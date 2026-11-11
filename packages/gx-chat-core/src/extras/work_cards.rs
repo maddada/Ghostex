@@ -40,7 +40,7 @@ pub(crate) fn at_ms(at: &str) -> Option<i64> {
 }
 
 /// One turn of the chat: from a message of the user's (or a thread's report) to the next.
-struct Turn {
+pub struct Turn {
     start_ms: i64,
     /// The message starting it.
     id: String,
@@ -48,7 +48,20 @@ struct Turn {
     anchor: Option<String>,
 }
 
-fn turns(state: &ChatState) -> Vec<Turn> {
+/// The chat's turns, read once for everything a document builds from them: the cards, the dock
+/// and every row of the Work panel.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "sending messages is the most important part of this app and it's broken", after messages
+/// sent from his coordinator's chat reached the agent 7 to 18 seconds late. Every chat runs on one
+/// engine thread, which a sample of his app showed busy 40% of the time, more than half of it
+/// here: the Work panel was built again on nearly every event (its kept copy ran out with every
+/// minute of every one of 231 items, about three times a second), and each of its rows walked the
+/// whole chat for its Show in chat, copying every reply's text to ask whether it had words. One
+/// walk now serves a whole document, it copies nothing (`prose::has_prose`), and the kept panel
+/// stands until a label on it really changes (`coordinator_board.rs` `ages_change_at`).
+/// `tests/coordinator_chat_event_cost.rs` pins both.
+pub fn turns(state: &ChatState) -> Vec<Turn> {
     let mut turns: Vec<Turn> = Vec::new();
     for message in &state.messages.composed {
         if message.role == ChatRole::User {
@@ -65,15 +78,40 @@ fn turns(state: &ChatState) -> Vec<Turn> {
             let Some(turn) = turns.last_mut() else {
                 continue;
             };
-            if !crate::transcript::prose::prose_markdown(&message.blocks)
-                .trim()
-                .is_empty()
-            {
+            if crate::transcript::prose::has_prose(&message.blocks) {
                 turn.anchor = Some(message.id.clone());
             }
         }
     }
     turns
+}
+
+/// What of `turns` a kept Show in chat depends on: how many there are, the first (older turns
+/// loaded above it), and the newest with the reply its cards sit under. A turn before the newest
+/// keeps its reply, so these four say whether any row's place in the chat moved.
+pub fn turns_mark(turns: &[Turn]) -> (usize, String, String, Option<String>) {
+    let id = |turn: Option<&Turn>| turn.map(|turn| turn.id.clone()).unwrap_or_default();
+    (
+        turns.len(),
+        id(turns.first()),
+        id(turns.last()),
+        turns.last().and_then(|turn| turn.anchor.clone()),
+    )
+}
+
+/// [`turns`] for a chat with work items, and none for any other: only their cards read them.
+pub fn turns_for_work(state: &ChatState) -> Vec<Turn> {
+    let has_work = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .is_some();
+    if has_work {
+        turns(state)
+    } else {
+        Vec::new()
+    }
 }
 
 /// The turn a change at `at` happened in: the last one that started at or before it.
@@ -462,8 +500,12 @@ fn ask_card(
 /// everything else is one status line under it that opens the Work panel. An open ask is drawn
 /// only there, never also under its reply; it leaves the dock once settled.
 pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
+    dock_with(state, context, &turns_for_work(state))
+}
+
+/// [`dock`], over turns the caller already read (`turns_for_work`).
+pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Value {
     let now_ms = context.now_millis();
-    let turns = turns(state);
     // (sinks, at, row): a row that needs him is newest first, but one older than a day sinks below
     // the newer ones, so long-lived tasks do not squat in the first rows (they stay reachable under
     // "N more need you" and in the Work panel).
@@ -674,6 +716,17 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
 /// User: "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU STUFF", for every needs-you item wherever it is
 /// drawn: the dock, the Work panel and Columns open to the same actions.
 pub fn panel_actions(state: &ChatState, context: &ChatContext, row: &Value) -> Value {
+    panel_actions_with(state, context, row, &turns_for_work(state))
+}
+
+/// [`panel_actions`], over turns the caller already read: the Work panel asks this of every row
+/// it builds (`coordinator_board.rs`), and a walk of the chat per row was most of its cost.
+pub fn panel_actions_with(
+    state: &ChatState,
+    context: &ChatContext,
+    row: &Value,
+    turns: &[Turn],
+) -> Value {
     let Some(items) = state
         .session
         .coordinator_threads
@@ -688,7 +741,6 @@ pub fn panel_actions(state: &ChatState, context: &ChatContext, row: &Value) -> V
     let Some(item) = items.iter().find(|item| text(item, "ref") == reference) else {
         return Value::Null;
     };
-    let turns = turns(state);
     let now_ms = context.now_millis();
     if row["askRow"] == true {
         let tag = text(row, "ask");
@@ -1069,7 +1121,13 @@ fn merged_turn(state: &ChatState, turns: &[Turn]) -> Option<usize> {
 /// The newest finished turn's line, for the end of its "Worked for" line
 /// (`extras::working_card`): "Pairing page started · 1 ask".
 pub fn turn_summary(state: &ChatState) -> Option<String> {
-    let turns = turns(state);
+    // Asked on every document: no walk of the chat unless its line shows on a chat with work.
+    let shows = state.transcript_view.worked_line.is_some()
+        && !state.transcript_view.chat_look.status_in_transcript;
+    if !shows {
+        return None;
+    }
+    let turns = turns_for_work(state);
     let newest = merged_turn(state, &turns)?;
     let turn_id = turns.get(newest)?.id.clone();
     let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
@@ -1143,6 +1201,15 @@ struct TurnLine {
 /// holds, buttons: [{label, recommended, picked, command}], answered, busy }]`, and the open asks
 /// the ? pill steps through: `[{ key, anchorId, at }]`.
 pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>) {
+    project_with(state, context, &turns_for_work(state))
+}
+
+/// [`project`], over turns the caller already read (`turns_for_work`).
+pub fn project_with(
+    state: &ChatState,
+    context: &ChatContext,
+    turns: &[Turn],
+) -> (Value, Vec<OpenAsk>) {
     let Some(items) = state
         .session
         .coordinator_threads
@@ -1153,7 +1220,6 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
     else {
         return (json!([]), Vec::new());
     };
-    let turns = turns(state);
     if turns.is_empty() {
         return (json!([]), Vec::new());
     }
@@ -1307,16 +1373,36 @@ pub fn open_asks(state: &ChatState, context: &ChatContext) -> Vec<OpenAsk> {
     project(state, context).1
 }
 
-/// When the first age on a live card changes after `now_ms`: the next whole minute since its item
-/// last changed (`age_label` reads only whole minutes).
-pub fn ages_change_at(cards: &Value, now_ms: i64) -> Option<i64> {
-    cards
-        .as_array()?
-        .iter()
+/// When the cards next read differently with nothing but the clock moving: the first age on a
+/// live card to change (`age_label_changes_at`), or the first snooze to end, which brings its ask
+/// back.
+pub fn ages_change_at(state: &ChatState, cards: &Value, now_ms: i64) -> Option<i64> {
+    let ages = cards
+        .as_array()
+        .into_iter()
+        .flatten()
         .filter(|card| card["folded"] != true)
         .filter_map(|card| card["at"].as_i64())
-        .map(|at| at + ((now_ms - at).max(0) / 60_000 + 1) * 60_000)
-        .min()
+        .map(|at| crate::transcript::message_time::age_label_changes_at(now_ms, at));
+    ages.chain(snoozes_end_at(state, now_ms)).min()
+}
+
+/// When the first snooze still running at `now_ms` ends: gxserver's `snoozedUntil` on an open ask,
+/// or one sent from here. Its ask is back under Needs you from then, in the dock and the panel.
+pub fn snoozes_end_at(state: &ChatState, now_ms: i64) -> Option<i64> {
+    let sent = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .flat_map(|item| item["asks"].as_array().into_iter().flatten())
+        .filter_map(|ask| at_ms(text(ask, "snoozedUntil")));
+    let local = state.extras.panels.work_snoozed.values().copied();
+    sent.chain(local).filter(|until| *until > now_ms).min()
 }
 
 /// Everything [`project`] reads besides the clock, kept beside the cards it built
@@ -1349,9 +1435,7 @@ impl WorkInputs {
             last_id: last.map(|message| message.id.clone()).unwrap_or_default(),
             last_has_words: last.is_some_and(|message| {
                 message.role == ChatRole::Assistant
-                    && !crate::transcript::prose::prose_markdown(&message.blocks)
-                        .trim()
-                        .is_empty()
+                    && crate::transcript::prose::has_prose(&message.blocks)
             }),
             answers: state.extras.panels.board_answers.clone(),
             worked: state.transcript_view.worked_line.is_some()
@@ -1370,6 +1454,7 @@ pub fn project_kept(
     state: &ChatState,
     context: &ChatContext,
     kept: &mut Option<KeptWork>,
+    turns: &[Turn],
 ) -> (Value, Vec<OpenAsk>) {
     // Not a coordinator, or a gxserver that sends no work: nothing to build or keep.
     if state
@@ -1389,8 +1474,8 @@ pub fn project_kept(
             return value.clone();
         }
     }
-    let value = project(state, context);
-    let changes_at = ages_change_at(&value.0, now_ms);
+    let value = project_with(state, context, turns);
+    let changes_at = ages_change_at(state, &value.0, now_ms);
     *kept = Some((inputs, now_ms, changes_at, value.clone()));
     value
 }

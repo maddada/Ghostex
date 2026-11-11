@@ -244,14 +244,8 @@ pub fn handle_with_ids(
             search::set_query(&mut state.extras.search, text(action, "query"));
             Vec::new()
         }
-        ActionKind::SearchNext => {
-            search::move_by(&mut state.extras.search, 1);
-            Vec::new()
-        }
-        ActionKind::SearchPrevious => {
-            search::move_by(&mut state.extras.search, -1);
-            Vec::new()
-        }
+        ActionKind::SearchNext => search::navigate(state, 1, context),
+        ActionKind::SearchPrevious => search::navigate(state, -1, context),
         ActionKind::SearchFolds => {
             search::set_folds(&mut state.extras.search, &action.params);
             Vec::new()

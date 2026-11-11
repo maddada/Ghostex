@@ -21,7 +21,7 @@ pub use crate::state::composer::{ComposerState, FailedSend, Submission};
 pub use crate::state::context::{ChatContext, FormattedTime, FormattedTimeStyle};
 pub use crate::state::extras::{
     ExtrasState, PanelsState, SaveMarkdownRequest, SaveMarkdownSheet, SaveMarkdownStage,
-    SaveMarkdownState, SearchState, SubagentGap, SubagentRequest, SubagentState, SubagentTarget,
+    SaveMarkdownState, SearchSeek, SearchState, SubagentGap, SubagentRequest, SubagentState, SubagentTarget,
     TerminalTailState, WorkingWordState, LOADING_STAGE_BLANK, LOADING_STAGE_INDICATOR,
     LOADING_STAGE_RETRY,
 };
