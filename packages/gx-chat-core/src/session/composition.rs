@@ -196,8 +196,10 @@ pub struct ComposeKey {
     pub queue: Option<Vec<serde_json::Value>>,
     pub app_commands: Vec<serde_json::Value>,
     pub shell: Option<serde_json::Value>,
-    /// The echo the send gate holds and its words (`composer::send::held_echo`).
-    pub held: Option<(String, String)>,
+    /// The echo whose send has not gone yet and what it says (`composer::delivery::echo_note`).
+    pub held: Option<(String, ghostex_gx_protocol::StartupDelivery)>,
+    /// The rows of the messages that were not sent (`composer::delivery::unsent_rows`).
+    pub unsent: Vec<crate::state::PendingSend>,
 }
 
 /// Rebuilds `state.messages.boundaried` when the transcript or the markers changed, and keeps it
@@ -267,7 +269,8 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
         queue: state.session.queue_prompts.clone(),
         app_commands: state.session.app_commands.clone(),
         shell: state.pending.terminal_shell.clone(),
-        held: crate::composer::send::held_echo(state),
+        held: crate::composer::delivery::echo_note(state),
+        unsent: crate::composer::delivery::unsent_rows(state),
     };
     if state.messages.compose_key.as_ref() == Some(&key) {
         return;
@@ -343,6 +346,8 @@ fn compose_after(
         pending_with_startup_sends(&state.pending.sends, &queue, state.session.agent.as_deref());
     // Messages this computer holds while the session's computer is offline.
     startup_pending.extend(crate::session::computer::held_as_pending(state));
+    // Messages that were not sent, above the sends still on their way: they are older.
+    startup_pending.splice(0..0, crate::composer::delivery::unsent_rows(state));
     // The list an echo is matched against copies the transcript; with nothing pending there is
     // nothing to match.
     let visible = if startup_pending.is_empty() {
@@ -355,21 +360,21 @@ fn compose_after(
         state.pending.terminal_shell.as_ref(),
         boundaried,
     );
-    // A message the send gate holds says so at once, with why, under its bubble (CDXC:SessionChat
-    // 2026-11-11 on `hold_words` in composer/policy.rs). Only the drawn row carries it, and it keeps
-    // its own `queued` mark: the echo is no queue row, so nothing that settles queue rows reads it.
-    if let Some((pending_id, words)) = crate::composer::send::held_echo(state) {
-        let id = format!("{}{pending_id}", crate::session::constants::PENDING_ID_PREFIX);
+    // A message that has not gone yet says so under its bubble: held by the send gate with why
+    // (CDXC:SessionChat 2026-11-11 on `hold_words` in composer/policy.rs), waiting to go again
+    // after a failure time can fix, or still out (composer/delivery.rs). Only the drawn row
+    // carries it, and it keeps its own `queued` mark: the echo is no queue row, so nothing that
+    // settles queue rows reads it.
+    if let Some((pending_id, delivery)) = crate::composer::delivery::echo_note(state) {
+        let id = format!(
+            "{}{pending_id}",
+            crate::session::constants::PENDING_ID_PREFIX
+        );
         if let Some(row) = pending_messages
             .iter_mut()
             .find(|row| row.id == id && row.startup_delivery.is_none())
         {
-            row.startup_delivery = Some(ghostex_gx_protocol::StartupDelivery {
-                prompt_id: format!("{HELD_BY_GATE_PREFIX}{pending_id}"),
-                state: "waiting".to_string(),
-                error_message: None,
-                wait_reason: Some(words),
-            });
+            row.startup_delivery = Some(delivery);
         }
     }
     let key = TranscriptPartKey {

@@ -135,13 +135,19 @@ pub struct Document {
     /// waiting with these words and goes once the wait clears (composer/policy.rs `hold_words`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_hold_reason: Option<String>,
-    /// The words the message the send gate holds right now shows under its bubble, or `null` when
-    /// no message is held (`composer::send::held_echo`); the host logs when it starts and ends.
+    /// The words the message that has not gone yet shows under its bubble, or `null` when none
+    /// waits: the send gate's (`composer::send::held_echo`), or a send waiting to go again after
+    /// a failure time can fix (`composer/delivery.rs`). The host logs when it starts and ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_held: Option<String>,
     /// How many submissions from the chat box the core has taken in (`ComposerState`).
     #[serde(default)]
     pub submissions_received: u64,
+    /// The `sendRequestId`s of the chat box's sends this core has taken in, newest last
+    /// (`composer/delivery.rs` `take`): the host stops sending an action again once its id is
+    /// here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sends_taken: Vec<String>,
     pub composer_collapse_eligible: bool,
     pub composer_collapsed: bool,
     pub composer_overflow: ComposerOverflow,

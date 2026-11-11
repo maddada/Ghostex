@@ -128,6 +128,35 @@ pub struct ComposerState {
     /// the document's `submissionsReceived` so the host can tell a message the core holds from one
     /// that never reached it (CDXC:SessionChat 2026-11-11 on `hold_words` in composer/policy.rs).
     pub submissions_received: u64,
+    /// The `sendRequestId` of each send, queue and compact the chat box named that this core has
+    /// taken in, newest last, at most [`TAKEN_SEND_IDS`]: the same action arriving again (the
+    /// host sends it again while it cannot see it taken) is not a second message, and the
+    /// document's `sendsTaken` tells the host which ones it has (`composer/delivery.rs`).
+    pub taken_send_ids: Vec<String>,
+    /// The messages whose send ended in a failure time cannot fix, which stay in the chat as rows
+    /// saying so until Retry, Edit or Remove (`composer/delivery.rs`).
+    pub unsent: Vec<UnsentSend>,
+}
+
+/// How many taken send ids a core remembers. A host waits on a handful at most.
+pub const TAKEN_SEND_IDS: usize = 64;
+
+/// A message that was not sent and cannot be by waiting: its row, and what a Retry sends.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnsentSend {
+    /// Its row, with the failure in its `startup_delivery`. The echo drawn at Enter, kept under
+    /// the same id so the row stays where it was.
+    pub echo: crate::state::PendingSend,
+    /// The words the reader typed, which Edit gives back to the chat box.
+    pub typed: String,
+    /// The text the send delivers (the typed words, or what they became).
+    pub text: String,
+    pub mode: crate::composer::submission::SubmissionMode,
+    pub image_paths: Vec<String>,
+    /// The id a Retry sends under: the first attempt's, so gxserver still takes it once, or
+    /// `None` when gxserver could not say what became of that attempt.
+    pub send_request_id: Option<String>,
+    pub interrupt: bool,
 }
 
 /// The `/`, `$` and `@` popup's own state.
@@ -219,6 +248,23 @@ pub struct Submission {
     /// The pictures this send waits for, which were still on their way into the chat box when
     /// Enter was pressed (`crate::composer::attaching`).
     pub attaching: Option<crate::composer::attaching::AttachingHold>,
+    /// The delivery met a failure time can fix and goes again by itself: how many attempts
+    /// failed, and what its row says meanwhile (`composer/delivery.rs`).
+    pub retry: Option<SendRetry>,
+    /// The delivery call has been out for a while: its row says it is still sending.
+    pub slow: bool,
+    /// A Retry of a message that was not sent: it has no draft of its own, so finishing it tells
+    /// the host nothing about the chat box.
+    pub resend: bool,
+}
+
+/// A send waiting to go again after a failure time can fix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SendRetry {
+    /// How many attempts failed so far.
+    pub attempts: u32,
+    /// What the row says while it waits.
+    pub words: String,
 }
 
 impl Submission {

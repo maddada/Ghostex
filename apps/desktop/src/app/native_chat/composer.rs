@@ -97,9 +97,20 @@ impl NativeChatView {
                 return;
             }
         };
+        // The message's name from here to the agent: every attempt goes under it, the chat core
+        // takes an action carrying it once, and gxserver delivers it once (send_watch.rs).
+        let send_request_id = match crate::app::helpers::gpui_random_uuid_string() {
+            Ok(id) => id,
+            Err(error) => {
+                self.error = Some(error);
+                cx.notify();
+                return;
+            }
+        };
         self.close_maximized(cx);
         self.pending_send = true;
         let mut submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
+            "sendRequestId":send_request_id,
             "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
         // The pictures still on their way go where the caret is, as a paste that lands writes
         // them (packages/gx-chat-core/src/composer/attaching.rs).
@@ -121,10 +132,9 @@ impl NativeChatView {
         }
         cx.emit(super::state::NativeChatEvent::DraftState(true));
         self.end_answer_hold_for_send();
-        let text = submission["text"].as_str().unwrap_or_default().to_owned();
-        self.invoke(submission, cx);
-        // The box is empty now: the view draws the message as Sending until the core counts it.
-        self.watch_send(text, cx);
+        self.invoke(submission.clone(), cx);
+        // The box is empty now: the view watches the message until the core has it.
+        self.watch_send(send_request_id, submission, cx);
     }
 
     /// The chat's neutral filled text button (Load earlier turns, Retry, Use / Dismiss, the

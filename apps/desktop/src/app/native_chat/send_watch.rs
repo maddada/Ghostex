@@ -1,28 +1,33 @@
-//! A message sent from the chat box shows above the box until the chat core has it, and every send
-//! leaves one line in the session chat log.
+//! The chat box's half of a send: it names the message at Enter, watches until the chat core has
+//! it, sends the same action again while it cannot see it taken, and leaves a line in the session
+//! chat log for every step.
 //!
 //! CDXC:SessionChat 2026-11-11 DECISION:
-//! User: "my messages to you weren't being sent from chat view!!! please fix wtf is this", then "text
-//! vanished but didn't show in the chat, even as optimistic message like we usually do", and "after
-//! like 2 mins my message actually did get sent". The chat box empties on Enter before the core has
-//! the message (composer.rs `submit`). The core counts what it takes (`submissionsReceived`); until
-//! it counts a send, the view draws it itself as "Sending" (`render_unconfirmed_sends`).
+//! User: "my messages to you weren't being sent from chat view!!! please fix wtf is this", "text
+//! vanished but didn't show in the chat, even as optimistic message like we usually do", "after
+//! like 2 mins my message actually did get sent"; then, of a watch here that put a message it
+//! thought lost back in the box with a notification: "i'm seeing double messages now too", "you
+//! should self heal, don't show me this message, why do i need to press enter again when you can
+//! press it for me". The message had only been waiting for the core's busy thread: it went out by
+//! itself and his Enter on the returned words sent it again under a new id. So:
 //!
-//! CDXC:SessionChat 2026-11-11 DECISION:
-//! User: "i'm seeing double messages now too", and of the notification that his message was back in
-//! the chat box: "you should self heal, don't show me this message, why do i need to press enter
-//! again when you can press it for me". A send the core had not counted within `SLOW_AFTER` used to
-//! go back into the box with a notification. The core's thread was only busy (18 s at 05:06): the
-//! message was still in its channel and went out by itself, and the Enter on the returned words
-//! sent it a second time under a new send request id. So a send is never taken back from the core:
-//! the watch only waits and writes `sessionChat.sendSlow`, and the row stays "Sending" until the
-//! core counts it. A message the core takes but holds says why under its own bubble
-//! (gx-chat-core composer/policy.rs `hold_words`).
+//! - The box names the message at Enter (composer.rs `submit`: `sendRequestId`). The core takes an
+//!   action carrying that id once and publishes the ids it has (`sendsTaken`), and every attempt
+//!   of the message reaches gxserver under it, which delivers it once
+//!   (packages/gx-chat-core/src/composer/delivery.rs).
+//! - A send is never taken back and never handed back. While the core has not said it has the
+//!   message, the view sends the SAME action again (`send_watch_due`), which is harmless when the
+//!   core was only busy and is what gets the message there when the first call met a core that
+//!   was not listening (no runtime yet, a chat the host had let go).
+//! - The message's own row is the core's, drawn the moment it takes the action, which is at most
+//!   one of its turns away now that a view's call goes ahead of the frames its socket read
+//!   (gx_chat/worker.rs). Only when even that takes longer than `ROW_AFTER` does the view draw a
+//!   plain "Sending" row of its own above the box, so a message is never nowhere on screen.
 //!
 //! CDXC:SessionChat 2026-11-11 WHY:
-//! The send's own breadcrumb was routine and behind Settings > Debugging, so tonight's fault left no
-//! trace on the user's machine. One line per send is written always: the chat's state at Enter
-//! (ready, working, why a send would be refused or held) and never the message's words.
+//! The send's own breadcrumb was routine and behind Settings > Debugging, so that night's fault
+//! left no trace on the user's machine. One line per send is written always: the chat's state at
+//! Enter (ready, working, why a send would be refused or held) and never the message's words.
 
 use std::time::Duration;
 
@@ -36,19 +41,30 @@ use super::appearance::ChatAppearance;
 
 use super::state::NativeChatView;
 
-/// How long the core gets to count a send before the log says it is slow. The host thread answers
-/// a call in milliseconds; a busy thread still takes the message later, so the watch keeps waiting
-/// and says so again after twice as long, up to `SLOW_AT_MOST` apart.
-const SLOW_AFTER: Duration = Duration::from_secs(8);
-const SLOW_AT_MOST: Duration = Duration::from_secs(64);
+/// How long the core gets to take a send before the log says it is slow and the action goes
+/// again. The host thread answers a call in milliseconds; the watch keeps waiting and says so
+/// again after twice as long, up to `SLOW_AT_MOST` apart.
+const SLOW_AFTER: Duration = Duration::from_secs(4);
+const SLOW_AT_MOST: Duration = Duration::from_secs(32);
+/// How long the core gets before the view draws the message itself. Longer than a busy turn of
+/// the core's thread, so in ordinary use the only row a message ever has is its real one.
+const ROW_AFTER: Duration = Duration::from_millis(250);
 
-/// The sends the core has not counted yet.
+/// One message the core has not said it has.
+struct Unconfirmed {
+    /// Its `sendRequestId`, which `sendsTaken` answers with.
+    id: String,
+    /// The action as it left, to send again as it was.
+    action: serde_json::Value,
+    left: web_time::Instant,
+}
+
+/// The sends the core has not taken yet.
 pub(crate) struct SendWatch {
-    /// Each send's words, the `submissionsReceived` that says the core has it, and when it left
-    /// the box, oldest first.
-    sends: Vec<(u64, String, web_time::Instant)>,
-    /// The count when the oldest of them left: a count below it is another core.
-    base: u64,
+    /// Oldest first.
+    sends: Vec<Unconfirmed>,
+    /// The session they were sent to: a view shown another session sends nothing again.
+    session: String,
     token: u64,
     /// The host thread drew something after the newest send left, so it is alive.
     heard_since: bool,
@@ -115,32 +131,52 @@ impl NativeChatView {
         );
     }
 
-    /// Starts watching the send that just left the box with `text`.
-    pub(super) fn watch_send(&mut self, text: String, cx: &mut Context<Self>) {
+    fn session_key(&self) -> String {
+        format!("{}:{}", self.config.project_id, self.config.session_id)
+    }
+
+    /// Starts watching the send that just left the box as `action`, named `id`.
+    pub(super) fn watch_send(
+        &mut self,
+        id: String,
+        action: serde_json::Value,
+        cx: &mut Context<Self>,
+    ) {
         let now = web_time::Instant::now();
         self.last_send_at = Some(now);
-        // A core too old to count publishes no count: nothing to compare with.
-        let Some(seen) = self.snapshot["submissionsReceived"].as_u64() else {
-            return;
-        };
         self.send_watch_token = self.send_watch_token.wrapping_add(1);
         let token = self.send_watch_token;
+        let session = self.session_key();
+        // Sends to another session are not this watch's to send again.
+        if self
+            .send_watch
+            .as_ref()
+            .is_some_and(|watch| watch.session != session)
+        {
+            self.send_watch = None;
+        }
         let watch = self.send_watch.get_or_insert_with(|| SendWatch {
             sends: Vec::new(),
-            base: seen,
+            session,
             token,
             heard_since: false,
             wait: SLOW_AFTER,
         });
-        // A send still unconfirmed when the next leaves is counted by the same core, in order.
-        let expected = watch.sends.last().map_or(seen, |(expected, ..)| *expected) + 1;
-        watch.sends.push((expected, text, now));
+        watch.sends.push(Unconfirmed {
+            id,
+            action,
+            left: now,
+        });
         watch.token = token;
         watch.heard_since = false;
         watch.wait = SLOW_AFTER;
         self.arm_send_watch(token, SLOW_AFTER, cx);
-        // The "Sending" row shows on this frame, before the core's thread has done anything.
-        cx.notify();
+        // The view's own row, only if the core's has not come by then.
+        cx.spawn(async move |chat, cx| {
+            cx.background_executor().timer(ROW_AFTER).await;
+            let _ = chat.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
     fn arm_send_watch(&mut self, token: u64, wait: Duration, cx: &mut Context<Self>) {
@@ -151,24 +187,20 @@ impl NativeChatView {
         .detach();
     }
 
-    /// A frame from the core: it counts sends, or at least shows the thread is alive.
+    /// A frame from the core: it says which sends it has, or at least shows the thread is alive.
     pub(super) fn note_send_progress(&mut self) {
+        let session = self.session_key();
         let Some(watch) = self.send_watch.as_mut() else {
             return;
         };
         watch.heard_since = true;
-        let Some(received) = self.snapshot["submissionsReceived"].as_u64() else {
-            return;
-        };
-        // A count below the one the watch started from is another core (a new session bound to
-        // this view), which cannot be compared with.
-        if received < watch.base {
-            self.send_watch = None;
+        if watch.session != session {
             return;
         }
-        let session = format!("{}:{}", self.config.project_id, self.config.session_id);
-        watch.sends.retain(|(expected, _, left)| {
-            if *expected > received {
+        let taken = self.snapshot["sendsTaken"].as_array();
+        watch.sends.retain(|send| {
+            let has = taken.is_some_and(|taken| taken.iter().any(|id| id == send.id.as_str()));
+            if !has {
                 return true;
             }
             // How long the core's thread took to take it in: the wait a starved app shows as a
@@ -176,7 +208,7 @@ impl NativeChatView {
             crate::support_logs::append_always(
                 crate::support_logs::GpuiSupportLog::SessionChat,
                 "sessionChat.sendTaken",
-                json!({ "session": session, "afterEnterMs": left.elapsed().as_millis() as u64 }),
+                json!({ "session": session, "afterEnterMs": send.left.elapsed().as_millis() as u64 }),
             );
             false
         });
@@ -185,10 +217,12 @@ impl NativeChatView {
         }
     }
 
-    /// The core has not counted the watched sends yet. They are still its to send (in its thread's
-    /// channel, or behind the send in flight), so nothing is taken back and nothing is sent again:
-    /// the row stays "Sending", the log says how long it has been, and the watch waits on.
+    /// The core has not said it has the watched sends. Nothing is taken back: the log says how
+    /// long it has been, and each goes to the core again as the action it was, under its own
+    /// id. A core that was only busy takes the first copy and passes over the rest; a core that
+    /// never heard the first (no runtime then, a chat the host had let go) takes this one.
     fn send_watch_due(&mut self, token: u64, cx: &mut Context<Self>) {
+        let session = self.session_key();
         let Some(watch) = self
             .send_watch
             .as_mut()
@@ -196,22 +230,33 @@ impl NativeChatView {
         else {
             return;
         };
+        let same_session = watch.session == session;
         crate::support_logs::append_always(
             crate::support_logs::GpuiSupportLog::SessionChat,
             "sessionChat.sendSlow",
             json!({
-                "session": format!("{}:{}", self.config.project_id, self.config.session_id),
+                "session": watch.session,
                 "sends": watch.sends.len(),
-                "waitedMs": watch.sends.first().map(|(_, _, left)| left.elapsed().as_millis() as u64),
-                "expected": watch.sends.last().map(|(expected, ..)| *expected),
-                "received": self.snapshot["submissionsReceived"],
+                "waitedMs": watch.sends.first().map(|send| send.left.elapsed().as_millis() as u64),
+                "taken": self.snapshot["sendsTaken"].as_array().map(Vec::len),
                 "heardSince": watch.heard_since,
                 "hasRuntime": self.runtime.is_some(),
+                "sentAgain": same_session && self.runtime.is_some(),
             }),
         );
         watch.wait = (watch.wait * 2).min(SLOW_AT_MOST);
         let wait = watch.wait;
+        let again: Vec<serde_json::Value> = if same_session {
+            watch.sends.iter().map(|send| send.action.clone()).collect()
+        } else {
+            Vec::new()
+        };
         self.arm_send_watch(token, wait, cx);
+        if let Some(runtime) = &self.runtime {
+            for action in again {
+                runtime.call("action", vec![action]);
+            }
+        }
     }
 
     /// Milliseconds since the last send left the chat box.
@@ -294,12 +339,21 @@ impl NativeChatView {
         }
     }
 
-    /// The messages that left the box and the core has not taken in yet, drawn by the view itself
-    /// at once ("Sending"), so a busy core thread never leaves a sent message nowhere on screen.
-    /// Each row goes the frame the core counts it, which is the frame its own echo arrives in.
+    /// The messages that left the box more than `ROW_AFTER` ago and the core still has not
+    /// taken, drawn by the view itself ("Sending"), so a core thread busy for longer than it ever
+    /// should be never leaves a sent message nowhere on screen. Each row goes the frame the core
+    /// says it has the message, which is the frame its own row arrives in.
     pub(super) fn render_unconfirmed_sends(&self, p: &ChatAppearance) -> Option<AnyElement> {
         let watch = self.send_watch.as_ref()?;
-        if watch.sends.is_empty() {
+        if watch.session != self.session_key() {
+            return None;
+        }
+        let late: Vec<&Unconfirmed> = watch
+            .sends
+            .iter()
+            .filter(|send| send.left.elapsed() >= ROW_AFTER)
+            .collect();
+        if late.is_empty() {
             return None;
         }
         let s = p.scale;
@@ -310,10 +364,12 @@ impl NativeChatView {
                 .flex_col()
                 .items_end()
                 .gap(px(6.0 * s))
-                .children(watch.sends.iter().map(|(expected, text, _)| {
+                .children(late.into_iter().map(|send| {
+                    let text = plain_words(send.action["text"].as_str().unwrap_or_default());
                     div()
                         .id(gpui::SharedString::from(format!(
-                            "unconfirmed-send:{expected}"
+                            "unconfirmed-send:{}",
+                            send.id
                         )))
                         .role(gpui::Role::Status)
                         .aria_label("Sending")
@@ -331,7 +387,7 @@ impl NativeChatView {
                                 .text_color(p.foreground)
                                 .text_size(px(14.0 * s))
                                 .line_clamp(3)
-                                .child(text.clone()),
+                                .child(text),
                         )
                         .child(
                             div()
@@ -342,5 +398,57 @@ impl NativeChatView {
                 })),
         )
         .map(IntoElement::into_any_element)
+    }
+}
+
+/// A message's words for the view's own "Sending" row: a picture or file reference reads as its
+/// label alone (`[Image #1]`), not as its Markdown link with the path.
+fn plain_words(text: &str) -> String {
+    let mut words = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        let (before, from) = rest.split_at(open);
+        words.push_str(before);
+        let link = from.find("](").and_then(|close| {
+            let label = &from[1..close];
+            let target = &from[close + 2..];
+            let end = target.find(')')?;
+            // A label on one line with a target on one line: a reference, not prose in brackets.
+            (!label.is_empty() && !label.contains('\n') && !target[..end].contains('\n'))
+                .then(|| (label, &target[end + 1..]))
+        });
+        match link {
+            Some((label, after)) => {
+                words.push('[');
+                words.push_str(label);
+                words.push(']');
+                rest = after;
+            }
+            None => {
+                words.push('[');
+                rest = &from[1..];
+            }
+        }
+    }
+    words.push_str(rest);
+    words
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plain_words;
+
+    #[test]
+    fn a_reference_reads_as_its_label() {
+        assert_eq!(
+            plain_words("look\n[Image #1](/Users/me/Screenshots/shot@2x.png) and [notes](a/b.md)."),
+            "look\n[Image #1] and [notes]."
+        );
+        assert_eq!(
+            plain_words("no [brackets] here (at all)"),
+            "no [brackets] here (at all)"
+        );
+        assert_eq!(plain_words("an [open"), "an [open");
+        assert_eq!(plain_words(""), "");
     }
 }

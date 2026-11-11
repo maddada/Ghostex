@@ -146,6 +146,19 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             state.composer.incoming_draft = None;
             effects
         }
+        // A row that was not sent (`composer/delivery.rs`): its words go back to the chat box.
+        ActionKind::EditUnsent => {
+            crate::composer::delivery::edit_unsent(state, string_param(action, "promptId"))
+        }
+        ActionKind::RetryQueue
+            if crate::composer::delivery::is_unsent(string_param(action, "promptId")) =>
+        {
+            crate::composer::delivery::retry_unsent(
+                state,
+                context,
+                string_param(action, "promptId"),
+            )
+        }
         ActionKind::RetryQueue => queue_rpc(
             state,
             ChatRpcMethod::UpdateSessionChatQueuedPrompt,
@@ -227,6 +240,16 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             action.param("confirm").and_then(Value::as_bool) == Some(true),
         ),
         ActionKind::Send | ActionKind::Queue | ActionKind::Compact => {
+            // The chat box names its message at Enter and sends the action again while it cannot
+            // see it taken: the second arrival is the same message, not another one.
+            let named = action
+                .param("sendRequestId")
+                .and_then(Value::as_str)
+                .filter(|named| !named.is_empty())
+                .map(str::to_string);
+            if !crate::composer::delivery::take(state, named.as_deref()) {
+                return Vec::new();
+            }
             state.composer.submissions_received += 1;
             let image_paths: Vec<String> = action
                 .param("imagePaths")
@@ -249,7 +272,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                     return effects;
                 }
             }
-            let effects = crate::composer::send::begin(
+            let effects = crate::composer::send::begin_named(
                 state,
                 context,
                 match action.kind {
@@ -265,6 +288,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                     .param("caret")
                     .and_then(Value::as_u64)
                     .map(|caret| caret as usize),
+                named,
             );
             // The first message has left the box: the worktree tray goes now, not when the agent
             // gets it (CDXC:Worktrees 2026-11-02 in menus/draft_worktree.rs). A send refused on
@@ -797,6 +821,10 @@ fn insert_attachments(action: &UserAction) -> Vec<Effect> {
 
 fn remove_queue(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let prompt_id = string_param(action, "promptId");
+    // Remove on a message that was not sent (`composer/delivery.rs`).
+    if crate::composer::delivery::is_unsent(prompt_id) {
+        return crate::composer::delivery::remove_unsent(state, prompt_id);
+    }
     // Cancel on a message held for an offline computer.
     if prompt_id.starts_with(crate::session::computer::HELD_PREFIX) {
         return crate::session::computer::cancel(state, prompt_id);
