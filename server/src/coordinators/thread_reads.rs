@@ -31,10 +31,11 @@ use super::records::{sql_error, thread_from_row, THREAD_COLUMNS};
 use super::{SessionKey, ThreadRecord};
 use crate::domain::DomainStateError;
 
-/// The short columns of a resolved thread; any change to the thread changes one of them. The
+/// The short columns of a resolved thread; any change to the thread changes one of them (main's
+/// 0075 watch stamps included: their writers stamp `updatedAt` too, and are read here anyway). The
 /// `rowid` breaks `createdAt` ties the way `list_threads`' single `ORDER BY createdAt` does (table
 /// order), so threads started in the same millisecond keep their order when the two lists merge.
-const FINGERPRINT_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, resolvedAt, observedWorking, reportedAt, reportedPromptKey, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt, rowid";
+const FINGERPRINT_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, resolvedAt, observedWorking, reportedAt, reportedPromptKey, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt, rowid, lastResolvedAt, pendingMessageSendId";
 
 /// A thread and its `rowid`, for the merge order.
 type Placed = (i64, Arc<ThreadRecord>);
@@ -139,7 +140,7 @@ fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<Placed>>, DomainStat
         let rows = statement
             .query_map([], |row| {
                 let mut fingerprint = String::new();
-                for index in 0..13 {
+                for index in 0..15 {
                     match row.get_ref(index)? {
                         rusqlite::types::ValueRef::Null => fingerprint.push('\u{0}'),
                         rusqlite::types::ValueRef::Integer(value) => {
