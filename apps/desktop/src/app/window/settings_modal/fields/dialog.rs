@@ -82,6 +82,36 @@ pub(crate) fn dialog_background(p: &SettingsPalette) -> gpui::Rgba {
     p.dialog_surface()
 }
 
+/// The one surface every dialog a Settings page opens is drawn on: the 12px corners, the frosted
+/// dialogs' ink hairline (`frosted_dialog_washes`), the dialog fill
+/// (`SettingsPalette::dialog_surface`, nearly opaque under glass) and a soft drop shadow that lifts
+/// it off the dimmed page (CDXC:Settings 2026-11-11 on `SettingsPalette::dialog_surface`).
+pub(crate) fn settings_dialog_surface<E: gpui::Styled>(p: &SettingsPalette, panel: E) -> E {
+    let hairline = frosted_dialog_washes(p.light).hairline;
+    let shadow_alpha = if p.light { 0.16 } else { 0.4 };
+    panel
+        .rounded(px(MODAL_RADIUS_SECTION))
+        .border_1()
+        .border_color(hsla(hairline))
+        .bg(hsla(dialog_background(p)))
+        .shadow(vec![
+            gpui::BoxShadow {
+                color: hsla(modal_rgba(0x000000, shadow_alpha)),
+                offset: point(px(0.0), px(16.0)),
+                blur_radius: px(40.0),
+                spread_radius: px(-8.0),
+                inset: false,
+            },
+            gpui::BoxShadow {
+                color: hsla(modal_rgba(0x000000, shadow_alpha * 0.5)),
+                offset: point(px(0.0), px(4.0)),
+                blur_radius: px(12.0),
+                spread_radius: px(-4.0),
+                inset: false,
+            },
+        ])
+}
+
 /// `DialogFooter`: the buttons right-aligned with 8px between them.
 pub(crate) fn dialog_footer(children: Vec<AnyElement>) -> AnyElement {
     h_flex()
@@ -135,7 +165,7 @@ pub(crate) fn settings_dialog<V: 'static>(
                 .text_color(hsla(p.muted))
                 .child(description)
         }));
-    let panel = v_flex()
+    let panel = settings_dialog_surface(p, v_flex())
         .id(spec.id.clone())
         .when_some(focus, |this, focus| this.track_focus(focus))
         .occlude()
@@ -145,17 +175,6 @@ pub(crate) fn settings_dialog<V: 'static>(
         .overflow_y_scroll()
         .p(px(spec.padding))
         .gap(px(spec.gap))
-        .rounded(px(12.0))
-        .border_1()
-        .border_color(hsla(modal_rgba(0xffffff, 0.1012)))
-        .bg(hsla(dialog_background(p)))
-        .shadow(vec![gpui::BoxShadow {
-            color: hsla(p.foreground_alpha(0.1)),
-            offset: point(px(0.0), px(0.0)),
-            blur_radius: px(0.0),
-            spread_radius: px(1.0),
-            inset: false,
-        }])
         .font_family(MODAL_UI_FONT)
         .text_size(px(14.0))
         .line_height(px(20.0))

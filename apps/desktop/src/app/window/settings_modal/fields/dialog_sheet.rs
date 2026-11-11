@@ -6,7 +6,6 @@
 //! a key typed on the sheet from reaching the Settings search behind it.
 use super::super::super::native_modal_kit::*;
 use super::super::palette::SettingsPalette;
-use super::dialog::dialog_background;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnchoredPositionMode, AnyElement, Bounds, Context, DispatchPhase, FocusHandle, FontWeight,
@@ -32,8 +31,10 @@ pub(crate) fn settings_dialog_overlay<V: 'static>(
     settings_dialog_layer(id, content, BACKDROP_ALPHA, on_dismiss, window, cx)
 }
 
-/// [`settings_dialog_overlay`] with its own backdrop tint (an `AppModalShell` nested in Settings, the
-/// extension install consent, dims nothing: `backdrop_alpha` 0 still catches the outside press).
+/// [`settings_dialog_overlay`] with its own backdrop tint (`backdrop_alpha` 0 dims nothing but still
+/// catches the outside press). Since 2026-11-11 every dialog in Settings, the extension consents
+/// included, takes the standard backdrop (CDXC:Settings 2026-11-11 on
+/// `SettingsPalette::dialog_surface`).
 pub(crate) fn settings_dialog_layer<V: 'static>(
     id: impl Into<SharedString>,
     content: AnyElement,
@@ -298,7 +299,7 @@ fn dialog_sheet<V: 'static>(
                 .children(body),
         )
         .children(footer);
-    let sheet = div()
+    let sheet = super::dialog::settings_dialog_surface(p, div())
         .id(id.clone())
         .track_focus(focus)
         .occlude()
@@ -308,11 +309,6 @@ fn dialog_sheet<V: 'static>(
         .w(px(width))
         .max_w(viewport.width - px(32.0))
         .max_h(px(max_height.unwrap_or(f32::MAX)).min(viewport.height - px(32.0)))
-        .rounded(px(MODAL_RADIUS_SECTION))
-        .border_1()
-        .border_color(hsla(p.hairline))
-        .bg(hsla(dialog_background(p)))
-        .shadow_xl()
         .font_family(MODAL_UI_FONT)
         .text_size(px(14.0))
         .line_height(px(20.0))

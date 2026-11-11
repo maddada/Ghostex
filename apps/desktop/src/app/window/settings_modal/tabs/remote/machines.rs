@@ -11,7 +11,7 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, full_value_tooltip, icon, is_long_value, settings_button_sized,
-    settings_icon, settings_icon_button, short_version, tooltip_text,
+    settings_dialog_surface, settings_icon, settings_icon_button, short_version, tooltip_text,
 };
 use super::super::super::model::SettingsTabId;
 use super::RemoteTab;
@@ -1567,7 +1567,7 @@ pub(super) fn machine_dialog(
         ));
 
     let viewport = window.viewport_size();
-    let sheet = v_flex()
+    let sheet = settings_dialog_surface(&t.p, v_flex())
         .id("remote-machine-dialog")
         .track_focus(&focus)
         .occlude()
@@ -1576,17 +1576,6 @@ pub(super) fn machine_dialog(
         .max_h(viewport.height - px(32.0))
         .p(px(16.0))
         .gap(px(12.0))
-        .rounded(px(MODAL_RADIUS_SECTION))
-        .border_1()
-        .border_color(hsla(colors.border))
-        .bg(hsla(colors.background))
-        .shadow(vec![gpui::BoxShadow {
-            color: hsla(css_fade(colors.foreground, 0.1)),
-            offset: gpui::point(px(0.0), px(0.0)),
-            blur_radius: px(0.0),
-            spread_radius: px(1.0),
-            inset: false,
-        }])
         .font_family(MODAL_UI_FONT)
         .text_size(px(14.0))
         .line_height(px(20.0))

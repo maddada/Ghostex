@@ -1046,7 +1046,7 @@ impl ExtensionsTab {
             )
         };
         let focus = self.consent_focus.clone();
-        let sheet = v_flex()
+        let sheet = super::super::super::fields::settings_dialog_surface(p, v_flex())
             .id("extension-consent")
             .track_focus(&focus)
             .occlude()
@@ -1054,11 +1054,6 @@ impl ExtensionsTab {
             .max_w(window.viewport_size().width - px(32.0))
             .p(px(MODAL_WINDOW_PADDING))
             .gap(px(MODAL_SECTION_GAP))
-            .rounded(px(MODAL_RADIUS_SECTION))
-            .border_1()
-            .border_color(hsla(m.hairline))
-            .bg(hsla(p.dialog_surface()))
-            .shadow_xl()
             .font_family(MODAL_UI_FONT)
             .text_size(px(14.0))
             .line_height(px(20.0))
@@ -1088,10 +1083,9 @@ impl ExtensionsTab {
             .child(body)
             .child(modal_footer(vec![cancel, confirm]))
             .into_any_element();
-        Some(super::super::super::fields::settings_dialog_layer(
+        Some(super::super::super::fields::settings_dialog_overlay(
             "extension-consent",
             sheet,
-            0.0,
             |page: &mut Self, _window, cx| {
                 let installing = page
                     .browser
