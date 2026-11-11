@@ -177,7 +177,7 @@ impl GhostexGpuiApp {
         self.native_kanban.panel = Some(KanbanPanel::Ticket(Box::new(form)));
         let issue_id = ticket_id.to_string();
         self.native_kanban_spawn(
-            move |context| show_issue(context, &issue_id),
+            move |context| async move { show_issue(&context, &issue_id).await },
             move |this, result, cx| {
                 let Ok(Some(shown)) = result else {
                     return;

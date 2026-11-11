@@ -7,52 +7,18 @@ use gpui::{AppContext as _, Context, Window};
 use gpui_component::input::{InputEvent, InputState};
 
 use super::beads::{KanbanLoadResult, load_board};
+use super::host::ProjectBoardBridgeRuntimeContext;
 use super::model::{
     build_board_columns, columns_signature, issues_signature, normalize_display_issue_key,
     normalize_issue_prefix, to_board_tickets,
 };
-use super::state::{KanbanLoadState, KanbanProject, KanbanProjectKey, KanbanRefreshMode};
+use super::state::{KanbanLoadState, KanbanProject, KanbanRefreshMode};
 use crate::GhostexGpuiApp;
-use crate::app::helpers::{
-    ProjectBoardBridgeRuntimeContext, project_board_bridge_runtime_context_from_snapshot,
-};
-use crate::app::model::TitlebarMode;
 
 /// `PROJECT_BOARD_AUTO_REFRESH_INTERVAL_MS`: the board notices bd changes made elsewhere.
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(8);
 
 impl GhostexGpuiApp {
-    /// The project the board shows, from the live sidebar snapshot: the same identity the Kanban
-    /// CEF page was given. `None` for Quick/projectless contexts and projects without Kanban.
-    pub(crate) fn native_kanban_project(&self) -> Option<KanbanProject> {
-        let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
-        if !snapshot.feature_availability.kanban || snapshot.is_quick_projectless {
-            return None;
-        }
-        snapshot.active_project_id.as_ref()?;
-        let context = project_board_bridge_runtime_context_from_snapshot(Some(snapshot))?;
-        Some(KanbanProject {
-            key: KanbanProjectKey {
-                project_id: context.project_id,
-                project_path: context.project_path,
-                remote_machine_id: context.remote_machine_id,
-            },
-            display_name: snapshot.display_name.clone(),
-        })
-    }
-
-    /// The bridge context Beads calls run with, including the remote gxserver target for a remote
-    /// project.
-    pub(crate) fn native_kanban_bridge_context(&self) -> Option<ProjectBoardBridgeRuntimeContext> {
-        let mut context = project_board_bridge_runtime_context_from_snapshot(
-            self.latest_sidebar_project_snapshot.as_ref(),
-        )?;
-        if let Some(remote_machine_id) = context.remote_machine_id.clone() {
-            context.remote_target = self.gpui_remote_gxserver_request_target(&remote_machine_id);
-        }
-        Some(context)
-    }
-
     /// Called from the app's render: switches the board to the current project, creates the
     /// search box and focus handle once, and starts the poll. True when the project changed.
     pub(crate) fn native_kanban_sync_project(
@@ -133,26 +99,13 @@ impl GhostexGpuiApp {
         project_changed
     }
 
-    /// A Kanban text field took focus: the page is GPUI's own, so nothing else keeps the keys.
-    pub(crate) fn native_kanban_input_focused(&mut self) {
-        self.pending_keyboard_handoff = None;
-        self.reclaim_gpui_root_for_chrome_input_focus();
-    }
-
-    /// Whether the board is on screen: its panel tab is the active, awake view, or it is out in
-    /// its own window.
-    pub(crate) fn native_kanban_visible(&self) -> bool {
-        let in_panel = self.active_mode == TitlebarMode::Kanban
-            && self
-                .project_editor_shell
-                .is_mode_awake(TitlebarMode::Kanban);
-        (in_panel || self.native_kanban.detached.is_some()) && self.native_kanban.project.is_some()
-    }
-
-    /// Runs `work` with the current bridge context on the background executor and hands its
-    /// result to `done`, unless the board has moved to another project meanwhile. False when there
-    /// is no project to run it for.
-    pub(crate) fn native_kanban_spawn<T, W, D>(
+    /// Runs the async `work` with the current bridge context on the background executor and hands
+    /// its result to `done`, unless the board has moved to another project meanwhile. False when
+    /// there is no project to run it for.
+    ///
+    /// CDXC:ProjectBoard 2026-11-10 WHY:
+    /// The work is async (`gx_rpc`, `beads.rs`) so the GPUI web build, which cannot block, runs the same board. The generation check stays: an answer for an older project generation is dropped, never applied to the board now on screen.
+    pub(crate) fn native_kanban_spawn<T, W, F, D>(
         &mut self,
         work: W,
         done: D,
@@ -160,7 +113,8 @@ impl GhostexGpuiApp {
     ) -> bool
     where
         T: Send + 'static,
-        W: FnOnce(&ProjectBoardBridgeRuntimeContext) -> T + Send + 'static,
+        W: FnOnce(ProjectBoardBridgeRuntimeContext) -> F + Send + 'static,
+        F: Future<Output = T> + Send + 'static,
         D: FnOnce(&mut Self, T, &mut Context<Self>) + 'static,
     {
         let Some(context) = self.native_kanban_bridge_context() else {
@@ -169,7 +123,7 @@ impl GhostexGpuiApp {
         let generation = self.native_kanban.generation;
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background.spawn(async move { work(&context) }).await;
+            let result = background.spawn(work(context)).await;
             let _ = this.update(cx, |this, cx| {
                 if this.native_kanban.generation != generation {
                     return;
@@ -206,7 +160,7 @@ impl GhostexGpuiApp {
         let prefix = state.issue_prefix.clone();
         let reconcile = mode.reconciles();
         if !self.native_kanban_spawn(
-            move |context| load_board(context, reconcile, &prefix),
+            move |context| async move { load_board(&context, reconcile, &prefix).await },
             move |this, result, cx| this.native_kanban_apply_load(mode, result, cx),
             cx,
         ) {
@@ -294,6 +248,26 @@ impl GhostexGpuiApp {
         if let Some(queued) = queued {
             self.native_kanban_refresh(queued, cx);
         }
+    }
+
+    /// Refresh: reloads the board (reconciling its statuses and prefix) and the agents and links,
+    /// as the board's own Refresh button and the Beads header's sync do.
+    pub(crate) fn native_kanban_refresh_now(&mut self, cx: &mut Context<Self>) {
+        self.native_kanban_refresh(KanbanRefreshMode::Manual, cx);
+        self.native_kanban_request_conversation_state(cx);
+    }
+
+    /// The Beads header's search drives the board's filter. The board's own search box (drawn
+    /// only in its own window) is made again on its next render with this text.
+    pub(crate) fn native_kanban_set_search_query(&mut self, query: String, cx: &mut Context<Self>) {
+        if query == self.native_kanban.search_query {
+            return;
+        }
+        self.native_kanban.search_query = query;
+        self.native_kanban.search = None;
+        self.native_kanban.search_subscription = None;
+        self.native_kanban.invalidate_derived();
+        self.native_kanban_notify(cx);
     }
 
     /// Rebuilds the tickets from `issues` after a local edit, keeping the lanes and ids in step.

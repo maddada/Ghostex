@@ -187,6 +187,46 @@ impl GhostexGpuiApp {
         true
     }
 
+    /// The store's board answer (`gx_store_board_respond`'s message), checked the way the
+    /// desktop's receiver always checked it, and handed to the native board when it is one of the
+    /// board's requests. `Some(response)` when it is valid and the board did not take it, for the
+    /// host to route on (native Automate and the CEF pages on the desktop; nothing on the web).
+    ///
+    /// CDXC:ProjectBoard 2026-11-10 WHY:
+    /// The GPUI web build compiles the native board, whose agents, links, Start work and Go to agent all answer through here; the web's receiver was an empty stub, so links never appeared there. The check and the board's routing live in this file both builds compile, so the two receivers cannot drift.
+    pub(crate) fn gx_store_route_board_conversation_response(
+        &mut self,
+        payload: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<Value> {
+        if payload.chars().count()
+            > crate::GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_PAYLOAD_MAX_CHARS
+        {
+            return None;
+        }
+        let message = serde_json::from_str::<Value>(payload).ok()?;
+        if message.get("type").and_then(Value::as_str)
+            != Some(crate::GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_MESSAGE_TYPE)
+            || message.get("version").and_then(Value::as_u64)
+                != Some(crate::GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_MESSAGE_VERSION)
+        {
+            return None;
+        }
+        let response = message.get("response").filter(|value| value.is_object())?;
+        let request_id_valid = response
+            .get("requestId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .is_some_and(|value| {
+                !value.is_empty()
+                    && value.chars().count() <= crate::GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS
+            });
+        if !request_id_valid || self.native_kanban_receive_conversation_response(response, cx) {
+            return None;
+        }
+        Some(response.clone())
+    }
+
     /// `postGpuiProjectBoardConversationResponse`, through the same receiver the runtime's post
     /// reached.
     fn gx_store_board_respond(

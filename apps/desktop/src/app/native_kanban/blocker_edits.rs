@@ -225,7 +225,7 @@ impl GhostexGpuiApp {
             json!({ "action": "depRemove", "issueId": edge.waiter, "dependsOnId": edge.blocker })
         };
         self.native_kanban_spawn(
-            move |context| beads_call(context, request),
+            move |context| async move { beads_call(&context, request).await },
             move |this, result, cx| {
                 match result {
                     Ok(_) => this.native_kanban_refresh(KanbanRefreshMode::Mutation, cx),
@@ -291,18 +291,20 @@ impl GhostexGpuiApp {
         }
         self.native_kanban_rebuild_tickets();
         self.native_kanban_spawn(
-            move |context| {
+            move |context| async move {
                 let mut failures = Vec::new();
                 for edge in &edges {
                     if let Err(error) = beads_call(
-                        context,
+                        &context,
                         json!({
                             "action": "depAdd",
                             "issueId": edge.waiter,
                             "dependsOnId": edge.blocker,
                             "depType": BLOCKS_DEPENDENCY,
                         }),
-                    ) {
+                    )
+                    .await
+                    {
                         failures.push(plain_blocker_error(&error));
                     }
                 }

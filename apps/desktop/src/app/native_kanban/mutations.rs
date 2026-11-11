@@ -83,11 +83,12 @@ impl GhostexGpuiApp {
         let status = column.beads_status.clone();
         let ticket_id = ticket_id.to_string();
         self.native_kanban_spawn(
-            move |context| {
+            move |context| async move {
                 beads_call(
-                    context,
+                    &context,
                     json!({ "action": "updateStatus", "issueId": issue_id, "status": status }),
                 )
+                .await
             },
             move |this, result, cx| {
                 if this
@@ -160,7 +161,9 @@ impl GhostexGpuiApp {
         self.native_kanban_rebuild_tickets();
         let issue_id = ticket_id.to_string();
         self.native_kanban_spawn(
-            move |context| beads_call(context, json!({ "action": "delete", "issueId": issue_id })),
+            move |context| async move {
+                beads_call(&context, json!({ "action": "delete", "issueId": issue_id })).await
+            },
             move |this, result, cx| match result {
                 Ok(_) => this.native_kanban_refresh(KanbanRefreshMode::Mutation, cx),
                 Err(error) => {
@@ -220,7 +223,7 @@ impl GhostexGpuiApp {
         self.native_kanban.error = None;
         self.native_kanban_upsert_local_issue(optimistic);
         self.native_kanban_spawn(
-            move |context| persist_ticket(context, &draft),
+            move |context| async move { persist_ticket(&context, &draft).await },
             |this, result, cx| {
                 if let Err(error) = result {
                     this.native_kanban.error = Some(error.clone());
@@ -286,7 +289,7 @@ impl GhostexGpuiApp {
         self.native_kanban.create_in_flight = true;
         self.native_kanban.panel = None;
         self.native_kanban_spawn(
-            move |context| create_issue(context, &prefix, &draft, &known_ids),
+            move |context| async move { create_issue(&context, &prefix, &draft, &known_ids).await },
             move |this, result, cx| {
                 this.native_kanban.create_in_flight = false;
                 let mut issue = match result {
@@ -355,18 +358,20 @@ impl GhostexGpuiApp {
         let id = issue_id.to_string();
         let issue_id = issue_id.to_string();
         self.native_kanban_spawn(
-            move |context| {
+            move |context| async move {
                 if needs_status {
                     beads_call(
-                        context,
+                        &context,
                         json!({ "action": "updateStatus", "issueId": id, "status": target_status }),
-                    )?;
+                    )
+                    .await?;
                 }
                 if !labels.is_empty() {
                     beads_call(
-                        context,
+                        &context,
                         json!({ "action": "setLabels", "issueId": id, "labels": labels }),
-                    )?;
+                    )
+                    .await?;
                 }
                 Ok::<(), String>(())
             },
@@ -383,43 +388,21 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// A ticket created without a title gets one from the board's default prompt agent, later
-    /// and in the background; failures keep the draft title.
+    /// A ticket created without a title gets one from the Title Generation agent of the computer
+    /// that owns the project, later and in the background; failures keep the draft title.
     fn native_kanban_schedule_generated_title(
         &mut self,
         issue_id: String,
         prompt: String,
         cx: &mut Context<Self>,
     ) {
-        let conversation = &self.native_kanban.conversation;
-        let agent = conversation
-            .default_agent_id
-            .as_deref()
-            .and_then(|id| {
-                conversation
-                    .agents
-                    .iter()
-                    .find(|agent| agent.agent_id == id)
-            })
-            .or_else(|| conversation.agents.first());
-        let agent_id = agent
-            .map(|agent| agent.agent_id.clone())
-            .or_else(|| conversation.default_agent_id.clone())
-            .unwrap_or_default();
-        let agent_command = agent.and_then(|agent| agent.command.clone());
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(GENERATED_TITLE_DELAY).await;
             let _ = this.update(cx, move |this, cx| {
                 let id = issue_id.clone();
                 this.native_kanban_spawn(
-                    move |context| {
-                        generate_and_store_title(
-                            context,
-                            &id,
-                            &prompt,
-                            &agent_id,
-                            agent_command.as_deref(),
-                        )
+                    move |context| async move {
+                        generate_and_store_title(&context, &id, &prompt).await
                     },
                     move |this, result, cx| {
                         if let Ok(title) = result
@@ -453,7 +436,9 @@ impl GhostexGpuiApp {
         }
         let value = config.clone();
         self.native_kanban_spawn(
-            move |context| beads_call(context, json!({ "action": "configSet", "value": value })),
+            move |context| async move {
+                beads_call(&context, json!({ "action": "configSet", "value": value })).await
+            },
             move |this, result, cx| {
                 let error = result.err();
                 if let Some(KanbanPanel::Columns(form)) = this.native_kanban.panel.as_mut() {

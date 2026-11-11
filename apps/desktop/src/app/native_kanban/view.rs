@@ -117,9 +117,6 @@ impl GhostexGpuiApp {
         p: &super::palette::KanbanPalette,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
-        let board_empty = self.native_kanban.initial_load_done
-            && self.native_kanban.load_state == Some(super::state::KanbanLoadState::Ready)
-            && self.native_kanban.tickets.is_empty();
         let lanes = self.native_kanban.derived().lanes.clone();
         let state = &mut self.native_kanban;
         let loading = state.loading_first();
@@ -131,7 +128,7 @@ impl GhostexGpuiApp {
             p.font.hash(&mut hasher);
             for link in &state.conversation.links {
                 link.bead_id.hash(&mut hasher);
-                (link.openable || link.resumable).hash(&mut hasher);
+                (link.openable || link.resumable, link.live).hash(&mut hasher);
             }
             hasher.finish()
         };
@@ -148,7 +145,6 @@ impl GhostexGpuiApp {
                     return self.render_native_kanban_lane(
                         column,
                         &[],
-                        None,
                         Some(position),
                         true,
                         measure_key,
@@ -156,12 +152,9 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }
-                let hint = (board_empty && column.key == "todo")
-                    .then_some("No tickets yet. Use + Ticket to add one.");
                 self.render_native_kanban_lane(
                     column,
                     &indices,
-                    hint,
                     None,
                     in_view.contains(&position),
                     measure_key,

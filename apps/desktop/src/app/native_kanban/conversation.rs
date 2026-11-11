@@ -17,6 +17,9 @@ use crate::app::window::{GPUI_APP_TOAST_DEFAULT_DURATION_MS, GpuiAppToast, GpuiA
 const REQUEST_PREFIX: &str = "native-kanban-";
 /// The React board's bridge timeout, after which a request that never came back stops blocking.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+/// Request ids only have to be unique within this app, whose own board receives the answers; a
+/// counter also works in the GPUI web build, which has no `uuid`.
+static NEXT_REQUEST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 impl GhostexGpuiApp {
     fn native_kanban_conversation_request(
@@ -29,7 +32,10 @@ impl GhostexGpuiApp {
         let Some(project) = self.native_kanban.project.clone() else {
             return false;
         };
-        let request_id = format!("{REQUEST_PREFIX}{}", uuid::Uuid::new_v4());
+        let request_id = format!(
+            "{REQUEST_PREFIX}{}",
+            NEXT_REQUEST.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
         let mut request = json!({
             "action": action,
             "projectPath": project.project_path,
@@ -41,11 +47,7 @@ impl GhostexGpuiApp {
         if let Some(remote_machine_id) = project.remote_machine_id {
             request["remoteMachineId"] = json!(remote_machine_id);
         }
-        if let Some(editor_id) = self
-            .latest_sidebar_project_snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.surface_ids.kanban_board_id.clone())
-        {
+        if let Some(editor_id) = self.native_kanban_project_editor_id() {
             request["projectEditorId"] = json!(editor_id);
         }
         if let (Some(request), Some(extra)) = (request.as_object_mut(), extra.as_object()) {
@@ -245,11 +247,12 @@ impl GhostexGpuiApp {
         self.native_kanban_set_local_status(ticket_id, "in_progress");
         let issue_id = ticket_id.to_string();
         self.native_kanban_spawn(
-            move |context| {
+            move |context| async move {
                 super::beads::beads_call(
-                    context,
+                    &context,
                     json!({ "action": "updateStatus", "issueId": issue_id, "status": "in_progress" }),
                 )
+                .await
             },
             {
                 let ticket_id = ticket_id.to_string();
