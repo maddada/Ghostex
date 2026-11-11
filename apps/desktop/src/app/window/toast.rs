@@ -268,8 +268,10 @@ fn gpui_app_toast_repeat_key(toast: &GpuiAppToast) -> String {
     )
 }
 
-/// CDXC:AppModal 2026-11-11 DECISION:
-/// User (2026-10-24): "i see this error appear a lot of times (should appear once, our errors in the app shouldn't keep spamming toasts like this)". A toast that says the same thing as one already on screen (same level, title and description) does not stack a second card: it takes the shown toast's place and restarts its timer. A warning or error raised again within `GPUI_APP_TOAST_REPEAT_QUIET` of the last time it was raised, after it closed or was dismissed, is not shown again. Toasts that update themselves by id (progress, Committing… then Committed) are unaffected. Superseded in one point on 2026-11-11 (user: "Yes, opt-in scope"): a toast may opt into a repeat scope through a `repeat-scope:` id, and then only a toast with the same text and the same scope counts as the same toast, so the same warning about two different repositories shows twice while each repository's repeat stays quiet. The desktop's toast window and the GPUI web build's toast overlay both pass every toast through here.
+/// CDXC:AppModal 2026-10-24 DECISION:
+/// User: "i see this error appear a lot of times (should appear once, our errors in the app shouldn't keep spamming toasts like this)". A toast that says the same thing as one already on screen (same level, title and description) does not stack a second card: it takes the shown toast's place and restarts its timer. A warning or error raised again within `GPUI_APP_TOAST_REPEAT_QUIET` of the last time it was raised, after it closed or was dismissed, is not shown again. Toasts that update themselves by id (progress, Committing… then Committed) are unaffected. The desktop's toast window and the GPUI web build's toast overlay both pass every toast through here.
+/// CDXC:AppModal 2026-11-11 WHY (PR #569):
+/// A toast may opt into a repeat scope through a `repeat-scope:` id (`GPUI_APP_TOAST_REPEAT_SCOPE_PREFIX`); then only a toast with the same text and the same scope counts as the same toast, so the same Beads hooks warning about two different repositories shows twice while each repository's repeat stays quiet. Toasts without a scope follow the rule above unchanged.
 /// SEE-ALSO: apps/desktop/src/app/modals/modal_messages_and_toasts.rs and apps/gpui-web/src/app/web_host/toasts.rs (`upsert_gpui_app_toast`).
 ///
 /// The toast to show, with the id of the shown toast it repeats, or `None` when it stays quiet.
