@@ -89,6 +89,7 @@ pub fn status_label(status: &str) -> &'static str {
         "blocked" => "Blocked",
         // In progress, never Moving (`work_panel.rs` `WORK_GROUPS` holds the user's words).
         "moving" => "In progress",
+        "idle" => "Not being worked on",
         "waiting" => "Waiting",
         "later" => "Later",
         "finished" => "Finished",

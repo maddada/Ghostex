@@ -3717,8 +3717,11 @@ version of the Projects features in Cursor and Claude Code.
   coloured counts when the row is tight. Click it for the panel, which lists
   every line of work by who has the ball: **Needs you** first (each naming the
   work it belongs to, with its answers or Done), then **Blocked**, **In
-  progress**, **Waiting**, **Later** and **Finished today**, the last three
-  folded; while anything is blocked, a **Blocked** pill beside it shows how many.
+  progress** (only work a thread or the coordinator is on right now), **Not
+  being worked on** (still open, but nobody is on it; it stays there until the
+  coordinator finishes it, parks it, asks you about it or works on it again),
+  **Waiting**, **Later** and **Finished today**, the last four folded; while
+  anything is blocked, a **Blocked** pill beside it shows how many.
   A thread the coordinator hasn't put on an item keeps a row of its own. Click a
   card to open it in place: one that needs you offers **Reply**, **Show in
   chat**, **Dismiss** and **Snooze** beside **Mention**, as a row above the chat

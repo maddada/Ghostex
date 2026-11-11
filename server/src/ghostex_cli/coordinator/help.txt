@@ -231,6 +231,10 @@ WORK ITEMS
                thread still not moving after Ghostex's nudge
     In progress  the coordinator or a thread is on it (stored, and accepted
                by --status, as moving or in-progress)
+    Not being worked on  In progress, but no thread is on it and the
+               coordinator has not changed it since its last turn; never
+               stored: item list and status name it until it is finished,
+               asked about, waits on something or changes again
     Waiting    on another item, an ask, or something outside
     Later      nobody is on it yet (next, held for a release, parked, backlog)
     Finished   done; today's show, older ones leave after 14 days

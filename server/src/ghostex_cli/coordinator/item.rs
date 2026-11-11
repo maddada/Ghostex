@@ -16,11 +16,13 @@ use crate::ghostex_cli::{
 const USAGE: &str = "Usage: ghostex coordinator item [add|now|step|ask|wait|done|drop|list] … (see ghostex coordinator --help, WORK ITEMS)";
 
 /// The statuses in the order `list` prints them, with their headings.
-const HEADINGS: [(&str, &str); 6] = [
+const HEADINGS: [(&str, &str); 7] = [
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
     // In progress, never Moving (server/src/coordinators/work.rs `status_heading`).
     ("moving", "In progress"),
+    // In progress that nobody is on (work.rs `derive`, turns.rs).
+    ("idle", "Not being worked on"),
     ("waiting", "Waiting"),
     ("later", "Later"),
     ("finished", "Finished today"),
@@ -585,5 +587,9 @@ fn print_list(work: &Value, all: bool) {
     }
     if empty {
         println!("No work items yet: ghostex coordinator item add \"<line of work>\" starts one.");
+    }
+    let notice = agents::text(work, "idleNotice");
+    if !notice.is_empty() {
+        println!("\n{notice}");
     }
 }

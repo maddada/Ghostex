@@ -718,6 +718,7 @@ pub fn coordinator_view(
         "threads": threads,
         "playbookNotice": playbook_notice,
         "networkNotice": network_notice(),
+        "workNotice": super::work::idle_notice_for(db, &coordinator.key()),
         "generatedAt": Utc::now().to_rfc3339(),
     }))
 }

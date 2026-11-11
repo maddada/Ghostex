@@ -1071,6 +1071,10 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         if moving > 0 {
             meta.push(format!("{moving} in progress"));
         }
+        let idle = count("idle");
+        if meta.is_empty() && idle > 0 {
+            meta.push(format!("{idle} not being worked on"));
+        }
         let later = count("later");
         if meta.is_empty() && later > 0 {
             meta.push(format!("{later} later"));

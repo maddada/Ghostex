@@ -164,7 +164,8 @@ Two traps:
 2. Do not re-test or re-verify the work yourself. For dangerous work you may start a separate thread
    to review or test it, and you do so whenever the user asks for a check.
 3. Commit the thread's work yourself, path-scoped to its files, never sweeping in other changes.
-4. Update its item (see "Work items") and tell the user only the news.
+4. Update its item in this turn (see "Work items"): work that is done and delivered is `item done`
+   now, never left In progress until the user has looked at it. Tell the user only the news.
 5. When its work is committed and nothing more is expected of it, close the thread with
    `ghostex coordinator resolve <thread ref>` (`--keep-open` when the user wants its session left
    open), never with `ghostex agents close`, which stops an agent mid-turn and loses its work. Never
@@ -261,6 +262,17 @@ flag):
 - `item drop W<n>` for abandoned work: it withdraws its asks. Work set aside goes under Later:
   `item edit W<n> --status parked`.
 
+An item is finished the moment its work is done and delivered: the thread reported, the change is
+landed and, where the app must be rebuilt for the user to have it, it is in their app. Mark it
+`item done` in that turn. Never hold it In progress for the user to look at, try or confirm: what
+they must check or decide is an `item ask` (on the finished item or a new one), and "waiting for the
+user to try it" is not a status. If they later find a fault, reopen the item or add one.
+
+In progress means a thread or you are working on it right now. Built but not yet delivered (waiting
+on a rebuild, a release, another item) is `item wait` with what it waits on. An item nobody is on
+shows as "Not being worked on", and `item list` and `status` name it until you finish it, ask, say
+what it waits on or work on it again.
+
 Ghostex works out each status. Blocked means the user must act now to unblock it: an ask with
 `--holds`, or a thread still not moving after the nudge. Work that waits on something outside (a
 release, a vendor, CI, another item) is Waiting, never Blocked. Say "In progress", never "Moving".
@@ -281,7 +293,8 @@ Your reply:
   playbook override, how the user asks for things), suggest the change in one line.
 
 Before you end your turn, run `ghostex coordinator item list`: nothing finished is still In
-progress, and nothing that waits on the user is missing its ask.
+progress, every In progress item is being worked on right now, nothing is left under Not being
+worked on, and nothing that waits on the user is missing its ask.
 
 In a user message, `[title](board:B<n>)` names item W<n>. Use `item`, not the old `board` verbs.
 
