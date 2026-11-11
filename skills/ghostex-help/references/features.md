@@ -2590,7 +2590,13 @@ expand a tool to inspect its full input and result. File edits
 collapse under "Edited 1 file" or "Edited X files", counting each path once; expand
 the row to see the usual file and diff cards. Detailed shows the tool calls and
 file edits under each reply, open. Summary is described below. The view is kept
-per chat, so a chat you set to Detailed stays Detailed. Turning Summary off, by
+per chat, so a chat you set to Detailed stays Detailed, and it follows you: the
+computer that runs the session keeps the view you picked last on any device (the
+View level and the Quiet View choice), so the phone, the desktop and Ghostex in a
+browser open that chat the same way. A device takes it when it opens the chat (the
+phone within a few seconds while the chat is open); one that could not reach the
+computer keeps its own pick and hands it over later, and the newest pick wins. A
+computer on an older Ghostex keeps no view, so each device keeps its own. Turning Summary off, by
 any route, always goes back to Normal. To have new chats start in Detailed, turn
 on Settings > Chat > Advanced > Default to Detailed view (`sessionChatDetailedView`).
 

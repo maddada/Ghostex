@@ -274,6 +274,7 @@ pub fn apply_queue_carriage(
 /// value, so folding them in the authoritative path (which frames also go through) would clear the
 /// switcher on the next frame. An omission on a read is the promotion signal and clears both.
 pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionChatResult) {
+    crate::transcript::view_sync::read_carried(state, result.chat_view.as_ref());
     apply_agent_identity(
         state,
         &AgentIdentity {

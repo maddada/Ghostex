@@ -210,6 +210,8 @@ pub struct TranscriptViewState {
     pub pending_quiet_view_override: Option<Option<bool>>,
     /// Quiet View is on for this chat now (`quiet_view::sync`).
     pub quiet_view_on: bool,
+    /// The chat's view across devices (`transcript/view_sync.rs`).
+    pub view_sync: crate::transcript::view_sync::ViewSyncState,
 }
 
 /// One message's full projection, with the source it was built from.
@@ -344,6 +346,7 @@ impl Default for TranscriptViewState {
             quiet_view_override: None,
             pending_quiet_view_override: None,
             quiet_view_on: false,
+            view_sync: Default::default(),
         }
     }
 }

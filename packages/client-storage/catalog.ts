@@ -159,6 +159,14 @@ export const storageCatalog = Object.freeze({
     binary,
     disk
   ),
+  viewSync: define(
+    'viewSync',
+    'When each chat view choice was made, kept with the computer',
+    'packages/gx-chat-core/src/transcript/view_sync.rs',
+    'ghostex.sessionChat.viewSync.',
+    textCodec,
+    disk
+  ),
   tasksCollapsed: define(
     'tasksCollapsed',
     'Chat task panel',

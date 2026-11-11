@@ -111,6 +111,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::ReorderSessionChatQueue => "reorderSessionChatQueue",
         ChatRpcMethod::SendSessionChatQueuedPrompt => "sendSessionChatQueuedPrompt",
         ChatRpcMethod::SetSessionChatDraft => "setSessionChatDraft",
+        ChatRpcMethod::SetSessionChatView => "setSessionChatView",
         ChatRpcMethod::AcknowledgeSessionChatDraftHandoff => "acknowledgeSessionChatDraftHandoff",
         ChatRpcMethod::ReadSessionTerminalTail => "readSessionTerminalTail",
         ChatRpcMethod::ReadSessionChatReport => "readSessionChatReport",

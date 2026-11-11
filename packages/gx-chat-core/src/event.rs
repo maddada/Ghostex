@@ -251,6 +251,10 @@ pub struct ComposerBootRead {
     /// (`transcript/quiet_view.rs`).
     #[serde(default)]
     pub quiet_view: Value,
+    /// The `viewSync` record: when each view record was picked and whether the session's computer
+    /// has the pick (`transcript/view_sync.rs`); absent from an older host.
+    #[serde(default)]
+    pub view_sync: Value,
 }
 
 /// The socket's state, which decides whether the core waits or re-reads.

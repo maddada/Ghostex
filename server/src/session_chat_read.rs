@@ -342,6 +342,13 @@ pub(crate) fn resolve_session_chat_read_state(
         uses_own_login.hash(&mut hasher);
     }
     enabled_agent_icons.hash(&mut hasher);
+    // A chat's view pick (session_chat_view.rs), in memory: a pick made on another device wakes a
+    // phone's long poll. Hashed only when set, so a chat without one keeps its fingerprint.
+    if let Some(pick) =
+        crate::session_chat_view::fingerprint_part(&state.paths, project_id, session_id)
+    {
+        pick.hash(&mut hasher);
+    }
     let fingerprint = format!("{:016x}", hasher.finish());
 
     Ok(SessionChatReadResolution {
@@ -607,6 +614,9 @@ pub(crate) async fn handle_read_session_chat_http(
         "catchUp".to_string(),
         json!(crate::session_chat_catch_up::catch_up_enabled(&state.paths)),
     );
+    // The chat's view pick rides every read, so each device opens the chat in the view picked last
+    // on any of them (session_chat_view.rs).
+    crate::session_chat_view::insert_into(&mut result, &state.paths, &project_id, &session_id);
     result.insert(
         "sessionDetails".to_string(),
         json!(crate::session_details::session_details_enabled(

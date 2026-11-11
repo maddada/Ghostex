@@ -78,6 +78,7 @@ pub mod transcript;
 pub mod transcript_rows;
 pub mod turns;
 pub mod view_level;
+pub mod view_sync;
 pub mod work_summary;
 pub mod workflow_card;
 

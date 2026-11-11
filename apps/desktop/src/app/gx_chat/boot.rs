@@ -72,6 +72,7 @@ pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> Co
     let verbose_override = decode_verbose(load("verbose", session_key, now_ms, errors).as_deref());
     let simple_override = decode_verbose(load("simple", session_key, now_ms, errors).as_deref());
     let quiet_view = decode_verbose(load("quietView", session_key, now_ms, errors).as_deref());
+    let view_sync = parse(load("viewSync", session_key, now_ms, errors));
     ComposerBootRead {
         session_key: session_key.to_string(),
         client_id,
@@ -103,6 +104,7 @@ pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> Co
             Some(on) => Value::Bool(on),
             None => Value::Null,
         },
+        view_sync,
     }
 }
 
