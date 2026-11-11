@@ -387,7 +387,12 @@ async fn start_worktree_work(
                 board.get("path").and_then(Value::as_str),
                 None,
             );
-            this.git_show_worktree_warnings(&response, &place, cx)
+            let identity = crate::app::gx_store::git::worktree_warning_identity(
+                "local",
+                board.get("path").and_then(Value::as_str),
+                &project_id(board),
+            );
+            this.git_show_worktree_warnings(&response, &place, &identity, cx)
         });
         let session = create_agent_record(
             this,

@@ -238,16 +238,32 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// What the toast says, for telling a repeat from a new toast.
+/// A toast id that starts with this names what the toast is about after it (`<prefix><scope>`),
+/// and the scope is part of the toast's repeat key.
+///
+/// CDXC:AppModal 2026-11-11 WHY:
+/// Two toasts can say the same thing about different things: the Beads hooks warning of two
+/// repositories whose folders share a name. Their text is kept short, so the repeat rule below
+/// would hide the second one. A toast whose id carries a scope (the repository's full path and
+/// computer, hashed) is a repeat only of a toast with the same text and the same scope. Toasts
+/// without one compare by their text alone, exactly as before.
+pub(crate) const GPUI_APP_TOAST_REPEAT_SCOPE_PREFIX: &str = "repeat-scope:";
+
+/// What the toast says, and what it is about when its id names a scope, for telling a repeat
+/// from a new toast.
 fn gpui_app_toast_repeat_key(toast: &GpuiAppToast) -> String {
     format!(
-        "{}\u{1f}{}\u{1f}{}",
+        "{}\u{1f}{}\u{1f}{}\u{1f}{}",
         toast.level.key(),
         gpui_app_toast_comparable_text(&toast.title),
         toast
             .description
             .as_deref()
             .map(gpui_app_toast_comparable_text)
+            .unwrap_or_default(),
+        toast
+            .id
+            .strip_prefix(GPUI_APP_TOAST_REPEAT_SCOPE_PREFIX)
             .unwrap_or_default(),
     )
 }

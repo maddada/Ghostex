@@ -45,7 +45,7 @@ use ghostex_gx_core::git_menu::{
 
 pub(crate) use export_transcript::{ExportTranscriptHost, HandoffTarget};
 pub(crate) use session_handoff::SessionHandoffRequest;
-pub(crate) use worktree_create::worktree_warning_place;
+pub(crate) use worktree_create::{worktree_warning_identity, worktree_warning_place};
 pub(crate) use worktree_list::TrustedWorktreeList;
 
 /// Everything this family keeps between calls.
