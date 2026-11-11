@@ -17,6 +17,7 @@ pub mod audit;
 pub mod auth;
 pub mod automations;
 pub(crate) mod autopilot;
+pub mod beads_view;
 pub mod board_start_work;
 pub(crate) mod bot_feed;
 pub(crate) mod bot_projects;

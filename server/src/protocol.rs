@@ -745,6 +745,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/runGitHubAction"
         | "/api/runWorktreeAction"
         | "/api/runBeadsAction"
+        /*
+        CDXC:ProjectBoard 2026-11-11 WHY:
+        Remote-allowed like runBeadsAction beside it: the Beads view shows the Beads workspace of a project on another computer, read by that computer's bd. beadsView takes only project selectors; beadsGenerateTitle takes a project selector and text, and runs only the agent that computer's own Title Generation setting names, never a command the caller sends.
+        */
+        | "/api/beadsView"
+        | "/api/beadsGenerateTitle"
         | "/api/runProjectDocsAction"
         // CDXC:AppModal 2026-10-17 WHY: remote-allowed like runProjectDocsAction: Quick Access's Files tab searches a remote machine's projects on that machine, naming projects only, never folders.
         | "/api/searchProjectFiles"

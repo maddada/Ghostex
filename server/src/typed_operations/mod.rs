@@ -1,6 +1,7 @@
 use serde_json::{json, Map, Value};
 
 pub mod beads;
+pub mod beads_view_actions;
 pub mod git;
 pub mod git_changes;
 pub mod github;
