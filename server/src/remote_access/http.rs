@@ -671,9 +671,9 @@ fn pair_device_error_outcome(error: &PairDeviceError) -> crate::audit::Outcome {
             Outcome::Refused("The phone's Ghostex is too old to pair.".to_string())
         }
         PairDeviceError::ApprovalDeclined => Outcome::Denied,
-        PairDeviceError::KeyHeldByAnotherDevice => Outcome::Refused(
-            "It named the Easy Connect key of another paired device.".to_string(),
-        ),
+        PairDeviceError::KeyHeldByAnotherDevice { name, paired } => Outcome::Refused(format!(
+            "It named the Easy Connect key of the paired entry \"{name}\" (paired {paired})."
+        )),
         PairDeviceError::Internal(error) => Outcome::Failed(format!("{error:#}")),
     }
 }
@@ -817,10 +817,10 @@ impl From<PairDeviceError> for RemoteAccessHttpError {
                 code: PAIR_DEVICE_APPROVAL_DECLINED_ERROR,
                 message: "The computer asked for administrator approval to add this phone's key, and the Windows prompt was declined. Scan the new code on the computer and choose Yes when Windows asks.".to_string(),
             },
-            PairDeviceError::KeyHeldByAnotherDevice => Self {
+            PairDeviceError::KeyHeldByAnotherDevice { name, paired } => Self {
                 status: StatusCode::CONFLICT,
                 code: PAIR_DEVICE_KEY_HELD_ERROR,
-                message: "Another device paired with this computer already uses this device's Easy Connect key. On the computer, remove the old entry for this device under Paired devices, then show a new code and scan again.".to_string(),
+                message: format!("The entry \"{name}\" (paired {paired}) under Paired devices on the computer already uses this device's Easy Connect key. If that entry is this device's earlier pairing, remove it on the computer, then show a new code and scan again."),
             },
             PairDeviceError::BadRequest(message) => Self::bad_request(message),
             PairDeviceError::Internal(error) => error.into(),

@@ -161,7 +161,12 @@ pub enum PairDeviceError {
     ApprovalDeclined,
     /// The tailcat key the request names belongs to another paired device (another device key):
     /// the request cannot be that device (`paired_devices::tailcat_key_held_by_another_device`).
-    KeyHeldByAnotherDevice,
+    /// `name` and `paired` (the day, as Settings > Remote words it) say which entry holds it, so
+    /// the user removes the right one. Only a caller that spent a valid code gets this far.
+    KeyHeldByAnotherDevice {
+        name: String,
+        paired: String,
+    },
     Internal(anyhow::Error),
 }
 
@@ -446,14 +451,12 @@ pub fn begin_pairing(
     // Checked once the code is spent, so it tells nobody without a code which keys are paired
     // (CDXC:RemotePairing 2026-11-11 SECURITY in paired_devices.rs).
     if let Some(client_key) = params.tailcat_client_key.as_deref() {
-        if super::paired_devices::tailcat_key_held_by_another_device(
+        if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
             db,
             client_key,
             &device_key.public_key,
-        )?
-        .is_some()
-        {
-            return Err(PairDeviceError::KeyHeldByAnotherDevice);
+        )? {
+            return Err(key_held_by(&holder));
         }
     }
 
@@ -870,14 +873,12 @@ fn finish_pairing(
     };
     // Checked again here: a device may have paired with that key while this one waited.
     if let Some(client_key) = pending.tailcat_client_key.as_deref() {
-        if super::paired_devices::tailcat_key_held_by_another_device(
+        if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
             context.db,
             client_key,
             &pending.device_key.public_key,
-        )?
-        .is_some()
-        {
-            return Err(PairDeviceError::KeyHeldByAnotherDevice);
+        )? {
+            return Err(key_held_by(&holder));
         }
     }
     let device_id = uuid::Uuid::new_v4().simple().to_string();
@@ -1196,6 +1197,30 @@ fn log_replaced_pairing_kept(
         error: Some(format!("{error:#}")),
         details: Some(serde_json::json!({ "deviceId": device.id })),
     });
+}
+
+/// The refusal naming the entry that holds the key (review of finding 6, finding 2): its name and
+/// the day it paired, in the words Settings > Remote uses for it ("today", "yesterday", "Nov 10").
+fn key_held_by(holder: &RemotePairedDeviceRecord) -> PairDeviceError {
+    PairDeviceError::KeyHeldByAnotherDevice {
+        name: holder.name.clone(),
+        paired: paired_day(&holder.paired_at, chrono::Local::now()),
+    }
+}
+
+/// As `format_paired_device_day` in the desktop's Settings > Remote model.
+fn paired_day(iso: &str, now: chrono::DateTime<chrono::Local>) -> String {
+    use chrono::Datelike as _;
+    let Ok(time) = chrono::DateTime::parse_from_rfc3339(iso) else {
+        return "on an unknown day".to_string();
+    };
+    let time = time.with_timezone(&chrono::Local);
+    match (now.date_naive() - time.date_naive()).num_days() {
+        days if days <= 0 => "today".to_string(),
+        1 => "yesterday".to_string(),
+        _ if time.year() == now.year() => format!("{} {}", time.format("%b"), time.day()),
+        _ => format!("{} {}, {}", time.format("%b"), time.day(), time.year()),
+    }
 }
 
 fn record_pair_device_attempt() -> Result<(), PairDeviceError> {
