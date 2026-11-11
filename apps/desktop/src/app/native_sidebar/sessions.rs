@@ -62,6 +62,7 @@ impl GhostexGpuiApp {
         // Another machine's session in a merged project (`machineName`) has no place in this
         // computer's groups to move to, except a pinned one among the Pinned rows it is drawn with
         // (CDXC:Sidebar 2026-11-07 WHY in gx-core sidebar_drag/pinned_order.rs).
+        let unified = place == SessionRowPlace::UnifiedThread;
         let reorders = place == SessionRowPlace::ProjectList
             && !session.is_browser()
             && !group.is_stale
@@ -99,9 +100,20 @@ impl GhostexGpuiApp {
         let indent = 5.0 + super::threads::thread_depth(session) * super::threads::THREAD_INDENT;
         let hovered = self.native_sidebar.hovered_session.as_deref() == Some(&session_id);
         // CDXC:Sessions 2026-10-28 DECISION: User: "if i disable all buttons for the session card in the sidebar please let the sidebar sessions not change when i hover over one of them". `hovered` alone still draws the row's hover fill; everything hover swaps (time, badges, status dots, icon, dimming, the button strip) follows `buttons_shown`, which is false when the strip has no button.
+        // A Unified thread's strip opens and closes with every Unified card's (`unifiedHoverExpand`,
+        // CDXC:Sidebar 2026-10-31 in unified/hover.rs), not with the hidden Project group's.
+        let (strip_expanded, strip_toggle) = match place {
+            SessionRowPlace::ProjectList => (
+                group.hover_actions_expanded,
+                json!({"type": "toggleHoverActions", "groupId": group.storage_id}),
+            ),
+            SessionRowPlace::UnifiedThread => (
+                self.gx_store.unified_sidebar.saved.strip_expanded,
+                json!({"type": "unifiedHoverExpand"}),
+            ),
+        };
         let buttons_shown = hovered
-            && !super::hover_actions::session_hover_items(session, group.hover_actions_expanded)
-                .is_empty();
+            && !super::hover_actions::session_hover_items(session, strip_expanded).is_empty();
         // CDXC:Sidebar 2026-09-19 WHY: sidebar clicks and tab selections must show in the same frame (user decision in gx_store/local_focus.rs). The focused and visible fills of a local session row read the Rust store, which a selection changes in the same frame; the snapshot's flags arrive a sidebar projection later. This supersedes the click-only `optimistic_focus` mark and its 1.5 second timeout of earlier the same day.
         let (focused, visible) = self.gx_store_sidebar_row_focus(
             &session_id,
@@ -298,7 +310,7 @@ impl GhostexGpuiApp {
                 .when(!buttons_shown && folded_dots.is_none() && !question && !approval, |row| row.children(super::status::activity_indicator(&session.activity, session.has_background_work, failed, scale)))
                 // CDXC:SessionStatus 2026-09-13 DECISION: User: hide Last Active while the question dot is shown so they do not overlap, including when the session is not working.
                 .when(!buttons_shown && folded_dots.is_none() && !question && !approval && !failed && (timer.is_some() || (show_time && session.activity != "working" && session.activity != "attention" && !session.has_background_work)), |row| row.child(div().text_size(px(13.55 * scale)).text_color(if sleeping { chrome_color(0x686868, 0x959595) } else { chrome_color(0xa6a6a6, 0x424242) }).child(time)))
-                .when(buttons_shown, |row| row.child(self.render_native_session_hover_actions(group, session, appearance, cx)))
+                .when(buttons_shown, |row| row.child(self.render_native_session_hover_strip(session, strip_expanded, strip_toggle, appearance, cx)))
                 .when(approval, |row| row.child(super::status::approval_indicator(scale)))
                 .when(question, |row| row.child(super::status::question_indicator(&session.activity, scale, super::status::session_row_ring(appearance, highlighted, visible, question_fill, hovered))))
                 .children(folded_dots))
@@ -327,6 +339,8 @@ impl GhostexGpuiApp {
                     }
                     if stale { return; }
                     let modifiers = event.modifiers();
+                    // Shift and Cmd/Ctrl select along the Project list's order, which a Unified thread is not drawn in; a Unified card ignores them too.
+                    if unified && (modifiers.shift || modifiers.platform || modifiers.control) { return; }
                     let mode = if modifiers.shift { "range" } else if modifiers.platform || modifiers.control { "additive" } else { "focus" };
                     // A coordinator's thread nested from another computer this app has not connected to yet: connect, then open it.
                     if mode == "focus" && borrowed_thread && app.open_borrowed_thread_row_when_connected(&session_id, cx) { return; }

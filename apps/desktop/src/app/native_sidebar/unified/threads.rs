@@ -68,6 +68,37 @@ pub(super) fn folded_slot(
     )
 }
 
+/// The thread's row with its time labels read now from its session, as a card reads its own: the
+/// row was built with the list, and the Project list's relabel pass refreshes only its own rows.
+fn with_live_labels(thread: &UnifiedCard) -> std::sync::Arc<NativeSidebarSession> {
+    let now = now_ms().max(0) as u64;
+    let labels = [
+        ("timerLabel", thread.row.timer_label(now)),
+        (
+            "lastInteractionLabel",
+            thread.row.last_interaction_label(now),
+        ),
+    ];
+    let stale = labels.iter().any(|(key, label)| {
+        thread.session.details.get(*key).and_then(Value::as_str) != label.as_deref()
+    });
+    if !stale {
+        return thread.session.clone();
+    }
+    let mut session = (*thread.session).clone();
+    for (key, label) in labels {
+        match label {
+            Some(label) => {
+                session.details.insert(key.to_string(), Value::from(label));
+            }
+            None => {
+                session.details.remove(key);
+            }
+        }
+    }
+    std::sync::Arc::new(session)
+}
+
 impl GhostexGpuiApp {
     /// The crew count of a Unified row with threads under it: always drawn on a card, grey while
     /// none works or waits, as information (CDXC:Coordinators 2026-11-11 WHY in
@@ -174,7 +205,7 @@ impl GhostexGpuiApp {
                     card: thread,
                     group,
                 } => {
-                    let session = &thread.session;
+                    let session = &with_live_labels(thread);
                     let row = self.render_native_sidebar_session(
                         group,
                         session,
@@ -186,6 +217,8 @@ impl GhostexGpuiApp {
                     );
                     // The Project list tracks hover with its own probes; here the row does.
                     let hover_id = session.session_id.clone();
+                    // A row with links opens the floating links card on hover, as a card does.
+                    let opens_links_card = self.native_session_links_row(session).hover_card;
                     rows.push(
                         div()
                             .id(gpui::SharedString::from(format!(
@@ -198,6 +231,12 @@ impl GhostexGpuiApp {
                                     == Some(hover_id.as_str());
                                 if *hovered && !current {
                                     app.native_sidebar.hovered_session = Some(hover_id.clone());
+                                    if opens_links_card {
+                                        app.open_session_links_card_after_delay(
+                                            hover_id.clone(),
+                                            cx,
+                                        );
+                                    }
                                     cx.notify();
                                 } else if !*hovered && current {
                                     app.native_sidebar.hovered_session = None;

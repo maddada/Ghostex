@@ -1,7 +1,4 @@
-use super::{
-    appearance::SidebarAppearance,
-    model::{NativeSidebarGroup, NativeSidebarSession},
-};
+use super::{appearance::SidebarAppearance, model::NativeSidebarSession};
 use crate::{GhostexGpuiApp, app::helpers::*};
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -42,22 +39,6 @@ pub(crate) fn session_hover_items(session: &NativeSidebarSession, expanded: bool
 }
 
 impl GhostexGpuiApp {
-    pub(crate) fn render_native_session_hover_actions(
-        &self,
-        group: &NativeSidebarGroup,
-        session: &NativeSidebarSession,
-        appearance: &SidebarAppearance,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        self.render_native_session_hover_strip(
-            session,
-            group.hover_actions_expanded,
-            json!({"type": "toggleHoverActions", "groupId": group.storage_id}),
-            appearance,
-            cx,
-        )
-    }
-
     /// The buttons themselves, with what the chevron sends: a Project sidebar row's chevron opens
     /// its project's strip, a Unified card's opens every card's.
     pub(crate) fn render_native_session_hover_strip(
