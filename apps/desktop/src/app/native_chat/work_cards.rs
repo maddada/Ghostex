@@ -93,6 +93,13 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
 /// A chip's glyph by what it says.
 /// The dock's cards stop growing here (unscaled) and scroll inside it.
 const DOCK_MAX_HEIGHT: f32 = 360.0;
+/// The share of the window's height the dock's rows may take at most, so a short window always
+/// keeps the transcript in view above the dock and the chat box (the phone's `dockHeightCap`).
+///
+/// CDXC:Coordinators 2026-11-12 DECISION:
+/// User, of the phone's opened dock that hid the chat: the dock never takes more than a share of
+/// the space above the chat box; the desktop keeps the same rule.
+const DOCK_WINDOW_SHARE: f32 = 0.4;
 /// A dock row's metrics (unscaled): the rows' inset in the dock, a row's side padding, the gap
 /// between its parts, and the glyph with its gap that leads every line.
 const DOCK_LIST_PAD: f32 = 4.0;
@@ -373,6 +380,7 @@ impl NativeChatView {
     pub(super) fn render_work_dock(
         &self,
         p: &ChatAppearance,
+        window_height: f32,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         self.board.dock_top.set(None);
@@ -430,7 +438,9 @@ impl NativeChatView {
                 .id("work-dock-rows")
                 .w_full()
                 .min_w_0()
-                .max_h(px(DOCK_MAX_HEIGHT * s))
+                .max_h(px(
+                    (DOCK_MAX_HEIGHT * s).min(window_height * DOCK_WINDOW_SHARE)
+                ))
                 .overflow_y_scroll()
                 .flex()
                 .flex_col()

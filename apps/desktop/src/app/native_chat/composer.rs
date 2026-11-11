@@ -412,7 +412,7 @@ impl NativeChatView {
         let dock = if maximized {
             None
         } else {
-            self.render_work_dock(p, cx)
+            self.render_work_dock(p, window.viewport_size().height.as_f32(), cx)
         };
         let working_card = if maximized
             || dock.is_some()
