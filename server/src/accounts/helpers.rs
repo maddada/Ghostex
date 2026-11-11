@@ -40,6 +40,15 @@ pub(crate) fn probe_executable(home: &Path, name: &str) -> Option<PathBuf> {
 /// The helpers' own install directories, searched after the live PATH.
 fn install_dirs(home: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![home.join(".local/bin"), home.join(".cargo/bin")];
+    // CDXC:AgentProviders 2026-11-11 WHY:
+    // A gxserver that `cargo xtask rebuild` starts as a launchd job has launchd's bare PATH, so a
+    // Claude or Codex installed only through mise (no `~/.local/bin` link) read as not installed to
+    // every account and usage helper. mise's shims run whichever version mise has now.
+    #[cfg(not(windows))]
+    dirs.extend([
+        crate::agent_cli::launch_path::mise_data_dir(home).join("shims"),
+        home.join(".asdf/shims"),
+    ]);
     // CDXC:AgentProviders 2026-09-06 WHY:
     // A GUI or systemd launch may omit Homebrew from PATH even after the account helper is installed.
     #[cfg(target_os = "macos")]

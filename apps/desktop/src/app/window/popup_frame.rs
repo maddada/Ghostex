@@ -90,7 +90,10 @@ where
 pub(crate) fn fade_in_popup_window(window: &Window, reduce_motion: bool) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     unsafe extern "C" {
-        fn GhostexGpuiFadeInPopupWindow(native_view: *mut std::ffi::c_void, seconds: f64);
+        fn GhostexGpuiFadeInPopupWindow(
+            native_view: *mut std::ffi::c_void,
+            seconds: f64,
+        ) -> std::ffi::c_int;
     }
     // With motion off it still shows, at once: a held popup is invisible until this runs.
     let duration = popup_open_duration(
@@ -101,8 +104,25 @@ pub(crate) fn fade_in_popup_window(window: &Window, reduce_motion: bool) {
     let Ok(handle) = HasWindowHandle::window_handle(window) else {
         return;
     };
-    if let RawWindowHandle::AppKit(handle) = handle.as_raw() {
-        unsafe { GhostexGpuiFadeInPopupWindow(handle.ns_view.as_ptr(), duration.as_secs_f64()) };
+    if let RawWindowHandle::AppKit(handle) = handle.as_raw()
+        && unsafe { GhostexGpuiFadeInPopupWindow(handle.ns_view.as_ptr(), duration.as_secs_f64()) }
+            == 0
+    {
+        // Kept until the user confirms the main window no longer flickers.
+        use std::io::Write as _;
+        let directory = crate::support_logs::logs_directory();
+        let _ = std::fs::create_dir_all(&directory);
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(directory.join("usage-popup-trace.log"))
+        {
+            let _ = writeln!(
+                file,
+                "fade refused: window {:?} is the main window",
+                window.window_handle().window_id()
+            );
+        }
     }
 }
 

@@ -8,7 +8,7 @@
 //! `noboxes` (agentbox installed, no box ready: the Settings link), `many`
 //! (sixteen agents, so the list scrolls). Every other state has no Run on row.
 use super::new_thread_picker::*;
-use gpui::{App, AppContext as _, Entity, WindowHandle};
+use gpui::{App, AppContext as _, Bounds, Entity, WindowHandle, point, px, size};
 use gpui_component::Root;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -218,10 +218,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     // The Cloud Box chip shows with the boxes states (Cloud Boxes on).
     let cloud_box = state.starts_with("boxes");
     // `places` and `projects` draw the project row and machine chips (`projects` opens the list).
-    let place = state.starts_with("places") || state == "projects";
+    let place = state.starts_with("places") || state.starts_with("projects");
     let run_on_shown = !place && (boxes.shows_run_on() || cloud_box);
     let config = NewThreadPickerConfig {
-        place: place.then(demo_place),
+        place: place.then(|| demo_place(state == "projects-long")),
         palette: demo.palette,
         agents: agents.clone(),
         agents_loaded: state != "loading",
@@ -235,15 +235,25 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         close_when_inactive: false,
         cloud_default_account: None,
         cloud_box,
+        // GHOSTEX_NATIVE_MODAL_DEMO_ROOM_HEIGHT=<points>: the height of the app window the picker
+        // opens over, so a short window can be previewed (its height cap).
+        room: std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_ROOM_HEIGHT")
+            .ok()
+            .and_then(|height| height.trim().parse::<f32>().ok())
+            .map(|height| Bounds::new(point(px(0.0), px(0.0)), size(px(1200.0), px(height)))),
     };
     let (window, view) = super::open_modal_window(
         NEW_THREAD_PICKER_WIDTH,
-        new_thread_picker_window_height(agents.len(), place, run_on_shown),
+        new_thread_picker_capped_height(
+            new_thread_picker_window_height(agents.len(), place, run_on_shown),
+            config.room,
+            None,
+        ),
         move |window, cx| cx.new(|cx| GpuiNewThreadPickerWindow::new(config, host, window, cx)),
         cx,
     );
     *slot.borrow_mut() = Some((window, view.clone()));
-    if state == "projects" {
+    if state.starts_with("projects") {
         let _ = window.update(cx, |_root, window, cx| {
             view.update(cx, |picker, cx| {
                 picker.toggle_project_list(window, cx);
@@ -290,7 +300,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
 }
 
 /// Three projects on three machines, one machine not connected, for the `places` states.
-fn demo_place() -> NewThreadPickerPlace {
+fn demo_place(long: bool) -> NewThreadPickerPlace {
     let machine = |id: &str, label: &str, connected: bool, project: &str| NewThreadPickerMachine {
         machine_id: id.to_string(),
         label: label.to_string(),
@@ -307,37 +317,53 @@ fn demo_place() -> NewThreadPickerPlace {
             start_machine: 0,
             detail: None,
         };
-    NewThreadPickerPlace {
-        projects: vec![
+    let mut projects = vec![
+        project(
+            "project-b",
+            true,
+            true,
+            vec![machine("serverb", "Server B", true, "b")],
+        ),
+        project(
+            "project-a",
+            true,
+            false,
+            vec![
+                machine("local", "MacBook", true, "a1"),
+                machine("servera", "Server A", true, "a2"),
+                machine("serverc", "Server C", false, "a3"),
+            ],
+        ),
+        project(
+            "dotfiles",
+            false,
+            true,
+            vec![machine("local", "MacBook", true, "d")],
+        ),
+        project(
+            "site",
+            false,
+            false,
+            vec![machine("local", "MacBook", true, "s")],
+        ),
+    ];
+    // A long list: more projects than any window shows, most on three computers.
+    if long {
+        projects.extend((1..=24).map(|n| {
             project(
-                "project-b",
-                true,
-                true,
-                vec![machine("serverb", "Server B", true, "b")],
-            ),
-            project(
-                "project-a",
-                true,
+                &format!("project-{n:02}"),
                 false,
+                n % 3 == 0,
                 vec![
-                    machine("local", "MacBook", true, "a1"),
-                    machine("servera", "Server A", true, "a2"),
-                    machine("serverc", "Server C", false, "a3"),
+                    machine("local", "Local", true, "l"),
+                    machine("windows", "Windows", true, "w"),
+                    machine("cloud", "Cloud Box", true, "c"),
                 ],
-            ),
-            project(
-                "dotfiles",
-                false,
-                true,
-                vec![machine("local", "MacBook", true, "d")],
-            ),
-            project(
-                "site",
-                false,
-                false,
-                vec![machine("local", "MacBook", true, "s")],
-            ),
-        ],
+            )
+        }));
+    }
+    NewThreadPickerPlace {
+        projects,
         project: 1,
         machine: 1,
         hotkey: Some("⌘N".to_string()),
