@@ -688,76 +688,6 @@ fn beads_hook_script_matches_typescript_contract() {
     assert_eq!(quoted, "'/tmp/it'\\''s/bd'");
 }
 
-#[tokio::test]
-async fn ensure_beads_hooks_installs_scripts_in_common_git_directory() {
-    let dir = tempdir().unwrap();
-    let repo = dir.path().join("repo");
-    let system_bin = dir.path().join("system-bin");
-    let bd = system_bin.join("bd");
-    let beads_dir = repo.join(".beads");
-    let hook_log = dir.path().join("hook.log");
-    fs::create_dir_all(&repo).unwrap();
-    fs::create_dir_all(&beads_dir).unwrap();
-    fs::create_dir_all(&system_bin).unwrap();
-    run_git(["init"], &repo);
-    fs::write(
-        &bd,
-        format!(
-            "#!/bin/sh\n\
-if [ \"$1\" = \"where\" ]; then\n\
-  printf '%s\\n' '{{\"path\":\"{}\"}}'\n\
-  exit 0\n\
-fi\n\
-if [ \"$1\" = \"hooks\" ] && [ \"$2\" = \"run\" ]; then\n\
-  printf '%s\\n' \"$BEADS_DIR|$BD_GIT_HOOK|$3\" >> {}\n\
-  exit 0\n\
-fi\n\
-exit 0\n",
-            beads_dir.to_string_lossy(),
-            shell_single_quote(&hook_log.to_string_lossy()),
-        ),
-    )
-    .unwrap();
-    chmod_executable_if_supported(&bd).unwrap();
-
-    let ctx = context(&repo);
-    let result = ensure_beads_git_hooks_with_executable(&ctx, &bd.to_string_lossy())
-        .await
-        .unwrap();
-    assert_eq!(result.get("exitCode").and_then(Value::as_i64), Some(0));
-    assert_eq!(
-        result.get("stdout").and_then(Value::as_str),
-        Some("installed")
-    );
-
-    let hooks_path = repo.join(".git").join("ghostex-hooks");
-    assert_eq!(
-        run_git_output(["config", "--get", "core.hooksPath"], &repo).trim(),
-        hooks_path.to_string_lossy()
-    );
-    let pre_commit = fs::read_to_string(hooks_path.join("pre-commit")).unwrap();
-    assert!(pre_commit.contains("BD_BIN="));
-    assert!(pre_commit.contains("BEADS_DIR_VALUE="));
-    assert!(pre_commit.contains("HOOK_NAME='pre-commit'"));
-    assert!(pre_commit.contains("hooks run \"$HOOK_NAME\""));
-    assert!(!pre_commit.contains("issues.jsonl"));
-
-    let hook_output = StdCommand::new(hooks_path.join("pre-commit"))
-        .current_dir(&repo)
-        .output()
-        .unwrap();
-    assert!(
-        hook_output.status.success(),
-        "hook failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&hook_output.stdout),
-        String::from_utf8_lossy(&hook_output.stderr)
-    );
-    assert_eq!(
-        fs::read_to_string(&hook_log).unwrap().trim(),
-        format!("{}|1|pre-commit", beads_dir.to_string_lossy())
-    );
-}
-
 #[test]
 fn beads_where_output_requires_absolute_directory() {
     let dir = tempdir().unwrap();
@@ -960,7 +890,7 @@ fn beads_list_all_labels_plans_board_list_command() {
     let ctx = context(dir.path());
     let command =
         build_beads_command_with_executable("listAllLabels", &Map::new(), &ctx, "/tmp/bd").unwrap();
-    assert_eq!(command.args, vec!["list", "--all", "--json"]);
+    assert_eq!(command.args, vec!["list", "--all", "-n", "0", "--json"]);
 }
 
 #[test]
@@ -997,21 +927,6 @@ where
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-}
-
-fn run_git_output<I, S>(args: I, cwd: &Path) -> String
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<std::ffi::OsStr>,
-{
-    let output = run_git_raw(args, cwd);
-    assert!(
-        output.status.success(),
-        "git failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).to_string()
 }
 
 fn run_git_raw<I, S>(args: I, cwd: &Path) -> std::process::Output

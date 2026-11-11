@@ -55,7 +55,9 @@ pub(crate) async fn serve(
     else {
         return status(StatusCode::NOT_FOUND);
     };
-    let page_id = id.clone();
+    let policy = served_policy(&id, host.as_deref());
+    let content_security_policy =
+        format!("sandbox allow-scripts allow-forms allow-popups; {policy}");
     let page_script = query
         .as_deref()
         .is_some_and(|query| query.split('&').any(|pair| pair == PAGE_SCRIPT_QUERY));
@@ -73,7 +75,7 @@ pub(crate) async fn serve(
             None
         };
         read_page(&gxserver_state_dir, &id)
-            .map(|page| with_page_state(page, record, page_script))
+            .map(|page| with_page_state(page, record, page_script, &policy))
             .map(|page| match note {
                 Some(note) => with_read_only(page, note),
                 None => page,
@@ -89,10 +91,6 @@ pub(crate) async fn serve(
         endpoint_path: None,
         response: Response::new(Body::from(page)),
     };
-    let content_security_policy = format!(
-        "sandbox allow-scripts allow-forms allow-popups; {}",
-        header_policy(&page_id, host.as_deref())
-    );
     for (name, value) in [
         (header::CONTENT_TYPE, "text/html; charset=utf-8"),
         (
@@ -152,11 +150,18 @@ fn status(code: StatusCode) -> RoutedResponse {
     }
 }
 
-/// The page's content policy for this response. The page's own copy allows it to reach its server
-/// (`'self'`), and a browser enforces both policies, so naming the page's own routes here (its
-/// answers, its draft and its scroll position, under `/visual/<id>/`) keeps the page off every
-/// other gxserver route.
-fn header_policy(id: &str, host: Option<&str>) -> String {
+/// The page's content policy for this response, sent as its header and written into the page's own
+/// policy tag (builtin.rs), so the browser gets the same resource policy twice. Its connect rule
+/// is the published one's `https:` with this page's own routes over http (its answers, its draft
+/// and its scroll position, under `/visual/<id>/`) in place of `'self'`, so it names no other
+/// gxserver route. What `https:` reaches, and where a redirect from an allowed address leads, are
+/// not narrowed by it, as before. The sandbox is the header's alone: a tag cannot carry one. `id`
+/// is a page id and `host` is checked here, so the policy holds nothing that could end the tag's
+/// attribute.
+///
+/// CDXC:ServerApi 2026-11-10 WHY:
+/// A page's answers and drafts never left an iPhone: Send said "Not sent yet: Ghostex can't be reached" for good. Only the header named the page's address; the page's own tag said `'self'`, as it is stored (prepare.rs, where the address is not known: each reader reaches the page under its own, the phone under its forward's port). The response's sandbox gives the page an opaque origin, and WebKit matches `'self'` against that origin, so it matched nothing and the tag refused every request the header allowed; Chromium matches it against the address the page was loaded from, so the desktop and Android sent. The tag now carries the same policy as the header. It is not dropped from the served page instead, because a copy of the page that is saved or handed on without this response's header would then run under no policy at all.
+fn served_policy(id: &str, host: Option<&str>) -> String {
     let host = host.filter(|host| {
         !host.is_empty()
             && host
@@ -179,14 +184,17 @@ fn header_policy(id: &str, host: Option<&str>) -> String {
 /// answers, what they were, and when, or else the draft they left; and, for a page written without
 /// the v2 marker, `oldLayout` and whether its notice was closed. A page published before
 /// answering existed has no marker. `page_script` adds [`PAGE_SCRIPT`] there too, or before
-/// `</head>` in a page without the marker.
+/// `</head>` in a page without the marker. `policy` is the content policy the block's tag gets:
+/// the one of this response's header ([`served_policy`]), or the published one for a copy that
+/// is not loaded from gxserver (a guest's, guest.rs).
 pub(super) fn with_page_state(
     page: Vec<u8>,
     record: Option<serde_json::Value>,
     page_script: bool,
+    policy: &str,
 ) -> Vec<u8> {
     let html = match String::from_utf8(page) {
-        Ok(html) => with_current_block(html),
+        Ok(html) => with_current_block(html, policy),
         Err(error) => return error.into_bytes(),
     };
     let script = if page_script {
@@ -293,7 +301,7 @@ mod tests {
             "the check runs before any answers leave the page"
         );
         let served = String::from_utf8(with_read_only(
-            with_page_state(page(""), None, false),
+            with_page_state(page(""), None, false, PAGE_CONTENT_SECURITY_POLICY),
             FILE_PAGE_NOTE,
         ))
         .unwrap();
@@ -306,7 +314,12 @@ mod tests {
 
     #[test]
     fn a_page_without_the_v2_marker_asks_for_the_old_layout_notice() {
-        let state = state_of(with_page_state(page(""), None, false));
+        let state = state_of(with_page_state(
+            page(""),
+            None,
+            false,
+            PAGE_CONTENT_SECURITY_POLICY,
+        ));
         assert_eq!(state["oldLayout"], true);
         assert_eq!(state["noticeDismissed"], false);
     }
@@ -314,7 +327,12 @@ mod tests {
     #[test]
     fn a_closed_notice_stays_closed_for_that_page() {
         let record = serde_json::json!({"layoutNoticeDismissedAt": "2026-10-27T00:00:00.000Z"});
-        let state = state_of(with_page_state(page(""), Some(record), false));
+        let state = state_of(with_page_state(
+            page(""),
+            Some(record),
+            false,
+            PAGE_CONTENT_SECURITY_POLICY,
+        ));
         assert_eq!(state["oldLayout"], true);
         assert_eq!(state["noticeDismissed"], true);
     }
@@ -322,7 +340,12 @@ mod tests {
     #[test]
     fn a_page_is_served_its_draft_with_the_time_of_its_last_edit() {
         let record = serde_json::json!({"draft": {"kit": {"q": "a"}}, "draftEditedAt": 1_234});
-        let state = state_of(with_page_state(page(""), Some(record), false));
+        let state = state_of(with_page_state(
+            page(""),
+            Some(record),
+            false,
+            PAGE_CONTENT_SECURITY_POLICY,
+        ));
         assert_eq!(state["draft"]["kit"]["q"], "a");
         assert_eq!(state["draftEditedAt"], 1_234);
     }
@@ -333,6 +356,7 @@ mod tests {
             page("<meta name=\"ghostex-page\" content=\"v2\">"),
             None,
             false,
+            PAGE_CONTENT_SECURITY_POLICY,
         ));
         assert!(state.get("oldLayout").is_none());
         assert_eq!(state["answered"], false);

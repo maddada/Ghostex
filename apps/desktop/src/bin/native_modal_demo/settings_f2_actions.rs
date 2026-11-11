@@ -9,8 +9,12 @@
 //! `actions-duplicate` (Build renamed to Dev), `actions-icon-picker`, `actions-icon-search`;
 //! `projects` (the Projects story), `projects-picker`, `projects-picker-search`, `projects-empty`,
 //! `projects-inherited` (Global Defaults set, so the project fields inherit), `projects-views`
-//! (a Linear website view, a Storybook dev-server view and a selected-only report view). The
-//! page reads the dialog and popover states from `preview_state`.
+//! (a Linear website view, a Storybook dev-server view and a selected-only report view); with the
+//! Global settings set: `projects-fold-closed` (the fold's summary), `projects-fold-open`,
+//! `projects-dropdown` (the Project dropdown open, a worktree under its project),
+//! `projects-picked` (Customer Web picked, its fields inheriting) and `projects-search` (a search
+//! for "docs directory" matching a global row and a project row). The page reads the dialog and
+//! popover states from `preview_state`.
 use serde_json::{Map, Value, json};
 use std::cell::RefCell;
 
@@ -33,6 +37,19 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
             "globalDocsDirectory".into(),
             json!("/Users/you/Documents/vault"),
         );
+    }
+    if matches!(
+        state,
+        "projects-fold-closed"
+            | "projects-fold-open"
+            | "projects-dropdown"
+            | "projects-picked"
+            | "projects-search"
+    ) {
+        settings.insert("defaultProjectsFolder".into(), json!("~/dev"));
+        settings.insert("globalWorktreeCommand".into(), json!("bun install"));
+        settings.insert("globalBeadsDisplayKey".into(), json!("TKT"));
+        settings.insert("globalDocsDirectory".into(), json!("~/Documents/notes"));
     }
     if state == "projects-views" {
         settings.insert(
@@ -68,6 +85,12 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
         );
     }
 }
+
+/// A project icon as the sidebar gets it: a data URL (a filled rounded square with a bolt).
+const GHOSTEX_ICON: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iI2Y1YTUyNCIvPjxwYXRoIGQ9Ik0xOCA1TDggMThoN2wtMSA5IDEwLTEzaC03bDEtOXoiIGZpbGw9IiMxYTFhMWEiLz48L3N2Zz4=";
+
+/// A worktree's icon: a PNG data URL (an orange square on green).
+const WORKTREE_ICON: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAP0lEQVR4nO3OIQEAIBDAwA9DBHqSgiRkQkMBBAbenJiZuqijrcwCAOA0Zy/PAgAAAAAAAAAAAAC4AvwMIB2wAYABiE8U+B1tAAAAAElFTkSuQmCC";
 
 fn default_commands() -> Value {
     json!([
@@ -117,10 +140,11 @@ pub(super) fn extend_sidebar_state(message: &mut Value) {
         json!([])
     } else {
         json!([
-            { "beadsDirectory": "", "beadsDisplayKey": "ZMX", "name": "Ghostex", "path": "/Users/you/dev/ghostex", "projectId": "project-ghostex", "worktreeCommand": "bun install", "workMode": true, "workspaceId": "work" },
+            { "beadsDirectory": "", "beadsDisplayKey": "ZMX", "iconDataUrl": GHOSTEX_ICON, "name": "Ghostex", "path": "/Users/you/dev/ghostex", "projectId": "project-ghostex", "worktreeCommand": "bun install", "workMode": true, "workspaceId": "work" },
             { "beadsDirectory": "/Users/you/dev/infra/.beads", "beadsDisplayKey": "INF", "name": "Infra Control Plane", "path": "/Users/you/dev/platform/infra-control-plane", "projectId": "project-infra", "worktreeCommand": "pnpm install" },
             { "beadsDirectory": "", "beadsDisplayKey": "WEB", "name": "Customer Web", "path": "/Users/you/dev/products/customer-web-application", "projectId": "project-web", "worktreeCommand": "" },
-            { "beadsDirectory": "", "beadsDisplayKey": "OPS", "name": "Operations Dashboard", "path": "/Users/you/dev/internal/tools/operations-dashboard", "projectId": "project-ops", "worktreeCommand": "bun run setup" }
+            { "beadsDirectory": "", "beadsDisplayKey": "OPS", "name": "Operations Dashboard", "path": "/Users/you/dev/internal/tools/operations-dashboard", "projectId": "project-ops", "worktreeCommand": "bun run setup" },
+            { "beadsDirectory": "", "beadsDisplayKey": "", "iconDataUrl": WORKTREE_ICON, "name": "ghostex-settings-fold", "path": "/Users/you/dev/ghostex-settings-fold", "projectId": "project-ghostex-fold", "worktreeCommand": "", "worktreeParentProjectId": "project-ghostex" }
         ])
     };
 }
@@ -128,6 +152,14 @@ pub(super) fn extend_sidebar_state(message: &mut Value) {
 pub(super) fn open_message(state: &str) -> Option<Value> {
     if state == "actions" || state.starts_with("actions-") {
         return Some(json!({ "initialTab": "actions" }));
+    }
+    if state == "projects-search" {
+        // GHOSTEX_NATIVE_MODAL_DEMO_QUERY searches for something else.
+        let query = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_QUERY")
+            .ok()
+            .filter(|query| !query.trim().is_empty())
+            .unwrap_or_else(|| "docs directory".to_string());
+        return Some(json!({ "initialTab": "projects", "initialSearchQuery": query }));
     }
     if state == "projects" || state.starts_with("projects-") {
         return Some(json!({ "initialTab": "projects" }));

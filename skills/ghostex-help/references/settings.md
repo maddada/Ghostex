@@ -634,7 +634,11 @@ How to use this file:
 - **Ticket key** `ticketKey` (Settings UI row without a settings key; use `ghostex settings open`): Three-letter prefix used for Linear-style ticket numbers on the Project board.
 - **Beads directory** `beadsDirectory` (Settings UI row without a settings key; use `ghostex settings open`): Absolute path the Project board reads its Beads workspace (.beads) from.
 - **Docs directory** `docsDirectory` (Settings UI row without a settings key; use `ghostex settings open`): Extra folder this project's Files view shows, in addition to its own docs.
+### Issues Workflow
+
 - **Project Linear API key** `projectLinearApiKey` (Settings UI row without a settings key; use `ghostex settings open`): A Linear key for this project only, used instead of its workspace's or the shared key. Issues Workflow shows Linear tickets once a key applies to the project.
+### Cloud box
+
 - **Cloud box provider and size** `projectCloudBoxDefaults` (Settings UI row without a settings key; use `ghostex settings open`): Which provider and machine size a new Cloud Box for this project starts on.
 - **Cloud box snapshots** `projectCloudBoxSnapshots` (Settings UI row without a settings key; use `ghostex settings open`): This project's saved snapshots: what a new Cloud Box starts from. Make one the Default (★), update the Default from a running box, or delete one.
 - **Send to the box** `projectCloudBoxSecrets` (Settings UI row without a settings key; use `ghostex settings open`): Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.
