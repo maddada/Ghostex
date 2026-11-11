@@ -12,4 +12,6 @@ mod render;
 mod tree;
 mod view;
 
-pub(crate) use view::{BeadsLayout, BeadsView};
+#[cfg_attr(not(target_arch = "wasm32"), allow(unused_imports))]
+pub(crate) use view::BeadsLayout;
+pub(crate) use view::BeadsView;

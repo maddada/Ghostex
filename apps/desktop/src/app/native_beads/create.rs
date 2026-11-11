@@ -269,10 +269,10 @@ impl BeadsView {
             )
             .await;
             let _ = this.update(cx, |this, cx| {
-                if this.generation == generation {
-                    if let Some(fetch) = this.fetch_now(false, cx) {
-                        fetch.detach();
-                    }
+                if this.generation == generation
+                    && let Some(fetch) = this.fetch_now(false, cx)
+                {
+                    fetch.detach();
                 }
             });
         })

@@ -399,6 +399,16 @@ impl BeadsView {
         }
         Some(cx.spawn(async move |this, cx| {
             let answer = gx_rpc(target.remote.clone(), "/api/beadsView", params).await;
+            // CDXC:ProjectBoard 2026-11-11 WHY: an older gxserver answers `notFound` for /api/beadsView, but a page's fetch of a path that server does not know fails before any answer (no CORS headers on its 404), so a failure with no code is checked against a call every gxserver answers; if that one works, the computer's Ghostex predates the view.
+            let server_older = match &answer {
+                Err(error) if error.code.as_deref() == Some("notFound") => true,
+                Err(error) if error.code.is_none() => {
+                    gx_rpc(target.remote.clone(), "/api/listProjects", json!({}))
+                        .await
+                        .is_ok()
+                }
+                _ => false,
+            };
             let projects = if projects_due {
                 gx_rpc(target.remote.clone(), "/api/listProjects", json!({}))
                     .await
@@ -420,9 +430,7 @@ impl BeadsView {
                 match answer {
                     Ok(answer) => this.apply_snapshot(answer),
                     Err(error) => {
-                        let unknown = error.code.as_deref() == Some("notFound")
-                            || error.message.to_lowercase().contains("unknown endpoint");
-                        if unknown {
+                        if server_older {
                             this.legacy = true;
                             this.load_error = None;
                         } else {

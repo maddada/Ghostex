@@ -80,11 +80,7 @@ async fn refresh(
 ) -> Option<String> {
     let embedded = workspace_mode(info) == "embedded";
     let attempts = if embedded { EMBEDDED_ATTEMPTS } else { 1 };
-    let ready_command = bd_read(
-        bd,
-        &["ready", "--explain", "--json", "--limit", "0"],
-        cwd,
-    );
+    let ready_command = bd_read(bd, &["ready", "--explain", "--json", "--limit", "0"], cwd);
     let list_command = match beads_action_command("list", &Map::new(), context) {
         Ok(command) => command,
         Err(error) => return Some(error.message),
@@ -266,12 +262,9 @@ fn parse_readiness(stdout: &str) -> Option<Readiness> {
 
 /// Server mode: does bd's ready answer agree with the list's own dependency facts?
 fn readiness_agrees(rows: &[ListRow], readiness: &Readiness) -> bool {
-    let by_id: HashMap<&str, &ListRow> = rows.iter().map(|row| (row.row.id.as_str(), row)).collect();
-    let open = |id: &str| {
-        by_id
-            .get(id)
-            .is_some_and(|row| row.row.status != "closed")
-    };
+    let by_id: HashMap<&str, &ListRow> =
+        rows.iter().map(|row| (row.row.id.as_str(), row)).collect();
+    let open = |id: &str| by_id.get(id).is_some_and(|row| row.row.status != "closed");
     let ready_ok = readiness.ready.iter().all(|id| {
         by_id.get(id.as_str()).is_some_and(|row| {
             row.row.status != "closed"
@@ -408,8 +401,7 @@ async fn ensure_side_facts(
     if needs_remote {
         let command = bd_read(bd, &["dolt", "remote", "list", "--json"], cwd);
         super::log::bd_call("refresh", "remoteList");
-        let remote = match run_process_command_with_timeout(&command, context, READ_TIMEOUT).await
-        {
+        let remote = match run_process_command_with_timeout(&command, context, READ_TIMEOUT).await {
             Ok(output) if output.exit_code == 0 => parse_remote(&output.stdout),
             _ => None,
         };
@@ -430,8 +422,7 @@ async fn read_config_statuses(
     if output.exit_code != 0 || output.error.is_some() {
         return None;
     }
-    let reply =
-        crate::typed_operations::finish_beads_action("configGet", &command, output).ok()?;
+    let reply = crate::typed_operations::finish_beads_action("configGet", &command, output).ok()?;
     entry.state().reads.insert(
         "configGet".to_string(),
         super::cache::CachedRead {
@@ -449,7 +440,11 @@ fn parse_custom_statuses(reply: &Value) -> Vec<String> {
         .and_then(Value::as_str)
         .unwrap_or_default();
     let value = unwrap_envelope(stdout)
-        .and_then(|data| data.get("value").and_then(Value::as_str).map(str::to_string))
+        .and_then(|data| {
+            data.get("value")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
         .unwrap_or_default();
     value
         .split(',')
@@ -494,9 +489,7 @@ async fn resolve_actor(cwd: &str) -> Option<String> {
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
     crate::platform::process::NoConsoleWindow::no_console_window(&mut git);
-    if let Ok(Ok(output)) =
-        tokio::time::timeout(Duration::from_secs(5), git.output()).await
-    {
+    if let Ok(Ok(output)) = tokio::time::timeout(Duration::from_secs(5), git.output()).await {
         let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if output.status.success() && !name.is_empty() {
             return Some(name);
@@ -527,7 +520,10 @@ fn build_reply(
     };
     let mut snapshot = BeadsViewSnapshot {
         workspace,
-        capabilities: capability::ALL.iter().map(|name| name.to_string()).collect(),
+        capabilities: capability::ALL
+            .iter()
+            .map(|name| name.to_string())
+            .collect(),
         busy,
         settling: state.settling,
         error: error.or_else(|| state.published.as_ref().and_then(|p| p.error.clone())),
@@ -549,14 +545,20 @@ fn build_reply(
 }
 
 /// The reply for a project whose folder has no workspace, no bd, or a bd that failed.
-pub(crate) fn workspace_less_reply(state: BeadsWorkspaceState, message: Option<String>) -> BeadsViewSnapshot {
+pub(crate) fn workspace_less_reply(
+    state: BeadsWorkspaceState,
+    message: Option<String>,
+) -> BeadsViewSnapshot {
     BeadsViewSnapshot {
         workspace: BeadsWorkspaceInfo {
             state,
             message,
             ..Default::default()
         },
-        capabilities: capability::ALL.iter().map(|name| name.to_string()).collect(),
+        capabilities: capability::ALL
+            .iter()
+            .map(|name| name.to_string())
+            .collect(),
         ..Default::default()
     }
 }

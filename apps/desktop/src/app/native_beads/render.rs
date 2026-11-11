@@ -135,7 +135,7 @@ impl BeadsView {
         let tree = self.layout == BeadsLayout::Tree;
         let focused = self.search.read(cx).focus_handle(cx).is_focused(window);
         let can_create = ready || self.legacy;
-        let Some(modal) = self.modal.clone() else {
+        let Some(modal) = self.modal else {
             return div().into_any_element();
         };
         div()
@@ -313,7 +313,7 @@ impl BeadsView {
             .filter(|filter| readiness_ok || !filter.needs_readiness())
             .collect();
         let filters_for_click = filters.clone();
-        let Some(modal) = self.modal.clone() else {
+        let Some(modal) = self.modal else {
             return div().into_any_element();
         };
         div()

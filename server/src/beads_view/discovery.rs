@@ -49,8 +49,7 @@ fn records() -> &'static Mutex<HashMap<String, DiscoveryRecord>> {
 }
 
 fn flights() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>> {
-    static FLIGHTS: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
-        OnceLock::new();
+    static FLIGHTS: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
     FLIGHTS.get_or_init(Default::default)
 }
 

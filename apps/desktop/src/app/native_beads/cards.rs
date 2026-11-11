@@ -185,13 +185,11 @@ impl BeadsView {
                 cards.push(self.notice_card("beads-sync-notice", &notice, false, p, cx));
             }
         }
-        if self.workspace_ready() {
-            if let Some(snapshot) = self.snapshot.as_ref() {
-                if snapshot.readiness == ghostex_gx_protocol::beads_view::BeadsReadiness::Paused {
-                    cards.push(quiet_line("Ready list paused while Beads is busy.", p));
-                } else if snapshot.busy || snapshot.settling {
-                    cards.push(quiet_line("Beads is busy; showing what it last said.", p));
-                }
+        if let Some(snapshot) = self.snapshot.as_ref().filter(|_| self.workspace_ready()) {
+            if snapshot.readiness == ghostex_gx_protocol::beads_view::BeadsReadiness::Paused {
+                cards.push(quiet_line("Ready list paused while Beads is busy.", p));
+            } else if snapshot.busy || snapshot.settling {
+                cards.push(quiet_line("Beads is busy; showing what it last said.", p));
             }
         }
         cards

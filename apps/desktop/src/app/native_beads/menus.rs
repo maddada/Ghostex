@@ -44,8 +44,10 @@ struct Entry {
     icon: Option<&'static str>,
     checked: bool,
     disabled: bool,
-    run: Option<Box<dyn Fn(&mut BeadsView, &mut Window, &mut Context<BeadsView>)>>,
+    run: Option<MenuRun>,
 }
+
+type MenuRun = Box<dyn Fn(&mut BeadsView, &mut Window, &mut Context<BeadsView>)>;
 
 fn entry(
     label: impl Into<String>,
