@@ -3538,7 +3538,9 @@ passed. `agents list` finds
 sessions, and `agents send <session-ref> "<text>"` attaches the sender's identity
 and reply reference automatically; an agent that sends with
 `send-session-chat-message`, `queue-session-chat-prompt` or `send-message`
-instead gets the same identity attached, so its message never shows as yours. A normal send reaches a busy agent at its
+instead gets the same identity attached, so its message never shows as yours. `agents send`
+answers in one line with the delivery status (delivered, pending, accepted or queued);
+`--json` prints the full answer. A normal send reaches a busy agent at its
 next input boundary and wakes a sleeping one, so it is right for almost every
 message. Use `--body-file` for multiline messages, `--interrupt` for an urgent
 correction, or `--queue` to leave the message waiting until the current turn
