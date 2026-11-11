@@ -35,15 +35,16 @@ hotkeys Every shortcut and its default binding
   Connect a Device, Keep Awake, then the Tools, Help and Ghostex submenus and
   Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
   Ghostex, and Quit Ghostex & BG Service, which also stops the background
-  service and every session; Help holds Ask Ghostex, Tips & Tricks, Join
-  Discord and Send Bug / Feedback; Tools holds Search by Prompt, Import
+  service and every session; Help holds Ask Ghostex, Join Discord and
+  Send Bug / Feedback; Tools holds Search by Prompt, Import
   Sessions, Extensions, Dev servers and Resources). The
   sidebar's top row holds Search, Add project, the Notifications bell and that
-  menu button. Under it, the New session button starts your last agent (its
-  arrow opens the New Thread picker). The bottom of the sidebar holds your
-  account usage meters, which are the last thing in it; while they are hidden,
-  a small handle at the bottom right brings them back (point at it to peek,
-  click it to pin them). The workspace button (when Workspaces is on) sits on a
+  menu button. Under it, the New session button starts your last agent (the
+  chevron at its right end opens the New Thread picker). The bottom of the sidebar holds your
+  account usage meters, which are the last thing in it; point at them for the
+  small button that hides them. While they are hidden, the usage icon shows at
+  the bottom right when the pointer is at the bottom of the sidebar (point at
+  it to peek, click it to pin them). The workspace button (when Workspaces is on) sits on a
   line of its own above the meters, at the left. There are no other buttons
   down there: Commands and Settings are rows of the More Options menu, with
   Cmd+Shift+P and Cmd+, as their hotkeys. Search is an icon button that keeps

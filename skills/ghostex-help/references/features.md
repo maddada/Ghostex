@@ -758,13 +758,15 @@ terminal. If that computer isn't connected, it says so. A project's "+" and the
 project on top (tap it to pick any project) and the same computer chips.
 
 On the computer, both sidebars have a wide New session button in a row of its
-own under the top row, with its shortcut on it. The top row holds Search, then
+own under the top row: a plus and New session, with its shortcut shown while
+you point at it or it has the keyboard. The top row holds Search, then
 Add project, the bell and the menu; on a very narrow sidebar Add project leaves
 that row and is only in the menu (Add Project is always the menu's first row).
 The button is there with several computers, while bots are showing and
 in the sidebar that slides in while the sidebar is hidden. Click it to start the
 agent you used last in the project of the session you have open, as Cmd+Shift+O
-does. The arrow at its right end opens the New Thread picker, as Cmd+N does, to
+does. The chevron pointing right at its right end opens the New Thread picker
+(the list of agents), as Cmd+N does, to
 pick another agent, a Coordinator, a Browser or a Terminal, or another project.
 The new chat's bar above its message box names its project: click the project
 to move the chat to another one before you send the first message (it starts
@@ -803,7 +805,7 @@ machine that has it; the "+" beside it opens the New Thread picker on that
 project without changing the filter. The project goes to Recent Projects, where Quick Access >
 Projects reopens it; its sessions keep running out of sight until then. Picking
 a project in Quick Access > Projects also filters to it. Above the filter, the
-New session button's arrow opens the New Thread picker in the filtered project
+New session button's chevron opens the New Thread picker in the filtered project
 when the filter is one project (else in the one you have open), without making
 it your open project; its top row changes the project and computer first. A
 click on the button itself starts your last agent in the project you have open. When the new session's project is one the filter hides, that
@@ -949,8 +951,8 @@ Top chrome holds tag filters, Spaces, and the sidebar's menu (More Options, the
 three-lines button at the top of the sidebar): Sort & Filter and Collapse All;
 then Commands, Agents Hub, All Automations, Connect a Device and Keep Awake
 (while it is switched on); then three submenus: Tools (Search by Prompt, Import Sessions,
-Extensions, Dev servers, Resources), Help (Ask Ghostex, Tips & Tricks, Join
-Discord, Send Bug / Feedback) and, in the desktop app, Ghostex (New Window, Check
+Extensions, Dev servers, Resources), Help (Ask Ghostex, Join Discord, Send
+Bug / Feedback) and, in the desktop app, Ghostex (New Window, Check
 for Updates, Restart Ghostex and the Quit rows); and Settings as the last row
 (there is no Settings gear at the bottom of the sidebar). Add Project is
 the folder button right of Search; it is the menu's first row only while the
@@ -1073,7 +1075,11 @@ that computer's filesystem root. On a computer running native Windows
 (PowerShell), the two are a single Local folder row that opens the list of
 drives, with your home folder at the top. You can paste a Windows drive or UNC
 path when the selected computer runs native Windows, even from a Linux or macOS
-client.
+client. Local folder is the first row. On a Mac, a folder in Documents, Desktop
+or Downloads makes macOS ask once to let "Ghostex Server" read it: that is
+Ghostex's own background service, and Add Project says so before macOS asks.
+Allow it, or your agents can't work in that folder (System Settings > Privacy
+& Security > Files and Folders changes it later).
 To start a brand-new project, open Add Project and choose New project folder.
 Type the project's name; the rows under it show what happens, and each can be
 changed before you press Enter (or Create): Folder is where the project's
@@ -1637,6 +1643,18 @@ image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session (with
 the Session notes extension on).
+**Tips on new chats**: a new chat shows a card of tips under "What should we
+build with …?", one tip at a time: first how to report a bug (Send Bug /
+Feedback with Collect more data with an agent), split the view by dragging a
+session from the sidebar, start a coordinator and use Ghostex from your phone,
+then the rest of the app in a new order each day. Previous and Next walk the
+tips, and each new chat opens on the next one. Got it hides that tip for good,
+on every chat; once every tip is read the card stops showing. Hide tips (the
+card's ⋯ button) or Settings > Chat > Tips on new chats turns the card off,
+and Show tips again on the same page brings back every tip you marked Got it.
+The card steps aside in a short window, so the chat box never moves. The Tips &
+Tricks panel is gone; tips you had marked read there stay read. Setting:
+`newChatTips`.
 On the phone, OMP's **Advisor shared notes** card starts as one row with counts
 by severity. Tap it to read the notes with their severity labels, then tap again
 to fold it. An OMP background job stopped before it finishes has a muted cross
@@ -2425,6 +2443,8 @@ wait until it finishes without a delivery warning.
 To compact before sending a new prompt, press `⌥Enter` on macOS or `Alt+Enter` on Windows and Linux in the chat box,
 Option-click Send (Alt-click on Windows and Linux), or right-click Send and choose Compact & Send. Ghostex sends `/compact` first,
 then puts your written prompt in the queue above the input to send after compaction.
+Compact context in the context window panel (the context ring) sends `/compact` the same way a typed
+`/compact` goes, and says why in the chat box when it can't run.
 Approval and dialog cards (Claude Code, Codex and the other agents) list the
 agent's choices as numbered rows: press a row's number or click it. Cmd+Enter
 (Ctrl+Enter on Windows and Linux) picks the row highlighted in the terminal and
@@ -2440,8 +2460,13 @@ agent there, so sessions never stop at the agent's own "Do you trust this
 folder?" question. It marks the folder trusted the way the agent would if you
 answered yes (Claude Code, Codex, Cursor, Gemini, Copilot, Grok Build,
 Antigravity, Pi and Factory Droid have such a question; OMP, OpenCode and Hermes
-don't). Only the folder the session runs in is trusted, never your home folder or
-a folder above it. To answer the question yourself, turn off **Trust project
+don't). If an agent asks anyway (one that never ran on this computer has no
+record to mark yet), Ghostex answers yes for you when the session runs in a
+project you added, a folder inside it or a worktree Ghostex made for it. Only
+the folder the session runs in is trusted, never your home folder or a folder
+above it, and the agent's own approvals of commands and edits still ask you. On
+a connected computer, that computer's Ghostex does the same with its own
+setting. To answer the question yourself, turn off **Trust project
 folders automatically** in Settings > Agents > Defaults
 (`trustProjectFoldersAutomatically`).
 With it off, when an agent asks whether to trust the project folder, chat shows a
@@ -2921,9 +2946,11 @@ them; the account's ⋯ menu holds Sign in again and Remove…, which asks first
 says how many sessions use the account.
 A newly added account starts with Show usage in the sidebar on. The accounts'
 usage sits pinned at the bottom of the sidebar by default, as the last thing in
-it; right-click a meter and choose Hide account usage to unpin it (it then shows
-only while you point at the small handle at the bottom right of the sidebar),
-and click that handle to pin it back. Ghostex remembers your choice, and
+it. To unpin it, point at the meters and click the small button that shows
+above them, or right-click a meter and choose Hide account usage. It then shows
+only while you point at the usage icon, which appears at the bottom right when
+the pointer is at the bottom of the sidebar; click that icon to pin it back.
+Ghostex remembers your choice, and
 adding an account pins it again so you can see where the new account went.
 Set Use this account to Paused to keep an account you no longer use (for example
 one whose subscription ended) saved but out of use: it shows dimmed with a
@@ -5628,29 +5655,51 @@ Android the ongoing notification lists your sessions in the same order (Needs
 you, then Done and Failed, then working ones), counts the ones that need you as
 the bell does, and tapping a row there opens the session as the list does.
 
-The iPhone's **Settings > Notifications** has a master Notifications switch,
-**Finished**, **Waiting for you** (questions too), **Ended with an error**, and
-**Attention notification sound**. The first answered iOS permission prompt
-turns the notification switches on if allowed and leaves them off if denied;
-after a denial, **Open iOS Settings** leads to the system controls.
-An alert names the agent and project, such as **Codex · My project**, with
-**Finished**, **Waiting for you**, **Has a question** or **Ended with an error**
-under it, never prompt, reply or session-title text. Stopping an agent yourself
-does not send an error alert, and the session you are looking at makes no alert
-or attention sound in the running app; it still shows in the bell while it
-needs you. Alerts and the attention sound share a limit of one per session every
-20 seconds and eight per minute. Without push, notifications arrive only while
-iOS lets Ghostex run, not once it pauses the app; opening the app shows in the
-bell what needs you, what finished and what failed, without a burst of old
-alerts.
+The iPhone's **Settings > Notifications** has a master Notifications switch
+and, under **What notifies you**, a choice of **Sound**, **Silent** (shown
+without a sound) or **Off** for each kind:
+
+- **Needs you** (Sound by default): a question, an approval or permission, or
+  an agent waiting for you.
+- **Finished** (Sound by default): a session you talk to finished its turn. A
+  coordinator's own turn notifies only when it needs you.
+- **Errors** (Sound by default): a session stopped on an error, is stuck, or is
+  out of usage on every account.
+- **Thread reports** (Off by default): a thread under a coordinator finished a
+  turn. Threads report to their coordinator, so turn this on only to hear every
+  report.
+
+An agent starting or working never notifies, and the session you are looking at
+makes no alert or attention sound in the running app; it still shows in the bell
+while it needs you. The notices of one session stack together, and several close
+together play one sound (a notice within 30 seconds of the last one comes
+without it). For quiet hours, use an iOS Focus (iOS Settings > Focus). **Send a
+test notification** shows a notice 5 seconds later, so you can leave Ghostex or
+lock the phone to see and hear it. Settings from before 11.4.0 keep a kind you
+had switched off as Off and take the defaults for the rest. The first answered
+iOS permission prompt turns notifications on if allowed and leaves them off if
+denied; after a denial, **Open iOS Settings** leads to the system controls.
+**Attention notification sound** and **Alert me for** stay under Sound.
+An alert names the agent and project, such as **Codex · My project**, or with
+**Show session names** on (Settings > Live Activity) the session's name, with
+**Finished**, **Waiting for you**, **Has a question**, **Ended with an error** or
+**Reported to its coordinator** under it, never prompt or reply text. Stopping
+an agent yourself does not send an error alert. Alerts and the attention sound
+share a limit of one per session every 20 seconds and eight per minute. Without
+push, notifications arrive only while iOS lets Ghostex run, not once it pauses
+the app; opening the app shows in the bell what needs you, what finished and
+what failed, without a burst of old alerts.
 
 A computer that supports push and has accepted this iPhone can also notify
 while Ghostex is closed or paused, through the Expo Push Service. iOS decides
-when to deliver a push, so it can be late or missing. The same notification
-switches apply; an unreachable computer keeps its previous choices until it
-accepts them on a later connection, for example when you open Ghostex again.
-Tap an alert to open its session; a question goes to its question card when
-Chat is available.
+when to deliver a push, so it can be late or missing. With Ghostex 11.4.0 on the
+computer the same choices apply to pushes: a kind that is Off is not sent, a
+Silent one comes without a sound, and Thread reports come only if you chose
+them; an older computer sends Finished, Waiting for you and Ended with an error
+as before. An unreachable computer keeps your previous choices until it accepts
+them on a later connection, for example when you open Ghostex again. Tap an
+alert to open its session; a question goes to its question card when Chat is
+available. Notifications on Android are not available yet.
 
 The iPhone's **Settings > Live Activity > Show Live Activity** controls one
 card on the Lock Screen and the counts in the Dynamic Island. It starts with
@@ -6291,12 +6340,16 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   settings links at the bottom of this page open it) to show their usage at the
   bottom of the desktop sidebar, or unstar them to hide it. The meters are the
   last thing in the sidebar, with nothing under them, four per row. To hide
-  them, right-click a meter and choose Hide account usage. While they are
-  hidden, a small handle with a chart sits at the bottom right of the sidebar:
-  point at it and every starred account floats over the bottom of the list,
-  without moving the list; the handle turns into a pin, and a click on it keeps
-  the meters there. Ghostex remembers whether they are pinned. The handle is
-  only there once you have starred an account and hidden the meters.
+  them, point at the meters and click the small button that shows above them,
+  at the right (its tooltip is Hide account usage), or right-click a meter and
+  choose Hide account usage. While they are hidden nothing is drawn at the
+  bottom. Move the pointer to the bottom of the sidebar and the usage icon, a
+  small chart, shows at the bottom right: point at it and every starred account
+  floats over the bottom of the list, without moving the list; the icon turns
+  into a pin, and a click on it keeps the meters there. Ghostex remembers
+  whether they are pinned. The icon is only there once you have starred an
+  account and hidden the meters. Both the button and the icon can be reached
+  with Tab.
   Claude meters show the two tightest of the 7d, 5h, and Fable
   limits, so the Fable limit is never hidden when it is running out; launcher
   and picker rows and the Accounts figures use the same two numbers. Each
@@ -6308,7 +6361,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   usage meter again to close its dropdown. Click another dropdown's
   button to close the current dropdown and open that one in a single click.
   Clicking outside, including in
-  Session Chat, closes usage dropdowns and Tips. More model
+  Session Chat, closes usage dropdowns. More model
   limits starts collapsed. Codex and Claude meters both show a Rate limit
   resets row when the provider has granted the account free resets (for
   Claude, promotions such as a model-launch reset). Click the count to list
@@ -6601,11 +6654,10 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   disable` turns Executor off for the workspace but keeps its apps and
   sign-ins for next time. `ghostex connectors executor` shows its state.
   Every command takes `--workspace <name>`.
-- Ask Ghostex and Tips & Tricks are under Help in the sidebar's menu, and
-  Extensions, Dev servers and Resources under Tools. Each opens a panel under
-  the menu button that closes when you click away. Ask Ghostex, Tips & Tricks
-  and Resources are available in every project. Tips & Tricks teaches
-  features one card at a time; Resources lists what Ghostex is running with
+- Ask Ghostex is under Help in the sidebar's menu, and Extensions, Dev
+  servers and Resources under Tools. Each opens a panel under the menu
+  button that closes when you click away. Ask Ghostex and Resources are
+  available in every project. Resources lists what Ghostex is running with
   per-session CPU and RAM, and can put a session or the editor to sleep; Ask
   Ghostex lists sample questions, and picking one opens a Ghostex Help chat
   with the question staged so the user can edit it and press Enter. Dev
@@ -6616,34 +6668,45 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   in the menu. Settings at the end of the menu reaches that page too. There is
   no ⋯ button above the chat.
 - Welcome to Ghostex is the onboarding that opens the first time Ghostex
-  runs. Its five panels cover: the agents found on this computer, with
-  Install buttons for Claude Code, Codex, Cursor Agent and Grok Build (an Add
-  to PATH button when an installed CLI is not on PATH; a command that is only
-  a launcher installing the agent the first time it runs, like Omarchy's, shows
-  as not installed yet), an Install guide
-  that installs any other supported agent, the Ghostex helper (agent hooks)
-  and Computer Use; which views to show (Browser and Files are on by default
-  on a first run), the browser skill and a Spaces switch (the Spaces extension,
-  off by default, the same switch as Settings > Extensions); phone pairing and notifications;
-  and the first project folder with the default agent, session view and
+  runs. Its five panels cover: Welcome, with three things Ghostex does (agents
+  that work together, coordinators, desktop and mobile); the agents found on
+  this computer, with Install buttons for Claude Code, Codex, Cursor Agent and
+  Grok Build (an Add to PATH button when an installed CLI is not on PATH; a
+  command that is only a launcher installing the agent the first time it runs,
+  like Omarchy's, shows as not installed yet), an Install guide that installs
+  any other supported agent, the Ghostex helper (agent hooks), which setup
+  installs for every installed agent when you go on, and a line that checks the
+  chosen agent is signed in (Claude Code, Codex and Cursor; a saved account in
+  Settings > Accounts counts) with a Sign in button that opens the agent's own
+  sign-in in your browser (starting an agent that was installed after setup
+  asks once to connect it, and Not now there is remembered for that agent);
+  which views
+  to show (Browser and Files are on by default on a first run), the browser
+  skill, Spaces (on for a first run, the same switch as Settings > Sidebar &
+  Sessions > Spaces), the Unified sidebar (the same choice as Settings >
+  Sidebar) and Fast Computer & Browser use (Computer Use: off until you turn
+  it on, and on a Mac it then asks for Accessibility and Screen Recording),
+  with a pointer to the other extensions in Settings > Extensions; how your
+  phone and other computers connect (Connect a Device), with one switch that
+  opens Connect a Device after your first agent reply; and the default session view and
   Agent approvals (Keep default or Skip permissions, the same setting as
-  Settings > Agents, `agentAcceptAllEnabled`), next to the look: Appearance, the theme colour squares (Dark and Light tabs),
-  Colourfulness and one Transparency row (the simple choices from Settings >
-  Interface), with a "More theme options in Settings > Interface" link that opens the
-  Interface page. Turning transparency on there also switches Appearance to Dark. The very first run opens on a short
-  intro video before the panels: press Play to watch it there (on Linux it
-  opens in your web browser, and says so), it shows once, and Continue (or Enter) goes on to
-  setup at any time; the
-  video is also at https://youtu.be/QzjFB4J6-8E. Choose folder opens the
-  system's folder picker; where there is none (a Linux desktop without the
-  xdg-desktop-portal file chooser) Ghostex opens its own: type a path (Tab
-  completes it, `~` is your home folder) or click through the folders, then
-  Use this folder. Setup counts as done once it opens your first project.
-  Skip for now (or closing the window) before any project exists leaves setup
-  unfinished and opens Add Project; it comes back on the next launch only if
-  there is still no project. With a folder chosen, Advanced settings later
-  adds the project and then opens Settings. Reopen the setup any
-  time from Tips > Setup or Quick Access > Commands > Setup.
+  Settings > Agents, `agentAcceptAllEnabled`), next to the look: Appearance,
+  the theme colour squares (Dark and Light tabs), Colourfulness and one
+  Transparency row (the simple choices from Settings > Interface), with a
+  "More theme options in Settings > Interface" link that opens the Interface
+  page. Turning transparency on there also switches Appearance to Dark. The
+  last panel also says that Ghostex sends anonymous usage analytics, which
+  Settings > About turns off. Setup
+  asks for no project folder: Open Ghostex ends it and goes straight to the
+  app, and when there is no project yet, Add Project opens. Advanced settings
+  later ends it and opens Settings. Closing the window instead (with no project
+  yet) leaves setup unfinished and opens Add Project; it comes back on the next
+  launch only if there is still no project. The very first run opens on a
+  short intro video before the panels: press Play to watch it there (on Linux
+  it opens in your web browser, and says so), it shows once, and Continue (or
+  Enter) skips it and goes on to setup at any time; the video is also at
+  https://youtu.be/QzjFB4J6-8E. Reopen the setup any time from Quick
+  Access > Commands > Setup.
 - The `ghostex` and `gx` commands are linked into a folder on your PATH, or
   into `~/.local/bin` when no other folder is writable (the usual case on
   Linux; never into a mise, asdf or other version-manager shims folder,

@@ -32,7 +32,7 @@ pub(crate) fn easy_connect() -> Section {
         "Phones and computers that can reach this machine",
         vec![
             row("easyConnectEnabled", "Easy Connect", "Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself."),
-            row("pairingCode", "Connect a Device", "Opens the Connect a phone window with the code to scan; Connect a Computer shows the code another computer pastes."),
+            row("pairingCode", "Connect a Device", "Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes."),
             row("pairedDevices", "Paired devices", "Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off."),
         ],
     )
@@ -43,7 +43,7 @@ pub(crate) fn tailscale() -> Section {
         "tailscale",
         "Tailscale",
         vec![
-            row("tailscaleEnabled", "Tailscale on or off", "Offer the Tailscale path; off leaves it out of the Connect a phone window."),
+            row("tailscaleEnabled", "Tailscale on or off", "Offer the Tailscale path; off leaves it out of the Connect a Device window."),
             row("tailscaleSteps", "Tailscale checklist", "Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone."),
             row("tailscaleCode", "Tailscale code", "Scan the Tailscale code with the Ghostex app, or type the host, IP and username."),
         ],

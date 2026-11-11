@@ -336,17 +336,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
-        key: "tipsAndTricksTitlebarButtonHidden",
-        tab: EXTENSIONS,
-        group: None,
-        section: "viewOrder",
-        section_title: "Views",
-        title: "Hide Tips button",
-        subtitle: "Stop offering the Tips & Tricks page, so it is missing from the sidebar's menu and the view picker.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
         key: "notificationsTitlebarButtonHidden",
         tab: EXTENSIONS,
         group: None,

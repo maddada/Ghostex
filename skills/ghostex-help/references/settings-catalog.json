@@ -290,6 +290,29 @@
       "agentWritable": true
     },
     {
+      "key": "newChatTips",
+      "title": "Tips on new chats",
+      "subtitle": "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "newChatTipsReset",
+      "title": "Show tips again",
+      "subtitle": "Bring back every tip you marked Got it, so the new chat card shows them again.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "chatSendOnPick",
       "title": "Send when you pick an answer",
       "subtitle": "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.",
@@ -11001,18 +11024,6 @@
       "agentWritable": true
     },
     {
-      "key": "tipsAndTricksTitlebarButtonHidden",
-      "title": "Hide Tips button",
-      "subtitle": "Stop offering the Tips & Tricks page, so it is missing from the sidebar's menu and the view picker.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "viewOrder",
-      "sectionTitle": "Views",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "notificationsTitlebarButtonHidden",
       "title": "Hide Notifications bell",
       "subtitle": "Hide the Notifications bell from the sidebar's top row.",
@@ -11297,17 +11308,6 @@
       "key": "terminal",
       "title": "Terminal",
       "subtitle": "A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Built-in",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "tips",
-      "title": "Tips & Tricks",
-      "subtitle": "A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12358,7 +12358,7 @@
     {
       "key": "pairingCode",
       "title": "Connect a Device",
-      "subtitle": "Opens the Connect a phone window with the code to scan; Connect a Computer shows the code another computer pastes.",
+      "subtitle": "Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
@@ -12380,7 +12380,7 @@
     {
       "key": "tailscaleEnabled",
       "title": "Tailscale on or off",
-      "subtitle": "Offer the Tailscale path; off leaves it out of the Connect a phone window.",
+      "subtitle": "Offer the Tailscale path; off leaves it out of the Connect a Device window.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "tailscale",

@@ -31,6 +31,8 @@ How to use this file:
 - **Keep chat box expanded while scrolling** `sessionChatKeepComposerExpanded` (boolean, default false) [advanced]: Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.
 - **Press Escape twice to interrupt** `sessionChatConfirmEscapeInterrupt` (boolean, default true) [advanced]: While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.
 - **Catch me up button** `chatCatchMeUp` (boolean, default false): Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.
+- **Tips on new chats** `newChatTips` (boolean, default true): Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.
+- **Show tips again** `newChatTipsReset` (Settings UI row without a settings key; use `ghostex settings open`): Bring back every tip you marked Got it, so the new chat card shows them again.
 - **Send when you pick an answer** `chatSendOnPick` (boolean, default false) [advanced]: When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.
 - **Wait for turn end before sending form answers** `chatAnswersWaitForIdle` (boolean, default false) [advanced]: Send answers from Ghostex forms and Ghostex pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.
 - **Open Ghostex pages in** `chatPageOpenTarget` (one of popup | files | system-browser; default popup): Where a Ghostex page (gx page) an agent shows in chat, such as a mockup or a comparison, opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer. Option labels: popup = Popup, files = Files, system-browser = System browser.
@@ -501,7 +503,6 @@ How to use this file:
 - **Hide Custom Website view** `customWebsiteViewTabHidden` (boolean, default true): Enable Custom Website in Settings > Extensions, then choose its home URL when opening the view. Disabled by default.
 - **Hide Storybook view** `storybookViewTabHidden` (boolean, default false): Hide the built-in component workshop. When enabled, it appears only in projects with Storybook.
 - **Hide Terminal view** `terminalViewTabHidden` (boolean, default false): Stop offering the Terminal view, so it is missing from the view panel tab strip, its + menu and the view picker.
-- **Hide Tips button** `tipsAndTricksTitlebarButtonHidden` (boolean, default false): Stop offering the Tips & Tricks page, so it is missing from the sidebar's menu and the view picker.
 - **Hide Notifications bell** `notificationsTitlebarButtonHidden` (boolean, default false): Hide the Notifications bell from the sidebar's top row.
 - **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Stop offering the Ask Ghostex page, so it is missing from the sidebar's menu and the view picker.
 - **Hide Resources button** `resourcesTitlebarButtonHidden` (boolean, default false): Stop offering the Resources page, so it is missing from the sidebar's menu and the view picker.
@@ -530,7 +531,6 @@ How to use this file:
 - **Files** `docs` (Settings UI row without a settings key; use `ghostex settings open`): Browse your project’s notes, plans, and reference files together in one focused reading space.
 - **Changes** `changes` (Settings UI row without a settings key; use `ghostex settings open`): Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions.
 - **Terminal** `terminal` (Settings UI row without a settings key; use `ghostex settings open`): A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel.
-- **Tips & Tricks** `tips` (Settings UI row without a settings key; use `ghostex settings open`): A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu.
 - **Notifications** `notifications` (Settings UI row without a settings key; use `ghostex settings open`): A bell in the sidebar's top row that lists what your agents finished or need from you.
 - **Ghostex Help** `help` (Settings UI row without a settings key; use `ghostex settings open`): An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.
 - **Dev servers** `devServers` (Settings UI row without a settings key; use `ghostex settings open`): A panel listing development servers running on this computer, opened from Tools in the sidebar's menu.
@@ -659,11 +659,11 @@ How to use this file:
 ### Phones and computers that can reach this machine
 
 - **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself.
-- **Connect a Device** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Opens the Connect a phone window with the code to scan; Connect a Computer shows the code another computer pastes.
+- **Connect a Device** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes.
 - **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off.
 ### Tailscale
 
-- **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off leaves it out of the Connect a phone window.
+- **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off leaves it out of the Connect a Device window.
 - **Tailscale checklist** `tailscaleSteps` (Settings UI row without a settings key; use `ghostex settings open`): Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone.
 - **Tailscale code** `tailscaleCode` (Settings UI row without a settings key; use `ghostex settings open`): Scan the Tailscale code with the Ghostex app, or type the host, IP and username.
 - **Tailscale on or off** `remoteTailscaleEnabled` (boolean, default true) [not agent-writable]: Offer the Tailscale path in Remote setup.
