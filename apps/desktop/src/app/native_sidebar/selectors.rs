@@ -52,7 +52,7 @@ impl GhostexGpuiApp {
         &self,
         snapshot: &NativeSidebarSnapshot,
         appearance: &SidebarAppearance,
-        _window: &gpui::Window,
+        window: &gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
@@ -64,7 +64,7 @@ impl GhostexGpuiApp {
         v_flex()
             .w_full()
             .flex_shrink_0()
-            .child(self.render_native_sidebar_new_session_row(appearance, cx))
+            .child(self.render_native_sidebar_new_session_row(appearance, window, cx))
             .children(
                 switch_row
                     .into_iter()

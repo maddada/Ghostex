@@ -281,6 +281,9 @@ pub struct ProjectionInputs {
     pub session_directory_revision: u64,
     /// `SessionState::agent_message_deliveries`: the statuses on sent agent message cards.
     pub agent_message_deliveries: Option<serde_json::Value>,
+    /// The bar above the chat box still shows the newest finished turn's "Worked for"
+    /// (`rows::worked_line_shown`), so that turn's own fold leaves its time out.
+    pub worked_line_shown: bool,
     /// The forms and pages whose answers are sending or queued, which turn their Q-tags answered
     /// (or skipped) before the transcript carries the answers.
     pub answers_on_the_way: Vec<String>,

@@ -15,16 +15,13 @@ use crate::menus::context::preferences::{
 };
 use crate::menus::context::rows::GroupId;
 use crate::menus::context::status::ContextDetailsAgent;
+use crate::menus::option_dispatch::DispatchStep;
 use crate::state::{ChatContext, ChatState};
 
 /// Handles one context meter, context editor or context details action.
 pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
     match action.kind {
-        ActionKind::ContextCompact => {
-            // `if (!chat.working) await chat.send('/compact')`. Sending is family d's; the
-            // refusal while the agent is busy is drawn by the meter's `compactDisabled`.
-            Vec::new()
-        }
+        ActionKind::ContextCompact => compact(state, context),
         ActionKind::ContextEdit => {
             let agent = editor_agent(state, context);
             state.pickers.context.editor = Some(ContextEditorState {
@@ -43,6 +40,43 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         }
         _ => editor_command(state, action, context),
     }
+}
+
+/// `if (!chat.working) await chat.send('/compact')`: Compact types `/compact` into the agent the
+/// way a typed one goes, so its "Ran /compact" row shows at once and gives way to the agent's own
+/// compaction card.
+///
+/// CDXC:SessionChat 2026-11-11 WHY:
+/// GitHub #572: "Compact context" in the context meter's panel did nothing at all. The Rust port of
+/// this arm left the send to family d and returned no effects, so the click closed the panel and
+/// nothing reached the agent. It now goes through the option dispatch's command step (the seam
+/// `/model` and `/effort` use to type into the agent), which takes the row back and puts
+/// gxserver's refusal on the chat box's error line when the send fails. A click the core cannot
+/// run says why there too instead of doing nothing: the button is greyed with this reason while
+/// the agent works, but the click can still race a turn that just started.
+fn compact(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
+    if crate::session::working::is_working(state) {
+        state
+            .core
+            .fail("Compact is available once the agent is idle.", None);
+        return Vec::new();
+    }
+    if state.menus.option_dispatch_id.is_some() {
+        state.core.fail(
+            "A setting change is still reaching the agent. Compact again once it lands.",
+            None,
+        );
+        return Vec::new();
+    }
+    state.menus.option_dispatch_id = Some("contextCompact".to_string());
+    crate::menus::dispatch_run::begin(
+        state,
+        context,
+        vec![DispatchStep::Command {
+            text: "/compact".to_string(),
+        }],
+        None,
+    )
 }
 
 /// The rest of `nativeContextEditorCommand`, which is refused while a save is in flight.

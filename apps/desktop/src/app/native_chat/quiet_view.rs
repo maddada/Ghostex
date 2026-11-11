@@ -67,9 +67,32 @@ impl QuietLines {
 /// The space between a shut line and the reply that ends it.
 const LINE_TO_REPLY: f32 = 8.0;
 
+/// The empty space under the time in a message's time line: the line is as tall as its 24px ⋯ button
+/// and the time's 12px type sits in its middle, so the space a reader sees above a quiet line
+/// starts that much higher than the line's own gap.
+const TIME_ROW_SLACK: f32 = 6.0;
+
+/// The space above the first letters of a message's text: its line height less its type size,
+/// halved.
+const REPLY_LEADING: f32 =
+    (super::chat_text_look::PROSE_LINE_HEIGHT - super::chat_text_look::PROSE_SIZE) / 2.0;
+
+/// The space above what a row draws first: a reply's or another message's words start their line's
+/// leading down; a bubble, a card or a quiet line (whose own leading `balanced_line` accounts for on
+/// both sides) starts at its edge.
+fn top_leading(item: Option<&TranscriptItem>) -> f32 {
+    match item {
+        Some(TranscriptItem::Message { message }) if message["role"] == "assistant" => {
+            REPLY_LEADING
+        }
+        _ => 0.0,
+    }
+}
+
 /// `line` moved `shift` (unscaled; up when negative) without changing any row's height, so the
-/// space above and below a quiet line comes out the same: half of the row gap and the line's own
-/// gap to its reply on each side (12px and 12px at Comfortable; at Compact both are 8px already).
+/// space a reader sees above and below a quiet line comes out the same, from the time line of the
+/// row above (`TIME_ROW_SLACK`) to the first letters of what follows (`top_leading`), whatever
+/// that is: its reply, your next message, another fold, the end of the chat.
 ///
 /// CDXC:SessionChat 2026-11-11 DECISION:
 /// User, of a folded "Previous turn · …" line: "space above is bigger than space below this previous turns line please fix", then "just increase space below and reduce it above pls". The line moves toward the larger gap until both are equal; the space it takes, and so every row's height, stays the same, so nothing else in the chat moves.
@@ -302,14 +325,14 @@ impl NativeChatView {
             Some(line) => {
                 let open = self.quiet_open(line);
                 if index == line.start {
-                    // A line its reply follows sits midway between the row above and the reply
-                    // (`balanced_line`); one with nothing of its own after it already has a full
-                    // row gap on both sides.
-                    let shift = if line.tail.is_some() {
-                        -(p.row_gap() - LINE_TO_REPLY) / 2.0
+                    // Midway between the time line of the row above and what follows the line: its
+                    // reply, or the next row (`balanced_line`).
+                    let below = if line.tail.is_some() {
+                        LINE_TO_REPLY + REPLY_LEADING
                     } else {
-                        0.0
+                        p.row_gap() + top_leading(items.get(line.end))
                     };
+                    let shift = (below - (TIME_ROW_SLACK + p.row_gap())) / 2.0;
                     let drawn = self.quiet_view_line(line, open, p, cx);
                     parts.push((balanced_line(drawn, shift, p), 0.0));
                 }
@@ -413,10 +436,11 @@ impl NativeChatView {
         }
         if let Some(line) = place.after.map(|at| &lines.lines[at]) {
             let open = self.quiet_open(line);
-            // Under its reply, 8px below the reply and a row gap above the next row: moved down to
-            // sit midway.
+            // Under its reply's time line, 8px below it and a row gap above the next row: midway
+            // between the two.
             let drawn = self.quiet_view_line(line, open, p, cx);
-            let shift = (p.row_gap() - LINE_TO_REPLY) / 2.0;
+            let below = p.row_gap() + top_leading(items.get(index + 1));
+            let shift = (below - (TIME_ROW_SLACK + LINE_TO_REPLY)) / 2.0;
             parts.push((balanced_line(drawn, shift, p), LINE_TO_REPLY));
             if open {
                 let cards = self.quiet_cards(line);

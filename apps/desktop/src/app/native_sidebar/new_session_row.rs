@@ -3,9 +3,11 @@
 //! two halves, the row's full width.
 //!
 //! CDXC:Sidebar 2026-11-10 DECISION:
-//! User (Q2340 C, Q2341 C, Q2342 D, Q2343 A, Q2344 "beside", Q2345 A): every sidebar layout has a wide New session button in a row of its own under the top row, with the pencil-on-a-square icon, its words and its shortcut on it. A click starts the agent you used last at once, in the project of the session you have open, as Cmd+Shift+O does (`start_new_agent_session`); the arrow at its end opens the New Thread picker, as Cmd+N does (`open_unified_new_session`). The button replaces the Unified header's pencil. It rests on a faint light fill so it reads as the sidebar's main action, never a dark one on glass.
+//! User (Q2340 C, Q2341 C, Q2342 D, Q2343 A, Q2344 "beside", Q2345 A): every sidebar layout has a wide New session button in a row of its own under the top row, with an icon, its words and its shortcut on it (see the 2026-11-11 decision below for which and when). A click starts the agent you used last at once, in the project of the session you have open, as Cmd+Shift+O does (`start_new_agent_session`); the arrow at its end opens the New Thread picker, as Cmd+N does (`open_unified_new_session`). The button replaces the Unified header's pencil. It rests on a faint light fill so it reads as the sidebar's main action, never a dark one on glass.
 //! CDXC:Sidebar 2026-11-11 DECISION:
 //! User: "i dont like new project shown like button without bg there fam add it to the top row instead please to the right of search". Add project left this row for the top row, right of Search (native_sidebar/navigation.rs), so the row holds only the New session button and its arrow, the row's full width, 28 high like every row at the top. This supersedes Add project sitting beside the button.
+//! CDXC:Sidebar 2026-11-11 DECISION:
+//! User: "dont show chevron down icon here, instead should be another icon that indicates we will show a menu of agents ... also please dont show the hotkey for new session unless i hover over it", then "also make icon for new session just + icon". The button leads with a plain plus, the arrow half shows a chevron pointing right (the user's pick, "chevron right", over a robot, sparkles or people icon) for the agent picker it opens, and the shortcut shows only while the pointer is over the button or it has the keyboard, keeping its room at rest so nothing moves. This supersedes the pencil-on-a-square, the chevron pointing down and the always-shown shortcut of 2026-11-10.
 //! SEE-ALSO: native_sidebar/render.rs and selectors.rs (where the row goes), native_sidebar/unified/header.rs (the header it took the pencil and Add project from), apps/gpui-web/src/app/web_host/new_thread_picker.rs (the web build's `start_new_agent_session`).
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -33,6 +35,11 @@ const LABEL_WITH_KEY_MIN_WIDTH: f32 = 150.0;
 
 /// The words on the button.
 const LABEL: &str = "New session";
+/// The start half's focus stop and its hover group, which shows the shortcut.
+const START_STOP: &str = "new-session:start";
+const START_GROUP: &str = "native-sidebar-new-session-start";
+/// The arrow half's icon: the sidebar's plain chevron, pointing to the list it opens.
+const CHOOSE_ICON: &str = "titlebar/chevron-right.svg";
 
 /// The width the label half gets in a sidebar `sidebar_width` wide, at `scale`.
 fn label_half_width(sidebar_width: f32, scale: f32) -> f32 {
@@ -66,6 +73,7 @@ impl GhostexGpuiApp {
     pub(in crate::app::native_sidebar) fn render_native_sidebar_new_session_row(
         &self,
         appearance: &SidebarAppearance,
+        window: &gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
@@ -98,8 +106,16 @@ impl GhostexGpuiApp {
                 super::tooltips::sidebar_style_tooltip(text.clone(), window, cx)
             }
         };
+        // The shortcut shows only while the pointer is over the button or it has the keyboard; at
+        // rest it keeps its room, drawn clear, so the label never moves.
+        let stops = &self.native_sidebar.focus_stops;
+        let focused = stops.recording()
+            && stops
+                .handle(&gpui::SharedString::new_static(START_STOP), cx)
+                .is_focused(window);
         let start = h_flex()
             .id("native-sidebar-new-session")
+            .group(START_GROUP)
             .role(gpui::Role::Button)
             .aria_label(start_tooltip.clone())
             .flex_1()
@@ -110,7 +126,7 @@ impl GhostexGpuiApp {
             .rounded_l(px(BUTTON_RADIUS * scale))
             .hover(|half| half.bg(appearance.hover))
             .child(titlebar_svg_icon(
-                "titlebar/edit.svg",
+                "titlebar/plus.svg",
                 15.0 * scale,
                 appearance.chrome_icon,
             ))
@@ -124,10 +140,12 @@ impl GhostexGpuiApp {
                     .child(LABEL),
             )
             .children(shortcut.map(|key| {
+                let muted = appearance.muted;
                 div()
                     .flex_shrink_0()
                     .text_size(px(11.5 * scale))
-                    .text_color(appearance.muted)
+                    .text_color(if focused { muted } else { muted.opacity(0.0) })
+                    .group_hover(START_GROUP, move |key| key.text_color(muted))
                     .child(key)
             }))
             .when(tooltips, |half| {
@@ -144,7 +162,7 @@ impl GhostexGpuiApp {
         // Stops of the sidebar's focus order; the row sits above the list in both sidebars.
         let start = self.sidebar_focus_stop(
             start,
-            "new-session:start",
+            START_STOP,
             super::focus_order::SidebarStopPlace::Fixed,
             appearance,
             cx,
@@ -165,7 +183,7 @@ impl GhostexGpuiApp {
             .rounded_r(px(BUTTON_RADIUS * scale))
             .hover(|half| half.bg(appearance.hover))
             .child(titlebar_svg_icon(
-                "titlebar/chevron-down.svg",
+                CHOOSE_ICON,
                 13.0 * scale,
                 appearance.chrome_icon,
             ))
