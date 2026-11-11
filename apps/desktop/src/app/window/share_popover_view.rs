@@ -9,6 +9,9 @@
 //!
 //! CDXC:Collab 2026-11-08 DECISION:
 //! User (Q1780-Q1786, share-popover/page.html): B "Live panel"; Collab installs right in the popover (Install, Touch ID, a progress bar, then "Ready to share"); Share shows before Collab is installed with "Don't show Share"; a guest's waiting message is pointed at (Review goes to the card above the chat box); Stop sharing asks first, naming who gets disconnected; the link lifetime is a chip before Create link that also changes the default, with "Until I stop it"; the phone gets the same design. Frosted light-grey glass, no near-black fills, sized to its content.
+//!
+//! CDXC:Collab 2026-11-11 DECISION:
+//! User, of this popover next to the Commit dropdown: "make this one bg color and style look like this". The popover is drawn on the header dropdowns' own surface (`PopupSurface`, which the app fills from `popup_menu_frame`: the same fill, blur, hairline and 8px corners as the Commit dropdown) instead of its warm grey, and its header, status band and footer are plain sections between hairlines rather than differently filled bands. Content, controls and layout are unchanged. Supersedes the "frosted light-grey glass" above; the Jobs popover follows (jobs_popover_view.rs).
 //! SEE-ALSO: apps/mobile/app/src/chat/native/cards/CollabShareMenu.tsx (the phone's sheet, same design).
 
 use std::rc::Rc;
@@ -161,8 +164,18 @@ pub(crate) struct ShareModel {
     pub(crate) light: bool,
     /// Window glass is on: the frost shows through the panel.
     pub(crate) glass: bool,
-    /// The panel's fill when the host has its own (the app's frosted popover fill).
-    pub(crate) surface: Option<Hsla>,
+    /// The panel's frame when the host gives it one: the app's dropdown menu surface.
+    pub(crate) surface: Option<PopupSurface>,
+}
+
+/// A header popover's frame: its fill, hairline edge and corner radius. The app passes the
+/// dropdown menus' own surface (`popup_menu_frame` in helpers/titlebar/chrome_colors.rs), so the
+/// Share and Jobs popovers are drawn exactly like the Commit dropdown beside them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PopupSurface {
+    pub(crate) fill: Hsla,
+    pub(crate) border: Hsla,
+    pub(crate) radius: f32,
 }
 
 impl ShareModel {
@@ -231,6 +244,16 @@ impl Palette {
             rgba(22, 22, 24, alpha)
         } else {
             rgba(255, 255, 255, alpha)
+        }
+    }
+
+    /// The frame when the host gives none (the preview binary): the panel fill below, an ink edge
+    /// and the menus' 8px corners.
+    fn fallback_surface(self) -> PopupSurface {
+        PopupSurface {
+            fill: self.surface(),
+            border: self.ink(0.12),
+            radius: 8.0,
         }
     }
 
@@ -405,8 +428,7 @@ fn band(p: Palette, tile: AnyElement, title: AnyElement, subtitle: String) -> An
         .px(px(13.0))
         .py(px(12.0))
         .border_b_1()
-        .border_color(p.ink(0.07))
-        .bg(p.ink(0.03))
+        .border_color(p.ink(0.08))
         .child(
             div()
                 .flex_shrink_0()
@@ -1025,7 +1047,6 @@ fn footer(p: Palette) -> gpui::Div {
         .py(px(9.0))
         .border_t_1()
         .border_color(p.ink(0.08))
-        .bg(p.ink(0.025))
 }
 
 // ---- the popover --------------------------------------------------------------------------
@@ -1058,14 +1079,15 @@ pub(crate) fn render_share_popover<V: 'static>(
                 .whitespace_nowrap()
                 .child("Share this chat"),
         );
+    let surface = model.surface.unwrap_or_else(|| p.fallback_surface());
     let mut panel = v_flex()
         .id("share-popover")
         .w(px(SHARE_POPOVER_WIDTH))
-        .rounded(px(10.0))
+        .rounded(px(surface.radius))
         .overflow_hidden()
-        .bg(model.surface.unwrap_or_else(|| p.surface()))
+        .bg(surface.fill)
         .border_1()
-        .border_color(p.ink(0.12))
+        .border_color(surface.border)
         .text_color(p.ink(0.92))
         .child(header);
     panel = match &model.stage {

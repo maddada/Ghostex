@@ -158,17 +158,9 @@ impl GhostexGpuiApp {
         let popup_window = match cx.open_window(options, {
             let content = content.clone();
             move |popup_window, cx| {
-                // The Share popover's glass panel is rounded 10px (share_popover_view.rs).
-                popup_window.set_background_corner_radius(px(
-                    if matches!(
-                        kind,
-                        GpuiTitlebarPopupKind::CollabShare | GpuiTitlebarPopupKind::Jobs
-                    ) {
-                        10.0
-                    } else {
-                        8.0
-                    },
-                ));
+                // Every dropdown, the Share and Jobs popovers included, is rounded like the
+                // menus' panel (`popup_menu_frame`).
+                popup_window.set_background_corner_radius(px(POPUP_MENU_RADIUS));
                 apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
                 if matches!(kind, GpuiTitlebarPopupKind::Notifications) {

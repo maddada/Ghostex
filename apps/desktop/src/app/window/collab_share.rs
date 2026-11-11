@@ -549,17 +549,8 @@ impl CollabSharePanel {
         model.now_ms = chrono::Utc::now().timestamp_millis();
         model.light = light;
         model.glass = glass;
-        // Under window glass the app's own frosted fill, over a warm grey (no near-black).
-        model.surface = glass.then(|| {
-            popup_window_panel_surface(
-                if light {
-                    gpui::rgb(0xf6f4f2)
-                } else {
-                    gpui::rgb(0x403c3a)
-                }
-                .into(),
-            )
-        });
+        // The header dropdowns' own surface, the Commit dropdown's (CDXC:Collab 2026-11-11).
+        model.surface = Some(popup_menu_frame());
         model
     }
 }
