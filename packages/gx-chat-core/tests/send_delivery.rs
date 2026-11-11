@@ -354,6 +354,14 @@ fn edit_gives_an_unsent_message_back_to_the_chat_box_and_remove_drops_it() {
     assert!(host.rows().is_empty());
     assert_eq!(host.handed_back(), ["first"]);
     assert_eq!(host.delivered.len(), 2, "neither went again");
+
+    // The phone's Edit is the queue row's: Remove with `edit`.
+    host.send("third", "id-3");
+    host.refuse(Some("invalidParams"), "The message is too long.");
+    let third = host.rows()[0].1["promptId"].as_str().unwrap().to_string();
+    host.act(json!({ "type": "removeQueue", "promptId": third, "edit": true }));
+    assert_eq!(host.handed_back(), ["first", "third"]);
+    assert!(host.rows().is_empty());
 }
 
 #[test]

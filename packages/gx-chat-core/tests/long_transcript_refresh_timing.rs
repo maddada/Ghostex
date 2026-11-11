@@ -103,8 +103,34 @@ fn a_long_transcript_refreshes_without_rebuilding_what_is_settled() {
         refresh(&mut state);
     });
 
+    // A third of the sessions share one title, as "Claude Session" does on a busy computer, and
+    // the sidebar keeps moving them above one another: still nothing to rebuild.
+    let mut twins = directory(renamed);
+    for session in twins.iter_mut().step_by(3) {
+        session.title = "Claude Session".into();
+    }
+    state.transcript_view.session_directory = twins.clone();
+    state.transcript_view.session_directory_revision += 1;
+    refresh(&mut state);
+    let mut bumps = 0;
+    let twin_moves = timed("sessions sharing a title reordered", 20, || {
+        twins.rotate_left(7);
+        if !KnownSession::same_names(&state.transcript_view.session_directory, &twins) {
+            state.transcript_view.session_directory_revision += 1;
+            bumps += 1;
+        }
+        state.transcript_view.session_directory = twins.clone();
+        refresh(&mut state);
+    });
+    assert_eq!(
+        bumps, 0,
+        "a reorder among same-titled sessions renames nobody"
+    );
+
     assert_eq!(state.transcript_view.items.len(), rows_before);
-    println!("reused {reused:?}, resettled {resettled:?}, reordered {directory_events:?}");
+    println!(
+        "reused {reused:?}, resettled {resettled:?}, reordered {directory_events:?}, twins {twin_moves:?}"
+    );
 }
 
 #[test]
