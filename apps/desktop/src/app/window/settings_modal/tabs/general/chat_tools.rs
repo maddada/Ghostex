@@ -40,8 +40,6 @@ fn chat_section(
             cx,
         ));
     }
-    // CDXC:Sessions 2026-10-09 DECISION: the New-session cleanup is an Advanced setting, off by default, that only runs for Chat; gxserver enforces the Chat condition.
-    rows.extend(page.toggle(g, s, "closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.", false, cx));
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q20): Custom transcript width and Transcript
     // width are one slider. It reads Auto (the transcript matches the prompt composer) until it is
     // dragged, which turns the custom width on; its reset goes back to Auto.
@@ -250,11 +248,9 @@ fn chat_section(
             cx,
         ));
     }
-    rows.extend(page.toggle(g, s, "agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.", false, cx));
     rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.", false, cx));
     rows.extend(orchestrator_playbook_row(page, g, s, cx));
     rows.extend(read_aloud_rows(page, g, s, window, cx));
-    rows.extend(page.toggle(g, s, "sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.", false, cx));
     settings_section(&g.p, g.section_title("chat", "Chat"), None, None, rows)
         .map(|section| PageBlock::section("chat", section))
 }
