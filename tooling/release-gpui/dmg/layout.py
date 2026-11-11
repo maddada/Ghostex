@@ -4,8 +4,9 @@ size, the icon size and places, and the drag-to-Applications background.
 Usage: python3 layout.py <mounted volume>
 
 The volume must already hold `Ghostex.app`, the `Applications` link and
-`.background/background.tiff` (macos.sh stages them). Needs the `ds_store` and `mac_alias`
-packages (the ones dmgbuild uses), which macos.sh installs into a throwaway venv.
+`.background/background.tiff` (macos.sh stages them). Uses the `ds_store` and `mac_alias`
+packages (the ones dmgbuild uses), vendored unchanged in `vendor/` so the release needs no network.
+macos.sh runs it with `python3 -I` and treats any failure as "no background" (best effort).
 
 CDXC:Onboarding 2026-11-11 DECISION:
 User, on the first-run page (step 1, install), picked "Add the drag picture to the DMG", with "make it
@@ -17,8 +18,10 @@ first-run art thread's dmg-with-instruction 1x and 2x PNGs) leaves empty for the
 import sys
 from pathlib import Path
 
-from ds_store import DSStore
-from mac_alias import Alias
+sys.path.insert(0, str(Path(__file__).resolve().parent / "vendor"))
+
+from ds_store import DSStore  # noqa: E402
+from mac_alias import Alias  # noqa: E402
 
 WINDOW_WIDTH = 660
 WINDOW_HEIGHT = 400
