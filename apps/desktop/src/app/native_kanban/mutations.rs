@@ -470,7 +470,9 @@ impl GhostexGpuiApp {
                 if error.is_none() {
                     this.native_kanban.hidden_columns = Some(hidden);
                     this.native_kanban.invalidate_derived();
-                    this.native_kanban_refresh(KanbanRefreshMode::Manual, cx);
+                    // Only reads: a Manual refresh would reconcile `status.custom` and the prefix,
+                    // and showing or hiding a lane must never change the workflow's statuses.
+                    this.native_kanban_refresh(KanbanRefreshMode::Mutation, cx);
                 }
                 this.native_kanban_notify(cx);
             },
