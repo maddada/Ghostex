@@ -49,11 +49,7 @@ impl AccountUsagePanel {
             .child(self.render_bar(session, "5h limit".into(), 13.0))
             .child(self.render_bar(weekly, "7d limit".into(), 13.0));
         if let Some(fable) = fable {
-            bars = bars.child(self.render_bar(
-                Some(fable),
-                format!("{} 7d limit", text(fable, "model")),
-                13.0,
-            ));
+            bars = bars.child(self.render_bar(Some(fable), model_limit_label(fable), 13.0));
         }
         let mut card = p.card().child(bars);
         if !other.is_empty() {
@@ -299,3 +295,23 @@ pub(super) const LIMIT_GAP: f32 = 10.0;
 pub(super) const WARNING_LINE: f32 = 16.0;
 pub(super) const SEPARATOR_MARGIN: f32 = 10.0;
 pub(super) const KV_ROW_HEIGHT: f32 = 24.0;
+
+/// A model window's row: "<Model> 5h limit" or "<Model> 7d limit" by the window's own length.
+///
+/// CDXC:AgentProviders 2026-11-11 WHY:
+/// This row always said "<Model> 7d limit", right for Claude's Fable but wrong for a Gemini account,
+/// whose first model window is Antigravity's "Claude/GPT 5h". Windows are named 5h and 7d by their
+/// length (the 2026-10-14 rule), so the row reads its length.
+fn model_limit_label(window: &Value) -> String {
+    let model = text(window, "model");
+    let span = match window["limitWindowSeconds"].as_f64() {
+        Some(seconds) if seconds > 0.0 && seconds < 86_400.0 && seconds % 3_600.0 == 0.0 => {
+            format!("{}h", (seconds / 3_600.0) as i64)
+        }
+        Some(seconds) if seconds > 0.0 && seconds < 604_800.0 && seconds % 86_400.0 == 0.0 => {
+            format!("{}d", (seconds / 86_400.0) as i64)
+        }
+        _ => "7d".to_string(),
+    };
+    format!("{model} {span} limit")
+}
