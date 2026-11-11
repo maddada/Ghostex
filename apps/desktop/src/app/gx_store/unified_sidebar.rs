@@ -18,12 +18,14 @@ use ghostex_gx_core::unified_sidebar::{
 };
 use ghostex_gx_core::{
     ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, ProjectKey,
-    SessionKey, SidebarInputs, SidebarMenus, SidebarViewModel, unified_delete_worktree_menu,
+    RowNesting, SessionKey, SidebarInputs, SidebarMenus, SidebarViewModel,
+    unified_delete_worktree_menu,
 };
 use serde_json::Value;
 
 use super::sidebar_snapshot::{SnapshotCache, SnapshotInput, snapshot_from_view};
 use crate::GhostexGpuiApp;
+use crate::app::native_sidebar::OlderThreadsRow;
 use crate::app::native_sidebar::model::{NativeSidebarGroup, NativeSidebarSession};
 use crate::app::native_sidebar::unified::model::{
     UnifiedCard, UnifiedCardLine, UnifiedGroupView, UnifiedShelfView, UnifiedSidebarSnapshot,
@@ -299,6 +301,8 @@ impl UnifiedSidebarHost {
 
         let mut groups: HashMap<(MachineId, String), Arc<NativeSidebarGroup>> = HashMap::new();
         let mut sessions: HashMap<(MachineId, String), Arc<NativeSidebarSession>> = HashMap::new();
+        // The lane group that holds each session, which a thread's Project row is drawn against.
+        let mut session_groups: HashMap<(MachineId, String), String> = HashMap::new();
         for (machine, _) in &machines {
             let lane = self.lanes.entry(machine.clone()).or_default();
             lane.inputs = unified_lane_inputs(list_inputs, machine);
@@ -328,6 +332,10 @@ impl UnifiedSidebarHost {
                     sessions.insert(
                         (machine.clone(), session.session_id.clone()),
                         session.clone(),
+                    );
+                    session_groups.insert(
+                        (machine.clone(), session.session_id.clone()),
+                        group.group_id.clone(),
                     );
                 }
                 // A card never draws its group's other rows.
@@ -488,7 +496,7 @@ impl UnifiedSidebarHost {
                 (machine, (name, short))
             })
             .collect();
-        let base = |row: &UnifiedRow| -> Option<UnifiedCard> {
+        let base = |row: &UnifiedRow, nesting: RowNesting| -> Option<UnifiedCard> {
             let branch_line = unified_branch_line(
                 row,
                 last_branches
@@ -498,12 +506,13 @@ impl UnifiedSidebarHost {
                     ))
                     .map(String::as_str),
             );
+            // The drawn row lives in the lane that holds it: a borrowed thread's is its
+            // coordinator's computer (gx-core `UnifiedRow::lane`).
+            let session = sessions
+                .get(&(row.lane.clone(), row.session.row.sidebar_session_id.clone()))?
+                .clone();
             Some(UnifiedCard {
-                // The drawn row lives in the lane that holds it: a borrowed thread's is its
-                // coordinator's computer (gx-core `UnifiedRow::lane`).
-                session: sessions
-                    .get(&(row.lane.clone(), row.session.row.sidebar_session_id.clone()))?
-                    .clone(),
+                session: with_unified_nesting(&session, row, &nesting),
                 row: row.session.row.clone(),
                 repo_icon: icons.get(&row.repo.key).cloned(),
                 repo_key: row.repo.key.clone(),
@@ -522,53 +531,38 @@ impl UnifiedSidebarHost {
                 statuses_below: Vec::new(),
             })
         };
-        let pull_request_of = |row: &UnifiedRow| {
-            row.session
-                .row
-                .work
-                .as_ref()
-                .and_then(|work| work.pull_request.as_ref())
-                .map(|pull_request| pull_request.number)
-        };
         let card = |row: &UnifiedRow| -> Option<UnifiedCard> {
-            let mut top = base(row)?;
-            let branch = row.session.row.menu_facts.branch.as_deref();
+            let mut top = base(row, row.card_nesting())?;
             top.lines = row
                 .drawn_lines()
                 .into_iter()
                 .filter_map(|line| match line {
-                    UnifiedTreeLine::Thread { row: thread, depth } => {
-                        let own_branch = thread.session.row.menu_facts.branch.clone();
+                    UnifiedTreeLine::Thread {
+                        row: thread,
+                        nesting,
+                    } => {
+                        let group = session_groups.get(&(
+                            thread.lane.clone(),
+                            thread.session.row.sidebar_session_id.clone(),
+                        ))?;
                         Some(UnifiedCardLine::Thread {
-                            card: Box::new(base(thread)?),
-                            depth,
-                            branch: own_branch.filter(|own| Some(own.as_str()) != branch),
-                            pull_request: pull_request_of(thread)
-                                .filter(|number| Some(*number) != pull_request_of(row)),
-                            // The computer that runs the thread, when it is not the card's, this
-                            // computer included (a local thread of a remote coordinator).
-                            machine: (thread.machine != row.machine).then(|| {
-                                chips.get(&thread.machine).map_or_else(
-                                    || {
-                                        if thread.machine.is_local() {
-                                            super::machine_short_names::local_computer_name()
-                                        } else {
-                                            thread.machine_label.clone().unwrap_or_default()
-                                        }
-                                    },
-                                    |(_, short)| short.clone(),
-                                )
-                            }),
+                            card: Box::new(base(thread, nesting)?),
+                            group: groups.get(&(thread.lane.clone(), group.clone()))?.clone(),
                         })
                     }
-                    UnifiedTreeLine::Older { coordinator, depth } => {
+                    UnifiedTreeLine::Older {
+                        coordinator,
+                        nesting,
+                    } => {
                         let crew = coordinator.crew.as_ref()?;
-                        Some(UnifiedCardLine::Older {
-                            key: crew.key.clone(),
-                            older: crew.older,
+                        Some(UnifiedCardLine::Older(OlderThreadsRow {
+                            coordinator: coordinator.session.row.sidebar_session_id.clone(),
+                            unified_key: Some(crew.key.clone()),
+                            depth: f32::from(nesting.depth),
+                            count: u64::from(crew.older),
                             shown: crew.older_shown,
-                            depth,
-                        })
+                            passing_lines: u64::from(nesting.passing_lines_below()),
+                        }))
                     }
                 })
                 .collect();
@@ -1378,6 +1372,40 @@ impl GhostexGpuiApp {
         #[cfg(target_arch = "wasm32")]
         let _ = (order, cx);
     }
+}
+
+/// The session's sidebar row with its place in the Unified tree in place of the Project
+/// sidebar's (gx-core `UnifiedRow::drawn_lines`), and, on a row with threads, the key its fold
+/// control toggles (`coordinatorThreads.unifiedKey`, read by native_sidebar/threads.rs).
+fn with_unified_nesting(
+    session: &Arc<NativeSidebarSession>,
+    row: &UnifiedRow,
+    nesting: &RowNesting,
+) -> Arc<NativeSidebarSession> {
+    let mut drawn = (**session).clone();
+    for key in [
+        "threadDepth",
+        "threadLast",
+        "threadPassingLines",
+        "coordinatorThreads",
+    ] {
+        drawn.details.remove(key);
+    }
+    super::sidebar_snapshot::insert_coordinator_nesting(
+        &mut drawn.details,
+        &row.session.row,
+        nesting,
+    );
+    if let (Some(crew), Some(threads)) = (
+        row.crew.as_ref(),
+        drawn
+            .details
+            .get_mut("coordinatorThreads")
+            .and_then(Value::as_object_mut),
+    ) {
+        threads.insert("unifiedKey".to_string(), Value::from(crew.key.clone()));
+    }
+    Arc::new(drawn)
 }
 
 /// The project whose menu each repository's filter row opens: the main checkout rather than a

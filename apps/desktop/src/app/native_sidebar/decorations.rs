@@ -33,6 +33,8 @@ impl GhostexGpuiApp {
         div().id(format!("native-session-identity-{id}")).size(px(15.0 * appearance.scale)).flex_shrink_0().flex().items_center().justify_center().child(icon)
             .when_some(fold, |identity, collapsed| {
                 let id = id.clone();
+                // A Unified sidebar row folds under its own key (gx_store/unified_sidebar.rs).
+                let unified_key = super::threads::unified_fold_key(session).map(str::to_owned);
                 let scale = appearance.scale;
                 let (light, glass, hover) = (appearance.light, appearance.glass, appearance.hover);
                 // CDXC:Coordinators 2026-10-06 DECISION: User: "please make the chevron button have a highlight button behind it when i hover over it (rounded bg behind it)". Same radius and colours as the card's hover action buttons (`hover_actions.rs`); the spot grows to 18px with a negative margin so the row's layout stays that of the 15px crown.
@@ -55,7 +57,10 @@ impl GhostexGpuiApp {
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |app, _, _, cx| {
                         cx.stop_propagation();
-                        app.dispatch_native_sidebar_ui(json!({"type": "toggleCoordinator", "sessionId": id}), cx);
+                        match &unified_key {
+                            Some(key) => app.gx_store_toggle_unified_coordinator(key, false, cx),
+                            None => app.dispatch_native_sidebar_ui(json!({"type": "toggleCoordinator", "sessionId": id}), cx),
+                        }
                     }))
                     // After the mouse-down above, so a press moves focus here before it stops.
                     .map(|toggle| {
@@ -209,7 +214,7 @@ fn outline(appearance: &SidebarAppearance, outline: gpui::Hsla) -> AnyElement {
 
 /// Whether a row shows a pending delayed send's clock and a close-after-done mark, which take the
 /// crown's spot and its click.
-fn session_clock_marks(session: &NativeSidebarSession) -> (bool, bool) {
+pub(crate) fn session_clock_marks(session: &NativeSidebarSession) -> (bool, bool) {
     let delayed = session
         .details
         .get("delayedSendDeadlineAt")

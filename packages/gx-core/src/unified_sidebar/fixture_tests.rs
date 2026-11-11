@@ -404,10 +404,18 @@ fn expected_of(case: &Value) -> Value {
             .drawn_lines()
             .into_iter()
             .map(|line| match line {
-                UnifiedTreeLine::Thread { row, depth } => format!("{}@{depth}", row_id(row)),
-                UnifiedTreeLine::Older { coordinator, depth } => {
-                    format!("older:{}@{depth}", row_id(coordinator))
+                UnifiedTreeLine::Thread { row, nesting } => {
+                    format!("{}@{}", row_id(row), nesting.depth)
                 }
+                // The older row sits at its coordinator's threads' depth.
+                UnifiedTreeLine::Older {
+                    coordinator,
+                    nesting,
+                } => format!(
+                    "older:{}@{}",
+                    row_id(coordinator),
+                    (nesting.depth + 1).min(crate::sidebar_view::MAX_THREAD_DEPTH)
+                ),
             })
             .collect();
         if !drawn.is_empty() {

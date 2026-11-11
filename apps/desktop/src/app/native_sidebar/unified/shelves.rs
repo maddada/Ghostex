@@ -176,6 +176,25 @@ impl GhostexGpuiApp {
             .when(!focused, |row| {
                 row.hover(|row| row.bg(appearance.session_hover))
             })
+            // A coordinator's hat first, which folds its threads as on a card.
+            .when(
+                crate::app::native_sidebar::threads::is_coordinator(&card.session),
+                |row| {
+                    row.child(self.render_native_session_identity(
+                        &card.session,
+                        crate::app::native_sidebar::icons::session_icon(
+                            &card.session,
+                            hud,
+                            appearance,
+                            false,
+                            hovered,
+                        ),
+                        hovered,
+                        appearance,
+                        cx,
+                    ))
+                },
+            )
             .child(repo_tile(card, appearance, show_project_icons(hud), true))
             .child(
                 div()
@@ -185,9 +204,7 @@ impl GhostexGpuiApp {
                     .opacity(0.8)
                     .child(card.session.title().to_owned()),
             )
-            // A parked or snoozed coordinator folds its threads from here too (CDXC:Sidebar
-            // 2026-11-09 in gx-core unified_sidebar/tree.rs).
-            .children(self.render_unified_crew_toggle(card, appearance, cx))
+            .children(self.render_unified_crew_count(&card.session, appearance, cx))
             .children(super::threads::folded_slot(card, appearance).filter(|_| action.is_none()))
             .child(action.unwrap_or(trailing))
             .when(focused, |row| {
@@ -197,7 +214,9 @@ impl GhostexGpuiApp {
                     crate::app::native_sidebar::decorations::session_outline(appearance),
                 )
             });
-        let threads = self.render_unified_thread_lines(card, hud, appearance, cx);
+        // The first thread's tree line rises to the hat, centred in the 34px row.
+        let hat = crate::app::native_sidebar::threads::TreeAnchor { icon_to_top: 17.0 };
+        let threads = self.render_unified_thread_lines(card, hat, hud, appearance, cx);
         div()
             .w_full()
             .pb(px(1.0 * scale))

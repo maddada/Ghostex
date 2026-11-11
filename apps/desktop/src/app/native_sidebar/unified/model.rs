@@ -8,7 +8,8 @@ use ghostex_gx_core::unified_sidebar::{
     UnifiedStatus,
 };
 
-use crate::app::native_sidebar::model::NativeSidebarSession;
+use crate::app::native_sidebar::model::{NativeSidebarGroup, NativeSidebarSession};
+use crate::app::native_sidebar::threads::OlderThreadsRow;
 
 /// One session card.
 #[derive(Clone, Debug)]
@@ -42,29 +43,17 @@ pub(crate) struct UnifiedCard {
     pub(crate) statuses_below: Vec<UnifiedStatus>,
 }
 
-/// One line under a card.
+/// One line under a card, drawn by the Project sidebar's own rows (unified/threads.rs).
 #[derive(Clone, Debug)]
 pub(crate) enum UnifiedCardLine {
     Thread {
+        /// Its session row carries its place in the Unified tree (gx-core `RowNesting`).
         card: Box<UnifiedCard>,
-        /// 1 for the card's own threads.
-        depth: u8,
-        /// Its branch, when it is not the card's.
-        branch: Option<String>,
-        /// Its pull request number, when the card does not show it.
-        pull_request: Option<u64>,
-        /// The short name of the computer that runs it, when that is not the card's computer (this
-        /// computer included).
-        machine: Option<String>,
+        /// The lane group that holds its row, which the row's drag, hover buttons and menu use.
+        group: Arc<NativeSidebarGroup>,
     },
     /// The "N older threads" / "Hide older threads" row of a coordinator.
-    Older {
-        /// gx-core `unified_coordinator_key`.
-        key: String,
-        older: u16,
-        shown: bool,
-        depth: u8,
-    },
+    Older(OlderThreadsRow),
 }
 
 #[derive(Clone, Debug)]
