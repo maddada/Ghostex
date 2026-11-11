@@ -57,27 +57,38 @@ fn condition_label(field: &Value, fields: &[&Value]) -> Option<String> {
 
 pub(crate) fn interactive_prompt(snapshot: &Snapshot) -> Option<SessionChatInteractivePrompt> {
     if let Some(permission) = snapshot.permissions.first() {
-        return Some(SessionChatInteractivePrompt::Approval {
-            tool: permission["action"]
-                .as_str()
-                .unwrap_or("OpenCode permission")
-                .into(),
-            summary: Some(
-                permission["resources"]
-                    .as_array()
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(Value::as_str)
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    })
-                    .unwrap_or_default(),
-            ),
-            tool_use_id: permission["id"].as_str().map(str::to_string),
-        });
+        return Some(approval_prompt(permission));
     }
-    let form = snapshot.forms.first()?;
+    form_prompt(snapshot.forms.first()?)
+}
+
+/// The card for one OpenCode approval request (a `/permission` row, or a `permission.asked`
+/// event, which carries the same fields).
+pub(crate) fn approval_prompt(permission: &Value) -> SessionChatInteractivePrompt {
+    SessionChatInteractivePrompt::Approval {
+        tool: permission["action"]
+            .as_str()
+            .unwrap_or("OpenCode permission")
+            .into(),
+        summary: Some(
+            permission["resources"]
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default(),
+        ),
+        tool_use_id: permission["id"].as_str().map(str::to_string),
+    }
+}
+
+/// The card for one OpenCode form (a `/form` row, or the form a `form.created` event carries);
+/// `None` for a form the chat cannot ask (a browser sign-in step).
+pub(crate) fn form_prompt(form: &Value) -> Option<SessionChatInteractivePrompt> {
     let fields = asked_fields(form)?;
     let mut questions = Vec::new();
     for field in fields.iter().copied() {

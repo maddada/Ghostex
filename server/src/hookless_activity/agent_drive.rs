@@ -3,7 +3,7 @@
 //! status: where its hook is installed nothing here runs and the hook keeps driving, as before.
 //!
 //! CDXC:AgentHooks 2026-11-07 FIX:
-//! Issue #475 asked that every agent's turns be tracked without hooks where hooks are missing, not only Claude's. Codex's observer tails the rollout Ghostex already binds to the session (the live-process scan reads the rollout Codex holds open, so this needs no hook), and OpenCode's reads OpenCode's own service events for the conversation id Ghostex chose at launch; both already ran beside the hooks for the side-by-side comparison. Where the agent's hook is missing, their events now go through `/api/ingestAgentHookEvent` like the hook's would, marked as the observer's so the comparison skips them. They see less than the hooks: Codex's rollout shows no approval waiting on the user (codex.rs), and OpenCode's events carry no question or approval card, so the session turns "waiting on you" without its card. Screen-based tracking for the other agents was left out: the title rules and the "Not moving" watch already read their screens, and nothing there tells a finished turn from a quiet one reliably enough to end a turn by.
+//! Issue #475 asked that every agent's turns be tracked without hooks where hooks are missing, not only Claude's. Codex's observer tails the rollout Ghostex already binds to the session (the live-process scan reads the rollout Codex holds open, so this needs no hook), and OpenCode's reads OpenCode's own service events for the conversation id Ghostex chose at launch; both already ran beside the hooks for the side-by-side comparison. Where the agent's hook is missing, their events now go through `/api/ingestAgentHookEvent` like the hook's would, marked as the observer's so the comparison skips them. They see less than the hooks: Codex's rollout shows no approval waiting on the user (codex.rs). OpenCode's events carry the whole approval request or form, so its observer sends the card with them and follows the TUI to another conversation from the terminal's own records (opencode.rs, CDXC:AgentHooks 2026-11-11). Screen-based tracking for the other agents was left out: the title rules and the "Not moving" watch already read their screens, and nothing there tells a finished turn from a quiet one reliably enough to end a turn by.
 //! SEE-ALSO: server/src/hookless_activity/drive.rs (Claude's driver and the hook status cache), server/src/hookless_activity/codex.rs, server/src/hookless_activity/opencode.rs.
 
 use std::collections::HashMap;
@@ -21,6 +21,9 @@ use crate::server::AppState;
 type HookCache = LazyLock<Mutex<Option<(Instant, Option<bool>)>>>;
 static CODEX_HOOK: HookCache = LazyLock::new(Default::default);
 static OPENCODE_HOOK: HookCache = LazyLock::new(Default::default);
+
+/// The payload key of hook params an observer event posts as they are.
+pub(super) const HOOK_PARAMS: &str = "hookParams";
 
 /// Whether Codex's observer drives Codex sessions here: its hook is not installed.
 pub(super) fn codex_drive_enabled(paths: &GxserverPaths) -> bool {
@@ -63,6 +66,10 @@ pub(super) fn hook_params(event: &ActivityEvent) -> Option<Map<String, Value>> {
     }
     if let Some(tool) = event.payload.get("toolName") {
         params.insert("toolName".to_string(), tool.clone());
+    }
+    // What an observer knows that the hook would post too (OpenCode's card and conversation id).
+    if let Some(Value::Object(extra)) = event.payload.get(HOOK_PARAMS) {
+        params.extend(extra.clone());
     }
     Some(params)
 }
