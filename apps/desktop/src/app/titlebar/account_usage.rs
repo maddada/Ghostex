@@ -887,16 +887,11 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let kind = GpuiTitlebarPopupKind::AccountUsage(id);
-        let Some(account) = self
+        if !self
             .titlebar_accounts
             .iter()
-            .find(|account| text(account, "titlebarKey") == id.as_str())
-        else {
-            return;
-        };
-        // The usage popup reads Claude and Codex limits; a usage-only account opens its Settings.
-        if usage_only_provider(text(account, "provider")) {
-            self.open_gpui_settings_accounts_reconnect(None, None, cx);
+            .any(|account| text(account, "titlebarKey") == id.as_str())
+        {
             return;
         }
         let opening = !self.titlebar_popup_menu_open(kind);
