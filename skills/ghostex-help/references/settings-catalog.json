@@ -682,7 +682,7 @@
     {
       "key": "sidebarVisibilityMemory",
       "title": "Remember sidebar per view",
-      "subtitle": "Off: hiding the sidebar hides it everywhere. On: Agents and the wide views (Browser, Code, Files, Kanban, Automate) each keep their own open or hidden sidebar; the Commands pane follows the same split.",
+      "subtitle": "Off: hiding the sidebar hides it everywhere. On: Agents and the wide views (Browser, Code, Files, Beads, Automate) each keep their own open or hidden sidebar; the Commands pane follows the same split.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
@@ -2786,6 +2786,32 @@
       "agentWritable": true
     },
     {
+      "key": "beadsViewLayout",
+      "title": "Beads view layout",
+      "subtitle": "Choose whether the Beads view opens as a Tree (every bead under its epic) or as the Board. The Tree | Board switch in the view's header changes this too.",
+      "tab": "tools",
+      "tabTitle": "Files & Links",
+      "section": "fileOpening",
+      "sectionTitle": "File opening",
+      "type": "enum",
+      "default": "auto",
+      "options": [
+        {
+          "label": "Tree, or Board where the Kanban was used",
+          "value": "auto"
+        },
+        {
+          "label": "Tree",
+          "value": "tree"
+        },
+        {
+          "label": "Board",
+          "value": "board"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "audioFileOpenTarget",
       "title": "Audio",
       "subtitle": "Choose whether audio files linked in agent chat or the terminal, or opened with `ghostex open`, play in Files or open in the system app. Formats Files cannot play, such as .m4a, always open in the system app.",
@@ -3177,7 +3203,7 @@
     {
       "key": "autoSleepProjectEditorIdleMinutes",
       "title": "Project sleeps after",
-      "subtitle": "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Kanban and Automate awake when more than three views are open.",
+      "subtitle": "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Beads and Automate awake when more than three views are open.",
       "tab": "system",
       "tabTitle": "Power & Sleep",
       "section": "autoSleep",
@@ -10730,8 +10756,8 @@
     },
     {
       "key": "kanbanViewTabHidden",
-      "title": "Hide Kanban view",
-      "subtitle": "Stop offering the Kanban view, so it is missing from the view panel tab strip, its + menu and the view picker.",
+      "title": "Hide Beads view",
+      "subtitle": "Stop offering the Beads view, so it is missing from the view panel tab strip, its + menu and the view picker.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -11138,8 +11164,8 @@
     },
     {
       "key": "kanban",
-      "title": "Kanban",
-      "subtitle": "Plan upcoming work and track task progress at a glance.",
+      "title": "Beads",
+      "subtitle": "See what's ready, who's on what and what's blocked, as a tree or a board.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12145,7 +12171,7 @@
     {
       "key": "globalBeadsDisplayKey",
       "title": "Global ticket key",
-      "subtitle": "Default ticket key prefix shown on Kanban cards when a project has none.",
+      "subtitle": "Default ticket key prefix shown on Beads cards when a project has none.",
       "tab": "projects",
       "tabTitle": "Projects",
       "section": "globalDefaults",
@@ -13888,8 +13914,8 @@
     },
     {
       "id": "switchKanbanView",
-      "title": "Switch to Kanban",
-      "description": "Switch to Kanban view.",
+      "title": "Switch to Beads",
+      "description": "Switch to the Beads view.",
       "defaultKey": "",
       "retiredDefaultKeys": [
         "alt+4"

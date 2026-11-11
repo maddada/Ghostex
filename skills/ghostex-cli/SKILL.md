@@ -5,7 +5,7 @@ description: >-
   projects and workspaces, terminal panes and sessions, agent orchestration
   (creating agent sessions, messaging agents, reading their output, queueing
   prompts, sleeping/waking/killing sessions), scheduled automations, the
-  Kanban/Beads project board, quick actions, session chat and prompt queues,
+  Beads view (tree and board), quick actions, session chat and prompt queues,
   prompt history and previous-session search/resume/fork, server management,
   UI controls, logs, screenshots, and diagnostics. It teaches help-first
   command discovery, stable target selection, JSON inspection, safe execution,
@@ -58,8 +58,8 @@ above. Route to a specialized skill only when its domain applies:
 - Use `$ghostex-computer-use` for native desktop application control.
 - Use `$ghostex-spaceo` to drive Mac apps on SpaceO's hidden virtual displays,
   out of the user's way.
-- Use `$ghostex-manage-beads` for Project Board bead workflows through the
-  machine-installed `bd` CLI.
+- Use `$ghostex-manage-beads` for bead workflows (the Beads view's tree and
+  board) through the machine-installed `bd` CLI.
 - Use `$ghostex-agents` when launching, messaging, reading,
   and verifying other agents (start from `ghostex agents --help`), when
   reading or searching another session's thread, and when a session can't
