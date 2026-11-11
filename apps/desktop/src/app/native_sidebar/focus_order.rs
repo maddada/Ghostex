@@ -18,7 +18,6 @@ use gpui::{
     StatefulInteractiveElement as _, Window, point, px, size,
 };
 use gpui_component::ElementExt as _;
-use web_time::Instant;
 
 use super::appearance::SidebarAppearance;
 use super::model::NativeSidebarSession;
@@ -122,13 +121,14 @@ pub(super) struct PendingFocus {
     pub(super) entry: Option<EntryWait>,
 }
 
-/// How long the hotkey's entry may wait, which entry it is, and the window the hotkey was pressed
-/// in (where the keyboard goes back when the entry ends without landing).
-#[derive(Clone, Copy, Debug)]
+/// Which entry it is, the window the hotkey was pressed in (where the keyboard goes back when the
+/// entry ends without landing), and what had focus there when the entry started, while the sidebar
+/// is in another window.
+#[derive(Clone, Debug)]
 pub(super) struct EntryWait {
-    pub(super) until: Instant,
     pub(super) id: u64,
     pub(super) from: AnyWindowHandle,
+    pub(super) from_focus: Option<FocusHandle>,
 }
 
 /// How many frames a stop picked by Tab or an arrow may take to be built before the move is
@@ -286,21 +286,27 @@ impl SidebarFocusStops {
             .any(|(stop, _)| stop == handle)
     }
 
-    /// Whether the Focus Sidebar hotkey's entry is still waiting for its row: the keyboard is the
-    /// sidebar's meanwhile (render/root.rs forwards nothing, Escape cancels).
+    /// Whether the Focus Sidebar hotkey's entry still waits for its row, until it lands, is
+    /// cancelled or is ended by its timer (keyboard.rs): the keyboard is the sidebar's meanwhile
+    /// (render/root.rs forwards nothing, Escape cancels, the hotkey gives it back).
     pub(crate) fn entry_pending(&self) -> bool {
         self.pending
             .borrow()
             .as_ref()
-            .and_then(|pending| pending.entry)
-            .is_some_and(|entry| Instant::now() < entry.until)
+            .is_some_and(|pending| pending.entry.is_some())
     }
 
-    /// The hotkey's entry still waiting, whatever its time, and the window its sidebar is in.
+    /// The hotkey's entry still waiting, and the window its sidebar is in.
     pub(super) fn pending_entry(&self) -> Option<(EntryWait, AnyWindowHandle)> {
         let pending = self.pending.borrow();
         let pending = pending.as_ref()?;
-        Some((pending.entry?, pending.window))
+        Some((pending.entry.clone()?, pending.window))
+    }
+
+    /// Whether `handle` is the entry's own parking handle, which is never a place to give the
+    /// keyboard back to.
+    pub(crate) fn is_entry_handle(&self, handle: &FocusHandle) -> bool {
+        self.entry.borrow().as_ref() == Some(handle)
     }
 
     pub(super) fn next_entry_id(&self) -> u64 {

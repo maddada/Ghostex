@@ -8,7 +8,7 @@
 use std::cell::Cell;
 
 use gpui::{AnyWindowHandle, App, Context, FocusHandle, KeyDownEvent, SharedString, Window};
-use web_time::{Duration, Instant};
+use web_time::Duration;
 
 use super::focus_order::{
     ENTRY_FOCUS_FRAMES, EntryWait, PENDING_FOCUS_FRAMES, PendingFocus, PendingTarget,
@@ -174,6 +174,7 @@ impl GhostexGpuiApp {
         &mut self,
         window: AnyWindowHandle,
         from: AnyWindowHandle,
+        from_focus: Option<FocusHandle>,
         origin: Option<Option<FocusHandle>>,
         cx: &mut Context<Self>,
     ) {
@@ -186,9 +187,9 @@ impl GhostexGpuiApp {
             origin_known: origin.is_some(),
             origin: origin.flatten(),
             entry: Some(EntryWait {
-                until: Instant::now() + ENTRY_WAIT,
                 id,
                 from,
+                from_focus,
             }),
         });
         cx.spawn(async move |this, cx| {
@@ -200,8 +201,13 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// Ends the hotkey's entry `id` if it still waits: the keyboard goes back from the window the
-    /// hotkey was pressed in, else from the sidebar's window; with both gone it is only forgotten.
+    /// Ends the hotkey's entry `id` if it still waits. When it still holds the keyboard, the
+    /// keyboard goes back from the window the hotkey was pressed in, else from the sidebar's
+    /// window; when the user already put it somewhere else, or both windows are gone, the entry is
+    /// only forgotten.
+    ///
+    /// CDXC:FocusRouting 2026-11-11 WHY:
+    /// The timer and the sidebar disappearing end an entry on their own, so they must not undo a choice the user made meanwhile (terminal A, the hotkey into the floating sidebar, then a click on chat B in the main window and the panel dismissed restored terminal A over the click). The entry still holds the keyboard while its handle has focus in the sidebar's window and, with the sidebar in another window, the hotkey's window still has the focus it had when the entry started (or, with the sidebar's window gone, while that window's focus is unchanged).
     fn end_native_sidebar_keyboard_entry(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some((entry, owner)) = self.native_sidebar.focus_stops.pending_entry() else {
             return;
@@ -211,19 +217,38 @@ impl GhostexGpuiApp {
         }
         let app = cx.entity();
         cx.defer(move |cx| {
-            for target in [entry.from, owner] {
-                let ended = target.update(cx, |_, window, cx| {
-                    app.update(cx, |app, cx| {
-                        app.cancel_native_sidebar_keyboard_entry(id, window, cx)
-                    })
-                });
-                if ended.is_ok() {
-                    return;
+            let entry_handle = app.read(cx).native_sidebar.focus_stops.entry_handle(cx);
+            let from_unchanged = |cx: &mut gpui::App| {
+                entry
+                    .from
+                    .update(cx, |_, window, cx| window.focused(cx) == entry.from_focus)
+                    .unwrap_or(false)
+            };
+            let holds = match owner.update(cx, |_, window, _| entry_handle.is_focused(window)) {
+                Ok(held) => held && (owner == entry.from || from_unchanged(cx)),
+                Err(_) => from_unchanged(cx),
+            };
+            if holds {
+                for target in [entry.from, owner] {
+                    let ended = target.update(cx, |_, window, cx| {
+                        app.update(cx, |app, cx| {
+                            app.cancel_native_sidebar_keyboard_entry(id, window, cx)
+                        })
+                    });
+                    if ended.is_ok() {
+                        return;
+                    }
                 }
             }
             app.update(cx, |app, _| {
-                app.native_sidebar.focus_stops.pending.borrow_mut().take();
-                app.native_sidebar.keyboard.forget_return();
+                let stops = &app.native_sidebar.focus_stops;
+                if stops
+                    .pending_entry()
+                    .is_some_and(|(entry, _)| entry.id == id)
+                {
+                    stops.pending.borrow_mut().take();
+                    app.native_sidebar.keyboard.forget_return();
+                }
             });
         });
     }
@@ -373,7 +398,9 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.native_sidebar.focus_stops.is_stop(&handle)
+        let stops = &self.native_sidebar.focus_stops;
+        if !stops.is_stop(&handle)
+            && !stops.is_entry_handle(&handle)
             && focus_handle_drawn(&handle, window, cx)
         {
             window.focus(&handle, cx);

@@ -66,8 +66,10 @@ impl GhostexGpuiApp {
             window
                 .focused(cx)
                 .filter(|focused| {
+                    let stops = &self.native_sidebar.focus_stops;
                     *focused != self.root_action_focus_handle
-                        && !self.native_sidebar.focus_stops.is_stop(focused)
+                        && !stops.is_stop(focused)
+                        && !stops.is_entry_handle(focused)
                 })
                 .map(|handle| SidebarKeyboardReturn::Focus {
                     handle,
@@ -79,7 +81,17 @@ impl GhostexGpuiApp {
         // nothing the hotkey took it from (a composer, whose capture listener runs first, or a
         // terminal) sees a key meanwhile, and Escape reaches the sidebar to cancel it.
         let entry = self.native_sidebar.focus_stops.entry_handle(cx);
-        self.start_native_sidebar_keyboard_entry(owner, here, Some(Some(entry.clone())), cx);
+        // What this window's keyboard is on now (after `unfocus_terminal`): with the sidebar in
+        // another window, an entry that ends on its own only hands the keyboard back while this
+        // is unchanged.
+        let from_focus = window.focused(cx);
+        self.start_native_sidebar_keyboard_entry(
+            owner,
+            here,
+            from_focus,
+            Some(Some(entry.clone())),
+            cx,
+        );
         cx.notify();
         if owner == here {
             window.focus(&entry, cx);
