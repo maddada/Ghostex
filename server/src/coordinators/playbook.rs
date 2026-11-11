@@ -1249,6 +1249,26 @@ mod tests {
         assert_eq!(texts.as_object().expect("texts").len(), 1);
     }
 
+    #[test]
+    fn a_restore_onto_a_session_that_is_already_a_coordinator_leaves_both_guide_records() {
+        let (_temp, db) = temp_db();
+        let repository = DomainRepository::new(&db, "S1");
+        let project_id = new_project(&repository, "Restore");
+        let closed = (project_id.clone(), "CLOSED".to_string());
+        let restored = (project_id.clone(), "RESTORED".to_string());
+        insert_coordinator(&db, &closed.0, &closed.1, "", "").expect("closed");
+        insert_coordinator(&db, &restored.0, &restored.1, "", "").expect("restored");
+        read_guide(&db, &repository, &closed);
+
+        // The coordinator row stays on the closed session, so its last read stays with it, and
+        // the restored session, which never read the guide, is not given that read.
+        crate::coordinators::carry_coordinator_to_restored_session(&db, &closed, &restored)
+            .expect("restore");
+        let reads = read_metadata(&db, GUIDE_READS_METADATA_KEY).expect("reads");
+        assert!(last_read(&reads, &closed).is_some());
+        assert!(last_read(&reads, &restored).is_none());
+    }
+
     fn temp_db() -> (tempfile::TempDir, crate::storage::GxserverDatabase) {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
