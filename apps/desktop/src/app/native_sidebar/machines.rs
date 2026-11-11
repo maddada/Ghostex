@@ -2,7 +2,7 @@
 //! lists them when the row is short of room.
 //!
 //! CDXC:RemoteMachines 2026-11-11 DECISION:
-//! User: "I told u to make the machines show as icons next to the spaces but i still dont see that??". The computers and the Spaces share one row: the computers first, as icon tiles without words (this computer's monitor, a remote computer's Windows, Apple or Ubuntu mark where the app knows its system, else the cloud), then a hairline, then the Spaces sharing the rest. The picked computer is filled like a picked Space; each tile's tooltip names it and its state ("Windows · connected"), its right-click menu is the one the tab had, and a remote computer's status dots sit small on its tile's top-right corner. With only this computer there are no computer tiles. When the row cannot hold every computer and every Space at their narrowest, the computers fold into one button showing the picked computer, which lists them all (each row keeps its menu); after that the Spaces fold into their More tile as before. This supersedes the joined Local | Windows control of the same day and the machine tabs before it.
+//! User: "I told u to make the machines show as icons next to the spaces but i still dont see that??". The computers and the Spaces share one row: the computers first, as icon tiles without words (this computer's monitor, a remote computer's Windows, Apple or Ubuntu mark where the app knows its system, else the cloud), then a hairline, then the Spaces sharing the rest. The picked computer is filled like a picked Space; each tile's tooltip names it and its state ("Windows · connected"), its right-click menu is the one the tab had, and a remote computer's status dots sit at its tile's bottom centre. With only this computer there are no computer tiles. When the row cannot hold every computer and every Space at their narrowest, the computers fold into one button showing the picked computer, which lists them all (each row keeps its menu); after that the Spaces fold into their More tile as before. This supersedes the joined Local | Windows control of the same day and the machine tabs before it.
 //! SEE-ALSO: native_sidebar/selectors.rs (the row and its room), remote_conn/app_update.rs (`remote_machine_systems`), unified/header.rs (`unified_filter_row_menu`, which opens a listed computer's menu).
 
 use super::{
@@ -45,14 +45,32 @@ fn machine_state_words(machine: &NativeSidebarMachine) -> &'static str {
     }
 }
 
-/// The icon a remote computer's system gets: the brand marks Settings > Remote shows.
-fn system_icon(system: Option<&&'static str>) -> &'static str {
+/// The icon a remote computer's system gets (the brand marks Settings > Remote shows), as the name
+/// a sidebar menu row takes (`gpui_sidebar_command_icon_asset_path`), so its tile and its row in
+/// the folded menu agree.
+fn system_icon_name(system: Option<&&'static str>) -> &'static str {
     match system.copied() {
-        Some("windows") => "modals/settings/brand-windows.svg",
-        Some("macos") => "modals/settings/brand-apple.svg",
-        Some("linux") => "modals/settings/brand-ubuntu.svg",
-        _ => "titlebar/cloud.svg",
+        Some("windows") => "brandWindows",
+        Some("macos") => "brandApple",
+        Some("linux") => "brandUbuntu",
+        _ => "cloud",
     }
+}
+
+/// Where a computer tile's status dots sit: centred over its lower edge, where a Space tile puts
+/// its own (selectors.rs), whatever the tile shows.
+///
+/// CDXC:RemoteMachines 2026-11-11 DECISION:
+/// User: "why are the dots showing in different positions, should always be bottom center". A computer's status dots sit at the bottom centre of its tile, as a Space's do, on the folded computers button too, and they do not move when the tile is picked, hovered, or shows a spinner or an update arrow (which sits on the top-right corner). This supersedes the dots on the tile's top-right corner from earlier the same day.
+fn machine_dots(scale: f32) -> gpui::Div {
+    div()
+        .absolute()
+        .top(px(20.5 * scale))
+        .left_0()
+        .w_full()
+        .h(px(11.0 * scale))
+        .flex()
+        .justify_center()
 }
 
 impl GhostexGpuiApp {
@@ -94,11 +112,13 @@ impl GhostexGpuiApp {
         let failed = !local && ghostex_gx_core::machine_state_is_failure(&machine.state);
         let icon = gpui::svg()
             .path(if local {
-                "titlebar/device-desktop.svg"
+                gpui::SharedString::new_static("titlebar/device-desktop.svg")
             } else if busy {
-                "titlebar/loader2.svg"
+                gpui::SharedString::new_static("titlebar/loader2.svg")
             } else {
-                system_icon(systems.get(&machine.id))
+                gpui_sidebar_command_icon_asset_path(Some(system_icon_name(
+                    systems.get(&machine.id),
+                )))
             })
             .size(px(size))
             .flex_shrink_0()
@@ -162,7 +182,8 @@ impl GhostexGpuiApp {
             super::selectors::space_tile_selected_colors(appearance);
         let tooltip = self.native_machine_tooltip(machine);
         let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
-        // An update waiting there: the tab's arrow, small on the tile's lower corner.
+        // An update waiting there: the tab's arrow, small on the tile's top-right corner, clear of
+        // the dots at its bottom centre.
         let update = (!local)
             .then(|| self.remote_app_update_tab_badge(&id))
             .flatten()
@@ -190,8 +211,11 @@ impl GhostexGpuiApp {
             .aria_label(tooltip.clone())
             .aria_selected(selected)
             .relative()
-            .size(px(MACHINE_ICON_SIZE * scale))
-            .flex_shrink_0()
+            .h(px(MACHINE_ICON_SIZE * scale))
+            .w(px(MACHINE_ICON_SIZE * scale))
+            // Beside the Spaces it may narrow to `SHARED_ROW_TILE_MIN` before anything folds.
+            .flex_shrink(1.0)
+            .min_w(px(super::selectors::SHARED_ROW_TILE_MIN * scale))
             .flex()
             .items_center()
             .justify_center()
@@ -216,30 +240,24 @@ impl GhostexGpuiApp {
             /*
             CDXC:Sidebar 2026-09-25 DECISION:
             User: stop showing the status on the machine we're on and show it on the other machines as dots, not numbers, exactly like the Spaces. The picked computer's sessions are already listed below.
-            Since 2026-11-11 the dots sit small on the tile's top-right corner (CDXC:RemoteMachines 2026-11-11 DECISION at the top of this file), so the icon stays centred.
+            Since 2026-11-11 they sit at the bottom centre of the computer's tile (`machine_dots`).
             */
             .when(has_status, |tile| {
-                tile.child(
-                    div()
-                        .absolute()
-                        .top(px(-4.0 * scale))
-                        .right(px(-4.0 * scale))
-                        .child(super::status::status_dot_stack(
-                            machine.working_count,
-                            machine.attention_count,
-                            machine.background_work_count,
-                            machine.question_count,
-                            machine.approval_count,
-                            scale,
-                            super::status::DotBackdrop::new(appearance, None, dot_group.clone()),
-                        )),
-                )
+                tile.child(machine_dots(scale).child(super::status::status_dot_stack(
+                    machine.working_count,
+                    machine.attention_count,
+                    machine.background_work_count,
+                    machine.question_count,
+                    machine.approval_count,
+                    scale,
+                    super::status::DotBackdrop::new(appearance, None, dot_group.clone()),
+                )))
             })
             .children(update.map(|glyph| {
                 div()
                     .absolute()
                     .right(px(2.0 * scale))
-                    .bottom(px(2.0 * scale))
+                    .top(px(2.0 * scale))
                     .child(glyph)
             }))
             .when(
@@ -330,7 +348,9 @@ impl GhostexGpuiApp {
                 let mut item = json!({
                     "label": machine.label,
                     "detail": machine_state_words(machine),
-                    "icon": if local { "deviceDesktop" } else { "cloud" },
+                    "icon": if local { "deviceDesktop" } else { system_icon_name(systems.get(&machine.id)) },
+                    // The name and the state on two lines with room (menu_state.rs `item_height`).
+                    "twoLineRow": true,
                     "checked": machine.id == snapshot.selected_machine_id,
                     "command": {"type": "selectMachine", "machineId": machine.id},
                 });
@@ -371,25 +391,15 @@ impl GhostexGpuiApp {
                 15.0 * scale,
             ))
             .when(has_status, |tile| {
-                tile.child(
-                    div()
-                        .absolute()
-                        .top(px(-4.0 * scale))
-                        .right(px(-4.0 * scale))
-                        .child(super::status::status_dot_stack(
-                            working,
-                            attention,
-                            background,
-                            question,
-                            approval,
-                            scale,
-                            super::status::DotBackdrop::new(
-                                appearance,
-                                None,
-                                dot_group.to_string(),
-                            ),
-                        )),
-                )
+                tile.child(machine_dots(scale).child(super::status::status_dot_stack(
+                    working,
+                    attention,
+                    background,
+                    question,
+                    approval,
+                    scale,
+                    super::status::DotBackdrop::new(appearance, None, dot_group.to_string()),
+                )))
             })
             .when(
                 self.native_sidebar.pointer_inside

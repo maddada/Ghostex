@@ -276,11 +276,13 @@ impl SidebarMenuPanel {
             SIDEBAR_MENU_SEPARATOR_HEIGHT
         } else if item["heading"] == true {
             SIDEBAR_MENU_HEADING_HEIGHT
-        } else if self.search.is_some()
+        } else if (self.search.is_some() || item["twoLineRow"] == true)
             && item["detail"]
                 .as_str()
                 .is_some_and(|detail| !detail.is_empty())
         {
+            // `twoLineRow`: a menu that is not searchable asks for the two-line height per row
+            // (the folded computers button's, native_sidebar/machines.rs); the rest keep theirs.
             SIDEBAR_MENU_TWO_LINE_ROW_HEIGHT
         } else {
             SIDEBAR_MENU_ROW_HEIGHT
