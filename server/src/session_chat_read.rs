@@ -342,6 +342,13 @@ pub(crate) fn resolve_session_chat_read_state(
         uses_own_login.hash(&mut hasher);
     }
     enabled_agent_icons.hash(&mut hasher);
+    // A chat's view pick (session_chat_view.rs), in memory: a pick made on another device wakes a
+    // phone's long poll. Hashed only when set, so a chat without one keeps its fingerprint.
+    if let Some(pick) =
+        crate::session_chat_view::fingerprint_part(&state.paths, project_id, session_id)
+    {
+        pick.hash(&mut hasher);
+    }
     let fingerprint = format!("{:016x}", hasher.finish());
 
     Ok(SessionChatReadResolution {
@@ -607,6 +614,9 @@ pub(crate) async fn handle_read_session_chat_http(
         "catchUp".to_string(),
         json!(crate::session_chat_catch_up::catch_up_enabled(&state.paths)),
     );
+    // The chat's view pick rides every read, so each device opens the chat in the view picked last
+    // on any of them (session_chat_view.rs).
+    crate::session_chat_view::insert_into(&mut result, &state.paths, &project_id, &session_id);
     result.insert(
         "sessionDetails".to_string(),
         json!(crate::session_details::session_details_enabled(
@@ -687,6 +697,25 @@ pub(crate) async fn handle_read_session_chat_http(
                     .unwrap_or(false)
             ),
             spacing: look_option("chatMessageSpacing"),
+        }),
+    );
+    // The three Quiet View settings ride every read too, so the phone opens a coordinator's chat in
+    // Quiet View as the desktop does (CDXC:SessionChat 2026-11-11 in
+    // packages/gx-chat-core/src/transcript/quiet_view.rs `apply_from_read`).
+    let quiet_switch = |key: &str, default: bool| {
+        Some(
+            settings
+                .get(key)
+                .and_then(Value::as_bool)
+                .unwrap_or(default),
+        )
+    };
+    result.insert(
+        "quietView".to_string(),
+        json!(ghostex_gx_protocol::ChatQuietViewSettings {
+            coordinators: quiet_switch("chatQuietViewCoordinators", true),
+            chats: quiet_switch("chatQuietViewChats", false),
+            expand_last: quiet_switch("chatQuietViewExpandLast", false),
         }),
     );
     if let Some(session_agent_id) = session_agent_id.as_deref() {

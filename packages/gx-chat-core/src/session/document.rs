@@ -44,6 +44,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.screen_probed = session.screen_probed;
     into.cloud_box_asleep = session.cloud_box_asleep;
     into.computer_notice = crate::session::computer::notice(state, context);
+    into.issue_link_base = session.issue_link_base.clone();
     into.retired_async_question_ids = Tri::Value(session.retired_async_question_ids.clone());
     into.has_more = state.messages.has_more;
     into.earlier_page_cursor = state.messages.before_offset as i64;

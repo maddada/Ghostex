@@ -96,6 +96,15 @@ pub enum Event {
     /// The computer the session runs on, as the host knows it (`session/computer.rs`): its name,
     /// whether it is another computer and whether it is offline. `None` for a host that cannot tell.
     ComputerChanged(Option<crate::session::computer::SessionComputer>),
+    /// The `origin` remote of the session's project, as the host's project list has it (`None`
+    /// for a project with none, or not a git repository): where its `#123` links go
+    /// (`transcript/issue_links.rs`). A host that never sends this draws them as text.
+    ProjectOriginChanged { origin: Option<String> },
+    /// The chat's view pick as its computer keeps it, pushed when a device changed it
+    /// (`sessionChatViewChanged`, `transcript/view_sync.rs`), so an open chat follows at once.
+    ChatViewChanged {
+        chat_view: ghostex_gx_protocol::ChatViewPick,
+    },
 }
 
 /// One session the host's session list knows (the sidebar on the desktop and the web build, the
@@ -251,6 +260,10 @@ pub struct ComposerBootRead {
     /// (`transcript/quiet_view.rs`).
     #[serde(default)]
     pub quiet_view: Value,
+    /// The `viewSync` record: when each view record was picked and whether the session's computer
+    /// has the pick (`transcript/view_sync.rs`); absent from an older host.
+    #[serde(default)]
+    pub view_sync: Value,
 }
 
 /// The socket's state, which decides whether the core waits or re-reads.

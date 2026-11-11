@@ -40,6 +40,8 @@ pub enum ChatRpcMethod {
     ReorderSessionChatQueue,
     SendSessionChatQueuedPrompt,
     SetSessionChatDraft,
+    /// A chat's view pick, kept by the session's computer (`transcript/view_sync.rs`).
+    SetSessionChatView,
     AcknowledgeSessionChatDraftHandoff,
     ReadSessionTerminalTail,
     /// Copy Report's text about this session's terminal (`/api/readSessionChatReport`).
@@ -124,6 +126,7 @@ impl ChatRpcMethod {
             Self::ReorderSessionChatQueue => "reorderSessionChatQueue",
             Self::SendSessionChatQueuedPrompt => "sendSessionChatQueuedPrompt",
             Self::SetSessionChatDraft => "setSessionChatDraft",
+            Self::SetSessionChatView => "setSessionChatView",
             Self::AcknowledgeSessionChatDraftHandoff => "acknowledgeSessionChatDraftHandoff",
             Self::ReadSessionTerminalTail => "readSessionTerminalTail",
             Self::ReadSessionChatReport => "readSessionChatReport",
@@ -182,6 +185,7 @@ impl ChatRpcMethod {
             "reorderSessionChatQueue" => Self::ReorderSessionChatQueue,
             "sendSessionChatQueuedPrompt" => Self::SendSessionChatQueuedPrompt,
             "setSessionChatDraft" => Self::SetSessionChatDraft,
+            "setSessionChatView" => Self::SetSessionChatView,
             "acknowledgeSessionChatDraftHandoff" => Self::AcknowledgeSessionChatDraftHandoff,
             "readSessionTerminalTail" => Self::ReadSessionTerminalTail,
             "readSessionChatReport" => Self::ReadSessionChatReport,

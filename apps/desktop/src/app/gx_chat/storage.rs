@@ -114,6 +114,12 @@ const STORES: &[ChatStore] = &[
         backend: disk("quietView", None),
     },
     ChatStore {
+        id: "viewSync",
+        prefix: "ghostex.sessionChat.viewSync.",
+        collection: true,
+        backend: disk("viewSync", None),
+    },
+    ChatStore {
         id: "tasksCollapsed",
         prefix: "ghostex.chat.agentTasks.collapsed",
         collection: false,

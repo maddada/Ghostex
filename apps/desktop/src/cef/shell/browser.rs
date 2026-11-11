@@ -90,6 +90,7 @@ impl CefBrowser {
         extension_bridge_event_handler: Option<ExtensionBridgeEventHandler>,
         page_load_end_handler: Option<PageLoadEndHandler>,
         mobile_user_agent: Option<BrowserMobileUserAgent>,
+        initial_frame: Option<(Bounds<Pixels>, f32)>,
     ) -> Result<Self, String> {
         let _profile = crate::profiling::span(crate::profiling::Metric::CefCreate);
         /*
@@ -133,12 +134,31 @@ impl CefBrowser {
         the surface for this pass and naturally create it on their next
         reconcile once the context finishes initializing.
         */
-        let initial_bounds = cef::Rect {
-            x: 0,
-            y: 0,
-            width: 1,
-            height: 1,
-        };
+        /*
+        CDXC:SessionChat 2026-11-11 WHY:
+        User: "after i open a inline html (ghsotex page) i see it show as collpased to the top left for a split second then return to normal size". A browser made at 1x1 and resized afterwards can hand Chromium a frame from before its real size, which Chromium draws in the view's top-left corner until the next one. A caller that knows where the page goes (the floating page window) passes that frame with the window's scale (`initial_frame`), so Chromium's view starts at its real size; `set_bounds` below then places it exactly, as a paint would. The frame is in points on macOS and in physical pixels on Windows and Linux, as each adapter's `set_native_view_frame` takes it.
+        */
+        let initial_bounds = initial_frame.map_or(
+            cef::Rect {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+            |(bounds, scale_factor)| {
+                let scale = if cfg!(target_os = "macos") {
+                    1.0
+                } else {
+                    scale_factor.max(1.0)
+                };
+                cef::Rect {
+                    x: (bounds.origin.x.as_f32() * scale).round() as i32,
+                    y: (bounds.origin.y.as_f32() * scale).round() as i32,
+                    width: ((bounds.size.width.as_f32() * scale).round() as i32).max(1),
+                    height: ((bounds.size.height.as_f32() * scale).round() as i32).max(1),
+                }
+            },
+        );
         let window_info = platform::child_window_info(parent_native_view, &initial_bounds);
         /*
         macOS `createBrowserIfNeeded` trusted-clipboard parity: only surfaces
@@ -358,7 +378,7 @@ impl CefBrowser {
             }
         }
 
-        Ok(Self {
+        let created = Self {
             browser: RefCell::new(browser),
             _client: client,
             _request_context: request_context,
@@ -370,7 +390,16 @@ impl CefBrowser {
             extension_bridge_surface: extension_bridge_surface
                 .filter(|_| extension_bridge_installed),
             app_initiated_close,
-        })
+        };
+        if let Some((bounds, scale_factor)) = initial_frame {
+            created.set_bounds(bounds, scale_factor);
+        }
+        Ok(created)
+    }
+
+    /// The view is on screen (`set_visible(true)` was its last change).
+    pub fn is_shown(&self) -> bool {
+        self.last_visible.get() == Some(true)
     }
 
     pub fn extension_bridge_installed(&self) -> bool {

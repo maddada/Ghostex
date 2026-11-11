@@ -726,6 +726,7 @@ impl GhostexGpuiApp {
             None,
             None,
             mobile_user_agent,
+            None,
             cx,
         ) {
             Ok(surface) => surface,

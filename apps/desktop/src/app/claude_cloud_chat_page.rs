@@ -209,6 +209,7 @@ impl GhostexGpuiApp {
                 None,
                 None,
                 None,
+                None,
                 cx,
             ) {
                 Ok(surface) => surface,

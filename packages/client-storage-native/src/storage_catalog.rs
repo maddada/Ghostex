@@ -126,6 +126,7 @@ pub const CATALOG: &[CatalogStore] = &[
     store("summary", "ghostex.sessionChat.summary.", true, Records),
     store("simple", "ghostex.sessionChat.simple.", true, Records),
     store("quietView", "ghostex.sessionChat.quietView.", true, Records),
+    store("viewSync", "ghostex.sessionChat.viewSync.", true, Records),
     store(
         "tasksCollapsed",
         "ghostex.chat.agentTasks.collapsed",

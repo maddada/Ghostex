@@ -327,6 +327,12 @@ pub(crate) struct NativeChatView {
     /// Where the transcript's `#123` references link to: the project's GitHub issues URL, or `None`
     /// when its `origin` is not on GitHub (markdown_links.rs).
     pub(super) issue_link_base: Option<gpui::SharedString>,
+    /// Markdown with its `#123` links resolved under the base it was resolved with
+    /// (rich_markdown.rs, `issue_linked`).
+    pub(super) issue_link_memo: std::cell::RefCell<(
+        Option<String>,
+        std::collections::HashMap<String, String>,
+    )>,
     /// The working card's Links pill, read from the sidebar store's links for this session
     /// (links_pill.rs).
     pub(super) links_pill: Option<ghostex_gx_core::SessionLinksChatPill>,
@@ -655,6 +661,7 @@ impl NativeChatView {
             row_label_find: None,
             search_folds_sent: None,
             issue_link_base: None,
+            issue_link_memo: Default::default(),
             links_pill: None,
             search_pending_open: None,
             drawn_zoom_percent: None,

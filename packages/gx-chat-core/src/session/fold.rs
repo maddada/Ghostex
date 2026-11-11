@@ -637,6 +637,8 @@ fn empty_result() -> ReadSessionChatResult {
         marked_heading_strength: None,
         chat_text_strength: None,
         chat_look: None,
+        chat_view: None,
+        quiet_view: None,
         fork_info: None,
         subagent: None,
         error: None,
@@ -701,6 +703,11 @@ fn snapshot_as_result(
     }
     folded.result.lifecycle = frame.lifecycle.clone();
     folded.result.state = frame.state.clone();
+    // Only a frame synthesized from a read speaks for the view pick; a socket frame leaves the
+    // previous fold's.
+    if frame.chat_view.is_some() {
+        folded.result.chat_view = frame.chat_view.clone();
+    }
     folded.extra.insert(
         "projectId".to_string(),
         Value::String(frame.base.project_id.clone()),

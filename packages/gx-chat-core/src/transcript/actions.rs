@@ -175,6 +175,23 @@ fn set_view_level(state: &mut ChatState, level: &str) -> Vec<Effect> {
 }
 
 pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
+    let mut effects = handle_action(state, action, context);
+    // The view picks are handed to the session's computer too, so every device opens the chat in
+    // the same view (`view_sync.rs`).
+    if matches!(
+        action.kind,
+        ActionKind::ToggleSummary
+            | ActionKind::SetVerbose
+            | ActionKind::SetDetailLevel
+            | ActionKind::SetQuietView
+    ) {
+        let sync = crate::transcript::view_sync::picked(state, context, &effects);
+        effects.extend(sync);
+    }
+    effects
+}
+
+fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
     match action.kind {
         ActionKind::RowDetails => {
             state.transcript_view.open_rows = open_rows(action);
@@ -649,7 +666,19 @@ mod tests {
             &act(ActionKind::SetDetailLevel, Some("summary")),
             &context,
         );
-        assert_eq!(effects.len(), 1, "only the summary record is written");
+        // Beside it, the `viewSync` stamp of the pick (`view_sync.rs`).
+        let records: Vec<&str> = effects
+            .iter()
+            .filter_map(|effect| match effect {
+                crate::effect::Effect::WriteStorage { key, .. }
+                    if crate::transcript::view_sync::RECORDS.contains(&key.store.as_str()) =>
+                {
+                    Some(key.store.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(records, ["summary"], "only the summary record is written");
         assert_eq!(state.transcript_view.pending_summary_mode, Some(true));
         assert_eq!(state.transcript_view.pending_simple_override, None);
     }

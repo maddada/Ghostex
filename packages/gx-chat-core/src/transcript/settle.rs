@@ -23,18 +23,28 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
         outcome,
     } = event
     {
-        match crate::transcript::page_thumbnails::settle_rpc(state, *request_id, outcome.as_ref()) {
-            Some(answer) => effects.extend(answer),
-            None if crate::transcript::gbot_cards::settle_rpc(
+        if let Some(answer) =
+            crate::transcript::view_sync::settle_rpc(state, *request_id, outcome.as_ref())
+        {
+            effects.extend(answer);
+        } else {
+            match crate::transcript::page_thumbnails::settle_rpc(
                 state,
                 *request_id,
                 outcome.as_ref(),
-            ) => {}
-            None => effects.extend(crate::transcript::actions::settle_rpc(
-                state,
-                *request_id,
-                outcome.as_ref(),
-            )),
+            ) {
+                Some(answer) => effects.extend(answer),
+                None if crate::transcript::gbot_cards::settle_rpc(
+                    state,
+                    *request_id,
+                    outcome.as_ref(),
+                ) => {}
+                None => effects.extend(crate::transcript::actions::settle_rpc(
+                    state,
+                    *request_id,
+                    outcome.as_ref(),
+                )),
+            }
         }
     }
     // The two transcript modes change when their write lands, which is what `await
@@ -73,6 +83,8 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
             }
         }
     }
+    // A read carried the chat's view as its computer keeps it (`view_sync.rs`).
+    effects.extend(crate::transcript::view_sync::settle(state));
     // `presentation.update(...)` runs inside `publish`, AFTER the controller has composed the
     // message list it projects, so `ChatCore::republish` calls `rows::refresh` rather than this
     // hook: calling it here would project the previous turn's transcript.

@@ -410,6 +410,38 @@ pub struct ChatSideState {
     pub resource_index: Option<crate::shared::Shared<Vec<Value>>>,
 }
 
+/// Settings > Chat > Advanced's three Quiet View switches as a chat read carries them
+/// (gx-chat-core `transcript/quiet_view.rs`): Coordinators open in Quiet View
+/// (`chatQuietViewCoordinators`), Other chats open in Quiet View (`chatQuietViewChats`) and Expand
+/// the last turn (`chatQuietViewExpandLast`). An absent switch is its default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatQuietViewSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinators: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chats: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expand_last: Option<bool>,
+}
+
+/// One of a chat's view records as the session's computer keeps it: the value the user picked
+/// (`None` follows the default) and when, in the picking device's milliseconds since the epoch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatViewField {
+    #[serde(default)]
+    pub value: Option<bool>,
+    #[serde(default)]
+    pub at: i64,
+}
+
+/// A chat's view pick, kept by the computer that owns the session so every device opens the chat
+/// in the same view: one [`ChatViewField`] per view record the chat core keeps (`summary`,
+/// `simple`, `verbose`, `quietView`; gx-chat-core `transcript/view_sync.rs`). The newest pick of
+/// each record wins; gxserver keeps only those four records.
+pub type ChatViewPick = std::collections::BTreeMap<String, ChatViewField>;
+
 /// `sessionChatSnapshot` and `sessionChatReplaced`: an authoritative tail window.
 ///
 /// A snapshot is the first frame of a follower generation and the answer to every subscribe by
@@ -452,6 +484,11 @@ pub struct ChatSnapshotFrame {
     /// Absent on a snapshot or replaced frame means cleared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<TurnLifecycle>,
+    /// The chat's view pick as the session's computer keeps it ([`ChatViewPick`]). A host that
+    /// synthesizes snapshots from reads (the phone) passes the read's along; every gxserver socket
+    /// frame omits it, and absent means the frame does not speak for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_view: Option<ChatViewPick>,
     #[serde(flatten)]
     pub state: ChatSideState,
 }
@@ -590,6 +627,16 @@ pub struct ReadSessionChatResult {
     /// The five chat look settings, the same way as `catch_up`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_look: Option<ChatLookSettings>,
+    /// The chat's view pick as the session's computer keeps it ([`ChatViewPick`]): on every read
+    /// from a gxserver that keeps one, an empty map when nothing was picked. `None` is an older
+    /// gxserver, which keeps no pick.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_view: Option<ChatViewPick>,
+    /// The computer's three Quiet View settings, the same way as `catch_up`, so a host with no
+    /// settings of its own (the phone) opens chats in the computer's Quiet View defaults. `None` is
+    /// an older gxserver: the chat keeps the full view there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet_view: Option<ChatQuietViewSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

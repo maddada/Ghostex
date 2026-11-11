@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### 🩹 Fixes and polish
+
+- **A Ghostex page opens at its full size:** opening a page, in its popup over the chat or in the Files view, no longer shows it shrunk into the top-left corner for a moment before it jumps to its real size. The page now appears only once it has its real size.
+- **Connect a Device can be used on every Windows screen:** on a small or scaled screen (1080p at 150%, for example), or with Ghostex near a screen edge, the window could open partly off the screen and show one big round close button over everything. Every Ghostex dialog now opens fully on the screen, and its close button stays its normal size.
+
 ## 11.4.0 - 2026-11-11
 
 **Ghostex 11.4.0 is out.** A shorter first-run setup, one main menu and a tidier sidebar, Settings grouped by what its pages do, a coordinator's work items in one collapsible list with Quiet View, a time and a ⋯ menu under every message, messages that always go out once, Connect a Device in one window, sturdier connections, and new phone apps.

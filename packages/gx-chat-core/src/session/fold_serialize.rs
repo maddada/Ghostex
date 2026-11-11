@@ -242,8 +242,9 @@ impl<'a, M: SerializeMap> Serializer for EntriesInto<'a, M> {
 #[cfg(test)]
 pub(crate) mod tests {
     use ghostex_gx_protocol::{
-        ChatForkInfo, ChatLookSettings, ChatMessage, ChatSideState, ChatStatus,
-        ReadSessionChatResult, Tri, TurnLifecycle, TurnLifecycleState, UnavailableMode,
+        ChatForkInfo, ChatLookSettings, ChatMessage, ChatQuietViewSettings, ChatSideState,
+        ChatStatus, ChatViewField, ReadSessionChatResult, Tri, TurnLifecycle, TurnLifecycleState,
+        UnavailableMode,
     };
     use serde::Serialize;
     use serde_json::{json, Map, Value};
@@ -354,6 +355,21 @@ pub(crate) mod tests {
                 agent_work: Some("folded".into()),
                 status_in_transcript: Some(true),
                 spacing: Some("compact".into()),
+            }),
+            chat_view: Some(
+                [(
+                    "quietView".to_string(),
+                    ChatViewField {
+                        value: Some(flag),
+                        at: number,
+                    },
+                )]
+                .into(),
+            ),
+            quiet_view: Some(ChatQuietViewSettings {
+                coordinators: Some(flag),
+                chats: Some(!flag),
+                expand_last: Some(true),
             }),
             fork_info: Some(ChatForkInfo {
                 forked_from_id: Some("parent".into()),

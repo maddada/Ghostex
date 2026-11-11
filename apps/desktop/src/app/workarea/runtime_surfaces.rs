@@ -330,6 +330,7 @@ impl GhostexGpuiApp {
                         None,
                         Some(page_load_end_handler.clone()),
                         None,
+                        None,
                         cx,
                     )
                 } else {
@@ -374,6 +375,7 @@ impl GhostexGpuiApp {
                 project_workarea_bridge_event_handler,
                 manage_docs_resource_scope,
                 Some(page_load_end_handler),
+                None,
                 None,
                 cx,
             ),

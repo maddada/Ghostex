@@ -261,6 +261,7 @@ pub mod session_chat_terminal_dialog;
 mod session_chat_tests;
 pub mod session_chat_trust_memory;
 pub(crate) mod session_chat_update_hint;
+pub(crate) mod session_chat_view;
 pub mod session_chat_watchdog;
 pub mod session_chat_workspace_trust;
 pub mod session_chat_zcode;

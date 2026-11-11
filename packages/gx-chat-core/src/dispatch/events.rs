@@ -108,6 +108,20 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
         | Event::Measured(_)
         | Event::DraftChanged { .. } => Vec::new(),
         Event::ReadAloud(input) => crate::read_aloud::handle_event(state, input, context),
+        Event::ProjectOriginChanged { origin } => {
+            let base = origin
+                .as_deref()
+                .and_then(crate::transcript::issue_links::github_issues_url);
+            if state.session.issue_link_base != base {
+                state.session.issue_link_base = base;
+                state.core.request_publish();
+            }
+            Vec::new()
+        }
+        Event::ChatViewChanged { chat_view } => {
+            crate::transcript::view_sync::read_carried(state, Some(chat_view));
+            Vec::new()
+        }
         Event::ComputerChanged(computer) => {
             crate::session::computer::changed(state, context, computer.clone())
         }

@@ -40,6 +40,11 @@ pub(crate) struct CefSurface {
     site_prompts: site_prompt::SitePromptQueue,
     /// The id the DevTools endpoint lists this page under, once asked (`learn_devtools_target_id`).
     devtools_target_id: Option<String>,
+    /// The page's view goes on screen only from a paint that placed it (`show_when_placed`).
+    show_when_placed: bool,
+    /// Asked to show while held: `Some(false)` until a paint places it, `Some(true)` once a paint
+    /// already moved it and the next one shows it (`CefElement::prepaint`).
+    pending_show: std::cell::Cell<Option<bool>>,
 }
 
 impl CefSurface {
@@ -72,6 +77,7 @@ impl CefSurface {
         manage_docs_resource_scope: Option<cef::ManageDocsResourceScope>,
         page_load_end_handler: Option<cef::PageLoadEndHandler>,
         mobile_user_agent: Option<cef::BrowserMobileUserAgent>,
+        initial_frame: Option<(Bounds<Pixels>, f32)>,
         cx: &mut gpui::App,
     ) -> Result<gpui::Entity<Self>, String> {
         let browser = Rc::new(CefBrowser::new(
@@ -91,6 +97,7 @@ impl CefSurface {
             None,
             page_load_end_handler,
             mobile_user_agent,
+            initial_frame,
         )?);
         Ok(cx.new(|cx| Self::from_browser(id, background, visible, browser, cx)))
     }
@@ -126,6 +133,7 @@ impl CefSurface {
             Some(bridge_surface),
             Some(bridge_event_handler),
             page_load_end_handler,
+            None,
             None,
         )?);
         Ok(cx.new(|cx| Self::from_browser(id, background, visible, browser, cx)))
@@ -202,6 +210,8 @@ impl CefSurface {
             workarea_theme: None,
             site_prompts: site_prompt::SitePromptQueue::new(cx),
             devtools_target_id: None,
+            show_when_placed: false,
+            pending_show: std::cell::Cell::new(None),
         }
     }
 
@@ -408,6 +418,16 @@ impl CefSurface {
         }
     }
 
+    /// From now on the page's view goes on screen only from a paint that placed it at its frame,
+    /// never straight from `set_visible`. For a surface made hidden (`visible: false`).
+    ///
+    /// CDXC:SessionChat 2026-11-11 WHY:
+    /// User: "after i open a inline html (ghsotex page) i see it show as collpased to the top left for a split second then return to normal size (just the html part of the page)". A Ghostex page's view was on screen before it had its real frame and scale: the floating window's page was made visible at 1x1, and the Files view's page was shown by `set_visible` before any paint had placed it. Chromium draws a frame made for an older size in the view's top-left corner until a frame at the new size arrives, which is that flash. A held surface stays hidden (Chromium keeps loading it and takes every resize) until a paint has placed it; when that paint moved it, the next paint shows it, so Chromium has taken the resize first. A page that keeps moving shows on that next paint anyway, and nothing waits for the page to paint, so the open is as fast as before. Ordinary surfaces still show straight from `set_visible`.
+    /// SEE-ALSO: apps/desktop/src/cef/shell/browser.rs (`initial_frame`: a page made at its real frame), apps/desktop/src/app/window/visual_page_modal.rs, apps/desktop/src/app/native_docs/published_page.rs.
+    pub(crate) fn show_when_placed(&mut self) {
+        self.show_when_placed = true;
+    }
+
     pub(crate) fn set_visible(&mut self, visible: bool) {
         if visible && !self.visible && crate::app::panel_motion::view_panel_would_slide_open() {
             self.browser
@@ -419,6 +439,13 @@ impl CefSurface {
             self.hidden_since = Some(std::time::Instant::now());
         }
         self.visible = visible;
+        if visible && self.show_when_placed && !self.browser.is_shown() {
+            if self.pending_show.get().is_none() {
+                self.pending_show.set(Some(false));
+            }
+            return;
+        }
+        self.pending_show.set(None);
         self.browser.set_visible(visible);
     }
 
@@ -690,13 +717,30 @@ impl Element for CefElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        if !self.parent.read(cx).visible {
+        let parent = self.parent.read(cx);
+        if !parent.visible {
             self.browser.set_visible(false);
             return None;
         }
 
-        self.browser.set_visible(true);
-        place_browser_view(&self.browser, bounds, window);
+        // A held page shows only once a paint has placed it (`CefSurface::show_when_placed`).
+        match parent.pending_show.get() {
+            None => {
+                self.browser.set_visible(true);
+                place_browser_view(&self.browser, bounds, window);
+            }
+            Some(moved_before) => {
+                let moves = self.browser.bounds_differ(bounds, window.scale_factor());
+                place_browser_view(&self.browser, bounds, window);
+                if moves && !moved_before {
+                    parent.pending_show.set(Some(true));
+                    window.request_animation_frame();
+                } else {
+                    parent.pending_show.set(None);
+                    self.browser.set_visible(true);
+                }
+            }
+        }
         // CDXC:Tooltips 2026-09-24 SEE-ALSO: the tooltip positioners in gpui (`window.rs`) and gpui-component (`tooltip.rs`) lay tooltips out around the regions recorded here, because the page's native view draws over anything GPUI paints inside its frame.
         window.occlude_native_region(bounds);
         #[cfg(target_os = "macos")]

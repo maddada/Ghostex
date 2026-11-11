@@ -361,6 +361,21 @@ impl GpuiVisualPageModalWindow {
         } else {
             glass::PAGE_TOP_DARK
         };
+        // CDXC:SessionChat 2026-11-11 WHY: the page is made at the area under the band, with the
+        // window's scale, instead of 1x1 (cef/shell/browser.rs `initial_frame`), and hidden until a
+        // paint has placed it there (element/cef_surface.rs `show_when_placed`), so no frame from
+        // before its real size or scale is ever seen: the "collapsed to the top left" flash.
+        let viewport = window.viewport_size();
+        let initial_frame = (
+            gpui::Bounds::new(
+                point(px(0.0), px(TOP_BAND_HEIGHT)),
+                size(
+                    viewport.width,
+                    (viewport.height - px(TOP_BAND_HEIGHT)).max(px(1.0)),
+                ),
+            ),
+            window.scale_factor(),
+        );
         let created = cef_parent_native_view(window)
             .map_err(|error| error.to_string())
             .and_then(|parent| {
@@ -375,7 +390,7 @@ impl GpuiVisualPageModalWindow {
                     false,
                     gpui::rgb(page_top).into(),
                     None,
-                    true,
+                    false,
                     Some(popup_open_handler),
                     None,
                     Some(page_closed),
@@ -384,6 +399,7 @@ impl GpuiVisualPageModalWindow {
                     None,
                     Some(page_loaded),
                     None,
+                    Some(initial_frame),
                     cx,
                 )
             });
@@ -392,19 +408,10 @@ impl GpuiVisualPageModalWindow {
             Ok(surface) => {
                 *shown_surface.borrow_mut() = Some(surface.downgrade());
                 surface.read(cx).add_page_script(page::PAGE_SCRIPT);
-                // A CEF page starts 1×1 and only gets its frame when the window paints; give it
-                // the area under the header from the start so it lays out at its real width.
-                let viewport = window.viewport_size();
-                surface.read(cx).set_initial_bounds(
-                    gpui::Bounds::new(
-                        point(px(0.0), px(TOP_BAND_HEIGHT)),
-                        size(
-                            viewport.width,
-                            (viewport.height - px(TOP_BAND_HEIGHT)).max(px(1.0)),
-                        ),
-                    ),
-                    window.scale_factor(),
-                );
+                surface.update(cx, |surface, _| {
+                    surface.show_when_placed();
+                    surface.set_visible(true);
+                });
                 self.surface = Some(surface);
                 self.follow_page_glass(window, cx);
             }

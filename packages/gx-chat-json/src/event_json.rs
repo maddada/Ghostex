@@ -107,6 +107,18 @@ enum EventJson {
         #[serde(default)]
         computer: Option<ghostex_gx_chat_core::session::computer::SessionComputer>,
     },
+    /// `{"type": "projectOriginChanged", "origin": "git@github.com:owner/repo.git"}` (or `null`):
+    /// the session's project's `origin` remote, where its `#123` links go.
+    ProjectOriginChanged {
+        #[serde(default)]
+        origin: Option<String>,
+    },
+    /// `{"type": "chatViewChanged", "chatView": {"summary": {"value": true, "at": …}}}`: the
+    /// chat's view pick, pushed by its computer when another device changed it.
+    ChatViewChanged {
+        #[serde(default)]
+        chat_view: ghostex_gx_chat_core::transcript::view_sync::ChatViewPick,
+    },
 }
 
 #[derive(Deserialize)]
@@ -199,6 +211,8 @@ pub(crate) fn parse(json: &str) -> Result<Event, String> {
         EventJson::ReadAloud { event } => Event::ReadAloud(event),
         EventJson::Visibility { shown } => Event::Visibility { shown },
         EventJson::ComputerChanged { computer } => Event::ComputerChanged(computer),
+        EventJson::ProjectOriginChanged { origin } => Event::ProjectOriginChanged { origin },
+        EventJson::ChatViewChanged { chat_view } => Event::ChatViewChanged { chat_view },
     })
 }
 

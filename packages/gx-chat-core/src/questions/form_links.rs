@@ -193,28 +193,10 @@ pub fn link_runs(text: &str) -> Vec<LinkRun> {
     runs
 }
 
-/// A bare `#407` in `text` at `at`: the digits' end when it is one. The rule is the desktop chat's
-/// (`issue_references` in gpui-component's text code): a whole token, 1 to 9 digits, no leading
-/// zero, and never 6 or 8 digits, which read as a hex colour.
+/// A bare `#407` in `text` at `at`: the digits' end when it is one, by the chat's one rule
+/// (`transcript/issue_links.rs`).
 fn issue_at(text: &str, at: usize) -> Option<usize> {
-    let bytes = text.as_bytes();
-    let word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
-    if bytes.get(at) != Some(&b'#') {
-        return None;
-    }
-    if at > 0 && (word(bytes[at - 1]) || matches!(bytes[at - 1], b'/' | b'#' | b'&')) {
-        return None;
-    }
-    let end = at
-        + 1
-        + bytes[at + 1..]
-            .iter()
-            .take_while(|byte| byte.is_ascii_digit())
-            .count();
-    let digits = end - at - 1;
-    let closes = end >= bytes.len() || !(word(bytes[end]) || matches!(bytes[end], b'/' | b'-'));
-    (closes && (1..=9).contains(&digits) && digits != 6 && digits != 8 && bytes[at + 1] != b'0')
-        .then_some(end)
+    crate::transcript::issue_links::issue_reference_at(text, at)
 }
 
 fn word_run(text: &str) -> Value {
