@@ -18,7 +18,7 @@ Everything App Store Connect shows for `com.maddada.ghostex.ios`, kept here so a
 2. Run **Release mobile iOS to the App Store** with mode `check` to see what App Store Connect has and what is missing.
 3. Run it with mode `prepare` and the same version (`whats_new` is required from the second App Store version on; Apple does not take it on the first). It creates the version, writes the listing and screenshots, attaches the build once Apple has processed it, and fills App Review Information. `dry_run` shows what it would change.
 4. Look the version over in App Store Connect.
-5. Run it with mode `submit`. Review usually takes one to two days. With release type `MANUAL` you press **Release this version** in App Store Connect after approval.
+5. Run it with mode `submit`. Review usually takes one to two days. The release type in `app-store.json` is `AFTER_APPROVAL`, so the version goes to the App Store by itself once Apple approves it. For a version that was submitted as `MANUAL`, run mode `release`: it switches the version to release after approval while it is in review, and releases it if Apple already approved it.
 
 ## Secrets the workflow reads
 

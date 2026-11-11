@@ -8,12 +8,16 @@
  *   asc-app-store.mjs check   [--version 10.27.0]                       read-only: what is set, what is missing
  *   asc-app-store.mjs prepare --version 10.27.0 [--timeout-minutes 60] [--dry-run]
  *   asc-app-store.mjs submit  --version 10.27.0 [--dry-run]
+ *   asc-app-store.mjs release --version 10.27.0 [--dry-run]         release it as soon as Apple approves
  *
  * `prepare` creates (or renames) the editable App Store version, writes the app information (name,
  * subtitle, privacy policy URL, categories, age rating, content rights), the version's text and
  * screenshots, attaches the build once Apple has processed it, and fills App Review Information.
- * `submit` checks the version is complete and sends it to App Review. Nothing is released: the
- * version's release type comes from app-store.json (MANUAL means you press Release).
+ * `submit` checks the version is complete and sends it to App Review. The version's release type
+ * comes from app-store.json: AFTER_APPROVAL goes to the App Store by itself once Apple approves,
+ * MANUAL waits for a release. `release` is for a version that is already submitted: it sets the
+ * release type to AFTER_APPROVAL while the version is in review, and releases a version that Apple
+ * approved and that waits for the developer (Pending Developer Release).
  *
  * Env: the key env in asc-api.mjs; GHOSTEX_WHATS_NEW (required from the second released version on);
  * GHOSTEX_REVIEW_CONTACT_FIRST_NAME, _LAST_NAME, _PHONE, _EMAIL (optional; App Review Information is
@@ -876,6 +880,57 @@ async function submitMode(client, options) {
   );
 }
 
+/*
+ CDXC:Release 2026-11-11 DECISION:
+ User: "why testflight then app store?? release on both rigth away please!!" and "please make the
+ release on apple auto not manual". 11.4.0 was submitted as MANUAL, and prepare refuses a submitted
+ version, so this mode changes the one thing App Store Connect still lets us change in review, and
+ presses Release for a version Apple already approved.
+*/
+async function releaseMode(client, options) {
+  const versionString = options.version;
+  const dryRun = options['dry-run'] === true;
+  if (dryRun) log('Dry run: nothing is changed.');
+  const app = await findApp(client);
+  const versions = await listVersions(client, app.id);
+  const version = versions.find((v) => v.attributes?.versionString === versionString);
+  if (!version) throw new Error(`App Store version ${versionString} does not exist; run prepare first`);
+  const state = version.attributes.appVersionState;
+  const releaseType = version.attributes.releaseType;
+  if (LIVE_VERSION_STATES.has(state)) {
+    log(`Version ${versionString} is ${state}: it is already on the App Store.`);
+    return;
+  }
+  if (state === 'PENDING_DEVELOPER_RELEASE') {
+    log(`Version ${versionString} is approved and waits for release: ${dryRun ? 'would release it' : 'releasing it'}`);
+    if (!dryRun)
+      await client.request('POST', '/v1/appStoreVersionReleaseRequests', {
+        data: {
+          type: 'appStoreVersionReleaseRequests',
+          relationships: { appStoreVersion: { data: { type: 'appStoreVersions', id: version.id } } },
+        },
+      });
+    return;
+  }
+  if (releaseType === 'AFTER_APPROVAL') {
+    log(`Version ${versionString} is ${state} and already releases by itself after approval.`);
+    return;
+  }
+  log(
+    `Version ${versionString} is ${state} (release ${releaseType ?? '?'}): ${dryRun ? 'would set' : 'setting'} release AFTER_APPROVAL`
+  );
+  if (dryRun) return;
+  await client.request('PATCH', `/v1/appStoreVersions/${version.id}`, {
+    data: { type: 'appStoreVersions', id: version.id, attributes: { releaseType: 'AFTER_APPROVAL' } },
+  });
+  const after = (await listVersions(client, app.id)).find((v) => v.id === version.id);
+  log(
+    `Version ${versionString}: release ${after?.attributes?.releaseType ?? '?'} (${after?.attributes?.appVersionState ?? '?'}).`
+  );
+  if (after?.attributes?.releaseType !== 'AFTER_APPROVAL')
+    throw new Error('App Store Connect kept the old release type; change it on the version page in App Store Connect');
+}
+
 function validateMode() {
   const listing = loadListing();
   for (const field of ['name', 'subtitle', 'promotionalText', 'description'])
@@ -943,14 +998,15 @@ async function main(argv) {
   if (values.version !== undefined) buildNumberFor(values.version);
   const mode = positionals[0];
   if (mode === 'validate') return validateMode();
-  if (!['check', 'prepare', 'submit'].includes(mode))
+  if (!['check', 'prepare', 'submit', 'release'].includes(mode))
     throw new Error(
-      'usage: asc-app-store.mjs validate|check|prepare|submit [--version x.y.z] [--dry-run] (see the header)'
+      'usage: asc-app-store.mjs validate|check|prepare|submit|release [--version x.y.z] [--dry-run] (see the header)'
     );
   if (mode !== 'check' && !values.version) throw new Error('--version is required');
   const client = ascClientFromEnv();
   if (mode === 'check') return checkMode(client, values);
   if (mode === 'prepare') return prepareMode(client, values);
+  if (mode === 'release') return releaseMode(client, values);
   return submitMode(client, values);
 }
 
