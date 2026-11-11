@@ -6,8 +6,8 @@ use super::records::{now_iso, sql_error, SessionKey};
 use crate::domain::DomainStateError;
 
 /// Moves the coordinator records of a closed session onto the session that restored it: its own
-/// coordinator record (goal, instructions, memory), the threads it leads, and its link when it was
-/// a thread itself. Nothing moves when the restored session already has a record of its own.
+/// coordinator record (goal, instructions, memory), the threads it leads, its link when it was
+/// a thread itself, and the record of the guide it last read (playbook.rs `carry_guide_records`). Nothing moves when the restored session already has a record of its own.
 ///
 /// CDXC:Coordinators 2026-10-16 WHY: Restore makes a new session and deletes the closed one, and the coordinator tables are keyed by session with no foreign key, so a restored coordinator came back as a plain session while its record and every thread link stayed on the deleted id: the sidebar showed no crown and no threads, and thread reports had nowhere to go.
 /// SEE-ALSO: server/src/previous_session_restore.rs (what the restore carries over), server/src/server/previous_session_restore_http.rs (which calls this).
@@ -51,5 +51,6 @@ pub fn carry_coordinator_to_restored_session(
             params![from.0, from.1, to.0, to.1, timestamp],
         )
         .map_err(sql_error)?;
+    super::playbook::carry_guide_records(&transaction, from, to)?;
     transaction.commit().map_err(sql_error)
 }

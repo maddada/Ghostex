@@ -689,20 +689,89 @@ pub fn record_playbook_update_note(
     key: &SessionKey,
     version: &str,
 ) -> Result<(), DomainStateError> {
-    let mut notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
-    notes[guide_read_key(key)] = json!(version);
-    write_metadata(db, GUIDE_NOTES_METADATA_KEY, &notes)
+    in_write_transaction(db, |db| {
+        let mut notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
+        notes[guide_read_key(key)] = json!(version);
+        write_metadata(db, GUIDE_NOTES_METADATA_KEY, &notes)
+    })
 }
 
 /// Marks a just-created orchestrator, whose first prompt sends it to the guide, so its messages
 /// before that first read carry no note.
 pub fn mark_new_coordinator(db: &Connection, key: &SessionKey) -> Result<(), DomainStateError> {
-    let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
-    let notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
-    if recorded(&reads, key).is_some() || recorded(&notes, key).is_some() {
+    in_write_transaction(db, |db| {
+        let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
+        let notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
+        if recorded(&reads, key).is_some() || recorded(&notes, key).is_some() {
+            return Ok(());
+        }
+        record_playbook_update_note(db, key, NEW_COORDINATOR_NOTE)
+    })
+}
+
+/// Runs `work` in one `BEGIN IMMEDIATE` transaction, or inside the transaction `db` is already in.
+///
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// The guide records (`coordinatorGuideReads`, `coordinatorGuideNotes`, `coordinatorGuideTexts`) are each one JSON object for every coordinator, read, changed and written back whole, and gxserver serves requests on several SQLite connections at once. Two coordinators reading their guide together each wrote back the object they had read, so the later write dropped the other's last read: it was then told it had never read its playbook, or got the full guide instead of its changes. Every read-and-write of these records takes the write lock first, so the second one reads what the first wrote.
+fn in_write_transaction<T>(
+    db: &Connection,
+    work: impl FnOnce(&Connection) -> Result<T, DomainStateError>,
+) -> Result<T, DomainStateError> {
+    if !db.is_autocommit() {
+        return work(db);
+    }
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+    let value = work(&transaction)?;
+    transaction.commit().map_err(sql_error)?;
+    Ok(value)
+}
+
+/// Moves a coordinator's guide records (its last read and the last note it was told about) from
+/// session `from` to session `to`, when `to` has none of its own: a restored coordinator and a
+/// Chief of Staff's new chat keep their place, and the old key stops holding a guide text.
+pub fn carry_guide_records(
+    db: &Connection,
+    from: &SessionKey,
+    to: &SessionKey,
+) -> Result<(), DomainStateError> {
+    if from == to {
         return Ok(());
     }
-    record_playbook_update_note(db, key, NEW_COORDINATOR_NOTE)
+    in_write_transaction(db, |db| {
+        for metadata_key in [GUIDE_READS_METADATA_KEY, GUIDE_NOTES_METADATA_KEY] {
+            let mut records = read_metadata(db, metadata_key)?;
+            let Some(records_map) = records.as_object_mut() else {
+                continue;
+            };
+            let Some(value) = records_map.remove(&guide_read_key(from)) else {
+                continue;
+            };
+            records_map.entry(guide_read_key(to)).or_insert(value);
+            write_metadata(db, metadata_key, &records)?;
+        }
+        Ok(())
+    })
+}
+
+/// The `projectId:sessionId` keys of every coordinator this computer has.
+fn coordinator_keys(
+    db: &Connection,
+) -> Result<std::collections::HashSet<String>, DomainStateError> {
+    let mut statement = db
+        .prepare("SELECT projectId, sessionId FROM coordinators")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(format!(
+                "{}:{}",
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?
+            ))
+        })
+        .map_err(sql_error)?;
+    rows.collect::<Result<_, _>>().map_err(sql_error)
 }
 
 /// What `guide --changes` prints for orchestrator `key` instead of the full `guide`: only what
@@ -730,16 +799,29 @@ fn changes_since_last_read(
 }
 
 /// Records that orchestrator `key` read guide `version`, keeps that version's text for its next
-/// `--changes`, and drops the texts no orchestrator's last read names any more.
+/// `--changes`, drops the records of sessions that are no longer coordinators, and drops the
+/// texts no coordinator's last read names any more. Runs inside the caller's write transaction.
 fn record_guide_read(
     db: &Connection,
     key: &SessionKey,
     version: &str,
     guide: &str,
 ) -> Result<(), DomainStateError> {
+    let coordinators = coordinator_keys(db)?;
     let mut reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
     reads[guide_read_key(key)] = json!(version);
+    if let Some(reads) = reads.as_object_mut() {
+        reads.retain(|key, _| coordinators.contains(key));
+    }
     write_metadata(db, GUIDE_READS_METADATA_KEY, &reads)?;
+    let mut notes = read_metadata(db, GUIDE_NOTES_METADATA_KEY)?;
+    if let Some(notes_map) = notes.as_object_mut() {
+        let before = notes_map.len();
+        notes_map.retain(|key, _| coordinators.contains(key));
+        if notes_map.len() != before {
+            write_metadata(db, GUIDE_NOTES_METADATA_KEY, &notes)?;
+        }
+    }
     let mut texts = read_metadata(db, GUIDE_TEXTS_METADATA_KEY)?;
     texts[version] = json!(guide);
     let read_versions: std::collections::HashSet<&str> = reads
@@ -781,12 +863,17 @@ pub fn handle_coordinator_playbook_endpoint(
             };
             let wants_changes = params.get("changes").and_then(Value::as_bool) == Some(true);
             let changes = match &reader {
-                Some(key) if wants_changes => changes_since_last_read(db, key, &guide)?,
-                _ => None,
+                Some(key) => in_write_transaction(db, |db| {
+                    let changes = if wants_changes {
+                        changes_since_last_read(db, key, &guide)?
+                    } else {
+                        None
+                    };
+                    record_guide_read(db, key, &version, &guide)?;
+                    Ok(changes)
+                })?,
+                None => None,
             };
-            if let Some(key) = &reader {
-                record_guide_read(db, key, &version, &guide)?;
-            }
             let changes_only = changes.is_some();
             Ok(json!({
                 "guide": changes.unwrap_or(guide),
@@ -1065,6 +1152,101 @@ mod tests {
             .expect("status")
             .expect("changed");
         assert!(notice.contains("`ghostex coordinator guide --changes`"));
+    }
+
+    fn new_project(repository: &DomainRepository<'_>, name: &str) -> String {
+        repository
+            .create_project(&params(
+                json!({ "name": name, "path": std::env::temp_dir() }),
+            ))
+            .expect("create project")["projectId"]
+            .as_str()
+            .expect("projectId")
+            .to_string()
+    }
+
+    fn last_read<'a>(records: &'a Value, key: &SessionKey) -> Option<&'a str> {
+        recorded(records, key)
+    }
+
+    #[test]
+    fn a_guide_read_waits_for_another_coordinators_record_instead_of_dropping_it() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        initialize_gxserver_storage(&paths).expect("storage init");
+        let setup = open_gxserver_database(&paths).expect("open db");
+        let project_id = new_project(&DomainRepository::new(&setup, "S1"), "Overlap");
+        let first = (project_id.clone(), "FIRST".to_string());
+        let second = (project_id.clone(), "SECOND".to_string());
+        insert_coordinator(&setup, &first.0, &first.1, "", "").expect("first");
+        insert_coordinator(&setup, &second.0, &second.1, "", "").expect("second");
+        drop(setup);
+
+        // Connection B is mid-way through recording the second coordinator's read: it holds the
+        // write lock and has written a record connection A cannot see yet.
+        let other = open_gxserver_database(&paths).expect("open db B");
+        other.execute_batch("BEGIN IMMEDIATE").expect("begin B");
+        let mut reads = read_metadata(&other, GUIDE_READS_METADATA_KEY).expect("reads");
+        reads[guide_read_key(&second)] = json!("second-version");
+        write_metadata(&other, GUIDE_READS_METADATA_KEY, &reads).expect("write B");
+
+        // Connection A records the first coordinator's read meanwhile.
+        let reader_paths = paths.clone();
+        let reader_key = first.clone();
+        let reader = std::thread::spawn(move || {
+            let db = open_gxserver_database(&reader_paths).expect("open db A");
+            let repository = DomainRepository::new(&db, "S1");
+            read_guide(&db, &repository, &reader_key);
+        });
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        other.execute_batch("COMMIT").expect("commit B");
+        reader.join().expect("reader");
+
+        let after = open_gxserver_database(&paths).expect("open db");
+        let reads = read_metadata(&after, GUIDE_READS_METADATA_KEY).expect("reads");
+        assert_eq!(last_read(&reads, &second), Some("second-version"));
+        assert!(last_read(&reads, &first).is_some());
+    }
+
+    #[test]
+    fn a_restored_coordinator_keeps_its_guide_record_and_gone_ones_are_dropped() {
+        let (_temp, db) = temp_db();
+        let repository = DomainRepository::new(&db, "S1");
+        let project_id = new_project(&repository, "Restore");
+        let closed = (project_id.clone(), "CLOSED".to_string());
+        let restored = (project_id.clone(), "RESTORED".to_string());
+        let gone = (project_id.clone(), "GONE".to_string());
+        insert_coordinator(&db, &closed.0, &closed.1, "", "").expect("closed");
+        insert_coordinator(&db, &gone.0, &gone.1, "", "").expect("gone");
+        read_guide(&db, &repository, &closed);
+        read_guide(&db, &repository, &gone);
+
+        // Restore moves the coordinator to a new session: its last read moves with it, so its
+        // first `--changes` there is one line, not the whole guide.
+        crate::coordinators::carry_coordinator_to_restored_session(&db, &closed, &restored)
+            .expect("restore");
+        let reads = read_metadata(&db, GUIDE_READS_METADATA_KEY).expect("reads");
+        assert!(last_read(&reads, &closed).is_none());
+        let (text, changes_only) = guide_changes_for(&db, &repository, &restored);
+        assert!(changes_only);
+        assert!(text.starts_with("Your playbook has not changed"));
+
+        // A coordinator record that is gone loses its guide records at the next read, and with
+        // them the guide text only it still named.
+        db.execute(
+            "DELETE FROM coordinators WHERE projectId = ?1 AND sessionId = ?2",
+            rusqlite::params![gone.0, gone.1],
+        )
+        .expect("delete");
+        let reads = read_metadata(&db, GUIDE_READS_METADATA_KEY).expect("reads");
+        let gone_version = last_read(&reads, &gone).expect("gone read").to_string();
+        set_overrides(&db, &repository, "A rule that changes the guide's version.");
+        read_guide(&db, &repository, &restored);
+        let reads = read_metadata(&db, GUIDE_READS_METADATA_KEY).expect("reads");
+        let texts = read_metadata(&db, GUIDE_TEXTS_METADATA_KEY).expect("texts");
+        assert!(last_read(&reads, &gone).is_none());
+        assert!(texts.get(&gone_version).is_none());
+        assert_eq!(texts.as_object().expect("texts").len(), 1);
     }
 
     fn temp_db() -> (tempfile::TempDir, crate::storage::GxserverDatabase) {

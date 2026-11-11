@@ -340,7 +340,8 @@ pub(crate) fn start_provider(
 }
 
 /// Moves a coordinator's goal, instructions, memory, threads (here and on other computers) and
-/// board items from session `old` to session `new`, and drops the old coordinator row.
+/// board items, and the record of the guide it last read, from session `old` to session `new`,
+/// and drops the old coordinator row.
 pub(super) fn move_coordinator(
     db: &Connection,
     old: &SessionKey,
@@ -376,5 +377,5 @@ pub(super) fn move_coordinator(
         rusqlite::params![old.0, old.1],
     )
     .map_err(sql)?;
-    Ok(())
+    crate::coordinators::carry_guide_records(db, old, new)
 }
