@@ -627,14 +627,7 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:SessionChat 2026-11-11 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so the three Quiet View rows (Settings > Chat > Advanced) are held the same way; their Help waits in the held help patch (release-11.3.1/help/quiet-view.patch).
-pub const HELD_FROM_HELP_FILES: &[&str] = &[
-    "closeButtonsOnRight",
-    "dimInactiveProjects",
-    "focusSidebar",
-    "chatQuietViewCoordinators",
-    "chatQuietViewChats",
-    "chatQuietViewExpandLast",
-];
+pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).
@@ -659,20 +652,7 @@ pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
 /// Connect a phone button and the line that names it read Connect a Device (and its neighbour Connect a
 /// computer reads Connect a Computer); Help keeps the old words
 /// until the release (release-11.3.1/help/connect-a-device.patch).
-pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[
-    (
-        "easyConnectEnabled",
-        "Easy Connect",
-        "Reach this machine from anywhere; only the devices in the list get in. Connect a phone turns it on by itself.",
-        false,
-    ),
-    (
-        "pairingCode",
-        "Connect a phone",
-        "Opens the Connect a phone window with the code to scan; Connect a computer shows the code another computer pastes.",
-        false,
-    ),
-];
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
 
 /// Hotkeys whose new description is held out of the committed Help files until a release ships
 /// it: the hotkey id, then the description the Help files keep meanwhile. The release that ships
@@ -680,10 +660,7 @@ pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[
 ///
 /// CDXC:Hotkeys 2026-11-10 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so New Thread in Active Project's description, which now names Coordinator among the picker's rows, waits in the held help patch (release-11.3.1/help/sidebar-new-button.patch).
-pub const HELD_HOTKEY_WORDING: &[(&str, &str)] = &[(
-    "openNewThreadPalette",
-    "Pick an agent, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
-)];
+pub const HELD_HOTKEY_WORDING: &[(&str, &str)] = &[];
 
 /// Rows that moved to another page, held at their old place in the committed Help files until a
 /// release ships the move: the key, the tab id and title, the section id and title, the title and
@@ -694,45 +671,13 @@ pub const HELD_HOTKEY_WORDING: &[(&str, &str)] = &[(
 ///
 /// CDXC:Spaces 2026-11-10 DECISION:
 /// The coordinator, for the user: Spaces moved from Settings > Extensions to its own section on Sidebar & Sessions (spaces.rs); its switch and its two rows stay where installed copies have them until the release that ships the move (release-11.3.1/help/spaces-setting.patch).
-pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[
-    (
-        "sidebarSpaceSwitchBehavior",
-        ("sidebar", "Sidebar & Sessions"),
-        ("sidebar", "Sidebar"),
-        "When switching to a Space",
-        "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while the Spaces extension is on.",
-        "unifiedGroupByProject",
-    ),
-    (
-        "sidebarSpaceFollowActiveSession",
-        ("sidebar", "Sidebar & Sessions"),
-        ("sidebar", "Sidebar"),
-        "Switch Space when opening a session from another Space",
-        "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while the Spaces extension is on.",
-        "sidebarSpaceSwitchBehavior",
-    ),
-    (
-        "sidebarSpacesEnabled",
-        ("extensions", "Extensions"),
-        ("official", "Built-in"),
-        "Spaces",
-        "Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.",
-        "openInTitlebarButtonHidden",
-    ),
-];
+pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
 
 /// Settings UI rows (no settings key) that were removed, kept in the committed Help files until a
 /// release ships the removal, in [`HELD_ROW_PLACEMENT`]'s shape.
 ///
 /// CDXC:Spaces 2026-11-10 DECISION: the Spaces card of Settings > Extensions (above).
-pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[(
-    "spaces",
-    ("extensions", "Extensions"),
-    ("official", "Built-in"),
-    "Spaces",
-    "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping.",
-    "openIn",
-)];
+pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
 /// with [`HELD_ROW_WORDING`]'s rows as they read before, [`HELD_ROW_PLACEMENT`]'s rows back
@@ -875,80 +820,10 @@ pub const HELD_PROJECTS_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &s
 ///
 /// CDXC:Settings 2026-11-11 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so the settings Q2511 moved (Tell agents about Ghostex and Claude task list from Chat to Agents > Defaults, Close empty sessions when starting a new one from Chat to Sidebar & Sessions, Keep the last project running for from Sidebar & Sessions to Power & Sleep > Auto Sleep, the four Commands pane rows from Sidebar & Sessions to Terminal) stay where installed copies have them until the release that ships the move empties this list and regenerates (release-11.3.1/help/settings-regroup.patch). It is a list of its own, at the end of this file, so the held patches that empty [`HELD_ROW_PLACEMENT`] still apply.
-pub const HELD_REGROUP_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[
-    (
-        "closeEmptySessionsOnNew",
-        ("chat", "Chat"),
-        ("chat", "Chat"),
-        "Close empty sessions when starting a new one",
-        "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.",
-        "preferredAgentInterface",
-    ),
-    (
-        "agentGhostexNote",
-        ("chat", "Chat"),
-        ("chat", "Chat"),
-        "Tell agents about Ghostex",
-        "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
-        "coordinatorBoardView",
-    ),
-    (
-        "sessionDetailsClaudeTaskTools",
-        ("chat", "Chat"),
-        ("chat", "Chat"),
-        "Claude task list",
-        "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it. Shown while the Session details panel extension is on.",
-        "readAloudUnavailable",
-    ),
-    (
-        "projectSwitchKeepAliveMinutes",
-        ("sidebar", "Sidebar & Sessions"),
-        ("sidebar", "Sidebar"),
-        "Keep the last project running for",
-        "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.",
-        "unifiedGroupByProject",
-    ),
-    (
-        "commandsPanelDefaultHeightPx",
-        ("sidebar", "Sidebar & Sessions"),
-        ("sidebar", "Sidebar"),
-        "Commands pane height on double-click",
-        "Height used when opening the command pane and when double-clicking its top resize rail.",
-        "sidebarDefaultWidthPx",
-    ),
-    (
-        "commandsPanelSide",
-        ("sidebar", "Sidebar & Sessions"),
-        ("sidebar", "Sidebar"),
-        "Commands pane side",
-        "Dock the command pane below the workspace or to its right.",
-        "commandsPanelDefaultHeightPx",
-    ),
-    (
-        "commandsPanelAutoMinimize",
-        ("sidebar", "Sidebar & Sessions"),
-        ("sidebar", "Sidebar"),
-        "Auto-minimize Commands pane",
-        "Minimize the Commands pane this long after you move focus elsewhere and the pointer leaves it. Commands keep running. Off keeps the pane open.",
-        "commandsPanelSide",
-    ),
-    (
-        "commandsPanelAutoMinimizeDelaySeconds",
-        ("sidebar", "Sidebar & Sessions"),
-        ("sidebar", "Sidebar"),
-        "Minimize after (set with Auto-minimize Commands pane)",
-        "How long the Commands pane stays open after focus and the pointer leave it.",
-        "commandsPanelAutoMinimize",
-    ),
-];
+pub const HELD_REGROUP_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
 
 /// Rows whose wording names the old place of a setting [`HELD_REGROUP_PLACEMENT`] holds, kept as
 /// they read before in the committed Help files until the same release, in [`HELD_ROW_WORDING`]'s
 /// shape (CDXC:Settings 2026-11-11 above): the Session details panel's switch says where its
 /// Claude task list row is.
-pub const HELD_REGROUP_WORDING: &[(&str, &str, &str, bool)] = &[(
-    "sessionDetailsPanelHidden",
-    "Turn off the Session details panel",
-    "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Chat. On by default.",
-    false,
-)];
+pub const HELD_REGROUP_WORDING: &[(&str, &str, &str, bool)] = &[];

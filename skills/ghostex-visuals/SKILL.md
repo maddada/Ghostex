@@ -568,6 +568,44 @@ works.
    and open any other in the browser. Older Ghostex versions print the block
    without `"open"`; paste it as printed.
 
+   A page with no questions (a report, a mockup to look at, a comparison)
+   waits for the reader until they mark it seen: Ghostex ends it with a
+   "Reply about this page" box and a Mark as seen button on its own, and its
+   block carries `"awaitsSeen": true`, which keeps it in the reader's list of
+   things that need them. Once they press it you receive the page's answers
+   message with `{"seen": true}`, plus `"reply"` when they wrote one:
+
+   ```
+   <ghostex-page-answers page="7fb3c974921c07aade81deda4809122d" title="Release notes draft">
+   {
+     "seen": true,
+     "reply": "Looks good, ship it."
+   }
+   </ghostex-page-answers>
+   ```
+
+   Read the reply like any message from the reader. Do not add a button of
+   your own for this.
+
+   A page with no questions (a report, a mockup to look at, a comparison)
+   waits for the reader until they mark it seen: Ghostex ends it with a
+   "Reply about this page" box and a Mark as seen button on its own, and its
+   block carries `"awaitsSeen": true`, which keeps it in the reader's list of
+   things that need them. Once they press it you receive the page's answers
+   message with `{"seen": true}`, plus `"reply"` when they wrote one:
+
+   ```
+   <ghostex-page-answers page="7fb3c974921c07aade81deda4809122d" title="Release notes draft">
+   {
+     "seen": true,
+     "reply": "Looks good, ship it."
+   }
+   </ghostex-page-answers>
+   ```
+
+   Read the reply like any message from the reader. Do not add a button of
+   your own for this.
+
 If `ghostex show` is an unknown command, say this Ghostex is too old to show
 pages and give the HTML file's path instead.
 

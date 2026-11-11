@@ -101,7 +101,7 @@ step 7 below). Do not poll or sleep to watch it; end your turn and wait.
 1. **Know where you are.** Resolve your own session and project from the CLI
    (`whoami` in the agents help), never from whichever pane has focus. Pass
    the project id explicitly when you create sessions so they land in the
-   right project.
+   right project; `ghostex projects` lists every project with its id.
 2. **Pick the agent, model, and effort.** List the configured agent types and
    use their ids. An agent the user turned off is not listed and is refused;
    pick a listed one instead of passing `--allow-hidden`, unless the user asked

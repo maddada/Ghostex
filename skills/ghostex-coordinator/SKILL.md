@@ -194,8 +194,12 @@ When a thread waits for an answer:
 Ask each question in exactly one place:
 
 - **It belongs to a line of work:**
-  `ghostex coordinator item ask W<n> "<question>" --answers "A,B" --recommended A`. Its row above
-  the chat box is the question.
+  `ghostex coordinator item ask W<n> "<title>" --detail "<the rest>" --answers "A,B" --recommended A`.
+  Its row above the chat box is the question. The title is one short plain question or instruction a
+  person understands at a glance, about ten words, with no item names or code names ("Ship the new
+  pairing screen today?"). Everything else (why, what to check, where) goes in `--detail`, which the
+  user reads when they open the row: Markdown (bold, code, links, lists; `#123` links to the PR) as
+  a few short lines or bullets, not one long paragraph.
 - **One quick pick, 2 to 4 short answers, nothing to explain:** one-click answers, a Markdown link
   per answer after the question:
   `Delete the branch? [Yes](ghostex-answer:Q41 "recommended") [No](ghostex-answer:Q41)`.
@@ -222,6 +226,9 @@ For every question:
   it again or withdraw it.
 - Dismiss arrives as a message saying "I dismissed …": withdrawn for good, never ask it again. A
   snoozed question (1, 6 or 24 hours) comes back by itself: leave it alone.
+- A Needs you item with no open ask has one answer, Done. "W<n>: Done" (no Q tag) means the user did
+  what the item asked: move the item on or finish it in that turn, and never ask whether they did
+  it. Their own words on such an item arrive as "W<n>: <words>".
 - `"skipped"` means skipped on purpose: ask again only if it blocks the work.
 - Withdraw in the same turn every open tag the user settles another way (in plain words, a "go with
   your picks", a later question, a page you replace, simply doing it). An ask:
@@ -243,9 +250,10 @@ Every line of work is one work item, W<n>, named the way the user would name it 
 redesign"). Work you do yourself in this chat (a release, a merge) is an item too. A thread, a step,
 a rebuild or a question is never an item: attach it to one.
 
-The user sees the items in the Work panel (the Work pill above the chat box opens it). What needs
-them, blocked work and what your newest turn finished sit as rows right above the chat box, the
-dock. Under your reply Ghostex adds one line of what the turn changed.
+The user sees the items in the Work panel (on the computer the button in the header above the chat
+box opens it, beside the counts; on the phone the Work pill). What needs them, blocked work and what
+your newest turn finished sit as rows right above the chat box, the dock. Under your reply Ghostex
+adds one line of what the turn changed.
 
 Update the item in the turn something changes (WORK ITEMS in `ghostex coordinator --help` has every
 flag):
@@ -254,8 +262,8 @@ flag):
 - `item now W<n> "<where it stands>"`: one line that replaces the last. Never append.
 - `item step W<n> "<step>"`: a step the user cares about. Rebuilds and test runs are chores: leave
   them out, or add `--chore`.
-- `item ask W<n> "<what>"`: anything the user must do or decide. Add `--holds` when the work stops
-  until they do.
+- `item ask W<n> "<title>" --detail "<the rest>"`: anything the user must do or decide. Add
+  `--holds` when the work stops until they do.
 - `item wait W<n> --on <W<m> | Q<n> | "something outside">`: clears itself when that is done.
 - `item done W<n> "<the one line worth keeping>"`. Its open asks stay under Needs you until the user
   answers them or you withdraw them.
