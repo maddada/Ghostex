@@ -333,6 +333,8 @@ pub(crate) struct NativeChatView {
     /// A send the chat core has not counted yet (send_watch.rs), and the last watch's number.
     pub(super) send_watch: Option<super::send_watch::SendWatch>,
     pub(super) send_watch_token: u64,
+    /// When the last send left the chat box, for the send log's step times (send_watch.rs).
+    pub(super) last_send_at: Option<web_time::Instant>,
     pub(crate) composer_ready: bool,
     pub(crate) expanded: FoldKeys,
     /// Scroll offsets of the capped boxes inside transcript rows (nested_scroll.rs).
@@ -636,6 +638,7 @@ impl NativeChatView {
             pending_send: false,
             send_watch: None,
             send_watch_token: 0,
+            last_send_at: None,
             composer_ready: false,
             expanded: FoldKeys::default(),
             nested_scrolls: Default::default(),
@@ -1211,6 +1214,10 @@ impl NativeChatView {
         params.insert("sessionId".into(), config.session_id.into());
         let params = Value::Object(params);
         let id = request["id"].clone();
+        // A message's own call to gxserver: when it left after Enter and how long it took go in
+        // the send log (send_watch.rs).
+        let delivery_call = matches!(method, "sendSessionChatMessage" | "queueSessionChatPrompt")
+            .then(|| (self.since_last_send_ms(), web_time::Instant::now()));
         let task = cx.background_executor().spawn(async move {
             if import_attachments {
                 return super::attachments::import_paths(&config.remote, &params)
@@ -1273,6 +1280,9 @@ impl NativeChatView {
                         "errorMessage": error["message"],
                     }),
                 );
+                if let Some((after_enter_ms, started)) = delivery_call {
+                    this.log_send_call(&diagnostic_method, after_enter_ms, started, &error);
+                }
                 if let Some(runtime) = &this.runtime {
                     runtime.call("resolve", vec![id, value, error]);
                 }

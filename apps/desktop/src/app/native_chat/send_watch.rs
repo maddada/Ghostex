@@ -19,8 +19,14 @@
 
 use std::time::Duration;
 
-use gpui::Context;
+use gpui::{
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _,
+    div, px,
+};
 use serde_json::json;
+
+use super::appearance::ChatAppearance;
 
 use super::state::NativeChatView;
 
@@ -31,8 +37,9 @@ const NOT_TAKEN_AFTER: Duration = Duration::from_secs(8);
 
 /// The sends the core has not counted yet.
 pub(crate) struct SendWatch {
-    /// Each send's words and the `submissionsReceived` that says the core has it, oldest first.
-    sends: Vec<(u64, String)>,
+    /// Each send's words, the `submissionsReceived` that says the core has it, and when it left
+    /// the box, oldest first.
+    sends: Vec<(u64, String, web_time::Instant)>,
     /// The count when the oldest of them left: a count below it is another core.
     base: u64,
     token: u64,
@@ -72,6 +79,8 @@ impl NativeChatView {
 
     /// Starts watching the send that just left the box with `text`.
     pub(super) fn watch_send(&mut self, text: String, cx: &mut Context<Self>) {
+        let now = web_time::Instant::now();
+        self.last_send_at = Some(now);
         // A core too old to count publishes no count: nothing to compare with.
         let Some(seen) = self.snapshot["submissionsReceived"].as_u64() else {
             return;
@@ -86,12 +95,14 @@ impl NativeChatView {
             patient: false,
         });
         // A send still unconfirmed when the next leaves is counted by the same core, in order.
-        let expected = watch.sends.last().map_or(seen, |(expected, _)| *expected) + 1;
-        watch.sends.push((expected, text));
+        let expected = watch.sends.last().map_or(seen, |(expected, ..)| *expected) + 1;
+        watch.sends.push((expected, text, now));
         watch.token = token;
         watch.heard_since = false;
         watch.patient = false;
         self.arm_send_watch(token, cx);
+        // The "Sending" row shows on this frame, before the core's thread has done anything.
+        cx.notify();
     }
 
     fn arm_send_watch(&mut self, token: u64, cx: &mut Context<Self>) {
@@ -117,7 +128,20 @@ impl NativeChatView {
             self.send_watch = None;
             return;
         }
-        watch.sends.retain(|(expected, _)| *expected > received);
+        let session = format!("{}:{}", self.config.project_id, self.config.session_id);
+        watch.sends.retain(|(expected, _, left)| {
+            if *expected > received {
+                return true;
+            }
+            // How long the core's thread took to take it in: the wait a starved app shows as a
+            // message missing from the chat.
+            crate::support_logs::append_always(
+                crate::support_logs::GpuiSupportLog::SessionChat,
+                "sessionChat.sendTaken",
+                json!({ "session": session, "afterEnterMs": left.elapsed().as_millis() as u64 }),
+            );
+            false
+        });
         if watch.sends.is_empty() {
             self.send_watch = None;
         }
@@ -142,7 +166,7 @@ impl NativeChatView {
         let text = watch
             .sends
             .iter()
-            .map(|(_, text)| text.as_str())
+            .map(|(_, text, _)| text.as_str())
             .collect::<Vec<_>>()
             .join("\n");
         crate::support_logs::append_always(
@@ -151,7 +175,7 @@ impl NativeChatView {
             json!({
                 "session": format!("{}:{}", self.config.project_id, self.config.session_id),
                 "sends": watch.sends.len(),
-                "expected": watch.sends.last().map(|(expected, _)| *expected),
+                "expected": watch.sends.last().map(|(expected, ..)| *expected),
                 "received": self.snapshot["submissionsReceived"],
                 "heardSince": watch.heard_since,
                 "hasRuntime": self.runtime.is_some(),
@@ -178,5 +202,81 @@ impl NativeChatView {
             });
         }
         cx.notify();
+    }
+
+    /// Milliseconds since the last send left the chat box.
+    pub(super) fn since_last_send_ms(&self) -> Option<u64> {
+        self.last_send_at
+            .map(|left| left.elapsed().as_millis() as u64)
+    }
+
+    /// A message's call to gxserver answered: when it left after Enter and how long it took.
+    pub(super) fn log_send_call(
+        &self,
+        method: &str,
+        after_enter_ms: Option<u64>,
+        started: web_time::Instant,
+        error: &serde_json::Value,
+    ) {
+        crate::support_logs::append_always(
+            crate::support_logs::GpuiSupportLog::SessionChat,
+            "sessionChat.sendCall",
+            json!({
+                "session": format!("{}:{}", self.config.project_id, self.config.session_id),
+                "method": method,
+                "leftAfterEnterMs": after_enter_ms,
+                "tookMs": started.elapsed().as_millis() as u64,
+                "succeeded": error.is_null(),
+                "errorCode": error["code"],
+            }),
+        );
+    }
+
+    /// The messages that left the box and the core has not taken in yet, drawn by the view itself
+    /// at once ("Sending"), so a busy core thread never leaves a sent message nowhere on screen.
+    /// Each row goes the frame the core counts it, which is the frame its own echo arrives in.
+    pub(super) fn render_unconfirmed_sends(&self, p: &ChatAppearance) -> Option<AnyElement> {
+        let watch = self.send_watch.as_ref()?;
+        if watch.sends.is_empty() {
+            return None;
+        }
+        let s = p.scale;
+        Some(
+            div()
+                .w_full()
+                .flex()
+                .flex_col()
+                .items_end()
+                .gap(px(6.0 * s))
+                .children(watch.sends.iter().map(|(expected, text, _)| {
+                    div()
+                        .id(gpui::SharedString::from(format!("unconfirmed-send:{expected}")))
+                        .role(gpui::Role::Status)
+                        .aria_label("Sending")
+                        .max_w(gpui::relative(0.8))
+                        .flex()
+                        .flex_col()
+                        .items_end()
+                        .gap(px(2.0 * s))
+                        .child(
+                            div()
+                                .px(px(12.0 * s))
+                                .py(px(8.0 * s))
+                                .rounded(px(12.0 * s))
+                                .bg(p.user_band)
+                                .text_color(p.foreground)
+                                .text_size(px(14.0 * s))
+                                .line_clamp(3)
+                                .child(text.clone()),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.0 * s))
+                                .text_color(p.muted)
+                                .child("Sending\u{2026}"),
+                        )
+                })),
+        )
+        .map(IntoElement::into_any_element)
     }
 }
