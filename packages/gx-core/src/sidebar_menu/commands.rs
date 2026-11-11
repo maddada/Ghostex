@@ -580,6 +580,11 @@ pub(crate) mod message {
         json!({ "type": "openExternalUrl", "url": url })
     }
 
+    /// `panel` is one of the `MENU_PANEL_*` ids (navigation.rs).
+    pub(crate) fn open_menu_panel(panel: &str) -> Value {
+        json!({ "type": super::super::navigation::MENU_PANEL_MESSAGE_TYPE, "panel": panel })
+    }
+
     /// `action` is one of [`crate::APP_LIFECYCLE_ACTIONS`]'s ids.
     pub(crate) fn app_lifecycle(action: &str) -> Value {
         json!({ "type": crate::APP_LIFECYCLE_MESSAGE_TYPE, "action": action })

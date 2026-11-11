@@ -168,10 +168,49 @@ impl GhostexGpuiApp {
 
     /// CDXC:Sidebar 2026-09-21 DECISION:
     /// User: the sidebar menu drops down from its trigger button rather than opening where the pointer was: its right edge lines up with the button's right edge, and it sits below the button with a gap (4px since 2026-09-25, `HEADER_MENU_TRIGGER_GAP`). Clicking the button again closes it.
-    /// The More menu with its Collapse All row saying what the next press does to the Unified
-    /// groups, which fold without the menu being rebuilt.
-    pub(crate) fn native_sidebar_more_menu_now(&self, items: &Value) -> Value {
+    /// The More menu as it opens now: its Collapse All row says what the next press does to the
+    /// Unified groups, which fold without the menu being rebuilt, and the rows that have another
+    /// place on screen or are switched off are left out.
+    ///
+    /// CDXC:Sidebar 2026-11-11 DECISION:
+    /// User (main menu page, Q2502): Add Project leaves the menu, since its button sits in the top row beside the menu, and comes back as the menu's first row while the sidebar is too narrow for that button (`add_project_in_row` is the top row's own answer, `top_row_fit`). The rows of Tools and Help that open one of the app's panels are listed only while that panel is offered (its Settings switch, and for Dev servers and Extensions the project's scope: titlebar/menu_panels.rs), as they were in the three-dots menu; the menu itself is built without those switches, so they are asked here, when it opens.
+    pub(crate) fn native_sidebar_more_menu_now(
+        &self,
+        items: &Value,
+        add_project_in_row: bool,
+    ) -> Value {
         let mut items = items.clone();
+        if let Some(rows) = items.as_array_mut() {
+            let offered = |row: &Value| {
+                let message = &row["command"]["message"];
+                message["type"] != ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE
+                    || message["panel"]
+                        .as_str()
+                        .is_some_and(|panel| self.sidebar_menu_panel_offered(panel))
+            };
+            if add_project_in_row {
+                rows.retain(|row| {
+                    row["command"]["type"] != "sidebarAction"
+                        || row["command"]["action"] != ghostex_gx_core::ADD_PROJECT_ACTION
+                });
+            }
+            for row in rows.iter_mut() {
+                if let Some(children) = row.get_mut("children").and_then(Value::as_array_mut) {
+                    let listed = children.len();
+                    children.retain(offered);
+                    if children.len() != listed {
+                        trim_menu_separators(children);
+                    }
+                }
+            }
+            // A submenu every row of which is switched off has nothing to open.
+            rows.retain(|row| {
+                row.get("children")
+                    .and_then(Value::as_array)
+                    .is_none_or(|children| !children.is_empty())
+            });
+            trim_menu_separators(rows);
+        }
         let all_folded = self.native_sidebar.unified.as_ref().is_some_and(|unified| {
             let saved = &self.gx_store.unified_sidebar.saved;
             !unified.groups.is_empty()
@@ -1484,6 +1523,21 @@ impl GhostexGpuiApp {
 }
 
 /// Whether the row `item_index` of panel `panel_index` has a menu of its own open beside it.
+/// Takes out the separators that rows left out of a menu leave behind: one at either end, and the
+/// second of two in a row.
+fn trim_menu_separators(rows: &mut Vec<Value>) {
+    let mut after_separator = true;
+    rows.retain(|row| {
+        let separator = row["separator"] == true;
+        let keep = !(separator && after_separator);
+        after_separator = separator;
+        keep
+    });
+    if rows.last().is_some_and(|row| row["separator"] == true) {
+        rows.pop();
+    }
+}
+
 fn menus_open_beside(panels: &[SidebarMenuPanel], panel_index: usize, item_index: usize) -> bool {
     panels.len() > panel_index + 1
         && panels[panel_index].child_item == Some(item_index)

@@ -55,7 +55,7 @@ impl GhostexGpuiApp {
         self.close_gpui_titlebar_popup(None, window, cx);
         /*
         CDXC:Titlebar 2026-09-27 WHY:
-        A dropdown can be asked to open before its trigger has painted (a hotkey, a ⋯ menu row, the
+        A dropdown can be asked to open before its trigger has painted (a hotkey, a menu row, the
         very first frame), so its bounds are unknown. This used to call `request_animation_frame`,
         which is only valid while a view paints: from an event or a task it unwrapped an empty view
         stack and crashed the app, and even when it didn't the dropdown never opened. The request
@@ -107,7 +107,6 @@ impl GhostexGpuiApp {
                 | GpuiTitlebarPopupKind::Git
                 | GpuiTitlebarPopupKind::Help
                 | GpuiTitlebarPopupKind::Updates
-                | GpuiTitlebarPopupKind::More
                 | GpuiTitlebarPopupKind::OpenTargets
         ) && content_height > popup_height;
         let content = self.build_gpui_titlebar_popup_content(
@@ -478,16 +477,6 @@ impl GhostexGpuiApp {
             GpuiTitlebarPopupKind::Help => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
                     super::help_menu::build_gpui_titlebar_help_popup_menu(
-                        menu,
-                        menu_width,
-                        menu_max_height,
-                        menu_scrollable,
-                    )
-                }))
-            }
-            GpuiTitlebarPopupKind::More => {
-                GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_more_popup_menu(
                         menu,
                         menu_width,
                         menu_max_height,

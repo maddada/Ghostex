@@ -146,11 +146,6 @@ impl GhostexGpuiApp {
             .child(self.render_web_git_button(cx))
             .children(self.render_web_session_details_button(cx))
             .child(Self::render_disabled_header_button(
-                "web-header-more",
-                TITLEBAR_ICON_DOTS,
-                None,
-            ))
-            .child(Self::render_disabled_header_button(
                 "web-header-panel-bottom",
                 TITLEBAR_ICON_PANEL_BOTTOM,
                 None,

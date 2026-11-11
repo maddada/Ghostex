@@ -42,20 +42,16 @@ pub(crate) enum HeaderControl {
     ClaudeCloud,
     /// The context ring (Session details).
     SessionDetails,
-    /// The trailing ⋯ menu (Ask Ghostex, Tips, Resources, Dev servers, Extensions).
-    MoreMenu,
     /// The Commands and side panel toggles.
     PanelToggles,
 }
 
 impl HeaderControl {
     /// CDXC:Extensions 2026-10-29 WHY:
-    /// Claude is its own place (the user's "consider claude a new space+project"), so what names or acts on the previous project or session leaves the header while Claude is on, and what is the app's own stays: the Update button, Voice, the ⋯ menu, and the panel toggles the user opens the Browser beside Claude with. The header shows no title: the Claude button right there shows as on and the account bar under the header names the account, so a "Claude" label would only repeat them.
+    /// Claude is its own place (the user's "consider claude a new space+project"), so what names or acts on the previous project or session leaves the header while Claude is on, and what is the app's own stays: the Update button, Voice, and the panel toggles the user opens the Browser beside Claude with. The header shows no title: the Claude button right there shows as on and the account bar under the header names the account, so a "Claude" label would only repeat them.
     pub(crate) fn shown_with_claude(self) -> bool {
         match self {
-            Self::Update | Self::WebBots | Self::Voice | Self::MoreMenu | Self::PanelToggles => {
-                true
-            }
+            Self::Update | Self::WebBots | Self::Voice | Self::PanelToggles => true,
             Self::Breadcrumb
             | Self::PinnedExtensions
             | Self::PromptEditorOrExitFocus
@@ -192,7 +188,6 @@ mod tests {
             HeaderControl::Update,
             HeaderControl::WebBots,
             HeaderControl::Voice,
-            HeaderControl::MoreMenu,
             HeaderControl::PanelToggles,
         ] {
             assert!(control.shown_with_claude(), "{control:?}");

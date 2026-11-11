@@ -381,7 +381,7 @@ impl ExtensionsTab {
                 ),
                 super::page_tabs::PageTab::PanelsMenus => (
                     "Panels & menus",
-                    "Buttons in the work area header and entries in its ⋯ menu.",
+                    "Buttons in the work area header and entries in the sidebar's menu.",
                 ),
                 super::page_tabs::PageTab::Experimental => (
                     "Experimental",

@@ -10923,7 +10923,7 @@
     {
       "key": "tipsAndTricksTitlebarButtonHidden",
       "title": "Hide Tips button",
-      "subtitle": "Stop offering the Tips & Tricks page, so it is missing from the header ⋯ menu and the view picker.",
+      "subtitle": "Stop offering the Tips & Tricks page, so it is missing from the sidebar's menu and the view picker.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -10947,7 +10947,7 @@
     {
       "key": "helpTitlebarButtonHidden",
       "title": "Hide Help button",
-      "subtitle": "Stop offering the Ask Ghostex page, so it is missing from the header ⋯ menu and the view picker.",
+      "subtitle": "Stop offering the Ask Ghostex page, so it is missing from the sidebar's menu and the view picker.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -10959,7 +10959,7 @@
     {
       "key": "resourcesTitlebarButtonHidden",
       "title": "Hide Resources button",
-      "subtitle": "Stop offering the Resources page, so it is missing from the header ⋯ menu and the view picker.",
+      "subtitle": "Stop offering the Resources page, so it is missing from the sidebar's menu and the view picker.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -10971,7 +10971,7 @@
     {
       "key": "devServersTitlebarButtonHidden",
       "title": "Hide Dev Servers button",
-      "subtitle": "Hide Dev servers from the header ⋯ menu.",
+      "subtitle": "Hide Dev servers from the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -10983,7 +10983,7 @@
     {
       "key": "extensionsTitlebarButtonHidden",
       "title": "Hide Extensions button",
-      "subtitle": "Hide Extensions from the header ⋯ menu.",
+      "subtitle": "Hide Extensions from the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -11227,7 +11227,7 @@
     {
       "key": "tips",
       "title": "Tips & Tricks",
-      "subtitle": "A panel of short tips for getting more out of Ghostex, opened from the ⋯ menu.",
+      "subtitle": "A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11249,7 +11249,7 @@
     {
       "key": "help",
       "title": "Ghostex Help",
-      "subtitle": "A ⋯ menu entry with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
+      "subtitle": "An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11260,7 +11260,7 @@
     {
       "key": "devServers",
       "title": "Dev servers",
-      "subtitle": "A ⋯ menu panel listing development servers running on this computer. A new Browser tab shows the same list.",
+      "subtitle": "A panel listing development servers running on this computer, opened from Tools in the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11271,7 +11271,7 @@
     {
       "key": "resources",
       "title": "Resources",
-      "subtitle": "A ⋯ menu panel listing what Ghostex is running right now, with the CPU and memory each part is using.",
+      "subtitle": "A panel listing what Ghostex is running right now, with the CPU and memory each part is using, opened from Tools in the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11381,7 +11381,7 @@
     {
       "key": "extensionsButton",
       "title": "Extensions",
-      "subtitle": "An entry in the work area header’s ⋯ menu that lists your installed extensions.",
+      "subtitle": "An entry under Tools in the sidebar's menu that lists your installed extensions.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11572,7 +11572,7 @@
     {
       "key": "keepAwakeEnabled",
       "title": "Keep Awake",
-      "subtitle": "Turn Keep Awake on or off: Keep Awake in the ⋯ menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default.",
+      "subtitle": "Turn Keep Awake on or off: Keep Awake in the sidebar's menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
