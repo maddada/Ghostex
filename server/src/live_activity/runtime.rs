@@ -31,7 +31,7 @@ use crate::{
     paths::GxserverPaths,
     push::{
         runtime::{PushClock, SystemClock},
-        token_fingerprint, PushRegistrationStore,
+        token_fingerprint,
     },
     storage::open_gxserver_database,
 };
@@ -43,6 +43,9 @@ use super::{
         forget_live_activity_token, token_label, LiveActivityPhone, LiveActivityStore, TokenKind,
     },
 };
+
+/// A gap this much longer than a tick between two wakes of the worker means the computer slept.
+const SLEEP_GAP_MS: i64 = 5 * 60_000;
 
 /// A connected computer's read gives up after this long, so one that went away delays the banner little.
 const REMOTE_READ_TIMEOUT: Duration = Duration::from_secs(5);
@@ -96,9 +99,6 @@ struct PhoneState {
     idle_since: Option<i64>,
     known_stints: HashSet<String>,
     last_start: Option<i64>,
-    /// This computer has put an agent on this activity. Until then it neither updates an idle banner nor
-    /// ends it: the activity may show another paired computer's agents, or what the phone itself drew.
-    showed_agents: bool,
     /// A working stint began while the phone had no activity: a start is owed (until it is sent, the agents
     /// stop, or the token is gone).
     start_wanted: bool,
@@ -125,6 +125,10 @@ struct Shared {
     /// Reads of connected computers that finished on their own threads, for the next pass.
     remote_reads: Mutex<Vec<RemoteRead>>,
     connected: ConnectedComputers,
+    /// The phones (by computer id) that registered with this gxserver since it started or last slept: only
+    /// they get pushes. A computer that restarted or slept may no longer be the phone's banner computer, so it
+    /// waits for the phone to confirm it (`registration.rs`) instead of pushing over the one picked meanwhile.
+    confirmed: Mutex<HashSet<String>>,
 }
 
 /// The computers connected to this one: the registry in gxserver; a test passes its own.
@@ -193,6 +197,7 @@ impl LiveActivityRuntime {
             logger,
             remote_reads: Mutex::new(Vec::new()),
             connected,
+            confirmed: Mutex::new(HashSet::new()),
         });
         let (done_tx, done_rx) = mpsc::channel();
         let worker_shared = shared.clone();
@@ -218,6 +223,33 @@ impl LiveActivityRuntime {
         }
         queue.poked = true;
         self.shared.wake.notify_all();
+    }
+
+    /// The phone `machine_id` registered (`true`) or cleared (`false`) its tokens here: it is (or is no longer)
+    /// sent to, and the worker looks again at once.
+    pub(crate) fn confirm(&self, machine_id: &str, registered: bool) {
+        {
+            let mut confirmed = self
+                .shared
+                .confirmed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if registered {
+                confirmed.insert(machine_id.to_string());
+            } else {
+                confirmed.remove(machine_id);
+            }
+        }
+        self.poke();
+    }
+
+    /// Whether the phone `machine_id` confirmed its registration since this gxserver started or last slept.
+    pub(crate) fn is_confirmed(&self, machine_id: &str) -> bool {
+        self.shared
+            .confirmed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(machine_id)
     }
 
     /// Stops the worker; waits up to `wait` for the request in flight.
@@ -251,6 +283,7 @@ fn run(shared: Arc<Shared>) {
     let mut memory = FinishedMemory::new();
     let mut remotes = Remotes::default();
     let mut next_due: Option<i64> = None;
+    let mut awake_at = shared.clock.now_ms();
     loop {
         {
             let mut queue = shared.lock();
@@ -276,6 +309,25 @@ fn run(shared: Arc<Shared>) {
                     break;
                 }
             }
+            // The worker never waits longer than a tick, so a longer gap means the computer slept: the phone may
+            // have picked another banner computer meanwhile, so wait for it to confirm this one again.
+            let woke_at = shared.clock.now_ms();
+            if woke_at - awake_at > SLEEP_GAP_MS + shared.timings.tick_ms as i64 {
+                let forgotten = std::mem::take(
+                    &mut *shared
+                        .confirmed
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner),
+                );
+                if !forgotten.is_empty() {
+                    shared.log(
+                        LogLevel::Warn,
+                        "liveActivity.sleptWaitingForPhone",
+                        json!({ "phones": forgotten.len() }),
+                    );
+                }
+            }
+            awake_at = woke_at;
             if queue.poked {
                 // Let a burst of changes (one turn ends, the next starts) arrive before reading.
                 drop(queue);
@@ -296,8 +348,9 @@ fn run(shared: Arc<Shared>) {
     }
 }
 
-/// The phones to look at: Live Activity tokens whose computer id also has a push registration, with that
-/// registration's "Show session names" switch.
+/// The phones to look at: Live Activity entries whose phone is still paired (or that a caller with the main
+/// token registered) and that the phone confirmed since this gxserver started or last slept, each with its
+/// "Show session names" switch.
 fn registered_phones(shared: &Shared) -> Option<Vec<(LiveActivityPhone, bool)>> {
     let phones = match LiveActivityStore::open(&shared.paths).read() {
         Ok(phones) => phones,
@@ -310,26 +363,42 @@ fn registered_phones(shared: &Shared) -> Option<Vec<(LiveActivityPhone, bool)>> 
             return None;
         }
     };
+    let confirmed = shared
+        .confirmed
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let phones: Vec<LiveActivityPhone> = phones
+        .into_iter()
+        .filter(|phone| confirmed.contains(&phone.machine_id))
+        .collect();
     if phones.is_empty() {
         return Some(Vec::new());
     }
-    let push = match PushRegistrationStore::open(&shared.paths).read() {
-        Ok(push) => push,
-        Err(error) => {
-            shared.log(
-                LogLevel::Warn,
-                "liveActivity.pushStoreUnreadable",
-                json!({ "error": error.to_string() }),
-            );
-            return None;
-        }
+    let paired: Option<HashSet<String>> = open_gxserver_database(&shared.paths)
+        .ok()
+        .and_then(|db| {
+            crate::remote_access::RemotePairingRepository::new(&db)
+                .list_devices()
+                .ok()
+        })
+        .map(|devices| devices.into_iter().map(|device| device.id).collect());
+    let Some(paired) = paired else {
+        shared.log(LogLevel::Warn, "liveActivity.pairingsUnreadable", json!({}));
+        return None;
     };
     Some(
         phones
             .into_iter()
-            .filter_map(|phone| {
-                let names = push.registration(&phone.machine_id)?.session_names;
-                Some((phone, names))
+            .filter(|phone| {
+                phone
+                    .device_id
+                    .as_ref()
+                    .is_none_or(|device_id| paired.contains(device_id))
+            })
+            .map(|phone| {
+                let names = phone.session_names;
+                (phone, names)
             })
             .collect(),
     )
@@ -725,22 +794,17 @@ fn phone_pass(
 
     let fingerprint = token_fingerprint(token);
     if state.activity_fingerprint.as_deref() != Some(fingerprint.as_str()) {
-        // An activity this computer started by push shows its agents from the start.
-        let started_here = state
-            .last_start
-            .is_some_and(|last| now - last < timings.start_interval_ms);
         *state = PhoneState {
             activity_fingerprint: Some(fingerprint),
             known_stints: state.known_stints.clone(),
             last_start: state.last_start,
-            showed_agents: started_here,
             ..PhoneState::default()
         };
     }
+    // The phone confirmed this computer as its one banner computer (registration.rs), so it owns the banner:
+    // it shows what this computer and the computers connected to it have, idle included, and ends it.
     if active {
         state.idle_since = None;
-    } else if !state.showed_agents {
-        return None;
     } else {
         let since = *state.idle_since.get_or_insert(now);
         if now - since >= timings.end_after_ms {
@@ -781,7 +845,6 @@ fn phone_pass(
         state.sent_shape = Some(shape);
         // From the answer, not the decision: a slow request must not bring the next one closer.
         state.sent_at = shared.clock.now_ms();
-        state.showed_agents |= active;
     }
     settle(
         shared,

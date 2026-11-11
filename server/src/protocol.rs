@@ -1168,6 +1168,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         SEE-ALSO: server/src/push/registration.rs, packages/shared/gxserver-protocol-core.ts.
         */
         "/api/registerPushToken" => full_local(path),
+        // A paired phone hands its Live Activity tokens to the one computer that pushes its banner
+        // (live_activity/registration.rs).
+        "/api/registerLiveActivity" => full_local(path),
         /*
         CDXC:RemotePairing 2026-09-03:
         The only unauthenticated write endpoint. A phone registers its SSH key

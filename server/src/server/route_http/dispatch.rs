@@ -507,6 +507,16 @@ pub(in crate::server) async fn route_http(
     }
     // Push registration needs to know which paired phone's own token (if any) authorized the
     // request, settled at the auth gate above.
+    if endpoint.path == crate::live_activity::REGISTER_LIVE_ACTIVITY_ENDPOINT {
+        return crate::live_activity::handle_register_live_activity_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            caller_token_hash,
+        )
+        .await;
+    }
     if endpoint.path == crate::push::REGISTER_PUSH_TOKEN_ENDPOINT {
         return crate::push::handle_register_push_token_http(
             &state,

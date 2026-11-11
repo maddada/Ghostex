@@ -3,10 +3,10 @@
 //! CDXC:Notifications 2026-11-11 WHY: The Live Activity tokens are send credentials like the Expo push token,
 //! so they get the same care (folder 0700, file 0600, never in a log, a debug print or an answer), but their
 //! own file: the push registrations file refuses fields it does not know, so adding them there would make an
-//! older gxserver call the whole file damaged and stop every phone's notifications. A phone's Live Activity
-//! entry counts only while the same computer id has a push registration (`push::PushRegistration`), which
-//! carries its pairing, its "Show session names" switch, and its removal when the phone is unpaired or
-//! unregisters; an entry without one is never sent to and is dropped on the next write.
+//! older gxserver call the whole file damaged and stop every phone's notifications. An entry carries its own
+//! pairing (`device_id`) and "Show session names" switch, so the banner works also for a phone whose
+//! notifications are off; `/api/registerLiveActivity` (`registration.rs`) writes it, and an entry whose paired
+//! phone was removed is never sent to.
 
 use std::{
     fmt, fs,
@@ -18,7 +18,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::paths::GxserverPaths;
-use crate::push::{is_printable_id, token_fingerprint, MACHINE_ID_MAX};
+use crate::push::{is_printable_id, token_fingerprint, DEVICE_ID_MAX, MACHINE_ID_MAX};
 
 const STORE_FILE_NAME: &str = "live-activity-registrations.json";
 const STORE_TEMP_FILE_NAME: &str = "live-activity-registrations.json.tmp";
@@ -28,7 +28,7 @@ const STORE_VERSION: u32 = 1;
 const TOKEN_HEX_MIN: usize = 64;
 const TOKEN_HEX_MAX: usize = 512;
 /// The phone's other computers a registration may name.
-const MAX_PHONE_COMPUTERS: usize = 32;
+pub(crate) const MAX_PHONE_COMPUTERS: usize = 32;
 
 /// Which of Apple's services the phone's build talks to: production (TestFlight, App Store) or sandbox
 /// (a development build).
@@ -79,6 +79,13 @@ pub(crate) struct LiveActivityPhone {
     /// none, and its rows open the app.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) computers: Vec<PhoneComputer>,
+    /// The paired device whose own token registered these (none for a caller with the computer's main
+    /// token); only that phone may replace or clear them, and unpairing it ends them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) device_id: Option<String>,
+    /// The phone's "Show session names" switch: on, a row leads with the session's title.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) session_names: bool,
 }
 
 /// One of the phone's other computers: its server id and the id the phone uses for it.
@@ -114,6 +121,8 @@ impl fmt::Debug for LiveActivityPhone {
             .field("environment", &self.environment)
             .field("seen_at", &self.seen_at)
             .field("computers", &self.computers)
+            .field("device_id", &self.device_id)
+            .field("session_names", &self.session_names)
             .finish()
     }
 }
@@ -245,34 +254,6 @@ impl LiveActivityStore {
     }
 }
 
-/// The phone's Live Activity tokens as it sends them with its registration: replaces what this computer id
-/// held. For the registration route, which takes the phone's tokens with its push registration once the
-/// phone sends them (a later change); `None` clears a token.
-#[allow(dead_code)]
-pub(crate) fn save_live_activity_tokens(
-    paths: &GxserverPaths,
-    machine_id: &str,
-    activity_token: Option<String>,
-    push_to_start_token: Option<String>,
-    environment: LiveActivityEnvironment,
-    computers: Vec<PhoneComputer>,
-) -> Result<(), LiveActivityStoreError> {
-    let store = LiveActivityStore::open(paths);
-    let mut phones = store.read()?;
-    phones.retain(|phone| phone.machine_id != machine_id);
-    if activity_token.is_some() || push_to_start_token.is_some() {
-        phones.push(LiveActivityPhone {
-            machine_id: machine_id.to_string(),
-            activity_token,
-            push_to_start_token,
-            environment,
-            seen_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            computers,
-        });
-    }
-    store.write(&phones)
-}
-
 /// Forgets one token of `machine_id`, only while it is still the one that was sent to (`fingerprint`), so a
 /// token Apple dropped never removes the replacement the phone sent meanwhile. A phone left without tokens
 /// is removed. Returns whether anything changed.
@@ -322,6 +303,10 @@ fn phones_are_valid(phones: &[LiveActivityPhone]) -> bool {
                 .as_deref()
                 .is_none_or(is_live_activity_token)
             && chrono::DateTime::parse_from_rfc3339(&phone.seen_at).is_ok()
+            && phone
+                .device_id
+                .as_deref()
+                .is_none_or(|device_id| is_printable_id(device_id, DEVICE_ID_MAX))
             && phone.computers.len() <= MAX_PHONE_COMPUTERS
             && phone.computers.iter().all(|computer| {
                 crate::connected_computers::is_server_id(&computer.server_id)
