@@ -10,13 +10,23 @@ use crate::session::fold::FoldedSnapshot;
 
 impl Serialize for FoldedSnapshot {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // CDXC:SessionChat 2026-11-11 WHY: every field is named (no `..`) so a field added to
+        // `FoldedSnapshot` fails the build here: write it below in the place the derived,
+        // flattened form wrote it, and read it in `fold.rs`'s `Deserialize`. The result's own
+        // fields need nothing here (`EntriesInto` forwards each one); the test below compares
+        // this writer with the derived one for a value with every field set.
+        let FoldedSnapshot {
+            result,
+            rows,
+            extra,
+        } = self;
         let mut map = serializer.serialize_map(None)?;
-        map.serialize_entry("messages", &self.rows)?;
-        self.result.serialize(EntriesInto {
+        map.serialize_entry(ROWS_KEY, rows)?;
+        result.serialize(EntriesInto {
             map: &mut map,
             skipping: false,
         })?;
-        for (key, value) in &self.extra {
+        for (key, value) in extra {
             map.serialize_entry(key, value)?;
         }
         map.end()
@@ -226,5 +236,157 @@ impl<'a, M: SerializeMap> Serializer for EntriesInto<'a, M> {
         _: usize,
     ) -> Result<Self::SerializeStructVariant, M::Error> {
         Err(not_an_object())
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use ghostex_gx_protocol::{
+        ChatForkInfo, ChatLookSettings, ChatMessage, ChatSideState, ChatStatus,
+        ReadSessionChatResult, Tri, TurnLifecycle, TurnLifecycleState, UnavailableMode,
+    };
+    use serde::Serialize;
+    use serde_json::{json, Map, Value};
+
+    use crate::session::fold::FoldedSnapshot;
+
+    /// What the fold wrote before its rows were shared: the result and the frame keys, flattened.
+    #[derive(Serialize)]
+    struct Derived<'a> {
+        #[serde(flatten)]
+        result: &'a ReadSessionChatResult,
+        #[serde(flatten)]
+        extra: &'a Map<String, Value>,
+    }
+
+    fn some(tag: &str, value: &str) -> Option<Value> {
+        Some(json!({ "set": value, "tag": tag }))
+    }
+
+    /// A result with every field set, its values marked with `tag`. Built without `..`, so a
+    /// field added to the result or the side state fails this test's build until it is set here
+    /// too.
+    pub(crate) fn every_field_set(tag: &str) -> ReadSessionChatResult {
+        // The rows are written by their own derived code, so any row does.
+        let message = |id: &str| -> ChatMessage {
+            serde_json::from_value(json!({
+                "id": id,
+                "role": "assistant",
+                "blocks": [{ "type": "text", "text": format!("row {id} {tag}") }],
+                "timestamp": 1_700_000_000_000_i64,
+                "source": "transcript",
+                "turnId": "turn",
+            }))
+            .unwrap()
+        };
+        // Values that differ between tags, so two results built with different tags differ in
+        // every field a fold can take from either.
+        let flag = tag.len() % 2 == 0;
+        let number = tag.len() as i64;
+        let state = ChatSideState {
+            prompt: some(tag, "prompt"),
+            selected_options: some(tag, "selectedOptions"),
+            terminal_notice: some(tag, "terminalNotice"),
+            terminal_activity: some(tag, "terminalActivity"),
+            agent_fleet: some(tag, "agentFleet"),
+            agent_tasks: some(tag, "agentTasks"),
+            workflows: some(tag, "workflows"),
+            screen_probed: Some(flag),
+            agent_gone: Some(!flag),
+            queue: Some(vec![json!(tag)]),
+            draft: some(tag, "draft").map(Into::into),
+            app_commands: Some(vec![json!(tag)]),
+            returned_prompt: some(tag, "returnedPrompt"),
+            coordinator_threads: some(tag, "coordinatorThreads").map(Into::into),
+            coordinator_threads_patch: some(tag, "coordinatorThreadsPatch"),
+            side_chats: some(tag, "sideChats"),
+            side_chat_of: some(tag, "sideChatOf"),
+            secret_requests: some(tag, "secretRequests"),
+            relayed_answers: some(tag, "relayedAnswers"),
+            autopilot: some(tag, "autopilot"),
+            collab: some(tag, "collab"),
+            agent_message_deliveries: some(tag, "agentMessageDeliveries"),
+            agent_session_id: Some(format!("agent-session {tag}")),
+            account_switch: Tri::Value(json!(tag)),
+            api_retry: if flag {
+                Tri::Null
+            } else {
+                Tri::Value(json!(tag))
+            },
+            pending_model_selection: Tri::Value(json!(tag)),
+            async_questions_since: Tri::Value(number),
+            forked_at: if flag { Tri::Value(number) } else { Tri::Null },
+            retired_async_question_ids: Some(vec![format!("retired {tag}")]),
+            later_question_ids: Some(vec![format!("later {tag}")]),
+            unavailable_modes: Some(vec![UnavailableMode {
+                value: "plan".into(),
+                why: tag.into(),
+            }]),
+            removed_question_ids: Some(vec![format!("removed {tag}")]),
+            resource_index: Some(vec![json!(tag)].into()),
+        };
+        ReadSessionChatResult {
+            messages: vec![message("a"), message("b")],
+            has_more: true,
+            has_more_exact: Some(true),
+            before_offset: 9,
+            epoch: 3,
+            seq: 11,
+            status: ChatStatus::Ready,
+            working: Some(true),
+            fingerprint: Some("fingerprint".into()),
+            agent: Some("claude".into()),
+            session_agent_id: Some("claude".into()),
+            available_agents: some(tag, "availableAgents"),
+            switchable_agents: some(tag, "switchableAgents"),
+            uses_own_login: Some(false),
+            catch_up: Some(true),
+            session_details: Some(false),
+            send_on_pick: Some(true),
+            answers_wait_for_idle: Some(false),
+            all_orchestrator_efforts: Some(true),
+            enabled_agent_icons: Some(vec!["claude".into()]),
+            marked_heading_strength: Some(40.0),
+            chat_text_strength: Some(72.5),
+            chat_look: Some(ChatLookSettings {
+                message_layout: Some("bubbles".into()),
+                user_style: Some("plain".into()),
+                agent_work: Some("folded".into()),
+                status_in_transcript: Some(true),
+                spacing: Some("compact".into()),
+            }),
+            fork_info: Some(ChatForkInfo {
+                forked_from_id: Some("parent".into()),
+                ancestor_ids: vec!["root".into()],
+            }),
+            subagent: some(tag, "subagent"),
+            error: Some("error".into()),
+            lifecycle: Some(TurnLifecycle {
+                state: TurnLifecycleState::Working,
+                turn_id: format!("turn {tag}"),
+                timestamp: Some(number),
+            }),
+            state,
+        }
+    }
+
+    #[test]
+    fn writes_what_the_derived_form_wrote_for_every_field() {
+        let mut folded = FoldedSnapshot::new(every_field_set("written"));
+        folded
+            .extra
+            .insert("type".into(), json!("sessionChatSnapshot"));
+        folded.extra.insert("sessionId".into(), json!("session"));
+        let written = serde_json::to_string(&folded).unwrap();
+        let derived = serde_json::to_string(&Derived {
+            result: &folded.read_result(),
+            extra: &folded.extra,
+        })
+        .unwrap();
+        assert_eq!(written, derived);
+        assert_eq!(
+            serde_json::from_str::<FoldedSnapshot>(&written).unwrap(),
+            folded
+        );
     }
 }

@@ -1598,39 +1598,52 @@ impl WorkInputs {
     /// Whether `state` holds these inputs: the threads and panels by stamp, and by value only
     /// when their stamp moved, without copies.
     fn matches(&mut self, state: &ChatState) -> bool {
-        if self.messages != state.messages.composed.len()
-            || self.last_id
+        // CDXC:Coordinators 2026-11-11 WHY: every input is named (no `..`), so one added to this
+        // struct fails the build here until it is compared below too: a kept part checked on fewer
+        // inputs than it was built from would serve a stale value.
+        let Self {
+            threads,
+            held_threads,
+            messages,
+            last_id,
+            last_has_words: had_words,
+            panels,
+            answers,
+            worked: was_worked,
+            snoozed,
+        } = self;
+        if *messages != state.messages.composed.len()
+            || last_id
                 != state
                     .messages
                     .composed
                     .last()
                     .map_or("", |message| message.id.as_str())
-            || self.last_has_words != last_has_words(state)
-            || self.worked != worked(state)
+            || *had_words != last_has_words(state)
+            || *was_worked != worked(state)
         {
             return false;
         }
-        let threads = state.session.coordinator_threads.stamp();
-        if self.threads != threads {
-            let held_work = self
-                .held_threads
+        let threads_now = state.session.coordinator_threads.stamp();
+        if *threads != threads_now {
+            let held_work = held_threads
                 .as_deref()
                 .and_then(|threads| threads.get("work"));
             if held_work != work_of(state) {
                 return false;
             }
-            self.threads = threads;
+            *threads = threads_now;
             // The threads held now, so the ones they replaced are not kept alive here.
-            self.held_threads = (*state.session.coordinator_threads).clone();
+            *held_threads = (*state.session.coordinator_threads).clone();
         }
-        let panels = state.extras.panels.stamp();
-        if self.panels != panels {
-            if self.answers != state.extras.panels.board_answers
-                || self.snoozed != state.extras.panels.work_snoozed
+        let panels_now = state.extras.panels.stamp();
+        if *panels != panels_now {
+            if *answers != state.extras.panels.board_answers
+                || *snoozed != state.extras.panels.work_snoozed
             {
                 return false;
             }
-            self.panels = panels;
+            *panels = panels_now;
         }
         true
     }

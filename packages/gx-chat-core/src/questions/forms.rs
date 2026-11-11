@@ -838,13 +838,25 @@ impl QuestionsInputs {
     /// Whether `questions` holds exactly these inputs: their stamps first, the values only for a
     /// stamp that moved ([`Stamped::same_as`]).
     pub(crate) fn matches(&mut self, questions: &crate::state::QuestionsState) -> bool {
-        self.forms.same_as(&questions.forms)
-            && self.form_answer_index.same_as(&questions.form_answer_index)
-            && self.inline_answers.same_as(&questions.inline_answers)
-            && self.later.same_as(&questions.later)
-            && self.recorded_answers.same_as(&questions.recorded_answers)
-            && self.resource_modal.same_as(&questions.resource_modal)
-            && self.core_id == questions.core_id
+        // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
+        // struct fails the build here until it is compared below too: a kept part checked on fewer
+        // inputs than it was built from would serve a stale value.
+        let Self {
+            forms,
+            form_answer_index,
+            inline_answers,
+            later,
+            recorded_answers,
+            resource_modal,
+            core_id,
+        } = self;
+        forms.same_as(&questions.forms)
+            && form_answer_index.same_as(&questions.form_answer_index)
+            && inline_answers.same_as(&questions.inline_answers)
+            && later.same_as(&questions.later)
+            && recorded_answers.same_as(&questions.recorded_answers)
+            && resource_modal.same_as(&questions.resource_modal)
+            && *core_id == questions.core_id
     }
 }
 
@@ -865,14 +877,18 @@ impl CardTags {
     }
 
     pub(crate) fn matches(&mut self, state: &ChatState) -> bool {
-        let threads = state.session.coordinator_threads.stamp();
-        if self.threads == threads {
+        // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
+        // struct fails the build here until it is compared below too: a kept part checked on fewer
+        // inputs than it was built from would serve a stale value.
+        let Self { threads, tags } = self;
+        let now = state.session.coordinator_threads.stamp();
+        if *threads == now {
             return true;
         }
-        if self.tags != crate::extras::work_cards::card_tags(state) {
+        if *tags != crate::extras::work_cards::card_tags(state) {
             return false;
         }
-        self.threads = threads;
+        *threads = now;
         true
     }
 
@@ -917,24 +933,33 @@ impl FormsInputs {
     /// Whether `state` holds exactly these inputs, by stamp where it can and by value where a
     /// stamp moved, without copies.
     fn matches(&mut self, state: &ChatState) -> bool {
-        self.question_forms
-            .same_as(&state.transcript_view.question_forms)
-            && self.askers.same_as(&state.transcript_view.askers)
-            && self
-                .page_answers
-                .same_as(&state.transcript_view.page_answers)
-            && self.questions.matches(&state.questions)
-            && self.queue_prompts.same_as(&state.session.queue_prompts)
-            && self.resource_index.same_as(&state.session.resource_index)
-            && self
-                .later_question_ids
-                .same_as(&state.session.later_question_ids)
-            && self
-                .removed_question_ids
-                .same_as(&state.session.removed_question_ids)
-            && self.collab.same_as(&state.session.collab)
-            && self.collab_guest.same_as(&state.session.collab_guest)
-            && self.card_tags.matches(state)
+        // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
+        // struct fails the build here until it is compared below too: a kept part checked on fewer
+        // inputs than it was built from would serve a stale value.
+        let Self {
+            question_forms,
+            askers,
+            page_answers,
+            questions,
+            queue_prompts,
+            resource_index,
+            later_question_ids,
+            removed_question_ids,
+            collab,
+            collab_guest,
+            card_tags,
+        } = self;
+        question_forms.same_as(&state.transcript_view.question_forms)
+            && askers.same_as(&state.transcript_view.askers)
+            && page_answers.same_as(&state.transcript_view.page_answers)
+            && questions.matches(&state.questions)
+            && queue_prompts.same_as(&state.session.queue_prompts)
+            && resource_index.same_as(&state.session.resource_index)
+            && later_question_ids.same_as(&state.session.later_question_ids)
+            && removed_question_ids.same_as(&state.session.removed_question_ids)
+            && collab.same_as(&state.session.collab)
+            && collab_guest.same_as(&state.session.collab_guest)
+            && card_tags.matches(state)
     }
 }
 

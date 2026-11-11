@@ -1197,18 +1197,27 @@ impl BoardInputs {
 
     /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
     fn matches(&mut self, state: &ChatState, turns: &[crate::extras::work_cards::Turn]) -> bool {
-        self.turns == crate::extras::work_cards::turns_mark(turns)
-            && self.threads.same_as(&state.session.coordinator_threads)
-            && self.panels.same_as(&state.extras.panels)
-            && self.askers.same_as(&state.transcript_view.askers)
-            && self.questions.matches(&state.questions)
-            && self.resource_index.same_as(&state.session.resource_index)
-            && self
-                .later_question_ids
-                .same_as(&state.session.later_question_ids)
-            && self
-                .removed_question_ids
-                .same_as(&state.session.removed_question_ids)
+        // CDXC:Coordinators 2026-11-11 WHY: every input is named (no `..`), so one added to this
+        // struct fails the build here until it is compared below too: a kept part checked on fewer
+        // inputs than it was built from would serve a stale value.
+        let Self {
+            threads,
+            panels,
+            askers,
+            questions,
+            resource_index,
+            later_question_ids,
+            removed_question_ids,
+            turns: mark,
+        } = self;
+        *mark == crate::extras::work_cards::turns_mark(turns)
+            && threads.same_as(&state.session.coordinator_threads)
+            && panels.same_as(&state.extras.panels)
+            && askers.same_as(&state.transcript_view.askers)
+            && questions.matches(&state.questions)
+            && resource_index.same_as(&state.session.resource_index)
+            && later_question_ids.same_as(&state.session.later_question_ids)
+            && removed_question_ids.same_as(&state.session.removed_question_ids)
     }
 }
 

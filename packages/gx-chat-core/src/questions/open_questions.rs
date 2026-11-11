@@ -716,18 +716,27 @@ impl ListInputs {
 
     /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
     fn matches(&mut self, state: &ChatState) -> bool {
-        self.card_tags.matches(state)
-            && self.askers.same_as(&state.transcript_view.askers)
-            && self.questions.matches(&state.questions)
-            && self.content.same_as(&state.questions.content.items)
-            && self.queue_prompts.same_as(&state.session.queue_prompts)
-            && self.resource_index.same_as(&state.session.resource_index)
-            && self
-                .later_question_ids
-                .same_as(&state.session.later_question_ids)
-            && self
-                .removed_question_ids
-                .same_as(&state.session.removed_question_ids)
+        // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
+        // struct fails the build here until it is compared below too: a kept part checked on fewer
+        // inputs than it was built from would serve a stale value.
+        let Self {
+            askers,
+            questions,
+            content,
+            queue_prompts,
+            resource_index,
+            later_question_ids,
+            removed_question_ids,
+            card_tags,
+        } = self;
+        card_tags.matches(state)
+            && askers.same_as(&state.transcript_view.askers)
+            && questions.matches(&state.questions)
+            && content.same_as(&state.questions.content.items)
+            && queue_prompts.same_as(&state.session.queue_prompts)
+            && resource_index.same_as(&state.session.resource_index)
+            && later_question_ids.same_as(&state.session.later_question_ids)
+            && removed_question_ids.same_as(&state.session.removed_question_ids)
     }
 }
 

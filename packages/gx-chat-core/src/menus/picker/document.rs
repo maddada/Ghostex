@@ -40,16 +40,28 @@ impl KeptModelMenu {
         favorites: &[String],
         catalog: &Stamped<AgentModelCatalog>,
     ) -> bool {
-        if self.context != *context || self.view != *view || self.favorites != favorites {
+        // CDXC:SessionChat 2026-11-11 WHY: every input is named (no `..`), so one added to this
+        // struct fails the build here until it is compared below too: a kept part checked on fewer
+        // inputs than it was built from would serve a stale value.
+        let Self {
+            context: kept_context,
+            view: kept_view,
+            catalogs: kept_catalogs,
+            favorites: kept_favorites,
+            catalog: kept_catalog,
+            // What was built from the five above.
+            menu: _,
+        } = self;
+        if *kept_context != *context || *kept_view != *view || *kept_favorites != favorites {
             return false;
         }
-        if !std::sync::Arc::ptr_eq(&self.catalogs, catalogs) {
-            if *self.catalogs != **catalogs {
+        if !std::sync::Arc::ptr_eq(kept_catalogs, catalogs) {
+            if **kept_catalogs != **catalogs {
                 return false;
             }
-            self.catalogs = std::sync::Arc::clone(catalogs);
+            *kept_catalogs = std::sync::Arc::clone(catalogs);
         }
-        self.catalog.same_as(catalog)
+        kept_catalog.same_as(catalog)
     }
 }
 
