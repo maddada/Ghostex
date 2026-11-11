@@ -324,6 +324,9 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
     if let Some(look) = &result.chat_look {
         crate::transcript::chat_look::apply_from_read(&mut state.transcript_view, look);
     }
+    if let Some(quiet) = &result.quiet_view {
+        crate::transcript::quiet_view::apply_from_read(state, quiet);
+    }
 }
 
 /// Applies one authoritative result: a seed read, a resync read, a snapshot, or the cached

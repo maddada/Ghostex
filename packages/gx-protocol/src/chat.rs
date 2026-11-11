@@ -410,6 +410,21 @@ pub struct ChatSideState {
     pub resource_index: Option<Vec<Value>>,
 }
 
+/// Settings > Chat > Advanced's three Quiet View switches as a chat read carries them
+/// (gx-chat-core `transcript/quiet_view.rs`): Coordinators open in Quiet View
+/// (`chatQuietViewCoordinators`), Other chats open in Quiet View (`chatQuietViewChats`) and Expand
+/// the last turn (`chatQuietViewExpandLast`). An absent switch is its default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatQuietViewSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinators: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chats: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expand_last: Option<bool>,
+}
+
 /// One of a chat's view records as the session's computer keeps it: the value the user picked
 /// (`None` follows the default) and when, in the picking device's milliseconds since the epoch.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -617,6 +632,11 @@ pub struct ReadSessionChatResult {
     /// gxserver, which keeps no pick.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_view: Option<ChatViewPick>,
+    /// The computer's three Quiet View settings, the same way as `catch_up`, so a host with no
+    /// settings of its own (the phone) opens chats in the computer's Quiet View defaults. `None` is
+    /// an older gxserver: the chat keeps the full view there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet_view: Option<ChatQuietViewSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

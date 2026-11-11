@@ -201,9 +201,12 @@ pub struct TranscriptViewState {
     /// The host has sent its own chat look ([`crate::ChatSettings::chat_look`]), so a chat read's
     /// `chatLook` no longer applies (`transcript/chat_look.rs`).
     pub chat_look_from_host: bool,
-    /// The Quiet View settings the host sent (`transcript/quiet_view.rs`); `None` from a host that
-    /// draws no Quiet View (the phone), where it stays off.
+    /// The Quiet View settings the host sent, or the computer's from a chat read for a host that
+    /// sends none (the phone; `transcript/quiet_view.rs`); `None` keeps Quiet View off.
     pub quiet_view_settings: Option<crate::transcript::quiet_view::QuietViewSettings>,
+    /// The host sent Quiet View settings of its own, which a read's never replace
+    /// (`quiet_view::apply_from_read`).
+    pub quiet_view_from_host: bool,
     /// This chat's own Quiet View choice from its View menu, or `None` to follow the default.
     pub quiet_view_override: Option<bool>,
     /// The Quiet View choice the write in flight will adopt once it lands.
@@ -343,6 +346,7 @@ impl Default for TranscriptViewState {
             chat_look: Default::default(),
             chat_look_from_host: false,
             quiet_view_settings: None,
+            quiet_view_from_host: false,
             quiet_view_override: None,
             pending_quiet_view_override: None,
             quiet_view_on: false,

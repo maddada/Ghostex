@@ -699,6 +699,25 @@ pub(crate) async fn handle_read_session_chat_http(
             spacing: look_option("chatMessageSpacing"),
         }),
     );
+    // The three Quiet View settings ride every read too, so the phone opens a coordinator's chat in
+    // Quiet View as the desktop does (CDXC:SessionChat 2026-11-11 in
+    // packages/gx-chat-core/src/transcript/quiet_view.rs `apply_from_read`).
+    let quiet_switch = |key: &str, default: bool| {
+        Some(
+            settings
+                .get(key)
+                .and_then(Value::as_bool)
+                .unwrap_or(default),
+        )
+    };
+    result.insert(
+        "quietView".to_string(),
+        json!(ghostex_gx_protocol::ChatQuietViewSettings {
+            coordinators: quiet_switch("chatQuietViewCoordinators", true),
+            chats: quiet_switch("chatQuietViewChats", false),
+            expand_last: quiet_switch("chatQuietViewExpandLast", false),
+        }),
+    );
     if let Some(session_agent_id) = session_agent_id.as_deref() {
         result.insert("sessionAgentId".to_string(), json!(session_agent_id));
     }

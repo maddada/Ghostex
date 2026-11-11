@@ -595,6 +595,7 @@ fn empty_result() -> ReadSessionChatResult {
         chat_text_strength: None,
         chat_look: None,
         chat_view: None,
+        quiet_view: None,
         fork_info: None,
         subagent: None,
         error: None,

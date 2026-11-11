@@ -18,10 +18,10 @@
 //! How it sits with the other looks. Summary view folds more than Quiet View does (earlier replies too), so a chat in Summary draws no quiet lines; its View menu still keeps the chat's Quiet View choice. Agent work Default and Reduced draw inside an opened line exactly as they draw without it. Agent work Quiet draws as Reduced while Quiet View is on (`TranscriptViewState::effective_chat_look`): its reply button and its hidden running work would hold the same work a second time, and hiding the running rows would leave the counting line nothing to count. Nothing on the never-hidden list is decided by those looks here: a row is judged on what it holds, so two looks at once never fold one of them away.
 //!
 //! CDXC:SessionChat 2026-11-11 WHY:
-//! Only a host that sends `quietView` settings gets the new shape (the desktop and the web build). The phone sends none, so its core keeps Quiet View off and publishes no `quietView`: a phone renderer that predates it never meets a row it cannot draw. What the phone needs to draw it is in the module's SEE-ALSO.
+//! Only a chat with Quiet View settings gets the new shape: the desktop and the web build send their own, and the phone takes the computer's from each chat read (`apply_from_read`; gxserver's `quietView`). A computer that sends none (older than this) leaves the settings unset, so the core keeps Quiet View off and publishes no `quietView`, and the phone keeps its full view there.
 //!
 //! CDXC:SessionChat 2026-11-11 SEE-ALSO:
-//! apps/desktop/src/app/native_chat/quiet_view.rs (desktop and web draw the lines), apps/desktop/src/app/gx_chat/boot.rs (the settings), packages/settings-catalog/src/general/chat.rs (the rows), server/src/session_chat_history.rs (`deferredWork.toolCallCount`, the counts of a turn still on the server), `extras/transcript_search.rs` (Find skips a closed line's rows). The phone (apps/mobile/app/src/chat/) would need: its host to send `quietView` in its chat settings and the `quietView` record in its boot read, `quietView.stretches` drawn in `Transcript.tsx` as these lines, the View menu row and the chip's icon.
+//! apps/desktop/src/app/native_chat/quiet_view.rs (desktop and web draw the lines), apps/desktop/src/app/gx_chat/boot.rs (the settings), packages/settings-catalog/src/general/chat.rs (the rows), server/src/session_chat_history.rs (`deferredWork.toolCallCount`, the counts of a turn still on the server), `extras/transcript_search.rs` (Find skips a closed line's rows). apps/mobile/app/src/chat/native/transcript/quietView.tsx (the phone draws the lines), apps/mobile/app/src/chat/native/composer/menus.ts (its View menu row), server/src/session_chat_read.rs (the settings ride every read).
 
 use std::collections::BTreeSet;
 
@@ -266,7 +266,37 @@ pub struct QuietTurnTail {
     pub reply: bool,
 }
 
-/// Adopts the host's settings.
+/// The host's own settings (the desktop and the web build), which a read's never replace.
+pub fn apply_from_host(state: &mut ChatState, settings: QuietViewSettings) {
+    state.transcript_view.quiet_view_from_host = true;
+    apply_settings(state, settings);
+}
+
+/// The computer's settings as a chat read carries them, for a host that sends none of its own
+/// (the phone).
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "i dont see queit for coordinator chat applied by default like it is on dekstop". The phone draws Quiet View (apps/mobile/app/src/chat/native/transcript/quietView.tsx) and follows the computer's three Quiet View settings, which every chat read carries (`quietView`), so a coordinator's chat opens in Quiet View on the phone as on the desktop. A computer that sends no settings keeps the phone in the full view, as before.
+pub fn apply_from_read(
+    state: &mut ChatState,
+    settings: &ghostex_gx_protocol::ChatQuietViewSettings,
+) {
+    if state.transcript_view.quiet_view_from_host {
+        return;
+    }
+    let defaults = QuietViewSettings::default();
+    let next = QuietViewSettings {
+        coordinators: settings.coordinators.unwrap_or(defaults.coordinators),
+        chats: settings.chats.unwrap_or(defaults.chats),
+        expand_last: settings.expand_last.unwrap_or(defaults.expand_last),
+    };
+    if state.transcript_view.quiet_view_settings != Some(next) {
+        apply_settings(state, next);
+        state.core.request_publish();
+    }
+}
+
+/// Adopts the settings.
 pub fn apply_settings(state: &mut ChatState, settings: QuietViewSettings) {
     state.transcript_view.quiet_view_settings = Some(settings);
     sync(state);
