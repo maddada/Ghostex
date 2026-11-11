@@ -3,7 +3,7 @@
 //! one removed, without the user doing anything.
 //!
 //! CDXC:Coordinators 2026-11-11 DECISION:
-//! User: "please make /ghostex-orchestrator renamed to /ghostex-coordinator everywhere from next update and replace the skill with the new name". The product already called the role a coordinator (the CLI is `ghostex coordinator`, the app says Coordinator); only the skill kept the old word. So the skill is `ghostex-coordinator` and gxserver stops knowing `ghostex-orchestrator` (no install, no refresh). At startup, before the refresh from the signed skill list, [`migrate_renamed_ghostex_agent_skills`] moves each install over: the new skill is written to `~/.agents/skills` from the app bundle when it is missing, every agent folder that had the old skill (a link Ghostex made, or a copy older builds made) gets a link to the new one (none for an agent that reads `~/.agents/skills` itself), and only then are the old entries Ghostex made removed, so no coordinator is ever left without a playbook. An old copy is Ghostex's when every file in it byte-matches a revision Ghostex shipped (the retired skills' rule, agent_skills.rs `remove_retired_ghostex_agent_skills`). Anything else named `ghostex-orchestrator` is the user's and is never deleted: an edited copy, the user's own link (to their checkout, say) and the agent links that point at a kept copy stay where they are, are reported as kept in the `renamedAgentSkillsMoved` log line, and are left out of Ghostex's installs and refreshes from then on. Coordinators started before the rename named `/ghostex-orchestrator` in their first message; they keep their playbook through `ghostex coordinator guide`, which prints it from the app (coordinators/role.rs `coordinator_guide_for` says the skill's new name), and the changed guide gets them the "playbook changed" note with their next message (coordinators/playbook.rs `playbook_update_note`).
+//! User: "please make /ghostex-orchestrator renamed to /ghostex-coordinator everywhere from next update and replace the skill with the new name". The product already called the role a coordinator (the CLI is `ghostex coordinator`, the app says Coordinator); only the skill kept the old word. So the skill is `ghostex-coordinator` and gxserver stops knowing `ghostex-orchestrator` (no install, no refresh). At startup, before the refresh from the signed skill list, [`migrate_renamed_ghostex_agent_skills`] moves each install over: the new skill is written to `~/.agents/skills` from the app bundle when it is missing, every agent folder that had the old skill (a link Ghostex made, or a copy older builds made) gets a link to the new one (none for an agent that reads `~/.agents/skills` itself), and only then are the old entries Ghostex made removed, so no coordinator is ever left without a playbook. An old copy is Ghostex's when every file in it byte-matches a revision Ghostex shipped (the retired skills' rule, agent_skills.rs `remove_retired_ghostex_agent_skills`). Anything else named `ghostex-orchestrator` is the user's and is never deleted: an edited copy, the user's own link (to their checkout, say) and the agent links that point at a kept copy stay where they are (that agent still gets the new skill linked beside them), are reported as kept in the `renamedAgentSkillsMoved` log line, and are left out of Ghostex's installs and refreshes from then on. Coordinators started before the rename named `/ghostex-orchestrator` in their first message; they keep their playbook through `ghostex coordinator guide`, which prints it from the app (coordinators/role.rs `coordinator_guide_for` says the skill's new name), and the changed guide gets them the "playbook changed" note with their next message (coordinators/playbook.rs `playbook_update_note`).
 //! SEE-ALSO: server/src/agent_skills_remote.rs (the signed list: an app from before the rename skips `ghostex-coordinator` and keeps its own `ghostex-orchestrator`; this app skips `ghostex-orchestrator` in an older list), server/src/server/foreground.rs (runs it at startup).
 
 use std::{
@@ -218,17 +218,18 @@ fn migrate_one(home: &Path, skill: &RenamedSkill, report: &mut Report) -> bool {
         if *root == canonical_root {
             continue;
         }
-        match kind {
+        // A Ghostex link to a kept copy stays, but its agent still gets the new skill beside it.
+        let keep_old = match kind {
             OldEntry::Users(reason) => {
                 report.keep(path, reason);
                 continue;
             }
             OldEntry::LinkToCanonical if !canonical_old_goes(old) => {
                 report.keep(path, "It links to the kept copy in ~/.agents/skills.");
-                continue;
+                true
             }
-            _ => {}
-        }
+            _ => false,
+        };
         let new_path = root.join(skill.new);
         if !reads_canonical(home, root) && fs::symlink_metadata(&new_path).is_err() {
             match link_skill_into_agent_root(&canonical_new, &new_path) {
@@ -239,6 +240,9 @@ fn migrate_one(home: &Path, skill: &RenamedSkill, report: &mut Report) -> bool {
                     continue;
                 }
             }
+        }
+        if keep_old {
+            continue;
         }
         let removed = if matches!(kind, OldEntry::LinkToCanonical) {
             ghostex_agent_sync::fsx::remove_link(path)
