@@ -151,7 +151,8 @@ impl GhostexGpuiApp {
                     projectless: false,
                 };
                 this.gx_store.git.trusted_worktrees = None;
-                this.git_show_worktree_warnings(&answer, cx);
+                let place = source.worktree_warning_place();
+                this.git_show_worktree_warnings(&answer, &place, cx);
                 this.git_worktree_ready(&worktree, agent, request.prompt, open, &toast_id, cx);
             });
         })
@@ -162,9 +163,15 @@ impl GhostexGpuiApp {
     /// gxserver's Beads hooks repair in `server/src/server/worktree_ops/projects.rs`) as a notice
     /// that waits for the user. The worktree is ready either way, and its own toast still follows.
     /// gxserver's full text, with the repository path and the reason, is behind Copy details.
+    ///
+    /// `place` names the repository (and its computer when it is remote) inside the notice: the
+    /// notice queue drops a warning that says the same thing as one shown in the last few seconds
+    /// (`gpui_app_toast_without_repeats`, window/toast.rs), so two repositories with the same
+    /// problem must not read alike, while the same repository's warning raised again still does.
     pub(crate) fn git_show_worktree_warnings(
         &mut self,
         answer: &Value,
+        place: &str,
         cx: &mut gpui::Context<Self>,
     ) {
         let warnings = answer.get("warnings").and_then(Value::as_array);
@@ -175,7 +182,7 @@ impl GhostexGpuiApp {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .trim();
-            let Some((title, description)) = worktree_warning_notice(kind, message) else {
+            let Some((title, description)) = worktree_warning_notice(kind, message, place) else {
                 continue;
             };
             let mut options = ToastOptions::persistent(&new_toast_id("worktree-warning"))
@@ -365,23 +372,77 @@ impl GhostexGpuiApp {
     }
 }
 
-/// The notice for one worktree warning: a short title, then what happened and what to do. An
-/// unknown kind from a newer gxserver shows its own message; one with no message shows nothing.
-fn worktree_warning_notice(kind: &str, message: &str) -> Option<(&'static str, String)> {
-    match kind {
-        "beadsHooksNeeded" => Some((
+/// The notice for one worktree warning: a short title, then what happened and what to do, naming
+/// `place`. An unknown kind from a newer gxserver gets a generic notice with its message behind
+/// Copy details; one with no message shows nothing.
+fn worktree_warning_notice(
+    kind: &str,
+    message: &str,
+    place: &str,
+) -> Option<(&'static str, String)> {
+    let notice = match kind {
+        "beadsHooksNeeded" => (
             "Your git hooks are still off",
-            "An older Ghostex replaced this repository's git hooks with its Beads hooks, and Beads still uses them here. To switch back, run git config --unset core.hooksPath, then bd hooks install, in the repository.".to_string(),
-        )),
-        "beadsHooksUnchecked" => Some((
+            format!(
+                "An older Ghostex replaced the git hooks of {place} with its Beads hooks, and Beads still uses them there. To switch back, run git config --unset core.hooksPath, then bd hooks install, in that repository."
+            ),
+        ),
+        "beadsHooksUnchecked" => (
             "Git hooks not checked",
-            "Ghostex could not check whether this repository still needs the Beads hooks an older Ghostex set up, so your own git hooks stay off for now. Copy the details to see what failed, fix it, then open the worktree again.".to_string(),
-        )),
-        "beadsHooksLeftAsIs" => Some((
+            format!(
+                "Ghostex could not check whether {place} still needs the Beads hooks an older Ghostex set up, so your own git hooks stay off there for now. Copy the details to see what failed, fix it, then open the worktree again."
+            ),
+        ),
+        "beadsHooksLeftAsIs" => (
             "Git hooks setting left alone",
-            "The Beads hooks folder an older Ghostex set up was edited, so Ghostex did not change this repository's git hooks setting. Check core.hooksPath in the repository if your own hooks should run.".to_string(),
-        )),
-        _ if !message.is_empty() => Some(("Worktree created with a warning", message.to_string())),
-        _ => None,
+            format!(
+                "The Beads hooks folder an older Ghostex set up in {place} was edited, so Ghostex did not change its git hooks setting. Check core.hooksPath there if your own hooks should run."
+            ),
+        ),
+        _ if !message.is_empty() => (
+            "Worktree created with a warning",
+            format!(
+                "Ghostex reported a problem with {place} while preparing the worktree. Copy the details to see what it said."
+            ),
+        ),
+        _ => return None,
+    };
+    Some(notice)
+}
+
+/// How a worktree warning names its repository: the project's name (or folder), and the
+/// computer's saved name when it is not this one.
+pub(crate) fn worktree_warning_place(
+    name: Option<&str>,
+    path: Option<&str>,
+    computer: Option<String>,
+) -> String {
+    let name = name
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            path.and_then(|path| std::path::Path::new(path).file_name())
+                .map(|name| name.to_string_lossy().to_string())
+        });
+    match (name, computer) {
+        (Some(name), Some(computer)) => format!("{name} on {computer}"),
+        (Some(name), None) => name,
+        (None, Some(computer)) => format!("a repository on {computer}"),
+        (None, None) => "this repository".to_string(),
+    }
+}
+
+impl GitScope {
+    /// This project as a worktree warning names it.
+    fn worktree_warning_place(&self) -> String {
+        let computer = self
+            .is_remote()
+            .then(|| {
+                self.machine_name()
+                    .or_else(|| self.machine_id().map(str::to_string))
+            })
+            .flatten();
+        worktree_warning_place(Some(&self.title), self.path.as_deref(), computer)
     }
 }

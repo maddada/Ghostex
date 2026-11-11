@@ -356,8 +356,8 @@ pub(crate) fn gpui_remote_sidebar_worktree_project_response_payload(
                     let message = warning
                         .get("message")
                         .and_then(serde_json::Value::as_str)
-                        .filter(|message| message.len() <= 4096)
-                        .unwrap_or("");
+                        .map(gpui_remote_sidebar_bounded_warning_message)
+                        .unwrap_or_default();
                     Some(serde_json::json!({ "kind": kind, "message": message }))
                 })
                 .take(8)
@@ -371,6 +371,20 @@ pub(crate) fn gpui_remote_sidebar_worktree_project_response_payload(
         object.insert("warnings".to_string(), serde_json::Value::Array(warnings));
     }
     response
+}
+
+/// A warning message cut to 4 KiB on a character boundary, with a visible marker when it was cut.
+fn gpui_remote_sidebar_bounded_warning_message(message: &str) -> String {
+    const LIMIT: usize = 4096;
+    const MARKER: &str = " … (cut)";
+    if message.len() <= LIMIT {
+        return message.to_string();
+    }
+    let mut end = LIMIT - MARKER.len();
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{MARKER}", &message[..end])
 }
 
 pub(crate) fn gpui_remote_sidebar_recent_projects_response_payload(
