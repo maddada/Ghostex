@@ -175,8 +175,15 @@ impl GhostexGpuiApp {
                     group,
                 } => {
                     let session = &thread.session;
-                    let row = self
-                        .render_native_sidebar_session(group, session, anchor, hud, appearance, cx);
+                    let row = self.render_native_sidebar_session(
+                        group,
+                        session,
+                        anchor,
+                        crate::app::native_sidebar::sessions::SessionRowPlace::UnifiedThread,
+                        hud,
+                        appearance,
+                        cx,
+                    );
                     // The Project list tracks hover with its own probes; here the row does.
                     let hover_id = session.session_id.clone();
                     rows.push(

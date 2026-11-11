@@ -18,7 +18,17 @@ use super::{
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
+/// Which list draws a session row (`render_native_sidebar_session`).
+///
+/// CDXC:Sidebar 2026-11-11 WHY: a Unified card's threads are drawn with the Project list's row, but the Unified sidebar reorders only pinned cards (CDXC:Sidebar 2026-11-05 in unified/cards.rs), so a thread row there takes no session drop (`moveSession` would change project groups behind the user's back) and its own drag only splits the Agents panes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SessionRowPlace {
+    ProjectList,
+    UnifiedThread,
+}
+
 impl GhostexGpuiApp {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_native_sidebar_session(
         &self,
         group: &NativeSidebarGroup,
@@ -26,6 +36,8 @@ impl GhostexGpuiApp {
         // Where the icon sits that a thread's tree line rises to (the row above's, or a Unified
         // card's hat).
         anchor: super::threads::TreeAnchor,
+        // Which list draws the row: only the Project list moves a session by dropping onto it.
+        place: SessionRowPlace,
         hud: &Value,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
@@ -50,7 +62,8 @@ impl GhostexGpuiApp {
         // Another machine's session in a merged project (`machineName`) has no place in this
         // computer's groups to move to, except a pinned one among the Pinned rows it is drawn with
         // (CDXC:Sidebar 2026-11-07 WHY in gx-core sidebar_drag/pinned_order.rs).
-        let reorders = !session.is_browser()
+        let reorders = place == SessionRowPlace::ProjectList
+            && !session.is_browser()
             && !group.is_stale
             && group.remote_machine_context.is_none()
             && (session.details.get("machineName").is_none() || session.is_pinned);
@@ -292,7 +305,7 @@ impl GhostexGpuiApp {
                 .children(self.render_native_session_work_chips(session, indent, tooltip_span, appearance, cx))
                 .children(self.render_native_session_link_line(session, indent, tooltip_span, appearance, cx))
                 .when(can_drag && self.native_sidebar.menu.is_none(), |row| row.sidebar_drag_source(dragged, cx))
-.sidebar_drop_target("session", drag_id, Some(drag_group_id), cx)
+                .when(place == SessionRowPlace::ProjectList, |row| row.sidebar_drop_target("session", drag_id, Some(drag_group_id), cx))
                 .on_mouse_down(MouseButton::Middle, |_, window, _| {
                     window.prevent_default();
                 })

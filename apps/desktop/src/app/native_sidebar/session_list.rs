@@ -156,6 +156,7 @@ impl GhostexGpuiApp {
                                                 card_heights[above]
                                             }),
                                         ),
+                                        super::sessions::SessionRowPlace::ProjectList,
                                         &snapshot.hud,
                                         &appearance,
                                         cx,
