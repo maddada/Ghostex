@@ -270,8 +270,15 @@ pub(crate) fn gpui_copy_feedback(cx: &mut gpui::App) {
     crate::app::window::copied_indicator::show_copied_indicator(cx);
 }
 
-/// Writes `item` to the clipboard with the feedback every copy in the app gives.
+/// Writes `item` to the clipboard with the feedback every copy in the app gives. A lone picture
+/// goes through [`gpui_copy_picture_to_clipboard`], which converts it to PNG and reports a copy
+/// that did not land (a page's Copy image in the browser view comes here).
 pub(crate) fn gpui_copy_to_clipboard(item: gpui::ClipboardItem, cx: &mut gpui::App) {
+    if let [gpui::ClipboardEntry::Image(picture)] = item.entries() {
+        let picture = picture.clone();
+        crate::app::helpers::gpui_copy_picture_to_clipboard(&picture, cx);
+        return;
+    }
     cx.write_to_clipboard(item);
     gpui_copy_feedback(cx);
 }

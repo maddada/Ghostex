@@ -68,6 +68,18 @@ pub(crate) fn gpui_copy_to_clipboard(item: gpui::ClipboardItem, cx: &mut gpui::A
     cx.write_to_clipboard(item);
 }
 
+/// The desktop converts the picture to PNG and reads the clipboard back
+/// (`helpers/copy_picture.rs`); the browser's clipboard write cannot be read back here, so the
+/// page only writes it.
+pub(crate) fn gpui_copy_picture_to_clipboard(picture: &gpui::Image, cx: &mut gpui::App) -> bool {
+    cx.write_to_clipboard(gpui::ClipboardItem::new_image(picture));
+    true
+}
+
+/// The desktop shows the failure where "Copied!" would have shown; the page shows no copy
+/// feedback.
+pub(crate) fn gpui_copy_failed_feedback(_message: &'static str, _cx: &mut gpui::App) {}
+
 /// Window glass blurs the desktop behind a native window; a canvas has nothing behind it to blur, so glass is never on here.
 /// A link the app opens outside itself (`gpui_open_external_url` in the desktop's os_cli/open_target.rs):
 /// the browser opens it in a new tab, so there is no Wayland display to restore.

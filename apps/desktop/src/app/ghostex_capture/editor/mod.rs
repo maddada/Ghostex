@@ -230,11 +230,12 @@ impl GhostexGpuiApp {
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
             .is_err()
         {
+            crate::app::helpers::gpui_copy_failed_feedback("Couldn't copy the image", cx);
             return;
         }
-        let item =
-            gpui::ClipboardItem::new_image(&gpui::Image::from_bytes(gpui::ImageFormat::Png, png));
-        cx.write_to_clipboard(item);
-        crate::app::window::copied_indicator::show_copied_indicator(cx);
+        crate::app::helpers::gpui_copy_picture_to_clipboard(
+            &gpui::Image::from_bytes(gpui::ImageFormat::Png, png),
+            cx,
+        );
     }
 }

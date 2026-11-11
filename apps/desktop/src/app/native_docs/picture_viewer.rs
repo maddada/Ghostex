@@ -444,11 +444,10 @@ impl Render for DocsPictureViewer {
                 &p,
                 cx,
                 |this, cx| {
-                    crate::app::helpers::gpui_copy_to_clipboard(
-                        gpui::ClipboardItem::new_image(&this.picture),
-                        cx,
-                    );
-                    this.completed = Some("Image copied");
+                    // The tick only for a copy that landed; a failed one says so itself.
+                    this.completed =
+                        crate::app::helpers::gpui_copy_picture_to_clipboard(&this.picture, cx)
+                            .then_some("Image copied");
                     cx.notify();
                 },
             ));

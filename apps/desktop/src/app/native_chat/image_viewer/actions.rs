@@ -50,9 +50,20 @@ impl NativeChatView {
         let Some(image) = self.image_viewer_current() else {
             return;
         };
-        if let ChatImageSource::Bytes(bytes) = self.chat_image(&image, cx) {
-            crate::app::helpers::gpui_copy_to_clipboard(gpui::ClipboardItem::new_image(&bytes), cx);
-            self.note_image_viewer_action("Image copied", cx);
+        // A picture without its bytes here (still loading, a web address GPUI fetches itself, or
+        // one that could not be read) used to make Copy image do nothing at all.
+        match self.chat_image(&image, cx) {
+            ChatImageSource::Bytes(bytes) => {
+                if crate::app::helpers::gpui_copy_picture_to_clipboard(&bytes, cx) {
+                    self.note_image_viewer_action("Image copied", cx);
+                }
+            }
+            ChatImageSource::Loading => {
+                crate::app::helpers::gpui_copy_failed_feedback("The image is still loading", cx)
+            }
+            ChatImageSource::Uri(_) | ChatImageSource::Unavailable(_) => {
+                crate::app::helpers::gpui_copy_failed_feedback("Couldn't copy this image", cx)
+            }
         }
     }
 
