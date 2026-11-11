@@ -5,7 +5,7 @@
 //!
 //! What happens instead:
 //! - **The door.** A third helper with a key and address of its own, which exists only for a device that is not on the other two yet. While a pairing code is shown (or a device waits as Pending) it runs open, and the QR carries its address, so a new phone reaches `/api/pairDevice` through it; the other two helpers are not touched. Opening and closing it starts again only this helper.
-//! - **An approved key starts the two helpers again once.** The new device's key goes on the allow-list when its request is approved, and both helpers take it by starting again: the devices connected reconnect once, at the moment the owner approves, where a code shown used to cost them two restarts whether anybody paired or not. The address list the new device is given names those two helpers and never the door, so nothing it saves stops answering when the door closes. The first version of this (4ac828ff7, the same day) held an approved key back from a helper that carried links and let the device live on the door instead; the review of it and the rig showed why that does not hold: tailcat never says when a link leaves, so a helper that once carried one never looks free again and the device stayed on the door alone, and a phone whose saved list named the door first waited 20 s on it (its hello timeout) the first time the door had stopped.
+//! - **An approved key starts the two helpers again once.** The new device's key goes on the allow-list when its request is approved, and both helpers take it by starting again: the devices connected reconnect once, at the moment the owner approves, where a code shown used to cost them two restarts whether anybody paired or not. The address list the new device is given names those two helpers to dial (since 2026-11-11 the addresses of both doors a code can carry follow them, last and flagged, only so a phone can recognise this computer at its next scan; see `remember_door_address`), so nothing it dials first stops answering when the door closes. The first version of this (4ac828ff7, the same day) held an approved key back from a helper that carried links and let the device live on the door instead; the review of it and the rig showed why that does not hold: tailcat never says when a link leaves, so a helper that once carried one never looks free again and the device stayed on the door alone, and a phone whose saved list named the door first waited 20 s on it (its hello timeout) the first time the door had stopped.
 //! - **A knock.** The text code other computers connect with (and a QR made while the door could not run) names the first helper's address, where a new key is turned away. While a code is shown, the first key turned away at a helper is let in by starting that one helper again with it: one restart of one helper, only when a device really comes, instead of two of both for every code shown. Its client is still saying hello (tailcat repeats it every second for ten), so it gets in without trying again. A key that knocked and did not pair is dropped when the window closes.
 //! - A removed device still restarts the helpers at once: that closes a door, and waiting would leave it open.
 //! SEE-ALSO: supervisor.rs (the reconcile), link_log.rs (`refused_client_key`), server/src/remote_access/easy_connect_addresses.rs, server/src/remote_access/http.rs (`/api/remotePairingCode`), server/src/remote_access/pair_device.rs (the approval adds the key).
@@ -106,21 +106,151 @@ pub(super) fn door_helper(
     paths: &GxserverPaths,
     relay_host: Option<&str>,
 ) -> Option<(PathBuf, PathBuf)> {
-    if let (Some(host), Some(binary)) = (relay_host, resolve_client_tailcat_binary()) {
-        let key_file = tailcat_door_key_file(paths, Some(host));
-        if ensure_tailcat_relay_key_file(&binary, &key_file, host).is_ok() {
-            return Some((binary, key_file));
-        }
+    relay_host
+        .and_then(|host| door_key(paths, Some(host)))
+        .or_else(|| door_key(paths, None))
+}
+
+/// The door's helper and key pinned to the relay `host` (only with a tailcat that can use one), or
+/// on the public relays; makes the key when it is missing. `None` when it cannot be made.
+fn door_key(paths: &GxserverPaths, host: Option<&str>) -> Option<(PathBuf, PathBuf)> {
+    let key_file = tailcat_door_key_file(paths, host);
+    let Some(host) = host else {
+        let binary =
+            resolve_client_tailcat_binary().or_else(|| resolve_host_tailcat_binary(paths))?;
+        return match make_door_key(&binary, &key_file, None) {
+            Ok(()) => Some((binary, key_file)),
+            Err(error) => {
+                eprintln!("[gxserver] could not create the Easy Connect door key: {error}");
+                None
+            }
+        };
+    };
+    let binary = resolve_client_tailcat_binary()?;
+    make_door_key(&binary, &key_file, Some(host))
+        .ok()
+        .map(|()| (binary, key_file))
+}
+
+/// Makes the door's key when it is missing, and keeps the address tailcat prints for it.
+fn make_door_key(
+    binary: &std::path::Path,
+    key_file: &std::path::Path,
+    host: Option<&str>,
+) -> anyhow::Result<()> {
+    if let Some(address) = make_tailcat_key_file(binary, key_file, host)? {
+        save_door_address(key_file, &address);
     }
-    let binary = resolve_client_tailcat_binary().or_else(|| resolve_host_tailcat_binary(paths))?;
-    let key_file = tailcat_door_key_file(paths, None);
-    match ensure_tailcat_key_file(&binary, &key_file) {
-        Ok(()) => Some((binary, key_file)),
-        Err(error) => {
-            eprintln!("[gxserver] could not create the Easy Connect door key: {error}");
-            None
-        }
+    Ok(())
+}
+
+/*
+CDXC:RemotePairing 2026-11-11 WHY:
+A phone recognises a computer by the server key inside an Easy Connect address: the address it paired with, or any address in the list the computer gave it (apps/mobile/app/src/machines/computerIdentity.ts). Since 11.3.0 the QR carries the door's address, whose key is on no phone's list, so a phone that scanned a new code through "Add a computer" for a computer it already had could not tell and added a second entry. The computer replaces that phone's earlier pairing, so the old entry was dead, and both entries dialled with the phone's one key, two tunnels that stall each other: the user's own iPhone showed exactly this (one entry Connected, one "SSH needs a key or password"), and a user with constant reconnects very likely had it. So the door's address is remembered (its key never changes, so neither does the key in its address) and named last in every address list (`easy_connect_addresses_with_doors`; both doors since finding 3 of its review, see `remember_door_address`): a phone on the old app, which cannot be updated over the air, then finds its entry by it at the next scan and pairs it again instead of adding one. The address is remembered when the key is made (tailcat prints it), each time the door publishes it, and from the file 11.3.0 left behind; the key is made when Easy Connect starts, so the address is known before the first code is shown. Nothing about the door itself changes: it still runs only while a code is shown and lets nobody in.
+SEE-ALSO: server/src/remote_access/easy_connect_addresses.rs, supervisor.rs (`apply`, `set_token`).
+*/
+/// Where the address of the door key `key_file` is kept (`<name>.address.txt` beside it).
+fn door_saved_address_file(key_file: &std::path::Path) -> PathBuf {
+    let name = key_file
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("door.private.json");
+    key_file.with_file_name(format!(
+        "{}.address.txt",
+        name.strip_suffix(".private.json").unwrap_or(name)
+    ))
+}
+
+/// Remembers `address` as the address of the door key `key_file`.
+pub(super) fn save_door_address(key_file: &std::path::Path, address: &str) {
+    let address = address.trim();
+    if address.starts_with("tc") {
+        let _ = std::fs::write(door_saved_address_file(key_file), address);
     }
+}
+
+fn saved_door_address(key_file: &std::path::Path) -> Option<String> {
+    let address = std::fs::read_to_string(door_saved_address_file(key_file)).ok()?;
+    let address = address.trim();
+    address.starts_with("tc").then(|| address.to_string())
+}
+
+/// Whether `address` is an address of the key in `key_file`: its bytes hold the key's public half.
+fn address_names_key(address: &str, key_file: &std::path::Path) -> bool {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let public = std::fs::read_to_string(key_file)
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|json| {
+            json.pointer("/Public/ServerPublic")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|key| key.strip_prefix("nodekey:"))
+                .map(str::to_string)
+        });
+    let Some(public) = public else {
+        return false;
+    };
+    let key: Option<Vec<u8>> = (0..public.len() / 2)
+        .map(|index| u8::from_str_radix(public.get(index * 2..index * 2 + 2)?, 16).ok())
+        .collect();
+    let (Some(key), Some(encoded)) = (key, address.trim().strip_prefix("tc")) else {
+        return false;
+    };
+    let Ok(bytes) = URL_SAFE_NO_PAD.decode(encoded.trim_end_matches('=')) else {
+        return false;
+    };
+    key.len() == 32
+        && bytes
+            .windows(key.len())
+            .any(|window| window == key.as_slice())
+}
+
+/*
+CDXC:RemotePairing 2026-11-11 WHY:
+Review of the first version (finding 3): a code carries one of two doors, the one pinned to the relay when that relay answered its last check and the one on the public relays otherwise (`door_helper`, supervisor.rs `apply_door`), but only one door's address was remembered (the first one found) and only one was listed. After the user switched relay, or while the relay was down so the code fell back to the public door, the listed door could differ from the one in the code, and an old phone added a second entry on that scan. Both doors are remembered and both are listed, each flagged as a door, so whichever door a code names is on the list a phone already has. Doors pinned to a relay the computer no longer uses are not listed: no code can carry them.
+*/
+/// The doors a code can carry: the one pinned to `relay_host` (when there is one and a tailcat
+/// that can use it) and the one on the public relays. Makes each key that is missing and makes
+/// sure each address is remembered. Called when Easy Connect starts; cheap once known.
+pub(super) fn remember_door_address(paths: &GxserverPaths, relay_host: Option<&str>) {
+    // Made by 11.3.0, which kept only the address of the door that ran last.
+    let last_published = std::fs::read_to_string(tailcat_door_address_file(paths)).ok();
+    for host in relay_host.into_iter().map(Some).chain([None]) {
+        let key_file = tailcat_door_key_file(paths, host);
+        if saved_door_address(&key_file).is_some() {
+            continue;
+        }
+        if key_file.is_file() {
+            // tailcat prints an address only when it makes a key; one 11.3.0 made earlier is
+            // learned here, or the next time that door runs (`save_door_address`, supervisor.rs).
+            if let Some(address) = last_published
+                .as_deref()
+                .filter(|address| address_names_key(address, &key_file))
+            {
+                save_door_address(&key_file, address);
+            }
+            continue;
+        }
+        let _ = door_key(paths, host);
+    }
+}
+
+/// The addresses of every door a code can carry, when they are known: the one pinned to
+/// `relay_host` first (a code carries it whenever that relay answers), then the one on the public
+/// relays.
+pub fn known_door_addresses(paths: &GxserverPaths, relay_host: Option<&str>) -> Vec<DoorAddress> {
+    let pinned = relay_host.and_then(|host| {
+        saved_door_address(&tailcat_door_key_file(paths, Some(host))).map(|address| DoorAddress {
+            address,
+            relay_host: Some(host.to_string()),
+        })
+    });
+    let public =
+        saved_door_address(&tailcat_door_key_file(paths, None)).map(|address| DoorAddress {
+            address,
+            relay_host: None,
+        });
+    pinned.into_iter().chain(public).collect()
 }
 
 /// The door's address while it runs, and the relay its key is pinned to (`None`: the public ones).

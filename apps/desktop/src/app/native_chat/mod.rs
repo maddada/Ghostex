@@ -141,6 +141,7 @@ mod reply_popover;
 mod rich_markdown;
 mod row_details;
 mod send_control;
+mod send_watch;
 mod tone_card;
 mod toolbar;
 mod transcript_host;

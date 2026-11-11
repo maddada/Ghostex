@@ -1,5 +1,6 @@
-//! The More menu rows whose whole answer already lives in Rust: Join Discord, Keep Awake, and the
-//! app's own New Window, Check for Updates, Restart and Quit rows.
+//! The More menu rows whose whole answer already lives in Rust: Join Discord, Keep Awake, the
+//! app's panels (Ask Ghostex, Tips & Tricks, Resources, Dev servers, Extensions) and the app's own
+//! New Window, Check for Updates, Restart and Quit rows.
 //!
 //! CDXC:Sidebar 2026-09-25 WHY:
 //! Join Discord (`openExternalUrl`) used to leave Rust for the app runtime, which posted the same
@@ -18,7 +19,7 @@ use crate::GhostexGpuiApp;
 use crate::shared_settings::SharedKeepAwakeDurationMinutes;
 
 impl GhostexGpuiApp {
-    /// Answers the More menu's Join Discord and Keep Awake rows. Returns whether it did, in which
+    /// Answers the More menu's Join Discord, Keep Awake, panel and app rows. Returns whether it did, in which
     /// case the command must NOT also reach the old runtime.
     pub(crate) fn gx_store_run_sidebar_more_menu(
         &mut self,
@@ -38,6 +39,17 @@ impl GhostexGpuiApp {
             }
             Some("runTitlebarKeepAwakeCommand") => {
                 self.run_sidebar_keep_awake_command(message, cx);
+                true
+            }
+            // A row of Tools or Help that opens one of the app's panels (titlebar/menu_panels.rs).
+            // The panel is a window of its own, opened once this click has left the sidebar's menu.
+            Some(ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE) => {
+                if let Some(panel) = message.get("panel").and_then(Value::as_str) {
+                    let panel = panel.to_owned();
+                    self.defer_in_main_window(cx, move |app, window, cx| {
+                        app.open_sidebar_menu_panel(&panel, window, cx);
+                    });
+                }
                 true
             }
             Some(ghostex_gx_core::APP_LIFECYCLE_MESSAGE_TYPE) => {

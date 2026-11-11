@@ -59,6 +59,14 @@ pub struct WorkingCard {
     /// CDXC:SessionChat 2026-11-09 WHY: the contributor of the chat look (sebastianarena) chose that with Status line in the chat on, the working status must still show while the agent works on an empty chat, where the line had no row to end; the capsule above the chat box shows until the transcript has one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_transcript: bool,
+    /// When the finished turn's last message came (epoch ms), while the Worked line shows: the
+    /// renderers let the line go a minute after it (desktop working_card.rs `worked_line_spent`).
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, picking on the chat box bars page: once a turn has ended, "Worked for 28s" and what
+    /// changed stay for one minute, then go; the time stays on the turn's own row in the chat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worked_at_ms: Option<i64>,
 }
 
 /// One pill on the working card (`extras::chat_pills`): a panel folded into a pill that opens a

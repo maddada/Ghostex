@@ -182,6 +182,8 @@ fn gpui_linux_client_window_frame(
 impl Render for GhostexGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let _profile = crate::profiling::span(crate::profiling::Metric::AppRender);
+        crate::app::titlebar::account_usage::MAIN_WINDOW_RENDERS
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // Only the main workspace window renders this entity, so this keeps
         // the authoritative frame and display every child popup anchors against.
         #[cfg(target_os = "macos")]

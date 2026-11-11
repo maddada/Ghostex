@@ -130,3 +130,68 @@ pub(super) fn disclosure_body(
         )
         .into_any_element()
 }
+
+/// The hit box of a quiet fold's rail (`closing_rail`), centred on its line.
+const QUIET_RAIL_BOX: f32 = 12.0;
+
+/// A quiet fold's rail: an opened Quiet View line's rows (quiet_view.rs) and an opened Reduced or
+/// Agent work Quiet line's steps (quiet_work.rs). The 1px line stays where it was drawn, `line_x`
+/// in from the row's left edge with the content starting at `content_x`; a click anywhere in the
+/// 12px box centred on it shuts the fold `key` as its header does, with a pointer and a stronger
+/// line while hovered. `bottom` is space under the rows that the line runs down through.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User, of the thin line down an opened Quiet View fold: "make clicking on this line collapse". Every rail in the chat closes its fold when clicked, as the disclosure rails already did (`disclosure_body`): Quiet View's folds and Reduced and Agent work Quiet's opened steps now too, with a hit area of about 12px centred on the line, a pointer, and the line drawn stronger while hovered. The chat keeps the header where it is as the fold shuts (`anchor_disclosure_toggle`).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn closing_rail(
+    p: &ChatAppearance,
+    key: String,
+    line_x: f32,
+    content_x: f32,
+    gap: f32,
+    bottom: f32,
+    children: impl IntoIterator<Item = AnyElement>,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let centre = line_x + RAIL_LINE_WIDTH / 2.0;
+    let box_left = centre - QUIET_RAIL_BOX / 2.0;
+    div()
+        .flex()
+        .min_w_0()
+        .ml(px(box_left * s))
+        .child(
+            div()
+                .id(SharedString::from(format!("quiet-rail:{key}")))
+                .group(RAIL_GROUP)
+                .role(gpui::Role::Button)
+                .aria_label("Collapse")
+                .w(px(QUIET_RAIL_BOX * s))
+                .flex_shrink_0()
+                .flex()
+                .justify_center()
+                .chat_cursor_pointer()
+                .child(
+                    div()
+                        .w(px(RAIL_LINE_WIDTH * s))
+                        .bg(p.foreground.opacity(RAIL_LINE_OPACITY))
+                        .group_hover(RAIL_GROUP, |style| style.bg(p.foreground.opacity(0.35))),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.toggle_marker_disclosure(key.clone(), true, cx);
+                    cx.stop_propagation();
+                })),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .ml(px((content_x - box_left - QUIET_RAIL_BOX) * s))
+                .pb(px(bottom * s))
+                .gap(px(gap * s))
+                .children(children),
+        )
+        .into_any_element()
+}

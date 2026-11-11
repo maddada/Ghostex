@@ -43,7 +43,7 @@ saved address blob. `--fixed-region` is what makes the derived blob stable
 across restarts, which is the whole reason the key is persisted at all.
 */
 pub fn ensure_tailcat_key_file(binary_path: &Path, key_file: &Path) -> Result<()> {
-    run_genkey(binary_path, key_file, "--fixed-region")
+    run_genkey(binary_path, key_file, "--fixed-region").map(|_| ())
 }
 
 /// The second key, pinned to `host` (`genkey --region=<host>`, which needs no network): its
@@ -54,12 +54,26 @@ pub fn ensure_tailcat_relay_key_file(
     key_file: &Path,
     host: &str,
 ) -> Result<()> {
-    run_genkey(binary_path, key_file, &format!("--region={host}"))
+    run_genkey(binary_path, key_file, &format!("--region={host}")).map(|_| ())
 }
 
-fn run_genkey(binary_path: &Path, key_file: &Path, region_arg: &str) -> Result<()> {
+/// Makes a key file like the two above (pinned to the relay `host`, or on the public relays) and
+/// returns the address tailcat prints for it; `None` when the file was there already.
+pub(crate) fn make_tailcat_key_file(
+    binary_path: &Path,
+    key_file: &Path,
+    host: Option<&str>,
+) -> Result<Option<String>> {
+    match host {
+        Some(host) => run_genkey(binary_path, key_file, &format!("--region={host}")),
+        None => run_genkey(binary_path, key_file, "--fixed-region"),
+    }
+}
+
+/// `tailcat genkey`: the address it prints for the new key, or `None` when the file exists.
+fn run_genkey(binary_path: &Path, key_file: &Path, region_arg: &str) -> Result<Option<String>> {
     if key_file.is_file() {
-        return Ok(());
+        return Ok(None);
     }
     if let Some(parent) = key_file.parent() {
         fs::create_dir_all(parent)
@@ -86,7 +100,11 @@ fn run_genkey(binary_path: &Path, key_file: &Path, region_arg: &str) -> Result<(
         bail!("tailcat genkey did not write a server key file.");
     }
     set_file_mode_0600(key_file)?;
-    Ok(())
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with("tc"))
+        .map(str::to_string))
 }
 
 #[cfg(unix)]

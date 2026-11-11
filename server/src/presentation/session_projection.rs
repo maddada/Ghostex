@@ -270,9 +270,8 @@ pub(crate) fn project_presentation_session(
     insert_optional_string(
         &mut output,
         "agentName",
-        read_runtime_text(session, "agentName")
-            .or_else(|| custom_agent_display_name(Some(project), session))
-            .or_else(|| string_field(session, "agentId"))
+        session_agent_name(Some(project), session)
+            .or_else(|| string_field(session, "agentId").filter(|id| !is_custom_agent_id(id)))
             .filter(|value| !value.is_empty()),
     );
     if let Some(agent_id) = string_field(session, "agentId").filter(|value| !value.is_empty()) {

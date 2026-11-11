@@ -1,4 +1,4 @@
-//! The header's trailing half: the Start / Open / Commit split buttons, the ⋯ menu, the two panel
+//! The header's trailing half: the Start / Open / Commit split buttons and the two panel
 //! toggles. Platform caption controls belong to the rightmost band region.
 
 use gpui::AnyElement;
@@ -301,7 +301,7 @@ impl GhostexGpuiApp {
     }
 
     /// The header's trailing controls, in the order the mockup lists them: the three split buttons,
-    /// the ⋯ menu, then the command terminal and view panel toggles.
+    /// then the command terminal and view panel toggles.
     pub(crate) fn render_workarea_header_actions(
         &self,
         compact: bool,
@@ -441,7 +441,7 @@ impl GhostexGpuiApp {
                     )
                 },
             );
-        // The ⋯ menu and the two panel toggles never scroll out of reach: only the split buttons
+        // The pinned controls and the two panel toggles never scroll out of reach: only the split buttons
         // and pinned extensions before them can, so a narrow column loses the least-needed first.
         let pinned = h_flex()
             .flex_shrink_0()
@@ -459,11 +459,8 @@ impl GhostexGpuiApp {
                 this.children(self.render_workarea_header_session_details_button(cx))
             })
             .children(self.render_workarea_header_share_button(cx))
-            // Everything occasional lives behind the trailing ⋯ menu.
-            .when(
-                self.titlebar_more_menu_visible() && shown(HeaderControl::MoreMenu),
-                |this| this.child(self.render_titlebar_more_button(cx)),
-            )
+            // No trailing ⋯ button: what it held opens from the sidebar's menu
+            // (CDXC:Titlebar 2026-11-11 DECISION in titlebar/menu_panels.rs).
             // With a view open the toggles end the view tab strip instead (render_workarea_panel_toggles).
             .when(
                 !self.workarea_header_hosts_view_tab_strip() && shown(HeaderControl::PanelToggles),

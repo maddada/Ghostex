@@ -55,7 +55,7 @@ impl GhostexGpuiApp {
         self.close_gpui_titlebar_popup(None, window, cx);
         /*
         CDXC:Titlebar 2026-09-27 WHY:
-        A dropdown can be asked to open before its trigger has painted (a hotkey, a ⋯ menu row, the
+        A dropdown can be asked to open before its trigger has painted (a hotkey, a menu row, the
         very first frame), so its bounds are unknown. This used to call `request_animation_frame`,
         which is only valid while a view paints: from an event or a task it unwrapped an empty view
         stack and crashed the app, and even when it didn't the dropdown never opened. The request
@@ -107,7 +107,6 @@ impl GhostexGpuiApp {
                 | GpuiTitlebarPopupKind::Git
                 | GpuiTitlebarPopupKind::Help
                 | GpuiTitlebarPopupKind::Updates
-                | GpuiTitlebarPopupKind::More
                 | GpuiTitlebarPopupKind::OpenTargets
         ) && content_height > popup_height;
         let content = self.build_gpui_titlebar_popup_content(
@@ -145,7 +144,11 @@ impl GhostexGpuiApp {
             is_minimizable: false,
             titlebar: None,
             // Under window glass the dropdown blurs what is behind it, rounded to its 8px panel.
-            window_background: if window_glass_active() {
+            // The usage panel opens without its glass and turns it on as it fades in, once it has
+            // fitted itself to its content (`reveal_popup_window` in account_usage/panel.rs).
+            window_background: if window_glass_active()
+                && !matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_))
+            {
                 WindowBackgroundAppearance::Blurred
             } else {
                 WindowBackgroundAppearance::Transparent
@@ -168,11 +171,7 @@ impl GhostexGpuiApp {
                 ));
                 apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
-                // The usage panel fades in once it has fitted itself to its content
-                // (CDXC:AgentProviders 2026-11-11 in account_usage/panel.rs).
-                if matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_)) {
-                    crate::app::window::popup_frame::hide_popup_window(popup_window);
-                } else if matches!(kind, GpuiTitlebarPopupKind::Notifications) {
+                if matches!(kind, GpuiTitlebarPopupKind::Notifications) {
                     crate::app::window::popup_frame::fade_in_popup_window(
                         popup_window,
                         cx.reduce_motion(),
@@ -478,16 +477,6 @@ impl GhostexGpuiApp {
             GpuiTitlebarPopupKind::Help => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
                     super::help_menu::build_gpui_titlebar_help_popup_menu(
-                        menu,
-                        menu_width,
-                        menu_max_height,
-                        menu_scrollable,
-                    )
-                }))
-            }
-            GpuiTitlebarPopupKind::More => {
-                GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_more_popup_menu(
                         menu,
                         menu_width,
                         menu_max_height,

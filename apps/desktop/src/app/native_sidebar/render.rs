@@ -70,7 +70,13 @@ impl GhostexGpuiApp {
                 .when(snapshot.spaces_enabled, |header| {
                     header.child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
                 })
-                .children(self.render_native_sidebar_space_row(&snapshot, &appearance, false, cx))
+                .children(self.render_native_sidebar_space_row(
+                    &snapshot,
+                    &appearance,
+                    false,
+                    false,
+                    cx,
+                ))
                 // CDXC:Chief 2026-11-08 DECISION: User (Q1922): Main Hub shows in the Unified sidebar too, under its header, drawn as in the Project sidebar (native_sidebar/chief.rs); its block lines up with the Unified group headers' box.
                 .child(gap(super::selectors::SIDEBAR_TOP_LIST_GAP))
                 .children(self.render_native_sidebar_chief(&snapshot, &appearance, true, cx))

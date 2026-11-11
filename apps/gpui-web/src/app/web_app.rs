@@ -180,6 +180,12 @@ impl GhostexGpuiApp {
         false
     }
 
+    /// The page's menu has no rows for the app's panels (`MenuHost::menu_panels` is false), so
+    /// there is none to offer.
+    pub(crate) fn sidebar_menu_panel_offered(&self, _panel_id: &str) -> bool {
+        false
+    }
+
     pub(crate) fn render_sidebar_notification_bell(
         &self,
         _appearance: &SidebarAppearance,

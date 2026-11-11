@@ -154,6 +154,9 @@ pub(crate) struct NativeChatView {
     /// The message under the pointer while Message spacing is Compact, whose footer row shows its
     /// buttons (message_spacing.rs).
     pub(super) hovered_message: Option<String>,
+    /// The message whose ⋯ menu was opened last: its ⋯ stays shown while that menu is up
+    /// (message_actions.rs).
+    pub(super) message_menu: Option<String>,
     /// Agent work Quiet: the work button and opened steps of the reply row being drawn, which
     /// that reply's hover row takes (hidden_work.rs).
     pub(super) hidden_work: Option<super::hidden_work::HiddenWork>,
@@ -330,6 +333,13 @@ pub(crate) struct NativeChatView {
     /// A send left this composer and has not settled; Enter does not wait for it (the core holds
     /// later sends behind it), so only summaries read it.
     pub(crate) pending_send: bool,
+    /// A send the chat core has not counted yet (send_watch.rs), and the last watch's number.
+    pub(super) send_watch: Option<super::send_watch::SendWatch>,
+    pub(super) send_watch_token: u64,
+    /// When the last send left the chat box, for the send log's step times (send_watch.rs).
+    pub(super) last_send_at: Option<web_time::Instant>,
+    /// The message the send gate holds, as it was when the hold began (send_watch.rs).
+    pub(super) held_log: Option<super::send_watch::HeldLog>,
     pub(crate) composer_ready: bool,
     pub(crate) expanded: FoldKeys,
     /// Scroll offsets of the capped boxes inside transcript rows (nested_scroll.rs).
@@ -535,6 +545,7 @@ impl NativeChatView {
             quiet_steps: false,
             quiet_lines_cache: Default::default(),
             hovered_message: None,
+            message_menu: None,
             hidden_work: None,
             disclosure_motion: Default::default(),
             transcript_focus_follow: Default::default(),
@@ -631,6 +642,10 @@ impl NativeChatView {
             draft: String::new(),
             draft_revision: 0,
             pending_send: false,
+            send_watch: None,
+            send_watch_token: 0,
+            last_send_at: None,
+            held_log: None,
             composer_ready: false,
             expanded: FoldKeys::default(),
             nested_scrolls: Default::default(),
@@ -924,7 +939,11 @@ impl NativeChatView {
         };
         for output in runtime.take_outputs() {
             match output {
-                ChatRuntimeOutput::Drained(output) => self.apply_output(output, cx),
+                ChatRuntimeOutput::Drained(output) => {
+                    self.apply_output(output, cx);
+                    // Whatever the frame carried, the host thread is alive (send_watch.rs).
+                    self.note_send_progress();
+                }
                 ChatRuntimeOutput::Error(error) => {
                     self.error = Some(error);
                     cx.notify();
@@ -1027,8 +1046,10 @@ impl NativeChatView {
                 .iter()
                 .any(|key| self.snapshot["sessionDetails"][key] != snapshot["sessionDetails"][key]);
             let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
+            self.note_held_send(&before);
             self.remeasure_on_look_change(&before);
             self.adopt_board_focus(&before, cx);
+            self.prune_kept_replies(&before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);
             }
@@ -1201,6 +1222,10 @@ impl NativeChatView {
         params.insert("sessionId".into(), config.session_id.into());
         let params = Value::Object(params);
         let id = request["id"].clone();
+        // A message's own call to gxserver: when it left after Enter and how long it took go in
+        // the send log (send_watch.rs).
+        let delivery_call = matches!(method, "sendSessionChatMessage" | "queueSessionChatPrompt")
+            .then(|| (self.since_last_send_ms(), web_time::Instant::now()));
         let task = cx.background_executor().spawn(async move {
             if import_attachments {
                 return super::attachments::import_paths(&config.remote, &params)
@@ -1263,6 +1288,9 @@ impl NativeChatView {
                         "errorMessage": error["message"],
                     }),
                 );
+                if let Some((after_enter_ms, started)) = delivery_call {
+                    this.log_send_call(&diagnostic_method, after_enter_ms, started, &error);
+                }
                 if let Some(runtime) = &this.runtime {
                     runtime.call("resolve", vec![id, value, error]);
                 }

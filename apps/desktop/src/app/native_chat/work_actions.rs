@@ -20,12 +20,49 @@ use gpui::{
 };
 use serde_json::{Value, json};
 
+/// The button an ask's answers fold into when they do not fit on one line (`answers_dropdown`).
+pub(super) const CHOOSE_ANSWER: &str = "Choose an answer";
+/// Its dropdown grows to its longest answer up to this (unscaled), and the window's edge.
+const ANSWERS_MENU_MAX: f32 = 560.0;
+
+/// The answers dropdown's rows: each answer whole on its own line, the recommended one starred, a
+/// click sending its command as its button does.
+fn answer_menu_rows(answers: &[Value]) -> Vec<Value> {
+    answers
+        .iter()
+        .filter(|answer| answer["command"].is_object() && answer["locked"] != true)
+        .map(|answer| {
+            let mut row = json!({ "label": text(answer, "label"), "command": answer["command"] });
+            if answer["recommended"] == true {
+                row["detail"] = json!("★");
+            }
+            row
+        })
+        .collect()
+}
+
+/// A closed card's answer button's width (unscaled), as `work_compact_answers` draws it: its
+/// label, 8px sides and border, then its check, reply arrow, star or Draft (`mark`).
+fn compact_answer_width(label: &str, mark: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
+    (super::work_cards::dock_text_width(label, 12.5, p, cx) + 18.0 + mark).max(34.0)
+}
+
 /// An icon button's box, and the icon in it (unscaled).
 const ICON_BOX: f32 = 28.0;
 const ICON_SIZE: f32 = 14.0;
 
 fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
+}
+
+/// The quiet word after a Reply that holds words not yet sent (`has_kept_reply`): the button's own
+/// muted ink, no colour of its own.
+fn draft_sign(p: &ChatAppearance) -> gpui::Div {
+    div()
+        .flex_shrink_0()
+        .font_weight(gpui::FontWeight::NORMAL)
+        .text_color(p.muted)
+        .child("Draft")
 }
 
 impl NativeChatView {
@@ -51,6 +88,7 @@ impl NativeChatView {
                 let command = answer["command"].clone();
                 // Reply (`reply_answer`): the reply box at the press, its words the answer.
                 let reply = answer["reply"].clone();
+                let draft = reply.is_object() && !picked && self.has_kept_reply(&reply);
                 let icon = if picked {
                     Some("titlebar/check.svg")
                 } else if reply.is_object() {
@@ -67,6 +105,11 @@ impl NativeChatView {
                     (busy || locked) && !picked,
                     p,
                 )
+                .when(draft, |button| {
+                    button
+                        .aria_label(format!("{label}, draft kept"))
+                        .child(draft_sign(p))
+                })
                 .when(answer["recommended"] == true, |button| {
                     button
                         .aria_label(format!("{label}, Recommended"))
@@ -102,6 +145,71 @@ impl NativeChatView {
                 .into_any_element()
             })
             .collect()
+    }
+
+    /// An ask's answers folded into one button, for a line too short for them all (the dock's rows,
+    /// an opened Work panel card): "Choose an answer" with its arrow opens the app's dropdown, one
+    /// answer a line and each whole, the recommended one starred; a click on one answers at once,
+    /// as its button does. `busy`: an answer is being sent, so it waits.
+    pub(super) fn answers_dropdown(
+        &self,
+        key: &str,
+        answers: &[Value],
+        busy: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let locked = busy || answers.iter().all(|answer| answer["locked"] == true);
+        let rows = answer_menu_rows(answers);
+        self.tone_button(
+            gpui::SharedString::from(format!("work-answers-choose:{key}")),
+            CHOOSE_ANSWER,
+            None,
+            ToneButton::Secondary,
+            None,
+            locked,
+            p,
+        )
+        .aria_label(format!("{CHOOSE_ANSWER}, {} answers", rows.len()))
+        .child(
+            svg()
+                .path("titlebar/chevron-down.svg")
+                .size(px(14.0 * s))
+                .flex_shrink_0()
+                .text_color(p.foreground),
+        )
+        .on_click(
+            cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                cx.stop_propagation();
+                if !locked {
+                    this.show_answers_menu(rows.clone(), event.position(), window, cx);
+                }
+            }),
+        )
+        .into_any_element()
+    }
+
+    /// The answers dropdown (`answers_dropdown`) at `at`, inside the window it was pressed in (the
+    /// chat's, or the floating Work card's), as wide as its longest answer.
+    fn show_answers_menu(
+        &mut self,
+        rows: Vec<Value>,
+        at: gpui::Point<gpui::Pixels>,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        if rows.is_empty() {
+            return;
+        }
+        let in_main = self
+            .open_main_window(cx)
+            .is_none_or(|main| main == window.window_handle());
+        if in_main {
+            self.show_chat_menu_at(rows, at, ANSWERS_MENU_MAX, window, cx);
+        } else {
+            self.show_chat_menu_in_window_at(rows, at, ANSWERS_MENU_MAX, window, cx);
+        }
     }
 
     /// Reply as one more of an ask's answers, last after them in their look (`work_answer_buttons`,
@@ -144,6 +252,7 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let open = row["open"].clone();
         let reply = row["reply"].clone();
+        let draft = !open.is_object() && reply.is_object() && self.has_kept_reply(&reply);
         // Each carries its icon, so it reads as an action and not as an answer.
         let (label, icon, id) = if open.is_object() {
             (
@@ -170,6 +279,11 @@ impl NativeChatView {
                 false,
                 p,
             )
+            .when(draft, |button| {
+                button
+                    .aria_label(format!("{label}, draft kept"))
+                    .child(draft_sign(p))
+            })
             .on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     cx.stop_propagation();
@@ -193,28 +307,105 @@ impl NativeChatView {
     /// [`Self::work_answer_buttons`], with less padding so the card keeps its two lines. Each gives
     /// way with an ellipsis on a narrow card rather than running past its edge; the one sent from
     /// here carries a check, and the others fade once it is answered.
+    ///
+    /// `room` (unscaled) is the line's width for them: past it the answers fold into one Choose an
+    /// answer dropdown beside Reply, as on the dock's rows (`answers_dropdown`), so none is cut.
     pub(super) fn work_compact_answers(
         &self,
         key: &str,
         answers: &[Value],
+        room: f32,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
         use super::appearance::ChatFilledButton as _;
         let s = p.scale;
+        let widths: Vec<f32> = answers
+            .iter()
+            .map(|answer| {
+                let picked = answer["picked"] == true;
+                let reply = answer["reply"].is_object();
+                let mut mark = 0.0;
+                if picked || reply {
+                    mark += 15.0;
+                }
+                if answer["recommended"] == true {
+                    mark += 13.0;
+                }
+                if reply && !picked && self.has_kept_reply(&answer["reply"]) {
+                    mark += super::work_cards::dock_text_width("Draft", 12.5, p, cx) + 4.0;
+                }
+                compact_answer_width(&text(answer, "label"), mark, p, cx)
+            })
+            .collect();
+        let gaps = |count: usize| 4.0 * count.saturating_sub(1) as f32;
+        let choices: Vec<usize> = (0..answers.len())
+            .filter(|index| !answers[*index]["reply"].is_object())
+            .collect();
+        let choices_width: f32 =
+            choices.iter().map(|index| widths[*index]).sum::<f32>() + gaps(choices.len());
+        let choose_width = compact_answer_width(CHOOSE_ANSWER, 15.0, p, cx);
+        let fold = choices_width > choose_width
+            && widths.iter().sum::<f32>() + gaps(answers.len()) > room
+            && !answers.iter().any(|answer| answer["picked"] == true);
         let mut row = div()
             .flex_shrink(1.0)
             .min_w_0()
             .flex()
             .items_center()
             .gap(px(4.0 * s));
+        if fold {
+            let choices: Vec<Value> = choices
+                .iter()
+                .map(|index| answers[*index].clone())
+                .collect();
+            let rows = answer_menu_rows(&choices);
+            row = row.child(
+                div()
+                    .id(gpui::SharedString::from(format!(
+                        "work-answers-choose-compact:{key}"
+                    )))
+                    .role(gpui::Role::Button)
+                    .aria_label(format!("{CHOOSE_ANSWER}, {} answers", rows.len()))
+                    .h(px(22.0 * s))
+                    .px(px(8.0 * s))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.0 * s))
+                    .rounded(px(7.0 * s))
+                    .border(px(s))
+                    .chat_filled(p.neutral_button_fills(), !rows.is_empty())
+                    .text_size(px(12.5 * s))
+                    .text_color(p.foreground)
+                    .chat_cursor_pointer()
+                    .child(div().whitespace_nowrap().child(CHOOSE_ANSWER))
+                    .child(
+                        svg()
+                            .path("titlebar/chevron-down.svg")
+                            .size(px(11.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.foreground),
+                    )
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.show_answers_menu(rows.clone(), event.position(), window, cx);
+                        }),
+                    ),
+            );
+        }
         for (index, answer) in answers.iter().enumerate() {
+            if fold && !answer["reply"].is_object() {
+                continue;
+            }
             let label = text(answer, "label");
             let picked = answer["picked"] == true;
             let recommended = answer["recommended"] == true;
             let locked = answer["locked"] == true;
             let command = answer["command"].clone();
             let reply = answer["reply"].clone();
+            let draft = reply.is_object() && !picked && self.has_kept_reply(&reply);
             row = row.child(
                 div()
                     .id(gpui::SharedString::from(format!(
@@ -256,7 +447,11 @@ impl NativeChatView {
                                 .text_color(p.foreground),
                         )
                     })
-                    .child(div().min_w_0().truncate().child(label))
+                    .child(div().min_w_0().truncate().child(label.clone()))
+                    .when(draft, |this| {
+                        this.aria_label(format!("{label}, draft kept"))
+                            .child(draft_sign(p))
+                    })
                     .when(recommended, |this| {
                         this.child(
                             svg()
@@ -357,11 +552,16 @@ impl NativeChatView {
         if reply.is_object() {
             any = true;
             row = row.child(
+                // Holding words not yet sent, it keeps the soft "on" fill and says so.
                 self.work_icon_button(
                     format!("work-reply:{key}"),
                     "titlebar/arrow-back-up.svg",
-                    "Reply",
-                    false,
+                    if self.has_kept_reply(&reply) {
+                        "Reply (draft kept)"
+                    } else {
+                        "Reply"
+                    },
+                    self.has_kept_reply(&reply),
                     p,
                 )
                 .on_click(cx.listener(

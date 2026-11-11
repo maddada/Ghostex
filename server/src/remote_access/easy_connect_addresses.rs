@@ -19,6 +19,10 @@ pub struct EasyConnectAddress {
     /// which it does not check.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reachable: Option<bool>,
+    /// The pairing door's address: named so a phone knows it as this computer's, not to be
+    /// dialled (`easy_connect_addresses_with_doors`).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub door: bool,
 }
 
 /*
@@ -27,8 +31,8 @@ User (approved plan): a paired phone asks `/api/easyConnectAddresses` with its d
 SEE-ALSO: apps/mobile/app/src/machines/easyConnectAddresses.ts (the phone's dial order), server/src/tailcat/supervisor.rs.
 */
 /*
-CDXC:RemotePairing 2026-11-10 WHY:
-This list never names the door a new phone pairs through (tailcat/door.rs): the door stops when the pairing window closes, and a phone dials its saved list in order and waits 20 s on an address that no longer answers before it tries the next. Both helpers below admit a device from the moment it is approved, so they are all it needs; the phone keeps the door's address only as the one it scanned, which it tries last.
+CDXC:RemotePairing 2026-11-10 WHY (the last place changed on 2026-11-11, see `easy_connect_addresses_with_doors`):
+This list never names the door a new phone pairs through among the addresses to dial (tailcat/door.rs): the door stops when the pairing window closes, and a phone dials its saved list in order and waits 20 s on an address that no longer answers before it tries the next. Both helpers below admit a device from the moment it is approved, so they are all it needs; the phone keeps the door's address only as the one it scanned, which it tries last.
 */
 pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectAddress> {
     let mut addresses = Vec::new();
@@ -45,6 +49,7 @@ pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectA
                 _ => "ghostex",
             },
             reachable: status.relay.reachable,
+            door: false,
         });
     }
     if let (true, Some(token)) = (status.running, status.token.as_ref()) {
@@ -53,6 +58,46 @@ pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectA
             relay: PUBLIC_RELAY_LABEL.to_string(),
             kind: "public",
             reachable: None,
+            door: false,
+        });
+    }
+    addresses
+}
+
+/*
+CDXC:RemotePairing 2026-11-11 WHY:
+The list above with the pairing doors' addresses named last (tailcat/door.rs says why: a phone that scans a new code must be able to tell that the door belongs to a computer it already has). Last and flagged `door: true`, because the door answers only while a code is shown: a phone on the old app dials its list in order and so reaches it only after both real addresses failed, which is where the address it scanned already sits for a phone paired since 11.3.0, and the new phone code keeps a flagged address for recognising the computer and never dials it. A list with no real address stays empty.
+*/
+pub fn easy_connect_addresses_with_doors(
+    status: &TailcatStatusPayload,
+    doors: Vec<crate::tailcat::DoorAddress>,
+) -> Vec<EasyConnectAddress> {
+    let mut addresses = easy_connect_addresses(status);
+    if addresses.is_empty() {
+        return addresses;
+    }
+    // Every door a code can carry (both since finding 3 of the review, tailcat/door.rs
+    // `remember_door_address`), each flagged, so whichever one a code names is on the list.
+    for door in doors {
+        if addresses.iter().any(|entry| entry.address == door.address) {
+            continue;
+        }
+        let (relay, kind) = match door.relay_host {
+            Some(host) => (
+                host,
+                match status.relay.mode {
+                    TailcatRelayMode::Custom => "custom",
+                    _ => "ghostex",
+                },
+            ),
+            None => (PUBLIC_RELAY_LABEL.to_string(), "public"),
+        };
+        addresses.push(EasyConnectAddress {
+            address: door.address,
+            relay,
+            kind,
+            reachable: None,
+            door: true,
         });
     }
     addresses

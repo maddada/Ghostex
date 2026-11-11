@@ -22,7 +22,7 @@ use super::super::super::fields::{
 };
 use super::super::super::palette::SettingsPalette;
 use super::data::{Account, helper_label, normalize_account_indicator_input};
-use super::widgets::{TagTone, account_badge, account_mark, account_text, status_tag, usage_line};
+use super::widgets::{TagTone, account_badge, account_mark, account_text, status_tag, usage_lines};
 use super::{AccountsTab, Pane};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -302,7 +302,7 @@ impl AccountsTab {
                     .border_1()
                     .border_color(hsla(p.hairline))
                     .bg(hsla(p.foreground_alpha(0.025)))
-                    .children(bars.iter().map(|window| usage_line(p, window)))
+                    .children(usage_lines(p, &bars, window))
                     .children(
                         account
                             .reset_credits()

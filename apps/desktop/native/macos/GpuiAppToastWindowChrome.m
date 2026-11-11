@@ -225,16 +225,86 @@ void GhostexGpuiSetChildWindowContentFrame(void *childNativeView,
 
 // Fades a just-opened popup window in, its backdrop blur and shadow with it. Runs before the window's
 // first flush, so it never shows at full alpha first.
-// Keeps a just-opened popup window invisible until it has its final size and place.
-void GhostexGpuiHidePopupWindow(void *nativeView) {
+// CDXC:AgentProviders 2026-11-11 WHY:
+// User: "clicking on any of these makes the app main window flicker for half a second". No agent
+// could run a second app to watch it, so a usage meter click records the main window for a
+// second: every change of its alpha, key and main state, occlusion, frame, first responder and the
+// app's activation, sampled every 8ms, plus the window's own notifications, appended to `path`.
+static void GhostexGpuiTraceAppend(NSString *path, NSString *line) {
+  NSFileHandle *file = [NSFileHandle fileHandleForWritingAtPath:path];
+  if (file == nil) {
+    [[NSFileManager defaultManager] createFileAtPath:path contents:nil attributes:nil];
+    file = [NSFileHandle fileHandleForWritingAtPath:path];
+  }
+  [file seekToEndOfFile];
+  [file writeData:[[line stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
+  [file closeFile];
+}
+
+void GhostexGpuiTraceMainWindow(void *nativeView, const char *path, double seconds) {
   @autoreleasepool {
-    if (nativeView == NULL) {
+    if (nativeView == NULL || path == NULL) {
       return;
     }
     NSWindow *window = ((__bridge NSView *)nativeView).window;
-    if (window != nil) {
-      window.alphaValue = 0.0;
+    if (window == nil) {
+      return;
     }
+    NSString *file = [NSString stringWithUTF8String:path];
+    CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
+    NSString *(^stamp)(void) = ^NSString *(void) {
+      return [NSString stringWithFormat:@"+%4.0fms", (CFAbsoluteTimeGetCurrent() - start) * 1000.0];
+    };
+    NSString *(^state)(void) = ^NSString *(void) {
+      NSRect frame = window.frame;
+      return [NSString
+          stringWithFormat:@"alpha=%.2f key=%d main=%d visible=%d occlusionVisible=%d appActive=%d "
+                           @"frame=%.0f,%.0f,%.0fx%.0f responder=%@ windows=%lu",
+                           window.alphaValue, window.isKeyWindow, window.isMainWindow,
+                           window.isVisible,
+                           (window.occlusionState & NSWindowOcclusionStateVisible) != 0,
+                           NSApp.isActive, frame.origin.x, frame.origin.y, frame.size.width,
+                           frame.size.height, NSStringFromClass([window.firstResponder class]),
+                           (unsigned long)NSApp.windows.count];
+    };
+    GhostexGpuiTraceAppend(file, [NSString stringWithFormat:@"--- usage meter click %@ main window %@",
+                                                         [NSDate date], state()]);
+    NSMutableArray *observers = [NSMutableArray array];
+    for (NSNotificationName name in @[
+           NSWindowDidBecomeKeyNotification, NSWindowDidResignKeyNotification,
+           NSWindowDidBecomeMainNotification, NSWindowDidResignMainNotification,
+           NSWindowDidChangeOcclusionStateNotification, NSWindowDidResizeNotification,
+           NSWindowDidMoveNotification
+         ]) {
+      [observers addObject:[[NSNotificationCenter defaultCenter]
+                               addObserverForName:name
+                                           object:window
+                                            queue:nil
+                                       usingBlock:^(NSNotification *note) {
+                                         GhostexGpuiTraceAppend(
+                                             file, [NSString stringWithFormat:@"%@ event %@",
+                                                                              stamp(), note.name]);
+                                       }]];
+    }
+    __block NSString *last = state();
+    NSTimer *timer = [NSTimer
+        timerWithTimeInterval:0.008
+                      repeats:YES
+                        block:^(NSTimer *t) {
+                          NSString *now = state();
+                          if (![now isEqualToString:last]) {
+                            GhostexGpuiTraceAppend(file, [NSString stringWithFormat:@"%@ %@", stamp(), now]);
+                            last = now;
+                          }
+                          if (CFAbsoluteTimeGetCurrent() - start > seconds) {
+                            [t invalidate];
+                            for (id observer in observers) {
+                              [[NSNotificationCenter defaultCenter] removeObserver:observer];
+                            }
+                            GhostexGpuiTraceAppend(file, [NSString stringWithFormat:@"%@ end", stamp()]);
+                          }
+                        }];
+    [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
   }
 }
 

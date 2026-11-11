@@ -136,6 +136,16 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         label_parts,
         in_transcript: state.transcript_view.chat_look.status_in_transcript
             && !state.transcript_view.items.is_empty(),
+        worked_at_ms: (phase == "worked")
+            .then(|| {
+                state
+                    .messages
+                    .composed
+                    .iter()
+                    .rev()
+                    .find_map(|message| message.timestamp)
+            })
+            .flatten(),
     }
 }
 

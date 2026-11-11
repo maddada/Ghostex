@@ -96,8 +96,8 @@ impl GhostexGpuiApp {
     }
 
     /// The enabled extensions Quick Access lists as "Open <title>" rows: the ones that open without
-    /// a place on screen to open from, shown in the active project (the header ⋯ > Extensions list
-    /// applies the same view scope).
+    /// a place on screen to open from, shown in the active project (the Extensions panel of the sidebar
+    /// menu's Tools applies the same view scope).
     pub(crate) fn quick_access_extensions(&self) -> Vec<ghostex_gx_core::QuickAccessExtension> {
         let mut extensions: Vec<ghostex_gx_core::QuickAccessExtension> = self
             .extensions_snapshot

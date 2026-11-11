@@ -634,6 +634,13 @@ pub(super) async fn route_sessions_http(
             )
             .await
         }
+        "/api/sessionReplyDrafts" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, _| crate::session_reply_drafts::handle(db, params),
+        ),
         "/api/toggleCloseAfterDone" => handle_domain_http(
             &state,
             endpoint.path,

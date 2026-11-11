@@ -88,9 +88,10 @@ fn install_step(status: &Value) -> InstallStep {
     if status.get("binaryFound").and_then(Value::as_bool) == Some(true) {
         return InstallStep::Done;
     }
-    InstallStep::Failed(status_error(status, "installError").unwrap_or_else(|| {
-        "The Easy Connect helper didn't install. Try again.".to_string()
-    }))
+    InstallStep::Failed(
+        status_error(status, "installError")
+            .unwrap_or_else(|| "The Easy Connect helper didn't install. Try again.".to_string()),
+    )
 }
 
 /// One admin prompt; a cancelled prompt is not an error (Remote Setup's Connect did the same).
@@ -325,12 +326,46 @@ impl GhostexGpuiApp {
                     "url": url,
                 }));
             }
+            ConnectDeviceCommand::ReadTailscale => self.read_connect_device_tailscale(cx),
+            ConnectDeviceCommand::OpenRemote => {
+                self.connect_device_window_closed(cx);
+                self.open_gpui_settings_remote_section(None, cx);
+            }
             ConnectDeviceCommand::OpenTailscale => {
                 self.connect_device_window_closed(cx);
-                self.open_gpui_settings_remote_section("tailscale", cx);
+                self.open_gpui_settings_remote_section(Some("tailscale"), cx);
             }
             ConnectDeviceCommand::Close => self.connect_device_window_closed(cx),
         }
+    }
+
+    /// Reads what the window's Tailscale way shows: whether Tailscale is switched on in Settings
+    /// and, when it is, the checklist Settings > Remote's Tailscale row draws from the same answer.
+    fn read_connect_device_tailscale(&mut self, cx: &mut gpui::Context<Self>) {
+        let enabled = shared_settings::shared_sidebar_settings_snapshot()
+            .object()
+            .get("remoteTailscaleEnabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        cx.spawn(async move |this, cx| {
+            let checklist = if enabled {
+                cx.background_executor()
+                    .spawn(async {
+                        rpc("/api/remoteAccessStatus", json!({}), RPC_TIMEOUT).and_then(|answer| {
+                            settings_modal::tabs::remote::tailscale_checklist_of_status(&answer)
+                        })
+                    })
+                    .await
+            } else {
+                Err(String::new())
+            };
+            let _ = this.update(cx, |app, cx| {
+                app.update_connect_device_window(cx, |modal, cx| {
+                    modal.tailscale_answered(enabled, checklist, cx)
+                });
+            });
+        })
+        .detach();
     }
 
     /// Starts the helper's install (`start`; else follows the one that runs) and shows each step
@@ -462,16 +497,22 @@ impl GhostexGpuiApp {
         self.owner_security_show_pending_pairing_requests(cx);
     }
 
-    /// Settings on the Remote page, with `section` (`tailscale`) open.
-    fn open_gpui_settings_remote_section(&mut self, section: &str, cx: &mut gpui::Context<Self>) {
+    /// Settings on the Remote page, with `section` (`tailscale`) open when one is given.
+    fn open_gpui_settings_remote_section(
+        &mut self,
+        section: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let modal = GpuiAppModalKind::Settings;
         let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
         let mut open_message = json!({
-            "initialRemoteSection": section,
             "initialTab": "remote",
             "modal": modal.modal_id(),
             "type": "open",
         });
+        if let Some(section) = section {
+            open_message["initialRemoteSection"] = json!(section);
+        }
         open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
         self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, None, cx);
     }

@@ -66,6 +66,7 @@ impl AccountsTab {
         };
         match state {
             "accounts-editor" => self.pane = Some(Pane::Account("claude-1".into())),
+            "accounts-gemini" => self.pane = Some(Pane::Account("gemini-1".into())),
             "accounts-editor-actions" | "accounts-advanced" => {
                 self.pane = Some(Pane::Account("claude-1".into()));
                 self.preview_draft("claude-1", |draft| draft.advanced = true, cx);

@@ -124,6 +124,10 @@ pub struct ComposerState {
     /// runs b before d, so the answer is cached on the state rather than read out of a half-built
     /// document.
     pub send_blocked_reason: Option<String>,
+    /// How many sends, queues and compacts from the chat box this core has taken in, published as
+    /// the document's `submissionsReceived` so the host can tell a message the core holds from one
+    /// that never reached it (CDXC:SessionChat 2026-11-11 on `hold_words` in composer/policy.rs).
+    pub submissions_received: u64,
 }
 
 /// The `/`, `$` and `@` popup's own state.

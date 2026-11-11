@@ -832,7 +832,24 @@ fn hold_for_gate(state: &mut ChatState, context: &ChatContext) -> bool {
             submission.storage = None;
         }
     }
+    if blocked {
+        // Its echo now says why it waits (`held_echo`, part of the composition's key).
+        state.core.request_publish();
+    }
     blocked
+}
+
+/// The echo of the message the gate holds, and the words it shows while it waits: its id in
+/// `state.pending.sends` and `hold_words` (CDXC:SessionChat 2026-11-11 in composer/policy.rs).
+pub fn held_echo(state: &ChatState) -> Option<(String, String)> {
+    let submission = state.composer.submitting.as_ref()?;
+    if !submission.awaiting_gate {
+        return None;
+    }
+    let pending_id = submission.pending_id.clone()?;
+    let words = crate::composer::document::send_hold(state)
+        .unwrap_or_else(|| "Waiting for the agent to take messages again.".to_string());
+    Some((pending_id, words))
 }
 
 /// Settle hook: a delivery phase parked by [`hold_for_gate`] resumes once the gate is clear.

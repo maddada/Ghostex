@@ -79,6 +79,9 @@ pub(crate) struct AlertEvent {
     pub(crate) notification_id: String,
     pub(crate) agent_name: String,
     pub(crate) project_name: String,
+    /// The session's title as the app shows it; an alert's title uses it only for a phone whose "Show session names"
+    /// switch is on (`PushRegistration::session_names`).
+    pub(crate) session_title: String,
     /// When the event happened, in wall-clock milliseconds; the alert expires an hour later.
     pub(crate) occurred_at_ms: i64,
 }
@@ -101,18 +104,26 @@ pub(crate) struct AgentStartEvent {
 ///
 /// CDXC:Notifications 2026-11-04 WHY:
 /// The phone shows the same events through its own notifications while the app is open, so the push uses the phone's `agent · project` title and event words and an alert reads the same whether the app is open or closed. The push title is kept to one line and at most 120 characters (the push message's title limit): line breaks in a name become spaces, and a longer title is cut with an ellipsis.
+/// CDXC:Notifications 2026-11-11 DECISION: the push's first name follows the phone's "Show session names" switch, as its Live Activity and widgets do: off (the default), the agent's name as the app shows it; on, the session's title (the agent's name when the session has none). The switch reaches the computer with the phone's registration (`sessionNames`), so a session title never goes into a push for a phone that did not turn names on, an older phone included.
 pub(crate) fn alert_message(
     token: &str,
     machine_id: &str,
     event: &AlertEvent,
+    session_names: bool,
     has_question: bool,
     ttl_secs: i64,
 ) -> Option<String> {
     let mut message = Map::new();
     message.insert("to".into(), json!(token));
+    let session_title = one_line(&event.session_title);
+    let leading_name = if session_names && !session_title.is_empty() {
+        session_title.as_str()
+    } else {
+        event.agent_name.as_str()
+    };
     message.insert(
         "title".into(),
-        json!(alert_title(&event.agent_name, &event.project_name)),
+        json!(alert_title(leading_name, &event.project_name)),
     );
     message.insert("body".into(), json!(event.kind.words(has_question)));
     message.insert(
@@ -155,7 +166,7 @@ fn within_limit(message: Value) -> Option<String> {
     (text.len() <= MESSAGE_BYTES_MAX).then_some(text)
 }
 
-/// `<agent> · <project>`, or the one name that is there, on one line and at most 120 characters.
+/// `<name> · <project>`, or the one name that is there, on one line and at most 120 characters.
 fn alert_title(agent_name: &str, project_name: &str) -> String {
     let agent = one_line(agent_name);
     let project = one_line(project_name);

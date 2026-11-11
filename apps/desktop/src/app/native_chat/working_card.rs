@@ -45,6 +45,9 @@ pub(super) enum WorkingLineLook {
     Quiet,
 }
 
+/// How long a finished turn's "Worked for" line stays, in ms (`worked_line_spent`).
+const WORKED_LINE_MS: i64 = 60_000;
+
 /// Where an element was last painted, with the clip it was painted in.
 pub(super) type PaintedSlot = Rc<Cell<Option<(Bounds<Pixels>, Bounds<Pixels>)>>>;
 
@@ -61,15 +64,77 @@ pub(super) struct WorkingCardCells {
     /// Set when the status row painted this frame, so the lead measures where its slot and line
     /// sit in the row again (status_tail.rs).
     pub(super) tail_fresh: Rc<Cell<bool>>,
+    /// The finished turn whose "Worked for" line has a wake-up set for when its minute is up.
+    pub(super) worked_wake: Rc<Cell<Option<i64>>>,
     /// The slot and the line, offset from the status row's origin, with the clip the slot was
     /// painted in, as last measured.
     pub(super) tail_in_row: Rc<Cell<Option<super::status_tail::TailInRow>>>,
 }
 
 impl NativeChatView {
-    /// The card shows: the transcript has rows and the core has a working (or worked) line.
+    /// The card shows: the transcript has rows and the core has a working (or worked) line, and a
+    /// worked line has not had its minute yet (`worked_line_spent`).
     fn working_card_shown(&self) -> bool {
-        self.list.item_count() > 0 && self.snapshot["workingCard"]["visible"] == true
+        self.list.item_count() > 0
+            && self.snapshot["workingCard"]["visible"] == true
+            && !self.worked_line_spent()
+    }
+
+    /// The status the dock's header bar carries instead of the card (work_cards.rs
+    /// `work_dock_header`): the card's value when it would show above the chat box, `None` when
+    /// it would not or the transcript draws it as its last row.
+    pub(super) fn dock_status_card(&self) -> Option<Value> {
+        let card = &self.snapshot["workingCard"];
+        (card["visible"] == true && card["inTranscript"] != true && !self.worked_line_spent())
+            .then(|| card.clone())
+    }
+
+    /// The turn ended more than a minute ago, so its "Worked for" line has gone (the time stays on
+    /// the turn's own row in the chat). The view draws again when the minute is up.
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, picking on the chat box bars page: "Worked for 28s" and what changed stay for one
+    /// minute after the turn ends, then go; an idle chat with a dock shows only the count, and a
+    /// chat with no dock loses its status bar the same minute later.
+    pub(super) fn worked_line_spent(&self) -> bool {
+        let card = &self.snapshot["workingCard"];
+        if card["phase"] != "worked" {
+            return false;
+        }
+        let Some(at) = card["workedAtMs"].as_i64() else {
+            return false;
+        };
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as i64);
+        now - at >= WORKED_LINE_MS
+    }
+
+    /// Draws the chat again when a showing "Worked for" line's minute is up, so it goes on time;
+    /// once per finished turn.
+    pub(super) fn wake_when_worked_line_ends(&self, cx: &mut Context<Self>) {
+        let card = &self.snapshot["workingCard"];
+        let Some(at) = card["workedAtMs"]
+            .as_i64()
+            .filter(|_| card["phase"] == "worked")
+        else {
+            return;
+        };
+        if self.working_card.worked_wake.get() == Some(at) || self.worked_line_spent() {
+            return;
+        }
+        self.working_card.worked_wake.set(Some(at));
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as i64);
+        let left = (at + WORKED_LINE_MS - now).max(0) as u64 + 50;
+        cx.spawn(async move |chat, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(left))
+                .await;
+            let _ = chat.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
     }
 
     /// The card for the top of the composer's stack. While the scroll-to-bottom pill shows, a click
@@ -163,6 +228,29 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        self.working_line(card, look, true, p, cx)
+    }
+
+    /// The status line as the dock's header bar carries it (work_cards.rs `work_dock_header`): the
+    /// capsule's spark and words without the capsule's own padding, cut with an ellipsis before
+    /// anything beside it would be overlapped.
+    pub(super) fn working_line_in_bar(
+        &self,
+        card: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.working_line(card, WorkingLineLook::Capsule, false, p, cx)
+    }
+
+    fn working_line(
+        &self,
+        card: &Value,
+        look: WorkingLineLook,
+        padded: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let reduced_motion = crate::app::helpers::gpui_macos_reduce_motion_enabled();
         let kind = card["labelKind"].as_str().unwrap_or_default();
@@ -241,7 +329,7 @@ impl NativeChatView {
             .id("chat-working-card-header")
             .w_full()
             .min_w_0()
-            .when(look == WorkingLineLook::Capsule, |line| {
+            .when(look == WorkingLineLook::Capsule && padded, |line| {
                 line.min_h(px((LINE_HEIGHT + 2.0 * HEADER_PAD_Y) * s))
                     .pl(px(12.0 * s))
                     .pr(px(12.0 * s))

@@ -174,8 +174,14 @@ impl GhostexGpuiApp {
         &mut self,
         row_menu: &Value,
     ) -> Option<Value> {
-        let unified = self.native_sidebar.unified.clone()?;
         let (kind, key) = (row_menu["kind"].as_str()?, row_menu["key"].as_str()?);
+        // A remote computer's row has its menu in the Project sidebar too: the folded computers
+        // button lists them (native_sidebar/machines.rs).
+        if kind == "machine" {
+            return (key != ghostex_gx_core::LOCAL_MACHINE_ID)
+                .then(|| self.native_machine_tab_menu(key));
+        }
+        let unified = self.native_sidebar.unified.clone()?;
         if !row_has_menu(&unified, kind, key) {
             return None;
         }

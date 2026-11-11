@@ -11,6 +11,8 @@ pub(crate) struct SpaceDragPreview {
     /// From one Space tile's start to the next's, before the zoom: the tiles stretch across their
     /// row (CDXC:Spaces 2026-11-11 DECISION in selectors.rs), so it follows the sidebar's width.
     pub(crate) pitch: f32,
+    /// What the computers and their hairline take before the first Space tile, before the zoom.
+    pub(crate) leading: f32,
     pub(crate) icon: String,
     pub(crate) color: Hsla,
     pub(crate) background: Hsla,
@@ -51,7 +53,7 @@ impl SpaceDragPreview {
     ) -> Option<Value> {
         let pitch = self.pitch;
         let left = if target_kind == "space-row" {
-            bounds.left() + px(super::navigation::SIDEBAR_TOP_EDGE_INSET * scale)
+            bounds.left() + px((super::navigation::SIDEBAR_TOP_EDGE_INSET + self.leading) * scale)
         } else {
             let index = self
                 .visible_ids

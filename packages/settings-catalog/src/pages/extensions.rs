@@ -51,11 +51,11 @@ pub(crate) fn official(platform: Platform) -> Section {
         row("docs", "Files", "Browse your project’s notes, plans, and reference files together in one focused reading space."),
         row("changes", "Changes", "Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions."),
         row("terminal", "Terminal", "A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel."),
-        row("tips", "Tips & Tricks", "A panel of short tips for getting more out of Ghostex, opened from the ⋯ menu."),
+        row("tips", "Tips & Tricks", "A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu."),
         row("notifications", "Notifications", "A bell in the sidebar's top row that lists what your agents finished or need from you."),
-        row("help", "Ghostex Help", "A ⋯ menu entry with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you."),
-        row("devServers", "Dev servers", "A ⋯ menu panel listing development servers running on this computer. A new Browser tab shows the same list."),
-        row("resources", "Resources", "A ⋯ menu panel listing what Ghostex is running right now, with the CPU and memory each part is using."),
+        row("help", "Ghostex Help", "An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you."),
+        row("devServers", "Dev servers", "A panel listing development servers running on this computer, opened from Tools in the sidebar's menu."),
+        row("resources", "Resources", "A panel listing what Ghostex is running right now, with the CPU and memory each part is using, opened from Tools in the sidebar's menu."),
         row("gitActions", "Git actions", "A work area header button for commit, branch, and worktree helpers on the active project."),
         row("quickActions", "Actions", "Saved terminal commands and web pages you start in one click from the Start button, a hotkey, Quick Access or a project row."),
         row("openIn", "Open In", "Open the active project or a session's folder in your editor, terminal or file manager from the Open button and the Open In menus."),
@@ -64,7 +64,7 @@ pub(crate) fn official(platform: Platform) -> Section {
         row("connectors", "Connectors", "Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands."),
         row("osIntegration", "OS Integration", "Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links."),
         row("debugging", "Debugging", "The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue."),
-        row("extensionsButton", "Extensions", "An entry in the work area header’s ⋯ menu that lists your installed extensions."),
+        row("extensionsButton", "Extensions", "An entry under Tools in the sidebar's menu that lists your installed extensions."),
     ];
     rows.retain(|row| crate::built_in_extensions::available_on(row.key, platform));
     section("official", "Built-in", rows)

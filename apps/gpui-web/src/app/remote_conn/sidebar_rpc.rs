@@ -75,4 +75,10 @@ impl GhostexGpuiApp {
     ) -> Option<RemoteAppUpdateBadge> {
         None
     }
+
+    /// The desktop's remote computers' systems (`apps/desktop/src/app/remote_conn/app_update.rs`);
+    /// the web has no remote connections, so its computers keep the generic remote icon.
+    pub(crate) fn remote_machine_systems(&self) -> std::collections::HashMap<String, &'static str> {
+        std::collections::HashMap::new()
+    }
 }

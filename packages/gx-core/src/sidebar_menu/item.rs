@@ -73,6 +73,9 @@ pub struct MenuItem {
     pub separator: bool,
     /// `presentation: 'page'`: the submenu replaces the panel rather than opening beside it.
     pub page: bool,
+    /// `presentation: 'beside'`: the submenu opens beside the menu, level with this row, where
+    /// the host has room for it there (`with_beside`).
+    pub beside: bool,
     /// `menuStyle: 'agentLauncher'`, read from the first row of a panel.
     pub agent_launcher: bool,
     /// The last-used agent, drawn highlighted.
@@ -146,6 +149,13 @@ impl MenuItem {
         self
     }
 
+    /// The submenu opens beside the menu rather than over it, so the rows under this one stay
+    /// in reach while it is open.
+    pub(crate) fn with_beside(mut self) -> Self {
+        self.beside = true;
+        self
+    }
+
     /// Applies a tag's glyph and colour, the way the TypeScript spreads `nativeTagPresentation`
     /// over the row it just built.
     pub(crate) fn with_tag_presentation(
@@ -197,6 +207,11 @@ impl MenuItem {
             object.insert(
                 "presentation".to_string(),
                 Value::String("page".to_string()),
+            );
+        } else if self.beside {
+            object.insert(
+                "presentation".to_string(),
+                Value::String("beside".to_string()),
             );
         }
         if self.agent_launcher {

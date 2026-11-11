@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
-use axum::{body::Body, http::StatusCode};
-use serde_json::json;
+use axum::{
+    body::Body,
+    http::{header, HeaderValue, Response, StatusCode},
+};
+use serde_json::{json, Value};
 
 use crate::server::{AppState, RoutedResponse};
 use crate::session_chat_files::{write_session_chat_image, SESSION_CHAT_IMAGE_MAX_BYTES};
@@ -14,7 +17,7 @@ use super::{
 
 pub(crate) const VISUAL_PAGE_IMAGE_SUFFIX: &str = "/image";
 
-/// Whether `POST <path>` is a page's pasted-image route, `/visual/<id>/image`.
+/// Whether `POST` or `GET <path>` is a page's image route, `/visual/<id>/image`.
 pub(crate) fn is_image_route(path: &str) -> bool {
     path.starts_with(VISUAL_PAGE_ROUTE_PREFIX) && path.ends_with(VISUAL_PAGE_IMAGE_SUFFIX)
 }
@@ -85,6 +88,121 @@ pub(crate) async fn save(state: Arc<AppState>, path: String, body: Body) -> Rout
             StatusCode::INTERNAL_SERVER_ERROR,
             json!({"ok": false, "error": "The pasted image could not be saved."}),
         ),
+    }
+}
+
+/// `GET /visual/<id>/image?path=<absolute path>`: a picture the page's own boxes refer to, for the
+/// kit to show when the reader hovers or clicks its pill (kit.rs).
+///
+/// CDXC:Clipboard 2026-11-11 WHY:
+/// A page reopened later, or answered, has only `[Image #N](path)` in its text, and its content policy lets it read nothing but its own `/visual/<id>/` routes, so the picture comes through here. Like the POST beside it this answers before the auth gate with the page id as the grant, so it gives out only what that page already names: a file in the folder pasted images are saved in (`<app data>/i`, `write_session_chat_image`) that the page's saved draft or sent answers reference as `[Image #N](path)`, and only when its bytes are an image. A page cannot ask for any other file, and a pasted image from a chat or another page stays out of reach.
+pub(crate) async fn read(
+    state: Arc<AppState>,
+    path: String,
+    query: Option<String>,
+) -> RoutedResponse {
+    let Some(id) = page_of(&path) else {
+        return not_found();
+    };
+    let Some(wanted) = query.as_deref().and_then(|query| {
+        url::form_urlencoded::parse(query.as_bytes())
+            .find(|(key, _)| key == "path")
+            .map(|(_, value)| value.into_owned())
+    }) else {
+        return not_found();
+    };
+    let state_dir = state.paths.root_dir.clone();
+    let data_dir = state.paths.app_data_dir.clone();
+    let read = tokio::task::spawn_blocking(move || {
+        let record = read_record(&state_dir, &id)?;
+        if !names_image(&record, &wanted) {
+            return None;
+        }
+        let folder = std::fs::canonicalize(data_dir.join("i")).ok()?;
+        let file = std::fs::canonicalize(&wanted).ok()?;
+        if !file.starts_with(&folder) || !file.is_file() {
+            return None;
+        }
+        if std::fs::metadata(&file).ok()?.len() > SESSION_CHAT_IMAGE_MAX_BYTES as u64 {
+            return None;
+        }
+        let bytes = std::fs::read(&file).ok()?;
+        looks_like_image(&bytes).then_some(bytes)
+    })
+    .await
+    .ok()
+    .flatten();
+    let Some(bytes) = read else {
+        return not_found();
+    };
+    let mut response = Response::new(Body::from(bytes.clone()));
+    for (name, value) in [
+        (header::CONTENT_TYPE, image_type(&bytes)),
+        (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+        (header::CACHE_CONTROL, "private, max-age=3600"),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    ] {
+        response
+            .headers_mut()
+            .insert(name, HeaderValue::from_static(value));
+    }
+    RoutedResponse {
+        endpoint_path: None,
+        response,
+    }
+}
+
+fn page_of(path: &str) -> Option<String> {
+    path.strip_prefix(VISUAL_PAGE_ROUTE_PREFIX)
+        .and_then(|rest| rest.strip_suffix(VISUAL_PAGE_IMAGE_SUFFIX))
+        .filter(|id| is_page_id(id))
+        .map(str::to_string)
+}
+
+fn not_found() -> RoutedResponse {
+    reply(
+        StatusCode::NOT_FOUND,
+        json!({"ok": false, "error": "No such image on this page."}),
+    )
+}
+
+/// Whether the page's saved draft or sent answers carry `[Image #N](wanted)`.
+fn names_image(record: &Value, wanted: &str) -> bool {
+    fn walk(value: &Value, needle: &str) -> bool {
+        match value {
+            Value::String(text) => text.match_indices(needle).any(|(at, _)| {
+                let before = &text[..at];
+                before.rfind("[Image #").is_some_and(|open| {
+                    let number = &before[open + "[Image #".len()..];
+                    !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+                })
+            }),
+            Value::Array(items) => items.iter().any(|item| walk(item, needle)),
+            Value::Object(map) => map.values().any(|item| walk(item, needle)),
+            _ => false,
+        }
+    }
+    if !std::path::Path::new(wanted).is_absolute() {
+        return false;
+    }
+    let needle = format!("]({wanted})");
+    ["draft", "answers"]
+        .iter()
+        .filter_map(|key| record.get(*key))
+        .any(|value| walk(value, &needle))
+}
+
+fn image_type(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(b"\x89PNG") {
+        "image/png"
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF8") {
+        "image/gif"
+    } else if bytes.len() >= 12 && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        "image/bmp"
     }
 }
 

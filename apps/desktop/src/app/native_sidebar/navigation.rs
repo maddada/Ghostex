@@ -43,8 +43,9 @@ const TOP_ROW_TIGHT_GAP: f32 = 2.0;
 /// How the top row's buttons share the room right of Toggle sidebar.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct TopRowFit {
-    /// Whether Add project stays in the row; it folds into the menu, whose first row it already
-    /// is, when the row cannot hold every button at its narrowest.
+    /// Whether Add project stays in the row; it folds into the menu, as its first row, when the
+    /// row cannot hold every button at its narrowest (the menu lists it only then:
+    /// `native_sidebar_more_menu_now`).
     add_project: bool,
     gap: f32,
     /// The row's right padding, which gives way last, only so the menu never runs past the edge.
@@ -180,9 +181,6 @@ impl GhostexGpuiApp {
         } else {
             &snapshot.search_shortcut
         };
-        // The menu is read when the button is pressed; sharing the snapshot keeps this row from
-        // copying the menu's JSON on every frame.
-        let more_menu_now = self.native_sidebar_more_menu_now(&snapshot.more_menu);
         /*
         CDXC:Sidebar 2026-09-20 DECISION:
         User: with the titlebar row deleted, the sidebar's Search row is what sits in the window's
@@ -228,8 +226,8 @@ impl GhostexGpuiApp {
         row of the More options menu (CDXC:Feedback 2026-10-14 in
         packages/gx-core/src/sidebar_menu/navigation.rs). This supersedes the 2026-09-23 rule that
         moved Search and Notifications into the menu together. Add project, which joined this row
-        on 2026-11-11, is the one button that gives way on a narrow sidebar: it is the menu's
-        first row already (`top_row_fit`).
+        on 2026-11-11, is the one button that gives way on a narrow sidebar: it becomes the
+        menu's first row then (`top_row_fit`).
         */
         /*
         CDXC:Sidebar 2026-09-21 DECISION:
@@ -334,6 +332,9 @@ impl GhostexGpuiApp {
         });
         let gap = fit.map_or(4.0, |fit| fit.gap) * scale;
         let add_project = fit.is_some_and(|fit| fit.add_project);
+        // The menu as a press on its button opens it: without Add Project while that button is in
+        // the row, and without the panels that are switched off (`native_sidebar_more_menu_now`).
+        let more_menu_now = self.native_sidebar_more_menu_now(&snapshot.more_menu, add_project);
         // Top-row buttons are 30 wide, 28 high with corner 7; the bottom bar's stay 34 with corner 5.
         let (button_width, button_radius) = if footer {
             (34.0, 5.0)
@@ -607,6 +608,8 @@ impl GhostexGpuiApp {
             Settings or Hotkeys (packages/gx-core/src/sidebar_menu/navigation.rs). This
             supersedes the 2026-09-20 rule that kept both entries in the menu as a
             deliberate duplicate.
+            Superseded in part on 2026-11-11: the menu has a Settings row again, alone at its end
+            (CDXC:Sidebar 2026-11-11 DECISION in that file); the gear stays.
             */
             .when(footer, |row| {
                 row.children(self.render_native_sidebar_usage_toggle(

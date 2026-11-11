@@ -249,6 +249,31 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
     if state == "accounts-empty" {
         data["accounts"] = json!([]);
     }
+    // A Gemini account with Antigravity's Claude/GPT windows beside its own 5h and 7d.
+    if state == "accounts-gemini"
+        && let Some(accounts) = data["accounts"].as_array_mut()
+    {
+        let window = |id: &str, label: &str, seconds: i64, model: Option<&str>| {
+            let minutes = if seconds == 18_000 { 299 } else { 7_000 };
+            let at = chrono::Utc::now() + chrono::Duration::minutes(minutes);
+            json!({
+                "id": id, "label": label, "usedPercent": 0, "limitWindowSeconds": seconds,
+                "resetsAt": at.to_rfc3339(), "model": model,
+            })
+        };
+        accounts.push(json!({
+            "id": "gemini-1", "provider": "gemini", "usageOnly": true,
+            "name": "m.yahia@example.com", "email": "m.yahia@example.com",
+            "registered": true, "status": "ready", "plan": "Google AI Pro",
+            "showInTitlebar": true, "selector": "", "color": "neutral", "eligible": false,
+            "usage": [
+                window("fiveHour", "5h", 18_000, None),
+                window("sevenDay", "7d", 604_800, None),
+                window("3p-5h", "Claude/GPT 5h", 18_000, Some("Claude/GPT")),
+                window("3p-weekly", "Claude/GPT 7d", 604_800, Some("Claude/GPT")),
+            ],
+        }));
+    }
     match params["operation"].as_str() {
         Some("setTitlebar") => {
             let id = params["id"].as_str().unwrap_or_default();

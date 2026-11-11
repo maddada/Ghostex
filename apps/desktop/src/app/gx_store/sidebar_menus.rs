@@ -183,6 +183,7 @@ impl GhostexGpuiApp {
             machine_connected,
             open_targets: self.gx_store.menu_host.open_targets.clone(),
             app_lifecycle: true,
+            menu_panels: true,
             agentbox_locations: self.gx_store.menu_host.agentbox_locations.clone(),
         }
     }
