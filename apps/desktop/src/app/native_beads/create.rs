@@ -160,6 +160,11 @@ impl BeadsView {
     }
 
     fn submit_create(&mut self, start_after: bool, window: &mut Window, cx: &mut Context<Self>) {
+        // A second click before bd answers (the form stays open until then) must not create the
+        // bead twice.
+        if self.create_in_flight {
+            return;
+        }
         let Some(form) = self.create.as_ref() else {
             return;
         };
@@ -203,8 +208,8 @@ impl BeadsView {
             params["estimate"] = json!(minutes);
         }
         let status = form.status.clone().filter(|status| status != "open");
-        // The form stays open (its Create buttons wait on the write) until bd has created the
-        // bead, so a refused create keeps everything typed.
+        // The form stays open until bd has created the bead, so a refused create keeps everything
+        // typed; `create_in_flight` (set by `run_action`) holds its Create buttons meanwhile.
         self.run_action(
             params,
             "Couldn't create the bead",
@@ -338,7 +343,7 @@ impl BeadsView {
         let title_empty = form.title.read(cx).value().trim().is_empty();
         let description_empty = form.description.read(cx).value().trim().is_empty();
         let can_submit = !title_empty || (can_generate && !description_empty);
-        let busy = self.writes_in_flight > 0;
+        let busy = self.create_in_flight;
         let heading = match &epic_title {
             Some((_, title)) => format!("New bead in {title}"),
             None => "New bead".to_string(),

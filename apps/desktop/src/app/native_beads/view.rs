@@ -168,6 +168,9 @@ pub(crate) struct BeadsView {
     pub(crate) bounds: super::menus::ViewBounds,
     pub(crate) notice: Option<BeadsNotice>,
     pub(crate) writes_in_flight: usize,
+    /// A create from the New bead form is on its way; the form ignores another submit until bd
+    /// has answered (other writes do not hold the form).
+    pub(crate) create_in_flight: bool,
     pub(crate) hovered_row: Option<String>,
     pub(crate) last_drawn: Option<Instant>,
     poll: Option<Task<()>>,
@@ -231,6 +234,7 @@ impl BeadsView {
             bounds: Default::default(),
             notice: None,
             writes_in_flight: 0,
+            create_in_flight: false,
             hovered_row: None,
             last_drawn: None,
             poll: None,
@@ -578,7 +582,9 @@ impl BeadsView {
         params["projectId"] = json!(target.rpc_project_id);
         params["projectPath"] = json!(target.project_path);
         params["projectBoardScope"] = json!(true);
+        let is_create = params.get("action").and_then(Value::as_str) == Some("create");
         self.writes_in_flight += 1;
+        self.create_in_flight |= is_create;
         self.notice = None;
         cx.notify();
         let window_handle = window.window_handle();
@@ -587,6 +593,9 @@ impl BeadsView {
             let _ = cx.update_window(window_handle, |_, window, cx| {
                 let _ = this.update(cx, |this, cx| {
                     this.writes_in_flight = this.writes_in_flight.saturating_sub(1);
+                    if is_create {
+                        this.create_in_flight = false;
+                    }
                     if this.generation != generation {
                         return;
                     }
