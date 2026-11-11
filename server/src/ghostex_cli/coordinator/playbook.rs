@@ -45,12 +45,13 @@ fn target_project(
     ))
 }
 
-/// `guide [--project-id <id>]`: the playbook in effect for the orchestrator's project and the reply
-/// format. Run inside an orchestrator, gxserver notes that it read this version, so `status`
-/// can say when it changes.
+/// `guide [--project-id <id>] [--changes]`: the playbook in effect for the orchestrator's project
+/// and the reply format. Run inside an orchestrator, gxserver notes that it read this version, so
+/// `status` can say when it changes; `--changes` prints only what changed since its last read
+/// when gxserver still has that text (coordinators/guide_changes.rs), and the full guide otherwise.
 pub(super) fn guide(parsed: &ParsedArgs) -> CliResult<()> {
     let (project_id, flags, caller) = target_project(parsed, true)?;
-    let mut params = json!({});
+    let mut params = json!({ "changes": parsed.flags.truthy("changes") });
     if let Some(project_id) = &project_id {
         params["projectId"] = json!(project_id);
     }

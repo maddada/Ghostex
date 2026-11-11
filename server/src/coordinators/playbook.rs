@@ -1,5 +1,5 @@
-//! The orchestrator playbook in effect: the `ghostex-coordinator` skill's body as Ghostex ships
-//! it, followed by the user's playbook overrides (one text for every coordinator). `ghostex
+//! The orchestrator playbook in effect: the playbook Ghostex ships (role.rs `coordinator_playbook`),
+//! followed by the user's playbook overrides (one text for every coordinator). `ghostex
 //! orchestrator guide` prints it, and `ghostex orchestrator status` says when it changed since the
 //! orchestrator last read it.
 //!
@@ -13,7 +13,7 @@
 //!
 //! CDXC:Coordinators 2026-10-19 DECISION:
 //! User: "ok i want to have a button to click on to set the orchestrator prompt and i want to be able to set a different orchestrator prompt for a specific project too (the orchestrator prompt that gets overriden for a project should apply for all it's worktrees too please)". Q310 "Edit the playbook itself": the editor shows the full playbook, changeable for all projects or for one project and its worktrees, and Reset to Default goes back to the playbook Ghostex ships (for a project, to the all-projects one). Q311 "Yes, existing ones too": orchestrators that already exist take an edited playbook at their next guide read. Q312 "Replace them with the playbook editor": the default standing instructions built first are gone; the same buttons (Settings > Chat, Settings > Projects, the New Orchestrator dialog) edit the playbook, and each orchestrator's own Goal & Instructions stay as they are. Also asked: Reset to Default needs a confirming second click and is disabled while the text matches its default, saving text equal to the default stores no edited copy, and an on/off switch turns an edited copy off without losing it.
-//! SEE-ALSO: server/src/coordinators/role.rs (`coordinator_guide`, the shipped playbook), server/src/ghostex_cli/coordinator/playbook.rs (the CLI verbs), apps/desktop/src/app/window/settings_modal/tabs/orchestrator_playbook.rs and apps/desktop/src/app/window/new_coordinator_modal.rs (the editors), skills/ghostex-coordinator/SKILL.md (tells the orchestrator the guide wins over the skill file).
+//! SEE-ALSO: server/src/coordinators/role.rs (`coordinator_guide`, the shipped playbook), server/src/ghostex_cli/coordinator/playbook.rs (the CLI verbs), apps/desktop/src/app/window/settings_modal/tabs/orchestrator_playbook.rs and apps/desktop/src/app/window/new_coordinator_modal.rs (the editors), server/src/coordinators/playbook.md (tells the orchestrator the guide wins over the skill file).
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
@@ -34,6 +34,10 @@ const GUIDE_READS_METADATA_KEY: &str = "coordinatorGuideReads";
 /// was last told to re-read under a message, or `new` for one whose first prompt sends it to the
 /// guide.
 const GUIDE_NOTES_METADATA_KEY: &str = "coordinatorGuideNotes";
+/// `{ "<guide version>": "<guide text>" }`: the text of each version some orchestrator read last, so
+/// `guide --changes` can show what differs from it (guide_changes.rs). Versions no orchestrator's
+/// last read names any more are dropped at every read.
+const GUIDE_TEXTS_METADATA_KEY: &str = "coordinatorGuideTexts";
 /// The note record of an orchestrator created since the notes existed, before its first guide read.
 const NEW_COORDINATOR_NOTE: &str = "new";
 /// An edited playbook never grows past this (the shipped one is about 16 KB).
@@ -629,7 +633,7 @@ pub fn playbook_status_notice(
     let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
     Ok(match recorded(&reads, key) {
         Some(read) if read == version => None,
-        Some(_) => Some("Your playbook changed since you last read it: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
+        Some(_) => Some("Your playbook changed since you last read it: run `ghostex coordinator guide --changes` now and follow it from here on.".to_string()),
         None => Some("You have not read your playbook yet: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
     })
 }
@@ -701,12 +705,61 @@ pub fn mark_new_coordinator(db: &Connection, key: &SessionKey) -> Result<(), Dom
     record_playbook_update_note(db, key, NEW_COORDINATOR_NOTE)
 }
 
+/// What `guide --changes` prints for orchestrator `key` instead of the full `guide`: only what
+/// changed since its last read, or a line saying nothing did. `None` when it has to read the
+/// whole guide: it never read one, the text it read was not kept (read before `--changes`
+/// existed), or most of the guide changed.
+fn changes_since_last_read(
+    db: &Connection,
+    key: &SessionKey,
+    guide: &str,
+) -> Result<Option<String>, DomainStateError> {
+    let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
+    let texts = read_metadata(db, GUIDE_TEXTS_METADATA_KEY)?;
+    let Some(last) = recorded(&reads, key).and_then(|version| texts.get(version)?.as_str()) else {
+        return Ok(None);
+    };
+    Ok(match super::guide_changes::guide_changes(last, guide) {
+        super::guide_changes::GuideChanges::Unchanged => Some(
+            "Your playbook has not changed since you last read it: keep following it.\n"
+                .to_string(),
+        ),
+        super::guide_changes::GuideChanges::Changed(text) => Some(text),
+        super::guide_changes::GuideChanges::MostlyNew => None,
+    })
+}
+
+/// Records that orchestrator `key` read guide `version`, keeps that version's text for its next
+/// `--changes`, and drops the texts no orchestrator's last read names any more.
+fn record_guide_read(
+    db: &Connection,
+    key: &SessionKey,
+    version: &str,
+    guide: &str,
+) -> Result<(), DomainStateError> {
+    let mut reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
+    reads[guide_read_key(key)] = json!(version);
+    write_metadata(db, GUIDE_READS_METADATA_KEY, &reads)?;
+    let mut texts = read_metadata(db, GUIDE_TEXTS_METADATA_KEY)?;
+    texts[version] = json!(guide);
+    let read_versions: std::collections::HashSet<&str> = reads
+        .as_object()
+        .into_iter()
+        .flat_map(|reads| reads.values().filter_map(Value::as_str))
+        .collect();
+    if let Some(texts) = texts.as_object_mut() {
+        texts.retain(|version, _| read_versions.contains(version.as_str()));
+    }
+    write_metadata(db, GUIDE_TEXTS_METADATA_KEY, &texts)
+}
+
 /// `/api/readCoordinatorPlaybook` `{ projectId? }`, `/api/setCoordinatorPlaybook`
 /// `{ overrides }` (blank removes them), `{ retireOldCopies: true }` (saves every old full copy
 /// as a Markdown file, removes them all and answers their paths as `savedFiles`), or
 /// `{ projectId?, reset? | enabled? }` for one old copy (a worktree's id means its project; no
 /// `projectId`: the all-projects copy), and `/api/readCoordinatorGuide`
-/// `{ projectId?, sessionId? }` (records the read for that orchestrator).
+/// `{ projectId?, sessionId?, changes? }` (records the read for that orchestrator; `changes`
+/// answers only what changed since its last read when it can, `changesOnly` says so).
 pub fn handle_coordinator_playbook_endpoint(
     endpoint_path: &str,
     db: &Connection,
@@ -718,17 +771,29 @@ pub fn handle_coordinator_playbook_endpoint(
         "/api/readCoordinatorGuide" => {
             let paths = crate::paths::get_gxserver_paths(None);
             let (guide, version, source) = guide_for(db, repository, &paths, project_id)?;
-            if let (Some(project_id), Some(session_id)) =
-                (project_id, param_text(params, "sessionId"))
-            {
-                if super::records::read_coordinator(db, project_id, session_id)?.is_some() {
-                    let mut reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
-                    reads[guide_read_key(&(project_id.to_string(), session_id.to_string()))] =
-                        json!(version);
-                    write_metadata(db, GUIDE_READS_METADATA_KEY, &reads)?;
+            let reader = match (project_id, param_text(params, "sessionId")) {
+                (Some(project_id), Some(session_id))
+                    if super::records::read_coordinator(db, project_id, session_id)?.is_some() =>
+                {
+                    Some((project_id.to_string(), session_id.to_string()))
                 }
+                _ => None,
+            };
+            let wants_changes = params.get("changes").and_then(Value::as_bool) == Some(true);
+            let changes = match &reader {
+                Some(key) if wants_changes => changes_since_last_read(db, key, &guide)?,
+                _ => None,
+            };
+            if let Some(key) = &reader {
+                record_guide_read(db, key, &version, &guide)?;
             }
-            Ok(json!({ "guide": guide, "version": version, "source": source.as_str() }))
+            let changes_only = changes.is_some();
+            Ok(json!({
+                "guide": changes.unwrap_or(guide),
+                "version": version,
+                "source": source.as_str(),
+                "changesOnly": changes_only,
+            }))
         }
         "/api/setCoordinatorPlaybook" => {
             if params.get("retireOldCopies").and_then(Value::as_bool) == Some(true) {
@@ -858,6 +923,148 @@ mod tests {
         // Reading the edited guide settles the old one without a note.
         read_guide(&db, &repository, &old);
         assert_eq!(note(&db, &repository, &old), None);
+    }
+
+    fn guide_changes_for(
+        db: &Connection,
+        repository: &DomainRepository<'_>,
+        key: &SessionKey,
+    ) -> (String, bool) {
+        let mut request = Map::new();
+        request.insert("projectId".into(), json!(key.0));
+        request.insert("sessionId".into(), json!(key.1));
+        request.insert("changes".into(), json!(true));
+        let answer = handle_coordinator_playbook_endpoint(
+            "/api/readCoordinatorGuide",
+            db,
+            repository,
+            &request,
+        )
+        .expect("read guide changes");
+        (
+            answer["guide"].as_str().expect("guide").to_string(),
+            answer["changesOnly"].as_bool().expect("changesOnly"),
+        )
+    }
+
+    fn set_overrides(db: &Connection, repository: &DomainRepository<'_>, overrides: &str) {
+        handle_coordinator_playbook_endpoint(
+            "/api/setCoordinatorPlaybook",
+            db,
+            repository,
+            &params(json!({ "overrides": overrides })),
+        )
+        .expect("set overrides");
+    }
+
+    #[test]
+    fn guide_changes_prints_only_what_changed_since_the_last_read() {
+        let (_temp, db) = temp_db();
+        let repository = DomainRepository::new(&db, "S1");
+        let project_id = repository
+            .create_project(&params(
+                json!({ "name": "Changes", "path": std::env::temp_dir() }),
+            ))
+            .expect("create project")["projectId"]
+            .as_str()
+            .expect("projectId")
+            .to_string();
+        let coordinator = (project_id.clone(), "COORD".to_string());
+        let unread = (project_id.clone(), "UNREAD".to_string());
+        let stranger = (project_id.clone(), "NOTCOORD".to_string());
+        insert_coordinator(&db, &coordinator.0, &coordinator.1, "", "").expect("coordinator");
+        insert_coordinator(&db, &unread.0, &unread.1, "", "").expect("unread coordinator");
+        let full = shipped_playbook();
+
+        // Never read: the whole guide, and the read is recorded with its text.
+        let (text, changes_only) = guide_changes_for(&db, &repository, &coordinator);
+        assert!(!changes_only);
+        assert!(text.starts_with(full.lines().next().expect("heading")));
+        // Read again with nothing changed: one line instead of the playbook.
+        let (text, changes_only) = guide_changes_for(&db, &repository, &coordinator);
+        assert!(changes_only);
+        assert!(text.starts_with("Your playbook has not changed"));
+
+        // The first override: its heading, the precedence line and the rule, nothing else.
+        set_overrides(&db, &repository, "Never push without asking.");
+        let (text, changes_only) = guide_changes_for(&db, &repository, &coordinator);
+        assert!(changes_only);
+        assert!(text.contains(crate::coordinators::PLAYBOOK_OVERRIDES_HEADING));
+        assert!(text.contains(crate::coordinators::PLAYBOOK_OVERRIDES_PRECEDENCE));
+        assert!(text.contains("Never push without asking."));
+        assert!(!text.contains("## Briefing a thread"));
+        assert!(text.len() < full.len() / 5);
+
+        // A second override: only that rule.
+        set_overrides(
+            &db,
+            &repository,
+            "Never push without asking.\n\nAsk before deleting branches.",
+        );
+        let (text, _) = guide_changes_for(&db, &repository, &coordinator);
+        assert!(text.contains("Ask before deleting branches."));
+        assert!(!text.contains("Never push without asking."));
+        assert!(!text.contains(crate::coordinators::PLAYBOOK_OVERRIDES_PRECEDENCE));
+
+        // An override removed: listed as removed, the rest left out.
+        set_overrides(&db, &repository, "Ask before deleting branches.");
+        let (text, _) = guide_changes_for(&db, &repository, &coordinator);
+        assert!(text
+            .contains("Removed (Under \"The user's overrides\"):\n\nNever push without asking."));
+        assert!(!text.contains("New or changed"));
+
+        // A coordinator that never read one, and an ordinary session, get the whole guide.
+        let (text, changes_only) = guide_changes_for(&db, &repository, &unread);
+        assert!(!changes_only);
+        assert!(text.contains("## Briefing a thread"));
+        let (text, changes_only) = guide_changes_for(&db, &repository, &stranger);
+        assert!(!changes_only);
+        assert!(text.contains("## Briefing a thread"));
+
+        // Only the texts some coordinator last read are kept.
+        let reads = read_metadata(&db, GUIDE_READS_METADATA_KEY).expect("reads");
+        let texts = read_metadata(&db, GUIDE_TEXTS_METADATA_KEY).expect("texts");
+        let mut kept: Vec<&String> = texts.as_object().expect("texts object").keys().collect();
+        let mut read: Vec<&str> = reads
+            .as_object()
+            .expect("reads object")
+            .values()
+            .filter_map(Value::as_str)
+            .collect();
+        kept.sort();
+        read.sort();
+        read.dedup();
+        assert_eq!(kept, read);
+    }
+
+    #[test]
+    fn the_status_notice_names_guide_changes_and_the_note_keeps_its_wire_text() {
+        let (_temp, db) = temp_db();
+        let repository = DomainRepository::new(&db, "S1");
+        let project_id = repository
+            .create_project(&params(
+                json!({ "name": "Note", "path": std::env::temp_dir() }),
+            ))
+            .expect("create project")["projectId"]
+            .as_str()
+            .expect("projectId")
+            .to_string();
+        let coordinator = (project_id, "COORD".to_string());
+        insert_coordinator(&db, &coordinator.0, &coordinator.1, "", "").expect("coordinator");
+        read_guide(&db, &repository, &coordinator);
+        set_overrides(&db, &repository, "Never push without asking.");
+        // The note stays the text every phone already strips from the user's message
+        // (packages/gx-chat-core/src/session/appended_notes.rs); `status` names `--changes`.
+        let text = note(&db, &repository, &coordinator).expect("due");
+        assert_eq!(
+            text,
+            ghostex_gx_chat_core::session::appended_notes::PLAYBOOK_CHANGED_NOTE
+        );
+        assert!(!text.contains("--changes"));
+        let notice = playbook_status_notice(&db, &repository, &coordinator)
+            .expect("status")
+            .expect("changed");
+        assert!(notice.contains("`ghostex coordinator guide --changes`"));
     }
 
     fn temp_db() -> (tempfile::TempDir, crate::storage::GxserverDatabase) {

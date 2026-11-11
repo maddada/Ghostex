@@ -3972,8 +3972,10 @@ version of the Projects features in Cursor and Claude Code.
   per-project playbook. Every coordinator, existing ones too, follows a change
   from its next message, with nothing to do on your side: when a Ghostex update
   or your overrides change its playbook, the next message it gets (yours, a
-  thread's report, a queued one) carries one line under it telling it to run
-  `ghostex coordinator guide` and follow it from then on. That line is for the
+  thread's report, a queued one) carries one line under it telling it its
+  playbook changed; it then runs `ghostex coordinator guide --changes`, which
+  prints only what changed since it last read its playbook, and follows it
+  from then on. That line is for the
   agent only: the chat shows your message as you typed it. That line comes once
   per change and not at all once it has read the new guide, and an idle
   coordinator is not woken for it. `ghostex coordinator status` says it too.
