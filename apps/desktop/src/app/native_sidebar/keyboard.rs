@@ -207,7 +207,7 @@ impl GhostexGpuiApp {
     /// only forgotten.
     ///
     /// CDXC:FocusRouting 2026-11-11 WHY:
-    /// The timer and the sidebar disappearing end an entry on their own, so they must not undo a choice the user made meanwhile (terminal A, the hotkey into the floating sidebar, then a click on chat B in the main window and the panel dismissed restored terminal A over the click). The entry still holds the keyboard while its handle has focus in the sidebar's window and, with the sidebar in another window, the hotkey's window still has the focus it had when the entry started (or, with the sidebar's window gone, while that window's focus is unchanged).
+    /// The timer and the sidebar disappearing end an entry on their own, so they must not undo a choice the user made meanwhile (terminal A, the hotkey into the floating sidebar, then a click on chat B in the main window and the panel dismissed restored terminal A over the click). The entry still holds the keyboard while its handle has focus in the sidebar's window and, with the sidebar in another window, the hotkey's window still has the focus it had when the entry started (or, with the sidebar's window gone, while that window's focus is unchanged). A hotkey window that disappeared (a floating sessions window closing) is no choice: while the sidebar's window still holds the entry, that window's active surface takes the keyboard, as for an entry nothing was recorded for.
     fn end_native_sidebar_keyboard_entry(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some((entry, owner)) = self.native_sidebar.focus_stops.pending_entry() else {
             return;
@@ -218,16 +218,40 @@ impl GhostexGpuiApp {
         let app = cx.entity();
         cx.defer(move |cx| {
             let entry_handle = app.read(cx).native_sidebar.focus_stops.entry_handle(cx);
+            // `None` when the hotkey's window is gone.
             let from_unchanged = |cx: &mut gpui::App| {
                 entry
                     .from
                     .update(cx, |_, window, cx| window.focused(cx) == entry.from_focus)
-                    .unwrap_or(false)
+                    .ok()
             };
-            let holds = match owner.update(cx, |_, window, _| entry_handle.is_focused(window)) {
-                Ok(held) => held && (owner == entry.from || from_unchanged(cx)),
-                Err(_) => from_unchanged(cx),
+            // `None` when the sidebar's window is gone.
+            let held = owner
+                .update(cx, |_, window, _| entry_handle.is_focused(window))
+                .ok();
+            let holds = match held {
+                Some(held) => held && (owner == entry.from || from_unchanged(cx) == Some(true)),
+                None => from_unchanged(cx) == Some(true),
             };
+            // The hotkey's window vanished while the sidebar's window still holds the entry: no
+            // one chose anything, so the sidebar's window gets the keyboard on its active surface.
+            if !holds && held == Some(true) && from_unchanged(cx).is_none() {
+                let _ = owner.update(cx, |_, window, cx| {
+                    app.update(cx, |app, cx| {
+                        if app
+                            .native_sidebar
+                            .focus_stops
+                            .pending_entry()
+                            .is_some_and(|(entry, _)| entry.id == id)
+                        {
+                            app.native_sidebar.focus_stops.pending.borrow_mut().take();
+                            app.native_sidebar.keyboard.forget_return();
+                            app.sidebar_keyboard_active_surface(window, cx);
+                        }
+                    })
+                });
+                return;
+            }
             if holds {
                 for target in [entry.from, owner] {
                     let ended = target.update(cx, |_, window, cx| {
