@@ -342,15 +342,10 @@ fn demo_playbook_view(state: &str) -> serde_json::Value {
     })
 }
 
-/// The scripted `/api/readCoordinatorGuide` answer: the playbook Ghostex ships (the skill's body)
-/// and the marked reply format.
+/// The scripted `/api/readCoordinatorGuide` answer: the playbook Ghostex ships and the marked
+/// reply format.
 pub(super) fn demo_guide() -> String {
-    let skill = include_str!("../../../../../skills/ghostex-coordinator/SKILL.md");
-    let body = skill
-        .strip_prefix("---\n")
-        .and_then(|rest| rest.split_once("\n---\n"))
-        .map_or(skill, |(_, body)| body)
-        .trim();
+    let body = include_str!("../../../../../server/src/coordinators/playbook.md").trim();
     format!(
         "{body}\n\nReply format: the user chose marked handovers. Start each status and action section with its marker.\n"
     )

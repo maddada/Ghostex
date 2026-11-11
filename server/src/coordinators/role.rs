@@ -8,7 +8,7 @@ use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 
 /// CDXC:Coordinators 2026-10-17 DECISION:
-/// User: "we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" and we should install this orchestrator skill when user picks the orchstrator option so no need to inject things the other way." The playbook is the bundled skill `skills/ghostex-coordinator/SKILL.md`; creating or promoting an orchestrator installs it for that agent ([`ensure_coordinator_skill_installed`]) and queues [`orchestrator_first_message`], which always starts with [`coordinator_skill_line`] in the agent's own skill spelling. Nothing is added to the agent's command any more. Supersedes the 2026-09-30 WHY that carried the role as a system prompt flag (Claude's role file, Codex `developer_instructions`, ZCode's SessionStart context, Empryo's `/agent` profile): those channels now serve only orchestrators created before this change, whose saved commands or records still name them, so they keep their role on resume, sleep and wake, and account switches.
+/// User: "we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" and we should install this orchestrator skill when user picks the orchstrator option so no need to inject things the other way." The playbook comes through the bundled skill `skills/ghostex-coordinator/SKILL.md` (since 2026-11-11 a pointer to `ghostex coordinator guide`, which prints server/src/coordinators/playbook.md; see `COORDINATOR_PLAYBOOK_MD`); creating or promoting an orchestrator installs it for that agent ([`ensure_coordinator_skill_installed`]) and queues [`orchestrator_first_message`], which always starts with [`coordinator_skill_line`] in the agent's own skill spelling. Nothing is added to the agent's command any more. Supersedes the 2026-09-30 WHY that carried the role as a system prompt flag (Claude's role file, Codex `developer_instructions`, ZCode's SessionStart context, Empryo's `/agent` profile): those channels now serve only orchestrators created before this change, whose saved commands or records still name them, so they keep their role on resume, sleep and wake, and account switches.
 /// SEE-ALSO: server/src/server/coordinator_runtime.rs (`start_orchestrator_role`), server/src/agents/marked_handovers.rs and server/src/agents/activity.rs (the older channels), apps/desktop/src/app/window/new_coordinator_modal.rs (the locked line in the dialog).
 ///
 /// CDXC:Coordinators 2026-10-09 DECISION:
@@ -38,6 +38,13 @@ use crate::paths::GxserverPaths;
 /// CDXC:Coordinators 2026-10-10 DECISION:
 /// User: "let's please rename "Coordinator" to "Orchestrator" everywhere so it's clearer to everyone." The playbook and the guide pointer call the role an orchestrator and name `ghostex orchestrator` verbs; the role file's name on disk and every internal name keep "coordinator".
 pub const COORDINATOR_SKILL_MD: &str = include_str!("../../../skills/ghostex-coordinator/SKILL.md");
+
+/// The playbook Ghostex ships, which `ghostex coordinator guide` prints.
+///
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// The playbook used to be the skill's own body, so a coordinator held it twice from its first turn: the skill loads it, then the skill sends it to the guide, which prints the same text with the reply format and overrides. Claude Code also attaches an invoked skill again after every compaction, right before the coordinator re-reads the guide, so the copy came back each time. In the user's coordinator transcripts the skill body was 6,000 to 12,000 tokens a load and the playbook's two copies were 9 to 21% of the input cost of the coordinators with fewer than 150 model calls. So the skill (`COORDINATOR_SKILL_MD`) is a short pointer to the guide and the text lives here, built into gxserver with the CLI verbs it names. A user's kept copy of an older full skill still works: it also sends its coordinator to the guide. Older apps refresh the skill from GitHub main and get the pointer too, while their own guide still prints the playbook built into them.
+/// SEE-ALSO: skills/ghostex-coordinator/SKILL.md (the pointer), apps/desktop/src/bin/native_modal_demo/new_coordinator.rs (`demo_guide`).
+pub const COORDINATOR_PLAYBOOK_MD: &str = include_str!("playbook.md");
 pub const COORDINATOR_SKILL_OPENAI_YAML: &str =
     include_str!("../../../skills/ghostex-coordinator/agents/openai.yaml");
 
@@ -85,18 +92,14 @@ pub fn coordinator_role_is_skill(session: &serde_json::Value) -> bool {
         == Some(COORDINATOR_ROLE_SKILL)
 }
 
-/// The playbook: the skill's body without its frontmatter.
+/// The playbook Ghostex ships ([`COORDINATOR_PLAYBOOK_MD`]).
 pub fn coordinator_playbook() -> &'static str {
-    COORDINATOR_SKILL_MD
-        .strip_prefix("---\n")
-        .and_then(|rest| rest.split_once("\n---\n"))
-        .map_or(COORDINATOR_SKILL_MD, |(_, body)| body)
-        .trim_start()
+    COORDINATOR_PLAYBOOK_MD.trim_start()
 }
 
 /// What `ghostex orchestrator guide` prints, and what the older role channels carry: the playbook
-/// and then the reply format the Marked handovers setting picks (see `coordinator_guide_for`). A
-/// static skill cannot read a setting, so the skill sends the orchestrator here.
+/// and then the reply format the Marked handovers setting picks (see `coordinator_guide_for`). The
+/// skill holds none of it and sends the orchestrator here.
 pub fn coordinator_guide(paths: &GxserverPaths) -> String {
     coordinator_guide_for(coordinator_playbook(), "", paths)
 }
@@ -148,7 +151,7 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
     // changed setting reaches every coordinator with its next message (playbook.rs
     // `playbook_update_note`).
     // SEE-ALSO: server/src/agents/marked_handovers.rs (`coordinator_marks_replies`, the note),
-    // skills/ghostex-coordinator/SKILL.md "Your reply" (says the guide's reply format decides).
+    // server/src/coordinators/playbook.md "Your reply" (says the guide's reply format decides).
     let mut guide = if crate::agents::coordinator_marks_replies(paths) {
         format!(
             "{playbook}\n\n{}\n\n{COORDINATOR_MARKED_REPLY_FORMAT}\n\n{}\n",
