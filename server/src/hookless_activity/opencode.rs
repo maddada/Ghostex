@@ -5,7 +5,7 @@
 //! OpenCode 2 runs every conversation in its shared background service, which streams `session.execution.started` and `.succeeded` / `.failed` / `.interrupted` for each run, `permission.asked` / `.replied` for approvals and `form.created` / `.replied` / `.cancelled` for questions, all carrying the conversation's `sessionID`. That is the busy / idle / needs-input state the TUI plugin polls from the same service. Events sent while the stream is down are lost by OpenCode's contract.
 //!
 //! CDXC:AgentHooks 2026-11-11 DECISION:
-//! The user wants Ghostex to stop installing hooks and plugins into Claude, Codex and OpenCode and to track them from what each agent exposes itself, and picked "Claude, then OpenCode and Codex". Two things only the plugin gave: the cards and the conversation the TUI shows. `permission.asked` and `form.created` carry the whole request or form, so the observer builds the same card the chat builds from the service (session_chat_opencode/prompts.rs) and stores it through the hook path, and clears it when the request is answered. Which conversation a TUI shows is the TUI's own route and never reaches the service (`session.viewed` fires only for an unread conversation while the terminal has focus, and from any client), and OpenCode 2.2.7 keeps no per-TUI route on disk. So the conversation at TUI start is the one Ghostex pins with `opencode --session <id>` and creates before launch (agents/opencode_session_id.rs, session_chat_opencode/conversation.rs), and a switch inside the TUI is read from that terminal's own OSC 7501 records, which OpenCode writes for each root conversation it shows that works or waits on the user: when they name exactly one conversation the stream reported and not the bound one, the session is moved to it. A switch to a conversation that stays idle is learned once it runs. The plugin keeps deciding where it is installed: these events drive a session only where it is missing (agent_drive.rs).
+//! The user wants Ghostex to stop installing hooks and plugins into Claude, Codex and OpenCode and to track them from what each agent exposes itself, and picked "Claude, then OpenCode and Codex". Two things only the plugin gave: the cards and the conversation the TUI shows. `permission.asked` and `form.created` carry the whole request or form, so the observer builds the same card the chat builds from the service (session_chat_opencode/prompts.rs) and stores it through the hook path, and clears it when the request is answered. Which conversation a TUI shows is the TUI's own route and never reaches the service (`session.viewed` fires only for an unread conversation while the terminal has focus, and from any client), and OpenCode 2.2.7 keeps no per-TUI route on disk. So the conversation at TUI start is the one Ghostex pins with `opencode --session <id>` and creates before launch (agents/opencode_session_id.rs, session_chat_opencode/conversation.rs), and a switch inside the TUI is read from that terminal's own OSC 7501 records, which OpenCode writes for each root conversation it shows that works or waits on the user: when they name exactly one conversation the stream reported and not the bound one, the session is moved to it. A switch to a conversation that stays idle is read from the terminal title OpenCode sets (`OC | <title>`, clipped past 40 characters): when exactly one top-level conversation in the session's folder carries that title, the session moves to it with the plugin's own SessionStart, and the records still decide whenever they name a conversation. The plugin keeps deciding where it is installed: these events drive a session only where it is missing (agent_drive.rs).
 //! SEE-ALSO: server/src/session_chat_opencode/events.rs (the one stream reader, which hands every event here), server/src/agent_hooks/install/opencode_tui.js (the plugin being compared), server/src/program_status/ (the OSC 7501 records), server/src/agents/activity.rs (`OBSERVED_PROMPT`).
 
 use std::collections::HashMap;
@@ -51,6 +51,17 @@ static CONVERSATIONS: LazyLock<Mutex<HashMap<String, Conversation>>> =
 /// A Ghostex session → the conversation its terminal's records last moved it to, until its row
 /// says so too (an ingest that refused the move is not proposed again every pass).
 static MOVED: LazyLock<Mutex<HashMap<(String, String), String>>> = LazyLock::new(Default::default);
+
+/// A Ghostex session → the conversation title its OpenCode TUI last put in the terminal title
+/// (`OC | <title>`; empty for `OpenCode`, a conversation with no title yet or the home screen).
+static TITLES: LazyLock<Mutex<HashMap<(String, String), String>>> = LazyLock::new(Default::default);
+/// A Ghostex session → the terminal title last matched against the service, so each title is
+/// looked up once.
+static TITLES_MATCHED: LazyLock<Mutex<HashMap<(String, String), String>>> =
+    LazyLock::new(Default::default);
+/// OpenCode 2.2.7 clips a terminal title's conversation title past this many characters to 37 and
+/// an ellipsis.
+const TITLE_CLIP: usize = 40;
 
 #[derive(Default)]
 struct Conversation {
@@ -338,6 +349,141 @@ fn follow_terminal_switches() {
     }
 }
 
+/// Called with every terminal title a session's terminal sets.
+pub(crate) fn observe_terminal_title(project_id: &str, session_id: &str, title: &str) {
+    if !ENABLED.load(Ordering::Relaxed) {
+        return;
+    }
+    let title = title.trim();
+    let shown = match title.strip_prefix("OC | ") {
+        Some(shown) => shown.trim().to_string(),
+        None if title == "OpenCode" => String::new(),
+        None => return,
+    };
+    lock(&TITLES).insert((project_id.to_string(), session_id.to_string()), shown);
+}
+
+/// Whether `title` (a conversation's) is what a terminal title shows as `shown`.
+fn title_shows(title: &str, shown: &str) -> bool {
+    match shown.strip_suffix('\u{2026}') {
+        Some(prefix) if title.chars().count() > TITLE_CLIP => title.starts_with(prefix),
+        Some(_) => false,
+        None => title == shown,
+    }
+}
+
+/// Two spellings of one folder: the same path, or on macOS and Windows the same path in another
+/// case (the TUI reports its working directory as the system spells it).
+fn same_folder(a: &str, b: &str) -> bool {
+    let canonical = |path: &str| {
+        std::fs::canonicalize(path)
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| path.trim_end_matches('/').to_string())
+    };
+    let (a, b) = (canonical(a), canonical(b));
+    a == b || (cfg!(any(target_os = "macos", windows)) && a.eq_ignore_ascii_case(&b))
+}
+
+/// Moves a session to the conversation its TUI's terminal title names, when the TUI shows one no
+/// OSC 7501 record names (an idle conversation): exactly one top-level conversation in the
+/// session's folder must carry that title, and no other session may hold it.
+fn follow_title_switches(sessions: &[Value], bound: &mut HashMap<String, (String, String)>) {
+    if cfg!(test) {
+        return;
+    }
+    let mut client = None;
+    for session in sessions {
+        let (Some(project_id), Some(session_id), Some(conversation), Some(folder)) = (
+            read_session_text(session, "projectId"),
+            read_session_text(session, "sessionId"),
+            read_runtime_text(session, "agentSessionId"),
+            read_session_text(session, "cwd"),
+        ) else {
+            continue;
+        };
+        let key = (project_id.clone(), session_id.clone());
+        let Some(shown) = lock(&TITLES)
+            .get(&key)
+            .cloned()
+            .filter(|shown| !shown.is_empty())
+        else {
+            continue;
+        };
+        if lock(&TITLES_MATCHED).get(&key) == Some(&shown) {
+            continue;
+        }
+        // The terminal's records name the conversation whenever one works or waits; they decide.
+        if crate::program_status::program_status_entry(&project_id, &session_id).is_some_and(
+            |entry| {
+                entry.records.iter().any(|record| {
+                    !record.id.is_empty() && record.app.as_deref() == Some("opencode")
+                })
+            },
+        ) {
+            continue;
+        }
+        lock(&TITLES_MATCHED).insert(key.clone(), shown.clone());
+        if client.is_none() {
+            client = crate::session_chat_opencode::Client::discover().ok();
+        }
+        let Some(client) = client.as_ref() else {
+            return;
+        };
+        let search = shown.trim_end_matches('\u{2026}');
+        let encoded: String = url::form_urlencoded::byte_serialize(search.as_bytes()).collect();
+        let Ok(response) = client.request(
+            "GET",
+            &format!(
+                "/api/session?limit=50&order=desc&parentID=null&archived=false&search={encoded}"
+            ),
+            None,
+        ) else {
+            continue;
+        };
+        let matches: Vec<&str> = response["data"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|row| {
+                row["title"]
+                    .as_str()
+                    .is_some_and(|title| title_shows(title, &shown))
+                    && row["location"]["directory"]
+                        .as_str()
+                        .is_some_and(|directory| same_folder(directory, &folder))
+            })
+            .filter_map(|row| row["id"].as_str())
+            .filter(|id| crate::session_chat_opencode::safe_id(id))
+            .collect();
+        if matches.contains(&conversation.as_str()) {
+            continue;
+        }
+        let [next] = matches[..] else {
+            continue;
+        };
+        if bound.contains_key(next) {
+            continue;
+        }
+        bound.remove(&conversation);
+        bound.insert(next.to_string(), (project_id.clone(), session_id.clone()));
+        // The TUI only opened it: the plugin's SessionStart, which moves the session and sets no
+        // activity.
+        let mut params = Map::new();
+        params.insert("agentSessionId".to_string(), json!(next));
+        lock(&QUEUE).push(
+            ActivityEvent::new(
+                &project_id,
+                &session_id,
+                "opencode",
+                "SessionStart",
+                Some(next.to_string()),
+            )
+            .with("streamEvent", json!("terminalTitle"))
+            .with(HOOK_PARAMS, Value::Object(params)),
+        );
+    }
+}
+
 /// Binds the running OpenCode sessions' conversations and starts the stream when one runs.
 pub(super) fn refresh(sessions: &[Value], enabled: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);
@@ -355,9 +501,12 @@ pub(super) fn refresh(sessions: &[Value], enabled: bool) {
                 bound.insert(conversation, (project_id, session_id));
             }
         }
+        follow_title_switches(sessions, &mut bound);
     } else {
         lock(&CONVERSATIONS).clear();
         lock(&MOVED).clear();
+        lock(&TITLES).clear();
+        lock(&TITLES_MATCHED).clear();
     }
     let any = !bound.is_empty();
     *lock(&BOUND) = bound;
