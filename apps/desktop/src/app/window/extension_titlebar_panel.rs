@@ -49,6 +49,7 @@ impl GpuiTitlebarExtensionPanel {
             bridge_event_handler,
             None,
             None,
+            None,
         )?);
         browser.set_visible(false);
         Ok(browser)

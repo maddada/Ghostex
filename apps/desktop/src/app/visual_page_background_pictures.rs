@@ -374,6 +374,7 @@ async fn load_and_picture(
             None,
             Some(page_loaded),
             None,
+            None,
             cx,
         )?;
         surface.read(cx).set_background_bounds(

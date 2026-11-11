@@ -213,7 +213,10 @@ impl GhostexGpuiApp {
                     .detach();
             })
         };
-        CefSurface::try_new(
+        // Made hidden and shown only by a paint that placed it, so no frame from before its real
+        // size is seen (CDXC:SessionChat 2026-11-11 WHY in element/cef_surface.rs
+        // `show_when_placed`). The Files view shows it once it loaded, through `set_visible`.
+        let surface = CefSurface::try_new(
             surface_id,
             parent_ns_view,
             url,
@@ -222,7 +225,7 @@ impl GhostexGpuiApp {
             false,
             background,
             None,
-            true,
+            false,
             Some(popup_open_handler),
             None,
             None,
@@ -231,8 +234,11 @@ impl GhostexGpuiApp {
             None,
             Some(page_load_end_handler),
             None,
+            None,
             cx,
-        )
+        )?;
+        surface.update(cx, |surface, _| surface.show_when_placed());
+        Ok(surface)
     }
 
     /// Opens the open page in the reader's browser (the header's Open in browser).
