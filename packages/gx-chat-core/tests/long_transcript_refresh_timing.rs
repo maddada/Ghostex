@@ -121,12 +121,29 @@ fn a_reordered_session_list_names_every_session_as_before() {
     assert!(!KnownSession::same_names(&sessions, &sessions[1..]));
 }
 
+/// Sessions that share a title are named alike in any order, so the sidebar moving one above its
+/// twin settles no transcript again (CDXC:SessionChat 2026-11-11 in `transcript/sent_message.rs`
+/// on `HostDirectory::new`). A real change to a name still counts.
 #[test]
-fn two_sessions_sharing_a_title_still_count_by_their_order() {
-    // A reference by title finds the first session listed with it, so swapping them renames it.
+fn sessions_sharing_a_title_are_named_alike_in_any_order() {
     let mut sessions = directory(0);
-    sessions[1].title = sessions[0].title.clone();
+    for index in [1, 2, 3, 40, 41] {
+        sessions[index].title = "Claude Session".into();
+    }
+    for index in [10, 11] {
+        sessions[index].title = String::new();
+    }
     let mut swapped = sessions.clone();
-    swapped.swap(0, 1);
-    assert!(!KnownSession::same_names(&sessions, &swapped));
+    swapped.swap(1, 2);
+    swapped.swap(3, 41);
+    swapped.swap(10, 11);
+    assert!(KnownSession::same_names(&sessions, &swapped));
+    let mut reversed = sessions.clone();
+    reversed.reverse();
+    assert!(KnownSession::same_names(&sessions, &reversed));
+    // One of the twins renamed, or closed: the names did change.
+    let mut renamed = swapped.clone();
+    renamed[1].title = "Release notes".into();
+    assert!(!KnownSession::same_names(&sessions, &renamed));
+    assert!(!KnownSession::same_names(&sessions, &swapped[1..]));
 }
