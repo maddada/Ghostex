@@ -32,6 +32,7 @@ impl GhostexGpuiApp {
             return div().size_full().into_any_element();
         };
         self.native_sidebar.focus_stops.begin_frame();
+        let entry_handle = self.native_sidebar.focus_stops.entry_handle(cx);
         // The list keeps showing the outgoing Space while its exit fade runs; the selector row above it already shows the new one.
         let content = self
             .native_sidebar
@@ -482,6 +483,10 @@ impl GhostexGpuiApp {
             .children(self.render_session_links_page_card(cx))
             // The Main Hub card, where a build draws it in the page (the desktop's is a window).
             .children(self.render_main_hub_page_card(cx))
+            // Where the Focus Sidebar hotkey's entry holds the keyboard while it waits for its row:
+            // no size, so no click ever focuses it. Last, so the children the bounds above count
+            // keep their places.
+            .child(div().absolute().size_0().track_focus(&entry_handle))
             .into_any_element()
     }
 }

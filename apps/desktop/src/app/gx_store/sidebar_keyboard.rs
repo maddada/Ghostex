@@ -69,17 +69,20 @@ impl GhostexGpuiApp {
                 })
         };
         self.native_sidebar.keyboard.set_return(record);
-        // The focus the entry waits from: read now when the sidebar is in this window (after
-        // `unfocus_terminal` parked it), else in the sidebar's window once it draws.
-        let origin = (owner == here).then(|| window.focused(cx));
-        self.start_native_sidebar_keyboard_entry(owner, origin);
+        // The entry holds the keyboard on the sidebar's own handle until its row takes it, so
+        // nothing the hotkey took it from (a composer, whose capture listener runs first, or a
+        // terminal) sees a key meanwhile, and Escape reaches the sidebar to cancel it.
+        let entry = self.native_sidebar.focus_stops.entry_handle(cx);
+        self.start_native_sidebar_keyboard_entry(owner, Some(Some(entry.clone())));
         cx.notify();
         if owner == here {
+            window.focus(&entry, cx);
             window.refresh();
         } else {
             cx.defer(move |cx| {
-                let _ = owner.update(cx, |_, window, _| {
+                let _ = owner.update(cx, |_, window, cx| {
                     window.activate_window();
+                    window.focus(&entry, cx);
                     window.refresh();
                 });
             });

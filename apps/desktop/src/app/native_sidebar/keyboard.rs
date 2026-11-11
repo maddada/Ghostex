@@ -5,9 +5,9 @@
 //! `sidebar_keyboard_active_surface`, `sidebar_keyboard_restore_terminal` and
 //! `sidebar_keyboard_row_is_active`.
 
-use std::collections::HashMap;
+use std::cell::Cell;
 
-use gpui::{AnyWindowHandle, Context, FocusHandle, KeyDownEvent, SharedString, Window};
+use gpui::{AnyWindowHandle, App, Context, FocusHandle, KeyDownEvent, SharedString, Window};
 use web_time::{Duration, Instant};
 
 use super::focus_order::{
@@ -29,16 +29,30 @@ pub(crate) enum SidebarKeyboardReturn {
     },
 }
 
-/// How long a handed-back control may take to show it is not drawn any more.
-const GIVE_BACK_CHECK: Duration = Duration::from_secs(1);
+gpui::actions!(native_sidebar_keyboard, [DrawnProbe]);
+
+thread_local! {
+    static PROBE_LISTENING: Cell<bool> = const { Cell::new(false) };
+    static PROBE_REACHED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Whether the control `handle` belongs to is in `window`'s last drawn frame.
+///
+/// CDXC:FocusRouting 2026-11-11 WHY:
+/// `Window::focus` takes a handle whose control is no longer drawn (a composer whose session closed while the sidebar had the keyboard) and leaves typing going nowhere, and GPUI's focus-lost report only fires when a focus that was drawn stops being drawn, so it misses a handle that was already gone. GPUI has no public "is this handle drawn" question, but it dispatches an action on a handle only when the handle's control is in the drawn frame (`FocusHandle::dispatch_action`), and a global listener sees every dispatched action first; a no-op probe action answers it directly, before the focus moves.
+fn focus_handle_drawn(handle: &FocusHandle, window: &mut Window, cx: &mut App) -> bool {
+    if !PROBE_LISTENING.with(|listening| listening.replace(true)) {
+        cx.on_action(|_: &DrawnProbe, _| PROBE_REACHED.with(|reached| reached.set(true)));
+    }
+    PROBE_REACHED.with(|reached| reached.set(false));
+    handle.dispatch_action(&DrawnProbe, window, cx);
+    PROBE_REACHED.with(|reached| reached.get())
+}
 
 #[derive(Default)]
 pub(crate) struct SidebarKeyboardState {
     /// Recorded by the Focus Sidebar hotkey only; Tab or a click into the sidebar records nothing.
     return_to: Option<SidebarKeyboardReturn>,
-    /// A control just handed the keyboard back, until GPUI has drawn without it going missing.
-    give_back_check: Option<(FocusHandle, Instant)>,
-    focus_lost: HashMap<AnyWindowHandle, gpui::Subscription>,
 }
 
 impl SidebarKeyboardState {
@@ -62,11 +76,22 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let stops = &app.native_sidebar.focus_stops;
+        if stops.entry_handle_focused(window) {
+            // The hotkey's entry holds the keyboard on the sidebar's own handle while it waits
+            // for its row: nothing is typed anywhere, and Escape cancels it.
+            if event.keystroke.key == "escape" {
+                app.sidebar_keyboard_give_back(window, cx);
+            }
+            window.prevent_default();
+            cx.stop_propagation();
+            return;
+        }
         if !app.native_sidebar_stop_focused(window) {
             return;
         }
         let modifiers = &event.keystroke.modifiers;
-        if modifiers.platform || modifiers.control || modifiers.alt || modifiers.shift {
+        if modifiers.platform || modifiers.control || modifiers.alt {
             return;
         }
         match event.keystroke.key.as_str() {
@@ -237,8 +262,6 @@ impl GhostexGpuiApp {
         self.sidebar_keyboard_active_surface(window, cx);
     }
 
-    /// CDXC:FocusRouting 2026-11-11 WHY:
-    /// `Window::focus` takes a handle whose control is no longer drawn (a composer whose session closed while the sidebar had the keyboard) and leaves the window with nothing focused. So the window must still exist, and once the handle is focused, GPUI's report that nothing in that window has focus within a moment (`on_focus_lost`, which fires when the focused node is not in the drawn tree) sends the keyboard to the active surface instead. No other focus loss is handled there.
     fn give_sidebar_keyboard_back_to(
         &mut self,
         handle: FocusHandle,
@@ -246,13 +269,8 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.native_sidebar.focus_stops.is_stop(&handle) {
-            self.sidebar_keyboard_active_surface(window, cx);
-            return;
-        }
         if to == window.window_handle() {
-            self.arm_sidebar_give_back_check(handle.clone(), window, cx);
-            window.focus(&handle, cx);
+            self.restore_sidebar_keyboard_focus(handle, window, cx);
             return;
         }
         let app = cx.entity();
@@ -261,8 +279,7 @@ impl GhostexGpuiApp {
             let landed = to.update(cx, |_, window, cx| {
                 window.activate_window();
                 app.update(cx, |app, cx| {
-                    app.arm_sidebar_give_back_check(handle.clone(), window, cx);
-                    window.focus(&handle, cx);
+                    app.restore_sidebar_keyboard_focus(handle, window, cx)
                 });
             });
             if landed.is_err() {
@@ -275,27 +292,19 @@ impl GhostexGpuiApp {
         });
     }
 
-    fn arm_sidebar_give_back_check(
+    /// The recorded control, when it is still drawn in `window`, else the active surface.
+    fn restore_sidebar_keyboard_focus(
         &mut self,
         handle: FocusHandle,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let keyboard = &mut self.native_sidebar.keyboard;
-        keyboard.give_back_check = Some((handle, Instant::now() + GIVE_BACK_CHECK));
-        keyboard
-            .focus_lost
-            .entry(window.window_handle())
-            .or_insert_with(|| {
-                cx.on_focus_lost(window, |app, window, cx| {
-                    let Some((handle, until)) = app.native_sidebar.keyboard.give_back_check.take()
-                    else {
-                        return;
-                    };
-                    if Instant::now() < until && window.focused(cx).as_ref() == Some(&handle) {
-                        app.sidebar_keyboard_active_surface(window, cx);
-                    }
-                })
-            });
+        if !self.native_sidebar.focus_stops.is_stop(&handle)
+            && focus_handle_drawn(&handle, window, cx)
+        {
+            window.focus(&handle, cx);
+        } else {
+            self.sidebar_keyboard_active_surface(window, cx);
+        }
     }
 }

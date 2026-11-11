@@ -151,6 +151,12 @@ pub(crate) struct SidebarFocusStops {
     keystrokes: RefCell<Option<gpui::Subscription>>,
     /// The sidebar's scale in the last frame, for scrolls the arrow keys start between frames.
     scale: Cell<f32>,
+    /// Open from `begin_frame` until the sidebar's last prepaint: only controls built and
+    /// prepainted for the sidebar in that span are its stops.
+    recording: Rc<Cell<bool>>,
+    /// The Focus Sidebar hotkey's entry holds the keyboard here while it waits for its row
+    /// (render.rs draws it on a zero-size child of the sidebar).
+    entry: RefCell<Option<FocusHandle>>,
 }
 
 impl SidebarFocusStops {
@@ -164,6 +170,7 @@ impl SidebarFocusStops {
             .borrow_mut()
             .retain(|_, (_, drawn)| *drawn == frame);
         self.frame.set(frame.wrapping_add(1));
+        self.recording.set(true);
         self.focused.borrow_mut().take();
         let mut drawn = self.drawn.borrow_mut();
         let mut prev = self.prev_drawn.borrow_mut();
@@ -191,6 +198,27 @@ impl SidebarFocusStops {
         key.strip_prefix("session:")
             .or_else(|| key.strip_prefix("coordinator-fold:"))
             .map(SharedString::new)
+    }
+
+    /// The handle the hotkey's entry parks the keyboard on: not a tab stop, and never focused by a
+    /// click (its element has no size).
+    pub(crate) fn entry_handle(&self, cx: &App) -> FocusHandle {
+        self.entry
+            .borrow_mut()
+            .get_or_insert_with(|| cx.focus_handle())
+            .clone()
+    }
+
+    pub(super) fn entry_handle_focused(&self, window: &Window) -> bool {
+        self.entry
+            .borrow()
+            .as_ref()
+            .is_some_and(|handle| handle.is_focused(window))
+    }
+
+    /// Whether the sidebar is being drawn now (see `recording`).
+    pub(super) fn recording(&self) -> bool {
+        self.recording.get()
     }
 
     /// The handle of `key` when the current frame built that control.
@@ -355,8 +383,13 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let key = key.into();
         let stops = &self.native_sidebar.focus_stops;
+        // CDXC:FocusRouting 2026-11-11 WHY:
+        // Sidebar controls are also drawn outside the sidebar (the Claude header draws its top row while the sidebar is hidden, app/claude_web/header.rs). Those copies are not its stops: they would record into a sidebar frame that never starts, so the records piled up, and focusing one counted as the sidebar having the keyboard. Only controls built while the sidebar itself is being drawn become stops.
+        if !stops.recording() {
+            return element;
+        }
+        let key = key.into();
         stops.observe_traversal(cx);
         let handle = stops.handle(&key, cx);
         // Inset: GPUI paints an outer shadow as a filled shape under the element, which shows
@@ -402,7 +435,11 @@ impl GhostexGpuiApp {
             });
         let focused = stops.focused.clone();
         let drawn = stops.drawn.clone();
+        let recording = stops.recording.clone();
         element.on_prepaint(move |bounds, window, _| {
+            if !recording.get() {
+                return;
+            }
             if handle.is_focused(window) {
                 *focused.borrow_mut() = Some(FocusedStop {
                     key: key.clone(),
@@ -470,6 +507,7 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) {
         self.native_sidebar.focus_stops.scale.set(scale);
+        self.native_sidebar.focus_stops.recording.set(false);
         let traversal = self.native_sidebar.focus_stops.traversal.take();
         if self.carry_pending_native_sidebar_focus(scale, window, cx) {
             return;
@@ -606,6 +644,13 @@ impl GhostexGpuiApp {
         };
         let stops = &self.native_sidebar.focus_stops;
         let Some(handle) = target.and_then(|key| stops.built(&key)) else {
+            // The hotkey's entry found nothing to land on: the keyboard it holds goes back.
+            if pending.entry.is_some() {
+                cx.defer_in(window, |app, window, cx| {
+                    app.sidebar_keyboard_give_back(window, cx)
+                });
+                return true;
+            }
             return false;
         };
         let origin = pending.origin;
