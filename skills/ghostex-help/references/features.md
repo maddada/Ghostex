@@ -4925,7 +4925,8 @@ sessions, so any client can control agents on any machine.
   (an agent's log, a draft or a diagram in another folder, say) opens in Files
   too, read-only, when that session's own chat links to it: text up to 2 MB,
   pictures up to 12 MB, on Mac, Linux and Windows computers alike. Another
-  binary or larger file says so; open it in the VS Code view instead. When a
+  binary or larger file says so; open it in the VS Code view instead. A link to
+  a file on a network share (`\\server\share\…`) doesn't open in Files. When a
   link can't open, Ghostex says why: the file is gone, the computer is offline,
   or it runs an older Ghostex (update Ghostex there). On the phone a chat's
   file link already opens text files and pictures anywhere on the computer in

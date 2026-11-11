@@ -202,6 +202,16 @@ impl GhostexGpuiApp {
         };
         let (relative, outside) =
             gpui_remote_chat_file_place(&path, project_path.unwrap_or_default());
+        // CDXC:Docs 2026-11-11 WHY: asking a Windows computer about `\\host\share\…` signs it in
+        // to that host, so gxserver refuses network shares and device paths on their text
+        // (server/src/project_docs/chat_file.rs) and the link says so here without asking.
+        if relative.starts_with("//") {
+            self.report_session_chat_file_open_failure(
+                "Files can't open a file on a network share. Open it on the computer that has it.",
+                cx,
+            );
+            return;
+        }
         /*
         CDXC:Docs 2026-11-07 WHY: issue #462. The check asked about the Docs folders alone, while
         the Files view it opens covers the whole project, so any project file outside them failed
@@ -520,6 +530,7 @@ mod tests {
             gpui_remote_chat_file_place("/c:/Dev/Mastro_Ed/docs/plan.md", project),
             ("docs/plan.md".to_string(), false)
         );
+        // A network share is placed so the link can say Files never opens one.
         assert_eq!(
             gpui_remote_chat_file_place(r"\\nas\share\shot.png", project),
             ("//nas/share/shot.png".to_string(), true)

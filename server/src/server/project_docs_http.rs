@@ -11,19 +11,39 @@ pub(super) async fn handle(
     request_id: String,
     body_json: Value,
 ) -> RoutedResponse {
-    // A text file the session's chat linked to, outside the project (CDXC:Docs 2026-11-07 in
-    // server/src/project_docs/chat_file.rs): opened only when that chat names it.
+    // A text file or picture the session's chat linked to, outside the project (CDXC:Docs
+    // 2026-11-07 and 2026-11-11 in server/src/project_docs/chat_file.rs): opened only when that
+    // chat names it.
     if let Some(request) = read_domain_rpc_params(&body_json)
         .ok()
         .and_then(|params| project_docs::chat_file_request(&params))
     {
-        let named = crate::session_files_links::session_names_file(
-            &state,
-            &request.project_id,
-            &request.session_id,
-            &request.path,
-        )
-        .await;
+        // A refused path (a network share) is answered without asking the chat or the disk, and
+        // only the Files view's frequent `stat` may use a remembered answer.
+        let remembered = request.action == "stat";
+        let names = |path: String| {
+            let state = state.clone();
+            let (project_id, session_id) = (request.project_id.clone(), request.session_id.clone());
+            async move {
+                crate::session_files_links::session_names_file(
+                    &state,
+                    &project_id,
+                    &session_id,
+                    &path,
+                    remembered,
+                )
+                .await
+            }
+        };
+        let named = request.refused.is_none() && names(request.path.clone()).await && {
+            // A file that is itself a link counts only when the chat names its target too.
+            let path = request.path.clone();
+            match tokio::task::spawn_blocking(move || project_docs::linked_target(&path)).await {
+                Ok(Some(target)) => names(target).await,
+                Ok(None) => true,
+                Err(_) => false,
+            }
+        };
         let answer = tokio::task::spawn_blocking(move || {
             project_docs::run_chat_file_action(&request, named)
         })

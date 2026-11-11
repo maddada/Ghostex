@@ -131,15 +131,20 @@ fn named_files() -> &'static Mutex<std::collections::HashSet<(String, String, St
 }
 
 /// Whether the session's own chat names the file at `path` (absolute, or from the home folder):
-/// a file or attachment row of its Files and links list, written as `path` (up to slashes and a
-/// drive letter's case, `path_key`) or resolving to the
-/// same file. The Files view of a remote project opens only these outside the project
-/// (CDXC:Docs 2026-11-07 in server/src/project_docs/chat_file.rs).
+/// a file or attachment row of its Files and links list, written as `path` (for a Windows path,
+/// up to slashes and case: `names_by_text`) or resolving to the same file. The Files view of a
+/// remote project opens only these outside the project (CDXC:Docs 2026-11-07 in
+/// server/src/project_docs/chat_file.rs).
+///
+/// `remembered` lets a file the chat once named count without reading the chat again: the Files
+/// view's change watch asks `stat` every 400 ms. A read passes `false`, so it asks the chat as it
+/// is now, and a file a rewound or edited chat no longer names is not read.
 pub(crate) async fn session_names_file(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     path: &str,
+    remembered: bool,
 ) -> bool {
     let wanted = path.trim().to_string();
     if wanted.is_empty() {
@@ -150,7 +155,7 @@ pub(crate) async fn session_names_file(
         session_id.to_string(),
         wanted.clone(),
     );
-    if named_files().lock().is_ok_and(|named| named.contains(&key)) {
+    if remembered && named_files().lock().is_ok_and(|named| named.contains(&key)) {
         return true;
     }
     let found = chat_names_file(state, project_id, session_id, wanted).await;
@@ -199,7 +204,18 @@ async fn chat_names_file(
             .iter()
             .filter(|candidate| {
                 let candidate = candidate.trim();
-                Path::new(candidate).is_absolute() || candidate.starts_with('~')
+                // A network share the chat mentions is never asked about: on Windows that signs
+                // the computer in to its host (CDXC:Docs 2026-11-11 WHY in chat_file.rs).
+                !crate::project_docs::is_network_or_device_path(candidate)
+                    && (Path::new(candidate).is_absolute() || candidate.starts_with('~'))
+            })
+            // A named path that is itself a link names the link, not the file it points at: that
+            // file counts only when the chat names it too (`linked_target` in chat_file.rs).
+            .filter(|candidate| {
+                !std::fs::symlink_metadata(crate::project_docs::expanded_chat_file_path(
+                    candidate.trim(),
+                ))
+                .is_ok_and(|metadata| metadata.file_type().is_symlink())
             })
             .take(NAMED_FILE_CANONICAL_CHECKS)
             .any(|candidate| real(candidate.trim()).as_ref() == Some(&target))
@@ -208,15 +224,33 @@ async fn chat_names_file(
     .unwrap_or(false)
 }
 
-/// Whether one of the list's paths is `wanted` as written, or under the list's own key, which
-/// spells `C:\a` and `c:/a` alike: a client that sends a Windows path with forward slashes (the
-/// desktop does) matches without a look at the disk, and a named file that is gone still counts.
+/// Whether one of the list's paths is `wanted` as written, or, for Windows paths, under the
+/// list's own key (`path_key`), which spells `C:\a` and `c:/A` alike: a client that sends a
+/// Windows path with forward slashes (the desktop does) matches without a look at the disk, and a
+/// named file that is gone still counts.
+///
+/// CDXC:Docs 2026-11-11 WHY: the key turns every backslash into a slash, and on macOS and Linux a
+/// backslash is an ordinary character in a file name, so a chat naming `<dir>/secret\id_rsa` (no
+/// such file) matched a request for `<dir>/secret/id_rsa` (security review 2026-11-11). The key is
+/// compared only on a Windows computer, or when both paths are drive paths, which only a Windows
+/// computer has.
 fn names_by_text(named: &[String], wanted: &str) -> bool {
-    let wanted_key = rules::path_key(wanted);
+    let windows_key =
+        |path: &str| (cfg!(windows) || is_drive_path(path)).then(|| rules::path_key(path));
+    let wanted_key = windows_key(wanted);
     named.iter().any(|candidate| {
         let candidate = candidate.trim();
-        candidate == wanted || rules::path_key(candidate) == wanted_key
+        candidate == wanted || (wanted_key.is_some() && windows_key(candidate) == wanted_key)
     })
+}
+
+/// `C:\…` or `C:/…`.
+fn is_drive_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
 }
 
 async fn read_files_links(state: &AppState, body: &Value) -> Result<Value, DomainStateError> {
@@ -584,6 +618,16 @@ mod tests {
             &named,
             "C:/dev.desk-runner/d1111/university-reply/reply-email.txt"
         ));
+        // On macOS and Linux a backslash is a name character: a chat naming `secret\id_rsa` names
+        // no file in a `secret` folder.
+        #[cfg(not(windows))]
+        {
+            let named = vec![r"/home/me/secret\id_rsa".to_string()];
+            assert!(!names_by_text(&named, "/home/me/secret/id_rsa"));
+            let named = vec![r"/home/me/notes\..\secret\id_rsa".to_string()];
+            assert!(!names_by_text(&named, "/home/me/notes/../secret/id_rsa"));
+            assert!(names_by_text(&named, r"/home/me/notes\..\secret\id_rsa"));
+        }
     }
 
     #[test]
