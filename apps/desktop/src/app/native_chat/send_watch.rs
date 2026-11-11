@@ -1,15 +1,22 @@
-//! A message sent from the chat box either reaches the chat core or comes back to the box with a
-//! plain word, and every send leaves one line in the session chat log.
+//! A message sent from the chat box shows above the box until the chat core has it, and every send
+//! leaves one line in the session chat log.
 //!
 //! CDXC:SessionChat 2026-11-11 DECISION:
 //! User: "my messages to you weren't being sent from chat view!!! please fix wtf is this", then "text
 //! vanished but didn't show in the chat, even as optimistic message like we usually do", and "after
 //! like 2 mins my message actually did get sent". The chat box empties on Enter before the core has
-//! the message (composer.rs `submit`), and nothing checked that the core ever took it: a chat the
-//! host thread no longer holds drops the call without a word (gx_chat/world.rs `drive`). The core
-//! now counts what it takes (`submissionsReceived`); a send it has not counted within
-//! `NOT_TAKEN_AFTER` goes back into the box with a notification saying so, so it is never lost or
-//! left unexplained. A message the core takes but holds says why under its own bubble instead
+//! the message (composer.rs `submit`). The core counts what it takes (`submissionsReceived`); until
+//! it counts a send, the view draws it itself as "Sending" (`render_unconfirmed_sends`).
+//!
+//! CDXC:SessionChat 2026-11-11 DECISION:
+//! User: "i'm seeing double messages now too", and of the notification that his message was back in
+//! the chat box: "you should self heal, don't show me this message, why do i need to press enter
+//! again when you can press it for me". A send the core had not counted within `SLOW_AFTER` used to
+//! go back into the box with a notification. The core's thread was only busy (18 s at 05:06): the
+//! message was still in its channel and went out by itself, and the Enter on the returned words
+//! sent it a second time under a new send request id. So a send is never taken back from the core:
+//! the watch only waits and writes `sessionChat.sendSlow`, and the row stays "Sending" until the
+//! core counts it. A message the core takes but holds says why under its own bubble
 //! (gx-chat-core composer/policy.rs `hold_words`).
 //!
 //! CDXC:SessionChat 2026-11-11 WHY:
@@ -21,8 +28,7 @@ use std::time::Duration;
 
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _,
-    div, px,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use serde_json::json;
 
@@ -30,10 +36,11 @@ use super::appearance::ChatAppearance;
 
 use super::state::NativeChatView;
 
-/// How long the core gets to count a send before the words go back to the box. The host thread
-/// answers a call in milliseconds; a thread that drew nothing at all in this time gets the same
-/// again once (`SendWatch::patient`), because a busy thread still takes the message later.
-const NOT_TAKEN_AFTER: Duration = Duration::from_secs(8);
+/// How long the core gets to count a send before the log says it is slow. The host thread answers
+/// a call in milliseconds; a busy thread still takes the message later, so the watch keeps waiting
+/// and says so again after twice as long, up to `SLOW_AT_MOST` apart.
+const SLOW_AFTER: Duration = Duration::from_secs(8);
+const SLOW_AT_MOST: Duration = Duration::from_secs(64);
 
 /// The sends the core has not counted yet.
 pub(crate) struct SendWatch {
@@ -45,7 +52,8 @@ pub(crate) struct SendWatch {
     token: u64,
     /// The host thread drew something after the newest send left, so it is alive.
     heard_since: bool,
-    patient: bool,
+    /// How long the watch waits before its next `sessionChat.sendSlow` line.
+    wait: Duration,
 }
 
 /// A message the send gate holds, as things stood when the hold began.
@@ -122,22 +130,22 @@ impl NativeChatView {
             base: seen,
             token,
             heard_since: false,
-            patient: false,
+            wait: SLOW_AFTER,
         });
         // A send still unconfirmed when the next leaves is counted by the same core, in order.
         let expected = watch.sends.last().map_or(seen, |(expected, ..)| *expected) + 1;
         watch.sends.push((expected, text, now));
         watch.token = token;
         watch.heard_since = false;
-        watch.patient = false;
-        self.arm_send_watch(token, cx);
+        watch.wait = SLOW_AFTER;
+        self.arm_send_watch(token, SLOW_AFTER, cx);
         // The "Sending" row shows on this frame, before the core's thread has done anything.
         cx.notify();
     }
 
-    fn arm_send_watch(&mut self, token: u64, cx: &mut Context<Self>) {
+    fn arm_send_watch(&mut self, token: u64, wait: Duration, cx: &mut Context<Self>) {
         cx.spawn(async move |chat, cx| {
-            cx.background_executor().timer(NOT_TAKEN_AFTER).await;
+            cx.background_executor().timer(wait).await;
             let _ = chat.update(cx, |chat, cx| chat.send_watch_due(token, cx));
         })
         .detach();
@@ -177,6 +185,9 @@ impl NativeChatView {
         }
     }
 
+    /// The core has not counted the watched sends yet. They are still its to send (in its thread's
+    /// channel, or behind the send in flight), so nothing is taken back and nothing is sent again:
+    /// the row stays "Sending", the log says how long it has been, and the watch waits on.
     fn send_watch_due(&mut self, token: u64, cx: &mut Context<Self>) {
         let Some(watch) = self
             .send_watch
@@ -185,53 +196,22 @@ impl NativeChatView {
         else {
             return;
         };
-        if !watch.heard_since && !watch.patient {
-            watch.patient = true;
-            self.arm_send_watch(token, cx);
-            return;
-        }
-        let Some(watch) = self.send_watch.take() else {
-            return;
-        };
-        let text = watch
-            .sends
-            .iter()
-            .map(|(_, text, _)| text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
         crate::support_logs::append_always(
             crate::support_logs::GpuiSupportLog::SessionChat,
-            "sessionChat.sendNotTaken",
+            "sessionChat.sendSlow",
             json!({
                 "session": format!("{}:{}", self.config.project_id, self.config.session_id),
                 "sends": watch.sends.len(),
+                "waitedMs": watch.sends.first().map(|(_, _, left)| left.elapsed().as_millis() as u64),
                 "expected": watch.sends.last().map(|(expected, ..)| *expected),
                 "received": self.snapshot["submissionsReceived"],
                 "heardSince": watch.heard_since,
                 "hasRuntime": self.runtime.is_some(),
-                "chars": text.chars().count(),
             }),
         );
-        self.pending_send = false;
-        let restored = ghostex_gx_chat_core::composer::submission::restore_undelivered_text(
-            &text,
-            &self.draft,
-        );
-        self.replace_draft(&restored, false, true, cx);
-        if let Some(window) = self.open_main_window(cx) {
-            cx.defer(move |cx| {
-                let _ = window.update(cx, |_, window, cx| {
-                    use gpui_component::WindowExt as _;
-                    window.push_notification(
-                        gpui_component::notification::Notification::warning(
-                            "Your message was not sent, so it is back in the chat box. Press Enter to send it again.",
-                        ),
-                        cx,
-                    );
-                });
-            });
-        }
-        cx.notify();
+        watch.wait = (watch.wait * 2).min(SLOW_AT_MOST);
+        let wait = watch.wait;
+        self.arm_send_watch(token, wait, cx);
     }
 
     /// Milliseconds since the last send left the chat box.
@@ -332,7 +312,9 @@ impl NativeChatView {
                 .gap(px(6.0 * s))
                 .children(watch.sends.iter().map(|(expected, text, _)| {
                     div()
-                        .id(gpui::SharedString::from(format!("unconfirmed-send:{expected}")))
+                        .id(gpui::SharedString::from(format!(
+                            "unconfirmed-send:{expected}"
+                        )))
                         .role(gpui::Role::Status)
                         .aria_label("Sending")
                         .max_w(gpui::relative(0.8))

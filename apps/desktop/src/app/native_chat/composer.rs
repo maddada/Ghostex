@@ -123,7 +123,7 @@ impl NativeChatView {
         self.end_answer_hold_for_send();
         let text = submission["text"].as_str().unwrap_or_default().to_owned();
         self.invoke(submission, cx);
-        // The box is empty now: the words come back to it unless the core counts this send.
+        // The box is empty now: the view draws the message as Sending until the core counts it.
         self.watch_send(text, cx);
     }
 
