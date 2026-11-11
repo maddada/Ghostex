@@ -23,11 +23,6 @@ serde_json = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 
-[dev-dependencies]
-axum = { version = "0.8", default-features = false, features = ["http1", "http2", "json", "tokio"] }
-p256 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem", "arithmetic"] }
-rand_core = { version = "0.6", features = ["getrandom"] }
-
 [profile.release]
 opt-level = 3
 lto = "thin"
