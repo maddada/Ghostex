@@ -197,14 +197,19 @@ pub(crate) fn remove_paired_device_using(
     reload_device_api_tokens(db, device_tokens)?;
     let link_key = repository.remove_device_link_key(&device.id)?;
     let purpose_keys = repository.remove_device_purpose_keys(&device.id)?;
+    // Its keys leave the allow-list unless a row of the same device still holds them.
+    let owner = device
+        .device_key
+        .as_ref()
+        .map(|key| key.public_key.as_str());
     if let Some(client_key) = device.tailcat_client_key.as_deref() {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, client_key)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, client_key, owner)?;
     }
     if let Some(link_key) = link_key.as_deref() {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, link_key)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, link_key, owner)?;
     }
     for (_, purpose_key) in purpose_keys {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, &purpose_key)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, &purpose_key, owner)?;
     }
     Ok(Some(device))
 }
@@ -289,25 +294,69 @@ fn is_earlier_pairing_of(device: &RemotePairedDeviceRecord, device_public_key: &
     }
 }
 
-/// A paired entry that holds `tailcat_client_key` under a device key other than
-/// `device_public_key`: a request naming that key is not that device, and is refused
-/// (`replace_earlier_pairings_of_same_phone`). A `legacy` entry never is one.
-pub fn tailcat_key_held_by_another_device(
-    db: &Connection,
-    tailcat_client_key: &str,
-    device_public_key: &str,
-) -> Result<Option<RemotePairedDeviceRecord>> {
-    Ok(RemotePairingRepository::new(db)
+/*
+CDXC:RemotePairing 2026-11-11 SECURITY:
+Review of 951cab347, finding 3: a refusal compared only pairing keys. A device with a code and approval could state another device's link key, or a paired computer's `app`/`server` purpose key, as its pairing key, and any paired phone could register another device's pairing key as its own link key (`/api/registerEasyConnectClientKey`). Neither was refused, and the second row then kept that key on the allow-list after the user removed the device it belongs to: Remove no longer closed that device's tunnel. A key now belongs to one device: a row holds a key as its pairing key, its link key or a purpose key, and a key another device's paired row holds in any of those ways is refused when a device pairs (`begin_pairing`, `finish_pairing`), registers a link key or registers purpose keys. "Another device" is another device key, so a device still moves its own keys between its own rows (a pairing again takes over the link and purpose keys of the entries it retires). And Remove takes a removed entry's keys off the allow-list unless a paired row of the same device still holds them (`key_still_needed`), so a key held by some other device since before this does not keep it either.
+*/
+/// Every entry that holds `key`, as its pairing key, its link key or one of its purpose keys.
+fn entries_holding_key(db: &Connection, key: &str) -> Result<Vec<RemotePairedDeviceRecord>> {
+    let repository = RemotePairingRepository::new(db);
+    let extra: std::collections::HashSet<String> = repository
+        .device_ids_with_link_or_purpose_key(key)?
+        .into_iter()
+        .collect();
+    Ok(repository
         .list_devices()?
         .into_iter()
-        .find(|device| {
-            device.status == PairedDeviceStatus::Paired
-                && device.tailcat_client_key.as_deref() == Some(tailcat_client_key)
-                && device
-                    .device_key
-                    .as_ref()
-                    .is_none_or(|key| key.public_key != device_public_key)
-        }))
+        .filter(|device| {
+            device.tailcat_client_key.as_deref() == Some(key) || extra.contains(&device.id)
+        })
+        .collect())
+}
+
+/// Whether `device` is an entry of the device whose device key is `device_public_key`.
+fn of_device(device: &RemotePairedDeviceRecord, device_public_key: &str) -> bool {
+    device
+        .device_key
+        .as_ref()
+        .is_some_and(|key| key.public_key == device_public_key)
+}
+
+/// A paired entry of another device (another device key) that holds `key` as its pairing key, link
+/// key or a purpose key (see above). A device naming that key is not that device and is refused. A
+/// `legacy` entry never is one.
+pub fn tailcat_key_held_by_another_device(
+    db: &Connection,
+    key: &str,
+    device_public_key: &str,
+) -> Result<Option<RemotePairedDeviceRecord>> {
+    key_held_by_another_device_than(db, key, device_public_key, None)
+}
+
+/// As `tailcat_key_held_by_another_device`, never naming the entry `except_id` itself.
+fn key_held_by_another_device_than(
+    db: &Connection,
+    key: &str,
+    device_public_key: &str,
+    except_id: Option<&str>,
+) -> Result<Option<RemotePairedDeviceRecord>> {
+    Ok(entries_holding_key(db, key)?.into_iter().find(|device| {
+        Some(device.id.as_str()) != except_id
+            && device.status == PairedDeviceStatus::Paired
+            && !of_device(device, device_public_key)
+    }))
+}
+
+/// Whether `key` stays on the allow-list once an entry of the device with `owner_device_key` let go
+/// of it: only while a paired entry of that same device still holds it. An entry without a device
+/// key (`legacy`) cannot tell its device, so any entry still holding the key keeps it, as before.
+fn key_still_needed(db: &Connection, key: &str, owner_device_key: Option<&str>) -> Result<bool> {
+    let Some(owner) = owner_device_key else {
+        return tailcat_client_key_in_use(db, key);
+    };
+    Ok(entries_holding_key(db, key)?
+        .iter()
+        .any(|device| device.status == PairedDeviceStatus::Paired && of_device(device, owner)))
 }
 
 /// Mirrors the stored device tokens (paired v2 devices only) into the map every request is
@@ -385,6 +434,18 @@ pub enum LinkKeyError {
     BadKey,
     /// The caller is no paired (v2) device here.
     NotPaired,
+    /// Another device's paired entry holds the key; `name` and `paired` say which (as the pairing
+    /// refusal does, `PairDeviceError::KeyHeldByAnotherDevice`). Only a paired device gets this.
+    HeldByAnotherDevice { name: String, paired: String },
+}
+
+impl LinkKeyError {
+    fn held_by(holder: &RemotePairedDeviceRecord) -> Self {
+        Self::HeldByAnotherDevice {
+            name: holder.name.clone(),
+            paired: super::pair_device::paired_day(&holder.paired_at, chrono::Local::now()),
+        }
+    }
 }
 
 /*
@@ -418,6 +479,17 @@ pub fn register_device_link_key(
     if device.status != PairedDeviceStatus::Paired {
         return Ok(Err(LinkKeyError::NotPaired));
     }
+    let owner = device
+        .device_key
+        .as_ref()
+        .map(|key| key.public_key.clone())
+        .unwrap_or_default();
+    // Another device's key is not this device's to register (CDXC:RemotePairing 2026-11-11
+    // SECURITY above `entries_holding_key`).
+    if let Some(holder) = key_held_by_another_device_than(db, client_key, &owner, Some(device_id))?
+    {
+        return Ok(Err(LinkKeyError::held_by(&holder)));
+    }
     let previous = repository.device_link_key(device_id)?;
     let listed = read_tailcat_status_payload(paths, db, tailcat_runtime)
         .allowed_client_keys
@@ -429,7 +501,7 @@ pub fn register_device_link_key(
     repository.set_device_link_key(device_id, client_key)?;
     add_tailcat_client_key_when_allow_listed(paths, db, tailcat_runtime, client_key)?;
     if let Some(previous) = previous.filter(|previous| previous != client_key) {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, &previous)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, &previous, Some(&owner))?;
     }
     Ok(Ok(true))
 }
@@ -463,6 +535,16 @@ pub fn register_device_purpose_keys(
     if device.status != PairedDeviceStatus::Paired {
         return Ok(Err(LinkKeyError::NotPaired));
     }
+    let owner = device
+        .device_key
+        .as_ref()
+        .map(|key| key.public_key.clone())
+        .unwrap_or_default();
+    for (_, key) in keys {
+        if let Some(holder) = key_held_by_another_device_than(db, key, &owner, Some(device_id))? {
+            return Ok(Err(LinkKeyError::held_by(&holder)));
+        }
+    }
     let mut added = Vec::new();
     let mut replaced = Vec::new();
     for (purpose, key) in keys {
@@ -474,7 +556,7 @@ pub fn register_device_purpose_keys(
         }
     }
     let current = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
-    if purpose_keys_allow_list(db, current.clone(), &added, &replaced)? == current {
+    if purpose_keys_allow_list(db, current.clone(), &added, &replaced, &owner)? == current {
         return Ok(Ok(false));
     }
     /*
@@ -490,7 +572,7 @@ pub fn register_device_purpose_keys(
         let applied = crate::storage::open_gxserver_database(&paths).and_then(|db| {
             let current =
                 read_tailcat_status_payload(&paths, &db, &tailcat_runtime).allowed_client_keys;
-            let next = purpose_keys_allow_list(&db, current.clone(), &added, &replaced)?;
+            let next = purpose_keys_allow_list(&db, current.clone(), &added, &replaced, &owner)?;
             if next == current {
                 return Ok(());
             }
@@ -511,13 +593,14 @@ pub fn register_device_purpose_keys(
     Ok(Ok(true))
 }
 
-/// `allowed` with `added` keys still registered put on and `replaced` keys no one uses any more
-/// taken off.
+/// `allowed` with `added` keys still registered put on and `replaced` keys the device with
+/// `owner` (its device key) no longer holds taken off.
 fn purpose_keys_allow_list(
     db: &Connection,
     mut allowed: Vec<String>,
     added: &[String],
     replaced: &[String],
+    owner: &str,
 ) -> Result<Vec<String>> {
     for key in added {
         if !tailcat_client_key_in_use(db, key)? {
@@ -528,7 +611,7 @@ fn purpose_keys_allow_list(
         }
     }
     for key in replaced {
-        if tailcat_client_key_in_use(db, key)? {
+        if key_still_needed(db, key, Some(owner))? {
             continue;
         }
         if let Some(next) = allow_list_without_client_key(allowed.clone(), key) {
@@ -587,13 +670,16 @@ fn allow_list_without_client_key(allowed: Vec<String>, client_key: &str) -> Opti
     Some(allowed_client_keys)
 }
 
+/// Takes `client_key` off the allow-list once the device with `owner_device_key` no longer holds
+/// it (`key_still_needed`).
 fn remove_tailcat_client_key(
     paths: &GxserverPaths,
     db: &Connection,
     tailcat_runtime: &TailcatRuntime,
     client_key: &str,
+    owner_device_key: Option<&str>,
 ) -> Result<bool> {
-    if tailcat_client_key_in_use(db, client_key)? {
+    if key_still_needed(db, client_key, owner_device_key)? {
         return Ok(false);
     }
     let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;

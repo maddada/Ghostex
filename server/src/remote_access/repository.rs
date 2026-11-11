@@ -411,6 +411,23 @@ impl<'a> RemotePairingRepository<'a> {
     }
 
     /// Whether any remaining device's link key is `client_key`.
+    /// The entries that hold `client_key` as their link key or one of their purpose keys.
+    pub fn device_ids_with_link_or_purpose_key(&self, client_key: &str) -> Result<Vec<String>> {
+        let mut statement = self
+            .db
+            .prepare(
+                "SELECT deviceId FROM remote_paired_device_link_keys WHERE clientKey = ?1
+                 UNION SELECT deviceId FROM remote_paired_device_purpose_keys WHERE clientKey = ?1",
+            )
+            .with_context(|| "prepare the entries holding a key")?;
+        let ids = statement
+            .query_map(params![client_key], |row| row.get::<_, String>(0))
+            .with_context(|| "read the entries holding a key")?
+            .collect::<rusqlite::Result<Vec<String>>>()
+            .with_context(|| "read the entries holding a key")?;
+        Ok(ids)
+    }
+
     pub fn link_key_in_use(&self, client_key: &str) -> Result<bool> {
         let count: i64 = self
             .db

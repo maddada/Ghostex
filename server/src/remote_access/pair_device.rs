@@ -1137,6 +1137,9 @@ pub fn register_computer_keys_signed(
         &keys,
     )? {
         Ok(changed) => Ok(json!({ "changed": changed })),
+        Err(super::paired_devices::LinkKeyError::HeldByAnotherDevice { name, paired }) => {
+            Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired })
+        }
         Err(_) => Err(PairDeviceError::BadRequest(
             "keys must name app or server, each with a nodekey: public key.".to_string(),
         )),
@@ -1209,7 +1212,7 @@ fn key_held_by(holder: &RemotePairedDeviceRecord) -> PairDeviceError {
 }
 
 /// As `format_paired_device_day` in the desktop's Settings > Remote model.
-fn paired_day(iso: &str, now: chrono::DateTime<chrono::Local>) -> String {
+pub(crate) fn paired_day(iso: &str, now: chrono::DateTime<chrono::Local>) -> String {
     use chrono::Datelike as _;
     let Ok(time) = chrono::DateTime::parse_from_rfc3339(iso) else {
         return "on an unknown day".to_string();

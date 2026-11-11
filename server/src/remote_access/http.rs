@@ -382,6 +382,9 @@ pub(crate) async fn handle_remote_access_http(
                         "clientKey must be a nodekey: public key.",
                     )),
                     Err(LinkKeyError::NotPaired) => Err(RemoteAccessHttpError::unknown_device(&device_id)),
+                    Err(LinkKeyError::HeldByAnotherDevice { name, paired }) => {
+                        Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired }.into())
+                    }
                 }
             })
             .await
