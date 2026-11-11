@@ -107,6 +107,12 @@ Label conventions already applied, keep them:
 
 The order of `models` is the order the dropdown shows. There is no sort key and
 no alphabetising anywhere in the clients, so to move a row, move it in the JSON.
+The one exception is Claude Code's lineup (user decision 2026-11-11): the chat
+core and gxserver order its rows by family, Fable, Opus, Sonnet, Haiku (any
+other family after them, in file order), newest version first, ungrouped rows
+before each group (`order_claude_models` in
+`packages/gx-chat-core/src/menus/catalog.rs`). Keep the JSON in that order too:
+apps built before the sort (11.4.0 and older) still show the file's order.
 
 A row may name one of the agent's `groups`, which draws it inside a submenu
 instead of at the top level. The submenu takes the position of the group's
