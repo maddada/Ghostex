@@ -582,6 +582,18 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         app.toggle_native_sidebar_usage_visible(cx);
                     }))
+                    // CDXC:FocusRouting 2026-11-11 WHY: the handle is the chart button PR #564 gave a
+                    // Tab stop at the bottom of the sidebar; it keeps that stop now that it shows
+                    // only while the meters are hidden.
+                    .map(|button| {
+                        self.sidebar_focus_stop(
+                            button,
+                            "navigation:usage",
+                            super::focus_order::SidebarStopPlace::Fixed,
+                            appearance,
+                            cx,
+                        )
+                    })
                     .managed_discrete_tooltip_with_placement(
                         // Left of the handle, so it does not cover the meters peeking above it.
                         ManagedTooltipPlacement::Left,
