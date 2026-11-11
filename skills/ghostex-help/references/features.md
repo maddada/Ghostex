@@ -1603,6 +1603,19 @@ arrow beside it; the arrow (or Up in an empty chat box) puts the text back in th
 chat box until the message leaves, and the picture lands there instead. If the
 picture can't be saved, the message comes back to the chat box and its error card
 says why. The phone's Send works while a picture uploads, the same way.
+A message you send is the chat's last message the moment you press Enter, with
+a spinner beside it while it is on its way (or the play button of a message
+waiting behind a working agent), and it reaches the agent once. If Ghostex's
+service is restarting or not answering, the message stays where it is, says
+"Couldn't reach Ghostex. It may be restarting. It sends by itself when it
+answers." under it, and goes by itself; you do not send it again. A message held
+because a dialog on the agent's terminal has its input says so the same way and
+goes when the dialog is gone. Only a message that cannot be sent at all (the
+session is gone, the text was refused) stops: it stays in the chat with the
+reason under it and Retry, Edit and Remove. Edit is the only thing that moves
+its words back to the chat box (Escape still takes back a message that has not
+left). An answer given in a coordinator's list or Work panel waits out a
+restarting service the same way.
 Type `/` in the chat box to pick one of the agent's skills (`$` opens the same
 list), `@` to mention a project file, and `+` (at the start or after a space) to mention another agent
 session of the same project: the list shows each session's logo, title and
