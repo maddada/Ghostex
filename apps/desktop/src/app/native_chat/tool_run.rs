@@ -34,6 +34,9 @@ const LINE_OUTPUT_LINES: usize = 12;
 /// A tool row's padding beside its glyph tile; its detail's rail is moved in by the same
 /// amount so the line still runs down from the middle of the tile.
 pub(super) const ROW_PAD_X: f32 = 8.0;
+/// The space above and below the plain rows in an opened Quiet View line's card, so one call is
+/// the "Message to" card's 44px with its border.
+const BOXED_PAD_Y: f32 = 5.0;
 /// The glyph tile's side.
 pub(super) const TILE: f32 = 22.0;
 /// A described tool row's label: the agent's prose colour, 20% dimmer.
@@ -52,7 +55,37 @@ fn glyph_icon(glyph: &str) -> &'static str {
 }
 
 impl NativeChatView {
+    /// A message's tool calls: its tool card, or its plain rows. Inside an opened Quiet View line
+    /// (`quiet_boxed`) the plain rows sit in the "Message to" card's shell, as its tool card does
+    /// (tool_card.rs, CDXC:SessionChat 2026-11-12), with their words at the card's 12px inset and
+    /// one call as tall as that card.
     pub(super) fn tool_rows(
+        &mut self,
+        message: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let card = message["toolCard"].is_object()
+            && !(p.tool_lines && message["toolCard"]["background"] == true);
+        let rows = self.unboxed_tool_rows(message, p, cx);
+        if !self.quiet_boxed || card || self.quiet_steps || rows.is_empty() {
+            return rows;
+        }
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let s = p.scale;
+        let column = div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(ROW_GAP * s))
+            .px(px((shape.padding_x - ROW_PAD_X) * s))
+            .py(px(BOXED_PAD_Y * s))
+            .children(rows);
+        vec![shape.shell(column, p).into_any_element()]
+    }
+
+    fn unboxed_tool_rows(
         &mut self,
         message: &Value,
         p: &ChatAppearance,

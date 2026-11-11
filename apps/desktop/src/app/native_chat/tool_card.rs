@@ -178,7 +178,14 @@ impl NativeChatView {
         // One line until the reader opens it; a call waiting on an approval opens it (`waiting`).
         // While calls run the header carries the newest one's words (the core's `liveLabel`).
         // Tool call lines open in Detailed view and stay shut in Simple (Q1964).
-        let line = p.tool_lines;
+        //
+        // CDXC:SessionChat 2026-11-12 DECISION: User, of the tool calls in an opened Quiet View
+        // line above a "Message to" card: "for the tool calls, make it a card, not without a card,
+        // like this, just like we have for the message to card there." There (`quiet_boxed`) the
+        // card wears the "Message to" card's shell, Tool call lines or not; elsewhere both looks
+        // stay. The phone does the same (ToolCard.tsx `BoxedToolCards`).
+        let boxed = self.quiet_boxed;
+        let line = p.tool_lines && !boxed;
         let open = self.is_expanded(&key, card["waiting"] == true || (line && p.work_open));
         let motion = self.disclosure_frame(&key, open, cx);
         let animate = (running || live) && !cx.reduce_motion();
@@ -219,17 +226,19 @@ impl NativeChatView {
             return Some(column.into_any_element());
         }
 
-        let mut column = div()
-            .w_full()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .rounded(px(12.0 * s))
-            // One scaled pixel, as the one-line cards' shell has, so the folded card is exactly as
-            // tall as they are (`SINGLE_LINE_CARD.header_height`).
-            .border(px(s))
-            .border_color(border)
-            .bg(surface)
+        let column = div().w_full().min_w_0().flex().flex_col();
+        let column = if boxed {
+            super::cards::SINGLE_LINE_CARD.shell(column, p)
+        } else {
+            column
+                .rounded(px(12.0 * s))
+                // One scaled pixel, as the one-line cards' shell has, so the folded card is
+                // exactly as tall as they are (`SINGLE_LINE_CARD.header_height`).
+                .border(px(s))
+                .border_color(border)
+                .bg(surface)
+        };
+        let mut column = column
             .overflow_hidden()
             .child(self.tool_card_header(&key, card, open, animate, false, p, cx));
         if open || motion.is_some() {
@@ -286,8 +295,15 @@ impl NativeChatView {
         );
         let more = card["moreIcons"].as_u64().unwrap_or(0);
         let (card_surface, _, _, hover, _, _) = card_colors(p);
-        // A line has no box: its circles are cut out of the chat's own background.
-        let surface = if line { p.background } else { card_surface };
+        // A line has no box: its circles are cut out of the chat's own background; a card in an
+        // opened Quiet View line, of the "Message to" card's fill laid over it.
+        let surface = if line {
+            p.background
+        } else if self.quiet_boxed {
+            super::cards::SINGLE_LINE_CARD.solid_fill(p)
+        } else {
+            card_surface
+        };
         let icons = card["icons"].as_array().map_or(&[][..], Vec::as_slice);
         let mut stack = div().flex().items_center().flex_shrink_0();
         let (disc, ring_color, ring_width) = stack_colors(surface, p);
@@ -413,7 +429,13 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(8.0 * s))
-            .px(px(if line { 8.0 } else { 10.0 } * s))
+            .px(px(if line {
+                8.0
+            } else if self.quiet_boxed {
+                super::cards::SINGLE_LINE_CARD.padding_x
+            } else {
+                10.0
+            } * s))
             // The one-line cards' header height ("Message to …", "Worked for 12s"), so a tool card
             // folded beside one of them is the same height; a line is a tool row's height.
             .h(px(if line {

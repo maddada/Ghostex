@@ -935,7 +935,8 @@ impl NativeChatView {
                 if !tools.is_empty() {
                     // With Settings > Chat > Tool call cards on, the calls are one card
                     // (`tool_card.rs`); otherwise they are plain rows.
-                    card_above = tool_card;
+                    // Inside an opened Quiet View line the plain rows are a card too (tool_run.rs).
+                    card_above = tool_card || self.quiet_boxed;
                 }
                 for tool in tools {
                     row = row.child(tool);

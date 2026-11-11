@@ -158,6 +158,9 @@ pub(crate) struct NativeChatView {
     /// True while an opened quiet line's steps render (Agent work Reduced or Quiet,
     /// quiet_work.rs): each call draws as a quiet step instead of a tool row.
     pub(super) quiet_steps: bool,
+    /// True while an opened Quiet View line's rows render (quiet_view.rs): a row's tool calls,
+    /// a tool card or plain rows, sit in the "Message to" card's shell (`SINGLE_LINE_CARD.shell`).
+    pub(super) quiet_boxed: bool,
     /// Quiet View's lines of the current snapshot, read once per snapshot (quiet_view.rs).
     /// Held weakly, so a later snapshot can never take the address of the one the lines are of.
     pub(super) quiet_lines_cache: std::cell::RefCell<
@@ -568,6 +571,7 @@ impl NativeChatView {
             in_work_fold: false,
             hide_file_changes: false,
             quiet_steps: false,
+            quiet_boxed: false,
             quiet_lines_cache: Default::default(),
             hovered_message: None,
             message_menu: None,

@@ -349,6 +349,7 @@ impl NativeChatView {
                             nested.push(stack);
                         }
                     }
+                    self.quiet_boxed = true;
                     let content = match tail {
                         Some(tail) => {
                             let folded = fold_part(item, tail);
@@ -356,6 +357,7 @@ impl NativeChatView {
                         }
                         None => self.item_content(item, next, true, p, window, cx),
                     };
+                    self.quiet_boxed = false;
                     nested.push(content);
                     // The rail runs on through the row gap to the next row of the line.
                     let bottom = if tail.is_none() && index + 1 < line.end {
@@ -499,19 +501,21 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
-        // Every quiet line starts with the same two marks, a 13px icon then the 12px tick (the
-        // turning loader while the turn runs), so their words line up one under another.
+        // A finished line starts with two marks, a 13px icon then the 12px tick, so their words line
+        // up one under another; a running line shows only its turning loader.
+        //
+        // CDXC:SessionChat 2026-11-12 DECISION: User, of "Working · 1 message sent · 3 tool calls so
+        // far": "Show just the spinner not spinner + icon." The phone does the same (quietView.tsx).
         let lead = if !line.time.is_empty() {
             "titlebar/messages.svg"
         } else {
             "titlebar/clock.svg"
         };
-        let mark = if line.running {
-            loader(&line.key, p, cx.reduce_motion())
+        let icons = if line.running {
+            vec![loader(&line.key, p, cx.reduce_motion())]
         } else {
-            check(p)
+            vec![line_icon(lead, 13.0, p), check(p)]
         };
-        let icons = vec![line_icon(lead, 13.0, p), mark];
         let mut segments: Vec<QuietSegment> = vec![(line.text.clone(), None)];
         if !line.time.is_empty() {
             segments.push((format!("\u{2002}{}", line.time), None));
