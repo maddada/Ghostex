@@ -5,6 +5,7 @@ use crate::{
     remote_access::{
         remove_paired_device_using, replace_earlier_pairings_of_same_phone,
         AdministratorApprovalDeclined, RemotePairedDeviceRecord, RemotePairingRepository,
+        StoredDeviceKey,
     },
     storage::open_gxserver_database,
 };
@@ -797,6 +798,13 @@ async fn push_token_store_repairing_a_phone_revokes_the_replaced_pairing() {
                 api_token_hash: None,
                 paired_at: "2026-11-05T10:00:00.000Z".to_string(),
                 last_seen_at: None,
+                // One device key per device (CDXC:RemotePairing 2026-11-11 SECURITY in
+                // paired_devices.rs): the same phone's rows share it.
+                device_key: Some(StoredDeviceKey {
+                    algorithm: "ecdsaP256Sha256".to_string(),
+                    public_key: format!("device-key-of-{client_key}"),
+                    key_id: format!("key-id-of-{client_key}"),
+                }),
                 ..Default::default()
             })
             .expect("insert paired device");
@@ -819,6 +827,7 @@ async fn push_token_store_repairing_a_phone_revokes_the_replaced_pairing() {
             &db,
             "phone-new",
             Some("tailcat-phone"),
+            "device-key-of-tailcat-phone",
             |_| Ok(true),
             on_kept,
         )

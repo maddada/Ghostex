@@ -71,6 +71,8 @@ pub const PAIR_DEVICE_RATE_LIMITED_ERROR: &str = "pairingRateLimited";
 /// The computer's administrator prompt was declined (Windows administrator
 /// accounts). The phone shows the message; it must never contain "expired".
 pub const PAIR_DEVICE_APPROVAL_DECLINED_ERROR: &str = "pairingApprovalDeclined";
+/// The tailcat key a pairing names is another paired device's (`PairDeviceError::KeyHeldByAnotherDevice`).
+pub const PAIR_DEVICE_KEY_HELD_ERROR: &str = "pairingKeyHeldByAnotherDevice";
 /// The phone's app is older than pairing v2 (it sent no device key). Must never contain "expired".
 pub const PAIR_DEVICE_NEEDS_UPDATE_ERROR: &str = "pairingNeedsAppUpdate";
 /// A signed pairing or renewal ask whose signature or time didn't check out.
@@ -157,6 +159,9 @@ pub enum PairDeviceError {
     BadSignature(String),
     /// The Windows administrator prompt for the keys file was declined.
     ApprovalDeclined,
+    /// The tailcat key the request names belongs to another paired device (another device key):
+    /// the request cannot be that device (`paired_devices::tailcat_key_held_by_another_device`).
+    KeyHeldByAnotherDevice,
     Internal(anyhow::Error),
 }
 
@@ -438,6 +443,19 @@ pub fn begin_pairing(
         return Err(PairDeviceError::CodeExpired);
     }
     pairing_runtime.forget_secret();
+    // Checked once the code is spent, so it tells nobody without a code which keys are paired
+    // (CDXC:RemotePairing 2026-11-11 SECURITY in paired_devices.rs).
+    if let Some(client_key) = params.tailcat_client_key.as_deref() {
+        if super::paired_devices::tailcat_key_held_by_another_device(
+            db,
+            client_key,
+            &device_key.public_key,
+        )?
+        .is_some()
+        {
+            return Err(PairDeviceError::KeyHeldByAnotherDevice);
+        }
+    }
 
     let pending_id = format!("pd_{}", uuid::Uuid::new_v4().simple());
     let words = match_words(&params.secret, &device_key.public_key);
@@ -850,6 +868,18 @@ fn finish_pairing(
     } else {
         None
     };
+    // Checked again here: a device may have paired with that key while this one waited.
+    if let Some(client_key) = pending.tailcat_client_key.as_deref() {
+        if super::paired_devices::tailcat_key_held_by_another_device(
+            context.db,
+            client_key,
+            &pending.device_key.public_key,
+        )?
+        .is_some()
+        {
+            return Err(PairDeviceError::KeyHeldByAnotherDevice);
+        }
+    }
     let device_id = uuid::Uuid::new_v4().simple().to_string();
     let device_api_token = phone.then(mint_device_api_token);
     let token_expires_at = chrono::Utc::now() + DEVICE_API_TOKEN_TTL;
@@ -910,6 +940,8 @@ fn finish_pairing(
         context.db,
         &device_id,
         pending.tailcat_client_key.as_deref(),
+        // Proven: `pairing_status` checked this key's signature before finishing the pairing.
+        &pending.device_key.public_key,
         |id: &str| (context.remove_key)(id),
         |device, error| log_replaced_pairing_kept(context.logger, device, error),
     )?;

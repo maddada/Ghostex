@@ -671,6 +671,9 @@ fn pair_device_error_outcome(error: &PairDeviceError) -> crate::audit::Outcome {
             Outcome::Refused("The phone's Ghostex is too old to pair.".to_string())
         }
         PairDeviceError::ApprovalDeclined => Outcome::Denied,
+        PairDeviceError::KeyHeldByAnotherDevice => Outcome::Refused(
+            "It named the Easy Connect key of another paired device.".to_string(),
+        ),
         PairDeviceError::Internal(error) => Outcome::Failed(format!("{error:#}")),
     }
 }
@@ -813,6 +816,11 @@ impl From<PairDeviceError> for RemoteAccessHttpError {
                 status: StatusCode::FORBIDDEN,
                 code: PAIR_DEVICE_APPROVAL_DECLINED_ERROR,
                 message: "The computer asked for administrator approval to add this phone's key, and the Windows prompt was declined. Scan the new code on the computer and choose Yes when Windows asks.".to_string(),
+            },
+            PairDeviceError::KeyHeldByAnotherDevice => Self {
+                status: StatusCode::CONFLICT,
+                code: PAIR_DEVICE_KEY_HELD_ERROR,
+                message: "Another device paired with this computer already uses this device's Easy Connect key. On the computer, remove the old entry for this device under Paired devices, then show a new code and scan again.".to_string(),
             },
             PairDeviceError::BadRequest(message) => Self::bad_request(message),
             PairDeviceError::Internal(error) => error.into(),

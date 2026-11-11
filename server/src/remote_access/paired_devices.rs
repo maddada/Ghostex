@@ -212,12 +212,16 @@ pub(crate) fn remove_paired_device_using(
 /*
 CDXC:RemotePairing 2026-11-05 WHY:
 A phone that pairs again replaces its earlier entries, so it is listed once (desktop Settings and the phone). The phone is recognized by its tailcat client key: it lives in the app's private storage, outside backups, and stays the same across pairings, while the SSH key is generated anew each time and the device name ("iPhone") is shared by many phones. A phone without a client key (an app build from before Easy Connect allow-listing) cannot be told apart from another phone and is never merged. Each earlier entry is revoked like Remove does it, key line first and then the row (its API token goes with it), but the tailcat key stays on the allow-list because the new entry uses it. Every earlier entry with the key goes, so a list that already holds duplicates collapses to one on the phone's next pairing. A key line that cannot be removed (a declined Windows administrator prompt) keeps that entry listed so Remove can retry it; the new pairing still succeeds. Runs after the new entry is saved, so a failure here never costs the phone its new access. Returns the replaced entries.
+
+CDXC:RemotePairing 2026-11-11 SECURITY:
+Review finding 6: the tailcat client key is only what the request STATES. Nothing checks it against the tunnel the request came in on (tailcat serve hands gxserver a plain local connection and reports no peer for it), so a device that held a code and was approved could name another paired device's key and retire that device's pairing (its SSH key line, token, push registrations and row), and take over the link and purpose keys it had registered. An earlier entry is now retired only when it is proven to be the same device: its device key is the key that signed this pairing's status ask (`pairing_status` verifies that signature before it finishes a pairing), and a phone or computer keeps one device key for good (Secure Enclave / Android Keystore, `computer_pairing::load_or_create_device_key`). A pre-11.0.1 `legacy` entry has no device key to compare; it is retired as before only when it holds no access any more (its unrestricted key line is gone, `retire_legacy_pairings`), so a false claim can cost it nothing but its "pair again" line. A request that names a key another paired device holds under another device key is refused (`tailcat_key_held_by_another_device`, `begin_pairing`). Approval is unchanged.
 */
 pub fn replace_earlier_pairings_of_same_phone(
     paths: &GxserverPaths,
     db: &Connection,
     new_device_id: &str,
     tailcat_client_key: Option<&str>,
+    device_public_key: &str,
     mut remove_key_line: impl FnMut(&str) -> Result<bool>,
     mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
 ) -> Result<Vec<RemotePairedDeviceRecord>> {
@@ -227,7 +231,10 @@ pub fn replace_earlier_pairings_of_same_phone(
     let repository = RemotePairingRepository::new(db);
     let mut replaced = Vec::new();
     for device in repository.list_devices()? {
-        if device.id == new_device_id || device.tailcat_client_key.as_deref() != Some(client_key) {
+        if device.id == new_device_id
+            || device.tailcat_client_key.as_deref() != Some(client_key)
+            || !is_earlier_pairing_of(&device, device_public_key)
+        {
             continue;
         }
         let removed = if device.ssh_key_fingerprint.is_empty() {
@@ -268,6 +275,39 @@ pub fn replace_earlier_pairings_of_same_phone(
         }
     }
     Ok(replaced)
+}
+
+/// Whether `device`, an entry with the same tailcat key, is an earlier pairing of the device whose
+/// key is `device_public_key` (see `replace_earlier_pairings_of_same_phone`).
+fn is_earlier_pairing_of(device: &RemotePairedDeviceRecord, device_public_key: &str) -> bool {
+    match device.device_key.as_ref() {
+        Some(key) => key.public_key == device_public_key,
+        None => {
+            device.status == PairedDeviceStatus::Legacy
+                && (device.legacy_key_line_removed || device.ssh_key_fingerprint.is_empty())
+        }
+    }
+}
+
+/// A paired entry that holds `tailcat_client_key` under a device key other than
+/// `device_public_key`: a request naming that key is not that device, and is refused
+/// (`replace_earlier_pairings_of_same_phone`). A `legacy` entry never is one.
+pub fn tailcat_key_held_by_another_device(
+    db: &Connection,
+    tailcat_client_key: &str,
+    device_public_key: &str,
+) -> Result<Option<RemotePairedDeviceRecord>> {
+    Ok(RemotePairingRepository::new(db)
+        .list_devices()?
+        .into_iter()
+        .find(|device| {
+            device.status == PairedDeviceStatus::Paired
+                && device.tailcat_client_key.as_deref() == Some(tailcat_client_key)
+                && device
+                    .device_key
+                    .as_ref()
+                    .is_none_or(|key| key.public_key != device_public_key)
+        }))
 }
 
 /// Mirrors the stored device tokens (paired v2 devices only) into the map every request is
