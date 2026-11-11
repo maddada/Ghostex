@@ -18,14 +18,26 @@ use super::{
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
+/// Which list draws a session row (`render_native_sidebar_session`).
+///
+/// CDXC:Sidebar 2026-11-11 WHY: a Unified card's threads are drawn with the Project list's row, but the Unified sidebar reorders only pinned cards (CDXC:Sidebar 2026-11-05 in unified/cards.rs), so a thread row there takes no session drop (`moveSession` would change project groups behind the user's back) and its own drag only splits the Agents panes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SessionRowPlace {
+    ProjectList,
+    UnifiedThread,
+}
+
 impl GhostexGpuiApp {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_native_sidebar_session(
         &self,
         group: &NativeSidebarGroup,
         session: &std::sync::Arc<NativeSidebarSession>,
-        // The unscaled height of the card above this one in the same list, which a thread's tree
-        // line rises to.
-        above_height: f32,
+        // Where the icon sits that a thread's tree line rises to (the row above's, or a Unified
+        // card's hat).
+        anchor: super::threads::TreeAnchor,
+        // Which list draws the row: only the Project list moves a session by dropping onto it.
+        place: SessionRowPlace,
         hud: &Value,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
@@ -50,7 +62,9 @@ impl GhostexGpuiApp {
         // Another machine's session in a merged project (`machineName`) has no place in this
         // computer's groups to move to, except a pinned one among the Pinned rows it is drawn with
         // (CDXC:Sidebar 2026-11-07 WHY in gx-core sidebar_drag/pinned_order.rs).
-        let reorders = !session.is_browser()
+        let unified = place == SessionRowPlace::UnifiedThread;
+        let reorders = place == SessionRowPlace::ProjectList
+            && !session.is_browser()
             && !group.is_stale
             && group.remote_machine_context.is_none()
             && (session.details.get("machineName").is_none() || session.is_pinned);
@@ -86,9 +100,20 @@ impl GhostexGpuiApp {
         let indent = 5.0 + super::threads::thread_depth(session) * super::threads::THREAD_INDENT;
         let hovered = self.native_sidebar.hovered_session.as_deref() == Some(&session_id);
         // CDXC:Sessions 2026-10-28 DECISION: User: "if i disable all buttons for the session card in the sidebar please let the sidebar sessions not change when i hover over one of them". `hovered` alone still draws the row's hover fill; everything hover swaps (time, badges, status dots, icon, dimming, the button strip) follows `buttons_shown`, which is false when the strip has no button.
+        // A Unified thread's strip opens and closes with every Unified card's (`unifiedHoverExpand`,
+        // CDXC:Sidebar 2026-10-31 in unified/hover.rs), not with the hidden Project group's.
+        let (strip_expanded, strip_toggle) = match place {
+            SessionRowPlace::ProjectList => (
+                group.hover_actions_expanded,
+                json!({"type": "toggleHoverActions", "groupId": group.storage_id}),
+            ),
+            SessionRowPlace::UnifiedThread => (
+                self.gx_store.unified_sidebar.saved.strip_expanded,
+                json!({"type": "unifiedHoverExpand"}),
+            ),
+        };
         let buttons_shown = hovered
-            && !super::hover_actions::session_hover_items(session, group.hover_actions_expanded)
-                .is_empty();
+            && !super::hover_actions::session_hover_items(session, strip_expanded).is_empty();
         // CDXC:Sidebar 2026-09-19 WHY: sidebar clicks and tab selections must show in the same frame (user decision in gx_store/local_focus.rs). The focused and visible fills of a local session row read the Rust store, which a selection changes in the same frame; the snapshot's flags arrive a sidebar projection later. This supersedes the click-only `optimistic_focus` mark and its 1.5 second timeout of earlier the same day.
         let (focused, visible) = self.gx_store_sidebar_row_focus(
             &session_id,
@@ -107,6 +132,7 @@ impl GhostexGpuiApp {
             && !buttons_shown
             && hud["settings"]["dimSleepingSessions"].as_bool() == Some(true);
         let icon = super::icons::session_icon(session, hud, appearance, buttons_shown, hovered);
+        let clock_fold = super::threads::unified_clock_owns_fold(session);
         let double_click_rename = hud["settings"]["renameSessionOnDoubleClick"].as_bool()
             == Some(true)
             && !session.is_browser();
@@ -261,7 +287,7 @@ impl GhostexGpuiApp {
                 .when(!highlighted, |row| row.hover(|row| row.bg(appearance.session_hover)))
                 .when(highlighted, |row| row.child(super::decorations::session_outline(appearance)))
                 .when_some(question_fill, |row, fill| row.bg(fill).hover(move |row| row.bg(fill)))
-                .children(super::threads::thread_tree_lines(session, card_height, above_height, appearance))
+                .children(super::threads::thread_tree_lines(session, card_height, anchor, appearance))
                 .children(self.render_native_session_decorations(session, appearance, cx))
                 .when_some(self.native_sidebar.reveal_flash.as_ref().filter(|(id, _)| id == &session.session_id).map(|(_, start)| *start), |row, start| row.child(super::scroll::reveal_flash(start, scale)))
                 // Line 1 is the whole card of every row without work links, and the absolute
@@ -271,7 +297,9 @@ impl GhostexGpuiApp {
                 .child(div().id(format!("native-session-title-{session_id}")).flex_1().min_w_0().h_full().flex().items_center().child(title_with_rename_shake(div().min_w_0().truncate().child(session.title().to_owned()), &session_id, session.rename_failed_at.as_deref(), scale)).when(session_tooltips && self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx))))
                 // CDXC:Sidebar 2026-10-29 DECISION: User: "please swap the order of these 2 things (the threads one for orchestrator with the link tag)". The links badge comes before a coordinator's workers badge; the phone's SessionRow.tsx follows.
                 .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
-                .when(!buttons_shown, |row| row.children(super::threads::coordinator_badge(session, appearance)))
+                .when(!buttons_shown && !clock_fold, |row| row.children(super::threads::coordinator_badge(session, appearance)))
+                // A Unified coordinator whose hat a clock owns folds from its count, idle or hovered too.
+                .when(clock_fold, |row| row.children(self.render_unified_crew_count(session, appearance, cx)))
                 .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::main_coordinator_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::worktree_badge(session, appearance)))
@@ -282,14 +310,14 @@ impl GhostexGpuiApp {
                 .when(!buttons_shown && folded_dots.is_none() && !question && !approval, |row| row.children(super::status::activity_indicator(&session.activity, session.has_background_work, failed, scale)))
                 // CDXC:SessionStatus 2026-09-13 DECISION: User: hide Last Active while the question dot is shown so they do not overlap, including when the session is not working.
                 .when(!buttons_shown && folded_dots.is_none() && !question && !approval && !failed && (timer.is_some() || (show_time && session.activity != "working" && session.activity != "attention" && !session.has_background_work)), |row| row.child(div().text_size(px(13.55 * scale)).text_color(if sleeping { chrome_color(0x686868, 0x959595) } else { chrome_color(0xa6a6a6, 0x424242) }).child(time)))
-                .when(buttons_shown, |row| row.child(self.render_native_session_hover_actions(group, session, appearance, cx)))
+                .when(buttons_shown, |row| row.child(self.render_native_session_hover_strip(session, strip_expanded, strip_toggle, appearance, cx)))
                 .when(approval, |row| row.child(super::status::approval_indicator(scale)))
                 .when(question, |row| row.child(super::status::question_indicator(&session.activity, scale, super::status::session_row_ring(appearance, highlighted, visible, question_fill, hovered))))
                 .children(folded_dots))
                 .children(self.render_native_session_work_chips(session, indent, tooltip_span, appearance, cx))
                 .children(self.render_native_session_link_line(session, indent, tooltip_span, appearance, cx))
                 .when(can_drag && self.native_sidebar.menu.is_none(), |row| row.sidebar_drag_source(dragged, cx))
-.sidebar_drop_target("session", drag_id, Some(drag_group_id), cx)
+                .when(place == SessionRowPlace::ProjectList, |row| row.sidebar_drop_target("session", drag_id, Some(drag_group_id), cx))
                 .on_mouse_down(MouseButton::Middle, |_, window, _| {
                     window.prevent_default();
                 })
@@ -311,6 +339,8 @@ impl GhostexGpuiApp {
                     }
                     if stale { return; }
                     let modifiers = event.modifiers();
+                    // Shift and Cmd/Ctrl select along the Project list's order, which a Unified thread is not drawn in; a Unified card ignores them too.
+                    if unified && (modifiers.shift || modifiers.platform || modifiers.control) { return; }
                     let mode = if modifiers.shift { "range" } else if modifiers.platform || modifiers.control { "additive" } else { "focus" };
                     // A coordinator's thread nested from another computer this app has not connected to yet: connect, then open it.
                     if mode == "focus" && borrowed_thread && app.open_borrowed_thread_row_when_connected(&session_id, cx) { return; }

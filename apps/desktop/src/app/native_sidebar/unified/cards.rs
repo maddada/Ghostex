@@ -438,8 +438,9 @@ impl GhostexGpuiApp {
         };
         /*
         CDXC:Sidebar 2026-11-05 DECISION:
-        User: "the dot that indicates working/status is shifted to the left a bit and not center aligned with the icon below it". The agent icon sits in the status dot's own slot (`status::STATUS_SLOT_WIDTH`, centred), so the card's right column has one fixed width and every dot, a question's overlapped pair included, is centred over the agent icon, whatever the timer to its left says.
+        User: "the dot that indicates working/status is shifted to the left a bit and not center aligned with the icon below it". The agent icon sits in the status dot's own slot (`status::STATUS_SLOT_WIDTH`, centred), so the card's right column has one fixed width and every dot, a question's overlapped pair included, is centred over the agent icon, whatever the timer to its left says. Since 2026-11-11 a coordinator card's hat sits at the card's start (CDXC:Sidebar 2026-11-11 in gx-core unified_sidebar/tree.rs), so its slot shows the agent's own logo, like every other card.
         */
+        let coordinator = crate::app::native_sidebar::threads::is_coordinator(session);
         let agent = || {
             div()
                 .w(px(status::STATUS_SLOT_WIDTH * scale))
@@ -447,9 +448,13 @@ impl GhostexGpuiApp {
                 .flex()
                 .justify_center()
                 .opacity(0.75)
-                .child(crate::app::native_sidebar::icons::session_icon(
-                    session, hud, appearance, false, false,
-                ))
+                .child(if coordinator {
+                    crate::app::native_sidebar::icons::session_agent_logo(session, hud, appearance)
+                } else {
+                    crate::app::native_sidebar::icons::session_icon(
+                        session, hud, appearance, false, false,
+                    )
+                })
         };
         let title_color = if needs_you || focused {
             Hsla::from(chrome_color(0xd8d8d8, 0x292929))
@@ -526,6 +531,19 @@ impl GhostexGpuiApp {
                 h_flex()
                     .min_h(px(CARD_TITLE_LINE * scale))
                     .gap(px(6.0 * scale))
+                    // The Project sidebar's hat, at the card's start: it turns into the fold
+                    // chevron on hover (CDXC:Coordinators 2026-10-06 in decorations.rs).
+                    .when(coordinator, |line| {
+                        line.child(self.render_native_session_identity(
+                            session,
+                            crate::app::native_sidebar::icons::session_icon(
+                                session, hud, appearance, false, hovered,
+                            ),
+                            hovered,
+                            appearance,
+                            cx,
+                        ))
+                    })
                     .when(title_line_only && session.is_pinned, |line| {
                         line.child(pin())
                     })
@@ -540,9 +558,9 @@ impl GhostexGpuiApp {
                             .when(recede, |title| title.opacity(0.75))
                             .child(session.title().to_owned()),
                     )
-                    // The crew count folds the threads nested under the card (CDXC:Sidebar
-                    // 2026-11-09 in gx-core unified_sidebar/tree.rs).
-                    .children(self.render_unified_crew_toggle(card, appearance, cx))
+                    // What the card holds: its crew count (CDXC:Coordinators 2026-11-11 in
+                    // native_sidebar/threads.rs).
+                    .children(self.render_unified_crew_count(session, appearance, cx))
                     .children(crate::app::native_sidebar::threads::main_coordinator_tag(
                         session, appearance,
                     ))
@@ -629,7 +647,11 @@ impl GhostexGpuiApp {
         CDXC:Sidebar 2026-11-06 WHY:
         A Discord tester: the hover buttons stayed on the first card hovered and did not follow the pointer to the next card until it left the sidebar. The managed tooltip attaches its own `on_hover`, and a GPUI element keeps only one hover listener, so on the card itself it replaced the card's hover tracking (`unified_row_interactions`) as soon as tooltips came on with the pointer inside. The tooltip sits on a wrapper of the card's exact size, so both listeners run.
         */
-        let threads = self.render_unified_thread_lines(card, hud, appearance, cx);
+        // The first thread's tree line rises to the hat on the title line, whatever is above it.
+        let hat = crate::app::native_sidebar::threads::TreeAnchor {
+            icon_to_top: CARD_TITLE_LINE / 2.0 + CARD_LINE_GAP + CARD_META_LINE + CARD_PADDING_Y,
+        };
+        let threads = self.render_unified_thread_lines(card, hat, hud, appearance, cx);
         div()
             .w_full()
             .pb(px(CARD_GAP * scale))

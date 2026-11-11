@@ -922,54 +922,7 @@ fn build_session(
     if row.is_main_coordinator {
         details.insert("isMainCoordinator".to_string(), Value::Bool(true));
     }
-    if session.nesting.depth > 0 {
-        details.insert(
-            "threadDepth".to_string(),
-            Value::from(session.nesting.depth),
-        );
-        details.insert(
-            "threadLast".to_string(),
-            Value::Bool(session.nesting.last_child),
-        );
-        if session.nesting.passing_lines != 0 {
-            details.insert(
-                "threadPassingLines".to_string(),
-                Value::from(session.nesting.passing_lines),
-            );
-        }
-    }
-    if row.is_coordinator {
-        let badge = session.nesting.coordinator_badge();
-        details.insert(
-            "coordinatorThreads".to_string(),
-            json!({
-                "count": badge.count,
-                "tone": match badge.tone {
-                    ghostex_gx_core::CoordinatorBadgeTone::Approval => "approval",
-                    ghostex_gx_core::CoordinatorBadgeTone::Waiting => "waiting",
-                    ghostex_gx_core::CoordinatorBadgeTone::Working => "working",
-                    ghostex_gx_core::CoordinatorBadgeTone::Idle => "idle",
-                },
-                "open": session.nesting.thread_count,
-                "collapsible": session.nesting.thread_count > 0,
-                "collapsed": session.nesting.collapsed,
-                "older": session.nesting.older_threads,
-                "olderShown": session.nesting.older_threads_shown,
-                "passingLinesBelow": session.nesting.passing_lines_below(),
-                "containsActive": session.nesting.contains_active_session,
-            }),
-        );
-        let folded = session.nesting.folded_status;
-        if folded.any() {
-            details["coordinatorThreads"]["foldedStatus"] = json!({
-                "working": folded.working,
-                "attention": folded.attention,
-                "backgroundWork": folded.background_work,
-                "question": folded.question,
-                "approval": folded.approval,
-            });
-        }
-    }
+    insert_coordinator_nesting(&mut details, row, &session.nesting);
     insert_optional(&mut details, "threadState", row.thread_state.clone());
     // The computer a coordinator's thread runs on, drawn by native_sidebar/threads.rs.
     insert_optional(&mut details, "computerName", row.computer_name.clone());
@@ -1063,6 +1016,58 @@ fn build_session(
             .filter(|links| !links.is_empty())
             .map(|links| Arc::new(links.clone())),
         details,
+    }
+}
+
+/// A row's place in its coordinator tree (gx-core `RowNesting`), written as the `details` the
+/// sidebar row reads (native_sidebar/threads.rs): the Project sidebar's rows and the Unified
+/// sidebar's threads and coordinator cards (gx_store/unified_sidebar.rs) both go through here.
+pub(crate) fn insert_coordinator_nesting(
+    details: &mut Map<String, Value>,
+    row: &ghostex_gx_core::SessionRow,
+    nesting: &ghostex_gx_core::RowNesting,
+) {
+    if nesting.depth > 0 {
+        details.insert("threadDepth".to_string(), Value::from(nesting.depth));
+        details.insert("threadLast".to_string(), Value::Bool(nesting.last_child));
+        if nesting.passing_lines != 0 {
+            details.insert(
+                "threadPassingLines".to_string(),
+                Value::from(nesting.passing_lines),
+            );
+        }
+    }
+    if row.is_coordinator {
+        let badge = nesting.coordinator_badge();
+        details.insert(
+            "coordinatorThreads".to_string(),
+            json!({
+                "count": badge.count,
+                "tone": match badge.tone {
+                    ghostex_gx_core::CoordinatorBadgeTone::Approval => "approval",
+                    ghostex_gx_core::CoordinatorBadgeTone::Waiting => "waiting",
+                    ghostex_gx_core::CoordinatorBadgeTone::Working => "working",
+                    ghostex_gx_core::CoordinatorBadgeTone::Idle => "idle",
+                },
+                "open": nesting.thread_count,
+                "collapsible": nesting.thread_count > 0,
+                "collapsed": nesting.collapsed,
+                "older": nesting.older_threads,
+                "olderShown": nesting.older_threads_shown,
+                "passingLinesBelow": nesting.passing_lines_below(),
+                "containsActive": nesting.contains_active_session,
+            }),
+        );
+        let folded = nesting.folded_status;
+        if folded.any() {
+            details["coordinatorThreads"]["foldedStatus"] = json!({
+                "working": folded.working,
+                "attention": folded.attention,
+                "backgroundWork": folded.background_work,
+                "question": folded.question,
+                "approval": folded.approval,
+            });
+        }
     }
 }
 
