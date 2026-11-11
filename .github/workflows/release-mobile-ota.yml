@@ -24,6 +24,11 @@ on:
         required: false
         default: ''
         type: string
+      whats_new:
+        description: The update's short What's new, a JSON array of lines the phone shows in Settings > Updates (bun run release:ota builds it from the phone commits since the last update)
+        required: false
+        default: ''
+        type: string
       dry_run:
         description: Export, check and sign everything but upload nothing
         required: false
@@ -77,9 +82,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PLATFORMS: ${{ inputs.platforms }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
+          WHATS_NEW: ${{ inputs.whats_new }}
         run: |
           node tooling/release-mobile/ota-release.mjs check \
-            --platform "$PLATFORMS" --expected-sha "$EXPECTED_SHA" --plan-out build/ota-plan.json
+            --platform "$PLATFORMS" --expected-sha "$EXPECTED_SHA" --plan-out build/ota-plan.json \
+            ${WHATS_NEW:+--whats-new "$WHATS_NEW"}
       # The same page and cache key as the Android release job (release-gpui-android.yml).
       - name: Restore the chat core page
         id: chat_core_page_cache
@@ -110,6 +117,8 @@ jobs:
           VERSION: ${{ steps.check.outputs.version }}
           PLATFORMS: ${{ inputs.platforms }}
         run: |
+          GHOSTEX_OTA_WHATS_NEW="$(node -p 'JSON.stringify(require("./build/ota-plan.json").whatsNew ?? [])')"
+          export GHOSTEX_OTA_WHATS_NEW
           tooling/release-mobile/ota-export.sh "$VERSION" build/ota
           # ota-export.sh always exports both; publish only the platforms asked for.
           for platform in android ios; do

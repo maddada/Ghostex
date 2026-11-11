@@ -4843,10 +4843,14 @@ sessions, so any client can control agents on any machine.
   Nothing is sent over the network, and voice is off. Remove it in Settings >
   Demo computer > Remove demo computer. Pairing a real computer is separate.
   The phone app keeps itself up to date: most releases download in the
-  background and apply the next time the app starts, or right away with
-  Restart to update in the phone's Settings > Updates, which also shows the
-  running version. A release that needs a new app shows Update available
-  there instead, with a Download button on the GitHub APK.
+  background and apply the next time the app starts. When an update is ready,
+  or a release needs a new app, an Update button shows at the top of the
+  Sessions screen: it restarts into the update, or gets the new app (the
+  GitHub APK downloads it and opens Android's installer; Google Play,
+  TestFlight and the App Store open their page). The phone's Settings >
+  Updates shows the app's version and where it came from, the update it runs
+  (its date, id and what's new), Restart to update, and Check for updates,
+  which checks for a new update and a new app at once.
   With Auto reconnect enabled in the phone's Settings > Connection, the phone
   checks the connection when you return to the app or its network changes and
   reconnects interrupted agent terminals. Tap a red cloud or choose Reconnect

@@ -8,9 +8,14 @@
  *       HEAD == origin/main), shows what would publish and dispatches release-mobile-ota.yml.
  *       --dry-run prints the plan and the dispatch instead. --force publishes even when nothing
  *       changed in the phone app since the last update. A dry run reports the source checks it
- *       would refuse on instead of stopping, since it dispatches nothing.
+ *       would refuse on instead of stopping, since it dispatches nothing. The phone commits since
+ *       the last update become the update's short "What's new", which the phone's Settings > Updates
+ *       shows; the dispatch hands it to the workflow (input whats_new).
  *   ota-release.mjs check [--platform both|android|ios] [--expected-sha <sha>] [--plan-out <file>]
- *       The workflow's gate: refuses when a platform's runtime version has no installed app.
+ *                         [--whats-new <json array>]
+ *       The workflow's gate: refuses when a platform's runtime version has no installed app. The plan
+ *       it writes carries the update's "What's new": the dispatcher's list, or one built here when the
+ *       checkout holds the phone commits since the last update.
  *   ota-release.mjs verify-export <bundle-dir> --plan <file>
  *       The workflow's check that ota-export.sh exported exactly what the gate approved.
  *
@@ -33,9 +38,11 @@ import {
   nativeChanges,
   otaServer,
   parsePlatforms,
+  parseWhatsNew,
   planOtaRelease,
   runtimeInputFiles,
   verifyExport,
+  whatsNewFromCommits,
 } from './ota-release-lib.mjs';
 
 const REPO = 'maddada/Ghostex';
@@ -131,6 +138,52 @@ function printChanges(changes, label) {
   return phoneFiles.length + bundled.length;
 }
 
+/**
+ * The commit the "What's new" starts at: the older of the main commits the served updates came
+ * from (Android and the iPhone can run updates from different commits), so every phone's list holds
+ * what it has not run yet. Null when no update is served or the commits are not in this checkout.
+ */
+function whatsNewBase(platforms, served) {
+  const bases = [
+    ...new Set(
+      platforms
+        .map((platform) => served[platform])
+        .filter((record) => record?.kind === 'update' && record.gitSha)
+        .map((record) => record.gitSha)
+    ),
+  ];
+  try {
+    return (
+      bases.find((base) =>
+        bases.every((other) => {
+          if (other === base) return true;
+          execFileSync('git', ['merge-base', '--is-ancestor', base, other], { cwd: REPO_ROOT, stdio: 'ignore' });
+          return true;
+        })
+      ) ?? null
+    );
+  } catch {
+    return bases.length === 1 ? bases[0] : null;
+  }
+}
+
+/** The update's "What's new" from the phone commits since the served updates, or none when unknown. */
+function whatsNewSince(platforms, served) {
+  const base = whatsNewBase(platforms, served);
+  if (base === null) return [];
+  const changes = tryChanges(base);
+  return changes.error ? [] : whatsNewFromCommits(changes.commits);
+}
+
+function printWhatsNew(whatsNew) {
+  if (whatsNew.length === 0) {
+    console.log("What's new (shown on phones): nothing to list");
+    return;
+  }
+  console.log("What's new (shown on phones):");
+  for (const line of whatsNew) console.log(`  - ${line}`);
+}
+
 function refuse(plan) {
   const lines = ['refused, nothing was published:', ...plan.refusals.map((refusal) => `  ${refusal}`)];
   const tag = `v${plan.version}`;
@@ -155,11 +208,19 @@ async function check(options) {
   }
   const { plan, served } = await resolvePlan(platforms);
   printPlan(plan, served);
-  if (plan.lastOtaGitSha) printChanges(tryChanges(plan.lastOtaGitSha), 'the last update');
+  const changes = plan.lastOtaGitSha ? tryChanges(plan.lastOtaGitSha) : null;
+  if (changes !== null) printChanges(changes, 'the last update');
   if (!plan.ok) refuse(plan);
+  let whatsNew;
+  try {
+    whatsNew = options.whatsNew ? parseWhatsNew(options.whatsNew) : whatsNewSince(plan.platforms, served);
+  } catch (error) {
+    fail(`--whats-new: ${error.message}`);
+  }
+  printWhatsNew(whatsNew);
   if (options.planOut) {
     mkdirSync(path.dirname(path.resolve(options.planOut)), { recursive: true });
-    writeFileSync(options.planOut, `${JSON.stringify(plan, null, 2)}\n`);
+    writeFileSync(options.planOut, `${JSON.stringify({ ...plan, whatsNew }, null, 2)}\n`);
   }
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `version=${plan.version}\n`);
 }
@@ -218,14 +279,18 @@ async function start(options) {
   printPlan(plan, served);
   if (!plan.ok) refuse(plan);
   const base = plan.lastOtaGitSha;
-  const changed = base ? printChanges(tryChanges(base), 'the last update') : undefined;
+  const changes = base ? tryChanges(base) : null;
+  const changed = changes !== null ? printChanges(changes, 'the last update') : undefined;
   if (!base) console.log('Changes since the last update: unknown (the served updates name different commits or none)');
+  const whatsNew = whatsNewSince(plan.platforms, served);
+  printWhatsNew(whatsNew);
   if (changed === 0 && !options.force) {
     fail('nothing changed in the phone app since the last update; pass --force to publish it again anyway');
   }
   if (!options.skipLocalTests) run('bun', ['run', 'release:test'], { capture: false });
   requireSecrets();
   const fields = { platforms: options.platform, expected_sha: head };
+  if (whatsNew.length > 0) fields.whats_new = JSON.stringify(whatsNew);
   const args = ['workflow', 'run', WORKFLOW, '--repo', REPO, '--ref', 'main'];
   for (const [name, value] of Object.entries(fields)) args.push('-f', `${name}=${value}`);
   if (options.dryRun) {

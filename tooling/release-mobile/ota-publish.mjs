@@ -115,6 +115,20 @@ function sha256(bytes) {
   return { hex: digest.toString('hex'), base64url: digest.toString('base64url') };
 }
 
+/**
+ * What the update says about itself in `extra.ghostex`, read by the phone's Settings > Updates
+ * (apps/mobile/app/src/updates/overTheAir.ts `updateDetails`): the release version and main commit
+ * (every update), the phone commit and the short "What's new" (exports from 2026-11-12 on).
+ */
+function ghostexDetails(info) {
+  return {
+    version: info.version,
+    gitSha: info.gitSha,
+    ...(typeof info.mobileSha === 'string' ? { mobileSha: info.mobileSha } : {}),
+    ...(Array.isArray(info.whatsNew) && info.whatsNew.length > 0 ? { whatsNew: info.whatsNew } : {}),
+  };
+}
+
 /** One platform folder from ota-export.sh: export/ (expo export), expo-config.json, ota.json. */
 function buildUpdate(platformDir) {
   const info = JSON.parse(readFileSync(path.join(platformDir, 'ota.json'), 'utf8'));
@@ -157,7 +171,7 @@ function buildUpdate(platformDir) {
     launchAsset: entry(files.bundle, null, true),
     assets: (files.assets ?? []).map((item) => entry(item.path, item.ext, false)),
     metadata: {},
-    extra: { expoClient: expoConfig, ghostex: { version: info.version, gitSha: info.gitSha } },
+    extra: { expoClient: expoConfig, ghostex: ghostexDetails(info) },
   };
   return { info, manifest, uploads };
 }

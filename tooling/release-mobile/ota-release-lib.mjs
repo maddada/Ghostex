@@ -14,8 +14,8 @@
  * APK was built with, so a runtime with a record on ota.ghostex.dev is one installed apps run, and a
  * runtime with none means the native inputs changed since the last app build. The update carries the
  * newest GitHub release's version (app.config.js only takes MAJOR.MINOR.PATCH, and the APK updater in
- * apps/mobile/app/src/updates/overTheAir.ts offers an APK unless the server's version equals the
- * newest release), so phones read it as "that release, plus a fix".
+ * apps/mobile/app/src/updates/appUpdateStore.ts offers a new app unless the server's version is at
+ * or above the newest release), so phones read it as "that release, plus a fix".
  */
 
 import { execFileSync } from 'node:child_process';
@@ -305,4 +305,68 @@ export function changesSince(base) {
           .split('\n')
           .filter(Boolean);
   return { from, to, commits, files: [...mainFiles.filter((file) => file !== MOBILE_APP), ...appFiles] };
+}
+
+/** The most lines an update's "What's new" carries, and the longest line. */
+export const WHATS_NEW_MAX_LINES = 8;
+export const WHATS_NEW_MAX_LENGTH = 120;
+
+/** `text` without a parenthesis left open at its end (a cut inside "(…" drops the whole aside). */
+function closeAsides(text) {
+  let depth = 0;
+  let openedAt = -1;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '(') {
+      if (depth === 0) openedAt = index;
+      depth += 1;
+    } else if (text[index] === ')' && depth > 0) depth -= 1;
+  }
+  return depth > 0 && openedAt > 20 ? text.slice(0, openedAt).trimEnd() : text;
+}
+
+function shortenLine(text) {
+  const whole = closeAsides(text);
+  if (whole.length <= WHATS_NEW_MAX_LENGTH) return whole;
+  const cut = whole.slice(0, WHATS_NEW_MAX_LENGTH - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${closeAsides(space > 40 ? cut.slice(0, space) : cut).replace(/[\s,;:.(]+$/, '')}…`;
+}
+
+/**
+ * The short "What's new" an update carries (Settings > Updates on the phone shows it): one line per
+ * phone commit since the update phones run now, from `git log --oneline` lines. Merges and chores
+ * are left out; a subject loses its `type(scope):` prefix and everything after its first `: ` or
+ * `; ` (the phone's subjects put the headline first and the details after), and starts upper case.
+ *
+ * CDXC:Updates 2026-11-12 WHY: the user could not tell which update the phone ran ("I can't see the
+ * actual OTA update version here"); updates now say what they bring. Built by the dispatcher, which
+ * has the phone's full history (the workflow checks the phone app out at depth 1).
+ */
+export function whatsNewFromCommits(onelineCommits) {
+  const lines = [];
+  for (const entry of onelineCommits) {
+    const subject = entry.replace(/^[0-9a-f]{6,40}\s+/, '').trim();
+    if (/^merge\b/i.test(subject) || /^chore(\([^)]*\))?!?:/i.test(subject)) continue;
+    const body = subject.replace(/^[a-z]+(\([^)]*\))?!?:\s*/i, '');
+    const headline = body.split(/:\s|;\s/)[0].trim();
+    if (headline.length === 0) continue;
+    const line = shortenLine(headline.charAt(0).toUpperCase() + headline.slice(1));
+    if (!lines.includes(line)) lines.push(line);
+  }
+  if (lines.length <= WHATS_NEW_MAX_LINES) return lines;
+  const rest = lines.length - (WHATS_NEW_MAX_LINES - 1);
+  return [...lines.slice(0, WHATS_NEW_MAX_LINES - 1), `And ${rest} more changes`];
+}
+
+/** A "What's new" list handed over as JSON (the workflow input, the export's environment); throws on anything else. */
+export function parseWhatsNew(json) {
+  if (json === undefined || json === null || json.trim() === '') return [];
+  const value = JSON.parse(json);
+  if (!Array.isArray(value) || !value.every((line) => typeof line === 'string')) {
+    throw new Error("what's new must be a JSON array of strings");
+  }
+  return value
+    .map((line) => shortenLine(line.trim()))
+    .filter(Boolean)
+    .slice(0, WHATS_NEW_MAX_LINES);
 }
