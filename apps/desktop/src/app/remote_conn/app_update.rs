@@ -600,6 +600,43 @@ impl GhostexGpuiApp {
     }
 }
 
+impl GhostexGpuiApp {
+    /// Each remote computer's system as far as this app knows it (`"windows"`, `"macos"` or
+    /// `"linux"`), by machine id, for its icon in the sidebar (native_sidebar/machines.rs). A
+    /// computer saved with a WSL distribution is Windows, though its gxserver runs in Linux; the
+    /// rest say what their gxserver's update status reports once it has been read. A computer that
+    /// has never answered is missing, and the sidebar shows the generic remote icon.
+    pub(crate) fn remote_machine_systems(&self) -> HashMap<String, &'static str> {
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        let mut systems: HashMap<String, &'static str> = remote_app_update_machine_ids()
+            .into_iter()
+            .filter_map(|id| {
+                let status = remote_app_update(&id)?.status?;
+                let system = match text(&status, "platform")? {
+                    "windows" => "windows",
+                    "macos" => "macos",
+                    "linux" => "linux",
+                    _ => return None,
+                };
+                Some((id, system))
+            })
+            .collect();
+        for machine in settings
+            .object()
+            .get("remoteMachines")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+        {
+            let wsl = text(machine, "wslDistribution").is_some_and(|name| !name.trim().is_empty());
+            if wsl && let Some(id) = gpui_remote_machine_id_from_value(machine) {
+                systems.insert(id, "windows");
+            }
+        }
+        systems
+    }
+}
+
 /// What a machine tab shows for its Ghostex update.
 pub(crate) struct RemoteAppUpdateBadge {
     pub(crate) busy: bool,
