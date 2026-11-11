@@ -365,6 +365,9 @@ pub(crate) struct CoordinatorBoardView {
     /// age while that menu is open, the pointer being on the menu and off the row (work_cards.rs
     /// `row_age_menu`).
     pub(super) dock_menu_row: Option<(String, gpui::EntityId)>,
+    /// Each opened card's answers line width at its last paint (unscaled), by card key: what
+    /// decides whether its answers fold into one dropdown (`board_card_buttons`).
+    answer_rooms: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
@@ -1275,7 +1278,16 @@ impl NativeChatView {
                 );
             }
             // Beside a lead the answers keep their width; alone on a narrow card they give way.
-            let answers_pill = self.board_answers(&key, &with_reply(row, &answers), p, cx);
+            // Their room: the card's line less its age, and the lead's narrowest beside them.
+            let room = inner_width
+                - age_width
+                - CHIP_GAP
+                - if !lead.is_empty() && inner_width >= 260.0 {
+                    40.0 + CHIP_GAP
+                } else {
+                    0.0
+                };
+            let answers_pill = self.board_answers(&key, &with_reply(row, &answers), room, p, cx);
             chips = if !lead.is_empty() && inner_width >= 260.0 {
                 chips.child(div().flex_shrink_0().child(answers_pill))
             } else {
@@ -1610,12 +1622,89 @@ impl NativeChatView {
         let icons = self.work_action_icons(&key, &actions, &reference, true, p, cx);
         let mut column = div().w_full().min_w_0().flex().flex_col().gap(px(6.0 * s));
         if !answers.is_empty() {
+            // One line, never wrapped: past the card's width the answers fold into one dropdown
+            // beside Reply, as on the dock's rows (work_cards.rs `dock_row`), measured against
+            // the line's width at its last paint.
+            let (choices, replies): (Vec<Value>, Vec<Value>) = answers
+                .iter()
+                .cloned()
+                .partition(|answer| !answer["reply"].is_object());
+            let widths: Vec<f32> = choices
+                .iter()
+                .map(|answer| {
+                    super::work_cards::dock_button_width(
+                        &text(answer, "label"),
+                        false,
+                        answer["recommended"] == true || answer["picked"] == true,
+                        p,
+                        cx,
+                    )
+                })
+                .collect();
+            let reply_width: f32 = replies
+                .iter()
+                .map(|answer| {
+                    super::work_cards::dock_button_width(&text(answer, "label"), true, false, p, cx)
+                        + 6.0
+                })
+                .sum();
+            let need = super::work_cards::buttons_width(&widths) + reply_width;
+            let picked = answers.iter().any(|answer| answer["picked"] == true);
+            let fold = !choices.is_empty()
+                && !picked
+                && self
+                    .board
+                    .answer_rooms
+                    .borrow()
+                    .get(&key)
+                    .is_some_and(|room| need > *room);
+            let mut buttons = Vec::new();
+            if fold {
+                buttons.push(self.answers_dropdown(&key, &choices, false, p, cx));
+                buttons.extend(self.work_answer_buttons(
+                    &format!("{key}:reply"),
+                    &replies,
+                    false,
+                    p,
+                    cx,
+                ));
+            } else {
+                buttons = self.work_answer_buttons(&key, &answers, false, p, cx);
+            }
+            let rooms = self.board.answer_rooms.clone();
+            let room_key = key.clone();
+            let chat = cx.weak_entity();
             column = column.child(
                 div()
+                    .relative()
+                    .w_full()
+                    .min_w_0()
                     .flex()
-                    .flex_wrap()
+                    .items_center()
                     .gap(px(6.0 * s))
-                    .children(self.work_answer_buttons(&key, &answers, false, p, cx)),
+                    .children(buttons)
+                    .child(
+                        gpui::canvas(
+                            move |bounds, _, cx| {
+                                let room = bounds.size.width.as_f32() / s;
+                                let changed = rooms
+                                    .borrow()
+                                    .get(&room_key)
+                                    .is_none_or(|was| (was - room).abs() > 0.5);
+                                if changed {
+                                    rooms.borrow_mut().insert(room_key.clone(), room);
+                                    // The chat's render is cached: lay the card out again.
+                                    let chat = chat.clone();
+                                    cx.defer(move |cx| {
+                                        let _ = chat.update(cx, |_, cx| cx.notify());
+                                    });
+                                }
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .inset_0(),
+                    ),
             );
         }
         column
@@ -2242,10 +2331,11 @@ impl NativeChatView {
         &self,
         key: &str,
         answers: &[Value],
+        room: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        self.work_compact_answers(key, answers, p, cx)
+        self.work_compact_answers(key, answers, room, p, cx)
     }
 
     /// The docked board is on screen (its pill reads as pressed).

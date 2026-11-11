@@ -105,7 +105,7 @@ const AGE_SLOT_MIN: f32 = 26.0;
 const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
-fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
+pub(super) fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
     if label.is_empty() {
         return 0.0;
     }
@@ -127,7 +127,7 @@ fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -
 
 /// One answer button's width (unscaled), as `tone_button` draws it: its label, its 11px sides
 /// and border, an icon (`icon`) or the star or check (`mark`) with their gaps.
-fn dock_button_width(
+pub(super) fn dock_button_width(
     label: &str,
     icon: bool,
     mark: bool,
@@ -141,7 +141,7 @@ fn dock_button_width(
 }
 
 /// A run of answer buttons' width with their 6px gaps.
-fn buttons_width(widths: &[f32]) -> f32 {
+pub(super) fn buttons_width(widths: &[f32]) -> f32 {
     widths.iter().sum::<f32>() + 6.0 * widths.len().saturating_sub(1) as f32
 }
 
@@ -787,13 +787,14 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// One dock row. Its first line is its status glyph, its question, the answers that fit
-    /// beside it and its age, which stays at the top right open or closed. Closed it stays one
-    /// line: the answers that fit, then "+N" for the rest (a click opens the row). Opened, it is
-    /// its own card (one open at a time): the title, the work it belongs to as a small label under
-    /// it, the whole description; the answers stay beside the title when they fit and go under it
-    /// when they do not, Reply after a divider, and one ⋯ menu at their right end for Show in
-    /// chat, Dismiss, Snooze and Mention.
+    /// One dock row. Its first line is its status glyph, its question, the answers beside it when
+    /// they fit and its age, which stays at the top right open or closed, with the row's ⋯ menu
+    /// (Show in chat, Dismiss, Snooze, Mention) over it under the pointer. Closed it stays one
+    /// line. Opened, it is its own card (one open at a time): the title, the work it belongs to as
+    /// a small label under it, the whole description; the answers stay beside the title when they
+    /// fit and go on a line under it when they do not, Reply after a divider. The answers and
+    /// Reply are always one line: past its room the answers fold into one Choose an answer
+    /// dropdown (work_actions.rs `answers_dropdown`).
     ///
     /// CDXC:Coordinators 2026-11-10 DECISION:
     /// User, picking on the dock rows page (rows-page.html) after a long question was squeezed
@@ -858,8 +859,8 @@ impl NativeChatView {
                 })
                 .collect(),
         };
-        // Reply always shows, so the answers give way to "+N" before it does: it is the one answer
-        // that takes anything, so a closed row keeps it one click away.
+        // Reply always shows: it is the one answer that takes anything, so a row keeps it one
+        // click away.
         let reply_width = reply_answer.as_ref().map_or(0.0, |answer| {
             dock_button_width(&text(answer, "label"), true, false, p, cx)
                 + 6.0
@@ -867,52 +868,29 @@ impl NativeChatView {
         });
         let all_width = buttons_width(&widths) + reply_width;
         let fit = all_width <= beside_room;
-        // Closed: the answers that fit, then "+N"; opened, all of them beside or under.
-        let shown = if open || fit {
-            widths.len()
-        } else {
-            let mut shown = widths.len();
-            while shown > 0 {
-                let rest = widths.len() - shown;
-                let chip = if rest > 0 {
-                    dock_button_width(&format!("+{rest}"), false, false, p, cx) + 6.0
-                } else {
-                    0.0
-                };
-                if buttons_width(&widths[..shown]) + chip + reply_width <= beside_room {
-                    break;
-                }
-                shown -= 1;
-            }
-            shown
-        };
+        // The answers, Reply and its divider are one line, never wrapped: when they do not all fit
+        // (beside the title on a closed row, on their own line under an opened one's text), the
+        // answers fold into one Choose an answer dropdown in their place. Measured, with the
+        // dock's width at its last paint, so a resize decides again.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of an opened row whose Reply wrapped under four answers: "i dont like the choices
+        // wrapping, please make them never wrap… should just show a dropdown". Supersedes the
+        // closed row's "+N" chip.
+        // Answers no wider than the dropdown stay as they are: folding them would gain nothing.
+        let line_room = row_width - DOCK_LEAD;
+        let choose_width =
+            dock_button_width(super::work_actions::CHOOSE_ANSWER, true, false, p, cx);
+        let fold = action.is_none()
+            && !answers.is_empty()
+            && buttons_width(&widths) > choose_width
+            && !(fit || open && all_width <= line_room);
         let mut buttons: Vec<AnyElement> = match &action {
             Some(_) => self.work_row_action(&key, row, p, cx).into_iter().collect(),
-            None => self.work_answer_buttons(&key, &answers[..shown], busy, p, cx),
+            None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
+            None => self.work_answer_buttons(&key, &answers, busy, p, cx),
         };
-        let rest = widths.len().saturating_sub(shown);
         let toggle = open_key.clone();
-        if !open && rest > 0 {
-            let toggle = toggle.clone();
-            buttons.push(
-                self.tone_button(
-                    gpui::SharedString::from(format!("dock-row-rest:{key}")),
-                    &format!("+{rest}"),
-                    None,
-                    super::tone_card::ToneButton::Secondary,
-                    None,
-                    false,
-                    p,
-                )
-                .aria_label(format!("{rest} more answers"))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.expanded.insert(toggle.clone());
-                    cx.notify();
-                }))
-                .into_any_element(),
-            );
-        }
         if let Some(answer) = &reply_answer {
             // Opened, Reply stands apart from the answers after a thin divider.
             if open {
@@ -1177,7 +1155,6 @@ impl NativeChatView {
                             .flex_1()
                             .min_w_0()
                             .flex()
-                            .flex_wrap()
                             .items_center()
                             .gap(px(6.0 * s))
                             .children(under_answers),
