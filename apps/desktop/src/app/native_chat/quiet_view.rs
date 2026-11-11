@@ -67,6 +67,23 @@ impl QuietLines {
 /// The space between a shut line and the reply that ends it.
 const LINE_TO_REPLY: f32 = 8.0;
 
+/// `line` moved `shift` (unscaled; up when negative) without changing any row's height, so the
+/// space above and below a quiet line comes out the same: half of the row gap and the line's own
+/// gap to its reply on each side (12px and 12px at Comfortable; at Compact both are 8px already).
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User, of a folded "Previous turn · …" line: "space above is bigger than space below this previous turns line please fix", then "just increase space below and reduce it above pls". The line moves toward the larger gap until both are equal; the space it takes, and so every row's height, stays the same, so nothing else in the chat moves.
+fn balanced_line(line: AnyElement, shift: f32, p: &ChatAppearance) -> AnyElement {
+    if shift == 0.0 {
+        return line;
+    }
+    div()
+        .relative()
+        .top(px(shift * p.scale))
+        .child(line)
+        .into_any_element()
+}
+
 /// Where a row stands among the lines.
 #[derive(Clone, Copy)]
 pub(super) struct QuietPlace {
@@ -285,7 +302,16 @@ impl NativeChatView {
             Some(line) => {
                 let open = self.quiet_open(line);
                 if index == line.start {
-                    parts.push((self.quiet_view_line(line, open, p, cx), 0.0));
+                    // A line its reply follows sits midway between the row above and the reply
+                    // (`balanced_line`); one with nothing of its own after it already has a full
+                    // row gap on both sides.
+                    let shift = if line.tail.is_some() {
+                        -(p.row_gap() - LINE_TO_REPLY) / 2.0
+                    } else {
+                        0.0
+                    };
+                    let drawn = self.quiet_view_line(line, open, p, cx);
+                    parts.push((balanced_line(drawn, shift, p), 0.0));
                 }
                 let tail = line.tail.as_ref().filter(|tail| tail.row == index);
                 if open {
@@ -387,7 +413,11 @@ impl NativeChatView {
         }
         if let Some(line) = place.after.map(|at| &lines.lines[at]) {
             let open = self.quiet_open(line);
-            parts.push((self.quiet_view_line(line, open, p, cx), 8.0));
+            // Under its reply, 8px below the reply and a row gap above the next row: moved down to
+            // sit midway.
+            let drawn = self.quiet_view_line(line, open, p, cx);
+            let shift = (p.row_gap() - LINE_TO_REPLY) / 2.0;
+            parts.push((balanced_line(drawn, shift, p), LINE_TO_REPLY));
             if open {
                 let cards = self.quiet_cards(line);
                 if let Some(stack) = self.work_card_stack(&cards, p, cx) {
