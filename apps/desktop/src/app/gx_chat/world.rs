@@ -128,6 +128,25 @@ pub(super) enum HostCommand {
     Computers,
 }
 
+impl HostCommand {
+    /// What kind of command this is, for the runner's slow-turn line: a view's call by its method
+    /// (`action`, `resolve`, `start`), never its arguments.
+    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    pub(super) fn kind(&self) -> &'static str {
+        match self {
+            Self::Attach { .. } => "attach",
+            Self::Detach { .. } => "detach",
+            Self::Call { method, .. } => method,
+            Self::Query { .. } => "query",
+            Self::Pause { .. } => "pause",
+            Self::Endpoint { .. } => "endpoint",
+            Self::Inbound(_) => "inbound",
+            Self::ReadAloud(_) => "readAloud",
+            Self::Computers => "computers",
+        }
+    }
+}
+
 /// How many renderer requests one chat with no view attached may hold before the chat is released.
 ///
 /// A chat is retained without a view for up to five minutes (`store.rs`), and the requests it
@@ -183,6 +202,9 @@ pub(super) struct World {
     computer_sent: std::collections::HashMap<String, u64>,
     /// Read aloud's app-wide facts and the one speaker (`read_aloud.rs`).
     pub(super) read_aloud: ReadAloudHost,
+    /// The chat whose drive took the longest this turn and how long, for the runner's slow-turn
+    /// line (`worker.rs`). The runner clears it before each turn.
+    pub(super) slowest_drive: Option<(String, Duration)>,
 }
 
 /// When the host must wake with no command: the core's timers and the draft retry ladder.
@@ -679,6 +701,19 @@ pub(super) fn drive(world: &mut World, key: &str, events: Vec<Event>) {
     if world.store.get(key).is_none() {
         return;
     }
+    let started = Instant::now();
+    drive_chat(world, key, events);
+    let took = started.elapsed();
+    if world
+        .slowest_drive
+        .as_ref()
+        .is_none_or(|(_, slowest)| took > *slowest)
+    {
+        world.slowest_drive = Some((key.to_string(), took));
+    }
+}
+
+fn drive_chat(world: &mut World, key: &str, events: Vec<Event>) {
     world.driving = Some(key.to_string());
     let mut pending = events;
     // Whatever this chat owed a view it did not have, in the order it was raised. An empty list
