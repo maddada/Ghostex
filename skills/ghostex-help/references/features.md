@@ -2140,7 +2140,7 @@ box and the transcript: a line that starts in one of them is right-aligned and
 reads right to left, like a web text box, and the arrow keys follow its reading
 direction; lines in left-to-right languages stay as they are.
 Hex colors (#RRGGBB, #RRGGBBAA, and the short #RGB and #RGBA when they contain a letter, such as #fa0) in messages, inline code, and tables have a small rounded color swatch
-beside the value on desktop and web; an all-digit number such as #1234 is not a color and stays plain text (or links to the project's GitHub issue). Copying keeps the original text.
+beside the value on desktop, web and the phone; an all-digit number such as #1234 is not a color and stays plain text (or links to the project's GitHub issue). Copying keeps the original text.
 Mermaid diagrams an agent writes (a ```mermaid block) are drawn as diagrams in
 the desktop and mobile chats once the block is complete. Source switches to the
 diagram's text and Copy copies it. On desktop, the expand button opens a larger
@@ -2684,7 +2684,8 @@ menu; click it to show or hide the panel of the chat you are in (one switch for
 the whole app, remembered across restarts). When the chat is wide enough the
 panel sits beside it as its own column and the conversation moves over to make
 room; when it is too narrow the panel opens as a floating card under the ring,
-and a click on the chat closes it. Its cards: Environment (this computer or the
+and a click on the chat closes it. On the phone the same ring sits in the chat's
+header and opens the cards as a sheet (Changes opens the phone's Changes view). Its cards: Environment (this computer or the
 box the session runs in, its folder, branch and account, and how much memory
 the session's processes use while it runs on this computer); Context (how full the
 context window is, with Claude's own breakdown into messages, memory files,
