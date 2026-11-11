@@ -1693,6 +1693,11 @@ pub fn answer(
     if !ask.is_empty() {
         body["ask"] = json!(ask);
     }
+    state
+        .extras
+        .panels
+        .board_answer_calls
+        .insert(request_id, body.clone());
     Some(crate::effect::Effect::SendRpc {
         request_id,
         method: crate::wire::ChatRpcMethod::CoordinatorBoard,
@@ -1709,19 +1714,106 @@ fn answer_message(
     text: &str,
     reply: bool,
 ) -> crate::effect::Effect {
-    state
-        .extras
-        .panels
+    let params = json!({
+        "text": text,
+        "sendRequestId": answer_send_id(&state.identity.session_id, key, label),
+    });
+    let panels = &mut state.extras.panels;
+    panels
         .board_answer_sends
         .insert(request_id, (key.to_string(), label.to_string(), reply));
+    panels.board_answer_calls.insert(request_id, params.clone());
     crate::effect::Effect::SendRpc {
         request_id,
         method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
-        params: Box::new(json!({
-            "text": text,
-            "sendRequestId": answer_send_id(&state.identity.session_id, key, label),
-        })),
+        params: Box::new(params),
     }
+}
+
+/// Fires when the board answers gxserver never answered go again.
+pub const BOARD_ANSWER_RETRY_TIMER: &str = "extras.boardAnswerRetry";
+
+/// A board answer's call (its record or its message) got no answer from Ghostex's service, or
+/// met it starting: the answer stays given, its card stays locked, and the same call goes again
+/// every two seconds until the service answers. `None` when `request_id` is not such a call or
+/// the outcome is an answer of gxserver's own, which [`settle_answer`] takes.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "you should self heal, don't show me this message, why do i need to press enter again
+/// when you can press it for me". An answer given in the dock or the Work panel (a pick, Done, a
+/// Reply) that met a restarting gxserver unlocked its card with an error toast, and a Reply
+/// opened its box again for the user to send a second time. Time fixes that, so the app waits it
+/// out, as a message from the chat box does (`composer/delivery.rs`). The record refuses a
+/// second answer and the message carries the card's own send id, so a call that did land is not
+/// applied twice.
+pub fn wait_out_answer(
+    state: &mut ChatState,
+    request_id: u64,
+    outcome: &crate::wire::RpcOutcome,
+    context: &ChatContext,
+) -> Option<Vec<crate::effect::Effect>> {
+    let crate::wire::RpcOutcome::Err { code, .. } = outcome else {
+        return None;
+    };
+    if !matches!(
+        code.as_deref(),
+        None | Some("unreachable") | Some("serverStarting")
+    ) {
+        return None;
+    }
+    let panels = &mut state.extras.panels;
+    let waiting = if let Some((key, label, reply)) = panels.board_answer_sends.remove(&request_id) {
+        (key, label, String::new(), reply, true)
+    } else {
+        let (key, label, text, reply) = panels.board_answer_requests.remove(&request_id)?;
+        (key, label, text, reply, false)
+    };
+    let params = panels
+        .board_answer_calls
+        .remove(&request_id)
+        .unwrap_or(Value::Null);
+    let (key, label, text, reply, message) = waiting;
+    panels
+        .board_answer_waiting
+        .push((key, label, text, reply, message, params));
+    state.core.timers.arm_once(
+        BOARD_ANSWER_RETRY_TIMER,
+        context.now_ms,
+        crate::session::constants::UNREACHABLE_RETRY_DELAY_MS as f64,
+    );
+    Some(Vec::new())
+}
+
+/// The retry clock fired: every waiting board answer call goes again as it was.
+pub fn resend_waiting_answers(
+    state: &mut ChatState,
+    mut next_request_id: impl FnMut() -> u64,
+) -> Vec<crate::effect::Effect> {
+    let waiting = std::mem::take(&mut state.extras.panels.board_answer_waiting);
+    let panels = &mut state.extras.panels;
+    waiting
+        .into_iter()
+        .map(|(key, label, text, reply, message, params)| {
+            let request_id = next_request_id();
+            panels.board_answer_calls.insert(request_id, params.clone());
+            let method = if message {
+                panels
+                    .board_answer_sends
+                    .insert(request_id, (key, label, reply));
+                crate::wire::ChatRpcMethod::SendSessionChatMessage
+            } else {
+                panels
+                    .board_answer_requests
+                    .insert(request_id, (key, label, text, reply));
+                crate::wire::ChatRpcMethod::CoordinatorBoard
+            };
+            crate::effect::Effect::SendRpc {
+                request_id,
+                method,
+                params: Box::new(params),
+            }
+        })
+        .collect()
 }
 
 /// The message's send id: the card and its answer, so the send ledger drops a repeat of the same
@@ -1763,6 +1855,7 @@ pub fn settle_answer(
     answer: Result<&Value, String>,
     next_request_id: u64,
 ) -> Option<Vec<crate::effect::Effect>> {
+    state.extras.panels.board_answer_calls.remove(&request_id);
     if let Some((key, label, reply)) = state.extras.panels.board_answer_sends.remove(&request_id) {
         return Some(settle_answer_message(state, &key, &label, reply, answer));
     }
@@ -2111,6 +2204,94 @@ mod tests {
             10,
         );
         assert_eq!(refused, Some(Vec::new()));
+    }
+
+    /// An answer whose call gxserver never answered stays given and goes again by itself, record
+    /// and message alike, as the same call (CDXC:SessionChat 2026-11-11 on `wait_out_answer`).
+    #[test]
+    fn a_card_answer_ghostex_did_not_answer_goes_again_by_itself() {
+        let unanswered = crate::wire::RpcOutcome::Err {
+            code: None,
+            message: "Could not read gxserver response.".into(),
+            endpoint: None,
+        };
+        let click = json!({"key": "item:7", "item": "B7", "label": "Yes", "text": "B7: Yes"});
+        let mut state = ChatState::default();
+        state.identity.session_id = "Gcoord".into();
+        let Some(crate::effect::Effect::SendRpc { params: record, .. }) =
+            answer(&mut state, click.as_object().unwrap(), 1)
+        else {
+            panic!("the record goes")
+        };
+        // gxserver is restarting: no toast, the card stays locked, the record waits.
+        let waited = wait_out_answer(&mut state, 1, &unanswered, &context());
+        assert_eq!(waited, Some(Vec::new()), "nothing is shown");
+        assert_eq!(
+            state
+                .extras
+                .panels
+                .board_answers
+                .get("item:7")
+                .map(String::as_str),
+            Some("Yes"),
+            "the answer stays given"
+        );
+        assert!(state.core.timers.is_armed(BOARD_ANSWER_RETRY_TIMER));
+        let mut next = 10;
+        let again = resend_waiting_answers(&mut state, || {
+            next += 1;
+            next
+        });
+        let [crate::effect::Effect::SendRpc {
+            request_id,
+            method,
+            params,
+        }] = again.as_slice()
+        else {
+            panic!("the record goes again")
+        };
+        assert_eq!(*method, crate::wire::ChatRpcMethod::CoordinatorBoard);
+        assert_eq!(params, &record, "as the call it was");
+        // Recorded now: its message goes, and that too is waited out under the card's own id.
+        let sent = settle_answer(&mut state, *request_id, Ok(&json!({})), 20).unwrap();
+        let [crate::effect::Effect::SendRpc {
+            params: message, ..
+        }] = sent.as_slice()
+        else {
+            panic!("the message goes")
+        };
+        assert_eq!(
+            wait_out_answer(&mut state, 20, &unanswered, &context()),
+            Some(Vec::new())
+        );
+        let again = resend_waiting_answers(&mut state, || 30);
+        let [crate::effect::Effect::SendRpc { method, params, .. }] = again.as_slice() else {
+            panic!("the message goes again")
+        };
+        assert_eq!(*method, crate::wire::ChatRpcMethod::SendSessionChatMessage);
+        assert_eq!(params, message);
+        assert_eq!(params["sendRequestId"], "board-answer-Gcoord-item:7-Yes");
+        // It lands: nothing waits, nothing is in flight.
+        assert_eq!(
+            settle_answer(&mut state, 30, Ok(&json!({})), 40),
+            Some(Vec::new())
+        );
+        let panels = &state.extras.panels;
+        assert!(panels.board_answer_waiting.is_empty() && panels.board_answer_calls.is_empty());
+        // A refusal of gxserver's own is not waited out.
+        answer(
+            &mut state,
+            json!({"key": "item:8", "item": "B8", "label": "No", "text": "B8: No"})
+                .as_object()
+                .unwrap(),
+            50,
+        );
+        let refused = crate::wire::RpcOutcome::Err {
+            code: Some("invalidState".into()),
+            message: "B8 is closed.".into(),
+            endpoint: None,
+        };
+        assert_eq!(wait_out_answer(&mut state, 50, &refused, &context()), None);
     }
 
     /// Blocked has its own pill, only while anything is blocked; the Board pill keeps Needs you and

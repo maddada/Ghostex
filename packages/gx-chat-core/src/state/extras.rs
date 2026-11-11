@@ -124,6 +124,13 @@ pub struct PanelsState {
     /// Cards whose answer gxserver recorded but whose message did not go: another try sends the
     /// message without recording it again.
     pub board_answer_unsent: std::collections::BTreeSet<String>,
+    /// The parameters of each board answer call in flight (its record or its message), by RPC id,
+    /// so a call gxserver never answered goes again as it was (`coordinator_board::wait_out_answer`).
+    pub board_answer_calls: std::collections::BTreeMap<u64, serde_json::Value>,
+    /// Board answer calls gxserver never answered, waiting to go again: the card's key, the
+    /// answer, the message, whether it is a Reply, whether it is the message (else the record),
+    /// and the call's parameters.
+    pub board_answer_waiting: Vec<(String, String, String, bool, bool, serde_json::Value)>,
     /// Each page's questions answered in the reader's draft and asked, `(answered, total)`, by page
     /// id, as its gxserver last said (`extras::work_cards::load_page_counts`).
     pub page_question_counts: std::collections::BTreeMap<String, (u64, u64)>,
@@ -174,6 +181,8 @@ impl Default for PanelsState {
             board_answer_requests: Default::default(),
             board_answer_sends: Default::default(),
             board_answer_unsent: Default::default(),
+            board_answer_calls: Default::default(),
+            board_answer_waiting: Default::default(),
             page_question_counts: Default::default(),
             page_count_requests: Default::default(),
             board_focus: None,

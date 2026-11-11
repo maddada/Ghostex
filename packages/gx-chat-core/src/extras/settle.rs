@@ -82,6 +82,13 @@ fn settle_with_ids(
                 crate::extras::work_cards::settle_page_counts(state, *request_id, answer.clone())
             {
                 effects.extend(more);
+            } else if let Some(more) = crate::extras::coordinator_board::wait_out_answer(
+                state,
+                *request_id,
+                outcome.as_ref(),
+                context,
+            ) {
+                effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_board::settle_answer(
                 state,
                 *request_id,
@@ -168,6 +175,16 @@ fn settle_with_ids(
             // without the request a moving elapsed label never shipped on its own tick.
             if state.core.timer_fired(FLEET_CLOCK) {
                 state.core.request_publish();
+            }
+            // Board answers gxserver never answered go again (`wait_out_answer`).
+            if state
+                .core
+                .timer_fired(crate::extras::coordinator_board::BOARD_ANSWER_RETRY_TIMER)
+            {
+                effects.extend(crate::extras::coordinator_board::resend_waiting_answers(
+                    state,
+                    &mut next_request_id,
+                ));
             }
             // `setInterval(() => setNow(Date.now()), ACTIVITY_CLOCK_TICK_MS)`: a new clock, so a
             // state change the lifecycle publishes on.
