@@ -4,7 +4,9 @@
 
 use ghostex_gx_core::beads_view::{BeadAgentSession, BeadsClock};
 use ghostex_gx_core::{MachineId, SessionKey};
-use gpui::{AnyElement, AppContext as _, ClipboardItem, Context, IntoElement, Window};
+use gpui::{
+    AnyElement, AppContext as _, Context, IntoElement, ParentElement as _, Styled as _, Window,
+};
 use serde_json::{Value, json};
 
 use super::view::{BeadsHostInfo, BeadsLayout, BeadsRequest, BeadsTarget, BeadsView};
@@ -120,7 +122,17 @@ impl GhostexGpuiApp {
             saved_layout: saved_layout(),
         };
         view.update(cx, |view, cx| view.sync(Some(target), info, cx));
-        Some(gpui::AnyView::from(view).into_any_element())
+        // The view's menus are drawn here, from the view's own area, so they show whether or not
+        // the sidebar is drawn.
+        let menu = self.render_native_region_menu(window, cx);
+        Some(
+            gpui::div()
+                .relative()
+                .size_full()
+                .child(gpui::AnyView::from(view))
+                .children(menu)
+                .into_any_element(),
+        )
     }
 
     pub(crate) fn handle_beads_request(
@@ -172,7 +184,6 @@ impl GhostexGpuiApp {
                 }
             }
             BeadsRequest::InstallBeads => self.beads_install(cx),
-            BeadsRequest::Copy(text) => cx.write_to_clipboard(ClipboardItem::new_string(text)),
         }
         cx.notify();
     }
@@ -184,9 +195,14 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(view) = self.native_beads.clone() {
-            view.update(cx, |view, cx| view.run_menu_command(command, window, cx));
-        }
+        let Some(view) = self.native_beads.clone() else {
+            return;
+        };
+        // CDXC:ProjectBoard 2026-11-11 WHY: the sidebar's menu runs a row while it updates this app, and a row can call back into the app (copy, the Board's refresh); running it after that update ends keeps the app from being borrowed twice.
+        let command = command.clone();
+        cx.defer_in(window, move |_, window, cx| {
+            view.update(cx, |view, cx| view.run_menu_command(&command, window, cx));
+        });
     }
 
     /// The Board's lane `+`: the Beads view's New bead form with that lane's status. False when

@@ -261,6 +261,15 @@ impl GhostexGpuiApp {
         }
         let requested_title = form.title.read(cx).value().trim().to_string();
         let generate_title = requested_title.is_empty();
+        // CDXC:ProjectBoard 2026-11-11 WHY: a computer whose Ghostex cannot write titles (no `generateTitle` in /api/beadsView) gets no bead with a placeholder title: the form asks for one first, as the Beads view's shared form does.
+        if generate_title && self.native_kanban.title_generation != Some(true) {
+            self.native_kanban_toast(
+                "Add a title",
+                "Ghostex on that computer can't write one for you. Type a title, then create the bead.",
+                cx,
+            );
+            return;
+        }
         let title = if generate_title {
             draft_title(&prompt)
         } else {

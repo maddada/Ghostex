@@ -80,20 +80,23 @@ async fn run_refresh(
     context: TypedOperationContext,
 ) {
     let deadline = tokio::time::Instant::now() + REFRESH_BUDGET;
-    let error = match entry.lock_within(REFRESH_BUDGET).await {
-        None => Some("Beads stayed busy. Showing what it last said.".to_string()),
-        Some(guard) => {
-            let token = current_token(&info);
-            let error = if needs_refresh(&entry, &token) {
-                refresh(&entry, &info, &bd, &cwd, &context, deadline).await
-            } else {
-                None
-            };
-            ensure_side_facts(&entry, &info, &bd, &cwd, &context, deadline).await;
-            drop(guard);
-            error
-        }
+    // One cancellation deadline over everything done under the lock (its wait included): when it
+    // passes, the work is dropped (bd and git children are killed) and the lock is let go.
+    let work = async {
+        let guard = entry.lock_owned().await;
+        let token = current_token(&info);
+        let error = if needs_refresh(&entry, &token) {
+            refresh(&entry, &info, &bd, &cwd, &context, deadline).await
+        } else {
+            None
+        };
+        ensure_side_facts(&entry, &info, &bd, &cwd, &context, deadline).await;
+        drop(guard);
+        error
     };
+    let error = tokio::time::timeout_at(deadline, work)
+        .await
+        .unwrap_or_else(|_| Some("Beads stayed busy. Showing what it last said.".to_string()));
     let mut state = entry.state();
     state.refreshing = false;
     state.last_error = error;
@@ -104,7 +107,6 @@ fn budget(deadline: tokio::time::Instant) -> Duration {
     deadline
         .saturating_duration_since(tokio::time::Instant::now())
         .min(READ_TIMEOUT)
-        .max(Duration::from_millis(1))
 }
 
 fn side_facts_missing(entry: &WorkspaceEntry) -> bool {
@@ -348,10 +350,27 @@ fn readiness_agrees(rows: &[ListRow], readiness: &Readiness) -> bool {
                 && !readiness.blocked.contains_key(id)
         })
     });
+    let ancestors = |row: &ListRow| {
+        let mut chain = Vec::new();
+        let mut parent = row.row.parent.clone();
+        while let Some(id) = parent.filter(|_| chain.len() < 32) {
+            parent = by_id
+                .get(id.as_str())
+                .and_then(|row| row.row.parent.clone());
+            chain.push(id);
+        }
+        chain
+    };
+    // Both directions: every open `blocks` dependency the list shows is reported, and every
+    // reported blocker is still one of the row's `blocks` dependencies (or, as bd counts it, an
+    // epic above the row), and still open.
     let blocked_ok = readiness.blocked.iter().all(|(id, by)| {
         by_id.get(id.as_str()).is_some_and(|row| {
+            let above = ancestors(row);
             row.row.status != "closed"
-                && by.iter().all(|blocker| open(blocker))
+                && by.iter().all(|blocker| {
+                    open(blocker) && (row.blocked_on.contains(blocker) || above.contains(blocker))
+                })
                 && row
                     .blocked_on
                     .iter()
@@ -475,7 +494,7 @@ async fn ensure_side_facts(
     }
     let needs_actor = entry.state().actor.is_none();
     if needs_actor {
-        let actor = resolve_actor(cwd).await;
+        let actor = resolve_actor(cwd, budget(deadline)).await;
         entry.state().actor = Some(actor);
     }
     let needs_remote = {
@@ -570,7 +589,7 @@ fn parse_remote(stdout: &str) -> Option<ghostex_gx_protocol::beads_view::BeadsSy
 
 /// bd's own rule for who "you" are: `$BEADS_ACTOR`, then git's user.name in the workspace's
 /// project, then `$USER` (`bd --help`, `--actor`).
-async fn resolve_actor(cwd: &str) -> Option<String> {
+async fn resolve_actor(cwd: &str, limit: Duration) -> Option<String> {
     if let Some(actor) = std::env::var("BEADS_ACTOR")
         .ok()
         .filter(|actor| !actor.trim().is_empty())
@@ -583,7 +602,9 @@ async fn resolve_actor(cwd: &str) -> Option<String> {
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
     crate::platform::process::NoConsoleWindow::no_console_window(&mut git);
-    if let Ok(Ok(output)) = tokio::time::timeout(Duration::from_secs(5), git.output()).await {
+    if let Ok(Ok(output)) =
+        tokio::time::timeout(limit.min(Duration::from_secs(5)), git.output()).await
+    {
         let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if output.status.success() && !name.is_empty() {
             return Some(name);

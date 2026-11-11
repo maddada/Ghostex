@@ -146,6 +146,29 @@ pub(crate) async fn beads_call(
         .map_err(|_| "Beads returned output the board could not read.".into())
 }
 
+/// Whether the computer that owns the project can write a title for a bead created without one
+/// (its gxserver lists `generateTitle` in `/api/beadsView`); an older one cannot.
+pub(crate) async fn title_generation_available(context: &ProjectBoardBridgeRuntimeContext) -> bool {
+    let Ok(remote) = gxserver_target(context) else {
+        return false;
+    };
+    let params = serde_json::json!({ "projectId": context.project_id });
+    gx_rpc(remote, "/api/beadsView", params)
+        .await
+        .ok()
+        .and_then(|answer| {
+            answer
+                .get("capabilities")
+                .and_then(Value::as_array)
+                .cloned()
+        })
+        .is_some_and(|capabilities| {
+            capabilities
+                .iter()
+                .any(|capability| capability.as_str() == Some("generateTitle"))
+        })
+}
+
 /// `normalizeBeadsPayload`: bd's `{ data }` envelope, unwrapped.
 pub(crate) fn beads_payload(payload: Value) -> Value {
     match payload {

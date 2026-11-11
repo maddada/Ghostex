@@ -148,6 +148,9 @@ pub(crate) struct KanbanLaneList {
 #[derive(Default)]
 pub(crate) struct NativeKanbanState {
     pub(crate) project: Option<KanbanProjectKey>,
+    /// The project's computer can write a title for a bead created without one; `None` until it
+    /// answered, which counts as no.
+    pub(crate) title_generation: Option<bool>,
     /// The project name the board's title shows.
     pub(crate) display_name: String,
     pub(crate) display_key: String,

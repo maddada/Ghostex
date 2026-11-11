@@ -57,7 +57,7 @@ struct Entry {
     run: Option<MenuRun>,
 }
 
-type MenuRun = Box<dyn Fn(&mut BeadsView, &mut Window, &mut Context<BeadsView>)>;
+pub(crate) type MenuRun = Box<dyn Fn(&mut BeadsView, &mut Window, &mut Context<BeadsView>)>;
 
 fn entry(
     label: impl Into<String>,
@@ -116,16 +116,20 @@ impl BeadsView {
                     }
                 } else {
                     let id_close = id.clone();
-                    entries.push(entry("Close", Some("check"), move |this, window, cx| {
-                        this.simple_action(
-                            "close",
-                            &id_close,
-                            json!({}),
-                            "Couldn't close this bead",
-                            window,
-                            cx,
-                        )
-                    }));
+                    entries.push(entry(
+                        "Close",
+                        Some("circleCheck"),
+                        move |this, window, cx| {
+                            this.simple_action(
+                                "close",
+                                &id_close,
+                                json!({}),
+                                "Couldn't close this bead",
+                                window,
+                                cx,
+                            )
+                        },
+                    ));
                     if row.status == "deferred" && self.has_capability(capability::DEFER) {
                         let id = id.clone();
                         entries.push(entry(
@@ -162,8 +166,8 @@ impl BeadsView {
                     ));
                 }
                 let copy = id.clone();
-                entries.push(entry("Copy ID", Some("copy"), move |this, window, cx| {
-                    (this.host.clone())(super::view::BeadsRequest::Copy(copy.clone()), window, cx)
+                entries.push(entry("Copy ID", Some("copy"), move |_, _, cx| {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()))
                 }));
                 entries
             }
@@ -282,12 +286,17 @@ impl BeadsView {
         menu.serial = self.menu_serial;
         let menu = menu.clone();
         let items: Vec<Value> = if menu.kind == BeadsMenuKind::Sync {
+            self.menu_runs.clear();
             self.sync_items(menu.serial)
         } else {
-            self.menu_entries(&menu.kind)
+            // CDXC:ProjectBoard 2026-11-11 WHY: each row keeps the action and the bead it showed when the menu opened; a poll that changes the bead meanwhile (someone claims it) must never turn a shown "Claim" into whatever now sits at that position.
+            let entries = self.menu_entries(&menu.kind);
+            let mut runs = Vec::with_capacity(entries.len());
+            let items = entries
                 .into_iter()
                 .enumerate()
-                .map(|(index, entry)| {
+                .map(|(index, mut entry)| {
+                    runs.push(entry.run.take());
                     let mut item = json!({
                         "label": entry.label,
                         "command": { "type": "beadsMenu", "serial": menu.serial, "index": index },
@@ -303,7 +312,9 @@ impl BeadsView {
                     }
                     item
                 })
-                .collect()
+                .collect();
+            self.menu_runs = runs;
+            items
         };
         if items.is_empty() {
             self.menu = None;
@@ -352,8 +363,8 @@ impl BeadsView {
             }
             return;
         }
-        let entries = self.menu_entries(&menu.kind);
-        if let Some(run) = entries.into_iter().nth(index).and_then(|entry| entry.run) {
+        let runs = std::mem::take(&mut self.menu_runs);
+        if let Some(run) = runs.into_iter().nth(index).flatten() {
             run(self, window, cx);
         }
         cx.notify();

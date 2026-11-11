@@ -722,6 +722,44 @@ impl GhostexGpuiApp {
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
+        if self
+            .native_sidebar
+            .menu
+            .as_ref()
+            .is_some_and(|menu| menu.region.is_some())
+        {
+            // A menu that belongs to another area is drawn there (`render_native_region_menu`).
+            return None;
+        }
+        self.render_native_menu_layers(self.native_sidebar.bounds, window, cx)
+    }
+
+    /// A menu opened for another area of the window (the Beads view's menus,
+    /// `SidebarMenuState::region`): the same rows, frosted host and dismissal, drawn by that area
+    /// so it shows whether or not the sidebar is drawn. `None` for the sidebar's own menus.
+    pub(crate) fn render_native_region_menu(
+        &self,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        let region = match self.native_sidebar.menu.as_ref() {
+            Some(menu) => menu.region?,
+            None => {
+                // Closed: take down the frosted hosts it used, sidebar drawn or not.
+                hide_sidebar_menu_hosts(0, window.window_handle(), cx);
+                return None;
+            }
+        };
+        self.render_native_menu_layers(region, window, cx)
+    }
+
+    /// The menu's layers, placed from `frame`'s origin (the element that draws them).
+    fn render_native_menu_layers(
+        &self,
+        frame: Bounds<Pixels>,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
         use crate::app::window::frosted_host::{
             FrostedHostKind, SIDEBAR_MENU_HOST_LEVELS, frosted_hosting_active, show_frosted_host,
         };
@@ -729,9 +767,7 @@ impl GhostexGpuiApp {
             hide_sidebar_menu_hosts(0, window.window_handle(), cx);
             return None;
         };
-        // The layers are drawn inside the sidebar, so they are placed from its origin even when
-        // the menu belongs to another region (`SidebarMenuState::region`).
-        let sidebar = self.native_sidebar.bounds;
+        let sidebar = frame;
         let hosted = frosted_hosting_active();
         let (panels, union) = self.native_sidebar_menu_panels(hosted, None, cx)?;
         let layers = div()

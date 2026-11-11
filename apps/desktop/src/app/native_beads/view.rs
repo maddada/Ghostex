@@ -113,7 +113,6 @@ pub(crate) enum BeadsRequest {
         issue: Value,
     },
     InstallBeads,
-    Copy(String),
 }
 
 pub(crate) type BeadsHostFn = Rc<dyn Fn(BeadsRequest, &mut Window, &mut App)>;
@@ -163,6 +162,8 @@ pub(crate) struct BeadsView {
     pub(crate) create: Option<CreateForm>,
     pub(crate) menu: Option<BeadsMenu>,
     pub(crate) menu_serial: u64,
+    /// The open menu's row actions, as they were when it opened.
+    pub(crate) menu_runs: Vec<Option<super::menus::MenuRun>>,
     /// Where the view was last drawn: its menus stay inside it.
     pub(crate) bounds: super::menus::ViewBounds,
     pub(crate) notice: Option<BeadsNotice>,
@@ -226,6 +227,7 @@ impl BeadsView {
             create: None,
             menu: None,
             menu_serial: 0,
+            menu_runs: Vec::new(),
             bounds: Default::default(),
             notice: None,
             writes_in_flight: 0,

@@ -58,6 +58,15 @@ impl GhostexGpuiApp {
         let project_changed = self.native_kanban.project.as_ref() != Some(&project.key);
         if project_changed {
             self.native_kanban.reset_for_project(project.key.clone());
+            self.native_kanban.title_generation = None;
+            self.native_kanban_spawn(
+                |context| async move { super::beads::title_generation_available(&context).await },
+                |this, available, cx| {
+                    this.native_kanban.title_generation = Some(available);
+                    this.native_kanban_notify(cx);
+                },
+                cx,
+            );
             self.native_kanban.display_key = normalize_display_issue_key(&project.display_name);
             let prefix_source = if project.display_name.trim().is_empty() {
                 project

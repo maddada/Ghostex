@@ -483,8 +483,10 @@ impl BeadsView {
                     )
                     .child(
                         small_button("beads-details-copy", Some("titlebar/copy.svg"), None, p)
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                (this.host.clone())(BeadsRequest::Copy(copy_id.clone()), window, cx)
+                            .on_click(cx.listener(move |_, _, _, cx| {
+                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                    copy_id.clone(),
+                                ))
                             })),
                     )
                     .child(div().flex_1())

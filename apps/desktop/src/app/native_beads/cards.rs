@@ -371,8 +371,8 @@ impl BeadsView {
                 false,
                 p,
             )
-            .on_click(cx.listener(move |this, _, window, cx| {
-                (this.host.clone())(BeadsRequest::Copy(prompt.clone()), window, cx)
+            .on_click(cx.listener(move |_, _, _, cx| {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(prompt.clone()))
             })),
         );
         if install {
