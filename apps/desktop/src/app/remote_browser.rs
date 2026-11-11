@@ -53,20 +53,24 @@ impl GhostexGpuiApp {
 
     /// The remote machine and project a terminal or chat session lives on, `None` for this
     /// computer's own sessions.
+    ///
+    /// CDXC:RemoteMachines 2026-11-11 WHY: An Agents shell id is only unique inside one project's workspace (each parked workspace counts its own ids), and `remote_attach_sessions` keeps the entries of remote projects that are not on screen. Matching the id against the whole map took a local chat for a session on another computer whenever a remote project once on screen had used the same id, so its Ghostex page card (a 127.0.0.1 address) went to that remote project's Browser with "Page opened in <project>" instead of the floating page window. The id is resolved the way the rest of the app resolves it (`workspace_terminal_key_for_shell_session`: this project's local tabs, side chats, then the remote project on screen).
     pub(crate) fn remote_project_for_terminal_target(
         &self,
         target: GpuiEngineTerminalEventTarget,
     ) -> Option<GpuiRemoteProjectReference> {
         match target {
-            GpuiEngineTerminalEventTarget::Agents(session_id) => self
-                .remote_attach_sessions
-                .iter()
-                .find_map(|(key, mapped)| {
-                    (*mapped == session_id).then(|| GpuiRemoteProjectReference {
-                        remote_machine_id: key.remote_machine_id.clone(),
-                        project_id: key.project_id.clone(),
-                    })
-                }),
+            GpuiEngineTerminalEventTarget::Agents(session_id) => {
+                match self.workspace_terminal_key_for_shell_session(session_id)? {
+                    GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+                        Some(GpuiRemoteProjectReference {
+                            remote_machine_id: key.remote_machine_id,
+                            project_id: key.project_id,
+                        })
+                    }
+                    GpuiWorkspaceTerminalSessionKey::Local(_) => None,
+                }
+            }
             GpuiEngineTerminalEventTarget::Command(session_id) => self
                 .command_remote_action_session_for_command_tab(session_id)
                 .map(|reference| GpuiRemoteProjectReference {
