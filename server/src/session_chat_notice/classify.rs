@@ -447,6 +447,15 @@ pub fn classify_session_chat_terminal_notice(
             {
                 return false;
             }
+            // A limit chooser quoted in tool output or a message, with this session's own input
+            // box below it, is another session's screen (`has_quoted_claude_limit_chooser`).
+            if agent == SessionChatOptionAgent::Claude
+                && rule.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT
+                && signature_needle(signature)
+                    .is_some_and(|needle| screen.has_quoted_claude_limit_chooser(needle))
+            {
+                return false;
+            }
             if agent == SessionChatOptionAgent::Claude
                 && rule.blocks_input
                 && matches!(signature.scope, NoticeScope::Dialog)
