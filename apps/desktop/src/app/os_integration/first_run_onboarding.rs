@@ -615,4 +615,21 @@ impl GhostexGpuiApp {
             cx,
         );
     }
+
+    /// CDXC:Onboarding 2026-11-11 WHY:
+    /// The hands-on check of the new setup: "More theme options" (and "Advanced settings later") with no project ended setup in Settings, and closing Settings left an empty app. Setup must never end there: leaving it for Settings with no project queues Add Project, which opens when Settings closes, as "Open Ghostex" opens it at once.
+    pub(crate) fn queue_add_project_after_settings(&mut self) {
+        ADD_PROJECT_AFTER_SETTINGS.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Settings just closed: Add Project, when setup queued it.
+    pub(crate) fn open_add_project_queued_after_settings(&mut self, cx: &mut gpui::Context<Self>) {
+        if ADD_PROJECT_AFTER_SETTINGS.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            self.open_app_modal_from_bridge(GpuiAppModalKind::AddProject.open_message(), cx);
+        }
+    }
 }
+
+/// Setup ended in Settings with no project: Add Project follows when Settings closes.
+static ADD_PROJECT_AFTER_SETTINGS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);

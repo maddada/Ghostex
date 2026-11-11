@@ -392,6 +392,10 @@ impl GhostexGpuiApp {
                             message["initialTab"] = serde_json::json!(tab);
                         }
                         self.open_app_modal_from_bridge(message, cx);
+                        // With no project yet, closing Settings leads on to Add Project, as Open Ghostex does.
+                        if !has_projects {
+                            self.queue_add_project_after_settings();
+                        }
                     }
                     FinishTarget::None | FinishTarget::RemoteSettings => {
                         // "Pair my phone after setup": the Connect a Device window (CDXC:RemotePairing

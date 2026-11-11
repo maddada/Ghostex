@@ -9,7 +9,7 @@ use gpui_component::{h_flex, v_flex};
 use serde_json::json;
 
 /// The bordered pill the empty list's action draws.
-fn empty_action_button(
+pub(super) fn empty_action_button(
     id: &'static str,
     label: impl Into<gpui::SharedString>,
     icon: Option<&'static str>,
