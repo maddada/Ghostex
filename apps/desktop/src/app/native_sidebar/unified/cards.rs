@@ -22,6 +22,7 @@ use crate::app::native_sidebar::drag::{
     SidebarDrag, SidebarDragPreview, SidebarDropTarget as _, drop_line,
 };
 use crate::app::native_sidebar::drag_source::SidebarDragSource as _;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 use crate::app::native_sidebar::row_drag::{RowDragIdentity, RowDragPreview};
 use crate::app::native_sidebar::status::{self, FAILED_COLOR, QUESTION_COLOR, WORKING_COLOR};
 
@@ -182,6 +183,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         let session_id = card.session.session_id.clone();
+        let stop_id = session_id.clone();
         /*
         CDXC:Sidebar 2026-11-05 DECISION:
         User: "please allow me to drag a session card to split like i can for project sidebar". A Unified card or slim row is the Project sidebar row's drag source (`SidebarDrag` of kind "session", drag_source.rs), so the Agents panes take it with the same split and centre zones, refusals and preview (session_pane_placement.rs). Like that row, only a session on this computer drags, and not while a menu is open; it fades while it is dragged. Only pinned cards reorder (pinned_drag.rs), so a release anywhere else in the sidebar does nothing; a plain click still opens the session, since a press only becomes a drag once the pointer moves.
@@ -329,6 +331,15 @@ impl GhostexGpuiApp {
                 );
             }),
         )
+        .map(|row| {
+            self.sidebar_focus_stop(
+                row,
+                format!("unified-session:{stop_id}"),
+                SidebarStopPlace::List,
+                appearance,
+                cx,
+            )
+        })
     }
 
     /// A card: two lines under a project header, three in the ungrouped list.

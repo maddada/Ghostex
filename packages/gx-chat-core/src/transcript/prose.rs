@@ -21,6 +21,14 @@ pub fn prose_markdown(blocks: &[ChatBlock]) -> String {
         .join("\n\n")
 }
 
+/// Whether [`prose_markdown`] has anything but white space: some text block has words. The same
+/// answer without building the text, for callers that ask it of every reply in a chat.
+pub fn has_prose(blocks: &[ChatBlock]) -> bool {
+    blocks
+        .iter()
+        .any(|block| matches!(block, ChatBlock::Text { text } if !text.trim().is_empty()))
+}
+
 /// Every text block run together, which is what the harness classifier reads.
 ///
 /// Ported from `sessionChatMessageText` in `packages/core-ui/chat/session-chat-noise.ts`; it joins
@@ -33,4 +41,32 @@ pub fn joined_text(blocks: &[ChatBlock]) -> String {
             _ => None,
         })
         .collect::<String>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `has_prose` is `prose_markdown` with something besides white space, block for block.
+    #[test]
+    fn a_reply_has_prose_when_its_text_has_words() {
+        let text = |text: &str| ChatBlock::Text {
+            text: text.to_string(),
+        };
+        let cases: Vec<Vec<ChatBlock>> = vec![
+            vec![],
+            vec![text("")],
+            vec![text("  \n\t")],
+            vec![text(" "), text("\n")],
+            vec![text("words")],
+            vec![text("  "), text(" words ")],
+        ];
+        for blocks in cases {
+            assert_eq!(
+                has_prose(&blocks),
+                !prose_markdown(&blocks).trim().is_empty(),
+                "{blocks:?}"
+            );
+        }
+    }
 }

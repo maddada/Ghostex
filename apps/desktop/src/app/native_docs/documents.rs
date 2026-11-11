@@ -48,6 +48,31 @@ impl GhostexGpuiApp {
         else {
             return;
         };
+        // A remote file outside the project is read only for the chat that linked to it, which
+        // this app remembers until it quits: one reopened after a restart closes quietly, as a
+        // missing reopened file does, and anything else says where to open it from.
+        let remote = self.native_docs.project.as_ref().is_some_and(|project| {
+            crate::app::helpers::gpui_remote_project_reference_from_project_id(&project.project_id)
+                .is_some()
+        });
+        if remote
+            && Self::native_docs_is_outside_file(path)
+            && !self.native_docs.remote_chat_files.contains_key(path)
+        {
+            let restored = self
+                .native_docs
+                .document(path)
+                .is_some_and(|document| document.restored);
+            if restored {
+                self.native_docs_close(path, cx);
+            } else if let Some(document) = self.native_docs.document_mut(path) {
+                document.load = DocsDocumentLoad::Error(
+                    "Open this file again from its link in the chat.".to_string(),
+                );
+                self.native_docs_notify(cx);
+            }
+            return;
+        }
         if kind == DocsFileKind::Image {
             self.native_docs_read_image(path, cx);
             if !self
@@ -136,25 +161,16 @@ impl GhostexGpuiApp {
         self.native_docs_notify(cx);
     }
 
-    /// Reads an image through the Docs resource scope, the same roots the page's images used.
+    /// Reads an image through the Docs resource scope, the same roots the page's images used; a
+    /// remote picture outside the project that a chat linked to, through that chat's session.
     pub(crate) fn native_docs_read_image(&mut self, path: &str, cx: &mut Context<Self>) {
+        let format = docs_image_format(path);
+        if self.native_docs.remote_chat_files.contains_key(path) {
+            self.native_docs_read_remote_chat_image(path, format, cx);
+            return;
+        }
         let Some(scope) = self.manage_docs_resource_scope() else {
             return;
-        };
-        let format = match path
-            .rsplit_once('.')
-            .map(|(_, extension)| extension.to_ascii_lowercase())
-            .as_deref()
-        {
-            Some("png") => gpui::ImageFormat::Png,
-            Some("jpg" | "jpeg" | "jfif" | "jpe") => gpui::ImageFormat::Jpeg,
-            Some("gif") => gpui::ImageFormat::Gif,
-            Some("webp") => gpui::ImageFormat::Webp,
-            Some("svg") => gpui::ImageFormat::Svg,
-            Some("bmp") => gpui::ImageFormat::Bmp,
-            Some("ico") => gpui::ImageFormat::Ico,
-            Some("tif" | "tiff") => gpui::ImageFormat::Tiff,
-            _ => gpui::ImageFormat::Png,
         };
         let generation = self.native_docs.generation;
         let path = path.to_string();
@@ -172,26 +188,83 @@ impl GhostexGpuiApp {
                 if this.native_docs.generation != generation {
                     return;
                 }
-                let Some(document) = this.native_docs.document_mut(&path) else {
-                    return;
-                };
-                match bytes {
-                    Some(bytes) => {
-                        document.image =
-                            Some(std::sync::Arc::new(gpui::Image::from_bytes(format, bytes)));
-                        document.load = DocsDocumentLoad::Ready;
-                    }
-                    None => {
-                        document.load =
-                            DocsDocumentLoad::Error("This image couldn't be read.".to_string());
-                    }
-                }
-                this.native_docs_notify(cx);
+                this.native_docs_apply_image(&path, format, bytes, None, cx);
             });
         })
         .detach();
     }
 
+    /// A remote picture outside the project, read by the remote gxserver for the chat that linked
+    /// to it (`readResource` with that `sessionId`, CDXC:Docs 2026-11-11 in
+    /// server/src/project_docs/chat_file.rs).
+    fn native_docs_read_remote_chat_image(
+        &mut self,
+        path: &str,
+        format: gpui::ImageFormat,
+        cx: &mut Context<Self>,
+    ) {
+        use base64::Engine as _;
+        let generation = self.native_docs.generation;
+        let request = self.native_docs_request("readResource", json!({ "path": path }));
+        let path = path.to_string();
+        self.run_docs_files_request(request.to_string(), cx, move |this, response, cx| {
+            if this.native_docs.generation != generation {
+                return;
+            }
+            let bytes = response["dataBase64"]
+                .as_str()
+                .and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok());
+            let error = response["error"].as_str().map(str::to_string);
+            this.native_docs_apply_image(&path, format, bytes, error, cx);
+        });
+    }
+
+    fn native_docs_apply_image(
+        &mut self,
+        path: &str,
+        format: gpui::ImageFormat,
+        bytes: Option<Vec<u8>>,
+        error: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(document) = self.native_docs.document_mut(path) else {
+            return;
+        };
+        match bytes {
+            Some(bytes) => {
+                document.image = Some(std::sync::Arc::new(gpui::Image::from_bytes(format, bytes)));
+                document.load = DocsDocumentLoad::Ready;
+            }
+            None => {
+                document.load = DocsDocumentLoad::Error(
+                    error.unwrap_or_else(|| "This image couldn't be read.".to_string()),
+                );
+            }
+        }
+        self.native_docs_notify(cx);
+    }
+}
+
+/// The picture format a Files image is drawn as, by its extension.
+fn docs_image_format(path: &str) -> gpui::ImageFormat {
+    match path
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => gpui::ImageFormat::Png,
+        Some("jpg" | "jpeg" | "jfif" | "jpe") => gpui::ImageFormat::Jpeg,
+        Some("gif") => gpui::ImageFormat::Gif,
+        Some("webp") => gpui::ImageFormat::Webp,
+        Some("svg") => gpui::ImageFormat::Svg,
+        Some("bmp") => gpui::ImageFormat::Bmp,
+        Some("ico") => gpui::ImageFormat::Ico,
+        Some("tif" | "tiff") => gpui::ImageFormat::Tiff,
+        _ => gpui::ImageFormat::Png,
+    }
+}
+
+impl GhostexGpuiApp {
     fn native_docs_apply_read(
         &mut self,
         path: &str,

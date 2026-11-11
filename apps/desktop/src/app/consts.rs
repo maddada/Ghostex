@@ -548,7 +548,9 @@ pub(crate) const BROWSER_FAVICON_HTTP_REDIRECT_LIMIT: u32 = 3;
 
 pub(crate) const BROWSER_FAVICON_DATA_URL_MAX_CHARS: usize = 96 * 1024;
 
-pub(crate) const BROWSER_FAVICON_IMAGE_MAX_BYTES: usize = 64 * 1024;
+/// The web build (apps/gpui-web) shares this file but has no favicon fetcher to read it.
+#[allow(unused_imports)]
+pub(crate) use crate::data_url_image::BROWSER_FAVICON_IMAGE_MAX_BYTES;
 
 pub(crate) const BROWSER_FAVICON_IMAGE_MAX_DIMENSION: u32 = 512;
 
@@ -677,15 +679,6 @@ pub(crate) const APP_MODAL_HOST_DELETE_WORKTREE_WINDOW_HEIGHT: f32 = 600.0;
 pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH: f32 = 560.0;
 
 pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT: f32 = 380.0;
-
-/*
-CDXC:RemotePairing 2026-09-03:
-Remote Setup opens on a frame tall enough for both sections; the one-shot
-fit-height pass then sizes the child window down to what React rendered.
-*/
-pub(crate) const APP_MODAL_HOST_REMOTE_SETUP_WINDOW_WIDTH: f32 = 560.0;
-
-pub(crate) const APP_MODAL_HOST_REMOTE_SETUP_WINDOW_HEIGHT: f32 = 760.0;
 
 pub(crate) const APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_WIDTH: f32 = 640.0;
 

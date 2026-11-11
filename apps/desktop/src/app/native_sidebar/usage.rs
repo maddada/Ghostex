@@ -1,6 +1,7 @@
-// The account usage strip at the bottom of the sidebar, directly above the
-// Commands row. The meters themselves are the shared renderer in
-// app/titlebar/account_usage.rs; this module owns only the strip around them.
+// The bottom of the sidebar: the account usage strip, which is the last thing in it, the small
+// handle that brings the strip back while it is hidden, and the workspace button's line above
+// them. The meters themselves are the shared renderer in app/titlebar/account_usage.rs; this
+// module owns only the strip around them.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -39,16 +40,31 @@ const SIDEBAR_USAGE_INSET: f32 = 8.0;
 /// pads one character less, while under-estimating would let a card overflow its column.
 const SIDEBAR_USAGE_BADGE_ADVANCE: f32 = 0.65;
 
-/// The Commands row's height and top padding (navigation.rs); the peek sits on the row.
-const SIDEBAR_FOOTER_ROW_HEIGHT: f32 = 39.0;
-const SIDEBAR_FOOTER_ROW_TOP_PADDING: f32 = 5.0;
+/// The line the workspace button sits in, above the strip: its button's height, the space above
+/// it, and the space under it while the line is the sidebar's last (the strip hidden or absent).
+const SIDEBAR_BOTTOM_LINE_BUTTON_HEIGHT: f32 = 28.0;
+const SIDEBAR_BOTTOM_LINE_TOP_PADDING: f32 = 5.0;
+const SIDEBAR_BOTTOM_LINE_BOTTOM_PADDING: f32 = 6.0;
+
+/// The line that holds only the handle, while the strip is hidden and there is no workspace
+/// button: the handle and the space under it.
+const SIDEBAR_USAGE_HANDLE_LINE_HEIGHT: f32 = 24.0;
+const SIDEBAR_USAGE_HANDLE_BOTTOM_PADDING: f32 = 6.0;
+
+/// The message the strip's right-click row posts, answered where the sidebar menu's own rows are
+/// (gx_store/sidebar_more_menu.rs).
+pub(crate) const HIDE_SIDEBAR_USAGE_MESSAGE_TYPE: &str = "hideSidebarAccountUsage";
+
+/// The handle's own size: a small chip with the chart glyph.
+const SIDEBAR_USAGE_HANDLE_WIDTH: f32 = 30.0;
+const SIDEBAR_USAGE_HANDLE_HEIGHT: f32 = 16.0;
 
 /// A meter card's height, before the zoom scale.
 const SIDEBAR_USAGE_METER_HEIGHT: f32 = 26.0;
 
 /// The strip's space above its first row of cards and below its last.
 const SIDEBAR_USAGE_TOP_PADDING: f32 = 10.0;
-const SIDEBAR_USAGE_BOTTOM_PADDING: f32 = 4.0;
+const SIDEBAR_USAGE_BOTTOM_PADDING: f32 = 8.0;
 
 /// The frosted panel's padding around the cards. The panel is inset by the rest of the strip's
 /// padding, so the cards sit exactly where the pinned strip puts them.
@@ -62,7 +78,7 @@ impl GhostexGpuiApp {
     /// User: each meter is a card with its own background, the cards fill their column so the rows line up, and their content is centred, which is the `space-around` look the user asked for: the gap from the sidebar's edge to the first card's content matches the gap from the last card's content to the other edge. The strip also sits lower, with more room between the session list and the first row of cards.
     ///
     /// CDXC:Sidebar 2026-09-20 WHY:
-    /// The strip itself takes no click any more. A press on a meter still opens that account's usage popup, and the strip's padding and its leftover columns are inert, so the only way in and out is the Commands row button.
+    /// The strip itself takes no click any more. A press on a meter still opens that account's usage popup, and the strip's padding and its leftover columns are inert, so the only ways in and out are the handle and the strip's right-click menu (`render_native_sidebar_bottom`).
     pub(crate) fn render_native_sidebar_usage(
         &self,
         appearance: &SidebarAppearance,
@@ -107,12 +123,13 @@ impl GhostexGpuiApp {
             return None;
         }
         let scale = appearance.scale;
-        // The painted box sits exactly where the pinned strip sits, on top of the Commands row.
-        // Its hover box alone reaches down through the row's top padding to the pin's own hitbox,
-        // so a pointer sliding from the pin up into a card never crosses a strip of nothing that
-        // would have closed the peek halfway.
-        let bridge = SIDEBAR_FOOTER_ROW_TOP_PADDING * scale;
-        let bottom = SIDEBAR_FOOTER_ROW_HEIGHT * scale - bridge;
+        // The painted box sits on top of the handle's line, so the handle stays under the pointer
+        // for the click that pins the strip. Its hover box alone reaches down through the line's
+        // top padding to the handle's own hitbox, so a pointer sliding from the handle up into a
+        // card never crosses a strip of nothing that would have closed the peek halfway.
+        let (line_height, bridge) = self.native_sidebar_usage_handle_line();
+        let bridge = bridge * scale;
+        let bottom = line_height * scale - bridge;
         let body = if frosted {
             self.render_native_sidebar_usage_frosted_placeholder(appearance, meters.len(), cx)?
         } else {
@@ -347,13 +364,45 @@ impl GhostexGpuiApp {
                 SIDEBAR_USAGE_BOTTOM_PADDING * scale,
             )
         };
+        // The pinned strip's right-click menu, hung from the strip (above it: it is the sidebar's
+        // last thing). The peek has none: it is not pinned, and leaves with the pointer.
+        let owner = super::menus::MenuOwner::default();
         Some(
             div()
+                .id("native-sidebar-usage-strip")
                 .w_full()
                 .flex_shrink_0()
                 .px(px(padding_x))
                 .pt(px(padding_top))
                 .pb(px(padding_bottom))
+                .on_prepaint(super::menus::record_menu_owner(&owner))
+                .when(route.is_none(), |strip| {
+                    strip.on_mouse_down(
+                        gpui::MouseButton::Right,
+                        cx.listener(move |app, event: &gpui::MouseDownEvent, window, cx| {
+                            if !app.sidebar_usage_visible {
+                                return;
+                            }
+                            cx.stop_propagation();
+                            let items = serde_json::json!([{
+                                "label": "Hide account usage",
+                                "icon": "eye-off",
+                                "command": {
+                                    "type": "command",
+                                    "message": { "type": HIDE_SIDEBAR_USAGE_MESSAGE_TYPE },
+                                },
+                            }]);
+                            Self::show_native_sidebar_context_menu(
+                                &items,
+                                owner.get(),
+                                event.position,
+                                scale,
+                                window,
+                                cx,
+                            );
+                        }),
+                    )
+                })
                 .child(
                     v_flex()
                         .w_full()
@@ -386,91 +435,188 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The Commands row's account-usage button: a bar chart at rest, a pin while hovered.
-    /// Hovering it peeks the strip, clicking it pins or unpins it.
-    pub(crate) fn render_native_sidebar_usage_toggle(
+    /// The height of the line the handle sits in, and how far down from the line's top the
+    /// handle's hitbox starts (both before the zoom): the workspace button's line when that
+    /// button shows, else a short line of its own.
+    fn native_sidebar_usage_handle_line(&self) -> (f32, f32) {
+        if self.native_sidebar_footer_workspace_tile_shown() {
+            (
+                SIDEBAR_BOTTOM_LINE_TOP_PADDING
+                    + SIDEBAR_BOTTOM_LINE_BUTTON_HEIGHT
+                    + SIDEBAR_BOTTOM_LINE_BOTTOM_PADDING,
+                SIDEBAR_BOTTOM_LINE_TOP_PADDING,
+            )
+        } else {
+            (SIDEBAR_USAGE_HANDLE_LINE_HEIGHT, 0.0)
+        }
+    }
+
+    /// The bottom of the sidebar: the workspace button's line (only while Workspaces is on), then
+    /// the usage strip, which is the last thing in the sidebar; or, while the strip is hidden, the
+    /// handle that brings it back, at the right end of that line.
+    ///
+    /// CDXC:Sidebar 2026-11-11 DECISION:
+    /// User (sidebar bottom page, Q2530 A): "want usage to be bottom fully, not have buttons there below them when they are shown". The row of three buttons under the usage meters is gone, on every sidebar (docked and floating). Commands is a row of the sidebar's menu (Q2531) and keeps its hotkey; Settings is that menu's last row and keeps its hotkey, so there is no gear at the bottom; the chart button is a small handle at the bottom right that shows only while the meters are hidden and works as the button did (point at it to peek at the meters, click it to pin them), and a right-click on the pinned meters offers Hide account usage. The workspace button (only while Workspaces is on) sits at the left of a line of its own above the meters. This supersedes the 2026-09-21 rules that put Commands and the Settings gear in a bottom bar, the 2026-09-22 rule that the peek sits exactly where the pinned strip does (it sits on the handle's line, so the handle stays clickable under it), and the place of the 2026-10-11 workspace button (bottom left still, on its own line now).
+    pub(crate) fn render_native_sidebar_bottom(
         &self,
         appearance: &SidebarAppearance,
+        pinned_meters: Vec<GpuiAccountUsageMeter>,
         meter_count: usize,
+        window: &mut Window,
         cx: &mut gpui::Context<Self>,
-    ) -> Option<AnyElement> {
-        // The button exists only once an account is starred.
-        if meter_count == 0 {
-            return None;
-        }
+    ) -> AnyElement {
         let scale = appearance.scale;
-        let visible = self.sidebar_usage_visible;
+        let tile = self.render_native_sidebar_footer_workspace_tile(appearance, cx);
+        // The handle exists only once an account is starred, and only while its meters are hidden.
+        let hidden = meter_count > 0 && !self.sidebar_usage_visible;
+        let handle = hidden.then(|| self.render_native_sidebar_usage_handle(appearance, cx));
+        let line = if let Some(tile) = tile {
+            Some(
+                h_flex()
+                    .w_full()
+                    .flex_shrink_0()
+                    .pt(px(SIDEBAR_BOTTOM_LINE_TOP_PADDING * scale))
+                    // The strip under it brings its own space above its cards.
+                    .when(hidden || meter_count == 0, |line| {
+                        line.pb(px(SIDEBAR_BOTTOM_LINE_BOTTOM_PADDING * scale))
+                    })
+                    .px(px(SIDEBAR_USAGE_INSET * scale))
+                    // CDXC:Workspaces 2026-10-11 DECISION: User: the workspace picker sits at the
+                    // bottom left of the app, a little in from the sidebar's edge (10px, as it
+                    // was in the bottom bar) so it lines up with the account cards under it.
+                    .child(div().flex_shrink_0().ml(px(2.0 * scale)).child(tile))
+                    .child(div().flex_1())
+                    .children(handle)
+                    .into_any_element(),
+            )
+        } else {
+            handle.map(|handle| {
+                h_flex()
+                    .w_full()
+                    .flex_shrink_0()
+                    .h(px(SIDEBAR_USAGE_HANDLE_LINE_HEIGHT * scale))
+                    .px(px(SIDEBAR_USAGE_INSET * scale))
+                    .justify_end()
+                    .child(handle)
+                    .into_any_element()
+            })
+        };
+        v_flex()
+            .w_full()
+            .flex_shrink_0()
+            .children(line)
+            .children(self.render_native_sidebar_usage(appearance, pinned_meters, window, cx))
+            .into_any_element()
+    }
+
+    /// The handle that brings hidden meters back: a small chip with the bar chart at rest and a
+    /// pin while the pointer is on it. Pointing at it peeks the strip, clicking it pins the strip.
+    /// Its hover box is as tall as the line it sits in, so the peek above it starts where it ends.
+    fn render_native_sidebar_usage_handle(
+        &self,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let scale = appearance.scale;
         let hovered = self.native_sidebar.usage_pin_hovered;
         let tooltip_delay = appearance.tooltip_delay;
+        let (line_height, top) = self.native_sidebar_usage_handle_line();
+        let in_button_line = top > 0.0;
+        let height = if in_button_line {
+            SIDEBAR_BOTTOM_LINE_BUTTON_HEIGHT
+        } else {
+            line_height
+        };
         // CDXC:Sidebar 2026-09-22 WHY:
         // A GPUI element holds one hover listener, and the managed tooltip installs its own, so an
-        // `on_hover` on the button itself is silently replaced in release builds (debug asserts).
-        // The peek's hover therefore lives on this wrapper, the tooltip on the button inside it.
-        Some(
-            div()
-                .id("native-sidebar-usage-toggle-hover")
-                .flex_shrink_0()
-                .mr(px(2.0 * scale))
-                .on_hover(cx.listener(|app, hovered: &bool, _, cx| {
-                    if app.native_sidebar.usage_pin_hovered != *hovered {
-                        app.native_sidebar.usage_pin_hovered = *hovered;
-                        cx.notify();
-                    }
-                }))
-                .child(
-                    div()
-                        .id("native-sidebar-usage-toggle")
-                        .relative()
-                        .h(px(28.0 * scale))
-                        .w(px(34.0 * scale))
-                        .rounded(px(5.0 * scale))
-                        .flex()
-                        .flex_shrink_0()
-                        .items_center()
-                        .justify_center()
-                        .cursor_default()
-                        .when(visible, |button| button.bg(appearance.hover))
-                        .hover(|button| button.bg(appearance.hover))
-                        .child(titlebar_svg_icon(
-                            match (hovered, visible) {
-                                (false, _) => "titlebar/chart-bar.svg",
-                                (true, false) => "titlebar/pin-outline.svg",
-                                (true, true) => "titlebar/pin-filled.svg",
-                            },
-                            15.0 * scale,
-                            if visible {
-                                titlebar_active_text_color()
-                            } else {
-                                appearance.chrome_icon
-                            },
-                        ))
-                        .on_click(cx.listener(|app, _, _, cx| {
-                            cx.stop_propagation();
-                            app.toggle_native_sidebar_usage_visible(cx);
-                        }))
-                        .managed_discrete_tooltip_with_placement(
-                            ManagedTooltipPlacement::AboveLeft,
-                            tooltip_delay,
-                            move |window, cx| {
-                                super::tooltips::sidebar_style_tooltip(
-                                    if visible {
-                                        "Unpin account usage"
-                                    } else {
-                                        "Pin account usage"
-                                    }
-                                    .to_string(),
-                                    window,
-                                    cx,
-                                )
-                            },
-                        ),
-                )
-                .into_any_element(),
-        )
+        // `on_hover` on the chip itself is silently replaced in release builds (debug asserts).
+        // The peek's hover therefore lives on this wrapper, the tooltip on the chip inside it.
+        div()
+            .id("native-sidebar-usage-handle-hover")
+            .flex()
+            .flex_shrink_0()
+            .h(px(height * scale))
+            .map(|wrapper| {
+                if in_button_line {
+                    wrapper.items_center()
+                } else {
+                    wrapper
+                        .items_end()
+                        .pb(px(SIDEBAR_USAGE_HANDLE_BOTTOM_PADDING * scale))
+                }
+            })
+            .on_hover(cx.listener(|app, hovered: &bool, _, cx| {
+                if app.native_sidebar.usage_pin_hovered != *hovered {
+                    app.native_sidebar.usage_pin_hovered = *hovered;
+                    cx.notify();
+                }
+            }))
+            .child(
+                div()
+                    .id("native-sidebar-usage-handle")
+                    .role(gpui::Role::Button)
+                    .aria_label("Pin account usage")
+                    .h(px(SIDEBAR_USAGE_HANDLE_HEIGHT * scale))
+                    .w(px(SIDEBAR_USAGE_HANDLE_WIDTH * scale))
+                    .rounded(px(5.0 * scale))
+                    .flex()
+                    .flex_shrink_0()
+                    .items_center()
+                    .justify_center()
+                    .cursor_default()
+                    .bg(appearance.hover)
+                    .child(titlebar_svg_icon(
+                        if hovered {
+                            "titlebar/pin-outline.svg"
+                        } else {
+                            "titlebar/chart-bar.svg"
+                        },
+                        11.0 * scale,
+                        if hovered {
+                            titlebar_active_text_color()
+                        } else {
+                            appearance.chrome_icon
+                        },
+                    ))
+                    .on_click(cx.listener(|app, _, _, cx| {
+                        cx.stop_propagation();
+                        app.toggle_native_sidebar_usage_visible(cx);
+                    }))
+                    // CDXC:FocusRouting 2026-11-11 WHY: the handle is the chart button PR #564 gave a
+                    // Tab stop at the bottom of the sidebar; it keeps that stop now that it shows
+                    // only while the meters are hidden.
+                    .map(|button| {
+                        self.sidebar_focus_stop(
+                            button,
+                            "navigation:usage",
+                            super::focus_order::SidebarStopPlace::Fixed,
+                            appearance,
+                            cx,
+                        )
+                    })
+                    .managed_discrete_tooltip_with_placement(
+                        // Left of the handle, so it does not cover the meters peeking above it.
+                        ManagedTooltipPlacement::Left,
+                        tooltip_delay,
+                        |window, cx| {
+                            super::tooltips::sidebar_style_tooltip(
+                                "Pin account usage".to_string(),
+                                window,
+                                cx,
+                            )
+                        },
+                    ),
+            )
+            .into_any_element()
     }
 
     pub(crate) fn toggle_native_sidebar_usage_visible(&mut self, cx: &mut gpui::Context<Self>) {
         self.sidebar_usage_visible = !self.sidebar_usage_visible;
+        // The handle and the peek leave with this change and never see the pointer go, so their
+        // hovers end here; a stale one would peek the strip the next time it is hidden.
+        self.native_sidebar.usage_pin_hovered = false;
+        self.native_sidebar.usage_peek_hovered = false;
+        self.native_sidebar.usage_frosted_hovered = false;
         self.persist_shell_layout_state();
         cx.notify();
     }

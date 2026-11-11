@@ -17,8 +17,8 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::RowControl;
 use super::super::super::fields::{
-    ButtonSize, ButtonVariant, icon, qr_code, settings_button_sized, settings_icon,
-    settings_icon_button,
+    ButtonSize, ButtonVariant, icon, qr_code, settings_button_sized, settings_dialog_surface,
+    settings_icon, settings_icon_button,
 };
 use super::style::*;
 use super::{PathCard, RemoteTab};
@@ -419,7 +419,7 @@ pub(super) fn qr_preview_dialog(
             close,
             cx,
         ));
-    let sheet = v_flex()
+    let sheet = settings_dialog_surface(&t.p, v_flex())
         .id("remote-qr-preview")
         .track_focus(&tab.qr_preview_focus)
         .occlude()
@@ -427,17 +427,6 @@ pub(super) fn qr_preview_dialog(
         .max_w(window.viewport_size().width - px(32.0))
         .p(px(20.0))
         .gap(px(16.0))
-        .rounded(px(MODAL_RADIUS_SECTION))
-        .border_1()
-        .border_color(hsla(colors.border))
-        .bg(hsla(colors.background))
-        .shadow(vec![gpui::BoxShadow {
-            color: hsla(css_fade(colors.foreground, 0.1)),
-            offset: gpui::point(px(0.0), px(0.0)),
-            blur_radius: px(0.0),
-            spread_radius: px(1.0),
-            inset: false,
-        }])
         .font_family(MODAL_UI_FONT)
         .text_size(px(14.0))
         .line_height(px(20.0))

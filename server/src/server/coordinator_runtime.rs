@@ -1826,7 +1826,7 @@ fn refresh_thread_screen_waits(
 }
 
 /// `/api/createAgentSession` with a `coordinator` object: marks the session as one that takes its
-/// role from the `ghostex-orchestrator` skill, so the older role channels (ZCode's SessionStart
+/// role from the `ghostex-coordinator` skill, so the older role channels (ZCode's SessionStart
 /// pointer) leave it alone.
 pub(crate) fn prepare_coordinator_create_params(
     params: &Map<String, Value>,
@@ -1855,7 +1855,7 @@ pub(crate) fn prepare_coordinator_create_params(
     Ok(params)
 }
 
-/// Hands a just-created orchestrator its role: installs the `ghostex-orchestrator` skill for its
+/// Hands a just-created orchestrator its role: installs the `ghostex-coordinator` skill for its
 /// agent and queues its first message (the skill line, then the create's first request) as a
 /// startup send. A ZCode or OpenCode orchestrator's chosen model goes first as a `/model` line
 /// (OpenCode's with the chosen variant after it), because neither has a launch model flag and the
@@ -1867,7 +1867,7 @@ pub(crate) fn start_orchestrator_role(
     family: &str,
     params: &Map<String, Value>,
 ) -> std::result::Result<(), DomainStateError> {
-    coordinators::ensure_orchestrator_skill_installed(&state.paths, family)?;
+    coordinators::ensure_coordinator_skill_installed(&state.paths, family)?;
     if let Some(line) = coordinator_model_line(family, params) {
         queue_session_chat_prompt(state, project_id, session_id, &line, true)?;
     }
@@ -2022,7 +2022,7 @@ fn promote_coordinator(
     let (project_id, session_id) = &promotion.key;
     schedule_presentation_session_delta(state, db, repository, project_id, session_id)?;
     let skill_error =
-        coordinators::ensure_orchestrator_skill_installed(&state.paths, &promotion.family)
+        coordinators::ensure_coordinator_skill_installed(&state.paths, &promotion.family)
             .err()
             .map(|error| error.message);
     Ok(PromotedCoordinator {

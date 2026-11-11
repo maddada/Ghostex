@@ -19,7 +19,7 @@
 //!
 //! CDXC:SessionChat 2026-11-05 DECISION:
 //! User: "for this kind of small question that u asked: "PR #414: Review and merge it?" i want to see the answers written as links next to it and when i click them they're send to u directly". From the mockups (issues-1027/inline-answers/inline-answers.html) they picked Q1245 C, a compact segmented pill on the line under the question; Q1246 C, a click sends the same `<ghostex-page-answers>` envelope a form sends, so the agent reads it like any form answer; Q1247 B, while the answer still waits in a queue a new pick replaces it, and once the agent has read it a new pick goes as a correction marked as changed from the old answer (`questions/inline_answers.rs`).
-//! SEE-ALSO: questions/inline_answers.rs (clicks and changes), apps/desktop/src/app/native_chat/inline_answers.rs and apps/mobile/app/src/chat/native/transcript/markdown/InlineAnswers.tsx (the pill), skills/ghostex-visuals/SKILL.md and skills/ghostex-orchestrator/SKILL.md (how agents write it). Change them together.
+//! SEE-ALSO: questions/inline_answers.rs (clicks and changes), apps/desktop/src/app/native_chat/inline_answers.rs and apps/mobile/app/src/chat/native/transcript/markdown/InlineAnswers.tsx (the pill), skills/ghostex-visuals/SKILL.md and skills/ghostex-coordinator/SKILL.md (how agents write it). Change them together.
 
 use ghostex_gx_protocol::{ChatMessage, ChatRole};
 use serde_json::{json, Value};

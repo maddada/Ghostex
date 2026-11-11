@@ -131,7 +131,8 @@ fn named_files() -> &'static Mutex<std::collections::HashSet<(String, String, St
 }
 
 /// Whether the session's own chat names the file at `path` (absolute, or from the home folder):
-/// a file or attachment row of its Files and links list, written as `path` or resolving to the
+/// a file or attachment row of its Files and links list, written as `path` (up to slashes and a
+/// drive letter's case, `path_key`) or resolving to the
 /// same file. The Files view of a remote project opens only these outside the project
 /// (CDXC:Docs 2026-11-07 in server/src/project_docs/chat_file.rs).
 pub(crate) async fn session_names_file(
@@ -184,7 +185,7 @@ async fn chat_names_file(
         .filter_map(|item| item.get("path").and_then(Value::as_str))
         .map(str::to_string)
         .collect();
-    if named.iter().any(|candidate| candidate.trim() == wanted) {
+    if names_by_text(&named, &wanted) {
         return true;
     }
     tokio::task::spawn_blocking(move || {
@@ -205,6 +206,17 @@ async fn chat_names_file(
     })
     .await
     .unwrap_or(false)
+}
+
+/// Whether one of the list's paths is `wanted` as written, or under the list's own key, which
+/// spells `C:\a` and `c:/a` alike: a client that sends a Windows path with forward slashes (the
+/// desktop does) matches without a look at the disk, and a named file that is gone still counts.
+fn names_by_text(named: &[String], wanted: &str) -> bool {
+    let wanted_key = rules::path_key(wanted);
+    named.iter().any(|candidate| {
+        let candidate = candidate.trim();
+        candidate == wanted || rules::path_key(candidate) == wanted_key
+    })
 }
 
 async fn read_files_links(state: &AppState, body: &Value) -> Result<Value, DomainStateError> {
@@ -550,6 +562,29 @@ fn absolute_in(cwd: &str, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Windows cannot be run here: the user's chat named `C:\dev\.desk-runner\…` and the desktop
+    /// asks for `C:/dev/.desk-runner/…`.
+    #[test]
+    fn a_windows_path_is_named_whatever_its_slashes_and_drive_case() {
+        let named = vec![r"C:\dev\.desk-runner\d1111\university-reply\reply-email.txt".to_string()];
+        assert!(names_by_text(
+            &named,
+            "C:/dev/.desk-runner/d1111/university-reply/reply-email.txt"
+        ));
+        assert!(names_by_text(
+            &named,
+            r"c:\dev\.desk-runner\d1111\university-reply\reply-email.txt"
+        ));
+        assert!(!names_by_text(
+            &named,
+            "C:/dev/.desk-runner/d1111/university-reply/other.txt"
+        ));
+        assert!(!names_by_text(
+            &named,
+            "C:/dev.desk-runner/d1111/university-reply/reply-email.txt"
+        ));
+    }
 
     #[test]
     fn pictures_the_agents_tools_opened() {

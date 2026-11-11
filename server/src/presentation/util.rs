@@ -103,6 +103,31 @@ pub(crate) fn custom_agent_display_name(
         })
 }
 
+/// CDXC:AgentProviders 2026-11-11 FIX: User, on a push titled "custom-claude-70-dl0rpxbt39e0-…" for his coordinator
+/// (a session of a custom agent that is no longer in Settings > Agents): a push must never show an internal id. The
+/// session's stored `agentName` was that id itself, and the session list, the push, the Live Activity and the widgets
+/// all read it before the custom agent fallback above. The agent's name as the app shows it: the session's stored name
+/// unless that is its own `custom-…` id, then the custom agent's name (`custom_agent_display_name`); None when neither
+/// is known, and callers keep their own fallback, never a `custom-…` id.
+pub(crate) fn session_agent_name(project: Option<&Value>, session: &Value) -> Option<String> {
+    let agent_id = string_field(session, "agentId").unwrap_or_default();
+    let agent_id = agent_id.trim();
+    read_runtime_text(session, "agentName")
+        .filter(|name| !(is_custom_agent_id(agent_id) && name.eq_ignore_ascii_case(agent_id)))
+        .filter(|name| !is_custom_agent_id(name))
+        .or_else(|| custom_agent_display_name(project, session))
+}
+
+/// A custom agent's internal id (`custom-<base>-<n>-<random>`), never a name to show.
+pub(crate) fn is_custom_agent_id(value: &str) -> bool {
+    let value = value.trim();
+    value.len() > "custom-".len()
+        && value
+            .get(.."custom-".len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("custom-"))
+        && !value.contains(char::is_whitespace)
+}
+
 pub(crate) fn project_custom_agent_icon(project: Option<&Value>, agent_id: &str) -> Option<String> {
     project
         .and_then(|project| project.get("customAgents"))

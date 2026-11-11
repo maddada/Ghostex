@@ -145,6 +145,7 @@ action_kinds! {
     RestoreReturned => "restoreReturned",
     ApplyReturned => "applyReturned",
     RestoreSubmission => "restoreSubmission",
+    EditUnsent => "editUnsent",
 
     // Attachments.
     AttachmentsStarted => "attachmentsStarted",

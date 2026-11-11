@@ -709,6 +709,9 @@ fn terminal_section(
         false,
         cx,
     ));
+    rows.extend(super::commands_pane::commands_pane_rows(
+        page, g, s, window, cx,
+    ));
     if g.visible(s, "promptEditorBackend") {
         let ctrl_g = settings_catalog().hotkey_label("ctrl+g");
         rows.extend(page.select(

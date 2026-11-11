@@ -286,7 +286,9 @@ pub(crate) async fn handle_remote_access_http(
             }
             tokio::task::spawn_blocking(move || {
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
-                Ok(json!({ "addresses": easy_connect_addresses(&status) }))
+                let doors =
+                    crate::tailcat::known_door_addresses(&paths, status.relay.host.as_deref());
+                Ok(json!({ "addresses": easy_connect_addresses_with_doors(&status, doors) }))
             })
             .await
         }
@@ -380,6 +382,9 @@ pub(crate) async fn handle_remote_access_http(
                         "clientKey must be a nodekey: public key.",
                     )),
                     Err(LinkKeyError::NotPaired) => Err(RemoteAccessHttpError::unknown_device(&device_id)),
+                    Err(LinkKeyError::HeldByAnotherDevice { name, paired }) => {
+                        Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired }.into())
+                    }
                 }
             })
             .await
@@ -532,7 +537,13 @@ pub(crate) async fn handle_remote_access_http(
                     let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                     object.insert(
                         "easyConnectAddresses".to_string(),
-                        json!(easy_connect_addresses(&status)),
+                        json!(easy_connect_addresses_with_doors(
+                            &status,
+                            crate::tailcat::known_door_addresses(
+                                &paths,
+                                status.relay.host.as_deref()
+                            ),
+                        )),
                     );
                 }
                 Ok(result)
@@ -663,6 +674,9 @@ fn pair_device_error_outcome(error: &PairDeviceError) -> crate::audit::Outcome {
             Outcome::Refused("The phone's Ghostex is too old to pair.".to_string())
         }
         PairDeviceError::ApprovalDeclined => Outcome::Denied,
+        PairDeviceError::KeyHeldByAnotherDevice { name, paired } => Outcome::Refused(format!(
+            "It named the Easy Connect key of the paired entry \"{name}\" (paired {paired})."
+        )),
         PairDeviceError::Internal(error) => Outcome::Failed(format!("{error:#}")),
     }
 }
@@ -805,6 +819,11 @@ impl From<PairDeviceError> for RemoteAccessHttpError {
                 status: StatusCode::FORBIDDEN,
                 code: PAIR_DEVICE_APPROVAL_DECLINED_ERROR,
                 message: "The computer asked for administrator approval to add this phone's key, and the Windows prompt was declined. Scan the new code on the computer and choose Yes when Windows asks.".to_string(),
+            },
+            PairDeviceError::KeyHeldByAnotherDevice { name, paired } => Self {
+                status: StatusCode::CONFLICT,
+                code: PAIR_DEVICE_KEY_HELD_ERROR,
+                message: format!("The entry \"{name}\" (paired {paired}) under Paired devices on the computer already uses this device's Easy Connect key. If that entry is this device's earlier pairing, remove it on the computer, then show a new code and scan again."),
             },
             PairDeviceError::BadRequest(message) => Self::bad_request(message),
             PairDeviceError::Internal(error) => error.into(),

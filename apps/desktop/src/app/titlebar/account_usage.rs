@@ -87,7 +87,7 @@ fn usage_only_provider(provider: &str) -> bool {
 }
 
 /// A usage-only provider's agent logo, in the chrome's ink where the artwork is plain white.
-fn usage_only_icon(provider: &str) -> Arc<gpui::Image> {
+pub(crate) fn usage_only_icon(provider: &str) -> Arc<gpui::Image> {
     static ICONS: OnceLock<
         std::sync::Mutex<std::collections::HashMap<(String, bool), Arc<gpui::Image>>>,
     > = OnceLock::new();
@@ -393,6 +393,35 @@ impl GhostexGpuiApp {
         if !moved {
             let _ = popup.update(cx, |_, window, _| window.resize(frame.size));
         }
+    }
+
+    /// Shows the usage popup `id` once it has fitted itself: its glass and fade, on the next frame
+    /// of the popup's own window.
+    pub(crate) fn reveal_account_usage_popup(
+        &mut self,
+        id: ExtensionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let kind = GpuiTitlebarPopupKind::AccountUsage(id);
+        if !self
+            .titlebar_popup_menu
+            .as_ref()
+            .is_some_and(|state| state.kind == kind)
+        {
+            return;
+        }
+        let (Some(popup), Some(main)) = (self.titlebar_popup_window, self.main_window_handle)
+        else {
+            return;
+        };
+        if gpui::AnyWindowHandle::from(popup) == main {
+            return;
+        }
+        let _ = popup.update(cx, |_, window, _| {
+            window.on_next_frame(|window, cx| {
+                crate::app::window::popup_frame::reveal_popup_window(window, cx.reduce_motion());
+            });
+        });
     }
 
     /// A usage notice's button: the popup closes and Settings > Accounts opens, on `reconnect`'s
@@ -838,16 +867,11 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let kind = GpuiTitlebarPopupKind::AccountUsage(id);
-        let Some(account) = self
+        if !self
             .titlebar_accounts
             .iter()
-            .find(|account| text(account, "titlebarKey") == id.as_str())
-        else {
-            return;
-        };
-        // The usage popup reads Claude and Codex limits; a usage-only account opens its Settings.
-        if usage_only_provider(text(account, "provider")) {
-            self.open_gpui_settings_accounts_reconnect(None, None, cx);
+            .any(|account| text(account, "titlebarKey") == id.as_str())
+        {
             return;
         }
         let opening = !self.titlebar_popup_menu_open(kind);

@@ -16,7 +16,7 @@ use super::super::super::fields::{settings_icon, switch_control};
 use super::easy_connect::{
     QR_PLACEHOLDER_SIZE, hidden_qr, path_card, path_head, qr_block, qr_meta, qr_pending,
 };
-use super::model::BadgeTone;
+use super::model::{AccessStatus, BadgeTone, read_remote_access_status_result};
 use super::style::*;
 use super::{PathCard, RemoteTab};
 use gpui::{
@@ -24,6 +24,79 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use gpui_component::{h_flex, v_flex};
+
+/// What the Tailscale row says while Tailscale is switched off.
+pub(crate) const TAILSCALE_OFF_NOTE: &str = "Tailscale is off. Turn it on to connect your phone over your tailnet; nothing is installed or changed on this machine.";
+
+/// One line of the Tailscale checklist: its title, what it says now, and whether it is done.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TailscaleCheck {
+    pub(crate) title: &'static str,
+    pub(crate) detail: String,
+    pub(crate) done: bool,
+}
+
+/// The Tailscale checklist as it stands (`access`: `/api/remoteAccessStatus`, `None` until it is
+/// read): Tailscale on this computer, SSH access, Tailscale on the phone, the code. The Tailscale
+/// row draws it with its code under the last line; the Connect a Device window draws the same four
+/// lines and sends the reader here for the code (window/connect_device_modal/tailscale_pane.rs).
+pub(crate) fn tailscale_checklist(access: Option<&AccessStatus>) -> [TailscaleCheck; 4] {
+    let tailscale = access.and_then(|access| access.tailscale.as_ref());
+    let running = tailscale.is_some_and(|status| status.running);
+    let ssh_on = access.is_some_and(|access| access.ssh.enabled);
+    let running_detail = match tailscale {
+        None => "Checking…".to_string(),
+        Some(status) if status.running => format!(
+            "Signed in as {}{}",
+            status
+                .account
+                .clone()
+                .unwrap_or_else(|| "your account".to_string()),
+            if status.magic_dns_name.is_some() {
+                " · MagicDNS on"
+            } else {
+                ""
+            }
+        ),
+        Some(status) if status.installed => {
+            "Tailscale is installed but not connected. Open it and sign in.".to_string()
+        }
+        Some(_) => "Install Tailscale on this computer and sign in.".to_string(),
+    };
+    [
+        TailscaleCheck {
+            title: "Tailscale is running on this computer",
+            detail: running_detail,
+            done: running,
+        },
+        TailscaleCheck {
+            title: "Turn on SSH access",
+            detail: if ssh_on {
+                "SSH access is on. Your phone signs in over SSH.".to_string()
+            } else {
+                "Your phone signs in over SSH.".to_string()
+            },
+            done: ssh_on,
+        },
+        TailscaleCheck {
+            title: "Install Tailscale on your phone",
+            detail: "Sign in to the same account, then make sure it shows Connected.".to_string(),
+            done: false,
+        },
+        TailscaleCheck {
+            title: "In the Ghostex app, scan this code",
+            detail: "Fills in the name, address and username. The app then asks for your computer password once and saves it on the phone.".to_string(),
+            done: false,
+        },
+    ]
+}
+
+/// [`tailscale_checklist`] from a `/api/remoteAccessStatus` answer.
+pub(crate) fn tailscale_checklist_of_status(
+    answer: &serde_json::Value,
+) -> Result<[TailscaleCheck; 4], String> {
+    read_remote_access_status_result(answer).map(|access| tailscale_checklist(Some(&access)))
+}
 
 /// The card's status badge (Off, Detected, Not running, Not installed), also shown on its tab;
 /// `None` until the first status read.
@@ -86,7 +159,7 @@ pub(super) fn tailscale_panel(
             .text_size(px(13.0))
             .line_height(px(19.5))
             .text_color(hsla(t.muted))
-            .child("Tailscale is off. Turn it on to connect your phone over your tailnet; nothing is installed or changed on this machine.")
+            .child(TAILSCALE_OFF_NOTE)
             .into_any_element()
     });
     path_card(t, "remote-tailscale-card", head, switch, body)
@@ -161,8 +234,6 @@ fn tailscale_body(
 ) -> AnyElement {
     let access = tab.access.clone();
     let tailscale = access.as_ref().and_then(|access| access.tailscale.clone());
-    let running = tailscale.as_ref().is_some_and(|status| status.running);
-    let ssh_on = access.as_ref().is_some_and(|access| access.ssh.enabled);
     let code = tab
         .pairing
         .as_ref()
@@ -183,29 +254,11 @@ fn tailscale_body(
         .as_ref()
         .and_then(|code| code.user.clone())
         .or_else(|| access.as_ref().map(|access| access.username.clone()));
-    let first_detail = match &tailscale {
-        None => "Checking…".to_string(),
-        Some(status) if status.running => format!(
-            "Signed in as {}{}",
-            status
-                .account
-                .clone()
-                .unwrap_or_else(|| "your account".to_string()),
-            if status.magic_dns_name.is_some() {
-                " · MagicDNS on"
-            } else {
-                ""
-            }
-        ),
-        Some(status) if status.installed => {
-            "Tailscale is installed but not connected. Open it and sign in.".to_string()
-        }
-        Some(_) => "Install Tailscale on this computer and sign in.".to_string(),
-    };
+    let [running_check, ssh_check, phone_check, scan_check] = tailscale_checklist(access.as_ref());
     // SSH access is set behind the This computer row; the step links there
     // (CDXC:RemotePairing 2026-11-08 in current_machine.rs).
-    let ssh_step_children =
-        (!ssh_on).then(|| super::current_machine::ssh_status_line(tab, t, "tailscale-ssh", cx));
+    let ssh_step_children = (!ssh_check.done)
+        .then(|| super::current_machine::ssh_status_line(tab, t, "tailscale-ssh", cx));
     let qr_left = match &code {
         Some(_) => hidden_qr(
             tab,
@@ -218,7 +271,7 @@ fn tailscale_body(
         None => qr_pending(
             t,
             QR_PLACEHOLDER_SIZE,
-            if running {
+            if running_check.done {
                 "Waiting for the address…"
             } else {
                 "Appears once Tailscale is running."
@@ -309,37 +362,33 @@ fn tailscale_body(
         .child(step(
             t,
             1,
-            running,
-            "Tailscale is running on this computer",
-            first_detail,
+            running_check.done,
+            running_check.title,
+            running_check.detail,
             None,
         ))
         .child(step(
             t,
             2,
-            ssh_on,
-            "Turn on SSH access",
-            if ssh_on {
-                "SSH access is on. Your phone signs in over SSH.".to_string()
-            } else {
-                "Your phone signs in over SSH.".to_string()
-            },
+            ssh_check.done,
+            ssh_check.title,
+            ssh_check.detail,
             ssh_step_children,
         ))
         .child(step(
             t,
             3,
-            false,
-            "Install Tailscale on your phone",
-            "Sign in to the same account, then make sure it shows Connected.".to_string(),
+            phone_check.done,
+            phone_check.title,
+            phone_check.detail,
             None,
         ))
         .child(step(
             t,
             4,
-            false,
-            "In the Ghostex app, scan this code",
-            "Fills in the name, address and username. The app then asks for your computer password once and saves it on the phone.".to_string(),
+            scan_check.done,
+            scan_check.title,
+            scan_check.detail,
             Some(qr_block(t, qr_left, meta.into_any_element())),
         ));
     v_flex()

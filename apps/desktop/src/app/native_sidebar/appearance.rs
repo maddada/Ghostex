@@ -28,6 +28,8 @@ pub(crate) struct SidebarAppearance {
     pub(crate) hover: Hsla,
     pub(crate) session_hover: Hsla,
     pub(crate) visible: Hsla,
+    /// The focused control's ring: the chat composer's (native_chat/appearance.rs).
+    pub(crate) ring: Hsla,
     pub(crate) scale: f32,
 }
 
@@ -106,6 +108,7 @@ impl SidebarAppearance {
                 base.blend(foreground.opacity(0.30))
                     .blend(rgb(0).opacity(0.40).into())
             },
+            ring: crate::app::native_chat::appearance::focus_ring_color(light),
             scale,
         }
     }

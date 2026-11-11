@@ -67,12 +67,13 @@ pub use crate::action::{ActionKind, UserAction};
 pub use crate::core::{ChatCore, SentFrame};
 pub use crate::dispatch::{owner, Family};
 pub use crate::document::{
-    assemble, frame_parts, AccountStatus, AsyncQuestions, ChatPill, ComposerActions,
-    ComposerChrome, ComposerOverflow, DeferredWorkRow, Document, Draft, EmptyState, Frame,
-    FrameParts, GroupedTurn, HostAction, IncomingDraft, Interaction, ItemsSplice, LoadingNotice,
-    MinimapMarker, NewSessionWelcome, Note, ProjectedMessage, QuestionCard, QuestionControls,
-    QuestionDraft, Queue, QueueCapabilities, QueuedPrompt, RowDetails, TerminalTail,
-    TerminalTailNotice, TranscriptItem, ViewState, WorkTally, WorkingCard, WorkingStrip,
+    assemble, assemble_with, frame_parts, AccountStatus, AssembleCache, AsyncQuestions, ChatPill,
+    ComposerActions, ComposerChrome, ComposerOverflow, DeferredWorkRow, Document, Draft,
+    EmptyState, Frame, FrameParts, GroupedTurn, HostAction, IncomingDraft, Interaction,
+    ItemsSplice, LoadingNotice, MinimapMarker, NewSessionWelcome, Note, ProjectedMessage,
+    QuestionCard, QuestionControls, QuestionDraft, Queue, QueueCapabilities, QueuedPrompt,
+    RowDetails, TerminalTail, TerminalTailNotice, TranscriptItem, ViewState, WorkTally,
+    WorkingCard, WorkingStrip,
 };
 pub use crate::effect::{Effect, HostRequest, OpenTarget, RequestKind, StorageWrite};
 pub use crate::event::{

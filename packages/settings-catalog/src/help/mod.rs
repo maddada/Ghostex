@@ -740,7 +740,10 @@ pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &s
 pub fn published_catalog() -> Catalog {
     let mut catalog = catalog();
     for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
-        HELD_ROW_PLACEMENT
+        HELD_REGROUP_PLACEMENT
+            .iter()
+            .chain(HELD_ROW_PLACEMENT)
+            .chain(HELD_PROJECTS_PLACEMENT)
     {
         let Some(at) = catalog.settings.iter().position(|entry| entry.key == *key) else {
             continue;
@@ -807,6 +810,7 @@ pub fn published_catalog() -> Catalog {
     for entry in &mut catalog.settings {
         if let Some((_, title, subtitle, advanced)) = HELD_ROW_WORDING
             .iter()
+            .chain(HELD_REGROUP_WORDING)
             .find(|(key, ..)| *key == entry.key.as_str())
         {
             entry.title = (*title).to_string();
@@ -821,3 +825,130 @@ pub fn published_catalog() -> Catalog {
 pub fn published_catalog_json() -> String {
     format!("{}\n", published_catalog().to_json().to_pretty_string())
 }
+
+/// Rows PR #567 moved out of Settings > Projects > Project settings into the new Issues Workflow
+/// and Cloud box sections, held in Project settings in the committed Help files until a release
+/// ships the move, in [`HELD_ROW_PLACEMENT`]'s shape.
+///
+/// CDXC:Projects 2026-11-11 DECISION:
+/// The coordinator, for the user (GitHub page Q2524, "Merge, then fix on main"): Help must not change on main before the next release, so the Project Linear API key and the three Cloud box rows stay in Project settings for installed copies until the release that ships PR #567 empties this list and regenerates (release-11.3.1/help/projects-global-fold.patch).
+pub const HELD_PROJECTS_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[
+    (
+        "projectLinearApiKey",
+        ("projects", "Projects"),
+        ("projectSettings", "Project settings"),
+        "Project Linear API key",
+        "A Linear key for this project only, used instead of its workspace's or the shared key. Issues Workflow shows Linear tickets once a key applies to the project.",
+        "docsDirectory",
+    ),
+    (
+        "projectCloudBoxDefaults",
+        ("projects", "Projects"),
+        ("projectSettings", "Project settings"),
+        "Cloud box provider and size",
+        "Which provider and machine size a new Cloud Box for this project starts on.",
+        "projectLinearApiKey",
+    ),
+    (
+        "projectCloudBoxSnapshots",
+        ("projects", "Projects"),
+        ("projectSettings", "Project settings"),
+        "Cloud box snapshots",
+        "This project's saved snapshots: what a new Cloud Box starts from. Make one the Default (★), update the Default from a running box, or delete one.",
+        "projectCloudBoxDefaults",
+    ),
+    (
+        "projectCloudBoxSecrets",
+        ("projects", "Projects"),
+        ("projectSettings", "Project settings"),
+        "Send to the box",
+        "Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.",
+        "projectCloudBoxSnapshots",
+    ),
+];
+
+/// Rows the 2026-11-11 Settings regroup moved to another page, held at their old place in the
+/// committed Help files until a release ships the move, in [`HELD_ROW_PLACEMENT`]'s shape.
+/// [`published_catalog`] puts these back before [`HELD_ROW_PLACEMENT`]'s rows, so Keep the last
+/// project running for lands after the two Space rows held on Sidebar & Sessions, where the
+/// committed files have it.
+///
+/// CDXC:Settings 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the settings Q2511 moved (Tell agents about Ghostex and Claude task list from Chat to Agents > Defaults, Close empty sessions when starting a new one from Chat to Sidebar & Sessions, Keep the last project running for from Sidebar & Sessions to Power & Sleep > Auto Sleep, the four Commands pane rows from Sidebar & Sessions to Terminal) stay where installed copies have them until the release that ships the move empties this list and regenerates (release-11.3.1/help/settings-regroup.patch). It is a list of its own, at the end of this file, so the held patches that empty [`HELD_ROW_PLACEMENT`] still apply.
+pub const HELD_REGROUP_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[
+    (
+        "closeEmptySessionsOnNew",
+        ("chat", "Chat"),
+        ("chat", "Chat"),
+        "Close empty sessions when starting a new one",
+        "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.",
+        "preferredAgentInterface",
+    ),
+    (
+        "agentGhostexNote",
+        ("chat", "Chat"),
+        ("chat", "Chat"),
+        "Tell agents about Ghostex",
+        "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+        "coordinatorBoardView",
+    ),
+    (
+        "sessionDetailsClaudeTaskTools",
+        ("chat", "Chat"),
+        ("chat", "Chat"),
+        "Claude task list",
+        "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it. Shown while the Session details panel extension is on.",
+        "readAloudUnavailable",
+    ),
+    (
+        "projectSwitchKeepAliveMinutes",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "Keep the last project running for",
+        "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.",
+        "unifiedGroupByProject",
+    ),
+    (
+        "commandsPanelDefaultHeightPx",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "Commands pane height on double-click",
+        "Height used when opening the command pane and when double-clicking its top resize rail.",
+        "sidebarDefaultWidthPx",
+    ),
+    (
+        "commandsPanelSide",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "Commands pane side",
+        "Dock the command pane below the workspace or to its right.",
+        "commandsPanelDefaultHeightPx",
+    ),
+    (
+        "commandsPanelAutoMinimize",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "Auto-minimize Commands pane",
+        "Minimize the Commands pane this long after you move focus elsewhere and the pointer leaves it. Commands keep running. Off keeps the pane open.",
+        "commandsPanelSide",
+    ),
+    (
+        "commandsPanelAutoMinimizeDelaySeconds",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "Minimize after (set with Auto-minimize Commands pane)",
+        "How long the Commands pane stays open after focus and the pointer leave it.",
+        "commandsPanelAutoMinimize",
+    ),
+];
+
+/// Rows whose wording names the old place of a setting [`HELD_REGROUP_PLACEMENT`] holds, kept as
+/// they read before in the committed Help files until the same release, in [`HELD_ROW_WORDING`]'s
+/// shape (CDXC:Settings 2026-11-11 above): the Session details panel's switch says where its
+/// Claude task list row is.
+pub const HELD_REGROUP_WORDING: &[(&str, &str, &str, bool)] = &[(
+    "sessionDetailsPanelHidden",
+    "Turn off the Session details panel",
+    "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Chat. On by default.",
+    false,
+)];

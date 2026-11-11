@@ -291,6 +291,7 @@ impl TailcatRuntime {
         );
         self.apply_relay(paths, state, &saved);
         self.apply_door(paths, state);
+        super::door::remember_door_address(paths, state.relay.relay_host().as_deref());
     }
 
     /*
@@ -697,6 +698,12 @@ impl TailcatRuntime {
             let state = inner.lane(lane);
             if state.generation != generation {
                 return;
+            }
+            // The door's address is kept for the address lists paired devices get (`door.rs`).
+            if lane == TailcatLane::Door {
+                if let Some(spec) = state.spec.as_ref() {
+                    super::door::save_door_address(&spec.key_file, &token);
+                }
             }
             state.token = Some(token);
             state.last_error = None;

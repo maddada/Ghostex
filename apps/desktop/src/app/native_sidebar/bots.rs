@@ -159,6 +159,16 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.toggle_native_sidebar_bots_mode(cx);
             }))
+            // Both entries (the top row's and the Spaces row's) sit above the list.
+            .map(|button| {
+                self.sidebar_focus_stop(
+                    button,
+                    format!("bots:{id}"),
+                    super::focus_order::SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
             .managed_discrete_tooltip_with_placement(
                 ManagedTooltipPlacement::Right,
                 appearance.tooltip_delay,

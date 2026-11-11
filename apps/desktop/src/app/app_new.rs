@@ -530,7 +530,6 @@ impl GhostexGpuiApp {
                 titlebar_popup_menu: None,
                 context_menu: None,
                 titlebar_popup_window: None,
-                titlebar_more_button_bounds: Rc::new(std::cell::Cell::new(None)),
                 titlebar_update_button_bounds: Rc::new(std::cell::Cell::new(None)),
                 pending_titlebar_popup_open: None,
                 titlebar_extension_popup_generation: 0,

@@ -180,9 +180,11 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Whether `path` addresses a file opened from outside the project (it has no tree folders).
+    /// Whether `path` addresses a file opened from outside the project (it has no tree folders):
+    /// absolute here, or a Windows drive or UNC path, which a remote Windows computer's chat link
+    /// opens on any computer (`C:/dev/…` is not absolute on a Mac, and was opened as tree folders).
     pub(crate) fn native_docs_is_outside_file(path: &str) -> bool {
-        manage_chat_file_is_address(path)
+        manage_chat_file_is_address(path) || crate::app::helpers::gpui_is_windows_remote_path(path)
     }
 
     /// The path `path`'s images and page load from on the Docs resource origin: its own path for

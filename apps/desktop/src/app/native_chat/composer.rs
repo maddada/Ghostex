@@ -57,18 +57,8 @@ impl NativeChatView {
             "interrupt" => ("send", true),
             mode => (mode, false),
         };
-        crate::support_logs::append_for_scenario(
-            crate::support_logs::GpuiSupportLog::SessionChat,
-            "gpui.sessionChat.viewState",
-            "sessionChat.nativeSubmit",
-            json!({
-                "composerReady": self.composer_ready,
-                "hasDraft": !self.draft.trim().is_empty(),
-                "pendingSend": self.pending_send,
-                "status": self.snapshot["status"],
-                "hasRuntime": self.runtime.is_some(),
-            }),
-        );
+        // One line per send, always kept (send_watch.rs).
+        self.log_send(mode, interrupt);
         if !self.composer_ready {
             return;
         }
@@ -107,9 +97,20 @@ impl NativeChatView {
                 return;
             }
         };
+        // The message's name from here to the agent: every attempt goes under it, the chat core
+        // takes an action carrying it once, and gxserver delivers it once (send_watch.rs).
+        let send_request_id = match crate::app::helpers::gpui_random_uuid_string() {
+            Ok(id) => id,
+            Err(error) => {
+                self.error = Some(error);
+                cx.notify();
+                return;
+            }
+        };
         self.close_maximized(cx);
         self.pending_send = true;
         let mut submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
+            "sendRequestId":send_request_id,
             "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
         // The pictures still on their way go where the caret is, as a paste that lands writes
         // them (packages/gx-chat-core/src/composer/attaching.rs).
@@ -131,7 +132,9 @@ impl NativeChatView {
         }
         cx.emit(super::state::NativeChatEvent::DraftState(true));
         self.end_answer_hold_for_send();
-        self.invoke(submission, cx);
+        self.invoke(submission.clone(), cx);
+        // The box is empty now: the view watches the message until the core has it.
+        self.watch_send(send_request_id, submission, cx);
     }
 
     /// The chat's neutral filled text button (Load earlier turns, Retry, Use / Dismiss, the
@@ -396,7 +399,22 @@ impl NativeChatView {
         // Status line in the chat on, the line is the transcript's last row instead
         // (status_tail.rs), and the box keeps the lead-in it has with no card above it; an empty
         // chat has no row to end with and keeps the card (gx-chat-core `inTranscript`).
-        let working_card = if maximized || self.snapshot["workingCard"]["inTranscript"] == true {
+        self.wake_when_worked_line_ends(cx);
+        // A coordinator's dock (work_cards.rs), built first: with a dock the status rides on its
+        // header bar (`work_dock_header`) and has no bar of its own.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, picking on the chat box bars page: "A. The status joins the dock's quiet line",
+        // always on that bar while the chat has a dock; a chat with no dock keeps its own bar.
+        let dock = if maximized {
+            None
+        } else {
+            self.render_work_dock(p, cx)
+        };
+        let working_card = if maximized
+            || dock.is_some()
+            || self.snapshot["workingCard"]["inTranscript"] == true
+        {
             None
         } else {
             self.render_working_card(p, cx)
@@ -418,6 +436,10 @@ impl NativeChatView {
         let mut working_card = working_card;
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();
+        // A message that left the box and the core has not taken in yet (send_watch.rs).
+        if let Some(sending) = self.render_unconfirmed_sends(p) {
+            waiting.push(sending);
+        }
         // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
         // (saved_draft_pill.rs), which replaced the notice row here (CDXC:Drafts 2026-11-04).
         // A `composerNotReady` refusal gets its own card instead of the plain error line.
@@ -477,6 +499,15 @@ impl NativeChatView {
         }
         if let Some(prompt) = self.render_prompt(p, window, cx) {
             if self.snapshot["prompt"]["kind"] == "question" {
+                // The question replaces the box and the dock, so the status keeps its own bar.
+                let working_card = match working_card {
+                    None if dock.is_some()
+                        && self.snapshot["workingCard"]["inTranscript"] != true =>
+                    {
+                        self.render_working_card(p, cx)
+                    }
+                    card => card,
+                };
                 return self
                     .composer_row()
                     .child(
@@ -504,11 +535,6 @@ impl NativeChatView {
         // User, of the "Worked for 34s · ... updated" bar above the dock: "please i beg you. move
         // this bar which shows how long we worked for etc to be below the work items cards
         // please". The gaps stay the stack's own.
-        let dock = if maximized {
-            None
-        } else {
-            self.render_work_dock(p, cx)
-        };
         let dock_shown = dock.is_some();
         footer = footer.children(dock).children(working_card.take());
         self.sync_files_links_menu(window, cx);

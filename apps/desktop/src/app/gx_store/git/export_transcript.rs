@@ -813,7 +813,7 @@ impl GhostexGpuiApp {
                 );
             }
             // An older gxserver there would type a staged draft into the terminal while
-            // `/ghostex-orchestrator` starts (CDXC:Coordinators `coordinatorHandoffDraft`).
+            // `/ghostex-coordinator` starts (CDXC:Coordinators `coordinatorHandoffDraft`).
             if scope
                 .remote
                 .as_ref()

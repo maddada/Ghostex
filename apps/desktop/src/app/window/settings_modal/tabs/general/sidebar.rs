@@ -160,21 +160,6 @@ fn sidebar_section(
             cx,
         ));
     }
-    rows.extend(page.slider(
-        g,
-        s,
-        "projectSwitchKeepAliveMinutes",
-        "Keep the last project running for (minutes)",
-        "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.",
-        (
-            g.number("MIN_PROJECT_SWITCH_KEEP_ALIVE_MINUTES"),
-            g.number("MAX_PROJECT_SWITCH_KEEP_ALIVE_MINUTES"),
-            1.0,
-        ),
-        false,
-        window,
-        cx,
-    ));
     // CDXC:Settings 2026-10-29 DECISION (wording Q23): Sidebar visibility memory, a select of Same in
     // every view / Remembered per view, is the switch Remember sidebar per view; the key keeps its
     // two values.
@@ -337,110 +322,6 @@ fn sidebar_section(
         ));
     }
     rows.extend(page.toggle(g, s, "closeSidePanelWithLastTab", "Close side panel with its last tab", "Close the side panel when you close its last tab, instead of showing the Open a view picker.", false, cx));
-    rows.extend(page.slider(
-        g,
-        s,
-        "commandsPanelDefaultHeightPx",
-        "Commands pane height on double-click",
-        "Used when opening the command pane (F12 or sidebar) and when double-clicking its top resize rail.",
-        (
-            g.number("MIN_COMMANDS_PANEL_DEFAULT_HEIGHT_PX"),
-            g.number("MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX"),
-            1.0,
-        ),
-        false,
-        window,
-        cx,
-    ));
-    rows.extend(page.select(
-        g,
-        s,
-        "commandsPanelSide",
-        "Commands pane side",
-        "Where terminal Actions and F12 open the command pane: below the workspace or as a column to its right.",
-        g.options("COMMANDS_PANEL_SIDE_OPTIONS"),
-        None,
-        false,
-        window,
-        cx,
-    ));
-    // CDXC:Settings 2026-10-29 DECISION (cleanup Q21): Auto-minimize Commands pane and Minimize
-    // after are one select: Off, or how long the pane stays open after focus and the pointer leave.
-    if g.any_visible(
-        s,
-        &[
-            "commandsPanelAutoMinimize",
-            "commandsPanelAutoMinimizeDelaySeconds",
-        ],
-    ) {
-        let delay = g
-            .values
-            .number_string("commandsPanelAutoMinimizeDelaySeconds");
-        let mut options = vec![SettingOption {
-            label: "Off".to_string(),
-            value: "off".to_string(),
-        }];
-        options.extend(g.options("COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS"));
-        if !options.iter().any(|option| option.value == delay) {
-            options.insert(
-                1,
-                SettingOption {
-                    label: format!("After {delay} seconds"),
-                    value: delay.clone(),
-                },
-            );
-        }
-        let value = if g.values.bool("commandsPanelAutoMinimize") {
-            delay
-        } else {
-            "off".to_string()
-        };
-        let spec = g
-            .spec(
-                "commandsPanelAutoMinimize",
-                "Auto-minimize Commands pane",
-                "Minimize the Commands pane this long after you move focus elsewhere and the pointer leaves it. Commands keep running. Off keeps the pane open.",
-            )
-            .modified(
-                g.values.is_modified("commandsPanelAutoMinimize")
-                    || g.values.is_modified("commandsPanelAutoMinimizeDelaySeconds"),
-            );
-        let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
-            let store = page.store.clone();
-            store.update(cx, |store, cx| {
-                store.reset_setting("commandsPanelAutoMinimize", cx);
-                store.reset_setting("commandsPanelAutoMinimizeDelaySeconds", cx);
-            });
-        });
-        rows.push(select_field(
-            page,
-            &g.p,
-            "commandsPanelAutoMinimize",
-            spec,
-            Some(reset),
-            &options,
-            &value,
-            None,
-            |page: &mut GeneralTab, next, _window, cx| {
-                let mut patch = Map::new();
-                if next == "off" {
-                    patch.insert("commandsPanelAutoMinimize".to_string(), json!(false));
-                } else if let Ok(seconds) = next.parse::<f64>() {
-                    patch.insert("commandsPanelAutoMinimize".to_string(), json!(true));
-                    patch.insert(
-                        "commandsPanelAutoMinimizeDelaySeconds".to_string(),
-                        json!(seconds.round() as i64),
-                    );
-                }
-                let store = page.store.clone();
-                store.update(cx, |store, cx| {
-                    store.apply_patch(patch, "settings:control", cx)
-                });
-            },
-            window,
-            cx,
-        ));
-    }
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q14): the old tab strip's Hide New Terminal and
     // Hide New Browser Tab rows are gone with it.
     // The sidebar's Sort & Filter menu writes the same setting (CDXC:Sidebar 2026-10-05 in gx-core
@@ -500,6 +381,8 @@ fn sidebar_section(
         false,
         cx,
     ));
+    // CDXC:Sessions 2026-10-09 DECISION: the New-session cleanup is an Advanced setting, off by default, that only runs for Chat; gxserver enforces the Chat condition. It sits here, not on Chat, since CDXC:Settings 2026-11-11 (model.rs `RailTier`, Q2511): it closes sessions in the sidebar's list.
+    rows.extend(page.toggle(g, s, "closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.", false, cx));
     rows.extend(page.toggle(g, s, "enableSessionParking", "Enable session parking", "Add Park to session menus and move parked sessions into a collapsible section at the bottom of the sidebar.", false, cx));
     if g.values.bool("enableSessionParking") {
         rows.extend(page.toggle(

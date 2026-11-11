@@ -85,9 +85,9 @@ WHAT A COORDINATOR IS
   that no longer runs) is nudged and reported the same way after 10 minutes
   without a new turn. `coordinator status`
   shows when each working thread started and last showed output. The coordinator
-  never has to poll. Its role is the ghostex-orchestrator skill: Ghostex installs it for the
+  never has to poll. Its role is the ghostex-coordinator skill: Ghostex installs it for the
   coordinator's agent, and its first message always starts with "Read and
-  adhere to this skill: /ghostex-orchestrator" ($ghostex-orchestrator for agents
+  adhere to this skill: /ghostex-coordinator" ($ghostex-coordinator for agents
   other than Claude Code and Copilot). `ghostex coordinator guide` prints the
   playbook in effect for the coordinator's project (see COORDINATOR
   PLAYBOOK) with the reply format the user chose for coordinators and the
@@ -118,7 +118,7 @@ PROMOTE
   promote makes a session that already exists (of an agent create accepts) an
   coordinator, keeping its conversation: the sidebar's Advanced > Make
   Coordinator does the same. Without <session-ref> it promotes the session it runs in. It never
-  restarts or interrupts the agent: Ghostex installs the ghostex-orchestrator
+  restarts or interrupts the agent: Ghostex installs the ghostex-coordinator
   skill and queues a message that starts with the skill line, which reaches the
   session once its current turn is over, like the first message of a created
   coordinator. --goal sets the goal. A session that is already a coordinator,
@@ -231,6 +231,10 @@ WORK ITEMS
                thread still not moving after Ghostex's nudge
     In progress  the coordinator or a thread is on it (stored, and accepted
                by --status, as moving or in-progress)
+    Not being worked on  In progress, but no thread is on it and the
+               coordinator has not changed it since its last turn; never
+               stored: item list and status name it until it is finished,
+               asked about, waits on something or changes again
     Waiting    on another item, an ask, or something outside
     Later      nobody is on it yet (next, held for a release, parked, backlog)
     Finished   done; today's show, older ones leave after 14 days
@@ -328,7 +332,7 @@ MEMORY AND INSTRUCTIONS
   a coordinator's sidebar menu save.
 
 COORDINATOR PLAYBOOK
-  The coordinator playbook is the ghostex-orchestrator skill's text: how every
+  The coordinator playbook is the ghostex-coordinator skill's text: how every
   coordinator works. Ghostex's playbook is never edited, so its updates keep
   arriving. The user changes how coordinators work with playbook overrides:
   one plain text for every coordinator ("Never push without asking", "Ignore

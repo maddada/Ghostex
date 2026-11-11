@@ -45,6 +45,9 @@ pub(crate) use prelude::*;
 
 mod assets;
 mod cef;
+/// The sidebar's and Settings' image cache and data URL decoders, the desktop's file.
+#[allow(dead_code)]
+mod data_url_image;
 /// The web build has the sidebar's folds but not the Settings rail, which uses the rest.
 #[allow(dead_code)]
 mod fold_motion;

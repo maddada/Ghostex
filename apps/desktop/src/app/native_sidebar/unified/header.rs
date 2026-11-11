@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use super::model::UnifiedSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 
 /// The header's side padding, its one button (the filter) and the gap before it, before the zoom:
 /// the top rows' shared edge and button size (native_sidebar/navigation.rs).
@@ -173,8 +174,14 @@ impl GhostexGpuiApp {
         &mut self,
         row_menu: &Value,
     ) -> Option<Value> {
-        let unified = self.native_sidebar.unified.clone()?;
         let (kind, key) = (row_menu["kind"].as_str()?, row_menu["key"].as_str()?);
+        // A remote computer's row has its menu in the Project sidebar too: the folded computers
+        // button lists them (native_sidebar/machines.rs).
+        if kind == "machine" {
+            return (key != ghostex_gx_core::LOCAL_MACHINE_ID)
+                .then(|| self.native_machine_tab_menu(key));
+        }
+        let unified = self.native_sidebar.unified.clone()?;
         if !row_has_menu(&unified, kind, key) {
             return None;
         }
@@ -295,19 +302,19 @@ impl GhostexGpuiApp {
                         },
                     )
                 })
-                .on_click(cx.listener(
-                    move |_, event: &gpui::ClickEvent, window, cx| {
-                        cx.stop_propagation();
-                        Self::show_unified_filter_menu(
-                            &menu,
-                            owner.get(),
-                            event,
-                            scale,
-                            window,
-                            cx,
-                        );
-                    },
-                )),
+                .on_click(cx.listener(move |_, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    Self::show_unified_filter_menu(&menu, owner.get(), event, scale, window, cx);
+                }))
+                .map(|button| {
+                    self.sidebar_focus_stop(
+                        button,
+                        "unified-header:filter",
+                        SidebarStopPlace::Fixed,
+                        appearance,
+                        cx,
+                    )
+                }),
             )
             .into_any_element()
     }

@@ -52,18 +52,8 @@ impl Render for JobsPopoverPanel {
             rows,
             light,
             glass,
-            // Under window glass the app's own frosted fill, over a warm grey (no near-black), as
-            // the Share popover does (collab_share.rs).
-            surface: glass.then(|| {
-                popup_window_panel_surface(
-                    if light {
-                        gpui::rgb(0xf6f4f2)
-                    } else {
-                        gpui::rgb(0x403c3a)
-                    }
-                    .into(),
-                )
-            }),
+            // The header dropdowns' own surface, as the Share popover takes it (collab_share.rs).
+            surface: Some(popup_menu_frame()),
         };
         let on: JobsHandler<Self> =
             Rc::new(|panel: &mut Self, action, _window, cx| panel.act(action, cx));

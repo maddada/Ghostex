@@ -115,6 +115,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let card_visible = notice_visible(state);
     let choice_pending = terminal_choice_pending(state, notice.as_ref());
     into.send_blocked_reason = send_refused(state);
+    into.send_hold_reason = send_hold(state);
+    into.send_held = crate::composer::delivery::held_words(state);
+    into.submissions_received = state.composer.submissions_received;
+    into.sends_taken = state.composer.taken_send_ids.clone();
     into.composer_placeholder = composer_placeholder(
         true,
         choice_pending,
@@ -300,8 +304,17 @@ fn queued_prompt(prompt: &Value) -> QueuedPrompt {
 /// `document::assemble` runs family b before family d. Family b reads this predicate over
 /// `ChatState`, never the half-built document.
 pub fn send_blocked(state: &ChatState, _context: &ChatContext) -> Option<String> {
+    send_blocked_reason(&send_gate(state)).map(str::to_string)
+}
+
+/// What a message held by the gate says while it waits (`hold_words`), or `None`.
+pub fn send_hold(state: &ChatState) -> Option<String> {
+    crate::composer::policy::hold_words(&send_gate(state)).map(str::to_string)
+}
+
+fn send_gate(state: &ChatState) -> SendGate {
     let notice = TerminalNotice::parse(state.session.terminal_notice.as_ref());
-    send_blocked_reason(&SendGate {
+    SendGate {
         // The desktop brain never holds input on another device; the web and mobile hosts gate it
         // on their own transport, which answers through the same field.
         can_send: true,
@@ -312,8 +325,7 @@ pub fn send_blocked(state: &ChatState, _context: &ChatContext) -> Option<String>
         terminal_choice_pending: terminal_choice_pending(state, notice.as_ref()),
         notice_card_visible: notice_visible(state),
         session_option_switching: option_switching(state),
-    })
-    .map(str::to_string)
+    }
 }
 
 /// Why a send is refused outright, or `None`; a send that is only blocked is held instead.

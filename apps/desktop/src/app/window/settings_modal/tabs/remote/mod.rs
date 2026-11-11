@@ -65,6 +65,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 use style::RemoteTokens;
+pub(crate) use tailscale::{TAILSCALE_OFF_NOTE, TailscaleCheck, tailscale_checklist_of_status};
 
 /// A request timeout for the polls and quick actions.
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);

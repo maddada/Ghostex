@@ -43,8 +43,9 @@ const TOP_ROW_TIGHT_GAP: f32 = 2.0;
 /// How the top row's buttons share the room right of Toggle sidebar.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct TopRowFit {
-    /// Whether Add project stays in the row; it folds into the menu, whose first row it already
-    /// is, when the row cannot hold every button at its narrowest.
+    /// Whether Add project stays in the row; it folds into the menu, as its first row, when the
+    /// row cannot hold every button at its narrowest (the menu lists it only then:
+    /// `native_sidebar_more_menu_now`).
     add_project: bool,
     gap: f32,
     /// The row's right padding, which gives way last, only so the menu never runs past the edge.
@@ -139,50 +140,33 @@ impl GhostexGpuiApp {
     /// User: the Search row and the Commands row are each one pixel taller.
     /// Both rows keep those heights now that the hairlines are gone; the pixel each border used to
     /// take out of the border-box went back into the padding, so neither row's content moved.
+    /// (The Commands row left on 2026-11-11: CDXC:Sidebar 2026-11-11 DECISION in usage.rs.)
     pub(crate) fn render_native_sidebar_navigation(
         &self,
         appearance: &SidebarAppearance,
-        footer: bool,
-        usage_meter_count: usize,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let owns_window_corner = !footer && !self.sidebar_collapsed;
-        self.render_native_sidebar_row(
-            appearance,
-            footer,
-            usage_meter_count,
-            owns_window_corner,
-            cx,
-        )
+        let owns_window_corner = !self.sidebar_collapsed;
+        self.render_native_sidebar_row(appearance, owns_window_corner, cx)
     }
 
-    /// The top row (or with `footer` the bottom bar). `owns_window_corner` draws it as the docked
-    /// sidebar's top row, in the window's top-left corner: the desktop's Claude header draws that
-    /// same row while Claude has the sidebar hidden (app/claude_web/header.rs).
+    /// The top row. `owns_window_corner` draws it as the docked sidebar's top row, in the window's
+    /// top-left corner: the desktop's Claude header draws that same row while Claude has the
+    /// sidebar hidden (app/claude_web/header.rs).
     pub(crate) fn render_native_sidebar_row(
         &self,
         appearance: &SidebarAppearance,
-        footer: bool,
-        usage_meter_count: usize,
         owns_window_corner: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
-        let label = if footer { "Commands" } else { "Search" };
-        let action_id = if footer { "commands" } else { "sessions" };
+        let label = "Search";
         let snapshot = self
             .native_sidebar
             .snapshot
             .as_ref()
             .expect("navigation follows a snapshot");
-        let shortcut = if footer {
-            &snapshot.commands_shortcut
-        } else {
-            &snapshot.search_shortcut
-        };
-        // The menu is read when the button is pressed; sharing the snapshot keeps this row from
-        // copying the menu's JSON on every frame.
-        let more_menu_now = self.native_sidebar_more_menu_now(&snapshot.more_menu);
+        let shortcut = &snapshot.search_shortcut;
         /*
         CDXC:Sidebar 2026-09-20 DECISION:
         User: with the titlebar row deleted, the sidebar's Search row is what sits in the window's
@@ -228,8 +212,8 @@ impl GhostexGpuiApp {
         row of the More options menu (CDXC:Feedback 2026-10-14 in
         packages/gx-core/src/sidebar_menu/navigation.rs). This supersedes the 2026-09-23 rule that
         moved Search and Notifications into the menu together. Add project, which joined this row
-        on 2026-11-11, is the one button that gives way on a narrow sidebar: it is the menu's
-        first row already (`top_row_fit`).
+        on 2026-11-11, is the one button that gives way on a narrow sidebar: it becomes the
+        menu's first row then (`top_row_fit`).
         */
         /*
         CDXC:Sidebar 2026-09-21 DECISION:
@@ -244,14 +228,9 @@ impl GhostexGpuiApp {
         still read one value, `sidebar_toggle_leading_x`.
         */
         // With Spaces on, the Hermes button is the Space row's last slot instead.
-        let bots_toggle = (!footer && snapshot.bots_enabled && !snapshot.spaces_enabled)
-            .then_some(snapshot.bots_mode);
-        let bell_visible = !footer && self.titlebar_notification_bell_visible();
-        let icon_path = if footer {
-            "titlebar/bolt.svg"
-        } else {
-            BROWSER_ICON_SEARCH
-        };
+        let bots_toggle =
+            (snapshot.bots_enabled && !snapshot.spaces_enabled).then_some(snapshot.bots_mode);
+        let bell_visible = self.titlebar_notification_bell_visible();
         let tooltip_label: gpui::SharedString = match shortcut.as_deref() {
             Some(shortcut) if !shortcut.is_empty() => format!("{label} ({shortcut})").into(),
             _ => label.into(),
@@ -267,7 +246,7 @@ impl GhostexGpuiApp {
         // the lights clear by the docked row's reserve, so a narrow or zoomed sidebar narrows its
         // buttons instead of sliding them under the green light, and it holds the lights' centre
         // line (`lights_row_top_padding`).
-        let lights_row = (!footer && !owns_window_corner)
+        let lights_row = (!owns_window_corner)
             .then(|| self.floating_sidebar_lights_row())
             .flatten();
         let lights_reserve = lights_row.map(|(reserve, _)| reserve);
@@ -276,10 +255,8 @@ impl GhostexGpuiApp {
         // the lights' line with as much room under them as above, and keeps the lights' inset on
         // its right (`floating_row_trailing_padding`). A panel under the header, while the window
         // keeps its own lights (`floating_sidebar_full_height`), keeps the plain row.
-        let floating_row = !footer
-            && !owns_window_corner
-            && self.sidebar_collapsed
-            && self.floating_sidebar_full_height();
+        let floating_row =
+            !owns_window_corner && self.sidebar_collapsed && self.floating_sidebar_full_height();
         let (row_height, top_padding, bottom_padding) =
             if owns_window_corner || lights_row.is_some() || floating_row {
                 let top_padding = match lights_row {
@@ -297,16 +274,11 @@ impl GhostexGpuiApp {
                     bottom_padding,
                 )
             } else {
-                let bottom_padding = (if footer { 6.0 } else { 3.0 }) * scale;
-                (
-                    (if footer { 39.0 } else { 35.0 }) * scale,
-                    5.0 * scale,
-                    bottom_padding,
-                )
+                (35.0 * scale, 5.0 * scale, 3.0 * scale)
             };
         // The top row's buttons right of Toggle sidebar: Search, Add project, the bell, the menu
-        // (and Bots, with Spaces off). The bottom bar keeps its own sizes.
-        let fit = (!footer).then(|| {
+        // (and Bots, with Spaces off).
+        let fit = {
             let width = match f32::from(self.native_sidebar.bounds.size.width) {
                 0.0 => self.sidebar_width,
                 width => width,
@@ -331,22 +303,23 @@ impl GhostexGpuiApp {
                 trailing,
                 scale,
             )
-        });
-        let gap = fit.map_or(4.0, |fit| fit.gap) * scale;
-        let add_project = fit.is_some_and(|fit| fit.add_project);
-        // Top-row buttons are 30 wide, 28 high with corner 7; the bottom bar's stay 34 with corner 5.
-        let (button_width, button_radius) = if footer {
-            (34.0, 5.0)
-        } else {
-            (SIDEBAR_TOP_ROW_BUTTON_WIDTH, SIDEBAR_TOP_ROW_BUTTON_RADIUS)
         };
+        let gap = fit.gap * scale;
+        let add_project = fit.add_project;
+        // The menu as a press on its button opens it: without Add Project while that button is in
+        // the row, and without the panels that are switched off (`native_sidebar_more_menu_now`).
+        let more_menu_now = self.native_sidebar_more_menu_now(
+            &snapshot.more_menu,
+            add_project,
+            snapshot.commands_shortcut.as_deref(),
+        );
         h_flex()
             .w_full()
             .h(px(row_height))
             .pt(px(top_padding))
             .pb(px(bottom_padding))
             .px(px(5.0 * scale))
-            .when_some(fit, |row, fit| row.pr(px(fit.trailing)))
+            .pr(px(fit.trailing))
             .gap(px(gap))
             /*
             CDXC:Sidebar 2026-10-24 WHY:
@@ -401,12 +374,6 @@ impl GhostexGpuiApp {
                 row.child(self.render_native_sidebar_bots_toggle(bots_mode, appearance, cx))
             })
             // The Claude and Grok Bot buttons are not in this row or the bottom bar: they are in the workarea header, left of the Voice button (CDXC:Extensions 2026-11-10 in app/claude_web/header_buttons.rs).
-            // CDXC:Workspaces 2026-10-11 DECISION: User: move the workspace picker out of the Spaces row to the bottom left of the app, in the sidebar's bottom bar, with 5px more margin from the sidebar's left side than the bar's own padding so it lines up with the account row above it. The bar's other buttons sit right of the spacer.
-            .when(footer, |row| {
-                let tile = self.render_native_sidebar_footer_workspace_tile(appearance, cx);
-                row.children(tile.map(|tile| div().flex_shrink_0().ml(px(5.0 * scale)).child(tile)))
-                    .child(div().flex_1())
-            })
             .child(
                 div()
                     .id(format!("native-sidebar-{label}"))
@@ -414,8 +381,8 @@ impl GhostexGpuiApp {
                     .aria_label(tooltip_label.clone())
                     .when(cfg!(target_os = "windows"), |button| button.occlude())
                     .h(px(SIDEBAR_TOP_ROW_BUTTON_HEIGHT * scale))
-                    .w(px(button_width * scale))
-                    .rounded(px(button_radius * scale))
+                    .w(px(SIDEBAR_TOP_ROW_BUTTON_WIDTH * scale))
+                    .rounded(px(SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
                     .flex()
                     .flex_shrink(1.0)
                     .min_w(px(SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH * scale))
@@ -424,17 +391,26 @@ impl GhostexGpuiApp {
                     .cursor_default()
                     .hover(|row| row.bg(appearance.hover))
                     .child(titlebar_svg_icon(
-                        icon_path,
+                        BROWSER_ICON_SEARCH,
                         15.0 * scale,
                         appearance.chrome_icon,
                     ))
                     .on_click(cx.listener(move |app, _, _, cx| {
                         cx.stop_propagation();
                         app.dispatch_native_sidebar_ui(
-                            json!({"type": "sidebarAction", "action": action_id}),
+                            json!({"type": "sidebarAction", "action": "sessions"}),
                             cx,
                         );
                     }))
+                    .map(|button| {
+                        self.sidebar_focus_stop(
+                            button,
+                            format!("navigation:{label}"),
+                            super::focus_order::SidebarStopPlace::Fixed,
+                            appearance,
+                            cx,
+                        )
+                    })
                     .managed_discrete_tooltip_with_placement(
                         ManagedTooltipPlacement::Right,
                         tooltip_delay,
@@ -478,6 +454,15 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }))
+                        .map(|button| {
+                            self.sidebar_focus_stop(
+                                button,
+                                "navigation:add-project",
+                                super::focus_order::SidebarStopPlace::Fixed,
+                                appearance,
+                                cx,
+                            )
+                        })
                         .managed_discrete_tooltip_with_placement(
                             ManagedTooltipPlacement::Right,
                             tooltip_delay,
@@ -496,7 +481,8 @@ impl GhostexGpuiApp {
             .when(bell_visible, |row| {
                 row.child(self.render_sidebar_notification_bell(appearance, cx))
             })
-            .when(!footer, |row| {
+            .map(|row| {
+                let more_menu_now_keyboard = more_menu_now.clone();
                 let more_open = self
                     .native_sidebar
                     .menu
@@ -547,62 +533,38 @@ impl GhostexGpuiApp {
                                     cx,
                                 );
                             }
-                        }),
-                )
-            })
-            /*
-            CDXC:Sidebar 2026-09-21 DECISION:
-            User: Settings gets a one-click gear immediately to the right of the Commands
-            button. The gear is now the sidebar's only Settings entry: the sidebar menu no longer carries
-            Settings or Hotkeys (packages/gx-core/src/sidebar_menu/navigation.rs). This
-            supersedes the 2026-09-20 rule that kept both entries in the menu as a
-            deliberate duplicate.
-            */
-            .when(footer, |row| {
-                row.children(self.render_native_sidebar_usage_toggle(
-                    appearance,
-                    usage_meter_count,
-                    cx,
-                ))
-            })
-            .when(footer, |row| {
-                row.child(
-                    div()
-                        .id("native-sidebar-settings")
-                        .role(gpui::Role::Button)
-                        .aria_label("Settings")
-                        .h(px(28.0 * scale))
-                        .w(px(34.0 * scale))
-                        .rounded(px(5.0 * scale))
-                        .flex()
-                        .flex_shrink_0()
-                        .items_center()
-                        .justify_center()
-                        .cursor_default()
-                        .hover(|row| row.bg(appearance.hover))
-                        .child(titlebar_svg_icon(
-                            TITLEBAR_ICON_SETTINGS,
-                            15.0 * scale,
-                            appearance.chrome_icon,
-                        ))
-                        .on_click(cx.listener(move |app, _, _, cx| {
-                            cx.stop_propagation();
-                            app.dispatch_native_sidebar_ui(
-                                json!({"type": "sidebarAction", "action": "settings"}),
-                                cx,
-                            );
-                        }))
-                        .managed_discrete_tooltip_with_placement(
-                            ManagedTooltipPlacement::Right,
-                            appearance.tooltip_delay,
-                            |window, cx| {
-                                super::tooltips::sidebar_style_tooltip(
-                                    titlebar_tooltip_label("Settings", "openSettings").to_string(),
+                        })
+                        // The menu opens on the press; Enter and Space reach it as a click.
+                        .on_click({
+                            let bounds = self.native_sidebar.more_button_bounds.clone();
+                            let more_menu_now = more_menu_now_keyboard;
+                            move |event: &gpui::ClickEvent, window, cx| {
+                                if !event.is_keyboard() {
+                                    return;
+                                }
+                                cx.stop_propagation();
+                                let Some(trigger) = bounds.get() else {
+                                    return;
+                                };
+                                Self::toggle_native_sidebar_more_menu(
+                                    &more_menu_now,
+                                    trigger,
+                                    trigger.center(),
+                                    scale,
                                     window,
                                     cx,
-                                )
-                            },
-                        ),
+                                );
+                            }
+                        })
+                        .map(|button| {
+                            self.sidebar_focus_stop(
+                                button,
+                                "navigation:more",
+                                super::focus_order::SidebarStopPlace::Fixed,
+                                appearance,
+                                cx,
+                            )
+                        }),
                 )
             })
             .into_any_element()

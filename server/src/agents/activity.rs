@@ -508,7 +508,7 @@ and the hook prints it for zcode to fold into context. Only a ZCode SessionStart
 a coordinators row, of a thread, or any ZCode SessionStart while Marked handovers is on (its note
 follows the pointer; agents/marked_handovers.rs), is answered, so every other hook response stays
 unchanged. Every ZCode SessionStart also gets the Ghostex note while Tell agents about Ghostex is on
-(agents/ghostex_note.rs). Since 2026-10-17 a new coordinator takes its role from the `ghostex-orchestrator` skill
+(agents/ghostex_note.rs). Since 2026-10-17 a new coordinator takes its role from the `ghostex-coordinator` skill
 (coordinators/role.rs), so only coordinators made before then get the pointer; every coordinator
 still gets the Marked handovers note unless coordinators answer without markers.
 */

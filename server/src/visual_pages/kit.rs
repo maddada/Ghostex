@@ -207,11 +207,26 @@ gx-question.gx-answered .gx-choice[aria-checked=true] .gx-mark{border-color:var(
 .gx-note::placeholder,.gx-text::placeholder{color:var(--gx-muted)}
 .gx-note[readonly],.gx-text[readonly]{resize:none}
 .gx-note[hidden],.gx-text[hidden]{display:none}
+textarea.gx-src{display:none!important}
+.gx-box{position:relative;overflow-wrap:anywhere;white-space:pre-wrap;cursor:text;-webkit-user-modify:read-write-plaintext-only}
+.gx-box[contenteditable=false]{-webkit-user-modify:read-only;cursor:default}
+.gx-box.gx-empty::before{content:attr(data-placeholder);position:absolute;left:10px;top:6px;right:10px;color:var(--gx-muted);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gx-ref{display:inline;padding:0 0 0 1px;border-radius:4px;font-weight:500;color:#8cb59e;white-space:nowrap;cursor:pointer;-webkit-user-modify:read-only}
+html[data-gx-theme=light] .gx-ref{color:#5f9878}
+.gx-ref svg{display:inline-block;width:1em;height:1em;margin:0 3px 0 0;vertical-align:-.15em}
+.gx-ref:hover,.gx-ref.gx-on{background:color-mix(in srgb,currentColor 14%,transparent)}
+#gx-peek{position:fixed;left:0;top:0;z-index:2147483646;margin:0;inset:auto;display:flex;flex-direction:column;gap:6px;box-sizing:border-box;width:max-content;max-width:min(340px,calc(100vw - 16px));padding:6px;border-radius:12px;border:1px solid var(--gx-tip-border);background:var(--gx-tip-bg);color:var(--gx-tip-fg);-webkit-backdrop-filter:blur(20px) saturate(1.15);backdrop-filter:blur(20px) saturate(1.15);box-shadow:var(--gx-tip-shadow);font:500 12.5px/1.4 Inter,var(--font-sans);opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
+#gx-peek.gx-peek-on{opacity:1;visibility:visible;transition:opacity .12s ease}
+#gx-peek img{display:block;max-width:100%;max-height:220px;min-width:48px;min-height:32px;border-radius:8px;object-fit:contain;cursor:zoom-in}
+#gx-peek .gx-peek-wait{display:flex;align-items:center;justify-content:center;width:200px;height:120px;border-radius:8px;color:color-mix(in srgb,var(--gx-tip-fg) 60%,transparent);background:color-mix(in srgb,var(--gx-tip-fg) 6%,transparent)}
+#gx-peek .gx-peek-row{display:flex;align-items:center;gap:8px;min-width:0;padding:0 2px 0 4px}
+#gx-peek .gx-peek-label{flex:none}
+#gx-peek .gx-peek-path{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;color:color-mix(in srgb,var(--gx-tip-fg) 58%,transparent);font-weight:400}
+#gx-peek .gx-pill-x{flex:none;width:auto;height:22px;padding:0 7px;gap:3px;border-radius:6px;color:color-mix(in srgb,var(--gx-tip-fg) 78%,transparent);font:500 12px/1 Inter,var(--font-sans)}
+#gx-peek .gx-pill-x:hover{background:color-mix(in srgb,var(--gx-tip-fg) 12%,transparent);color:var(--gx-tip-fg)}
+.gx-thumb.gx-on{border-color:var(--gx-fg);box-shadow:0 0 0 1px var(--gx-fg)}
 .gx-pills{display:flex;flex-wrap:wrap;gap:4px 10px;margin:6px 0 0}
 .gx-pills[hidden]{display:none}
-.gx-pill{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;font:500 13.5px/20px var(--font-sans);color:#8cb59e}
-html[data-gx-theme=light] .gx-pill{color:#5f9878}
-.gx-pill svg{flex:none;width:15px;height:15px}
 .gx-pill-x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;padding:0;border:0;border-radius:4px;background:none;color:var(--gx-muted);font:inherit;line-height:1;cursor:pointer}
 .gx-pill-x:hover{background:color-mix(in srgb,var(--gx-fg) 10%,transparent);color:var(--gx-fg)}
 .gx-paste{margin:4px 0 0;font-size:12.5px;color:var(--gx-muted)}
@@ -226,6 +241,9 @@ html[data-gx-theme=light] .gx-pill{color:#5f9878}
 .gx-thumb>img{display:block;width:100%;height:100%;object-fit:cover}
 .gx-thumb>.gx-pill-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.62);color:#fff;font-size:13px}
 .gx-thumb>.gx-pill-x:hover{background:rgba(0,0,0,.82);color:#fff}
+.gx-tally{position:fixed;right:14px;bottom:14px;z-index:20;box-sizing:border-box;padding:3px 10px;border-radius:999px;border:1px solid var(--gx-card-border);background:var(--gx-card);color:var(--gx-muted);font:500 12px/18px var(--font-sans);font-variant-numeric:tabular-nums;white-space:nowrap;box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);pointer-events:none}
+.gx-tally.gx-all{color:var(--success)}
+.gx-tally-room{display:block;height:44px}
 .gx-has-pick{display:flex;align-items:center;gap:8px}
 .gx-pick{display:inline-flex;flex:none;align-items:center;gap:4px;margin-left:auto;padding:2px 10px;vertical-align:middle;border:1px solid var(--gx-line-strong);border-radius:999px;background:transparent;color:var(--gx-text);font:500 12px/1.5 var(--font-sans);cursor:pointer}
 .gx-pick:hover:not(:disabled):not([aria-pressed=true]){background:var(--gx-surface);color:var(--gx-fg)}
@@ -263,6 +281,9 @@ html[data-gx-theme=light] .gx-pill{color:#5f9878}
 /// CDXC:Clipboard 2026-11-02 DECISION:
 /// User: "i also want to be able to paste images into the notes of questions in inline html or the inline questions you send please. when i paste an image now nothing happens. pls fix. (it can just show like this like we show it in chat: [Image #1](…/2026-11-02_Ghostex_06-18-47@2x.png)". An image pasted into a note or text box is saved on the computer through the page's own `/image` route (images.rs, beside the chat's pasted images) and written into the box as `[Image #N](path)`, the reference a chat message carries, so the answers carry it and the agent can open the file. The numbers count across every box of the page, which all go in one answers message. A textarea cannot draw a pill inside its text, so each box lists its images under it as pills (the chat's image icon and colour, the path in the tooltip, × removes the reference). The in-chat form does the same with the composer's own pills (apps/desktop/src/app/native_chat/form_attachments.rs).
 ///
+/// CDXC:Clipboard 2026-11-11 DECISION:
+/// User, of a question page whose note box showed `[Image #1](/Users/…/ghostex/i/1794352947512.png)` as text with an "Image #1 ×" chip under it: "why can't see the image? and why doesn't show as inline image #1 pill like we show in the chat composer?" A page's note and text boxes draw each pasted picture as the composer's pill, inline where it was pasted: the image icon and "Image #N" in the composer's green, one unit the caret steps over and Backspace or Delete takes out whole. Hovering the pill shows the picture above it in the tooltip's glass, with its path and Remove; clicking it opens the page's picture viewer (the floating window's, the phone sheet's), or keeps that preview open where the page has no viewer. What the agent gets is unchanged: the box's text with `[Image #N](path)` in it, kept in the kit's own textarea (hidden), which every answer, draft and check still reads and writes. A reopened or answered page draws the pills again from that text and reads the pictures through `GET /visual/<id>/image` (images.rs). The "Anything else?" box keeps its thumbnails under the text as well, as the composer keeps its tiles. Supersedes the pills listed under the box in the 2026-11-02 DECISION above. The in-chat form already drew the composer's pills (apps/desktop/src/app/native_chat/form_attachments.rs).
+///
 /// CDXC:SessionChat 2026-11-04 DECISION:
 /// User, of a question page's send bar: "please always at the end of the inline html pages we must have a text area where i can write text and paste images there (should show thumbnails) so i can write more". Every `<gx-questions>` page ends, just above its send bar, with an "Anything else?" box the kit adds by itself (`.gx-notes`), unless the page's own last question is already a text question of that kind ("Anything else?", "Additional notes", "Notes", "Comments"). Its text arrives last in the answers under "Additional notes", the key the chat's inline forms use for their notes box (packages/gx-visual/src/questions.rs `NOTES_KEY`, numbered the same way when a question already answers under it), and an empty box sends nothing. Pasted images go through the same `/image` route and `[Image #N](path)` references as the question notes, so they reach the agent the same way; in this box they show as removable thumbnails rather than pills. A thumbnail is drawn from the pasted file itself; a small copy of each is kept with the page's draft (`thumbs`, up to about 24 KB in all, so the draft stays well under its 64 KiB limit), so a reopened page still shows them; any image without one shows as a pill.
 pub(super) const KIT_SCRIPT: &str = r#"<script>(function(){
@@ -288,6 +309,172 @@ function linkText(root){
   found.forEach(function(t){var f=document.createElement("span");linked(f,t.nodeValue);t.replaceWith.apply(t,Array.prototype.slice.call(f.childNodes));});
 }
 function kids(node){return Array.prototype.slice.call(node.childNodes);}
+/* Note and text boxes: see the Clipboard 2026-11-11 DECISION on KIT_SCRIPT. The kit's textarea
+   stays the box's value (hidden, `.gx-src`); the box the reader types in (`.gx-box`) draws that
+   value with each `[Image #N](path)` as a pill and writes every edit back into it. */
+var ZW=/\u200b/g,base=location.pathname.replace(/\/+$/,"");
+function refs(text){var re=/\[(Image #\d+)\]\(((?:\\.|[^)\\\r\n])*)\)/g,out=[],m;while((m=re.exec(text)))out.push({label:m[1],path:m[2],source:m[0],start:m.index,end:re.lastIndex});return out;}
+function fire(area){area.dispatchEvent(new Event("input",{bubbles:true}));}
+function isRef(n){return !!n&&n.nodeType===1&&n.hasAttribute("data-ref");}
+function isTail(n){return !!n&&n.nodeType===1&&n.tagName==="BR"&&!n.nextSibling;}
+/* The box's text, or with `stop` the text and where (node, offset) falls in it. */
+function boxText(ed,stop,offset){
+  var out="",at=-1;
+  (function walk(n){
+    for(var i=0;i<n.childNodes.length;i++){
+      if(n===stop&&i===offset&&at<0)at=out.length;
+      var c=n.childNodes[i];
+      if(c.nodeType===3){if(c===stop&&at<0)at=out.length+c.nodeValue.slice(0,offset).replace(ZW,"").length;out+=c.nodeValue.replace(ZW,"");}
+      else if(isRef(c)){if(stop&&c.contains(stop)&&at<0)at=out.length+c.getAttribute("data-ref").length;out+=c.getAttribute("data-ref");}
+      else if(c.nodeType===1&&c.tagName==="BR"){if(!(n===ed&&isTail(c)))out+="\n";}
+      else if(c.nodeType===1){if(/^(DIV|P)$/.test(c.tagName)&&out&&!/\n$/.test(out))out+="\n";walk(c);}
+    }
+    if(n===stop&&offset>=n.childNodes.length&&at<0)at=out.length;
+  })(ed);
+  return stop?{text:out,at:at<0?out.length:at}:out;
+}
+function caretIn(ed){var sel=getSelection(),r=sel&&sel.rangeCount?sel.getRangeAt(0):null;if(!r||!ed.contains(r.startContainer))return null;return{start:boxText(ed,r.startContainer,r.startOffset).at,end:boxText(ed,r.endContainer,r.endOffset).at};}
+function setCaret(ed,pos){
+  var sel=getSelection(),r=document.createRange(),kids=ed.childNodes,placed=false;if(!sel)return;
+  for(var i=0;i<kids.length&&!placed;i++){var c=kids[i];
+    if(c.nodeType===3){var s=c.nodeValue,real=s.replace(ZW,"").length;
+      if(pos<=real){var k=0,j=0;while(j<s.length&&(k<pos||s.charAt(j)==="​")){if(s.charAt(j)!=="​")k++;j++;}r.setStart(c,j);placed=true;}else pos-=real;}
+    else if(isRef(c)){var n=c.getAttribute("data-ref").length;if(pos<n){r.setStartAfter(c);placed=true;}else pos-=n;}
+    else if(c.tagName==="BR"&&!isTail(c)){if(pos<1){r.setStartBefore(c);placed=true;}else pos-=1;}
+  }
+  if(!placed){r.selectNodeContents(ed);if(isTail(ed.lastChild))r.setEndBefore(ed.lastChild);}
+  r.collapse(!placed?false:true);sel.removeAllRanges();sel.addRange(r);
+}
+function refPill(ref){var p=el("span","gx-ref");p.contentEditable="false";p.setAttribute("data-ref",ref.source);p.setAttribute("data-path",ref.path);p.setAttribute("data-label",ref.label);p.setAttribute("role","img");p.setAttribute("aria-label",ref.label);p.innerHTML=IMAGE_ICON;p.append(ref.label);return p;}
+/* Draws the box from its textarea. Every pill has text on both sides (a zero-width space where there is none), so the caret can stand before and after it. */
+function renderBox(area){
+  var ed=area.__gxBox;if(!ed)return;var v=area.value,at=0;ed.textContent="";
+  refs(v).forEach(function(r){if(r.start>at)ed.append(v.slice(at,r.start));ed.append(refPill(r));at=r.end;});
+  if(at<v.length)ed.append(v.slice(at));
+  Array.prototype.forEach.call(ed.querySelectorAll(".gx-ref"),function(p){if(!p.previousSibling||p.previousSibling.nodeType!==3)p.before("​");if(!p.nextSibling||p.nextSibling.nodeType!==3)p.after("​");});
+  if(/\n$/.test(v))ed.append(document.createElement("br"));
+  boxState(area);
+}
+function boxState(area){
+  var ed=area.__gxBox;ed.classList.toggle("gx-empty",!area.value);ed.hidden=area.hidden;ed.setAttribute("data-placeholder",area.placeholder||"");ed.setAttribute("aria-readonly",area.readOnly?"true":"false");
+  var mode=area.readOnly?"false":"plaintext-only";if(ed.getAttribute("contenteditable")!==mode)try{ed.contentEditable=mode;}catch(x){ed.contentEditable="true";}
+}
+/* Whether the box's nodes are not what its text draws: a reference typed or pasted as text, a line break the browser made an element of, a pill without its caret anchors. */
+function stale(ed,v){
+  if(refs(v).length!==ed.querySelectorAll(".gx-ref").length)return true;
+  if(/\n$/.test(v)!==isTail(ed.lastChild))return true;
+  for(var c=ed.firstChild;c;c=c.nextSibling){
+    if(c.nodeType===1&&!isRef(c)&&!isTail(c))return true;
+    if(isRef(c)&&(!c.previousSibling||c.previousSibling.nodeType!==3||!c.nextSibling||c.nextSibling.nodeType!==3))return true;
+  }
+  return false;
+}
+function syncBox(area,e){
+  var ed=area.__gxBox;if(e&&e.isComposing)return;var v=boxText(ed);
+  if(v!==area.value){area.value=v;area.__gxQuiet=true;try{fire(area);}finally{area.__gxQuiet=false;}}
+  if(stale(ed,v)){var c=document.activeElement===ed?caretIn(ed):null;renderBox(area);if(c)setCaret(ed,c.start);}else boxState(area);
+}
+/* Takes reference `pill` out of its box's text (with one space beside it when `spaced`), and leaves the caret where it was. */
+function removeRef(area,pill,spaced){
+  var ed=area.__gxBox,i=Array.prototype.indexOf.call(ed.childNodes,pill);if(i<0)return;
+  var s=boxText(ed,ed,i).at,e=s+pill.getAttribute("data-ref").length,v=area.value;if(v.slice(s,e)!==pill.getAttribute("data-ref"))return;
+  if(spaced){if(s>0&&v.charAt(s-1)===" ")s--;else if(v.charAt(e)===" ")e++;}
+  var focused=document.activeElement===ed;area.value=v.slice(0,s)+v.slice(e);fire(area);if(focused)setCaret(ed,s);
+}
+/* The pill beside a collapsed caret, on the side `back` names, past the zero-width anchors. */
+function refBeside(ed,back){
+  var sel=getSelection(),r=sel&&sel.rangeCount?sel.getRangeAt(0):null;if(!r||!r.collapsed||!ed.contains(r.startContainer))return null;
+  var n=r.startContainer,o=r.startOffset,side;
+  if(n.nodeType===3){var s=n.nodeValue;if(back?s.slice(0,o).replace(ZW,""):s.slice(o).replace(ZW,""))return null;side=back?n.previousSibling:n.nextSibling;}
+  else side=back?n.childNodes[o-1]:n.childNodes[o];
+  while(side&&side.nodeType===3&&!side.nodeValue.replace(ZW,""))side=back?side.previousSibling:side.nextSibling;
+  return isRef(side)?side:null;
+}
+function richBox(area){
+  if(area.__gxBox)return;
+  var ed=el("div",area.className+" gx-box");area.classList.add("gx-src");
+  ed.setAttribute("role","textbox");ed.setAttribute("aria-multiline","true");ed.spellcheck=true;
+  ["aria-label","aria-labelledby"].forEach(function(a){var v=area.getAttribute(a);if(v)ed.setAttribute(a,v);});
+  ed.__gxArea=area;area.__gxBox=ed;area.after(ed);
+  area.focus=function(){ed.focus();setCaret(ed,area.value.length);};
+  ed.addEventListener("input",function(e){syncBox(area,e);});
+  ed.addEventListener("compositionend",function(){syncBox(area);});
+  ed.addEventListener("keydown",function(e){
+    if(area.readOnly||e.isComposing)return;
+    /* Enter writes a line break into the text itself, so what the browser makes of it never decides the value. */
+    if(e.key==="Enter"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+      e.preventDefault();var c=caretIn(ed);if(!c)return;var v=area.value;area.value=v.slice(0,c.start)+"\n"+v.slice(c.end);fire(area);setCaret(ed,c.start+1);return;}
+    /* Backspace or Delete beside a pill takes the whole reference out, as in the composer. */
+    if((e.key==="Backspace"||e.key==="Delete")&&!e.altKey&&!e.ctrlKey&&!e.metaKey){var p=refBeside(ed,e.key==="Backspace");if(p){e.preventDefault();removeRef(area,p,false);}}
+  });
+  renderBox(area);
+}
+/* The picture behind a reference: the pasted file itself while the page is open, else read from the computer through the page's own `/image` route (images.rs), else the small copy kept with the draft. */
+var shots={},shown={},small={};
+function imageFor(path){
+  if(shots[path])return shots[path];
+  var p=fetch(base+"/image?path="+encodeURIComponent(path)).then(function(r){if(!r.ok)throw new Error("unreadable");return r.blob();}).then(function(b){if(!/^image\//.test(b.type))throw new Error("not an image");return shown[path]=URL.createObjectURL(b);})
+    .catch(function(error){delete shots[path];if(small[path])return shown[path]=small[path];throw error;});
+  return shots[path]=p;
+}
+function knownImage(path,file){var url=URL.createObjectURL(file);shown[path]=url;shots[path]=Promise.resolve(url);}
+/* The pill's preview: hovering a pill shows the picture above it in the tooltip's glass, with the file's path and, while the box can change, Remove; a click opens the page's picture viewer (the floating window's, the phone sheet's), else keeps the preview open. */
+var peek=null,peekFor=null,peekPinned=false,peekTimer=0,peekHide=0;
+function placePeek(){
+  if(!peek||!peekFor||!peekFor.isConnected)return;
+  var r=peekFor.getBoundingClientRect(),w=peek.offsetWidth,h=peek.offsetHeight,vw=document.documentElement.clientWidth||innerWidth,vh=innerHeight,m=8,gap=6;
+  var x=Math.min(Math.max(r.left,m),Math.max(m,vw-w-m)),y=r.top-gap-h;if(y<m)y=Math.min(r.bottom+gap,Math.max(m,vh-h-m));
+  peek.style.left=Math.round(x)+"px";peek.style.top=Math.round(y)+"px";
+}
+function hidePeek(){
+  clearTimeout(peekTimer);clearTimeout(peekHide);peekPinned=false;
+  if(peekFor)peekFor.classList.remove("gx-on");peekFor=null;
+  Array.prototype.forEach.call(document.querySelectorAll(".gx-thumb.gx-on"),function(t){t.classList.remove("gx-on");});
+  if(peek)peek.classList.remove("gx-peek-on");
+}
+function showPeek(pill,pinned){
+  clearTimeout(peekTimer);clearTimeout(peekHide);hideTip();
+  var box=pill.closest(".gx-box"),area=box&&box.__gxArea,path=pill.getAttribute("data-path"),label=pill.getAttribute("data-label");if(!area)return;
+  if(peekFor!==pill)hidePeek();
+  if(!peek){peek=el("div");peek.id="gx-peek";peek.setAttribute("role","dialog");if(peek.showPopover)peek.setAttribute("popover","manual");
+    peek.addEventListener("pointerenter",function(){clearTimeout(peekHide);});
+    peek.addEventListener("pointerleave",function(e){if(!peekPinned&&e.pointerType!=="touch")peekHide=setTimeout(hidePeek,200);});}
+  if(!peek.isConnected)document.body.append(peek);
+  if(peek.showPopover&&!peek.matches(":popover-open"))try{peek.showPopover();}catch(x){}
+  peekPinned=peekPinned||!!pinned;
+  if(peekFor===pill){if(pinned)openViewer();return;}
+  peekFor=pill;pill.classList.add("gx-on");peek.setAttribute("aria-label",label);
+  Array.prototype.forEach.call(document.querySelectorAll(".gx-thumb"),function(t){if(t.getAttribute("data-path")===path&&area.__gxThumbs&&t.parentNode===area.__gxPills)t.classList.add("gx-on");});
+  peek.textContent="";var wait=el("div","gx-peek-wait",shown[path]?"":"Loading…"),row=el("div","gx-peek-row"),where=el("span","gx-peek-path","‎"+path+"‎");
+  row.append(el("span","gx-peek-label",label),where);
+  if(!area.readOnly){var x=el("button","gx-pill-x","× Remove");x.type="button";x.setAttribute("aria-label","Remove "+label);x.addEventListener("click",function(){hidePeek();removeRef(area,pill,true);});row.append(x);}
+  peek.append(wait,row);placePeek();
+  requestAnimationFrame(function(){if(peekFor===pill)peek.classList.add("gx-peek-on");});
+  imageFor(path).then(function(src){
+    if(peekFor!==pill)return;var img=el("img");img.alt=label;
+    img.onload=function(){if(peekFor!==pill)return;wait.replaceWith(img);placePeek();if(peekPinned)openViewer();};
+    img.onerror=function(){if(peekFor===pill)wait.textContent="This picture can’t be shown here.";};img.src=src;
+  },function(){if(peekFor===pill)wait.textContent="This picture can’t be shown here.";});
+  function openViewer(){
+    var img=peek.querySelector("img");if(!img||!img.complete)return;
+    /* The window's picture viewer takes a click on a picture (and cancels it); with no viewer the preview stays open. */
+    if(!img.dispatchEvent(new MouseEvent("click",{bubbles:true,cancelable:true,button:0})))hidePeek();
+  }
+}
+document.addEventListener("pointerover",function(e){
+  if(e.pointerType==="touch")return;var pill=e.target&&e.target.closest&&e.target.closest(".gx-ref");
+  if(pill===peekFor||(pill==null&&peek&&peek.contains(e.target))){clearTimeout(peekHide);return;}
+  if(pill){clearTimeout(peekTimer);peekTimer=setTimeout(function(){showPeek(pill,false);},350);}
+},true);
+document.addEventListener("pointerout",function(e){
+  var pill=e.target&&e.target.closest&&e.target.closest(".gx-ref");if(!pill)return;
+  if(e.relatedTarget&&(pill.contains(e.relatedTarget)||(peek&&peek.contains(e.relatedTarget))))return;
+  clearTimeout(peekTimer);if(pill===peekFor&&!peekPinned)peekHide=setTimeout(hidePeek,200);
+},true);
+document.addEventListener("click",function(e){var pill=e.target&&e.target.closest&&e.target.closest(".gx-ref");if(!pill)return;e.preventDefault();showPeek(pill,true);},true);
+document.addEventListener("pointerdown",function(e){if(!peekFor)return;var t=e.target;if(t&&t.closest&&(t.closest(".gx-ref")||(peek&&peek.contains(t))))return;hidePeek();},true);
+document.addEventListener("keydown",function(e){if(e.key==="Escape"&&peekFor)hidePeek();},true);
+["scroll","wheel","resize"].forEach(function(name){addEventListener(name,function(e){if(peekFor&&!(peek&&e.target&&e.target.nodeType===1&&peek.contains(e.target)))hidePeek();},true);});
 /* Tooltips: any element with `data-gx-tip` (and optional `data-gx-tip-keys`, key caps split by spaces) gets the app's tooltip bubble on hover or keyboard focus, never the browser's own `title` box. One bubble in the top layer, placed above its control (below when there is no room) and kept inside the window; found through shadow roots too, so the floating window's picture viewer uses it. */
 var tip=null,tipFor=null,tipNext=null,tipTimer=0;
 function tipTarget(e){var path=e.composedPath?e.composedPath():[e.target];for(var i=0;i<path.length;i++){var n=path[i];if(n&&n.nodeType===1&&n.hasAttribute("data-gx-tip"))return n;}return null;}
@@ -371,7 +558,7 @@ function question(qe,index,used,changed){
   var list=el("div","gx-choices"),choices=[];
   list.setAttribute("role",multiple?"group":"radiogroup");list.setAttribute("aria-labelledby",titleId);
   var note=el("textarea","gx-note");note.rows=1;note.setAttribute("aria-label","Note");note.addEventListener("input",notify);
-  function sync(){note.placeholder=other.on()?"What would you prefer instead? (optional)":"Note (optional)";}
+  function sync(){note.placeholder=other.on()?"What would you prefer instead? (optional)":"Note (optional)";if(note.__gxBox)boxState(note);}
   function choice(nodes,value,recommended,label){
     var button=el("button","gx-choice"),body=el("span","gx-choice-body"),index=choices.length,letter=index<26?String.fromCharCode(97+index):String(index+1);
     button.type="button";button.setAttribute("role",multiple?"checkbox":"radio");button.setAttribute("aria-checked","false");
@@ -489,54 +676,71 @@ function setup(root){
     send(out,function(){restore({});root.querySelectorAll("textarea").forEach(function(t){t.value="";});});
   });
   function lock(){questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Seen":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked as seen. The agent was told.":"Sent to the agent.";}
+  /* CDXC:SessionChat 2026-11-11 DECISION:
+     User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. The page gets 44px more room at its end, so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here. */
+  if(questions.length&&!seen){
+    var tally=el("div","gx-tally");tally.setAttribute("role","status");tally.setAttribute("aria-live","polite");
+    var tallied=function(){var n=questions.filter(function(q){return q.el.classList.contains("gx-has-answer");}).length,text=n+" of "+questions.length+" answered";if(tally.textContent!==text)tally.textContent=text;tally.classList.toggle("gx-all",n===questions.length);};
+    document.body.append(el("div","gx-tally-room"),tally);tallied();
+    new MutationObserver(tallied).observe(root,{subtree:true,attributes:true,attributeFilter:["class"]});
+  }
+  /* The boxes the reader types in, drawn over the kit's textareas (richBox). */
+  boxes().forEach(richBox);
+  function boxes(){return Array.prototype.slice.call(root.querySelectorAll("textarea.gx-note,textarea.gx-text"));}
+  function edited(area){fire(area);}
+  /* Redraws a box from its text (unless the box itself just wrote it), and the "Anything else?" box's thumbnails under it. */
+  function pills(area){
+    if(area.__gxBox){if(area.__gxQuiet)boxState(area);else renderBox(area);}
+    if(!area.__gxThumbs)return;
+    var row=area.__gxPills;if(!row){row=el("div","gx-pills gx-thumbs");(area.__gxBox||area).after(row);area.__gxPills=row;}
+    var found=refs(area.value),sig=found.map(function(r){return r.start+":"+r.source;}).join("\n")+(area.readOnly?"|locked":"");
+    if(row.__gxSig!==sig){row.__gxSig=sig;row.textContent="";
+      found.forEach(function(r){
+        var thumb=el("span","gx-thumb"),img=el("img");img.alt=r.label;thumb.setAttribute("data-path",r.path);thumb.setAttribute("data-gx-tip",r.label+": "+r.path);
+        function put(src){img.src=src;thumb.prepend(img);}
+        if(shown[r.path])put(shown[r.path]);else imageFor(r.path).then(put,function(){thumb.remove();row.hidden=!row.querySelector(".gx-thumb")||area.hidden;});
+        if(!area.readOnly){var x=el("button","gx-pill-x","\u00d7");x.type="button";x.setAttribute("aria-label","Remove "+r.label);x.addEventListener("click",function(){var v=area.value,s=r.start,e=r.end;if(v.slice(s,e)!==r.source)return;if(s>0&&v.charAt(s-1)===" ")s--;else if(v.charAt(e)===" ")e++;area.value=v.slice(0,s)+v.slice(e);edited(area);});thumb.append(x);}
+        row.append(thumb);
+      });}
+    row.hidden=!row.querySelector(".gx-thumb")||area.hidden;
+  }
+  function allPills(){boxes().forEach(pills);}
   if(!window.ghostex){button.disabled=true;skipAll.remove();status.textContent="This Ghostex can't send answers from a page; type them in the chat.";return;}
   if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
   var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
-  /* Pasted images: see the Clipboard DECISION on KIT_SCRIPT. */
-  var pendingImages=0,base=location.pathname.replace(/\/+$/,"");
-  var thumbs={},kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
-  if(savedThumbs&&typeof savedThumbs==="object")Object.keys(savedThumbs).forEach(function(k){var d=savedThumbs[k];if(typeof d==="string"&&/^data:image\//.test(d)){thumbs[k]=kept[k]=d;keptSize+=d.length;}});
+  /* Pasted images: see the Clipboard DECISIONs on KIT_SCRIPT. */
+  var pendingImages=0,kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
+  function keepSmall(k,d){if(typeof d==="string"&&/^data:image\//.test(d)&&!kept[k]){small[k]=kept[k]=d;keptSize+=d.length;}}
+  if(savedThumbs&&typeof savedThumbs==="object")Object.keys(savedThumbs).forEach(function(k){keepSmall(k,savedThumbs[k]);});
   /* A small JPEG of the pasted image for the draft, so a reopened page still shows its thumbnail. */
-  function small(file){return new Promise(function(resolve){var url=URL.createObjectURL(file),img=new Image();
+  function shrink(file){return new Promise(function(resolve){var url=URL.createObjectURL(file),img=new Image();
     img.onload=function(){var k=Math.min(1,112/Math.max(img.naturalWidth,img.naturalHeight,1)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(img.naturalWidth*k));c.height=Math.max(1,Math.round(img.naturalHeight*k));var g=c.getContext("2d");g.fillStyle="rgb(128,128,128)";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);try{resolve(c.toDataURL("image/jpeg",0.7));}catch(x){resolve(null);}};
     img.onerror=function(){URL.revokeObjectURL(url);resolve(null);};img.src=url;});}
-  function keepThumb(path,file){thumbs[path]=URL.createObjectURL(file);small(file).then(function(d){if(!d||keptSize+d.length>24000||button.disabled)return;kept[path]=d;keptSize+=d.length;if(ghostex.__saveDraft)ghostex.__saveDraft("thumbs",kept);});}
-  function boxes(){return Array.prototype.slice.call(root.querySelectorAll("textarea.gx-note,textarea.gx-text"));}
+  function keepThumb(path,file){shrink(file).then(function(d){if(!d||keptSize+d.length>24000||button.disabled)return;kept[path]=small[path]=d;keptSize+=d.length;if(ghostex.__saveDraft)ghostex.__saveDraft("thumbs",kept);});}
   function nextImage(){var top=0;boxes().forEach(function(t){t.value.replace(/\[Image #(\d+)\]\(/g,function(_,n){top=Math.max(top,+n);});});return top+1;}
-  function edited(area){area.dispatchEvent(new Event("input",{bubbles:true}));}
-  function pills(area){
-    var row=area.__gxPills;if(!row){row=el("div",area.__gxThumbs?"gx-pills gx-thumbs":"gx-pills");area.after(row);area.__gxPills=row;}
-    row.textContent="";var re=/\[(Image #\d+)\]\(((?:\\.|[^)\\\r\n])*)\)/g,m;
-    while((m=re.exec(area.value))){
-      var src=area.__gxThumbs&&thumbs[m[2]],pill,start=m.index,end=re.lastIndex;
-      if(src){pill=el("span","gx-thumb");var img=el("img");img.src=src;img.alt=m[1];pill.append(img);pill.setAttribute("data-gx-tip",m[1]+": "+m[2]);}
-      else{pill=el("span","gx-pill");pill.innerHTML=IMAGE_ICON;pill.append(el("span",null,m[1]));pill.setAttribute("data-gx-tip",m[2]);}
-      if(!area.readOnly){var x=el("button","gx-pill-x","\u00d7");x.type="button";x.setAttribute("aria-label","Remove "+m[1]);x.addEventListener("click",(function(s,e){return function(){var v=area.value;if(s>0&&v.charAt(s-1)===" ")s--;else if(v.charAt(e)===" ")e++;area.value=v.slice(0,s)+v.slice(e);edited(area);};})(start,end));pill.append(x);}
-      row.append(pill);
-    }
-    row.hidden=!row.childNodes.length||area.hidden;
-  }
-  function allPills(){boxes().forEach(pills);}
-  function hint(area,text,error){var h=area.__gxHint;if(!h){h=el("div","gx-paste");(area.__gxPills||area).after(h);area.__gxHint=h;}h.textContent=text||"";h.classList.toggle("gx-error",!!error);h.hidden=!text;}
+  function hint(area,text,error){var h=area.__gxHint;if(!h){h=el("div","gx-paste");(area.__gxPills||area.__gxBox||area).after(h);area.__gxHint=h;}h.textContent=text||"";h.classList.toggle("gx-error",!!error);h.hidden=!text;}
   function upload(file){return fetch(base+"/image",{method:"POST",body:new Blob([file])}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok&&j.path)return j.path;throw new Error(j.error||"The pasted image could not be saved.");});});}
   root.addEventListener("input",function(e){if(e.target&&e.target.matches&&e.target.matches("textarea.gx-note,textarea.gx-text"))pills(e.target);},true);
   root.addEventListener("paste",function(e){
-    var area=e.target;if(!area||!area.matches||!area.matches("textarea.gx-note,textarea.gx-text")||area.readOnly||button.disabled)return;
+    var t=e.target,ed=t&&t.closest&&t.closest(".gx-box"),area=ed?ed.__gxArea:t&&t.matches&&t.matches("textarea.gx-note,textarea.gx-text")?t:null;
+    if(!area||area.readOnly||button.disabled)return;
     var files=[];Array.prototype.forEach.call(e.clipboardData&&e.clipboardData.items||[],function(i){if(i.kind==="file"&&/^image\//.test(i.type)){var f=i.getAsFile();if(f)files.push(f);}});
     if(!files.length)return;
     e.preventDefault();
-    var original=area.value,start=area.selectionStart,end=area.selectionEnd,paths=[];pendingImages++;hint(area,files.length>1?"Saving the pasted images…":"Saving the pasted image…");
-    files.reduce(function(chain,f){return chain.then(function(){return upload(f).then(function(p){paths.push(p);if(area.__gxThumbs)keepThumb(p,f);});});},Promise.resolve()).then(function(){hint(area,"");},function(error){hint(area,error&&error.message||"The pasted image could not be saved.",true);}).then(function(){
+    var at=ed&&caretIn(ed),original=area.value,start=at?at.start:ed?original.length:area.selectionStart,end=at?at.end:ed?original.length:area.selectionEnd,paths=[];
+    pendingImages++;hint(area,files.length>1?"Saving the pasted images…":"Saving the pasted image…");
+    files.reduce(function(chain,f){return chain.then(function(){return upload(f).then(function(p){paths.push(p);knownImage(p,f);if(area.__gxThumbs)keepThumb(p,f);});});},Promise.resolve()).then(function(){hint(area,"");},function(error){hint(area,error&&error.message||"The pasted image could not be saved.",true);}).then(function(){
       pendingImages--;if(!paths.length)return;
       /* Typing went on while it saved: the selection taken at the paste no longer fits, so the references go at the end. */
       var v=area.value,s=v===original?start:v.length,en=v===original?end:s;
       paths.forEach(function(p){var ref="[Image #"+nextImage()+"]("+p+")",lead=s>0&&!/\s/.test(v.charAt(s-1))?" ":"",ins=lead+ref+" ";v=v.slice(0,s)+ins+v.slice(en);s=en=s+ins.length;area.value=v;});
-      if(document.activeElement===area)area.setSelectionRange(s,s);edited(area);
+      edited(area);
+      if(area.__gxBox&&document.activeElement===area.__gxBox)setCaret(area.__gxBox,s);else if(document.activeElement===area)area.setSelectionRange(s,s);
     });
   },true);
   allPills();
   /* A newer draft than the one the page was served came after it loaded (PAGE_API's "gx-draft", sent only before the reader changed anything): show it. */
-  document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){var d=t[k];if(typeof d==="string"&&/^data:image\//.test(d)&&!kept[k]){thumbs[k]=kept[k]=d;keptSize+=d.length;}});syncOptions();allPills();});
+  document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();});
   function send(out,sent){
     if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
     button.disabled=true;status.classList.remove("gx-error");status.textContent="Sending…";

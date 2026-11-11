@@ -50,9 +50,9 @@ fn agent(id: &str, name: &str, models: Vec<NewCoordinatorModel>) -> NewCoordinat
         name: name.to_string(),
         family: family.to_string(),
         models,
-        skill_line: ghostex_gx_chat_core::composer::skill_invocation::orchestrator_skill_line(
-            Some(family),
-        ),
+        skill_line: ghostex_gx_chat_core::composer::skill_invocation::coordinator_skill_line(Some(
+            family,
+        )),
     }
 }
 
@@ -345,7 +345,7 @@ fn demo_playbook_view(state: &str) -> serde_json::Value {
 /// The scripted `/api/readCoordinatorGuide` answer: the playbook Ghostex ships (the skill's body)
 /// and the marked reply format.
 pub(super) fn demo_guide() -> String {
-    let skill = include_str!("../../../../../skills/ghostex-orchestrator/SKILL.md");
+    let skill = include_str!("../../../../../skills/ghostex-coordinator/SKILL.md");
     let body = skill
         .strip_prefix("---\n")
         .and_then(|rest| rest.split_once("\n---\n"))

@@ -132,7 +132,7 @@ impl NativeChatView {
                         .into_any_element(),
                 );
             }
-            self.quiet_steps(steps, p)
+            self.quiet_steps(&key, steps, p, cx)
         });
         self.hidden_work = Some(HiddenWork {
             carrier: work_carrier.clone(),

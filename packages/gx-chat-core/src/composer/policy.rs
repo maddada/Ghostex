@@ -76,6 +76,35 @@ pub fn send_blocked_reason(state: &SendGate) -> Option<&'static str> {
     None
 }
 
+/// What a message held by the gate says while it waits, or `None` when nothing holds a send: every
+/// block that [`send_blocked_reason`] names and [`send_refused_reason`] does not.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User, after a message he sent while the coordinator worked cleared from the chat box, showed
+/// nothing, and reached the agent about two minutes later: "my messages to you weren't being sent
+/// from chat view!!!". A send the gate holds (here, a dialog read off the agent's terminal whose
+/// card was not on screen, which kept it until the turn ended) said nothing: its reason only ever
+/// existed as a refusal toast. The message now shows at once as waiting, with these words under
+/// it, and still goes by itself the moment the block clears. A send refused outright keeps its
+/// toast and stays in the box.
+pub fn hold_words(state: &SendGate) -> Option<&'static str> {
+    if send_refused_reason(state).is_some() {
+        return None;
+    }
+    if state.account_switch_busy {
+        return Some("Waiting for the account switch to finish. It sends by itself then.");
+    }
+    if state.terminal_choice_pending {
+        return Some(
+            "Waiting for the agent's terminal to close the dialog it shows. It sends by itself then.",
+        );
+    }
+    if state.session_option_switching {
+        return Some("Waiting for the agent to finish switching mode. It sends by itself then.");
+    }
+    send_blocked_reason(state).map(|_| "Waiting for the agent to take messages again.")
+}
+
 /// Why a send is refused outright, or `None` when it may go (at once or once the gate clears).
 ///
 /// CDXC:SessionChat 2026-09-24 SEE-ALSO:

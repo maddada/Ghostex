@@ -62,19 +62,13 @@ impl AccountUsagePanel {
         account: Value,
         cx: &mut gpui::Context<Self>,
     ) -> Self {
-        let codex = text(&account, "provider") == "codex";
-        let logo = if codex {
-            crate::app::titlebar::account_usage::account_logo_svg(true)
-                .replace("#ffffff", "#8cbbe8")
-        } else {
-            crate::app::titlebar::account_usage::account_logo_svg(false).to_string()
-        };
+        let provider = super::provider::UsageProvider::of(&account);
         let tick = Self::start_tick(cx);
         Self {
             main_app,
             id,
             account: popup_account(&account),
-            palette: Palette::new(codex),
+            palette: Palette::new(provider),
             models_open: false,
             resets_open: false,
             revealed: false,
@@ -95,10 +89,7 @@ impl AccountUsagePanel {
             focus: cx.focus_handle(),
             scroll: ScrollHandle::new(),
             reported_height: Rc::new(Cell::new(0.0)),
-            logo: Arc::new(gpui::Image::from_bytes(
-                gpui::ImageFormat::Svg,
-                logo.into_bytes(),
-            )),
+            logo: provider.logo(),
             now: now(),
             tick,
         }
@@ -325,19 +316,9 @@ impl AccountUsagePanel {
     /// cells the panel's bottom buttons used to be, divided by the header's hairlines.
     fn render_header(&self) -> AnyElement {
         let p = self.palette;
-        let provider = if p.codex { "Codex" } else { "Claude" };
+        let provider = p.provider.name();
         let indicator = badge(&self.account);
-        let links = if p.codex {
-            [
-                "https://status.openai.com",
-                "https://chatgpt.com/codex/settings/usage",
-            ]
-        } else {
-            [
-                "https://status.anthropic.com",
-                "https://claude.ai/settings/usage",
-            ]
-        };
+        let links = p.provider.links();
         resource_header()
             .child(
                 h_flex()
@@ -376,56 +357,93 @@ impl AccountUsagePanel {
                         )
                     }),
             )
-            .children(
-                [
-                    ("account-usage-status", "Status"),
-                    ("account-usage-dashboard", "Dashboard"),
-                ]
-                .into_iter()
-                .zip(links)
-                .enumerate()
-                .map(|(index, ((id, title), url))| {
-                    // Notifications' header action cell, with its arrow after the label.
-                    h_flex()
-                        .id(id)
-                        .tab_index(0)
-                        .when(index == 1, |this| {
-                            this.rounded_tr(px(RESOURCE_PANEL_RADIUS - 1.0))
-                        })
-                        .h_full()
-                        .flex_shrink_0()
-                        .px(px(11.0))
-                        .items_center()
-                        .gap(px(4.0))
-                        .border_l_1()
-                        .border_color(chrome_ink().opacity(0.12))
-                        .whitespace_nowrap()
-                        .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
-                        .text_color(chrome_ink().opacity(0.78))
-                        .cursor_pointer()
-                        .hover(|this| {
-                            this.bg(chrome_ink().opacity(0.14))
-                                .text_color(chrome_ink().opacity(0.94))
-                        })
-                        .focus_visible(|this| this.bg(chrome_ink().opacity(0.14)))
-                        .on_click(move |_, _, _| {
-                            let _ = gpui_open_external_http_url(url);
-                        })
-                        .on_key_down(move |event, _, cx| {
-                            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                                cx.stop_propagation();
-                                let _ = gpui_open_external_http_url(url);
-                            }
-                        })
-                        .child(title)
-                        .child(titlebar_svg_icon(
+            .children(self.header_cells(links))
+            .into_any_element()
+    }
+
+    /// The header's action cells: Status and Dashboard where the provider has them, and for a
+    /// usage-only account a Settings cell that opens it in Settings > Accounts.
+    ///
+    /// CDXC:AgentProviders 2026-11-11 DECISION:
+    /// User: "clicking on gemini shows the settings dialog. pls fix make it show a new pop up but should have the 4 sliders in settings there and few details. same for cursor". A usage-only meter opens this popup, with a small way into the account's Settings.
+    fn header_cells(&self, links: Option<[&'static str; 2]>) -> Vec<AnyElement> {
+        type Run = std::rc::Rc<dyn Fn(&mut App)>;
+        let mut cells: Vec<(&'static str, &'static str, bool, Run)> = Vec::new();
+        for ((id, title), url) in [
+            ("account-usage-status", "Status"),
+            ("account-usage-dashboard", "Dashboard"),
+        ]
+        .into_iter()
+        .zip(links.into_iter().flatten())
+        {
+            let run: Run = std::rc::Rc::new(move |_| {
+                let _ = gpui_open_external_http_url(url);
+            });
+            cells.push((id, title, true, run));
+        }
+        if self.palette.provider.usage_only() {
+            let (id, app, account) = (
+                self.id,
+                self.main_app.clone(),
+                text(&self.account, "id").to_string(),
+            );
+            let run: Run = std::rc::Rc::new(move |cx: &mut App| {
+                let (app, account) = (app.clone(), account.clone());
+                cx.defer(move |cx| {
+                    let _ = app.update(cx, |app, cx| {
+                        app.open_accounts_from_usage_popup(id, Some(account), cx);
+                    });
+                });
+            });
+            cells.push(("account-usage-settings", "Settings", false, run));
+        }
+        let count = cells.len();
+        cells
+            .into_iter()
+            .enumerate()
+            .map(|(index, (id, title, external, run))| {
+                let key_run = run.clone();
+                // Notifications' header action cell, with its arrow after the label.
+                h_flex()
+                    .id(id)
+                    .tab_index(0)
+                    .when(index + 1 == count, |this| {
+                        this.rounded_tr(px(RESOURCE_PANEL_RADIUS - 1.0))
+                    })
+                    .h_full()
+                    .flex_shrink_0()
+                    .px(px(11.0))
+                    .items_center()
+                    .gap(px(4.0))
+                    .border_l_1()
+                    .border_color(chrome_ink().opacity(0.12))
+                    .whitespace_nowrap()
+                    .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
+                    .text_color(chrome_ink().opacity(0.78))
+                    .cursor_pointer()
+                    .hover(|this| {
+                        this.bg(chrome_ink().opacity(0.14))
+                            .text_color(chrome_ink().opacity(0.94))
+                    })
+                    .focus_visible(|this| this.bg(chrome_ink().opacity(0.14)))
+                    .on_click(move |_, _, cx| run(cx))
+                    .on_key_down(move |event, _, cx| {
+                        if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                            cx.stop_propagation();
+                            key_run(cx);
+                        }
+                    })
+                    .child(title)
+                    .when(external, |this| {
+                        this.child(titlebar_svg_icon(
                             "titlebar/arrow-up-right.svg",
                             TITLEBAR_POPUP_READING_HEADER_BUTTON_ICON_SIZE - 3.0,
                             chrome_ink().opacity(0.78).into(),
                         ))
-                }),
-            )
-            .into_any_element()
+                    })
+                    .into_any_element()
+            })
+            .collect()
     }
 
     /// The account's section label: "THIS ACCOUNT", its email when the badge doesn't already
@@ -517,7 +535,7 @@ impl AccountUsagePanel {
     /// once it has its first measured size.
     ///
     /// CDXC:AgentProviders 2026-11-11 DECISION:
-    /// User: opening a usage popup is "also jerky. wish it would fade in smoother please and not adjust size after appearing". The popup opens invisible at its estimated size; once its content is laid out and the window moved to the measured size, it fades in on the next frame, so it is never seen at one size and then another.
+    /// User: opening a usage popup is "also jerky. wish it would fade in smoother please and not adjust size after appearing". The popup opens drawn transparent, without glass, at its estimated size; once its content is laid out and the window moved to the measured size, it fades in on the next frame, so it is never seen at one size and then another.
     fn fit(&mut self, height: f32, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let id = self.id;
         let _ = self.main_app.update(cx, |app, cx| {
@@ -527,15 +545,17 @@ impl AccountUsagePanel {
             return;
         }
         // Runs after the window move the fit queued, then shows on the frame drawn at that size.
-        self.reveal = Some(cx.spawn_in(window, async move |this, cx| {
-            let _ = this.update_in(cx, |panel, window, cx| {
+        // The popup is found by the app's own handle to it, never by a window this callback was
+        // handed: the user's trace showed the main window faded instead (CDXC:AgentProviders
+        // 2026-11-11 in GpuiAppToastWindowChrome.m).
+        let _ = window;
+        self.reveal = Some(cx.spawn(async move |this, cx| {
+            let _ = this.update(cx, |panel, cx| {
                 panel.revealed = true;
                 cx.notify();
-                window.on_next_frame(|window, cx| {
-                    crate::app::window::popup_frame::fade_in_popup_window(
-                        window,
-                        cx.reduce_motion(),
-                    );
+                let id = panel.id;
+                let _ = panel.main_app.update(cx, |app, cx| {
+                    app.reveal_account_usage_popup(id, cx);
                 });
             });
         }));
@@ -596,7 +616,7 @@ impl Render for AccountUsagePanel {
     /// User wants text in the usage dropdowns to be non-selectable.
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         // The theme and window glass can change while the panel is open.
-        self.palette = Palette::new(self.palette.codex);
+        self.palette = Palette::new(self.palette.provider);
         self.viewport =
             window.viewport_size().height.as_f32() - TITLEBAR_POPUP_READING_HEADER_HEIGHT - 2.0;
         // While the resets list folds, its clock sets the window's height each frame. A closed
@@ -633,7 +653,9 @@ impl Render for AccountUsagePanel {
             .child(self.render_account_label())
             .child(self.render_limits(cx))
             .children(notice)
-            .child(self.render_history())
+            .when(!self.palette.provider.usage_only(), |body| {
+                body.child(self.render_history())
+            })
             // CDXC:AgentProviders 2026-10-30 DECISION:
             // User: the panel's height fits its content, up to what fits on screen, then it
             // scrolls: no empty gap under Codex, no cut-off buttons on Claude. The body reports
@@ -796,6 +818,7 @@ pub(crate) fn estimated_height(account: &Value) -> f32 {
     use super::limits::*;
     let account = popup_account(account);
     let codex = text(&account, "provider") == "codex";
+    let provider = super::provider::UsageProvider::of(&account);
     let windows = array(&account, "usage");
     let scoped = windows.iter().any(|w| !text(w, "model").is_empty());
     let bars = 2 + usize::from(!codex && scoped);
@@ -805,6 +828,30 @@ pub(crate) fn estimated_height(account: &Value) -> f32 {
         .count()
         .saturating_sub(bars);
     let card_chrome = CARD_PADDING_Y * 2.0 + 2.0;
+    if provider.usage_only() {
+        // One row per window, then the plan and details rows; no history section.
+        let bars = windows.len().max(1) as f32;
+        let rows =
+            usize::from(!text(&account, "plan").is_empty()) + array(&account, "details").len();
+        let mut limits =
+            bars * (LIMIT_LINE + LIMIT_BAR_GAP + LIMIT_BAR_HEIGHT) + (bars - 1.0) * LIMIT_GAP;
+        if rows > 0 {
+            limits += 1.0 + SEPARATOR_MARGIN * 2.0 + rows as f32 * KV_ROW_HEIGHT;
+        }
+        let notice = account_notice(&account, now()).is_some();
+        return TITLEBAR_POPUP_READING_HEADER_HEIGHT
+            + 2.0
+            + BODY_PADDING_TOP
+            + BODY_PADDING
+            + SECTION_LABEL_HEIGHT
+            + card_chrome
+            + limits
+            + if notice {
+                NOTICE_GAP + 14.0 + 2.0 + NOTICE_LINE
+            } else {
+                0.0
+            };
+    }
     let mut limits = bars as f32 * (LIMIT_LINE + LIMIT_BAR_GAP + LIMIT_BAR_HEIGHT)
         + (bars - 1) as f32 * LIMIT_GAP;
     if shown_others > 0 {

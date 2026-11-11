@@ -1,5 +1,5 @@
 // Ghostex Help: the "Ask Ghostex" sample-question popup menu reached from the
-// titlebar's ⋯ menu or the Ghostex Help hotkey, and the flow that turns a picked
+// sidebar menu's Help submenu or the Ghostex Help hotkey, and the flow that turns a picked
 // question into a Ghostex Help agent session.
 
 use futures::FutureExt as _;
@@ -215,21 +215,21 @@ pub(crate) fn build_gpui_titlebar_help_popup_menu(
 }
 
 impl GhostexGpuiApp {
-    /// Toggles the Help popup anchored to the last painted Help button bounds,
-    /// for both the button itself and the `openGhostexHelp` hotkey.
+    /// Toggles the Help popup, hung from the sidebar's menu button, for the
+    /// `openGhostexHelp` hotkey.
     pub(crate) fn show_gpui_titlebar_help_menu(
         &mut self,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         let open = !self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Help);
-        // Ask Ghostex is a row of the titlebar's ⋯ menu now, so the hotkey anchors
-        // its panel to that button.
-        let trigger_bounds = self.titlebar_more_button_bounds.get();
+        // Ask Ghostex is a row of the sidebar's menu (Help), so the hotkey hangs its panel where
+        // that row does (titlebar/menu_panels.rs).
+        let trigger_bounds = self.sidebar_menu_panel_trigger_bounds();
         self.set_gpui_titlebar_popup_open(
             GpuiTitlebarPopupKind::Help,
             open,
-            trigger_bounds,
+            Some(trigger_bounds),
             window,
             cx,
         );

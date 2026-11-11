@@ -20,6 +20,7 @@ use super::model::{UnifiedCard, UnifiedCardLine};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::chrome_color;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 use crate::app::native_sidebar::status;
 use crate::app::native_sidebar::threads::{
     THREAD_INDENT, contains_active_marker, coordinator_icon, crew_badge, crew_tint,
@@ -153,6 +154,16 @@ impl GhostexGpuiApp {
                     cx.stop_propagation();
                     app.gx_store_toggle_unified_coordinator(&key, false, cx);
                 }))
+                // After the mouse-down above, so a press moves focus here before it stops.
+                .map(|toggle| {
+                    self.sidebar_focus_stop(
+                        toggle,
+                        format!("unified-crew:{}", card.session.session_id),
+                        SidebarStopPlace::List,
+                        appearance,
+                        cx,
+                    )
+                })
                 .managed_discrete_tooltip_with_placement(
                     span.placement(),
                     appearance.tooltip_delay,
@@ -397,6 +408,7 @@ impl GhostexGpuiApp {
             (false, count) => format!("{count} older threads"),
         };
         let key = key.to_string();
+        let stop_key = key.clone();
         div()
             .id(gpui::SharedString::from(format!(
                 "native-unified-older-threads-{key}"
@@ -423,6 +435,15 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.gx_store_toggle_unified_coordinator(&key, true, cx);
             }))
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    format!("unified-older-threads:{stop_key}"),
+                    SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

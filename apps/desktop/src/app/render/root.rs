@@ -191,6 +191,8 @@ impl Render for GhostexGpuiApp {
         self.note_voice_agent_space_free(window, cx);
         self.sync_read_aloud_on_screen(window, cx);
         self.main_window_handle = Some(gpui::Window::window_handle(window));
+        // The Focus Sidebar hotkey's entry ends at once when its sidebar is no longer drawn.
+        self.check_native_sidebar_keyboard_entry(cx);
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);
         self.sync_main_window_glass(window, cx);
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);
@@ -239,7 +241,6 @@ impl Render for GhostexGpuiApp {
         self.sync_session_chat_pane_focus(window, cx);
         self.refresh_zmx_persistence_focused_terminal_if_changed(cx);
         let sidebar_chrome_visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);
-        let sidebar_keyboard_focus = self.sidebar_keyboard_focus_handle(cx);
         // The sidebar's peeking usage strip draws in a frosted window of its own, which outlives a
         // docked sidebar that is no longer drawn unless it is taken down here.
         if !sidebar_chrome_visible {
@@ -388,7 +389,18 @@ impl Render for GhostexGpuiApp {
                 }
             }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                // While the Focus Sidebar hotkey's entry waits for its row, the keyboard is parked here but is the sidebar's: nothing is typed anywhere, and Escape gives it back (native_sidebar/keyboard.rs).
+                if this.native_sidebar.focus_stops.entry_pending() {
+                    if event.keystroke.key == "escape" {
+                        this.sidebar_keyboard_give_back(window, cx);
+                    }
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    return;
+                }
+                // A focused sidebar control takes Enter and Space as its click (native_sidebar/focus_order.rs); nothing here may also type them into a terminal or the chat.
                 if this.native_sidebar_input_owns_focus(window, cx)
+                    || this.native_sidebar_stop_focused(window)
                     || this.terminal_search_input_owns_keyboard_focus(window, cx)
                     || this.browser_find_input_owns_keyboard_focus(window, cx)
                 {
@@ -1405,9 +1417,6 @@ impl Render for GhostexGpuiApp {
                                 .id("ghostex-gpui-docked-sidebar")
                                 .w(px(self.sidebar_width))
                                 .h_full()
-                                // The Focus Sidebar hotkey's keyboard (gx_store/sidebar_keyboard.rs).
-                                .track_focus(&sidebar_keyboard_focus)
-                                .on_key_down(cx.listener(Self::sidebar_keyboard_key_down))
                                 .on_mouse_move(cx.listener(
                                     |this, event: &MouseMoveEvent, _window, _cx| {
                                         this.handle_floating_reveal_sidebar_edge_move(

@@ -464,12 +464,26 @@ pub fn transcript_matches(
 }
 
 /// `sessionChatSearchCountLabel`: the terminal-style counter beside the field.
-pub fn search_count_label(query: &str, total: usize, active_index: usize) -> String {
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// Find starts at the bottom of the chat and counts from there: "1/42" is the newest match, the one nearest the bottom, and each "Previous" (up) adds one, so "42/42" is the oldest. A "+" after the total means older history is not loaded yet, so there may be more above. `active_index` is the match's place in transcript order (0 is the oldest).
+pub fn search_count_label(
+    query: &str,
+    total: usize,
+    active_index: usize,
+    more_unloaded: bool,
+    searching: bool,
+) -> String {
     if js_trim(query).is_empty() {
         return String::new();
     }
+    let more = if more_unloaded { "+" } else { "" };
     if total > 0 {
-        format!("{}/{total}", active_index + 1)
+        format!("{}/{total}{more}", total - active_index.min(total - 1))
+    } else if searching {
+        "Searching\u{2026}".to_string()
+    } else if more_unloaded {
+        "None loaded".to_string()
     } else {
         "N/A".to_string()
     }

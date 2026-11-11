@@ -24,7 +24,7 @@ use serde_json::{json, Map, Value};
 use crate::extras::work_cards::{owner_words, waits_line};
 
 /// The groups, in the order the panel lists them: the board's ids, the Work panel's titles.
-pub const WORK_GROUPS: [(&str, &str); 6] = [
+pub const WORK_GROUPS: [(&str, &str); 7] = [
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
     // CDXC:Coordinators 2026-11-10 DECISION:
@@ -32,6 +32,14 @@ pub const WORK_GROUPS: [(&str, &str); 6] = [
     // the board: "rename to in progress please"). Wherever the user reads it, the `moving` status is
     // "In progress"; the stored value stays `moving` and `--status` takes `moving` or `in-progress`.
     ("moving", "In progress"),
+    // CDXC:Coordinators 2026-11-11 DECISION:
+    // User: "the user should have accurate statuses in the work board/list always!" An item the
+    // coordinator calls In progress that nobody is on (no thread working, waiting on the user or
+    // owing work, and not changed by the coordinator in its current or last turn) is gxserver's
+    // `idle` (server/src/coordinators/turns.rs): listed here under In progress, folded, with its
+    // last line, and left out of every "in progress" count. A core from before reads `idle` as
+    // Later.
+    ("idle", "Not being worked on"),
     ("hold", "Waiting"),
     ("later", "Later"),
     ("done", "Finished today"),
@@ -39,7 +47,7 @@ pub const WORK_GROUPS: [(&str, &str); 6] = [
 
 /// Groups folded until the reader opens them.
 pub fn folded_by_default(group: &str) -> bool {
-    matches!(group, "hold" | "later" | "done")
+    matches!(group, "idle" | "hold" | "later" | "done")
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -52,6 +60,7 @@ fn group_of(status: &str) -> &'static str {
         "needs" => "needs",
         "blocked" => "blocked",
         "moving" => "moving",
+        "idle" => "idle",
         "waiting" => "hold",
         "finished" => "done",
         _ => "later",
@@ -116,6 +125,7 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
         "note": if line.is_empty() {
             match status {
                 "later" => "Nobody is on it yet".to_string(),
+                "idle" => "Nobody is on it".to_string(),
                 "finished" => "Finished".to_string(),
                 _ => owner_words(item),
             }

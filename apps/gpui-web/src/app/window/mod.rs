@@ -76,3 +76,8 @@ pub(crate) mod space_editor_modal {
 /// which `app_modal_kind.rs` reads; the page never opens that notice.
 pub(crate) const SECURITY_UPGRADE_MODAL_WIDTH: f32 = 640.0;
 pub(crate) const SECURITY_UPGRADE_MODAL_INITIAL_HEIGHT: f32 = 520.0;
+
+/// The Connect a device window's size (`window/connect_device_modal.rs` on the desktop), which
+/// `app_modal_kind.rs` reads; the page never opens that window.
+pub(crate) const CONNECT_DEVICE_MODAL_WIDTH: f32 = 560.0;
+pub(crate) const CONNECT_DEVICE_MODAL_INITIAL_HEIGHT: f32 = 560.0;

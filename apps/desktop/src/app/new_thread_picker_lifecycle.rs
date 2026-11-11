@@ -316,6 +316,7 @@ impl GhostexGpuiApp {
             default_run_location: shared_settings::shared_sidebar_settings_snapshot()
                 .agentbox_default_location(),
             cloud_box: self.new_thread_picker_offers_cloud_box(),
+            room: Some(self.main_window_bounds),
             close_when_inactive: true,
             cloud_default_account: self
                 .gx_store
@@ -364,10 +365,14 @@ impl GhostexGpuiApp {
         let agent_count = config.agents.len();
         let window_size = size(
             px(NEW_THREAD_PICKER_WIDTH),
-            px(new_thread_picker_window_height(
-                agent_count,
-                config.place.is_some(),
-                config.place.is_none() && (config.boxes.shows_run_on() || config.cloud_box),
+            px(new_thread_picker_capped_height(
+                new_thread_picker_window_height(
+                    agent_count,
+                    config.place.is_some(),
+                    config.place.is_none() && (config.boxes.shows_run_on() || config.cloud_box),
+                ),
+                config.room,
+                None,
             )),
         );
         let window_bounds =

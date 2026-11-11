@@ -1,5 +1,5 @@
-//! A text file a session's chat linked to, read for the Files view of a remote project: any
-//! plain-text file the chat names, wherever it is on this computer, read-only.
+//! A file a session's chat linked to, read for the Files view of a remote project: any plain-text
+//! file or picture the chat names, wherever it is on this computer, read-only.
 //!
 //! CDXC:Docs 2026-11-07 DECISION:
 //! Issue #462: on a remote computer, a chat link to a file outside the project's Docs folders
@@ -13,8 +13,12 @@
 //! read that session's chat; a Ghostex Collab guest cannot reach `runProjectDocsAction` at all
 //! (`collab_shim::registry::GUEST_READ_ENDPOINTS`). So the API opens no path the chat did not show, which
 //! keeps it from becoming a way to read arbitrary files.
+//!
+//! CDXC:Docs 2026-11-11 DECISION:
+//! User, on a Mac in the chat of a session on his Windows PC: "i clicked on these 2 links in the chat but nothing happened ... i should be able to see them in files", a text file and a picture under `C:\dev\.desk-runner\…`, outside the project. A picture the chat names now opens too, under the same rule: `stat` answers `kind: "image"` and `readResource` returns its bytes (at most [`RESOURCE_MAX_BYTES`]), only for a file the chat names whose name ends in a picture extension. The name check compares the Files and links list's own key (`path_key`: one slash, a drive path in one case) first, so the desktop's `C:/dev/…` matches the chat's `C:\dev\…` without touching the disk, and a named file that is gone says so instead of "not linked".
 //! SEE-ALSO: server/src/server/project_docs_http.rs (where the scope is checked),
-//! apps/desktop/src/app/session_chat_context_menu/remote_files.rs (the desktop's chat link).
+//! apps/desktop/src/app/session_chat_context_menu/remote_files.rs (the desktop's chat link),
+//! apps/desktop/src/app/native_docs/documents.rs (`native_docs_read_image`, the picture's read).
 
 use std::{
     fs,
@@ -37,10 +41,17 @@ pub const CHAT_FILE_TOO_LARGE: &str =
     "This file is larger than 2 MB, too large to open in Files. Use Open in VS Code for it.";
 pub const CHAT_FILE_NOT_TEXT: &str =
     "This file is not plain text, so Files can't show it. Use Open in VS Code for it.";
+pub const CHAT_FILE_PICTURE_TOO_LARGE: &str =
+    "This picture is larger than 12 MB, too large to open in Files.";
 const CHAT_FILE_UNAVAILABLE: &str = "That file is not on the session computer any more.";
+/// The picture kinds Files draws (`DocsMediaKind::Image` on the desktop), by extension.
+const CHAT_PICTURE_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "jfif", "jpe", "gif", "webp", "bmp", "ico", "svg", "tif", "tiff", "avif",
+];
 const CHAT_FILE_NOT_A_FILE: &str = "That path is not a file.";
+const CHAT_FILE_NOT_A_PICTURE: &str = "That file is not a picture.";
 
-/// A `read` or `stat` of a file the chat linked to: the action, its request id, the session and
+/// A `read`, `stat` or `readResource` of a file the chat linked to: the action, its request id, the session and
 /// the path exactly as the chat named it.
 pub struct ChatFileRequest {
     pub action: String,
@@ -50,12 +61,12 @@ pub struct ChatFileRequest {
     pub path: String,
 }
 
-/// `Some` when `params` asks to `read` or `stat` a path outside the project for a session: an
+/// `Some` when `params` asks to `read`, `stat` or `readResource` a path outside the project for a session: an
 /// absolute path (or one from the home folder, `~/…`) with a `sessionId`. Everything else is an
 /// ordinary Docs action and keeps its project-relative rules.
 pub fn chat_file_request(params: &Map<String, Value>) -> Option<ChatFileRequest> {
     let action = string_param(params, "action")?;
-    if action != "read" && action != "stat" {
+    if !matches!(action.as_str(), "read" | "stat" | "readResource") {
         return None;
     }
     let path = string_param(params, "path")?.trim().to_string();
@@ -104,10 +115,11 @@ pub fn expanded_chat_file_path(path: &str) -> PathBuf {
 pub fn run_chat_file_action(request: &ChatFileRequest, named: bool) -> Value {
     let result = if named {
         let file = expanded_chat_file_path(&request.path);
-        if request.action == "stat" {
-            chat_file_metadata(&file, &request.path)
-        } else {
-            chat_file_preview(&file, &request.path)
+        match request.action.as_str() {
+            "stat" if is_picture(&file) => chat_picture_metadata(&file, &request.path),
+            "stat" => chat_file_metadata(&file, &request.path),
+            "readResource" => return chat_picture_resource(request, &file),
+            _ => chat_file_preview(&file, &request.path),
         }
     } else {
         Err(CHAT_FILE_NOT_NAMED.to_string())
@@ -197,6 +209,65 @@ fn chat_file_preview(file: &Path, named: &str) -> Result<Value, String> {
     }))
 }
 
+/// Whether the file's name ends in a picture extension Files draws.
+fn is_picture(file: &Path) -> bool {
+    file.extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|extension| CHAT_PICTURE_EXTENSIONS.contains(&extension.as_str()))
+}
+
+/// A picture's name, size and time, after checking it is small enough to open.
+fn chat_picture_metadata(file: &Path, named: &str) -> Result<Value, String> {
+    let metadata = fs::metadata(file).map_err(|_| CHAT_FILE_UNAVAILABLE.to_string())?;
+    if !metadata.is_file() {
+        return Err(CHAT_FILE_NOT_A_FILE.to_string());
+    }
+    if metadata.len() > RESOURCE_MAX_BYTES {
+        return Err(CHAT_FILE_PICTURE_TOO_LARGE.to_string());
+    }
+    Ok(json!({
+        "kind": "image",
+        "modifiedAt": modified_at(&metadata),
+        "name": file_name(file),
+        "path": named,
+        "readOnly": true,
+        "size": metadata.len(),
+    }))
+}
+
+/// A picture's bytes, as the Files view's `readResource` answers them. Only a picture: any other
+/// file the chat names is read as text (`read`), never handed over as raw bytes.
+fn chat_picture_resource(request: &ChatFileRequest, file: &Path) -> Value {
+    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+    let data = if is_picture(file) {
+        chat_picture_metadata(file, &request.path).and_then(|_| {
+            let mut data = Vec::new();
+            fs::File::open(file)
+                .and_then(|handle| handle.take(RESOURCE_MAX_BYTES + 1).read_to_end(&mut data))
+                .map_err(|_| CHAT_FILE_UNAVAILABLE.to_string())?;
+            if data.len() as u64 > RESOURCE_MAX_BYTES {
+                return Err(CHAT_FILE_PICTURE_TOO_LARGE.to_string());
+            }
+            Ok(data)
+        })
+    } else {
+        Err(CHAT_FILE_NOT_A_PICTURE.to_string())
+    };
+    match data {
+        Ok(data) => json!({
+            "action": request.action,
+            "requestId": request.request_id,
+            "dataBase64": BASE64_STANDARD.encode(data),
+        }),
+        Err(error) => json!({
+            "action": request.action,
+            "requestId": request.request_id,
+            "error": error,
+        }),
+    }
+}
+
 /// No NUL byte and valid UTF-8, a character cut off by the sample's end aside.
 fn looks_like_text(start: &[u8]) -> bool {
     if start.contains(&0) {
@@ -237,7 +308,7 @@ mod tests {
         let mut no_session = absolute.clone();
         no_session.as_object_mut().unwrap().remove("sessionId");
         assert!(chat_file_request(&params(no_session)).is_none());
-        for action in ["save", "delete", "rename", "readResource", "list"] {
+        for action in ["save", "delete", "rename", "list"] {
             let mut other = absolute.clone();
             other["action"] = json!(action);
             assert!(chat_file_request(&params(other)).is_none(), "{action}");

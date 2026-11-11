@@ -494,12 +494,12 @@ How to use this file:
 - **Hide Custom Website view** `customWebsiteViewTabHidden` (boolean, default true): Enable Custom Website in Settings > Extensions, then choose its home URL when opening the view. Disabled by default.
 - **Hide Storybook view** `storybookViewTabHidden` (boolean, default false): Hide the built-in component workshop. When enabled, it appears only in projects with Storybook.
 - **Hide Terminal view** `terminalViewTabHidden` (boolean, default false): Stop offering the Terminal view, so it is missing from the view panel tab strip, its + menu and the view picker.
-- **Hide Tips button** `tipsAndTricksTitlebarButtonHidden` (boolean, default false): Stop offering the Tips & Tricks page, so it is missing from the header ⋯ menu and the view picker.
+- **Hide Tips button** `tipsAndTricksTitlebarButtonHidden` (boolean, default false): Stop offering the Tips & Tricks page, so it is missing from the sidebar's menu and the view picker.
 - **Hide Notifications bell** `notificationsTitlebarButtonHidden` (boolean, default false): Hide the Notifications bell from the sidebar's top row.
-- **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Stop offering the Ask Ghostex page, so it is missing from the header ⋯ menu and the view picker.
-- **Hide Resources button** `resourcesTitlebarButtonHidden` (boolean, default false): Stop offering the Resources page, so it is missing from the header ⋯ menu and the view picker.
-- **Hide Dev Servers button** `devServersTitlebarButtonHidden` (boolean, default false): Hide Dev servers from the header ⋯ menu.
-- **Hide Extensions button** `extensionsTitlebarButtonHidden` (boolean, default false): Hide Extensions from the header ⋯ menu.
+- **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Stop offering the Ask Ghostex page, so it is missing from the sidebar's menu and the view picker.
+- **Hide Resources button** `resourcesTitlebarButtonHidden` (boolean, default false): Stop offering the Resources page, so it is missing from the sidebar's menu and the view picker.
+- **Hide Dev Servers button** `devServersTitlebarButtonHidden` (boolean, default false): Hide Dev servers from the sidebar's menu.
+- **Hide Extensions button** `extensionsTitlebarButtonHidden` (boolean, default false): Hide Extensions from the sidebar's menu.
 - **Hide Git button** `gitActionsTitlebarButtonHidden` (boolean, default false): Hide the Commit button from the work area header.
 ### Built-in
 
@@ -523,11 +523,11 @@ How to use this file:
 - **Files** `docs` (Settings UI row without a settings key; use `ghostex settings open`): Browse your project’s notes, plans, and reference files together in one focused reading space.
 - **Changes** `changes` (Settings UI row without a settings key; use `ghostex settings open`): Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions.
 - **Terminal** `terminal` (Settings UI row without a settings key; use `ghostex settings open`): A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel.
-- **Tips & Tricks** `tips` (Settings UI row without a settings key; use `ghostex settings open`): A panel of short tips for getting more out of Ghostex, opened from the ⋯ menu.
+- **Tips & Tricks** `tips` (Settings UI row without a settings key; use `ghostex settings open`): A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu.
 - **Notifications** `notifications` (Settings UI row without a settings key; use `ghostex settings open`): A bell in the sidebar's top row that lists what your agents finished or need from you.
-- **Ghostex Help** `help` (Settings UI row without a settings key; use `ghostex settings open`): A ⋯ menu entry with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.
-- **Dev servers** `devServers` (Settings UI row without a settings key; use `ghostex settings open`): A ⋯ menu panel listing development servers running on this computer. A new Browser tab shows the same list.
-- **Resources** `resources` (Settings UI row without a settings key; use `ghostex settings open`): A ⋯ menu panel listing what Ghostex is running right now, with the CPU and memory each part is using.
+- **Ghostex Help** `help` (Settings UI row without a settings key; use `ghostex settings open`): An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.
+- **Dev servers** `devServers` (Settings UI row without a settings key; use `ghostex settings open`): A panel listing development servers running on this computer, opened from Tools in the sidebar's menu.
+- **Resources** `resources` (Settings UI row without a settings key; use `ghostex settings open`): A panel listing what Ghostex is running right now, with the CPU and memory each part is using, opened from Tools in the sidebar's menu.
 - **Git actions** `gitActions` (Settings UI row without a settings key; use `ghostex settings open`): A work area header button for commit, branch, and worktree helpers on the active project.
 - **Actions** `quickActions` (Settings UI row without a settings key; use `ghostex settings open`): Saved terminal commands and web pages you start in one click from the Start button, a hotkey, Quick Access or a project row.
 - **Open In** `openIn` (Settings UI row without a settings key; use `ghostex settings open`): Open the active project or a session's folder in your editor, terminal or file manager from the Open button and the Open In menus.
@@ -537,7 +537,7 @@ How to use this file:
 - **Connectors** `connectors` (Settings UI row without a settings key; use `ghostex settings open`): Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands.
 - **OS Integration** `osIntegration` (Settings UI row without a settings key; use `ghostex settings open`): Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links.
 - **Debugging** `debugging` (Settings UI row without a settings key; use `ghostex settings open`): The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue.
-- **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): An entry in the work area header’s ⋯ menu that lists your installed extensions.
+- **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): An entry under Tools in the sidebar's menu that lists your installed extensions.
 - **Hide Bots** `botsHidden` (boolean, default true): Stop offering Bots, the sidebar mode with one row per Hermes profile. Hidden by default; offered only where the Hermes CLI is installed.
 - **GBots** `gbotsEnabled` (boolean, default false): Turn GBots on or off: your own team of bots under Chief of Staff in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.
 - **Hide Bot automations** `botAutomationsHidden` (boolean, default true): Stop offering Bot automations, the Automations row in the Bots sidebar that opens a feed of every Hermes cron run. Hidden by default; needs Bots.
@@ -553,7 +553,7 @@ How to use this file:
 - **Turn off Grok Bot** `grokWebHidden` (boolean, default true): Turn off Grok Bot: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.
 - **Turn off Connectors** `connectorsHidden` (boolean, default true): Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default true): Leave the OS Integration page out of Settings. Experimental, off by default.
-- **Keep Awake** `keepAwakeEnabled` (boolean, default false): Turn Keep Awake on or off: Keep Awake in the ⋯ menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default. Only on macOS.
+- **Keep Awake** `keepAwakeEnabled` (boolean, default false): Turn Keep Awake on or off: Keep Awake in the sidebar's menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default. Only on macOS.
 - **All Automations** `allAutomationsEnabled` (boolean, default false): Turn All Automations on or off: automations that belong to no project, in Automate's All Automations board, which shows that it is coming soon while this is off. Experimental, off by default.
 - **Faster rendering** `fasterRendering` (boolean, default false): Redraw only the parts of a window that changed, so Ghostex uses less CPU while agents stream and you scroll; it applies at once. Turn it off if part of a window stops updating. Experimental, off by default.
 - **Tool call lines** `chatToolCallLines` (boolean, default false): Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. Settings > Chat > Agent work set to Reduced or Quiet replaces these lines. Experimental, off by default.

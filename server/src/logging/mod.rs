@@ -28,6 +28,7 @@ mod tests;
 use log_files::*;
 pub use logger::*;
 pub use query::*;
+pub(crate) use redaction::cut_push_tokens;
 use redaction::*;
 
 /// What the JSONL writer would persist for `entry`, for tests outside this module that check a

@@ -274,23 +274,97 @@ pub(crate) fn usage_bar(p: &SettingsPalette, used_percent: f64, height: f32) -> 
         .into_any_element()
 }
 
-/// One usage window as a row: its label, the bar, and "41% used · resets in 2h 14m".
-pub(crate) fn usage_line(p: &SettingsPalette, window: &UsageWindow) -> AnyElement {
+/// The narrowest and widest the usage rows' label column gets.
+const USAGE_LABEL_MIN_WIDTH: f32 = 28.0;
+const USAGE_LABEL_MAX_WIDTH: f32 = 140.0;
+const USAGE_LABEL_SIZE: f32 = 12.0;
+
+/// One card's usage windows as rows, their labels in one column as wide as the longest of them.
+///
+/// CDXC:AgentProviders 2026-11-11 DECISION:
+/// User, of a Gemini account's rows "Claude…" and "Claude…": "can not read what this is". The label
+/// column was a fixed 56px, too narrow for a model window ("Claude/GPT 5h", Antigravity's
+/// third-party models). It now takes the longest label on the card, up to 140px, and the bar gives
+/// up the room; a label past that cuts and shows in full in its tooltip.
+pub(crate) fn usage_lines(
+    p: &SettingsPalette,
+    windows: &[UsageWindow],
+    window: &mut Window,
+) -> Vec<AnyElement> {
+    let labels: Vec<String> = windows.iter().map(card_label).collect();
+    let mut style = window.text_style();
+    style.font_family = MODAL_UI_FONT.into();
+    let widest = labels
+        .iter()
+        .map(|label| {
+            let text: SharedString = label.clone().into();
+            let run = style.to_run(text.len());
+            f32::from(
+                window
+                    .text_system()
+                    .shape_line(text, px(USAGE_LABEL_SIZE), &[run], None)
+                    .width,
+            )
+        })
+        .fold(0.0, f32::max);
+    // A pixel to spare, so rounding never cuts the widest label.
+    let column = (widest.ceil() + 1.0).clamp(USAGE_LABEL_MIN_WIDTH, USAGE_LABEL_MAX_WIDTH);
+    let cut = widest + 1.0 > USAGE_LABEL_MAX_WIDTH;
+    windows
+        .iter()
+        .zip(labels)
+        .enumerate()
+        .map(|(index, (usage, label))| usage_line(p, usage, label, column, cut.then_some(index)))
+        .collect()
+}
+
+/// A row's label on the account card: the account's own two windows spelled out, every other
+/// window (a model's) as everywhere else.
+///
+/// CDXC:AgentProviders 2026-11-11 DECISION:
+/// User: "just for top 2 bars say 5 hours and 7 hours pls" (the second is the seven-day window).
+/// The card has room, so its main 5h and 7d rows read "5 hours" and "7 days". This is a stated
+/// exception to the 2026-10-14 rule that windows are written 5h and 7d: model rows ("Claude/GPT
+/// 5h", "Fable 7d") and the sidebar, the usage popup, the CLI and the phone keep 5h and 7d.
+fn card_label(window: &UsageWindow) -> String {
     let label = window.short_label();
+    if window.model.is_some() {
+        return label;
+    }
+    match label.as_str() {
+        "5h" => "5 hours".to_string(),
+        "7d" => "7 days".to_string(),
+        _ => label,
+    }
+}
+
+/// One usage window as a row: its label, the bar, and "41% used · resets in 2h 14m". `tooltip`
+/// names the row when its label may be cut.
+fn usage_line(
+    p: &SettingsPalette,
+    window: &UsageWindow,
+    label: String,
+    column: f32,
+    tooltip: Option<usize>,
+) -> AnyElement {
     h_flex()
         .w_full()
         .items_center()
         .gap(px(10.0))
-        .text_size(px(12.0))
+        .text_size(px(USAGE_LABEL_SIZE))
         .line_height(px(16.0))
         .child(
             div()
-                .w(px(56.0))
+                .id(("usage-label", tooltip.unwrap_or(0)))
+                .w(px(column))
                 .flex_shrink_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .text_color(hsla(p.muted))
+                .when(tooltip.is_some(), |this| {
+                    this.tooltip(tooltip_text(label.clone()))
+                })
                 .child(label),
         )
         .child(usage_bar(p, window.used_percent, 6.0))

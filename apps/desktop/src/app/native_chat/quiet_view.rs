@@ -77,20 +77,14 @@ pub(super) struct QuietPlace {
 }
 
 /// The rail an opened line's rows sit on, as an opened Reduced line's steps do (quiet_work.rs).
-fn rail(rows: Vec<AnyElement>, bottom: f32, p: &ChatAppearance) -> AnyElement {
-    let s = p.scale;
-    div()
-        .flex()
-        .flex_col()
-        .min_w_0()
-        .ml(px(6.0 * s))
-        .pl(px(16.0 * s))
-        .pb(px(bottom * s))
-        .gap(px(8.0 * s))
-        .border_l(px(s))
-        .border_color(p.foreground.opacity(0.1))
-        .children(rows)
-        .into_any_element()
+fn rail(
+    key: &str,
+    rows: Vec<AnyElement>,
+    bottom: f32,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    super::disclosure_body::closing_rail(p, key.to_string(), 6.0, 23.0, 8.0, bottom, rows, cx)
 }
 
 /// `item` without what of it stays in view after its line.
@@ -317,7 +311,7 @@ impl NativeChatView {
                         0.0
                     };
                     let gap = if index == line.start { 4.0 } else { 0.0 };
-                    parts.push((rail(nested, bottom, p), gap));
+                    parts.push((rail(&line.key, nested, bottom, p, cx), gap));
                 }
                 if let Some(tail) = tail {
                     let kept = kept_parts(item, tail);
@@ -397,7 +391,7 @@ impl NativeChatView {
             if open {
                 let cards = self.quiet_cards(line);
                 if let Some(stack) = self.work_card_stack(&cards, p, cx) {
-                    parts.push((rail(vec![stack], 0.0, p), 4.0));
+                    parts.push((rail(&line.key, vec![stack], 0.0, p, cx), 4.0));
                 }
             }
         }
@@ -437,9 +431,9 @@ impl NativeChatView {
             .collect()
     }
 
-    /// The quiet line itself: an icon (the turning loader while the turn runs, the messages icon on
-    /// a line reports came in on, else the clock and the green check), its counts, its time, and
-    /// the chevron that shows on hover or while it is open.
+    /// The quiet line itself: an icon (the messages icon on a line reports came in on, else the
+    /// clock) and the green check (the turning loader while the turn runs), its counts, its time,
+    /// and the chevron that shows on hover or while it is open.
     fn quiet_view_line(
         &self,
         line: &QuietStretch,
@@ -447,13 +441,19 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
-        let icons = if line.running {
-            vec![loader(&line.key, p, cx.reduce_motion())]
-        } else if !line.time.is_empty() {
-            vec![line_icon("titlebar/messages.svg", 13.0, p)]
+        // Every quiet line starts with the same two marks, a 13px icon then the 12px tick (the
+        // turning loader while the turn runs), so their words line up one under another.
+        let lead = if !line.time.is_empty() {
+            "titlebar/messages.svg"
         } else {
-            vec![line_icon("titlebar/clock.svg", 13.0, p), check(p)]
+            "titlebar/clock.svg"
         };
+        let mark = if line.running {
+            loader(&line.key, p, cx.reduce_motion())
+        } else {
+            check(p)
+        };
+        let icons = vec![line_icon(lead, 13.0, p), mark];
         let mut segments: Vec<QuietSegment> = vec![(line.text.clone(), None)];
         if !line.time.is_empty() {
             segments.push((format!("\u{2002}{}", line.time), None));
@@ -481,7 +481,7 @@ impl NativeChatView {
     }
 
     /// An answers card drawn shut as its own line (gx-chat-core `transcript/quiet_view.rs`
-    /// `QuietAnswers` has the user's words): the answered check, "You answered “…”" and its count,
+    /// `QuietAnswers` has the user's words): the question card's icon, the answered check, "You answered “…”" and its count,
     /// and the chevron; opened, the card follows it.
     pub(super) fn quiet_answers_line(
         &self,
@@ -501,7 +501,11 @@ impl NativeChatView {
         self.quiet_line(
             card.key.clone(),
             spoken,
-            vec![check(p)],
+            // The question card's own icon, then the tick, as every quiet line starts.
+            vec![
+                line_icon("titlebar/chat-card-checklist.svg", 13.0, p),
+                check(p),
+            ],
             styled_segments(segments),
             open,
             true,

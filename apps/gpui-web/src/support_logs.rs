@@ -12,6 +12,11 @@ pub(crate) fn append(log: GpuiSupportLog, event: &str, details: Value) {
     log::debug!("{log:?} {event} {details}");
 }
 
+/// Always kept on the desktop (a chat send, native_chat/send_watch.rs); the console at info level.
+pub(crate) fn append_always(log: GpuiSupportLog, event: &str, details: Value) {
+    log::info!("{log:?} {event} {details}");
+}
+
 /// Scenario-gated on the desktop; the console has no scenarios, so the call is logged like `append`.
 pub(crate) fn append_for_scenario(
     log: GpuiSupportLog,

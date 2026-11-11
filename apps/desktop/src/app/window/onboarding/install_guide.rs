@@ -52,8 +52,9 @@ pub(crate) fn popup(
             glass(s)
                 .id("onboarding-popup")
                 .w(s.px(width))
-                .py(s.px(20.0))
-                .px(s.px(22.0))
+                // The same 20pt on every side, so the header's X sits as far from the top as from
+                // the side (CDXC:SessionChat 2026-11-11 in visual_page_modal/band_geometry.rs).
+                .p(s.px(20.0))
                 .border_color(rgba(120, 150, 235, 0.25))
                 .bg(hex(0x0e1119))
                 .shadow(vec![

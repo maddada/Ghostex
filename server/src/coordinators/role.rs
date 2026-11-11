@@ -1,4 +1,4 @@
-//! The coordinator's role: the playbook it runs by (the bundled `ghostex-orchestrator` skill), how a
+//! The coordinator's role: the playbook it runs by (the bundled `ghostex-coordinator` skill), how a
 //! new orchestrator is handed it, and the older channels that orchestrators created before
 //! 2026-10-17 still read it through.
 
@@ -8,7 +8,7 @@ use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
 
 /// CDXC:Coordinators 2026-10-17 DECISION:
-/// User: "we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" and we should install this orchestrator skill when user picks the orchstrator option so no need to inject things the other way." The playbook is the bundled skill `skills/ghostex-orchestrator/SKILL.md`; creating or promoting an orchestrator installs it for that agent ([`ensure_orchestrator_skill_installed`]) and queues [`orchestrator_first_message`], which always starts with [`orchestrator_skill_line`] in the agent's own skill spelling. Nothing is added to the agent's command any more. Supersedes the 2026-09-30 WHY that carried the role as a system prompt flag (Claude's role file, Codex `developer_instructions`, ZCode's SessionStart context, Empryo's `/agent` profile): those channels now serve only orchestrators created before this change, whose saved commands or records still name them, so they keep their role on resume, sleep and wake, and account switches.
+/// User: "we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" and we should install this orchestrator skill when user picks the orchstrator option so no need to inject things the other way." The playbook is the bundled skill `skills/ghostex-coordinator/SKILL.md`; creating or promoting an orchestrator installs it for that agent ([`ensure_coordinator_skill_installed`]) and queues [`orchestrator_first_message`], which always starts with [`coordinator_skill_line`] in the agent's own skill spelling. Nothing is added to the agent's command any more. Supersedes the 2026-09-30 WHY that carried the role as a system prompt flag (Claude's role file, Codex `developer_instructions`, ZCode's SessionStart context, Empryo's `/agent` profile): those channels now serve only orchestrators created before this change, whose saved commands or records still name them, so they keep their role on resume, sleep and wake, and account switches.
 /// SEE-ALSO: server/src/server/coordinator_runtime.rs (`start_orchestrator_role`), server/src/agents/marked_handovers.rs and server/src/agents/activity.rs (the older channels), apps/desktop/src/app/window/new_coordinator_modal.rs (the locked line in the dialog).
 ///
 /// CDXC:Coordinators 2026-10-09 DECISION:
@@ -37,12 +37,34 @@ use crate::paths::GxserverPaths;
 ///
 /// CDXC:Coordinators 2026-10-10 DECISION:
 /// User: "let's please rename "Coordinator" to "Orchestrator" everywhere so it's clearer to everyone." The playbook and the guide pointer call the role an orchestrator and name `ghostex orchestrator` verbs; the role file's name on disk and every internal name keep "coordinator".
-const ORCHESTRATOR_SKILL_MD: &str = include_str!("../../../skills/ghostex-orchestrator/SKILL.md");
-const ORCHESTRATOR_SKILL_OPENAI_YAML: &str =
-    include_str!("../../../skills/ghostex-orchestrator/agents/openai.yaml");
+pub const COORDINATOR_SKILL_MD: &str = include_str!("../../../skills/ghostex-coordinator/SKILL.md");
+pub const COORDINATOR_SKILL_OPENAI_YAML: &str =
+    include_str!("../../../skills/ghostex-coordinator/agents/openai.yaml");
 
-/// The bundled skill every orchestrator works by.
-pub const ORCHESTRATOR_SKILL_NAME: &str = "ghostex-orchestrator";
+/// The bundled skill every coordinator works by (the name is written once, in
+/// packages/gx-chat-core/src/composer/skill_invocation.rs).
+pub const COORDINATOR_SKILL_NAME: &str =
+    ghostex_gx_chat_core::composer::skill_invocation::COORDINATOR_SKILL_NAME;
+
+/// The names the coordinator skill had before, oldest first. agent_skills_renamed.rs moves an
+/// install under any of them to [`COORDINATOR_SKILL_NAME`], and the guide tells a coordinator
+/// whose first message named one of them ([`coordinator_skill_renamed_line`]). To rename the skill
+/// again, add the current name here (and its shipped file hashes there).
+pub const COORDINATOR_SKILL_OLD_NAMES: &[&str] = &["ghostex-orchestrator"];
+
+/// The line the guide carries under the playbook so a coordinator started before the skill was
+/// renamed knows the playbook it was told to read by an old name.
+///
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// A coordinator started before the rename has "Read and adhere to this skill: /ghostex-orchestrator" (or `$ghostex-orchestrator`) as its first message, and that skill is removed at the first start after the update (agent_skills_renamed.rs). Its playbook never depended on the folder: `ghostex coordinator guide` prints it from the app, and the playbook sends it there before its first reply and after every compaction. The line changes the guide's text, so every existing coordinator also gets the "playbook changed" note with its next message (playbook.rs `playbook_update_note`) and reads this line once it runs the guide. No new note text: phone apps already out recognise only the notes they know (packages/gx-chat-core/src/session/appended_notes.rs).
+pub fn coordinator_skill_renamed_line() -> String {
+    let old = COORDINATOR_SKILL_OLD_NAMES
+        .iter()
+        .map(|name| format!("`{name}`"))
+        .collect::<Vec<_>>()
+        .join(" or ");
+    format!("Your playbook is the `{COORDINATOR_SKILL_NAME}` skill. If your first message named {old}, that is this skill's old name: follow this guide, and don't look for a skill by the old name.")
+}
 
 /// The session runtime setting that marks an orchestrator as taking its role from the skill
 /// (created or promoted since 2026-10-17); the older role channels skip such a session.
@@ -65,10 +87,10 @@ pub fn coordinator_role_is_skill(session: &serde_json::Value) -> bool {
 
 /// The playbook: the skill's body without its frontmatter.
 pub fn coordinator_playbook() -> &'static str {
-    ORCHESTRATOR_SKILL_MD
+    COORDINATOR_SKILL_MD
         .strip_prefix("---\n")
         .and_then(|rest| rest.split_once("\n---\n"))
-        .map_or(ORCHESTRATOR_SKILL_MD, |(_, body)| body)
+        .map_or(COORDINATOR_SKILL_MD, |(_, body)| body)
         .trim_start()
 }
 
@@ -126,14 +148,18 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
     // changed setting reaches every coordinator with its next message (playbook.rs
     // `playbook_update_note`).
     // SEE-ALSO: server/src/agents/marked_handovers.rs (`coordinator_marks_replies`, the note),
-    // skills/ghostex-orchestrator/SKILL.md "Your reply" (says the guide's reply format decides).
+    // skills/ghostex-coordinator/SKILL.md "Your reply" (says the guide's reply format decides).
     let mut guide = if crate::agents::coordinator_marks_replies(paths) {
         format!(
-            "{playbook}\n\n{COORDINATOR_MARKED_REPLY_FORMAT}\n\n{}\n",
+            "{playbook}\n\n{}\n\n{COORDINATOR_MARKED_REPLY_FORMAT}\n\n{}\n",
+            coordinator_skill_renamed_line(),
             crate::agents::MARKED_HANDOVERS_NOTE
         )
     } else {
-        format!("{playbook}\n\n{COORDINATOR_REPLY_FORMAT}\n")
+        format!(
+            "{playbook}\n\n{}\n\n{COORDINATOR_REPLY_FORMAT}\n",
+            coordinator_skill_renamed_line()
+        )
     };
     let overrides = overrides.trim();
     if !overrides.is_empty() {
@@ -144,17 +170,46 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
     guide
 }
 
-/// The line every new orchestrator's first message starts with (`/ghostex-orchestrator` for Claude
-/// Code and Copilot, `$ghostex-orchestrator` for every other agent); the dialogs show the same
+/// Rewrites the first lines still waiting in a chat queue (in any state: it runs at startup, before
+/// the queue sends anything, and one left `sending` by the last run is retried) that name an old name of the coordinator skill, in any agent's spelling, to the new name.
+/// Returns how many it changed.
+///
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// A coordinator created just before the update keeps its first message in the queue until its agent takes it, and that message named `ghostex-orchestrator`, which the first start after the update removes (agent_skills_renamed.rs). A new coordinator gets no "playbook changed" note before its first guide read (playbook.rs `mark_new_coordinator`), so nothing else would tell it the name. gxserver rewrites such lines at startup, before any queue is sent.
+pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusqlite::Result<usize> {
+    use ghostex_gx_chat_core::composer::skill_invocation::{skill_invocation, SKILL_LINE_PREFIX};
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let mut changed = 0;
+    for old in COORDINATOR_SKILL_OLD_NAMES {
+        // One agent of each spelling: `/name`, `$name`, `/skill:name`, `@name`.
+        for agent in ["claude", "codex", "pi", "opencode"] {
+            let from = format!("{SKILL_LINE_PREFIX}{}", skill_invocation(old, Some(agent)));
+            let to = format!(
+                "{SKILL_LINE_PREFIX}{}",
+                skill_invocation(COORDINATOR_SKILL_NAME, Some(agent))
+            );
+            changed += db.execute(
+                "UPDATE session_chat_queued_prompts SET text = ?2 || substr(text, length(?1) + 1), updatedAt = ?3
+                 WHERE substr(text, 1, length(?1)) = ?1
+                   AND (length(text) = length(?1) OR substr(text, length(?1) + 1, 1) IN (char(10), char(13), ' '))",
+                rusqlite::params![from, to, now],
+            )?;
+        }
+    }
+    Ok(changed)
+}
+
+/// The line every new orchestrator's first message starts with (`/ghostex-coordinator` for Claude
+/// Code and Copilot, `$ghostex-coordinator` for every other agent); the dialogs show the same
 /// line from the same function.
-pub fn orchestrator_skill_line(family: &str) -> String {
-    ghostex_gx_chat_core::composer::skill_invocation::orchestrator_skill_line(Some(family))
+pub fn coordinator_skill_line(family: &str) -> String {
+    ghostex_gx_chat_core::composer::skill_invocation::coordinator_skill_line(Some(family))
 }
 
 /// A new orchestrator's first message: the skill line, then the user's first request when the
 /// create carried one.
 pub fn orchestrator_first_message(family: &str, first_request: &str) -> String {
-    let line = orchestrator_skill_line(family);
+    let line = coordinator_skill_line(family);
     match first_request.trim() {
         "" => line,
         request => format!("{line}\n\n{request}"),
@@ -192,16 +247,16 @@ fn orchestrator_skill_agent(family: &str) -> Option<&'static str> {
 }
 
 /// Installs the orchestrator skill for `family` ([`ensure_bundled_skill_installed`]).
-pub fn ensure_orchestrator_skill_installed(
+pub fn ensure_coordinator_skill_installed(
     paths: &GxserverPaths,
     family: &str,
 ) -> Result<PathBuf, DomainStateError> {
     ensure_bundled_skill_installed(
         paths,
         family,
-        ORCHESTRATOR_SKILL_NAME,
-        ORCHESTRATOR_SKILL_MD,
-        ORCHESTRATOR_SKILL_OPENAI_YAML,
+        COORDINATOR_SKILL_NAME,
+        COORDINATOR_SKILL_MD,
+        COORDINATOR_SKILL_OPENAI_YAML,
     )
 }
 

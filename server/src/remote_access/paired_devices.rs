@@ -197,40 +197,86 @@ pub(crate) fn remove_paired_device_using(
     reload_device_api_tokens(db, device_tokens)?;
     let link_key = repository.remove_device_link_key(&device.id)?;
     let purpose_keys = repository.remove_device_purpose_keys(&device.id)?;
+    // Its keys leave the allow-list unless a row of the same device still holds them.
+    let owner = device
+        .device_key
+        .as_ref()
+        .map(|key| key.public_key.as_str());
     if let Some(client_key) = device.tailcat_client_key.as_deref() {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, client_key)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, client_key, owner)?;
     }
     if let Some(link_key) = link_key.as_deref() {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, link_key)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, link_key, owner)?;
     }
     for (_, purpose_key) in purpose_keys {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, &purpose_key)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, &purpose_key, owner)?;
     }
     Ok(Some(device))
 }
 
 /*
 CDXC:RemotePairing 2026-11-05 WHY:
-A phone that pairs again replaces its earlier entries, so it is listed once (desktop Settings and the phone). The phone is recognized by its tailcat client key: it lives in the app's private storage, outside backups, and stays the same across pairings, while the SSH key is generated anew each time and the device name ("iPhone") is shared by many phones. A phone without a client key (an app build from before Easy Connect allow-listing) cannot be told apart from another phone and is never merged. Each earlier entry is revoked like Remove does it, key line first and then the row (its API token goes with it), but the tailcat key stays on the allow-list because the new entry uses it. Every earlier entry with the key goes, so a list that already holds duplicates collapses to one on the phone's next pairing. A key line that cannot be removed (a declined Windows administrator prompt) keeps that entry listed so Remove can retry it; the new pairing still succeeds. Runs after the new entry is saved, so a failure here never costs the phone its new access. Returns the replaced entries.
+A phone that pairs again replaces its earlier entries, so it is listed once (desktop Settings and the phone). The phone is recognized by its tailcat client key: it lives in the app's private storage and stays the same across pairings (on iOS outside backups; on Android the phone app keeps it out of backups only from the build that moves it to `noBackupFilesDir`, so an Android phone restored from a backup made before that brings the old key along, review of finding 6, finding 1), while the SSH key is generated anew each time and the device name ("iPhone") is shared by many phones. A phone without a client key (an app build from before Easy Connect allow-listing) cannot be told apart from another phone and is never merged. Each earlier entry is revoked like Remove does it, key line first and then the row (its API token goes with it), but the tailcat key stays on the allow-list because the new entry uses it. Every earlier entry with the key goes, so a list that already holds duplicates collapses to one on the phone's next pairing. A key line that cannot be removed (a declined Windows administrator prompt) keeps that entry listed so Remove can retry it; the new pairing still succeeds. Runs after the new entry is saved, so a failure here never costs the phone its new access. Returns the replaced entries.
+
+CDXC:RemotePairing 2026-11-11 SECURITY:
+Review finding 6: the tailcat client key is only what the request STATES. Nothing checks it against the tunnel the request came in on (tailcat serve hands gxserver a plain local connection and reports no peer for it), so a device that held a code and was approved could name another paired device's key and retire that device's pairing (its SSH key line, token, push registrations and row), and take over the link and purpose keys it had registered. An earlier entry is now retired only when it is proven to be the same device: its device key is the key that signed this pairing's status ask (`pairing_status` verifies that signature before it finishes a pairing), and a phone or computer keeps one device key for good (Secure Enclave / Android Keystore, `computer_pairing::load_or_create_device_key`). A pre-11.0.1 `legacy` entry has no device key to compare. It is retired only once it holds no access: like every earlier entry, its key line is removed first and the entry is kept when that fails or is declined (see `is_earlier_pairing_of` for Windows, review of 951cab347, finding 6). So a false claim cannot take access from it without the owner's own Windows administrator prompt, and that prompt only removes an unrestricted line 11.0.1 meant to remove anyway. It can still cost that phone its next pairing: once a device that claimed the legacy entry's key has retired it, that device's new entry holds the key, and the real phone's own pairing is refused until the user removes that entry (the refusal names it). A request that names a key another paired device holds under another device key is refused (`tailcat_key_held_by_another_device`, `begin_pairing`). Approval is unchanged.
 */
 pub fn replace_earlier_pairings_of_same_phone(
     paths: &GxserverPaths,
     db: &Connection,
     new_device_id: &str,
     tailcat_client_key: Option<&str>,
-    mut remove_key_line: impl FnMut(&str) -> Result<bool>,
-    mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+    device_public_key: &str,
+    remove_key_line: impl FnMut(&str) -> Result<bool>,
+    on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+) -> Result<Vec<RemotePairedDeviceRecord>> {
+    let earlier =
+        earlier_pairings_of_same_device(db, new_device_id, tailcat_client_key, device_public_key)?;
+    retire_earlier_pairings(paths, db, new_device_id, earlier, remove_key_line, on_kept)
+}
+
+/// The entries `replace_earlier_pairings_of_same_phone` retires for the new entry `new_device_id`.
+/// `finish_pairing` reads them in the transaction that checks the key and inserts the new entry,
+/// and retires them after it (removing their key lines can be slow, or ask Windows for approval).
+pub(crate) fn earlier_pairings_of_same_device(
+    db: &Connection,
+    new_device_id: &str,
+    tailcat_client_key: Option<&str>,
+    device_public_key: &str,
 ) -> Result<Vec<RemotePairedDeviceRecord>> {
     let Some(client_key) = tailcat_client_key else {
         return Ok(Vec::new());
     };
+    Ok(RemotePairingRepository::new(db)
+        .list_devices()?
+        .into_iter()
+        .filter(|device| {
+            device.id != new_device_id
+                && device.tailcat_client_key.as_deref() == Some(client_key)
+                && is_earlier_pairing_of(device, device_public_key)
+        })
+        .collect())
+}
+
+/// Retires `earlier` (`earlier_pairings_of_same_device`) for the new entry `new_device_id`; an
+/// entry already gone is skipped.
+pub(crate) fn retire_earlier_pairings(
+    paths: &GxserverPaths,
+    db: &Connection,
+    new_device_id: &str,
+    earlier: Vec<RemotePairedDeviceRecord>,
+    mut remove_key_line: impl FnMut(&str) -> Result<bool>,
+    mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+) -> Result<Vec<RemotePairedDeviceRecord>> {
     let repository = RemotePairingRepository::new(db);
     let mut replaced = Vec::new();
-    for device in repository.list_devices()? {
-        if device.id == new_device_id || device.tailcat_client_key.as_deref() != Some(client_key) {
+    for device in earlier {
+        if repository.find_device(&device.id)?.is_none() {
             continue;
         }
-        let removed = if device.ssh_key_fingerprint.is_empty() {
+        // A legacy entry whose line is known to be gone is not looked for again: on a Windows
+        // administrator account that would show a prompt for nothing.
+        let removed = if device.ssh_key_fingerprint.is_empty() || device.legacy_key_line_removed {
             Ok(false)
         } else {
             remove_key_line(&device.id)
@@ -268,6 +314,85 @@ pub fn replace_earlier_pairings_of_same_phone(
         }
     }
     Ok(replaced)
+}
+
+/*
+CDXC:RemotePairing 2026-11-11 WHY:
+Review of 951cab347, finding 6: a legacy entry was matched only once its unrestricted key line was gone. `retire_legacy_pairings` removes those lines at start without ever showing a prompt, so on a Windows administrator account (keys in `administrators_authorized_keys`, which changes only through a UAC prompt) the line stayed, the entry was never retired when its phone paired again, and the line and the "pair again" notice stayed until the user removed the entry by hand. Before 951cab347 a pairing again retired it with the prompt. A legacy entry with the same tailcat key is matched again whatever its line, because retiring it keeps the rule that a legacy entry goes only once it holds no access: `retire_earlier_pairings` removes its key line first (on such an account through the prompt, after the new pairing is saved and outside the pairing's transaction) and keeps the entry, listed for Remove to retry, when the line cannot be removed or the prompt is declined. On macOS and Linux nothing changes: the line was removed at start, so removing it again finds nothing.
+*/
+/// Whether `device`, an entry with the same tailcat key, is an earlier pairing of the device whose
+/// key is `device_public_key` (see `replace_earlier_pairings_of_same_phone`): an entry with that
+/// device key, or a `legacy` one (see above).
+fn is_earlier_pairing_of(device: &RemotePairedDeviceRecord, device_public_key: &str) -> bool {
+    match device.device_key.as_ref() {
+        Some(key) => key.public_key == device_public_key,
+        None => device.status == PairedDeviceStatus::Legacy,
+    }
+}
+
+/*
+CDXC:RemotePairing 2026-11-11 SECURITY:
+Review of 951cab347, finding 3: a refusal compared only pairing keys. A device with a code and approval could state another device's link key, or a paired computer's `app`/`server` purpose key, as its pairing key, and any paired phone could register another device's pairing key as its own link key (`/api/registerEasyConnectClientKey`). Neither was refused, and the second row then kept that key on the allow-list after the user removed the device it belongs to: Remove no longer closed that device's tunnel. A key now belongs to one device: a row holds a key as its pairing key, its link key or a purpose key, and a key another device's paired row holds in any of those ways is refused when a device pairs (`begin_pairing`, `finish_pairing`), registers a link key or registers purpose keys. "Another device" is another device key, so a device still moves its own keys between its own rows (a pairing again takes over the link and purpose keys of the entries it retires). And Remove takes a removed entry's keys off the allow-list unless a paired row of the same device still holds them (`key_still_needed`), so a key held by some other device since before this does not keep it either.
+*/
+/// Every entry that holds `key`, as its pairing key, its link key or one of its purpose keys.
+fn entries_holding_key(db: &Connection, key: &str) -> Result<Vec<RemotePairedDeviceRecord>> {
+    let repository = RemotePairingRepository::new(db);
+    let extra: std::collections::HashSet<String> = repository
+        .device_ids_with_link_or_purpose_key(key)?
+        .into_iter()
+        .collect();
+    Ok(repository
+        .list_devices()?
+        .into_iter()
+        .filter(|device| {
+            device.tailcat_client_key.as_deref() == Some(key) || extra.contains(&device.id)
+        })
+        .collect())
+}
+
+/// Whether `device` is an entry of the device whose device key is `device_public_key`.
+fn of_device(device: &RemotePairedDeviceRecord, device_public_key: &str) -> bool {
+    device
+        .device_key
+        .as_ref()
+        .is_some_and(|key| key.public_key == device_public_key)
+}
+
+/// A paired entry of another device (another device key) that holds `key` as its pairing key, link
+/// key or a purpose key (see above). A device naming that key is not that device and is refused. A
+/// `legacy` entry never is one.
+pub fn tailcat_key_held_by_another_device(
+    db: &Connection,
+    key: &str,
+    device_public_key: &str,
+) -> Result<Option<RemotePairedDeviceRecord>> {
+    key_held_by_another_device_than(db, key, device_public_key, None)
+}
+
+/// As `tailcat_key_held_by_another_device`, never naming the entry `except_id` itself.
+fn key_held_by_another_device_than(
+    db: &Connection,
+    key: &str,
+    device_public_key: &str,
+    except_id: Option<&str>,
+) -> Result<Option<RemotePairedDeviceRecord>> {
+    Ok(entries_holding_key(db, key)?.into_iter().find(|device| {
+        Some(device.id.as_str()) != except_id
+            && device.status == PairedDeviceStatus::Paired
+            && !of_device(device, device_public_key)
+    }))
+}
+
+/// Whether `key` stays on the allow-list once an entry of the device with `owner_device_key` let go
+/// of it: only while a paired entry of that same device still holds it. An entry without a device
+/// key (`legacy`) cannot tell its device, so any entry still holding the key keeps it, as before.
+fn key_still_needed(db: &Connection, key: &str, owner_device_key: Option<&str>) -> Result<bool> {
+    let Some(owner) = owner_device_key else {
+        return tailcat_client_key_in_use(db, key);
+    };
+    Ok(entries_holding_key(db, key)?
+        .iter()
+        .any(|device| device.status == PairedDeviceStatus::Paired && of_device(device, owner)))
 }
 
 /// Mirrors the stored device tokens (paired v2 devices only) into the map every request is
@@ -345,6 +470,18 @@ pub enum LinkKeyError {
     BadKey,
     /// The caller is no paired (v2) device here.
     NotPaired,
+    /// Another device's paired entry holds the key; `name` and `paired` say which (as the pairing
+    /// refusal does, `PairDeviceError::KeyHeldByAnotherDevice`). Only a paired device gets this.
+    HeldByAnotherDevice { name: String, paired: String },
+}
+
+impl LinkKeyError {
+    fn held_by(holder: &RemotePairedDeviceRecord) -> Self {
+        Self::HeldByAnotherDevice {
+            name: holder.name.clone(),
+            paired: super::pair_device::paired_day(&holder.paired_at, chrono::Local::now()),
+        }
+    }
 }
 
 /*
@@ -372,24 +509,42 @@ pub fn register_device_link_key(
         return Ok(Err(LinkKeyError::BadKey));
     }
     let repository = RemotePairingRepository::new(db);
+    let listed = read_tailcat_status_payload(paths, db, tailcat_runtime)
+        .allowed_client_keys
+        .iter()
+        .any(|key| key == client_key);
+    // The holder check and the write run in one IMMEDIATE transaction, so a pairing or another
+    // registration finishing at the same moment cannot take the key in between (review of 951cab347,
+    // finding 5; CDXC:RemotePairing 2026-11-11 SECURITY in pair_device.rs `finish_pairing`). The
+    // allow-list changes, which restart tailcat's helpers, come after it.
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)?;
     let Some(device) = repository.find_device(device_id)? else {
         return Ok(Err(LinkKeyError::NotPaired));
     };
     if device.status != PairedDeviceStatus::Paired {
         return Ok(Err(LinkKeyError::NotPaired));
     }
+    let owner = device
+        .device_key
+        .as_ref()
+        .map(|key| key.public_key.clone())
+        .unwrap_or_default();
+    // Another device's key is not this device's to register (CDXC:RemotePairing 2026-11-11
+    // SECURITY above `entries_holding_key`).
+    if let Some(holder) = key_held_by_another_device_than(db, client_key, &owner, Some(device_id))?
+    {
+        return Ok(Err(LinkKeyError::held_by(&holder)));
+    }
     let previous = repository.device_link_key(device_id)?;
-    let listed = read_tailcat_status_payload(paths, db, tailcat_runtime)
-        .allowed_client_keys
-        .iter()
-        .any(|key| key == client_key);
     if previous.as_deref() == Some(client_key) && listed {
         return Ok(Ok(false));
     }
     repository.set_device_link_key(device_id, client_key)?;
+    transaction.commit()?;
     add_tailcat_client_key_when_allow_listed(paths, db, tailcat_runtime, client_key)?;
     if let Some(previous) = previous.filter(|previous| previous != client_key) {
-        remove_tailcat_client_key(paths, db, tailcat_runtime, &previous)?;
+        remove_tailcat_client_key(paths, db, tailcat_runtime, &previous, Some(&owner))?;
     }
     Ok(Ok(true))
 }
@@ -417,11 +572,25 @@ pub fn register_device_purpose_keys(
         return Ok(Err(LinkKeyError::BadKey));
     }
     let repository = RemotePairingRepository::new(db);
+    // As in `register_device_link_key`: the holder checks and the writes in one IMMEDIATE
+    // transaction, the allow-list after it.
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)?;
     let Some(device) = repository.find_device(device_id)? else {
         return Ok(Err(LinkKeyError::NotPaired));
     };
     if device.status != PairedDeviceStatus::Paired {
         return Ok(Err(LinkKeyError::NotPaired));
+    }
+    let owner = device
+        .device_key
+        .as_ref()
+        .map(|key| key.public_key.clone())
+        .unwrap_or_default();
+    for (_, key) in keys {
+        if let Some(holder) = key_held_by_another_device_than(db, key, &owner, Some(device_id))? {
+            return Ok(Err(LinkKeyError::held_by(&holder)));
+        }
     }
     let mut added = Vec::new();
     let mut replaced = Vec::new();
@@ -433,8 +602,9 @@ pub fn register_device_purpose_keys(
             replaced.push(previous);
         }
     }
+    transaction.commit()?;
     let current = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
-    if purpose_keys_allow_list(db, current.clone(), &added, &replaced)? == current {
+    if purpose_keys_allow_list(db, current.clone(), &added, &replaced, &owner)? == current {
         return Ok(Ok(false));
     }
     /*
@@ -450,7 +620,7 @@ pub fn register_device_purpose_keys(
         let applied = crate::storage::open_gxserver_database(&paths).and_then(|db| {
             let current =
                 read_tailcat_status_payload(&paths, &db, &tailcat_runtime).allowed_client_keys;
-            let next = purpose_keys_allow_list(&db, current.clone(), &added, &replaced)?;
+            let next = purpose_keys_allow_list(&db, current.clone(), &added, &replaced, &owner)?;
             if next == current {
                 return Ok(());
             }
@@ -471,13 +641,14 @@ pub fn register_device_purpose_keys(
     Ok(Ok(true))
 }
 
-/// `allowed` with `added` keys still registered put on and `replaced` keys no one uses any more
-/// taken off.
+/// `allowed` with `added` keys still registered put on and `replaced` keys the device with
+/// `owner` (its device key) no longer holds taken off.
 fn purpose_keys_allow_list(
     db: &Connection,
     mut allowed: Vec<String>,
     added: &[String],
     replaced: &[String],
+    owner: &str,
 ) -> Result<Vec<String>> {
     for key in added {
         if !tailcat_client_key_in_use(db, key)? {
@@ -488,7 +659,7 @@ fn purpose_keys_allow_list(
         }
     }
     for key in replaced {
-        if tailcat_client_key_in_use(db, key)? {
+        if key_still_needed(db, key, Some(owner))? {
             continue;
         }
         if let Some(next) = allow_list_without_client_key(allowed.clone(), key) {
@@ -547,13 +718,16 @@ fn allow_list_without_client_key(allowed: Vec<String>, client_key: &str) -> Opti
     Some(allowed_client_keys)
 }
 
+/// Takes `client_key` off the allow-list once the device with `owner_device_key` no longer holds
+/// it (`key_still_needed`).
 fn remove_tailcat_client_key(
     paths: &GxserverPaths,
     db: &Connection,
     tailcat_runtime: &TailcatRuntime,
     client_key: &str,
+    owner_device_key: Option<&str>,
 ) -> Result<bool> {
-    if tailcat_client_key_in_use(db, client_key)? {
+    if key_still_needed(db, client_key, owner_device_key)? {
         return Ok(false);
     }
     let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;

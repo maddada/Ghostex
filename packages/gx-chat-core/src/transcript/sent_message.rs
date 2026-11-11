@@ -712,8 +712,8 @@ struct HostDirectory<'a> {
 
 /// Whether two host session lists name every session alike for the transcript, in whatever order
 /// they come: each reference finds a session with the same name fields in both
-/// ([`KnownSession::same_names`]). The directory keeps the first session a reference names, so two
-/// sessions sharing a title still count by their order.
+/// ([`KnownSession::same_names`]). A reference several sessions answer to (a shared title) finds
+/// the same one of them in any order ([`HostDirectory::new`]), so a reorder is never a rename.
 pub fn host_lists_name_alike(a: &[KnownSession], b: &[KnownSession]) -> bool {
     let (a, b) = (HostDirectory::new(a), HostDirectory::new(b));
     a.loaded == b.loaded
@@ -725,9 +725,18 @@ pub fn host_lists_name_alike(a: &[KnownSession], b: &[KnownSession]) -> bool {
         })
 }
 
+/// What picks one of several sessions a reference names, whatever order the list comes in.
+fn stable_order(session: &KnownSession) -> (&str, &str, &str) {
+    (
+        session.project_id.as_str(),
+        session.session_id.as_str(),
+        session.global_ref.as_str(),
+    )
+}
+
 impl<'a> HostDirectory<'a> {
     fn new(sessions: &'a [KnownSession]) -> Self {
-        let mut by_reference = HashMap::new();
+        let mut by_reference: HashMap<String, &'a KnownSession> = HashMap::new();
         for session in sessions {
             let keys = [
                 session.global_ref.clone(),
@@ -738,7 +747,28 @@ impl<'a> HostDirectory<'a> {
             for key in keys {
                 let key = directory_key(&key);
                 if !key.is_empty() && key != ":" {
-                    by_reference.entry(key).or_insert(session);
+                    // CDXC:SessionChat 2026-11-11 DECISION:
+                    // User: "sending messages is the most important part of this app and it's
+                    // broken now" (messages from his coordinator's chat left seconds late). A
+                    // reference several sessions answer to kept the FIRST one listed, and the list
+                    // comes in the sidebar's order, which moves whenever a session becomes the
+                    // newest. So with two sessions sharing a title, every such move "renamed" a
+                    // session (`KnownSession::same_names`), bumped `session_directory_revision`,
+                    // and every open chat settled its whole transcript again: a sample of his app
+                    // showed the chat engine's thread fully busy, 72% of it there, with 10,141
+                    // sessions under 6,401 titles ("Claude Session" 460 times). The one kept is now
+                    // the same in any order: the least by project and session id. Which of several
+                    // same-titled sessions a title names was a guess before and is one now; the
+                    // guess no longer changes under the reader. Supersedes the 2026-11-06 note that
+                    // two sessions sharing a title count by their order.
+                    by_reference
+                        .entry(key)
+                        .and_modify(|kept| {
+                            if stable_order(session) < stable_order(kept) {
+                                *kept = session;
+                            }
+                        })
+                        .or_insert(session);
                 }
             }
         }

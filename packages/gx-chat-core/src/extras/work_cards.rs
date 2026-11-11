@@ -26,6 +26,9 @@ use crate::state::{ChatContext, ChatState};
 
 /// The changes that are the coordinator's own and so make a card in its turn. The user's answer
 /// on a card (`answer`) and the move from the board (`moved`) do not.
+/// A turn that changed more items than this shows one card for them all.
+const TURN_CARDS_MAX: usize = 3;
+
 const TURN_KINDS: [&str; 12] = [
     "add", "now", "step", "ask", "wait", "done", "drop", "restore", "status", "edit", "thread",
     "settle",
@@ -40,7 +43,7 @@ pub(crate) fn at_ms(at: &str) -> Option<i64> {
 }
 
 /// One turn of the chat: from a message of the user's (or a thread's report) to the next.
-struct Turn {
+pub struct Turn {
     start_ms: i64,
     /// The message starting it.
     id: String,
@@ -48,7 +51,20 @@ struct Turn {
     anchor: Option<String>,
 }
 
-fn turns(state: &ChatState) -> Vec<Turn> {
+/// The chat's turns, read once for everything a document builds from them: the cards, the dock
+/// and every row of the Work panel.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "sending messages is the most important part of this app and it's broken", after messages
+/// sent from his coordinator's chat reached the agent 7 to 18 seconds late. Every chat runs on one
+/// engine thread, which a sample of his app showed busy 40% of the time, more than half of it
+/// here: the Work panel was built again on nearly every event (its kept copy ran out with every
+/// minute of every one of 231 items, about three times a second), and each of its rows walked the
+/// whole chat for its Show in chat, copying every reply's text to ask whether it had words. One
+/// walk now serves a whole document, it copies nothing (`prose::has_prose`), and the kept panel
+/// stands until a label on it really changes (`coordinator_board.rs` `ages_change_at`).
+/// `tests/coordinator_chat_event_cost.rs` pins both.
+pub fn turns(state: &ChatState) -> Vec<Turn> {
     let mut turns: Vec<Turn> = Vec::new();
     for message in &state.messages.composed {
         if message.role == ChatRole::User {
@@ -65,15 +81,40 @@ fn turns(state: &ChatState) -> Vec<Turn> {
             let Some(turn) = turns.last_mut() else {
                 continue;
             };
-            if !crate::transcript::prose::prose_markdown(&message.blocks)
-                .trim()
-                .is_empty()
-            {
+            if crate::transcript::prose::has_prose(&message.blocks) {
                 turn.anchor = Some(message.id.clone());
             }
         }
     }
     turns
+}
+
+/// What of `turns` a kept Show in chat depends on: how many there are, the first (older turns
+/// loaded above it), and the newest with the reply its cards sit under. A turn before the newest
+/// keeps its reply, so these four say whether any row's place in the chat moved.
+pub fn turns_mark(turns: &[Turn]) -> (usize, String, String, Option<String>) {
+    let id = |turn: Option<&Turn>| turn.map(|turn| turn.id.clone()).unwrap_or_default();
+    (
+        turns.len(),
+        id(turns.first()),
+        id(turns.last()),
+        turns.last().and_then(|turn| turn.anchor.clone()),
+    )
+}
+
+/// [`turns`] for a chat with work items, and none for any other: only their cards read them.
+pub fn turns_for_work(state: &ChatState) -> Vec<Turn> {
+    let has_work = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .is_some();
+    if has_work {
+        turns(state)
+    } else {
+        Vec::new()
+    }
 }
 
 /// The turn a change at `at` happened in: the last one that started at or before it.
@@ -89,6 +130,7 @@ pub fn status_label(status: &str) -> &'static str {
         "blocked" => "Blocked",
         // In progress, never Moving (`work_panel.rs` `WORK_GROUPS` holds the user's words).
         "moving" => "In progress",
+        "idle" => "Not being worked on",
         "waiting" => "Waiting",
         "later" => "Later",
         "finished" => "Finished",
@@ -461,8 +503,12 @@ fn ask_card(
 /// everything else is one status line under it that opens the Work panel. An open ask is drawn
 /// only there, never also under its reply; it leaves the dock once settled.
 pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
+    dock_with(state, context, &turns_for_work(state))
+}
+
+/// [`dock`], over turns the caller already read (`turns_for_work`).
+pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Value {
     let now_ms = context.now_millis();
-    let turns = turns(state);
     // (sinks, at, row): a row that needs him is newest first, but one older than a day sinks below
     // the newer ones, so long-lived tasks do not squat in the first rows (they stay reachable under
     // "N more need you" and in the Work panel).
@@ -673,6 +719,17 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
 /// User: "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU STUFF", for every needs-you item wherever it is
 /// drawn: the dock, the Work panel and Columns open to the same actions.
 pub fn panel_actions(state: &ChatState, context: &ChatContext, row: &Value) -> Value {
+    panel_actions_with(state, context, row, &turns_for_work(state))
+}
+
+/// [`panel_actions`], over turns the caller already read: the Work panel asks this of every row
+/// it builds (`coordinator_board.rs`), and a walk of the chat per row was most of its cost.
+pub fn panel_actions_with(
+    state: &ChatState,
+    context: &ChatContext,
+    row: &Value,
+    turns: &[Turn],
+) -> Value {
     let Some(items) = state
         .session
         .coordinator_threads
@@ -687,7 +744,6 @@ pub fn panel_actions(state: &ChatState, context: &ChatContext, row: &Value) -> V
     let Some(item) = items.iter().find(|item| text(item, "ref") == reference) else {
         return Value::Null;
     };
-    let turns = turns(state);
     let now_ms = context.now_millis();
     if row["askRow"] == true {
         let tag = text(row, "ask");
@@ -1068,7 +1124,13 @@ fn merged_turn(state: &ChatState, turns: &[Turn]) -> Option<usize> {
 /// The newest finished turn's line, for the end of its "Worked for" line
 /// (`extras::working_card`): "Pairing page started · 1 ask".
 pub fn turn_summary(state: &ChatState) -> Option<String> {
-    let turns = turns(state);
+    // Asked on every document: no walk of the chat unless its line shows on a chat with work.
+    let shows = state.transcript_view.worked_line.is_some()
+        && !state.transcript_view.chat_look.status_in_transcript;
+    if !shows {
+        return None;
+    }
+    let turns = turns_for_work(state);
     let newest = merged_turn(state, &turns)?;
     let turn_id = turns.get(newest)?.id.clone();
     let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
@@ -1135,6 +1197,92 @@ struct TurnLine {
     finished: bool,
     at: i64,
     item_key: String,
+    /// What the turn did to each item it touched, in the order it touched them (`turn_change`).
+    changes: Vec<TurnChange>,
+}
+
+/// One item a turn changed, said plainly for its card: "Work item updated", the item's title set
+/// apart, the one line that changed, and the item's state after it as the card's pill.
+#[derive(Default)]
+struct TurnChange {
+    /// "Work item updated", "added", "finished", "dropped", "needs you", "asked you", "now waiting".
+    lead: String,
+    title: String,
+    /// The line that changed: its new status line, the question asked, what it waits on.
+    detail: String,
+    /// The state the pill names (`status_label`), empty for none.
+    status: String,
+    key: String,
+    at: i64,
+}
+
+/// What a turn's events did to one item, for its card (`TurnChange`). The strongest change names
+/// it (finished, dropped, a question still open, added, waiting, then any other change), and its
+/// own event's words are the line that changed. The pill is the item's state now when this turn
+/// changed it last, else the state that change left it in.
+fn turn_change(item: &Value, events: &[&Value], latest: bool) -> TurnChange {
+    let last_text = |kinds: &[&str]| {
+        events
+            .iter()
+            .rev()
+            .find(|event| kinds.contains(&text(event, "kind")))
+            .map(|event| text(event, "text").to_string())
+            .unwrap_or_default()
+    };
+    let has = |kind: &str| events.iter().any(|event| text(event, "kind") == kind);
+    // A question asked in this turn that is still open.
+    let open_ask = events
+        .iter()
+        .rev()
+        .filter(|event| text(event, "kind") == "ask")
+        .find(|event| {
+            let tag = text(event, "text").split(':').next().unwrap_or_default();
+            item["asks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|ask| text(ask, "tag") == tag && ask["open"] == true)
+        })
+        .map(|event| text(event, "text").to_string());
+    let (lead, detail, status) = if has("done") {
+        ("finished", last_text(&["done"]), "finished")
+    } else if has("drop") {
+        ("dropped", String::new(), "dropped")
+    } else if let Some(question) = open_ask {
+        ("needs you", question, "needs")
+    } else if has("add") {
+        ("added", last_text(&["now", "step", "status"]), "")
+    } else if has("wait") {
+        ("now waiting", last_text(&["wait"]), "waiting")
+    } else if has("ask") {
+        ("asked you", last_text(&["ask"]), "")
+    } else {
+        (
+            "updated",
+            last_text(&[
+                "now", "step", "status", "edit", "thread", "settle", "restore",
+            ]),
+            "",
+        )
+    };
+    let current = text(item, "status");
+    let status = if latest && !current.is_empty() {
+        current.to_string()
+    } else {
+        status.to_string()
+    };
+    TurnChange {
+        lead: format!("Work item {lead}"),
+        title: text(item, "title").to_string(),
+        detail,
+        status,
+        key: text(item, "key").to_string(),
+        at: events
+            .iter()
+            .filter_map(|event| at_ms(text(event, "at")))
+            .max()
+            .unwrap_or_default(),
+    }
 }
 
 /// The cards, in transcript order: `[{ key, kind ("item" | "ask"), anchorId, turnId, folded,
@@ -1142,6 +1290,15 @@ struct TurnLine {
 /// holds, buttons: [{label, recommended, picked, command}], answered, busy }]`, and the open asks
 /// the ? pill steps through: `[{ key, anchorId, at }]`.
 pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>) {
+    project_with(state, context, &turns_for_work(state))
+}
+
+/// [`project`], over turns the caller already read (`turns_for_work`).
+pub fn project_with(
+    state: &ChatState,
+    context: &ChatContext,
+    turns: &[Turn],
+) -> (Value, Vec<OpenAsk>) {
     let Some(items) = state
         .session
         .coordinator_threads
@@ -1152,7 +1309,6 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
     else {
         return (json!([]), Vec::new());
     };
-    let turns = turns(state);
     if turns.is_empty() {
         return (json!([]), Vec::new());
     }
@@ -1213,6 +1369,9 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                 .max()
                 .unwrap_or(first_at);
             summary.at = summary.at.max(last_at);
+            // What the turn did to the item, for its own card (`turn_change`).
+            let latest = by_turn.keys().next_back() == Some(turn_index);
+            summary.changes.push(turn_change(item, events, latest));
             // What the turn did to the item, in a word, unless it only asked.
             let kinds: Vec<&str> = events.iter().map(|event| text(event, "kind")).collect();
             if kinds.iter().all(|kind| *kind == "ask") {
@@ -1256,34 +1415,74 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
         if Some(turn_index) == merged {
             continue;
         }
-        let mut words: Vec<String> = summary.parts.iter().take(3).cloned().collect();
-        if summary.parts.len() > 3 {
-            words.push(format!("{} more", summary.parts.len() - 3));
-        }
-        let outcome = match summary.asks {
-            0 => String::new(),
-            1 => "1 ask".to_string(),
-            asks => format!("{asks} asks"),
+        // One card per item the turn changed, said plainly: "Work item updated", the item's
+        // title, the line that changed and its state now as the pill. A turn that changed more
+        // than `TURN_CARDS_MAX` items is one card naming how many, its titles as the line.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the thin line "Usage meters: a click must not make the main window flicker
+        // updated" above a "Message from" card: "make this one look like the other card please"
+        // and "please make it clearer, i dont get what this card means". The title with "updated"
+        // on its end read as part of the title. Each card now leads with what happened to a work
+        // item, sets the item's title apart, and opens it in the Work panel (`jumpToWorkCard`).
+        // Supersedes the one line per turn joining "<title> updated" parts.
+        let base = |key: String, status: &str, at: i64| {
+            json!({
+                "key": key,
+                "kind": "turnLine",
+                "anchorId": anchor,
+                "turnId": turn.id,
+                "folded": true,
+                "foldStatus": if status.is_empty() { "moving" } else { status },
+                "time": clock(at, context),
+            })
         };
-        if words.is_empty() && outcome.is_empty() {
+        if summary.changes.len() > TURN_CARDS_MAX {
+            let titles: Vec<&str> = summary
+                .changes
+                .iter()
+                .map(|change| change.title.as_str())
+                .collect();
+            let lead = format!("{} work items changed", titles.len());
+            let mut line = base(format!("work-turn:{}", turn.id), "moving", summary.at);
+            line["lead"] = json!(lead);
+            line["title"] = json!("");
+            line["detail"] = json!(titles.join(" \u{b7} "));
+            line["foldText"] = json!(format!("{lead}: {}", titles.join(" \u{b7} ")));
+            line["foldOutcome"] = json!("");
+            if let Some(first) = summary
+                .changes
+                .first()
+                .filter(|change| !change.key.is_empty())
+            {
+                line["command"] = json!({ "type": "jumpToWorkCard", "key": first.key });
+            }
+            cards.push((turn.start_ms, 5, summary.at, line));
             continue;
         }
-        let mut line = json!({
-            "key": format!("work-turn:{}", turn.id),
-            "kind": "turnLine",
-            "anchorId": anchor,
-            "turnId": turn.id,
-            "folded": true,
-            "foldStatus": if summary.finished { "finished" } else if summary.asks > 0 && words.is_empty() { "needs" } else { "moving" },
-            // A turn that only asked says so as its words ("2 asks"), never an empty line.
-            "foldText": if words.is_empty() { outcome.clone() } else { words.join(" \u{b7} ") },
-            "foldOutcome": if words.is_empty() { String::new() } else { outcome },
-            "time": clock(summary.at, context),
-        });
-        if !summary.item_key.is_empty() {
-            line["command"] = json!({ "type": "jumpToWorkCard", "key": summary.item_key });
+        for (index, change) in summary.changes.iter().enumerate() {
+            let mut line = base(
+                format!("work-turn:{}:{index}", turn.id),
+                &change.status,
+                change.at.max(turn.start_ms),
+            );
+            line["lead"] = json!(change.lead);
+            line["title"] = json!(change.title);
+            line["detail"] = json!(change.detail);
+            line["status"] = json!(change.status);
+            line["statusLabel"] = json!(if change.status.is_empty() {
+                ""
+            } else {
+                status_label(&change.status)
+            });
+            // The words the phone's line shows until it draws the card's parts.
+            line["foldText"] = json!(format!("{}: {}", change.lead, change.title));
+            line["foldOutcome"] = json!("");
+            if !change.key.is_empty() {
+                line["command"] = json!({ "type": "jumpToWorkCard", "key": change.key });
+            }
+            cards.push((turn.start_ms, 5, change.at, line));
         }
-        cards.push((turn.start_ms, 5, summary.at, line));
     }
     cards.sort_by_key(|(turn, priority, at, _)| (*turn, *priority, *at));
     open_asks.sort_by_key(|ask| ask.at);
@@ -1306,16 +1505,36 @@ pub fn open_asks(state: &ChatState, context: &ChatContext) -> Vec<OpenAsk> {
     project(state, context).1
 }
 
-/// When the first age on a live card changes after `now_ms`: the next whole minute since its item
-/// last changed (`age_label` reads only whole minutes).
-pub fn ages_change_at(cards: &Value, now_ms: i64) -> Option<i64> {
-    cards
-        .as_array()?
-        .iter()
+/// When the cards next read differently with nothing but the clock moving: the first age on a
+/// live card to change (`age_label_changes_at`), or the first snooze to end, which brings its ask
+/// back.
+pub fn ages_change_at(state: &ChatState, cards: &Value, now_ms: i64) -> Option<i64> {
+    let ages = cards
+        .as_array()
+        .into_iter()
+        .flatten()
         .filter(|card| card["folded"] != true)
         .filter_map(|card| card["at"].as_i64())
-        .map(|at| at + ((now_ms - at).max(0) / 60_000 + 1) * 60_000)
-        .min()
+        .map(|at| crate::transcript::message_time::age_label_changes_at(now_ms, at));
+    ages.chain(snoozes_end_at(state, now_ms)).min()
+}
+
+/// When the first snooze still running at `now_ms` ends: gxserver's `snoozedUntil` on an open ask,
+/// or one sent from here. Its ask is back under Needs you from then, in the dock and the panel.
+pub fn snoozes_end_at(state: &ChatState, now_ms: i64) -> Option<i64> {
+    let sent = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .flat_map(|item| item["asks"].as_array().into_iter().flatten())
+        .filter_map(|ask| at_ms(text(ask, "snoozedUntil")));
+    let local = state.extras.panels.work_snoozed.values().copied();
+    sent.chain(local).filter(|until| *until > now_ms).min()
 }
 
 /// Everything [`project`] reads besides the clock, kept beside the cards it built
@@ -1348,9 +1567,7 @@ impl WorkInputs {
             last_id: last.map(|message| message.id.clone()).unwrap_or_default(),
             last_has_words: last.is_some_and(|message| {
                 message.role == ChatRole::Assistant
-                    && !crate::transcript::prose::prose_markdown(&message.blocks)
-                        .trim()
-                        .is_empty()
+                    && crate::transcript::prose::has_prose(&message.blocks)
             }),
             answers: state.extras.panels.board_answers.clone(),
             worked: state.transcript_view.worked_line.is_some()
@@ -1369,6 +1586,7 @@ pub fn project_kept(
     state: &ChatState,
     context: &ChatContext,
     kept: &mut Option<KeptWork>,
+    turns: &[Turn],
 ) -> (Value, Vec<OpenAsk>) {
     // Not a coordinator, or a gxserver that sends no work: nothing to build or keep.
     if state
@@ -1388,8 +1606,8 @@ pub fn project_kept(
             return value.clone();
         }
     }
-    let value = project(state, context);
-    let changes_at = ages_change_at(&value.0, now_ms);
+    let value = project_with(state, context, turns);
+    let changes_at = ages_change_at(state, &value.0, now_ms);
     *kept = Some((inputs, now_ms, changes_at, value.clone()));
     value
 }

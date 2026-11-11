@@ -135,6 +135,21 @@ pub(crate) fn popup_menu_surface() -> Hsla {
     popup_window_surface(titlebar_popup_menu_background())
 }
 
+/// The corner radius of a header dropdown's panel and of the window that blurs behind it.
+pub(crate) const POPUP_MENU_RADIUS: f32 = 8.0;
+
+/// The whole frame of a header dropdown: [`popup_menu_surface`], the menus' hairline
+/// ([`titlebar_popup_menu_border_color`]) and [`POPUP_MENU_RADIUS`]. The Commit dropdown and every
+/// other titlebar menu draw on it (`titlebar_popup_menu_with_scroll_behavior`), and the Share and
+/// Jobs popovers take it whole (CDXC:Collab 2026-11-11 in window/share_popover_view.rs).
+pub(crate) fn popup_menu_frame() -> crate::app::window::share_popover_view::PopupSurface {
+    crate::app::window::share_popover_view::PopupSurface {
+        fill: popup_menu_surface(),
+        border: titlebar_popup_menu_border_color(),
+        radius: POPUP_MENU_RADIUS,
+    }
+}
+
 pub(crate) fn titlebar_popup_menu_foreground() -> Hsla {
     rgb(if titlebar_uses_light_theme() {
         0x292929

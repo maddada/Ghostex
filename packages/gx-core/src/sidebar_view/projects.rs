@@ -101,6 +101,24 @@ fn path_for_comparison(value: &str) -> String {
     }
 }
 
+/// The icon a project's sidebar row draws, as a data URL: the image set for the project, else the
+/// one gxserver found in its folder. Settings > Projects' Project dropdown draws the same icon.
+pub fn project_sidebar_icon_data_url(
+    machine: &MachinePresentation,
+    project_id: &str,
+) -> Option<String> {
+    machine
+        .domain_project(project_id)
+        .and_then(project_icon_data_url)
+        .or_else(|| {
+            machine
+                .loaded()?
+                .project(project_id)?
+                .discovered_icon_data_url
+                .clone()
+        })
+}
+
 /// `gpuiPresentationProjectIconDataUrl`: the user's attached image, else the stored data URL. A
 /// typed image icon whose data URL does not validate is no icon at all, and the legacy field is
 /// read instead (`normalizeWorkspaceProjectIcon` returns nothing for it).

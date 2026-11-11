@@ -3526,9 +3526,9 @@ version of the Projects features in Cursor and Claude Code.
   model: the coordinator
   is the agent you talk to all day, and the main way Ghostex itself is built.
   Its first message is always "Read and adhere to this skill:
-  /ghostex-orchestrator" (`$ghostex-orchestrator` on agents other than Claude
+  /ghostex-coordinator" (`$ghostex-coordinator` on agents other than Claude
   Code and Copilot), shown locked in the dialog: Ghostex installs the
-  ghostex-orchestrator skill for that agent, and the skill is the coordinator's
+  ghostex-coordinator skill for that agent, and the skill is the coordinator's
   playbook. Then it opens in chat, where you write your first request. The name
   is what its sidebar row shows, and the coordinator keeps it: unlike other
   sessions it is not renamed from your first message (Rename in the sidebar
@@ -3544,7 +3544,7 @@ version of the Projects features in Cursor and Claude Code.
   Coordinator** (optionally with a goal); on the phone it is in the session's
   menu too. The session keeps its conversation and is never restarted or
   interrupted: it gets the captain's hat right away, Ghostex installs the
-  ghostex-orchestrator skill for its agent, and a message telling it to read
+  ghostex-coordinator skill for its agent, and a message telling it to read
   the skill waits in its chat queue until its current turn is over. Sessions
   it started before are not its threads yet; ask it to adopt them. A thread of
   another coordinator, a session in a box, or a draft cannot be made an
@@ -3717,8 +3717,11 @@ version of the Projects features in Cursor and Claude Code.
   coloured counts when the row is tight. Click it for the panel, which lists
   every line of work by who has the ball: **Needs you** first (each naming the
   work it belongs to, with its answers or Done), then **Blocked**, **In
-  progress**, **Waiting**, **Later** and **Finished today**, the last three
-  folded; while anything is blocked, a **Blocked** pill beside it shows how many.
+  progress** (only work a thread or the coordinator is on right now), **Not
+  being worked on** (still open, but nobody is on it; it stays there until the
+  coordinator finishes it, parks it, asks you about it or works on it again),
+  **Waiting**, **Later** and **Finished today**, the last four folded; while
+  anything is blocked, a **Blocked** pill beside it shows how many.
   A thread the coordinator hasn't put on an item keeps a row of its own. Click a
   card to open it in place: one that needs you offers **Reply**, **Show in
   chat**, **Dismiss** and **Snooze** beside **Mention**, as a row above the chat
@@ -4948,12 +4951,15 @@ sessions, so any client can control agents on any machine.
   open the VS Code view on that computer once (or update Ghostex there) and retry.
   Folder links in remote chats also browse the remote folder in VS Code.
   A file link in a remote chat opens in Files for any file in the project, not
-  only the Docs folders. A link to a text file outside the project (an agent's
-  log or scratch file in a temporary folder, say) opens in Files too, read-only,
-  when that session's own chat links to it: logs, code, config and JSON up to
-  2 MB. A binary or larger file says so; open it in the VS Code view instead.
-  Both computers need this Ghostex version. On the phone a chat's file link
-  already opens text files anywhere on the computer in the file viewer.
+  only the Docs folders. A link to a text file or a picture outside the project
+  (an agent's log, a draft or a diagram in another folder, say) opens in Files
+  too, read-only, when that session's own chat links to it: text up to 2 MB,
+  pictures up to 12 MB, on Mac, Linux and Windows computers alike. Another
+  binary or larger file says so; open it in the VS Code view instead. When a
+  link can't open, Ghostex says why: the file is gone, the computer is offline,
+  or it runs an older Ghostex (update Ghostex there). On the phone a chat's
+  file link already opens text files and pictures anywhere on the computer in
+  the file viewer.
   A remote project's Open Folder (its right-click menu, Quick Access) opens the
   project in the Files view. Open In with VS Code, VS Code Insiders, VSCodium,
   Cursor, Windsurf, Trae or Antigravity opens the remote folder over Remote-SSH,

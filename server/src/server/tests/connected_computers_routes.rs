@@ -968,7 +968,7 @@ async fn a_session_on_a_connected_computer_is_made_a_coordinator_there() {
             .paths
             .agent_config_home_dir()
             .join(crate::agent_skills::CANONICAL_AGENT_SKILLS_DIR)
-            .join("ghostex-orchestrator")
+            .join("ghostex-coordinator")
             .join("SKILL.md")
     };
     assert!(skill(&remote).is_file(), "installed on the other computer");

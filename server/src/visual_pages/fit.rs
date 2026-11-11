@@ -67,7 +67,7 @@ function name(e){var s=e.tagName.toLowerCase(),c=typeof e.className==="string"?e
 function said(e){var t=(e.textContent||"").replace(/\s+/g," ").trim();return t.length>40?t.slice(0,39)+"…":t;}
 function entry(e){return{element:name(e),text:said(e)};}
 /* The kit's own parts already fit; only the page's own markup is fitted. */
-function kitOwned(e){return !!(e.closest&&e.closest("gx-question,.gx-send,.gx-theme-switch,#gx-tip,#gx-layout-notice,.gx-seg"));}
+function kitOwned(e){return !!(e.closest&&e.closest("gx-question,.gx-send,.gx-theme-switch,#gx-tip,#gx-layout-notice,.gx-seg,.gx-tally,.gx-tally-room"));}
 function undo(){
   Array.prototype.forEach.call(document.querySelectorAll("["+MARK+"]"),function(e){
     if(e.getAttribute(MARK)==="wrap"){var child=e.firstElementChild;if(child)e.replaceWith(child);else e.remove();return;}
@@ -182,6 +182,7 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 mod tests {
     use super::super::builtin::{current_block, with_current_block, BUILTIN_END, BUILTIN_START};
     use super::super::kit::KIT_SCRIPT;
+    use super::super::prepare::PAGE_CONTENT_SECURITY_POLICY;
     use super::*;
 
     #[test]
@@ -209,7 +210,7 @@ mod tests {
         let page = format!(
             "<!doctype html><html><head>{BUILTIN_START}<style>old</style>{BUILTIN_END}<title>t</title></head><body></body></html>"
         );
-        let served = with_current_block(page);
+        let served = with_current_block(page, PAGE_CONTENT_SECURITY_POLICY);
         assert!(served.contains(FIT_STYLE) && served.contains(FIT_SCRIPT));
         assert!(!served.contains("<style>old</style>"));
     }

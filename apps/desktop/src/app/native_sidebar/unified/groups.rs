@@ -17,6 +17,7 @@ use super::model::{UnifiedCard, UnifiedGroupView};
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
 use crate::app::native_sidebar::disclosure::unified_key;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 
 /// A project header on the move.
 #[derive(Clone)]
@@ -270,6 +271,13 @@ impl GhostexGpuiApp {
                 cx.notify();
             }))
             .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()));
+        let header = self.sidebar_focus_stop(
+            header,
+            format!("unified-group:{key}"),
+            SidebarStopPlace::List,
+            appearance,
+            cx,
+        );
         let move_key = key.clone();
         let drop_key = key.clone();
         v_flex()

@@ -74,6 +74,16 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.toggle_bot_feed_view(window, cx);
             }))
+            // It is the list's first row (render.rs).
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    "automations",
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

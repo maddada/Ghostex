@@ -40,6 +40,24 @@ pub(crate) fn test_app_state_with_push(
     test_app_state_on_with_push(paths, "S7k", None, push)
 }
 
+/// Test daemons never reach the Live Activity relay: their sender points at a closed loopback port.
+pub(crate) fn closed_live_activity(
+    paths: &GxserverPaths,
+    server_id: &str,
+) -> Arc<crate::live_activity::LiveActivityRuntime> {
+    Arc::new(crate::live_activity::LiveActivityRuntime::start_with(
+        paths.clone(),
+        server_id.to_string(),
+        Arc::new(GxserverLogger::new(paths.clone())),
+        Arc::new(crate::push::runtime::SystemClock),
+        crate::live_activity::relay::RelayClient::new(
+            "http://127.0.0.1:9/live-activity/v1/send".to_string(),
+        ),
+        crate::live_activity::runtime::Timings::default(),
+        Arc::new(Vec::new),
+    ))
+}
+
 fn test_app_state_on_with_push(
     paths: GxserverPaths,
     server_id: &str,
@@ -85,6 +103,7 @@ fn test_app_state_on_with_push(
             config.listeners.local.host, config.listeners.local.port
         ),
     );
+    let live_activity = closed_live_activity(&paths, &metadata.server_id);
     Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
@@ -104,6 +123,7 @@ fn test_app_state_on_with_push(
         paths,
         presentation_event_sequence,
         push,
+        live_activity,
         remote_pairing_runtime: crate::remote_access::RemotePairingRuntime::new(),
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),

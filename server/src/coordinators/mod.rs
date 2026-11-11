@@ -33,6 +33,7 @@ mod stall;
 mod state;
 mod thread_messages;
 mod title;
+mod turns;
 mod work;
 
 pub use auto_sleep::*;

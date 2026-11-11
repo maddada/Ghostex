@@ -79,6 +79,33 @@ pub fn begin(
     interrupt: bool,
     caret: Option<usize>,
 ) -> Vec<Effect> {
+    begin_named(
+        state,
+        context,
+        mode,
+        text,
+        version,
+        image_paths,
+        interrupt,
+        caret,
+        None,
+    )
+}
+
+/// [`begin`], for a send the chat box named itself: `named` is the `sendRequestId` it chose at
+/// Enter (`composer/delivery.rs`), which every attempt of this message goes under.
+#[allow(clippy::too_many_arguments)]
+pub fn begin_named(
+    state: &mut ChatState,
+    context: &ChatContext,
+    mode: SubmissionMode,
+    text: &str,
+    version: Option<crate::composer::queue::DraftVersion>,
+    image_paths: Vec<String>,
+    interrupt: bool,
+    caret: Option<usize>,
+    named: Option<String>,
+) -> Vec<Effect> {
     // A block that clears on its own does not refuse: the delivery phase waits for it instead.
     if let Some(refused) = crate::composer::document::send_refused(state) {
         state.core.fail(refused, None);
@@ -150,7 +177,7 @@ pub fn begin(
     } else {
         mode
     };
-    let send_request_id = submission_send_request_id(state, context, mode, text);
+    let send_request_id = submission_send_request_id(state, context, mode, text, named);
     let capabilities = crate::composer::document::queue(state).capabilities;
     let steps = match submission_steps(
         text,
@@ -212,6 +239,9 @@ pub fn begin(
         draft_unsaved: false,
         typed,
         attaching,
+        retry: None,
+        slow: false,
+        resend: false,
     };
     draw_at_enter(state, context, &mut submission);
     let mut effects = start_or_wait(state, context, submission);
@@ -283,7 +313,7 @@ fn draw_at_enter(state: &mut ChatState, context: &ChatContext, submission: &mut 
 ///
 /// CDXC:SessionChat 2026-10-07 WHY:
 /// The composer used to ignore Enter until the previous send settled (gxserver answers a send only after it has typed it, 1.1 to 1.6 seconds), so a quick follow-up stayed in the box. Sends now line up here in order, each with its own `sendRequestId`, and one that fails or is cancelled takes every send behind it back to the composer with it, so nothing is delivered out of order and nothing typed is lost.
-fn start_or_wait(
+pub(crate) fn start_or_wait(
     state: &mut ChatState,
     context: &ChatContext,
     submission: Submission,
@@ -344,6 +374,7 @@ fn submission_send_request_id(
     context: &ChatContext,
     mode: SubmissionMode,
     text: &str,
+    named: Option<String>,
 ) -> Option<String> {
     let retried = state
         .composer
@@ -351,7 +382,11 @@ fn submission_send_request_id(
         .take()
         .filter(|failed| failed.mode == mode && failed.text == text)
         .map(|failed| failed.send_request_id);
-    retried.or_else(|| (context.random_ids[0] != 0).then(|| context.random_id(0)))
+    // The id the chat box chose at Enter comes before one made here: the box sends its action
+    // again under it when it cannot see the action taken (`composer/delivery.rs`).
+    retried
+        .or(named)
+        .or_else(|| (context.random_ids[0] != 0).then(|| context.random_id(0)))
 }
 
 /// Remembers a submission whose send or queue call failed, for [`submission_send_request_id`].
@@ -561,6 +596,7 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
             }
             let request_id = state.core.allocate_request_id();
             wait_request(state, request_id);
+            crate::composer::delivery::call_left(state, context);
             let mut effect = agent_send_rpc(
                 request_id,
                 &body,
@@ -581,6 +617,7 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
             }
             let request_id = state.core.allocate_request_id();
             wait_request(state, request_id);
+            crate::composer::delivery::call_left(state, context);
             let mut params = json!({ "text": queued_text, "draftVersion": version });
             if let Some(id) = send_request_id {
                 params["sendRequestId"] = json!(id);
@@ -832,7 +869,24 @@ fn hold_for_gate(state: &mut ChatState, context: &ChatContext) -> bool {
             submission.storage = None;
         }
     }
+    if blocked {
+        // Its echo now says why it waits (`held_echo`, part of the composition's key).
+        state.core.request_publish();
+    }
     blocked
+}
+
+/// The echo of the message the gate holds, and the words it shows while it waits: its id in
+/// `state.pending.sends` and `hold_words` (CDXC:SessionChat 2026-11-11 in composer/policy.rs).
+pub fn held_echo(state: &ChatState) -> Option<(String, String)> {
+    let submission = state.composer.submitting.as_ref()?;
+    if !submission.awaiting_gate {
+        return None;
+    }
+    let pending_id = submission.pending_id.clone()?;
+    let words = crate::composer::document::send_hold(state)
+        .unwrap_or_else(|| "Waiting for the agent to take messages again.".to_string());
+    Some((pending_id, words))
 }
 
 /// Settle hook: a delivery phase parked by [`hold_for_gate`] resumes once the gate is clear.
@@ -844,12 +898,17 @@ pub fn release_held(
     _event: &crate::event::Event,
     context: &ChatContext,
 ) -> Vec<Effect> {
+    crate::composer::delivery::settle(state, context);
     let parked = state
         .composer
         .submitting
         .as_ref()
         .is_some_and(|submission| submission.awaiting_gate);
-    if !parked || crate::composer::document::send_blocked(state, context).is_some() {
+    // A send waiting to go again after a failure time can fix goes when its timer fires.
+    let again = crate::composer::delivery::retry_due(state);
+    // The retry runs whatever the gate says: its delivery phase parks itself behind a shut gate
+    // (`hold_for_gate`), which this hook then resumes like any other held send.
+    if !again && (!parked || crate::composer::document::send_blocked(state, context).is_some()) {
         return Vec::new();
     }
     let effects = run_head(state, context);
@@ -961,6 +1020,9 @@ pub fn settle_request(
             if let Some(submission) = state.composer.submitting.as_mut() {
                 let sent = submission.phases.first().copied();
                 submission.request = None;
+                // It went: whatever its row said about waiting or still sending is over.
+                submission.retry = None;
+                submission.slow = false;
                 // The echo was drawn at Enter, so it stays undoable until its own delivery
                 // answered; the draft push ahead of it can still be followed by a refused send.
                 if matches!(sent, Some(SendPhase::SendCompact | SendPhase::SendText)) {
@@ -1014,12 +1076,26 @@ pub fn settle_request(
             effects.extend(hold_head(state, context));
         }
         crate::wire::RpcOutcome::Err { message, code, .. } => {
-            remember_failed_send(state, code.as_deref());
-            undo_optimistic(state);
-            // Only `unreachable` rides along (it draws Retry); every other refusal keeps the plain
-            // line it always had.
-            let code = code.clone().filter(|code| code == "unreachable");
-            effects.extend(fail(state, message, code));
+            // A failure time can fix goes again by itself, and one it cannot fix leaves the
+            // message in the chat saying so (`composer/delivery.rs`). Only what neither covers (a
+            // compact, a handoff, a Side chat) still gives its text back to the chat box.
+            if crate::composer::delivery::retry_later(state, context, message, code.as_deref()) {
+                // Nothing to do until its timer fires.
+            } else if crate::composer::delivery::keep_unsent(
+                state,
+                context,
+                message,
+                code.as_deref(),
+            ) {
+                effects.extend(start_next(state, context));
+            } else {
+                remember_failed_send(state, code.as_deref());
+                undo_optimistic(state);
+                // Only `unreachable` rides along (it draws Retry); every other refusal keeps the
+                // plain line it always had.
+                let code = code.clone().filter(|code| code == "unreachable");
+                effects.extend(fail(state, message, code));
+            }
         }
     }
     state.core.publish_after(&effects);
@@ -1089,6 +1165,25 @@ pub fn settle_storage(
             }
             effects.extend(run_head(state, context));
         }
+        // The chat box's own draft record could not be written. That record is bookkeeping
+        // about a message, not the message: a send goes on without it, and one already delivered
+        // is finished, so a full disk never hands a sent message back to be sent twice. A handoff
+        // is the record itself and still fails.
+        Some(_)
+            if state
+                .composer
+                .submitting
+                .as_ref()
+                .is_some_and(|submission| !submission.handoff) =>
+        {
+            if let Some(submission) = state.composer.submitting.as_mut() {
+                submission.storage = None;
+                if !submission.phases.is_empty() {
+                    submission.phases.remove(0);
+                }
+            }
+            effects.extend(run_head(state, context));
+        }
         Some(message) => {
             undo_optimistic(state);
             effects.extend(fail(state, message, None));
@@ -1110,6 +1205,9 @@ fn finish(state: &mut ChatState) -> Vec<Effect> {
     // A send waiting behind this one continues the same chain, which would otherwise hold this
     // one's closing publish until the last of them answered.
     state.core.request_publish();
+    if submission.resend {
+        return Vec::new();
+    }
     let method = if submission.handoff {
         "handoff"
     } else {
@@ -1296,6 +1394,9 @@ pub fn handoff(
         draft_unsaved: false,
         typed: None,
         attaching: None,
+        retry: None,
+        slow: false,
+        resend: false,
     };
     // The head phase writes the unsubmitted record a handoff parks from.
     start_or_wait(state, context, submission)
@@ -1468,7 +1569,10 @@ pub fn interrupt(state: &mut ChatState, context: &ChatContext, confirm: bool) ->
     if let Some(submission) = state.composer.submitting.as_mut() {
         submission.cancelled = true;
         // A send still waiting for its pictures has nothing in flight to notice the cancel either.
-        parked = submission.awaiting_gate || submission.attaching.is_some();
+        // Nor has one waiting to go again after a failure.
+        parked = submission.awaiting_gate
+            || submission.attaching.is_some()
+            || (submission.retry.is_some() && submission.request.is_none());
     }
     for waiting in &mut state.composer.waiting {
         waiting.cancelled = true;

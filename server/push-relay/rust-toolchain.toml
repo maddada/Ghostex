@@ -1,0 +1,5 @@
+# CDXC:Build 2026-09-23 WHY:
+# Without a pin, local starts compiled gxserver with whatever `stable` the machine had (1.89.0 on the maintainer's computer) while the desktop crate and the release workflows use 1.95.0.
+# Two compilers meant no shared build-cache entries and a year of missing compiler speedups. Keep this in step with apps/desktop/rust-toolchain.toml.
+[toolchain]
+channel = "1.99.1"

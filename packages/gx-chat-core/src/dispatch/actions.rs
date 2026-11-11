@@ -121,6 +121,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::RestoreReturned
         | ActionKind::ApplyReturned
         | ActionKind::RestoreSubmission
+        | ActionKind::EditUnsent
         | ActionKind::AttachmentsStarted
         | ActionKind::AttachmentsFinished
         | ActionKind::AttachPaths

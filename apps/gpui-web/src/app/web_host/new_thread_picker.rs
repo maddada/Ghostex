@@ -55,6 +55,7 @@ impl GhostexGpuiApp {
             close_when_inactive: true,
             cloud_default_account: None,
             place,
+            room: None,
         };
         let page = web_sys::window()
             .map(|window| {
@@ -67,8 +68,17 @@ impl GhostexGpuiApp {
                 )
             })
             .unwrap_or((1280.0, 800.0));
-        let height =
-            new_thread_picker_window_height(config.agents.len(), config.place.is_some(), false);
+        // The page is the window the picker must stay inside: it is capped to it.
+        let room = Bounds::new(gpui::point(px(0.0), px(0.0)), size(px(page.0), px(page.1)));
+        let config = NewThreadPickerConfig {
+            room: Some(room),
+            ..config
+        };
+        let height = new_thread_picker_capped_height(
+            new_thread_picker_window_height(config.agents.len(), config.place.is_some(), false),
+            config.room,
+            None,
+        );
         let bounds = Bounds::centered_at(
             gpui::point(px(page.0 / 2.0), px(page.1 / 2.0)),
             size(px(NEW_THREAD_PICKER_WIDTH), px(height)),

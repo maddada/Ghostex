@@ -558,6 +558,15 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }))
+            .map(|older| {
+                self.sidebar_focus_stop(
+                    older,
+                    format!("older-threads:{}", row.coordinator),
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

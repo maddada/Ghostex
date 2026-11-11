@@ -1,0 +1,29 @@
+[package]
+name = "ghostex-push-relay"
+version = "0.1.0"
+edition = "2021"
+description = "Ghostex's Live Activity push relay: holds the Apple push key and sends Live Activity pushes for the Ghostex iPhone app, nothing else."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ghostex-push-relay"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+base64 = "0.22"
+hex = "0.4"
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem"] }
+reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls-webpki-roots", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
