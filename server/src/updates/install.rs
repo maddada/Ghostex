@@ -358,7 +358,9 @@ async fn update_easy_connect(state: &AppState) -> Result<(), Outcome> {
             store::set_phase(items::EASY_CONNECT_ITEM, progress);
         }
         if started.elapsed() > JOB_WAIT {
-            return Err(failed("The Easy Connect helper's update did not finish within 20 minutes."));
+            return Err(failed(
+                "The Easy Connect helper's update did not finish within 20 minutes.",
+            ));
         }
     }
 }

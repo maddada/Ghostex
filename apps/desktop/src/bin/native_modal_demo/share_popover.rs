@@ -223,7 +223,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
 /// The header dropdowns' frame as the app draws it on the default theme (`popup_menu_frame` in
 /// helpers/titlebar/chrome_colors.rs, which the preview cannot reach): the menu colour at the macOS
 /// glass coverage, the menus' hairline and 8px corners. Preview only.
-pub(super) fn preview_menu_frame(light: bool, glass: bool) -> super::share_popover_view::PopupSurface {
+pub(super) fn preview_menu_frame(
+    light: bool,
+    glass: bool,
+) -> super::share_popover_view::PopupSurface {
     let (menu, ink, alpha) = if light {
         (0xfafafa_u32, 0x000000_u32, 0.75)
     } else {
