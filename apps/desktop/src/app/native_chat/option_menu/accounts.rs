@@ -732,6 +732,18 @@ impl ChatOptionMenuPanel {
         };
         let available = self.menu.read(cx).source_bounds;
         let desired = px((height + MENU_CHROME) * appearance.scale);
+        // A panel above its trigger keeps its bottom edge as its content grows or shrinks, and
+        // the room above the trigger caps it (`refit_panel_height`).
+        let depth = self.depth;
+        if self.menu.read(cx).panel_hangs_above(depth, window.bounds()) {
+            let row = json!({"accounts": panel, "customize": self.accounts_customize});
+            self.heights = vec![height];
+            self.menu.update(cx, |menu, cx| {
+                menu.refit_panel_height(depth, desired, vec![row], cx)
+            });
+            cx.notify();
+            return;
+        }
         let room = available.bottom() - window.bounds().top() - px(12.0 * appearance.scale);
         if desired > room && window.bounds().size.height < desired {
             // Like the React popover's collision handling: re-place the taller panel so it

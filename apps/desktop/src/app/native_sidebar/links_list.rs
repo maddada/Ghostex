@@ -989,7 +989,17 @@ impl Render for SessionLinksList {
             let fitted = self.fitted_height();
             if self.fitted_height != Some(fitted) {
                 self.fitted_height = Some(fitted);
-                window.resize(gpui::size(window.bounds().size.width, px(fitted)));
+                // The dropdown hangs above the Links pill, so it keeps its bottom edge and its
+                // top moves (`fit_session_links_popup`); the card beside the sidebar hangs from
+                // its row and keeps its top, which is what `Window::resize` does.
+                let anchored = self.host == SessionLinksListHost::Dropdown
+                    && self
+                        .main_app
+                        .update(cx, |app, cx| app.fit_session_links_popup(fitted, cx))
+                        .unwrap_or(false);
+                if !anchored {
+                    window.resize(gpui::size(window.bounds().size.width, px(fitted)));
+                }
             }
         }
         #[cfg(target_arch = "wasm32")]
