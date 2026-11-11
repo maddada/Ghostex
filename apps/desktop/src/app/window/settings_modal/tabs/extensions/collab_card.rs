@@ -17,13 +17,15 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use serde_json::{Value, json};
 
 use super::super::super::super::native_modal_kit::hsla;
 use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, is_long_value, settings_sized_button, short_version,
+    tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{refresh_collab_component, store_gxserver_rpc};
@@ -222,8 +224,13 @@ impl ExtensionsTab {
             )
         };
         let extra = div()
-            .mt(px(8.0))
+            .id("collab-status-line")
             .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
+            .tooltip(tooltip_text(status.clone()))
             .text_size(px(13.0))
             .line_height(px(18.57))
             .text_color(hsla(p.muted))

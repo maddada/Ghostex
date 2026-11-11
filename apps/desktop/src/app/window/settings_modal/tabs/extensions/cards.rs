@@ -19,8 +19,13 @@ use std::sync::Arc;
 
 /// `.extension-card-grid { gap: 0.625rem }`.
 const GRID_GAP: f32 = 10.0;
-/// A tile's height: its icon and two lines (CDXC:Extensions 2026-11-09 in `grid_card`).
-pub(crate) const CARD_MIN_HEIGHT: f32 = 60.0;
+/// A card's main row: its icon tile, the name line and one line of description, always this tall
+/// (CDXC:Extensions 2026-11-11 "same height" in `grid_card`).
+pub(crate) const CARD_ROW_HEIGHT: f32 = 40.0;
+/// A card's sub-row (an option switch, Collab's status), always this tall, under a hairline.
+pub(crate) const CARD_SUB_ROW_HEIGHT: f32 = 32.0;
+/// A card without a sub-row: the main row, 10px above and below, and the 1px edge.
+pub(crate) const CARD_MIN_HEIGHT: f32 = CARD_ROW_HEIGHT + 20.0 + 2.0;
 /// `EXTENSION_ICON_COLOR` (`#b9b9b9`; the light theme's `--extension-icon-color` is `#525252`).
 pub(crate) fn extension_icon_color(p: &SettingsPalette) -> gpui::Rgba {
     if p.light {
@@ -283,6 +288,8 @@ fn keep_press<E: gpui::InteractiveElement>(element: E, guard: bool) -> E {
 /// anywhere but its switch, its buttons and its (i), with the pointer cursor over it; Back returns
 /// to the same tab and scroll. The hover Details button it replaces is gone.
 /// CDXC:Extensions 2026-11-11 DECISION:
+/// User, of the one-card-per-row page and its On tab: "all extensions rows have to be same height pls. don t wrap text" (for 11.4.0). Every card's main row is `CARD_ROW_HEIGHT` tall: the name on one line (with its badge and scope label) and the description on ONE line, cut with an ellipsis, never wrapped; hovering that line shows the whole description (and the type or author) in a tooltip, like the (i). A card with a row of its own (a chat-bar extension's "Open automatically in sessions", Collab's status) shows it under a hairline as a second row of `CARD_SUB_ROW_HEIGHT`, also one line, so the list reads as an even grid. Supersedes "wraps to a second line" in the next decision.
+/// CDXC:Extensions 2026-11-11 DECISION:
 /// User, of the Built-in tiles two to a row: "also i dont like the 2 in a row look", with "it's super hard to tell which are disabled and which enabled" (for 11.4.0). Every card list on the Extensions page now has one card to a row (`EXTENSION_LIST_COLUMNS`), so the description gets the page's width and wraps to a second line before it is cut. A card that is off draws its title in the muted grey and its icon fainter, so on and off read at a glance with the switch. Supersedes "two to a row" in the first 2026-11-09 decision above; the rest of that tile stands.
 pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
     let group: SharedString = format!("extension-card-{}", spec.id).into();
@@ -313,12 +320,18 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
         .status
         .clone()
         .or_else(|| (!spec.description.is_empty()).then(|| spec.description.clone()));
+    let line_tooltip = tooltip.clone();
+    let line_id = SharedString::from(format!("extension-card-line-{}", spec.id));
     let one_line = |text: SharedString, color: gpui::Rgba| {
         div()
+            .id(line_id)
             .min_w_0()
             .overflow_hidden()
-            .line_clamp(2)
+            .whitespace_nowrap()
             .text_ellipsis()
+            .when(!line_tooltip.is_empty(), |this| {
+                this.tooltip(tooltip_text(line_tooltip))
+            })
             .text_size(px(12.5))
             .line_height(px(17.0))
             .text_color(hsla(color))
@@ -418,6 +431,8 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
             h_flex()
                 .w_full()
                 .min_w_0()
+                .h(px(CARD_ROW_HEIGHT))
+                .flex_shrink_0()
                 .items_center()
                 .gap(px(10.0))
                 .children(
@@ -447,10 +462,24 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                         .child(control)
                 })),
         )
-        .children(
-            spec.extra
-                .map(|extra| guard_element(extra, div().w_full(), opens)),
-        )
+        .children(spec.extra.map(|extra| {
+            guard_element(
+                extra,
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .h(px(CARD_SUB_ROW_HEIGHT))
+                    .mt(px(10.0))
+                    .pt(px(1.0))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .overflow_hidden()
+                    .border_t_1()
+                    .border_color(hsla(p.hairline)),
+                true,
+            )
+        }))
         .into_any_element()
 }
 
@@ -464,7 +493,6 @@ pub(crate) fn card_option_row(
     let control = control.into();
     h_flex()
         .id(SharedString::from(format!("card-option-{label}")))
-        .mt(px(8.0))
         .w_full()
         .items_center()
         .justify_between()
@@ -502,7 +530,7 @@ pub(crate) fn add_view_card<V: 'static>(
     v_flex()
         .id("extensions-add-view")
         .w_full()
-        .min_h(px(CARD_MIN_HEIGHT))
+        .h(px(CARD_MIN_HEIGHT))
         .items_center()
         .justify_center()
         .gap(px(6.0))
