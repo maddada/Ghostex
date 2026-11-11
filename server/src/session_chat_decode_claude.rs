@@ -270,11 +270,21 @@ pub(crate) fn claude_transcript_lineage_record(
     }
     Some(TranscriptLineage {
         id: extract_string(record.get("uuid"))?,
-        parent_id: extract_string(record.get("parentUuid")),
+        parent_id: extract_string(record.get("parentUuid"))
+            .or_else(|| claude_compaction_parent(record)),
         queue: None,
         delivered_queue_keys: claude_delivered_queue_keys(record),
         leaf_marker: None,
     })
+}
+
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// Claude writes a compaction as a `compact_boundary` row with no `parentUuid` and the last row before it as `logicalParentUuid`, and a Claude process that compacted keeps the earlier prompts in its /rewind list. With the boundary parentless, a rewind to one of those prompts was refused as "not a prompt of this conversation", which the chat takes as a message the agent never took, so Rewind closed and did nothing; and once rewound, the rows after the boundary did not descend from the retracted prompt, so the chat would have kept showing them. The boundary hangs off its logical parent instead. Which compactions the rewind may cross is decided in session_chat_rewind.rs (`active_conversation`).
+fn claude_compaction_parent(record: &Map<String, Value>) -> Option<String> {
+    (record.get("type").and_then(Value::as_str) == Some("system")
+        && record.get("subtype").and_then(Value::as_str) == Some("compact_boundary"))
+    .then(|| extract_string(record.get("logicalParentUuid")))
+    .flatten()
 }
 
 /*
@@ -315,6 +325,10 @@ struct ClaudeLineageFields {
     prompt_source: Option<Value>,
     #[serde(rename = "queueSkipAttachments", default, deserialize_with = "present")]
     queue_skip_attachments: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    subtype: Option<Value>,
+    #[serde(rename = "logicalParentUuid", default, deserialize_with = "present")]
+    logical_parent_uuid: Option<Value>,
 }
 
 /// A field that is there, `null` included (a plain `Option` would read `null` as missing).
@@ -349,6 +363,8 @@ pub(crate) fn claude_lineage_fields(line: &str) -> Option<Map<String, Value>> {
         ("text", fields.text),
         ("promptSource", fields.prompt_source),
         ("queueSkipAttachments", fields.queue_skip_attachments),
+        ("subtype", fields.subtype),
+        ("logicalParentUuid", fields.logical_parent_uuid),
     ] {
         if let Some(value) = value {
             record.insert(key.to_string(), value);

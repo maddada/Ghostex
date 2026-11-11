@@ -167,6 +167,16 @@ fn agent_busy(message: impl Into<String>) -> DomainStateError {
     }
 }
 
+/// A prompt above a compaction Claude Code loaded on its last start (see `active_conversation`).
+/// Its own code, not `messageNotFound`, so the chat keeps the dialog up and shows the sentence
+/// instead of closing it as if the agent had never taken the message.
+fn before_compaction() -> DomainStateError {
+    DomainStateError {
+        code: "beforeCompaction",
+        message: "Claude Code can't go back this far, because this message was compacted before Claude Code last started. Pick a later message.".to_string(),
+    }
+}
+
 fn message_not_found(message: impl Into<String>) -> DomainStateError {
     DomainStateError {
         code: "messageNotFound",
@@ -391,6 +401,34 @@ struct ClaudeTranscriptRow {
     /// User prompt or local slash command as shown in Claude's rewind list.
     /// Tool results, meta turns, and command output are not selectable rows.
     prompt_text: Option<String>,
+    /// Set on Claude's `compact_boundary` row, where a compaction starts.
+    compaction: Option<ClaudeCompaction>,
+}
+
+struct ClaudeCompaction {
+    /// When the compaction was written, in ms.
+    at_ms: Option<i64>,
+}
+
+/// Claude's `compact_boundary` row, read only for a line that names one, so the whole-file walk
+/// pays one substring test per line.
+fn claude_compaction(line: &str) -> Option<ClaudeCompaction> {
+    if !line.contains("\"compact_boundary\"") {
+        return None;
+    }
+    let record = serde_json::from_str::<Value>(line).ok()?;
+    if record.get("type").and_then(Value::as_str) != Some("system")
+        || record.get("subtype").and_then(Value::as_str) != Some("compact_boundary")
+    {
+        return None;
+    }
+    Some(ClaudeCompaction {
+        at_ms: record
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .map(|at| at.timestamp_millis()),
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -407,6 +445,9 @@ struct ClaudeRewindTarget {
     /// The list starts on `(current)`, so reaching the target costs one more
     /// press than that.
     prompts_after: usize,
+    /// When the running Claude process started (`sessionChatClaudeStartedAt`), in ms: which
+    /// compactions its rewind list reaches across (`active_conversation`).
+    claude_started_ms: Option<i64>,
 }
 
 /// CDXC:SessionChat 2026-09-16 WHY:
@@ -465,6 +506,7 @@ fn read_claude_transcript_rows(path: &Path) -> std::io::Result<Vec<ClaudeTranscr
         rows.push(ClaudeTranscriptRow {
             lineage,
             prompt_text,
+            compaction: claude_compaction(trimmed),
         });
     }
     Ok(rows)
@@ -488,9 +530,13 @@ fn active_leaf_id(path: &Path, rows: &[ClaudeTranscriptRow], file_len: u64) -> O
 /// The active conversation, oldest first: the chain of rows from the root down
 /// to the active leaf. This is exactly the set Claude's rewind list is built
 /// from, which is why rows on abandoned branches never enter the count.
+///
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// Claude Code's /rewind list reaches back across a compaction that happened while its process ran (it keeps those prompts in memory), but a process that started after a compaction loads only what follows it (tried 2026-11-12 on Claude Code 2.1.322: A and B listed after a live /compact, gone after a reload). So the chain crosses a `compact_boundary` written at or after the process start (`claude_started_ms`) and stops at an older one, or at every one when the start is unknown.
 fn active_conversation<'a>(
     rows: &'a [ClaudeTranscriptRow],
     leaf_id: Option<&str>,
+    claude_started_ms: Option<i64>,
 ) -> Vec<&'a ClaudeTranscriptRow> {
     let by_id: HashMap<&str, &ClaudeTranscriptRow> = rows
         .iter()
@@ -503,6 +549,15 @@ fn active_conversation<'a>(
             break;
         };
         chain.push(row);
+        let loaded_on_start = row.compaction.as_ref().is_some_and(|compaction| {
+            match (compaction.at_ms, claude_started_ms) {
+                (Some(at), Some(started)) => at < started,
+                _ => true,
+            }
+        });
+        if loaded_on_start {
+            break;
+        }
         cursor = row.lineage.parent_id.as_deref();
         // A cycle cannot happen in a well-formed transcript, and a malformed
         // one must not spin the request forever.
@@ -521,6 +576,7 @@ fn resolve_rewind_target(
     path: &Path,
     message_id: &str,
     returned_row: Option<&str>,
+    claude_started_ms: Option<i64>,
 ) -> std::result::Result<ClaudeRewindTarget, DomainStateError> {
     let file_len = std::fs::metadata(path)
         .map_err(|error| {
@@ -535,7 +591,14 @@ fn resolve_rewind_target(
         ))
     })?;
     let leaf = active_leaf_id(path, &rows, file_len);
-    let chain = active_conversation(&rows, leaf.as_deref());
+    let chain = active_conversation(&rows, leaf.as_deref(), claude_started_ms);
+    // Where the active conversation starts when a compaction Claude loaded on its start cut it
+    // off: the boundary row's place in the file, so a prompt written above it is told apart from
+    // one Claude never took.
+    let compaction_root = chain
+        .first()
+        .filter(|root| root.compaction.is_some())
+        .and_then(|root| rows.iter().position(|row| std::ptr::eq(row, *root)));
     let prompts: Vec<&ClaudeTranscriptRow> = chain
         .into_iter()
         .filter(|row| row.prompt_text.is_some() && returned_row != Some(row.lineage.id.as_str()))
@@ -544,6 +607,14 @@ fn resolve_rewind_target(
         .iter()
         .position(|row| row.lineage.id == message_id)
         .ok_or_else(|| {
+            let compacted_away = compaction_root.is_some_and(|root| {
+                rows[..root]
+                    .iter()
+                    .any(|row| row.lineage.id == message_id && row.prompt_text.is_some())
+            });
+            if compacted_away {
+                return before_compaction();
+            }
             message_not_found(
                 "That message is not a user prompt of this conversation, so there is nothing to rewind to."
                     .to_string(),
@@ -564,6 +635,7 @@ fn resolve_rewind_target(
         first_line,
         confirm_cap: claude_confirm_quote_cap(&text),
         prompts_after: prompts.len() - position - 1,
+        claude_started_ms,
     })
 }
 
@@ -885,7 +957,12 @@ impl RewindDriver<'_> {
                     self.project_id,
                     self.session_id,
                 );
-            if resolve_rewind_target(path, &target.message_id, returned_row.as_deref())? != *target
+            if resolve_rewind_target(
+                path,
+                &target.message_id,
+                returned_row.as_deref(),
+                target.claude_started_ms,
+            )? != *target
             {
                 return Err(agent_busy(
                     "The conversation changed while the rewind was queued. Try again.",
@@ -1251,8 +1328,18 @@ async fn rewind_session_chat(
         &target.project_id,
         &target.session_id,
     );
-    let rewind_target =
-        resolve_rewind_target(&transcript_path, &message_id, returned_row.as_deref())?;
+    let claude_started_ms = target
+        .session
+        .pointer("/runtimeSettings/sessionChatClaudeStartedAt")
+        .and_then(Value::as_str)
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.timestamp_millis());
+    let rewind_target = resolve_rewind_target(
+        &transcript_path,
+        &message_id,
+        returned_row.as_deref(),
+        claude_started_ms,
+    )?;
 
     let Some(_guard) = RewindInFlightGuard::claim(&target.project_id, &target.session_id) else {
         return Err(agent_busy(
