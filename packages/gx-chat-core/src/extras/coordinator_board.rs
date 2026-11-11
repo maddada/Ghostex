@@ -1061,8 +1061,9 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     // The Work panel's header: "3 for you · 1 blocked · 2 in progress".
     if work_mode {
         if needs > 0 {
-            // The pill's words ("4 need you"), so the header and the pill read the same.
-            meta.push(format!("{needs} need you"));
+            // The pill's words ("1 needs you", "4 need you"), so the header and the pill read the
+            // same.
+            meta.push(needs_you(needs));
         }
         if blocked > 0 {
             meta.push(format!("{blocked} blocked"));
@@ -1076,10 +1077,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         }
     }
     if needs > 0 && !work_mode {
-        meta.push(format!(
-            "{needs} {}",
-            if needs == 1 { "needs you" } else { "need you" }
-        ));
+        meta.push(needs_you(needs));
     }
     if !work_mode {
         if blocked > 0 {
@@ -1254,6 +1252,20 @@ pub fn project_kept(
     board
 }
 
+/// A Needs you count in words that agree with it: "1 needs you", "2 need you".
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User, of the dock header's "1 need you": it should say "needs you". Every place that writes
+/// this count (the Work pill, the Work panel's header, the dock's header and its "N more" line)
+/// agrees with its number. Supersedes "need you" for any number.
+pub fn needs_you(count: usize) -> String {
+    if count == 1 {
+        "1 needs you".to_string()
+    } else {
+        format!("{count} need you")
+    }
+}
+
 /// The document value, `null` when there is no board.
 pub fn project(state: &ChatState, context: &ChatContext) -> Value {
     coordinator_board(state, context)
@@ -1291,8 +1303,7 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
     let mut words = vec![title.clone()];
     let needs = count_of("needs");
     if needs > 0 {
-        // "need you" for any number, as a list heading reads (the target page's wording).
-        words.push(format!("{needs} need you"));
+        words.push(needs_you(needs as usize));
     }
     let moving = count_of("moving");
     if moving > 0 {

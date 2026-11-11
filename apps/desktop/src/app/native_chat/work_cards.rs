@@ -471,7 +471,12 @@ impl NativeChatView {
                         .child(if all {
                             "Show fewer".to_string()
                         } else {
-                            format!("{hidden} more need you")
+                            // "1 more needs you", "3 more need you".
+                            if hidden == 1 {
+                                "1 more needs you".to_string()
+                            } else {
+                                format!("{hidden} more need you")
+                            }
                         })
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if !this.expanded.remove(DOCK_ALL_ROWS) {
@@ -556,7 +561,9 @@ impl NativeChatView {
             vec![("needs", needs), ("blocked", blocked)]
         };
         let counts: Vec<(&str, u64)> = counts.into_iter().filter(|(_, count)| *count > 0).collect();
-        let name_of = |group: &str| match group {
+        // Its words agree with its count: "1 needs you", "2 need you".
+        let name_of = |group: &str, count: u64| match group {
+            "needs" if count == 1 => "needs you",
             "needs" => "need you",
             "blocked" => "blocked",
             _ => "in progress",
@@ -581,7 +588,7 @@ impl NativeChatView {
                 14.0 + 5.0
                     + dock_text_width(&count.to_string(), 13.0, p, cx)
                     + 4.0
-                    + dock_text_width(name_of(group), 13.0, p, cx)
+                    + dock_text_width(name_of(group, *count), 13.0, p, cx)
             })
             .sum::<f32>()
             + 12.0 * counts.len().saturating_sub(1) as f32;
@@ -604,6 +611,7 @@ impl NativeChatView {
                 let (icon, color) = super::coordinator_board::group_look(group);
                 let color = color.map_or(p.muted, |color| gpui::rgb(color).into());
                 let tip = match group {
+                    "needs" if count == 1 => "Needs you",
                     "needs" => "Need you",
                     "blocked" => "Blocked",
                     _ => "In progress",
@@ -633,7 +641,7 @@ impl NativeChatView {
                             .child(count.to_string()),
                     )
                     .when(named, |mark| {
-                        mark.child(div().ml(px(-1.0 * s)).child(name_of(group)))
+                        mark.child(div().ml(px(-1.0 * s)).child(name_of(group, count)))
                     })
                     .into_any_element()
             })
