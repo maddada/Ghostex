@@ -488,19 +488,19 @@ pub(crate) fn codex_process_session_identity_from_paths(
             .or_insert((agent_session_id, target));
     }
     // Codex may retain the previous rollout handle after rewinding. Among its
-    // open root rollouts, only an unambiguous descendant can be the active branch.
+    // open root rollouts, a rewound predecessor is never the active branch.
     identities.retain(|rollout, (id, _)| {
         !predecessors.contains(id) && !inherited_rollouts.contains(rollout)
     });
-    if identities.len() != 1 {
-        return None;
-    }
+    /*
+    CDXC:SessionIdentity 2026-11-11 WHY:
+    After `/new` or a resume inside the TUI, Codex 0.167 keeps the conversation it left open beside the one it moved to, with no lineage between them (seen live: two `session_meta` heads naming only themselves). Requiring exactly one open root rollout named none, so without Codex's hook the stored path stayed on the old file for good. Of several open root rollouts, the one written last is the conversation the TUI is on: Codex writes the one it moves to as soon as it opens it, and the one it left no more. Same rule as the hook-free observer (hookless_activity/codex.rs `open_rollouts_from`).
+    */
+    let written = |path: &PathBuf| fs::metadata(path).and_then(|meta| meta.modified()).ok();
     identities
-        .into_iter()
-        .next()
-        .map(|(_, (agent_session_id, path))| {
-            (agent_session_id, path.to_string_lossy().into_owned())
-        })
+        .into_values()
+        .max_by_key(|(_, path)| written(path))
+        .map(|(agent_session_id, path)| (agent_session_id, path.to_string_lossy().into_owned()))
 }
 
 #[cfg(target_os = "linux")]

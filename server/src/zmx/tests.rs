@@ -462,6 +462,49 @@ fn codex_process_open_rollout_resolves_exact_session_identity() {
     );
 }
 
+/// After `/new` Codex holds the conversation it left open beside the new one, neither naming the
+/// other: the one written last is the conversation the TUI is on.
+#[test]
+fn codex_process_with_two_open_root_rollouts_names_the_one_written_last() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let sessions = temp
+        .path()
+        .join("sessions")
+        .join("2026")
+        .join("11")
+        .join("11");
+    fs::create_dir_all(&sessions).expect("sessions directory");
+    let write = |id: &str| {
+        let path = sessions.join(format!("rollout-2026-11-11T17-41-35-{id}.jsonl"));
+        fs::write(
+            &path,
+            format!("{{\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"source\":\"cli\"}}}}\n"),
+        )
+        .expect("rollout");
+        path
+    };
+    let old = write("01a1cad7-aea0-7a60-8e25-fac7d7f2ac40");
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let new = write("01a1cad8-1187-7f80-9c06-8236a85f6550");
+    let identity =
+        codex_process_session_identity_from_paths([old.clone(), new.clone()]).expect("an identity");
+    assert_eq!(identity.0, "01a1cad8-1187-7f80-9c06-8236a85f6550");
+    assert_eq!(std::path::PathBuf::from(identity.1), new);
+    // The old one written again (a resume back to it) is the conversation again.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&old)
+        .and_then(|mut file| std::io::Write::write_all(&mut file, b"{}\n"))
+        .expect("append");
+    assert_eq!(
+        codex_process_session_identity_from_paths([new, old])
+            .expect("an identity")
+            .0,
+        "01a1cad7-aea0-7a60-8e25-fac7d7f2ac40"
+    );
+}
+
 #[test]
 fn zmx_process_identity_parser_keeps_omp_terminal_name() {
     let session_name = "S90-P3lv0-G0omp".to_string();
