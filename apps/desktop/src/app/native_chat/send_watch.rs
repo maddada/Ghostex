@@ -48,6 +48,29 @@ pub(crate) struct SendWatch {
     patient: bool,
 }
 
+/// A message the send gate holds, as things stood when the hold began.
+pub(crate) struct HeldLog {
+    since: web_time::Instant,
+    reason: serde_json::Value,
+    notice: serde_json::Value,
+    working: serde_json::Value,
+    chat_shown: bool,
+}
+
+/// The terminal notice as the send log records it: what it is, whether it holds the agent's input,
+/// and whether its card is drawn above the chat box.
+fn notice_facts(snapshot: &serde_json::Value) -> serde_json::Value {
+    let notice = &snapshot["terminalNotice"];
+    json!({
+        "kind": notice["kind"],
+        "title": notice["title"],
+        "detectedAt": notice["detectedAt"],
+        "holdsInput": notice["choices"].as_array().is_some_and(|rows| !rows.is_empty())
+            || notice["dialog"].is_object(),
+        "cardShown": notice.is_object() && snapshot["noticeVisible"] == true,
+    })
+}
+
 impl NativeChatView {
     /// The always-kept line for a send from the chat box, written before anything can stop it. An
     /// Enter on an empty box is no send and leaves no line.
@@ -74,14 +97,10 @@ impl NativeChatView {
                 "received": snapshot["submissionsReceived"],
                 // What stood above the chat box at Enter: the terminal's notice and whether its
                 // card was drawn (a notice that holds the agent's input with no card holds sends),
-                // and a question that replaces the box.
-                "notice": {
-                    "kind": snapshot["terminalNotice"]["kind"],
-                    "title": snapshot["terminalNotice"]["title"],
-                    "holdsInput": snapshot["terminalNotice"]["choices"].as_array().is_some_and(|rows| !rows.is_empty())
-                        || snapshot["terminalNotice"]["dialog"].is_object(),
-                    "cardShown": snapshot["terminalNotice"].is_object() && snapshot["noticeVisible"] == true,
-                },
+                // and a question that replaces the box; and whether the chat was on screen at all
+                // (its session may show its terminal instead).
+                "notice": notice_facts(snapshot),
+                "chatShown": !self.pane_hidden,
                 "questionCard": snapshot["questionCard"]["visible"],
                 "unconfirmed": self.send_watch.as_ref().map_or(0, |watch| watch.sends.len()),
             }),
@@ -239,8 +258,60 @@ impl NativeChatView {
                 "tookMs": started.elapsed().as_millis() as u64,
                 "succeeded": error.is_null(),
                 "errorCode": error["code"],
+                "chatShown": !self.pane_hidden,
             }),
         );
+    }
+
+    /// A frame moved the held message: the gate took one (`sessionChat.sendHeld`) or let it go
+    /// (`sessionChat.sendReleased`), with what changed in between, so a later reader can tell what
+    /// released it: the notice leaving the agent's screen (for example once its terminal view was
+    /// opened and the screen read again), the turn ending, or a switch finishing.
+    pub(super) fn note_held_send(&mut self, before: &serde_json::Value) {
+        let now = &self.snapshot["sendHeld"];
+        let session = format!("{}:{}", self.config.project_id, self.config.session_id);
+        match (before["sendHeld"].is_string(), now.is_string()) {
+            (false, true) => {
+                let held = HeldLog {
+                    since: web_time::Instant::now(),
+                    reason: now.clone(),
+                    notice: notice_facts(&self.snapshot),
+                    working: self.snapshot["working"].clone(),
+                    chat_shown: !self.pane_hidden,
+                };
+                crate::support_logs::append_always(
+                    crate::support_logs::GpuiSupportLog::SessionChat,
+                    "sessionChat.sendHeld",
+                    json!({
+                        "session": session,
+                        "reason": held.reason,
+                        "notice": held.notice,
+                        "working": held.working,
+                        "chatShown": held.chat_shown,
+                    }),
+                );
+                self.held_log = Some(held);
+            }
+            (true, false) => {
+                let held = self.held_log.take();
+                crate::support_logs::append_always(
+                    crate::support_logs::GpuiSupportLog::SessionChat,
+                    "sessionChat.sendReleased",
+                    json!({
+                        "session": session,
+                        "heldMs": held.as_ref().map(|held| held.since.elapsed().as_millis() as u64),
+                        "reasonAtHold": held.as_ref().map(|held| held.reason.clone()),
+                        "noticeAtHold": held.as_ref().map(|held| held.notice.clone()),
+                        "noticeNow": notice_facts(&self.snapshot),
+                        "workingAtHold": held.as_ref().map(|held| held.working.clone()),
+                        "workingNow": self.snapshot["working"],
+                        "chatShownAtHold": held.as_ref().map(|held| held.chat_shown),
+                        "chatShownNow": !self.pane_hidden,
+                    }),
+                );
+            }
+            _ => {}
+        }
     }
 
     /// The messages that left the box and the core has not taken in yet, drawn by the view itself

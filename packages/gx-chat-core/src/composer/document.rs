@@ -116,6 +116,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let choice_pending = terminal_choice_pending(state, notice.as_ref());
     into.send_blocked_reason = send_refused(state);
     into.send_hold_reason = send_hold(state);
+    into.send_held = crate::composer::send::held_echo(state).map(|(_, words)| words);
     into.submissions_received = state.composer.submissions_received;
     into.composer_placeholder = composer_placeholder(
         true,

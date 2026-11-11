@@ -335,6 +335,8 @@ pub(crate) struct NativeChatView {
     pub(super) send_watch_token: u64,
     /// When the last send left the chat box, for the send log's step times (send_watch.rs).
     pub(super) last_send_at: Option<web_time::Instant>,
+    /// The message the send gate holds, as it was when the hold began (send_watch.rs).
+    pub(super) held_log: Option<super::send_watch::HeldLog>,
     pub(crate) composer_ready: bool,
     pub(crate) expanded: FoldKeys,
     /// Scroll offsets of the capped boxes inside transcript rows (nested_scroll.rs).
@@ -639,6 +641,7 @@ impl NativeChatView {
             send_watch: None,
             send_watch_token: 0,
             last_send_at: None,
+            held_log: None,
             composer_ready: false,
             expanded: FoldKeys::default(),
             nested_scrolls: Default::default(),
@@ -1039,6 +1042,7 @@ impl NativeChatView {
                 .iter()
                 .any(|key| self.snapshot["sessionDetails"][key] != snapshot["sessionDetails"][key]);
             let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
+            self.note_held_send(&before);
             self.remeasure_on_look_change(&before);
             self.adopt_board_focus(&before, cx);
             self.prune_kept_replies(&before);

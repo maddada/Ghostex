@@ -135,6 +135,10 @@ pub struct Document {
     /// waiting with these words and goes once the wait clears (composer/policy.rs `hold_words`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_hold_reason: Option<String>,
+    /// The words the message the send gate holds right now shows under its bubble, or `null` when
+    /// no message is held (`composer::send::held_echo`); the host logs when it starts and ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_held: Option<String>,
     /// How many submissions from the chat box the core has taken in (`ComposerState`).
     #[serde(default)]
     pub submissions_received: u64,
