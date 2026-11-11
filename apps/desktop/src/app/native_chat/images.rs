@@ -450,6 +450,47 @@ fn image_format(media_type: &str) -> Option<ImageFormat> {
     }
 }
 
+/// The most a picture file read here may hold: gxserver's own cap for a chat picture
+/// (`SESSION_CHAT_IMAGE_MAX_BYTES`, server/src/session_chat_files.rs).
+const LOCAL_PICTURE_MAX_BYTES: u64 = 32 * 1024 * 1024;
+
+/// The picture at `path` on this computer, read and recognised by its bytes; `None` for anything
+/// else, which the chat core's read then decides about (`chat_image`). Nothing in a browser,
+/// where the file is not the page's to read.
+fn read_local_picture(path: &str) -> Option<gpui::Image> {
+    if cfg!(target_family = "wasm") {
+        return None;
+    }
+    let path = std::path::Path::new(path);
+    if !path.is_absolute() {
+        return None;
+    }
+    let size = std::fs::metadata(path)
+        .ok()
+        .filter(|file| file.is_file())?
+        .len();
+    if size == 0 || size > LOCAL_PICTURE_MAX_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    let format = match image::guess_format(&bytes).ok()? {
+        image::ImageFormat::Png => ImageFormat::Png,
+        image::ImageFormat::Jpeg => ImageFormat::Jpeg,
+        image::ImageFormat::WebP => ImageFormat::Webp,
+        image::ImageFormat::Gif => ImageFormat::Gif,
+        image::ImageFormat::Bmp => ImageFormat::Bmp,
+        image::ImageFormat::Tiff => ImageFormat::Tiff,
+        _ => return None,
+    };
+    // A header that does not parse is left to the core's read, which says the file is damaged.
+    let (width, height) = image::ImageReader::new(std::io::Cursor::new(bytes.as_slice()))
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()?;
+    (width > 0 && height > 0).then(|| gpui::Image::from_bytes(format, bytes))
+}
+
 fn decode_data_url(url: &str) -> Result<gpui::Image, ChatImageFailure> {
     let damaged = || ChatImageFailure::new("damaged");
     let (meta, payload) = url
@@ -734,9 +775,26 @@ impl NativeChatView {
             // The path is on the session's machine, so the read goes through the shared transport.
             // Asked for on the next turn of the loop, because this runs while the row is rendering.
             let path = image["path"].as_str().unwrap_or_default().to_string();
+            // CDXC:SessionChat 2026-11-11 DECISION:
+            // User: "still seeing the chat messages show images as this for ages… please fix
+            // this". A picture a message names by path was always fetched through the chat core
+            // (`loadImage`, its `chatImage` request, gxserver's read, the answer back), so a busy
+            // core left a sent message's picture as a loading tile for as long as the core was
+            // behind, while the file sat on this very computer. For a session on this computer
+            // the view reads the file itself, off the UI thread, under gxserver's own limits (a
+            // picture by its bytes, up to its size cap); anything it cannot take that way (a
+            // session on another computer, a type this build does not decode, a file it may not
+            // read) still goes through the core, which also says why a picture is unavailable.
+            let local = self.config.remote.is_none();
+            let read = cx.background_executor().spawn({
+                let path = path.clone();
+                async move { local.then(|| read_local_picture(&path)).flatten() }
+            });
             cx.spawn(async move |this, cx| {
-                let _ = this.update(cx, |this, cx| {
-                    this.invoke(json!({"type": "loadImage", "path": path}), cx)
+                let picture = read.await;
+                let _ = this.update(cx, |this, cx| match picture {
+                    Some(picture) => this.store_chat_image(id, Ok(picture), cx),
+                    None => this.invoke(json!({"type": "loadImage", "path": path}), cx),
                 });
             })
             .detach();
@@ -1653,4 +1711,42 @@ fn loading_tile(message_id: &str, index: usize, p: &ChatAppearance) -> AnyElemen
         .border_color(p.input_border)
         .child(glyph)
         .into_any_element()
+}
+
+#[cfg(test)]
+mod local_picture_tests {
+    use super::read_local_picture;
+
+    /// A picture file on this computer is read as the picture it is, by its bytes; anything else
+    /// is left to the chat core's read (CDXC:SessionChat 2026-11-11 on `chat_image`).
+    #[test]
+    fn a_local_picture_file_is_read_by_its_bytes() {
+        let folder =
+            std::env::temp_dir().join(format!("ghostex-local-picture-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(3, 2, image::Rgba([10, 20, 30, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        // Named as something else: the bytes decide.
+        let picture = folder.join("shot.dat");
+        std::fs::write(&picture, &png).unwrap();
+        let read = read_local_picture(picture.to_str().unwrap()).expect("a picture");
+        assert_eq!(read.format, gpui::ImageFormat::Png);
+        assert_eq!(read.bytes, png);
+
+        let words = folder.join("notes.png");
+        std::fs::write(&words, b"not a picture at all").unwrap();
+        assert!(read_local_picture(words.to_str().unwrap()).is_none());
+        let empty = folder.join("empty.png");
+        std::fs::write(&empty, b"").unwrap();
+        assert!(read_local_picture(empty.to_str().unwrap()).is_none());
+        assert!(read_local_picture(folder.join("gone.png").to_str().unwrap()).is_none());
+        assert!(read_local_picture("shot.dat").is_none(), "a relative path");
+        assert!(
+            read_local_picture(folder.to_str().unwrap()).is_none(),
+            "a folder"
+        );
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
 }
