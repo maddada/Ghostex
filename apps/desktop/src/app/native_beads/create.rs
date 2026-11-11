@@ -33,6 +33,9 @@ const TYPES: [(&str, &str); 5] = [
 ];
 
 pub(crate) struct CreateForm {
+    /// Tells this form from one opened later, so a create's answer closes only the form that
+    /// sent it.
+    pub(crate) id: u64,
     pub(crate) title: Entity<InputState>,
     pub(crate) description: Entity<TextareaState>,
     pub(crate) label_input: Entity<InputState>,
@@ -95,7 +98,9 @@ impl BeadsView {
             ),
         ];
         title.update(cx, |input, cx| input.focus(window, cx));
+        self.next_create_form_id += 1;
         self.create = Some(CreateForm {
+            id: self.next_create_form_id,
             title,
             description,
             label_input,
@@ -208,6 +213,7 @@ impl BeadsView {
             params["estimate"] = json!(minutes);
         }
         let status = form.status.clone().filter(|status| status != "open");
+        let form_id = form.id;
         // The form stays open until bd has created the bead, so a refused create keeps everything
         // typed; `create_in_flight` (set by `run_action`) holds its Create buttons meanwhile.
         self.run_action(
@@ -216,7 +222,10 @@ impl BeadsView {
             window,
             cx,
             move |this, reply, window, cx| {
-                this.create = None;
+                // Closed and opened again while bd was creating: the new draft stays.
+                if this.create.as_ref().is_some_and(|form| form.id == form_id) {
+                    this.create = None;
+                }
                 let Some(issue) = created_issue(reply) else {
                     return;
                 };

@@ -171,6 +171,7 @@ pub(crate) struct BeadsView {
     /// A create from the New bead form is on its way; the form ignores another submit until bd
     /// has answered (other writes do not hold the form).
     pub(crate) create_in_flight: bool,
+    pub(crate) next_create_form_id: u64,
     pub(crate) hovered_row: Option<String>,
     pub(crate) last_drawn: Option<Instant>,
     poll: Option<Task<()>>,
@@ -235,6 +236,7 @@ impl BeadsView {
             notice: None,
             writes_in_flight: 0,
             create_in_flight: false,
+            next_create_form_id: 0,
             hovered_row: None,
             last_drawn: None,
             poll: None,
