@@ -150,6 +150,30 @@ pub async fn run_gxserver_foreground(
             });
         }
     }
+    // A coordinator's first message still waiting in its queue names the skill's new name too.
+    match crate::storage::open_gxserver_database(&paths)
+        .map_err(|error| error.to_string())
+        .and_then(|db| {
+            crate::coordinators::rename_queued_coordinator_skill_lines(&db)
+                .map_err(|error| error.to_string())
+        }) {
+        Ok(0) => {}
+        Ok(renamed) => {
+            let _ = logger.log(GxserverLogInput {
+                level: crate::logging::LogLevel::Info,
+                event: "queuedCoordinatorSkillLinesRenamed".to_string(),
+                server_id: None,
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: None,
+                details: Some(json!({ "renamed": renamed })),
+            });
+        }
+        Err(error) => {
+            eprintln!("gxserver: queued coordinator skill lines were not renamed: {error}")
+        }
+    }
     #[cfg(windows)]
     if let Some(details) = crate::platform::launch_context::launch_context_warning_details() {
         let _ = logger.log(GxserverLogInput {

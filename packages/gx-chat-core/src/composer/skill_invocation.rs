@@ -67,6 +67,9 @@ pub fn agent_skill_reference(link: &str, name: &str, agent: Option<&str>) -> Str
 /// (gxserver's `COORDINATOR_SKILL_NAME` is this). Named `ghostex-orchestrator` until 2026-11-11.
 pub const COORDINATOR_SKILL_NAME: &str = "ghostex-coordinator";
 
+/// What a role's first message starts with, before the skill in the agent's spelling.
+pub const SKILL_LINE_PREFIX: &str = "Read and adhere to this skill: ";
+
 /// The line every new orchestrator's first message starts with, in the agent's own skill
 /// spelling ([`skill_invocation`]): "Read and adhere to this skill: /ghostex-coordinator" for
 /// Claude Code, `$ghostex-coordinator` for Codex. gxserver sends it, and the New Orchestrator
@@ -74,7 +77,7 @@ pub const COORDINATOR_SKILL_NAME: &str = "ghostex-coordinator";
 /// SEE-ALSO: server/src/coordinators/role.rs (`orchestrator_first_message`, the CDXC:Coordinators 2026-10-17 decision).
 pub fn coordinator_skill_line(agent: Option<&str>) -> String {
     format!(
-        "Read and adhere to this skill: {}",
+        "{SKILL_LINE_PREFIX}{}",
         skill_invocation(COORDINATOR_SKILL_NAME, agent)
     )
 }

@@ -170,6 +170,35 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
     guide
 }
 
+/// Rewrites the first lines still waiting in a chat queue (in any state: it runs at startup, before
+/// the queue sends anything, and one left `sending` by the last run is retried) that name an old name of the coordinator skill, in any agent's spelling, to the new name.
+/// Returns how many it changed.
+///
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// A coordinator created just before the update keeps its first message in the queue until its agent takes it, and that message named `ghostex-orchestrator`, which the first start after the update removes (agent_skills_renamed.rs). A new coordinator gets no "playbook changed" note before its first guide read (playbook.rs `mark_new_coordinator`), so nothing else would tell it the name. gxserver rewrites such lines at startup, before any queue is sent.
+pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusqlite::Result<usize> {
+    use ghostex_gx_chat_core::composer::skill_invocation::{skill_invocation, SKILL_LINE_PREFIX};
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let mut changed = 0;
+    for old in COORDINATOR_SKILL_OLD_NAMES {
+        // One agent of each spelling: `/name`, `$name`, `/skill:name`, `@name`.
+        for agent in ["claude", "codex", "pi", "opencode"] {
+            let from = format!("{SKILL_LINE_PREFIX}{}", skill_invocation(old, Some(agent)));
+            let to = format!(
+                "{SKILL_LINE_PREFIX}{}",
+                skill_invocation(COORDINATOR_SKILL_NAME, Some(agent))
+            );
+            changed += db.execute(
+                "UPDATE session_chat_queued_prompts SET text = ?2 || substr(text, length(?1) + 1), updatedAt = ?3
+                 WHERE substr(text, 1, length(?1)) = ?1
+                   AND (length(text) = length(?1) OR substr(text, length(?1) + 1, 1) IN (char(10), char(13), ' '))",
+                rusqlite::params![from, to, now],
+            )?;
+        }
+    }
+    Ok(changed)
+}
+
 /// The line every new orchestrator's first message starts with (`/ghostex-coordinator` for Claude
 /// Code and Copilot, `$ghostex-coordinator` for every other agent); the dialogs show the same
 /// line from the same function.
