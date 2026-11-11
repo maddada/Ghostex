@@ -362,6 +362,36 @@ process.stdout.write(version);
 		"$APP_PATH"
 }
 
+# CDXC:Onboarding 2026-11-11 DECISION:
+# User, on the first-run page (step 1, install): the DMG window shows a drag-to-Applications picture,
+# "a nice looking picture matching ghostex.dev". The picture is tooling/release-gpui/dmg/background.tiff
+# (1x and 2x in one TIFF, from the first-run art thread's dmg-with-instruction PNGs; to change it, replace
+# that file with `tiffutil -cathidpicheck new.png new@2x.png -out a.tiff && tiffutil -lzw a.tiff -out
+# tooling/release-gpui/dmg/background.tiff`, 660 by 400 points). Finder reads the window size, icon places
+# and background from a .DS_Store that points into the mounted volume, so it is written on the read-write
+# image, mounted out of sight (-nobrowse), by dmg/layout.py with the two packages dmgbuild uses, pinned.
+DMG_LAYOUT_PACKAGES=("ds-store==1.3.3" "mac-alias==2.2.3")
+
+release_gpui_dmg_layout() {
+	local rw_image="$1" venv="$REPO_ROOT/build/release-gpui/dmg-layout-venv" mount
+	if [[ ! -x "$venv/bin/python" ]] || ! "$venv/bin/python" -c 'import ds_store, mac_alias' 2>/dev/null; then
+		# Runs inside the retry loop's `if`, where `set -e` does not apply, so each step returns on failure.
+		rm -rf "$venv"
+		python3 -m venv "$venv" || return 1
+		"$venv/bin/pip" install --quiet --disable-pip-version-check "${DMG_LAYOUT_PACKAGES[@]}" || return 1
+	fi
+	mount="$(mktemp -d "$STAGE_ROOT/mount-XXXXXX")" || return 1
+	hdiutil attach -quiet -nobrowse -noautoopen -noverify -mountpoint "$mount" "$rw_image" || return 1
+	if ! "$venv/bin/python" "$SCRIPT_DIR/dmg/layout.py" "$mount"; then
+		hdiutil detach -quiet "$mount" || hdiutil detach -quiet -force "$mount"
+		echo "Could not write the DMG window layout" >&2
+		return 1
+	fi
+	sync
+	hdiutil detach -quiet "$mount" || hdiutil detach -quiet -force "$mount"
+	rmdir "$mount"
+}
+
 phase_dmg() {
 	[[ -d "$APP_PATH" ]] || {
 		echo "Signed app bundle is missing: $APP_PATH (run --phase assemble first)" >&2
@@ -375,6 +405,9 @@ phase_dmg() {
 	trap 'rm -rf "$STAGE" "$RW_IMAGE"' EXIT
 	ditto "$APP_PATH" "$STAGE/Ghostex.app"
 	ln -s /Applications "$STAGE/Applications"
+	mkdir "$STAGE/.background"
+	cp "$SCRIPT_DIR/dmg/background.tiff" "$STAGE/.background/background.tiff"
+	chflags hidden "$STAGE/.background"
 	# CDXC:Release 2026-08-22:
 	# `hdiutil create` attaches a device to read the staging folder, and another
 	# process on the runner — Spotlight indexing the stage it has just seen appear,
@@ -387,6 +420,7 @@ phase_dmg() {
 	for attempt in 1 2 3; do
 		rm -f "$RW_IMAGE" "$DMG"
 		if hdiutil create -volname Ghostex -srcfolder "$STAGE" -fs APFS -format UDRW "$RW_IMAGE" &&
+			release_gpui_dmg_layout "$RW_IMAGE" &&
 			hdiutil convert "$RW_IMAGE" -format ULMO -imagekey udif-chunk-size=8192 -o "$DMG"; then
 			break
 		fi
