@@ -321,9 +321,10 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
   helper, where a new key is let in when it knocks (that one helper starts again with it). An
   approved key goes on the allow-list of both helpers at once (they start again once with it), and
   the door stops when the window closes; a removed key still restarts the helpers at once. The
-  address list a paired device gets names the door's address last, flagged `door`, only so a
+  address list a paired device gets names the addresses of both doors a code can carry (the one
+  pinned to the relay and the one on the public relays) last, each flagged `door`, only so a
   phone can tell at its next scan that the door is this computer's (the old phone app compares
-  the key inside an address); the door itself still answers only while a code is shown.
+  the key inside an address); the doors themselves still answer only while a code is shown.
 - The relay check (`server/src/tailcat/relay_check.rs`) has a tailcat client key of its own beside
   each helper's key (`relay-check.private.json`). It is on no allow-list and is never added to
   one: gxserver says hello with it to this computer's own address, the helper logs the hello and
