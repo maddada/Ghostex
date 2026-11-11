@@ -74,7 +74,6 @@ impl GhostexGpuiApp {
             .take(10)
             .collect::<Vec<_>>();
         let label_chip = |label: String, selected: bool, cx: &mut Context<Self>| {
-            let tone = KanbanPalette::chip_tone(&label);
             let hover = p.control_hover;
             let value = label.clone();
             div()
@@ -96,7 +95,7 @@ impl GhostexGpuiApp {
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.native_kanban_toggle_form_label(&value, cx);
                 }))
-                .child(div().size(px(7.0)).rounded_full().bg(tone))
+                .child(titlebar_svg_icon("titlebar/tag.svg", 12.0, p.faint))
                 .child(label)
                 .when(selected, |this| {
                     this.child(titlebar_svg_icon("titlebar/x.svg", 11.0, p.muted))

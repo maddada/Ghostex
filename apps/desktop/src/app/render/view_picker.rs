@@ -74,7 +74,7 @@ fn view_picker_description(mode: TitlebarMode) -> (gpui::SharedString, Option<gp
         mode if mode.is_storybook() => "Annotate your project’s components.",
         TitlebarMode::Source => "Edit and search project files.",
         TitlebarMode::Browser => "Open a local app or any website.",
-        TitlebarMode::Kanban => "Plan work and track task progress.",
+        TitlebarMode::Kanban => "See what's ready, who's on what and what's blocked.",
         TitlebarMode::Automate => "Run repeatable project routines.",
         TitlebarMode::Terminal => "Shell commands beside your agents..",
         TitlebarMode::Manage => "Notes, plans and reference files.",

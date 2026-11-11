@@ -22,31 +22,35 @@ pub(crate) const TSHIRT_OPTIONS: [(&str, i64); 5] =
 /// The statuses Ghostex keeps in every board's `status.custom` config.
 const REQUIRED_CUSTOM_STATUS_CONFIG: [&str; 3] = ["backlog", "test", "review"];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LaneTone {
-    Muted,
-    Neutral,
-    Blue,
-    Amber,
-    Violet,
-    Green,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BoardColumn {
     pub(crate) key: String,
     pub(crate) label: String,
     pub(crate) beads_status: String,
-    pub(crate) tone: LaneTone,
+    /// The lane header's grey status glyph (an icon path).
+    pub(crate) glyph: &'static str,
 }
 
-const BUILTIN_COLUMNS: [(&str, &str, &str, LaneTone); 6] = [
-    ("backlog", "Backlog", "backlog", LaneTone::Muted),
-    ("todo", "Todo", "open", LaneTone::Neutral),
-    ("in_progress", "In Progress", "in_progress", LaneTone::Blue),
-    ("test", "Test", "test", LaneTone::Amber),
-    ("review", "Review", "review", LaneTone::Violet),
-    ("done", "Done", "closed", LaneTone::Green),
+/// An extra configured status's lane glyph.
+const CUSTOM_LANE_GLYPH: &str = "titlebar/circle.svg";
+
+const BUILTIN_COLUMNS: [(&str, &str, &str, &str); 6] = [
+    (
+        "backlog",
+        "Backlog",
+        "backlog",
+        "titlebar/circle-dashed.svg",
+    ),
+    ("todo", "Todo", "open", "titlebar/circle.svg"),
+    (
+        "in_progress",
+        "In Progress",
+        "in_progress",
+        "titlebar/circle-half.svg",
+    ),
+    ("test", "Test", "test", "titlebar/flask.svg"),
+    ("review", "Review", "review", "titlebar/eye.svg"),
+    ("done", "Done", "closed", "titlebar/circle-check.svg"),
 ];
 
 fn is_builtin_status_name(name: &str) -> bool {
@@ -59,11 +63,11 @@ fn is_builtin_status_name(name: &str) -> bool {
 pub(crate) fn build_board_columns(custom_status_config: &str) -> Vec<BoardColumn> {
     let mut columns = BUILTIN_COLUMNS
         .iter()
-        .map(|(key, label, status, tone)| BoardColumn {
+        .map(|(key, label, status, glyph)| BoardColumn {
             key: (*key).to_string(),
             label: (*label).to_string(),
             beads_status: (*status).to_string(),
-            tone: *tone,
+            glyph: *glyph,
         })
         .collect::<Vec<_>>();
     for entry in parse_board_column_config(custom_status_config) {
@@ -74,10 +78,19 @@ pub(crate) fn build_board_columns(custom_status_config: &str) -> Vec<BoardColumn
             label: status_name_to_label(&entry.name),
             key: entry.name.clone(),
             beads_status: entry.name,
-            tone: LaneTone::Muted,
+            glyph: CUSTOM_LANE_GLYPH,
         });
     }
     columns
+}
+
+/// Whether the Board draws a lane.
+///
+/// CDXC:ProjectBoard 2026-11-11 DECISION:
+/// User (issue #577, folded into the Beads view): Backlog, Test and Review each get a Show switch in the Board's Columns dialog; Todo, In Progress and Done always show. The choice is saved in the project's Beads workspace (bd config `custom.ghostex.board_hidden_columns`, next to `status.custom`), so every computer, clone and agent sees the same Board. A hidden lane that still holds beads keeps showing, so no bead vanishes, and hiding never takes the status out of `status.custom` (agents may still set it).
+pub(crate) fn board_lane_shown(key: &str, hidden: &[String], tickets: &[BoardTicket]) -> bool {
+    !hidden.iter().any(|name| name == key)
+        || tickets.iter().any(|ticket| ticket.board_status == key)
 }
 
 pub(crate) fn status_name_to_label(name: &str) -> String {
@@ -302,6 +315,8 @@ pub(crate) struct BeadsIssue {
     pub(crate) id: String,
     pub(crate) title: String,
     pub(crate) status: String,
+    /// bd's `issue_type` (bug, feature, task, chore, epic…), shown first on the card's meta line.
+    pub(crate) issue_type: Option<String>,
     pub(crate) description: String,
     pub(crate) priority: Option<i64>,
     pub(crate) estimate: Option<i64>,
@@ -390,6 +405,7 @@ impl BeadsIssue {
         Some(Self {
             title: text("title").unwrap_or_default(),
             status: text("status").unwrap_or_else(|| "open".to_string()),
+            issue_type: text("issue_type"),
             description: text("description").unwrap_or_default(),
             priority: number("priority"),
             estimate: number("estimate"),
@@ -607,7 +623,6 @@ pub(crate) fn priority_label(priority: Option<i64>) -> &'static str {
 pub(crate) struct KanbanAgent {
     pub(crate) agent_id: String,
     pub(crate) label: String,
-    pub(crate) command: Option<String>,
 }
 
 /// A bead's linked agent conversation, as the board conversation state reports it.
@@ -619,6 +634,8 @@ pub(crate) struct KanbanConversationLink {
     pub(crate) label: String,
     pub(crate) openable: bool,
     pub(crate) resumable: bool,
+    /// The linked session is running now (`isLive`).
+    pub(crate) live: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -647,7 +664,6 @@ impl KanbanConversationState {
                         let agent_id = string(agent, "agentId")?;
                         Some(KanbanAgent {
                             label: string(agent, "label").unwrap_or_else(|| agent_id.clone()),
-                            command: string(agent, "command"),
                             agent_id,
                         })
                     })
@@ -676,6 +692,7 @@ impl KanbanConversationState {
                                     .unwrap_or_else(|| "Agent session".to_string()),
                                 openable: flag("isLive") || flag("isRestorable"),
                                 resumable: flag("isResumable"),
+                                live: flag("isLive"),
                             },
                         ))
                     })

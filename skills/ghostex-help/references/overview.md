@@ -52,7 +52,7 @@ hotkeys Every shortcut and its default binding
 - **Work area**: your sessions, and the views open beside them. The sessions are
   a grid of terminal panes and tabs; each pane can show the raw terminal or the
   Session Chat rendering of the same agent conversation. Opening Code, Browser,
-  Kanban, Automate or Files puts it in a panel on the right with a divider you can
+  Beads, Automate or Files puts it in a panel on the right with a divider you can
   drag, and your agents keep running on the left. The panel's tab strip shares
   the header's row: several views can be open at once, the **+** opens another,
   and the two buttons at its end pop the view out into its own window or expand
@@ -101,7 +101,7 @@ hotkeys Every shortcut and its default binding
   threads (agent sessions it starts, shown indented under it in the sidebar)
   and reports back when they finish or need you. Start one from a project's
   Select Agent menu with New Coordinator.
-- **Extensions**: optional views and panels (Code, Browser, Kanban, Automate,
+- **Extensions**: optional views and panels (Code, Browser, Beads, Automate,
   Files, and third-party ones) installed from Settings > Extensions.
 - **gxserver**: the local daemon that owns sessions, projects, settings sync,
   automations, and the HTTP API the `ghostex` CLI, the web app, and the mobile

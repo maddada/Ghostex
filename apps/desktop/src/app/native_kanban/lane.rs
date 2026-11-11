@@ -108,7 +108,7 @@ fn skeleton_cards(position: usize, p: &KanbanPalette) -> AnyElement {
     if gpui_macos_reduce_motion_enabled() {
         return cards.into_any_element();
     }
-    let (period, min) = crate::app::session_chat_skeleton::skeleton_pulse();
+    let (period, min) = super::host::skeleton_pulse();
     cards
         .with_throttled_animation(
             ElementId::Name(format!("kanban-skeleton-pulse-{position}").into()),
@@ -128,7 +128,6 @@ impl GhostexGpuiApp {
         &mut self,
         column: &BoardColumn,
         indices: &[usize],
-        empty_hint: Option<&'static str>,
         skeleton: Option<usize>,
         in_view: bool,
         measure_key: u64,
@@ -144,15 +143,20 @@ impl GhostexGpuiApp {
         let body = if let Some(position) = skeleton {
             Self::native_kanban_lane_static_body(Some(skeleton_cards(position, p)))
         } else if count == 0 {
-            Self::native_kanban_lane_static_body(empty_hint.map(|hint| {
+            Self::native_kanban_lane_static_body(Some(
                 div()
-                    .px(px(4.0))
-                    .py(px(8.0))
+                    .py(px(26.0))
+                    .flex()
+                    .justify_center()
+                    .rounded(px(CARD_RADIUS))
+                    .border_1()
+                    .border_dashed()
+                    .border_color(p.border)
                     .text_size(px(12.0))
                     .text_color(p.faint)
-                    .child(hint)
-                    .into_any_element()
-            }))
+                    .child("No beads")
+                    .into_any_element(),
+            ))
         } else if !in_view {
             div().flex_1().min_h_0().into_any_element()
         } else {
@@ -193,61 +197,58 @@ impl GhostexGpuiApp {
                             .items_center()
                             .gap(px(8.0))
                             .min_w_0()
-                            .child(
-                                div()
-                                    .size(px(6.0))
-                                    .flex_none()
-                                    .rounded_full()
-                                    .bg(p.tone(column.tone)),
-                            )
+                            .child(titlebar_svg_icon(column.glyph, 13.0, p.muted))
                             .child(
                                 div()
                                     .truncate()
                                     .text_size(px(13.0))
                                     .text_color(p.foreground.opacity(0.9))
                                     .child(column.label.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(2.0))
+                            )
                             .when(skeleton.is_none(), |this| {
                                 this.child(
                                     div()
+                                        .flex_none()
                                         .text_size(px(12.0))
                                         .text_color(p.muted)
                                         .child(count.to_string()),
                                 )
-                            })
-                            .child(
-                                div()
-                                    .id(ElementId::Name(
-                                        format!("kanban-lane-add-{}", column.key).into(),
-                                    ))
-                                    .size(px(26.0))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(px(7.0))
-                                    .cursor_pointer()
-                                    .hover(move |style| style.bg(control_hover))
-                                    .tooltip({
-                                        let label = format!("Add ticket to {}", column.label);
-                                        move |window, cx| {
-                                            crate::app::helpers::titlebar_tooltip(
-                                                label.clone(),
-                                                window,
-                                                cx,
-                                            )
-                                        }
-                                    })
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.native_kanban_open_new_ticket(&add_key, window, cx);
-                                    }))
-                                    .child(titlebar_svg_icon("titlebar/plus.svg", 14.0, p.muted)),
-                            ),
+                            }),
+                    )
+                    .child(
+                        div().flex().items_center().child(
+                            div()
+                                .id(ElementId::Name(
+                                    format!("kanban-lane-add-{}", column.key).into(),
+                                ))
+                                .size(px(26.0))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(7.0))
+                                .cursor_pointer()
+                                .hover(move |style| style.bg(control_hover))
+                                .tooltip({
+                                    let label = format!("Add ticket to {}", column.label);
+                                    move |window, cx| {
+                                        crate::app::helpers::titlebar_tooltip(
+                                            label.clone(),
+                                            window,
+                                            cx,
+                                        )
+                                    }
+                                })
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    // CDXC:ProjectBoard 2026-11-11 DECISION: User: a lane's + opens the Beads view's New bead form with that lane's status (the Board-only Estimate and Create & Start included), the same capability-gated form the header's New bead opens; only the board in its own window keeps its own form.
+                                    if !this.native_kanban_in_own_window(window)
+                                        && this.beads_open_create_in_lane(&add_key, window, cx)
+                                    {
+                                        return;
+                                    }
+                                    this.native_kanban_open_new_ticket(&add_key, window, cx);
+                                }))
+                                .child(titlebar_svg_icon("titlebar/plus.svg", 14.0, p.muted)),
+                        ),
                     ),
             )
             .child(body)

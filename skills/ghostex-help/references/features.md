@@ -95,7 +95,7 @@ them as installed by another Ghostex) instead of rewriting them.
 **Open a view** is the picker the panel shows when nothing is open in it. It
 lists every view you can open here: the built-in views first, then your own views
 and extensions. Press a view's letter to open it (C for VS Code, B for Browser, K for
-Kanban, U for Automate, D for Files, G for Changes, T for Terminal, W for Issues) while the picker is in front. Views you hid
+Beads, U for Automate, D for Files, G for Changes, T for Terminal, W for Issues) while the picker is in front. Views you hid
 for this project are not in the list; **Manage views and where they appear…** at
 the bottom opens their settings, and **Hidden here** on the `+` menu brings one
 back. Closing the panel's last tab closes the whole panel; to bring the picker
@@ -105,7 +105,7 @@ Sidebar & Sessions, under Advanced at the bottom of the page (`closeSidePanelWit
 While a view in the side panel has focus, the session shortcuts act on that view
 instead of the session beside it: Cmd+W or Cmd+Shift+Backspace closes its tab,
 Previous/Next Tab in Pane (Cmd+Option+[ and ]) steps through the panel's tabs,
-Sleep and Reload sleep or reload the view, Cmd+F searches in Files or Kanban, and
+Sleep and Reload sleep or reload the view, Cmd+F searches in Files or Beads, and
 Cmd+R renames the file open in Files.
 
 **Issues** (called Work before) lists the tickets and pull requests of the
@@ -241,7 +241,7 @@ Right-click a view tab to choose where that view appears and what happens to it.
 **Reload** refreshes the clicked view, **Sleep** unloads it while keeping its tab (Code also stops its editor
 server; choose **Wake** or click the tab to bring it back, and Resources can stop
 Code too without closing Ghostex), and **Open externally** opens its page in its
-own window (for Kanban it reads **Open in new window** and moves the board to a
+own window (for Beads it reads **Open in new window** and moves the view to a
 Ghostex window of its own; see Project board). **Configure ▸** holds what a view can change about itself: **Modify
 home URL** for a website view, and **Command output** and **Configure view** for
 your own project views (Configure view opens that view's editor in Settings >
@@ -522,8 +522,8 @@ view from the strip.
   in Browser. Build failures offer Retry and Command output. For a workspace with
   several Storybooks, open the desired package as a project or provide a root build
   script. Settings > Extensions controls visibility (`storybookViewTabHidden`).
-- **Kanban**: the project board backed by the Beads `bd` CLI (see Project
-  board).
+- **Beads** (was Kanban): the project's Beads issues as a tree under their
+  epics or as a board, backed by the `bd` CLI (see Beads view).
 - **Automate**: scheduled and triggered agent runs (see Automations).
 - **Files**: Markdown, HTML, and Excalidraw files from the project's docs
   folders, with a markdown editor and an annotation system that sends notes
@@ -1109,7 +1109,7 @@ attention-session counts in extra-bold text near the bottom of each icon, includ
 the selected Space.
 Switching to a Space brings back what you last had open there: the session you
 last used in that Space, in the view its project was in (Agents, Code, Browser,
-Kanban, Automate, or Files). If that session was closed, the one before it is
+Beads, Automate, or Files). If that session was closed, the one before it is
 used; a Space you have never used opens its first project. Choose "Don't switch
 projects" to make a Space switch change only the sidebar filter
 (`sidebarSpaceSwitchBehavior`). "Switch Space when opening a session from another Space"
@@ -1136,7 +1136,7 @@ Sleep on the project or its Space still releases them, it uses more memory,
 and terminals and chats keep the minutes above. VS Code still reloads when you
 switch VS Code between computers, including when you switch back.
 Starting a new agent from the sidebar launcher or New Thread picker keeps your
-current view open, including Code, Browser, Kanban, Automate, and Files. Select
+current view open, including Code, Browser, Beads, Automate, and Files. Select
 Agents when you want to open the new agent there.
 Opening a view puts it beside your sessions rather than over them: the whole grid of
 terminal panes and chats stays on the left, the view takes the right half, and a
@@ -1178,7 +1178,7 @@ where they are while you open, change and close views.
   settings, panels always open and close instantly (`panelAnimationSpeed`).
 - Pane width: agent panes have a minimum resize width of 388px, and so does the
   Agents Panel when a view is open beside it. In the desktop app, an open Code,
-  Browser, Kanban, Automate, or Files view has a minimum width of 455px.
+  Browser, Beads, Automate, or Files view has a minimum width of 455px.
 - Presets: Settings > Sidebar & Sessions > Sidebar > Preset switches groups of card
   details at once; the individual rows below it are marked Advanced.
 - Timed Delayed Send: open **Delayed Send** from an agent's right-click menu
@@ -1468,7 +1468,7 @@ when you open it.
   reloads when you select it again. Tabs playing sound, tabs where you typed
   text you have not sent, and the page another Space opens on stay awake. The side panel
   also keeps only the view on screen and the two you used last awake; with more views open,
-  the oldest one sleeps, unless it is VS Code, Browser, Files, Kanban or Automate with its
+  the oldest one sleeps, unless it is VS Code, Browser, Files, Beads or Automate with its
   Auto Sleep Off: Off keeps that view's state (its page, or Code's terminals) in exchange for
   more memory. Keep views
   loaded (`keepViewsLoaded`) lifts that limit for every view, website and extension views
@@ -4184,45 +4184,81 @@ on|off`, `ghostex autopilot session <project-id> <session-id> on|off`, and
 `ghostex autopilot decide <project-id> <session-id> --answer <pick> | --message
 <text> | --leave <note>` (what the supervisor runs).
 
-## Project board (Kanban)
+## Beads view (was Kanban)
 
-The Kanban view is a board over the Beads issue tracker: every card is a bead
-in the project's `.beads` database, driven by the `bd` CLI installed on the
-machine that runs the project (Ghostex does not bundle it; the board's
-"Install or Update Beads" action installs it). Columns follow the bead
-statuses (backlog, open, in progress, test, review, done); cards have
-priority, labels, comments, and linked sessions.
+The Beads view (the view panel tab that used to be called Kanban) shows the
+project's Beads issue tracker: every row or card is a bead in the project's
+`.beads` workspace, read and changed through the `bd` CLI installed on the
+computer that runs the project (Ghostex does not bundle it; the view's
+**Install Beads** button installs it). A project without a Beads workspace
+shows a card with a fix prompt to hand an agent, which asks you before it
+creates any Beads files. The header has a **Tree | Board** switch, search,
+the sync status with **Pull** and **Push**, Refresh, and **New bead**.
 
-- "Start work" on a card dispatches an agent session to it (`ghostex board
-start-work <bead-id>`); the session is linked to the card and the card shows
-  who is working it. An agent started by hand links itself with
-  `gx board associate <bead-id>`.
-- The `$ghostex-manage-beads` skill teaches agents the swimlane workflow:
-  claim with `bd update <id> --status in_progress`, comment progress with
-  `bd comment`, move to test or review, and `bd close`.
-- Ask a coordinator agent to "work the high-priority beads on the board" to
-  have it pick cards and spawn workers.
-- Blockers: opening a card (or New ticket) shows **Blocked by** (the cards it
-  waits on) and **Blocks** (the cards waiting on it), including the ones an
-  agent set with `bd dep add`. Pick **Blocked by** or **Blocks** under Add,
-  search cards by title or ID and click one to link it; the x removes a link,
-  and clicking a linked card opens it. On an open card each change is saved to
-  Beads at once; on New ticket the links are saved when the card is created. A
-  card can't block itself, and a link that would make cards wait on each other
-  in a loop is refused.
-- When the columns do not fit, the board scrolls sideways: swipe on a trackpad,
-  Shift+wheel on a mouse, or drag the bar under the lanes (each lane has its
-  own bar for its cards). Dragging a card to the board's left or right edge
-  scrolls the board to the lanes off screen.
+- **Tree** (the default): every bead sits under its epic, with the epic's
+  progress ("2 of 5 done · 1 in progress · 1 blocked · 1 ready") and its done
+  beads folded into one "N done" row; beads not in an epic come last. Beads
+  waiting on a person (bd's `human` flag, `bd human`) are pinned on top under
+  **Needs a decision**, with an **Answer** button. Each row shows the status,
+  type, what it is waiting on, its defer or due date, labels, comments, the
+  agent on it (a green dot while it works), the priority and when it last
+  changed; hovering shows the bead's id, **Claim** and a ⋯ menu.
+- **Filters**: All, Needs a decision, Ready, In progress, Blocked and Deferred,
+  with counts from bd's own answers (`bd ready`); a filter keeps the tree's
+  shape. **Show done** lists done beads too; the sort is Priority or Last changed.
+- **Details**: click a bead to open its details beside the tree (✕ or Escape
+  closes them): Close or Reopen, **Defer** (Tomorrow, Next week, Pick a date…,
+  or On ice, which waits until you bring it back) and **Bring back**, the
+  priority, labels, its epic, who claimed it, who's on it with **Go to agent**,
+  what blocks it and what it blocks, the description and comments, and a box to
+  add a comment. Claim really claims the bead (`bd update <id> --claim`, which
+  sets you as its assignee).
+- **New bead**: title (leave it empty and Ghostex writes one from the
+  description), description, type (Task, Bug, Feature, Chore, Epic), priority
+  P0 to P4, an epic, labels (a child starts with its epic's labels; remove any
+  you don't want) and **Blocked by**, the beads it waits on. An epic's **Add
+  child** opens it with that epic chosen.
+- **Board**: the board you know from the Kanban, drawn in the same quiet style:
+  lanes follow the statuses (backlog, open, in progress, test, review, done),
+  you drag cards between lanes, and **Start work** on a card dispatches an agent
+  to it (`ghostex board start-work <bead-id>`); the agent is linked to the card
+  and the card shows who is working it. An agent started by hand links itself
+  with `gx board associate <bead-id>`. On the Board, New bead also has the
+  estimate and **Create & Start**. Opening a card shows **Blocked by** and
+  **Blocks**; pick one under Add, search by title or ID and click to link; the x
+  removes a link, and a link that would make cards wait on each other in a loop
+  is refused. When the lanes do not fit, the board scrolls sideways (swipe,
+  Shift+wheel, or drag the bar under the lanes). **Columns** adds the project's
+  own lanes and has a **Show** switch for Backlog, Test and Review (Todo, In
+  Progress and Done always show). A hidden lane still appears while a bead is in
+  it, and the choice is saved in the project's Beads workspace, so every computer
+  and clone sees the same Board (`bd config set custom.ghostex.board_hidden_columns
+  test,review`; `bd config unset custom.ghostex.board_hidden_columns` shows them
+  all again).
+- **Sync**: the header says when the beads last synced from this computer
+  ("Synced 4 min ago"); click it for the remote and the last push and pull.
+  **Pull** brings in changes from your other computers (`bd dolt pull`), **Push**
+  sends this computer's (`bd dolt push`). When a push doesn't go through because
+  the remote has changes this computer doesn't have, a card says so with **Pull
+  now**; then push again. A workspace with no remote shows no Pull or Push.
+- Everything an agent changes with `bd` shows up in the view on its own within
+  a few seconds, and an open view that nothing changes costs nothing: Ghostex
+  re-reads Beads only when the workspace changes.
+- A project on another computer is read with that computer's `bd`. If that
+  computer runs an older Ghostex, the view shows a card asking to update it
+  and the Board still works.
+- The `$ghostex-manage-beads` skill teaches agents the same workflow from the
+  command line. Ask a coordinator to "work the ready beads with high priority"
+  to have it pick beads and start workers.
 - **Open in New Window** (the pop-out control at the top right of the view, or
   the tab's right-click menu) moves the board to a window of its own, for a
-  second monitor; the panel shows a card with **Show Window** (brings that
-  window to the front) and **Bring Back**, and closing the window brings the
-  board back too. The window follows the project you switch
-  to, and after a restart the board is in the panel again.
+  second monitor; the panel shows a card with **Show Window** and **Bring
+  Back**, and closing the window brings it back too.
 
-Related settings: Settings > Projects (beads directory and display key),
-`globalBeadsDirectory`, `globalBeadsDisplayKey`.
+Related settings: `beadsViewLayout` (Tree or Board; if you had the Kanban tab
+open before it became Beads, the view starts on Board), Settings > Projects (beads directory and display key),
+`globalBeadsDirectory`, `globalBeadsDisplayKey`. Hotkey: Switch to Beads
+(`switchKanbanView`).
 
 ## Automations
 
@@ -6997,7 +7033,7 @@ picked card; More transparency options holds the picture position, the Live
 speed and brightness, Play only when plugged in, Fine-tune the tints and Menu
 blur. With Dark only, light mode stays opaque, so the light-mode picture, video
 and tints are hidden until Always is picked.
-Files, Kanban, the browser, and the code editor stay opaque. Turning on Reduce
+Files, Beads, the browser, and the code editor stay opaque. Turning on Reduce
 transparency in the macOS accessibility settings, or turning off Transparency effects
 in Windows Settings > Personalization > Colors, always makes the window opaque. Turning
 transparency on or off, or changing any of its choices, applies to every open Ghostex
@@ -7181,5 +7217,5 @@ terminalViewWidthMode match-chat`.
   menu bar badges (always on; remove the item from the menu bar itself), and the
   sidebar bell (kept visible with `notificationsTitlebarButtonHidden false`)
   lists every finished turn with what the agent said.
-- "What does the Kanban board do": see Project board (Kanban).
-- "Does a coordinator use the Kanban board?": not on its own. A coordinator's Work panel is its own list of work (see Coordinators, Work items and The Work panel); the Kanban view is the Beads board in the repository (Project board (Kanban)). Tell the coordinator "use the Kanban board (Beads) to manage the work" (with the Ghostex Project Board Beads skill installed) or "work the high-priority beads on the board" and it keeps tasks as cards and starts a thread per card. Docs: ghostex.dev/docs/workflows/orchestrators.
+- "What does the Beads view do, and how do I start work on a bead?" (also asked as "What does the Kanban board do"): see Beads view (was Kanban); on the Board, Start work on a card dispatches an agent to it, and from the command line `ghostex board start-work <bead-id>`.
+- "Does a coordinator use the Kanban board?": not on its own. A coordinator's Work panel is its own list of work (see Coordinators, Work items and The Work panel); the Beads view shows the Beads issues in the repository (Beads view). Tell the coordinator "use Beads to manage the work" (with the Ghostex Project Board Beads skill installed) or "work the high-priority beads on the board" and it keeps tasks as cards and starts a thread per card. Docs: ghostex.dev/docs/workflows/orchestrators.

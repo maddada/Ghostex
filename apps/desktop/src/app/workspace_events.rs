@@ -13,7 +13,6 @@ use std::rc::Rc;
 
 use gpui::Window;
 
-use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
@@ -265,40 +264,16 @@ impl GhostexGpuiApp {
     ) {
         /*
         The store (gx_store/create/board.rs) answers board conversation requests
-        here; the validated response object travels back to any tasks CEF
-        workarea as the standard `ghostex-project-board-response` event,
+        here; the check and the native board's share run in that file
+        (`gx_store_route_board_conversation_response`, shared with the web build),
+        and any other valid response travels back to native Automate or to any
+        tasks CEF workarea as the standard `ghostex-project-board-response` event,
         matched by the page on its own requestId.
         */
-        if payload.chars().count() > GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_PAYLOAD_MAX_CHARS {
-            return;
-        }
-        let Ok(message) = serde_json::from_str::<serde_json::Value>(payload) else {
+        let Some(response) = self.gx_store_route_board_conversation_response(payload, cx) else {
             return;
         };
-        if message.get("type").and_then(serde_json::Value::as_str)
-            != Some(GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_MESSAGE_TYPE)
-            || message.get("version").and_then(serde_json::Value::as_u64)
-                != Some(GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_MESSAGE_VERSION)
-        {
-            return;
-        }
-        let Some(response) = message.get("response").filter(|value| value.is_object()) else {
-            return;
-        };
-        let request_id_valid = response
-            .get("requestId")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .is_some_and(|value| {
-                !value.is_empty() && value.chars().count() <= GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS
-            });
-        if !request_id_valid {
-            return;
-        }
-        if self.route_native_automate_board_response(response, cx) {
-            return;
-        }
-        if self.native_kanban_receive_conversation_response(response, cx) {
+        if self.route_native_automate_board_response(&response, cx) {
             return;
         }
         let response_json = response.to_string();

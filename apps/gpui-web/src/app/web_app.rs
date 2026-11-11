@@ -80,6 +80,15 @@ pub(crate) struct GhostexGpuiApp {
     pub(crate) native_changes: Option<Entity<crate::app::native_changes::ChangesView>>,
     pub(crate) native_changes_preset: Option<crate::app::native_changes::ChangesPreset>,
     pub(crate) changes_open: bool,
+    /// The Beads view (the desktop's `app/native_beads/`), drawn beside the chat while
+    /// `beads_open` (`web_host/beads.rs`).
+    pub(crate) native_beads: Option<Entity<crate::app::native_beads::BeadsView>>,
+    pub(crate) beads_open: bool,
+    pub(crate) beads_width: f32,
+    /// The Beads view's Board (the desktop's `app/native_kanban/`; `web_host/kanban.rs`).
+    pub(crate) native_kanban: crate::app::native_kanban::state::NativeKanbanState,
+    /// Whether the Beads panel shows the Board now, so its poll runs only while it is seen.
+    pub(crate) native_kanban_shown: bool,
     /// The side chat drawn beside the chat (`web_host/side_chat.rs`), opened by `openSideChat`.
     pub(crate) side_chat_open: Option<ghostex_gx_core::SessionKey>,
     pub(crate) changes_width: f32,
@@ -129,6 +138,11 @@ impl GhostexGpuiApp {
             native_changes: None,
             native_changes_preset: None,
             changes_open: false,
+            native_beads: None,
+            beads_open: false,
+            beads_width: 980.0,
+            native_kanban: Default::default(),
+            native_kanban_shown: false,
             side_chat_open: None,
             changes_width: 620.0,
             chat_presentations: HashMap::new(),

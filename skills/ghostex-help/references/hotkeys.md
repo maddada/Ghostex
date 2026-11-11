@@ -48,7 +48,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Switch to Agents | unassigned |  | unassigned |  | Switch to Agents view. | `switchAgentsView` |
 | Switch to VS Code | unassigned |  | unassigned |  | Switch to VS Code view. | `switchSourceView` |
 | Switch to Browser | unassigned |  | unassigned |  | Switch to Browser view. | `switchGitHubView` |
-| Switch to Kanban | unassigned |  | unassigned |  | Switch to Kanban view. | `switchKanbanView` |
+| Switch to Beads | unassigned |  | unassigned |  | Switch to the Beads view. | `switchKanbanView` |
 | Switch to Files | unassigned |  | unassigned |  | Switch to Files view. | `switchManageView` |
 | Switch to Automate | unassigned |  | unassigned |  | Switch to Automate view. | `switchAutomateView` |
 | Switch to Changes | unassigned |  | unassigned |  | Switch to Changes view. | `switchChangesView` |

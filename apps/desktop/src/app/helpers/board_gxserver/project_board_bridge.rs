@@ -1,8 +1,7 @@
 // C1 wave-1 deferred split: apps/desktop/src/app/helpers/board_gxserver.rs
 // (~4.3k lines) further divided into responsibility-scoped submodules (pure
 // move, no logic changes). This file holds the Kanban project board bridge: workarea URL derivation,
-// bridge runtime context, board command intents/requests, and the project
-// beads bridge response/error helpers.
+// bridge runtime context.
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 use crate::app::helpers::*;
@@ -54,71 +53,4 @@ pub(crate) fn project_board_bridge_runtime_context_from_snapshot(
         remote_machine_id: remote_reference.map(|reference| reference.remote_machine_id),
         remote_target: None,
     })
-}
-
-pub(crate) fn project_beads_gxserver_action_for_board_action(
-    action: &str,
-) -> Result<&'static str, String> {
-    match action {
-        "addComment" => Ok("comment"),
-        "addLabel" => Ok("addLabel"),
-        "configGet" => Ok("configGet"),
-        "configGetIssuePrefix" => Ok("configGetIssuePrefix"),
-        "configSet" => Ok("configSet"),
-        "create" => Ok("create"),
-        "delete" => Ok("delete"),
-        "depAdd" => Ok("depAdd"),
-        "depRemove" => Ok("depRemove"),
-        "list" => Ok("list"),
-        "listIssues" => Ok("board"),
-        "listAllLabels" => Ok("listAllLabels"),
-        "renamePrefix" => Ok("renamePrefix"),
-        "removeLabel" => Ok("removeLabel"),
-        "search" => Ok("search"),
-        "setLabels" => Ok("setLabels"),
-        "show" => Ok("show"),
-        "updateDescription" => Ok("updateDescription"),
-        "updateEstimate" => Ok("updateEstimate"),
-        "updatePriority" => Ok("updatePriority"),
-        "updateStatus" => Ok("updateStatus"),
-        "updateTitle" => Ok("updateTitle"),
-        _ => Err(format!("Unsupported Beads action: {action}")),
-    }
-}
-
-pub(crate) fn project_beads_bridge_response_from_gxserver(
-    status_code: u16,
-    body: &str,
-    request_id: &str,
-) -> Result<serde_json::Value, String> {
-    if !(200..300).contains(&status_code) {
-        let error = project_beads_gxserver_error_message(body, Some(status_code));
-        return Ok(project_beads_bridge_error_response(request_id, &error));
-    }
-    let response = serde_json::from_str::<serde_json::Value>(body)
-        .map_err(|_| "gxserver returned an invalid Beads response.".to_string())?;
-    let result = response
-        .get("result")
-        .and_then(serde_json::Value::as_object)
-        .ok_or_else(|| "gxserver did not return a Beads result.".to_string())?;
-    Ok(project_beads_bridge_response_from_result(
-        &serde_json::Value::Object(result.clone()),
-        request_id,
-    ))
-}
-
-pub(crate) fn project_beads_gxserver_error_message(body: &str, status_code: Option<u16>) -> String {
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body)
-        && let Some(message) = value
-            .get("error")
-            .and_then(|error| error.get("message"))
-            .and_then(serde_json::Value::as_str)
-            .or_else(|| value.get("message").and_then(serde_json::Value::as_str))
-    {
-        return message.to_string();
-    }
-    match status_code {
-        Some(status_code) => format!("gxserver Beads request failed with HTTP {status_code}."),
-        None => "gxserver Beads request failed.".to_string(),
-    }
 }

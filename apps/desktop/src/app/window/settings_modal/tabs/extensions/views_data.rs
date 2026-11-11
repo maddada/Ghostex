@@ -353,7 +353,7 @@ pub(crate) fn view_order_items(
         item("agents", "Agents", true),
         item("source", "VS Code", !values.bool("codeViewTabHidden")),
         item("browser", "Browser", !values.bool("browserViewTabHidden")),
-        item("kanban", "Kanban", !values.bool("kanbanViewTabHidden")),
+        item("kanban", "Beads", !values.bool("kanbanViewTabHidden")),
         item(
             "automate",
             "Automate",

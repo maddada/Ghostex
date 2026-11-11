@@ -21,8 +21,10 @@ pub(crate) mod gx_store;
 pub(crate) mod helpers;
 pub(crate) mod hotkeys;
 pub(crate) mod model;
+pub(crate) mod native_beads;
 pub(crate) mod native_changes;
 pub(crate) mod native_chat;
+pub(crate) mod native_kanban;
 pub(crate) mod native_sidebar;
 pub(crate) mod notice_modal_host;
 /// The window panels' tween alone (the page has none of the desktop's panels), which the chat's

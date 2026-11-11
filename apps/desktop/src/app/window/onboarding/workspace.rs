@@ -101,7 +101,7 @@ fn tab_meta(tab: WsTab) -> (&'static str, &'static str) {
         WsTab::Agents => ("users", "Agents"),
         WsTab::View(ViewKey::Code) => ("code", "VS Code"),
         WsTab::View(ViewKey::Browser) => ("target", "Browser"),
-        WsTab::View(ViewKey::Kanban) => ("kanban", "Kanban"),
+        WsTab::View(ViewKey::Kanban) => ("kanban", "Beads"),
         WsTab::View(ViewKey::Automate) => ("bolt", "Automate"),
         WsTab::View(ViewKey::Docs) => ("list", "Files"),
     }

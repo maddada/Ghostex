@@ -1,5 +1,5 @@
-//! One ticket card (`TicketCard` in board-lane-card.tsx): id and assignee, priority and title,
-//! then the details the card-view toggles allow. Cards drag between lanes and open on click.
+//! One ticket card (`TicketCard` in board-lane-card.tsx): id and assignee, title and its `P0`–`P4`
+//! tag, the meta line, grey label chips and the linked agent, as the card-view toggles allow. Cards drag between lanes and open on click.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -13,6 +13,7 @@ use super::palette::KanbanPalette;
 use super::widgets::CARD_RADIUS;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::titlebar_svg_icon;
+use crate::app::native_chat::fonts::CHAT_MONO;
 
 /// What a dragged card carries; lanes accept it and move the ticket.
 #[derive(Clone)]
@@ -44,74 +45,60 @@ impl Render for KanbanCardDrag {
     }
 }
 
-/// `TicketPriorityIcon`: a filled square for Urgent, otherwise three rising bars.
-fn priority_icon(priority: Option<i64>, p: &KanbanPalette) -> AnyElement {
-    let tone = p.priority_tone(priority);
-    let value = priority.unwrap_or(2);
-    if value <= 0 {
-        return div()
-            .size(px(13.0))
-            .rounded(px(3.5))
-            .bg(tone)
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_size(px(10.0))
-            .font_weight(FontWeight::BOLD)
-            .text_color(gpui::rgb(0x0e0e0e))
-            .child("!")
-            .into_any_element();
-    }
-    let filled = match value {
-        1 => 3,
-        2 => 2,
-        _ => 1,
-    };
+/// The card's priority as a mono `P0`–`P4` tag in a hairline box.
+fn priority_tag(priority: Option<i64>, p: &KanbanPalette) -> gpui::Div {
     div()
-        .flex()
-        .items_end()
-        .gap(px(1.5))
-        .h(px(12.0))
-        .children((0..3).map(|bar| {
-            div()
-                .w(px(3.0))
-                .h(px(4.0 + bar as f32 * 3.5))
-                .rounded(px(1.0))
-                .bg(if bar < filled {
-                    tone
-                } else {
-                    tone.opacity(0.25)
-                })
-        }))
-        .into_any_element()
+        .flex_none()
+        .px(px(5.0))
+        .rounded(px(5.0))
+        .border_1()
+        .border_color(p.border_strong)
+        .font_family(CHAT_MONO)
+        .text_size(px(10.5))
+        .line_height(px(16.0))
+        .text_color(p.muted)
+        .child(format!("P{}", priority.unwrap_or(2).clamp(0, 4)))
 }
 
-fn chip(
-    icon: Option<(&'static str, Hsla)>,
-    dot: Option<Hsla>,
-    text: String,
-    p: &KanbanPalette,
-) -> gpui::Div {
+/// A grey label chip: tag glyph and the label.
+fn label_chip(label: String, p: &KanbanPalette) -> gpui::Div {
     div()
         .flex()
         .items_center()
-        .gap(px(5.0))
+        .gap(px(4.0))
         .min_w_0()
         .max_w_full()
-        .px(px(8.0))
-        .py(px(2.0))
-        .rounded_full()
-        .border_1()
-        .border_color(p.border)
+        .px(px(6.0))
+        .py(px(1.0))
+        .rounded(px(5.0))
+        .bg(p.control)
         .text_size(px(11.0))
         .text_color(p.muted)
-        .when_some(dot, |this, dot| {
-            this.child(div().size(px(7.0)).flex_none().rounded_full().bg(dot))
+        .child(titlebar_svg_icon("titlebar/tag.svg", 11.0, p.faint))
+        .child(div().truncate().child(label))
+}
+
+/// One item of the meta line: an optional grey outline glyph and its text.
+fn meta_item(icon: Option<&'static str>, text: String, p: &KanbanPalette) -> AnyElement {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(px(3.0))
+        .when_some(icon, |this, icon| {
+            this.child(titlebar_svg_icon(icon, 11.0, p.faint))
         })
-        .when_some(icon, |this, (icon, color)| {
-            this.child(titlebar_svg_icon(icon, 12.0, color))
-        })
-        .child(div().truncate().child(text))
+        .child(text)
+        .into_any_element()
+}
+
+/// bd's issue type as the meta line shows it: `bug` reads "Bug".
+fn issue_type_label(issue_type: &str) -> String {
+    let mut chars = issue_type.trim().chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
 }
 
 impl GhostexGpuiApp {
@@ -131,10 +118,48 @@ impl GhostexGpuiApp {
         let comments = issue.comment_total();
         let tshirt = estimate_to_tshirt(issue.estimate);
         let link = self.native_kanban.conversation.primary_link_for(&issue.id);
+        let done = ticket.board_status == "done" || issue.status == "closed";
         let show_top = view.show_id || (view.show_assignee && issue.assignee.is_some());
-        let show_chips = (view.show_labels && !issue.labels.is_empty())
-            || (view.show_details
-                && (tshirt.is_some() || blocked_by > 0 || blocking > 0 || comments > 0));
+        let mut meta = Vec::new();
+        if view.show_details {
+            if let Some(kind) = issue
+                .issue_type
+                .as_deref()
+                .map(issue_type_label)
+                .filter(|kind| !kind.is_empty())
+            {
+                meta.push(meta_item(None, kind, p));
+            }
+            if blocked_by > 0 {
+                meta.push(meta_item(
+                    Some("titlebar/link.svg"),
+                    format!("Waiting on {blocked_by}"),
+                    p,
+                ));
+            }
+            if blocking > 0 {
+                meta.push(meta_item(
+                    Some("titlebar/alert-triangle.svg"),
+                    format!("Blocks {blocking}"),
+                    p,
+                ));
+            }
+            if comments > 0 {
+                meta.push(meta_item(
+                    Some("titlebar/message-circle.svg"),
+                    comments.to_string(),
+                    p,
+                ));
+            }
+            if let Some(tshirt) = tshirt {
+                meta.push(meta_item(Some("titlebar/clock.svg"), tshirt.to_string(), p));
+            }
+        }
+        let labels = if view.show_labels {
+            issue.labels.clone()
+        } else {
+            Vec::new()
+        };
         let hover = p.card_hover;
         let drag = KanbanCardDrag {
             ticket_id: id.clone(),
@@ -148,6 +173,7 @@ impl GhostexGpuiApp {
         let menu_id = id.clone();
         let jump_id = id.clone();
         let busy = self.native_kanban.busy_ticket.is_some();
+        let faint = p.faint;
         div()
             .id(ElementId::Name(format!("kanban-card-{id}").into()))
             .w_full()
@@ -195,7 +221,6 @@ impl GhostexGpuiApp {
                         .when_some(
                             issue.assignee.clone().filter(|_| view.show_assignee),
                             |this, assignee| {
-                                let tone = KanbanPalette::chip_tone(&assignee);
                                 let initial = assignee
                                     .chars()
                                     .next()
@@ -209,8 +234,8 @@ impl GhostexGpuiApp {
                                         .flex()
                                         .items_center()
                                         .justify_center()
-                                        .bg(tone.opacity(0.18))
-                                        .text_color(tone)
+                                        .bg(p.control)
+                                        .text_color(p.muted)
                                         .text_size(px(10.0))
                                         .font_weight(FontWeight::MEDIUM)
                                         .child(initial),
@@ -223,31 +248,37 @@ impl GhostexGpuiApp {
                 div()
                     .flex()
                     .items_start()
-                    .gap(px(7.0))
+                    .justify_between()
+                    .gap(px(8.0))
                     .min_w_0()
+                    .child(
+                        div()
+                            .min_w_0()
+                            .text_size(px(13.0))
+                            .line_height(px(18.0))
+                            .text_color(if done {
+                                p.muted
+                            } else {
+                                p.foreground.opacity(0.95)
+                            })
+                            .when(done, |this| this.line_through())
+                            .child(issue.title.clone()),
+                    )
                     .when(view.show_priority, |this| {
                         this.child(
                             div()
                                 .id(ElementId::Name(format!("kanban-card-priority-{id}").into()))
                                 .flex_none()
-                                .mt(px(3.0))
+                                .mt(px(1.0))
                                 .tooltip({
                                     let label = priority_label(issue.priority);
                                     move |window, cx| {
                                         crate::app::helpers::titlebar_tooltip(label, window, cx)
                                     }
                                 })
-                                .child(priority_icon(issue.priority, p)),
+                                .child(priority_tag(issue.priority, p)),
                         )
-                    })
-                    .child(
-                        div()
-                            .min_w_0()
-                            .text_size(px(13.0))
-                            .line_height(px(18.0))
-                            .text_color(p.foreground.opacity(0.95))
-                            .child(issue.title.clone()),
-                    ),
+                    }),
             )
             .when(
                 view.show_description && !issue.description.is_empty(),
@@ -262,69 +293,42 @@ impl GhostexGpuiApp {
                     )
                 },
             )
-            .when(show_chips, |this| {
+            .when(!meta.is_empty(), |this| {
                 let mut row = div()
                     .flex()
                     .flex_wrap()
                     .items_center()
-                    .gap(px(4.0))
-                    .mt(px(2.0));
-                if view.show_labels {
-                    for label in &issue.labels {
-                        row = row.child(chip(
-                            None,
-                            Some(KanbanPalette::chip_tone(label)),
-                            label.clone(),
-                            p,
-                        ));
+                    .gap(px(5.0))
+                    .text_size(px(12.0))
+                    .text_color(p.muted);
+                for (index, item) in meta.into_iter().enumerate() {
+                    if index > 0 {
+                        row = row.child(div().text_color(faint).child("·"));
                     }
-                }
-                if view.show_details {
-                    if let Some(tshirt) = tshirt {
-                        row = row.child(chip(
-                            Some(("titlebar/clock.svg", p.faint)),
-                            None,
-                            tshirt.to_string(),
-                            p,
-                        ));
-                    }
-                    if blocked_by > 0 {
-                        row = row.child(chip(
-                            Some(("titlebar/square-minus.svg", gpui::rgb(0xf87171).into())),
-                            None,
-                            format!("{blocked_by} blocked"),
-                            p,
-                        ));
-                    }
-                    if blocking > 0 {
-                        row = row.child(chip(
-                            Some(("titlebar/alert-circle.svg", gpui::rgb(0xfbbf24).into())),
-                            None,
-                            format!("{blocking} blocking"),
-                            p,
-                        ));
-                    }
-                    if comments > 0 {
-                        row = row.child(chip(
-                            Some(("titlebar/message-circle.svg", gpui::rgb(0x38bdf8).into())),
-                            None,
-                            comments.to_string(),
-                            p,
-                        ));
-                    }
+                    row = row.child(item);
                 }
                 this.child(row)
             })
+            .when(!labels.is_empty(), |this| {
+                this.child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap(px(4.0))
+                        .mt(px(2.0))
+                        .children(labels.into_iter().map(|label| label_chip(label, p))),
+                )
+            })
             .when_some(link.filter(|_| view.show_links), |this, link| {
-                let icon = if link.openable {
-                    "titlebar/external-link.svg"
-                } else {
-                    "titlebar/player-play.svg"
-                };
                 let muted = p.muted;
                 let hover = p.control_hover;
                 this.child(
                     div()
+                        .mt(px(2.0))
+                        .pt(px(8.0))
+                        .border_t_1()
+                        .border_color(p.border)
                         .flex()
                         .items_center()
                         .justify_between()
@@ -337,31 +341,47 @@ impl GhostexGpuiApp {
                                 .items_center()
                                 .gap(px(6.0))
                                 .min_w_0()
-                                .child(titlebar_svg_icon(
-                                    "titlebar/link.svg",
-                                    13.0,
-                                    gpui::rgb(0x34d399).into(),
-                                ))
+                                .child(titlebar_svg_icon("titlebar/robot.svg", 13.0, faint))
                                 .child(div().truncate().child(link.label.clone())),
                         )
                         .child(
                             div()
-                                .id(ElementId::Name(format!("kanban-card-jump-{id}").into()))
-                                .size(px(22.0))
                                 .flex()
                                 .flex_none()
                                 .items_center()
-                                .justify_center()
-                                .rounded(px(6.0))
-                                .when(busy, |this| this.opacity(0.45))
-                                .when(!busy, |this| {
-                                    this.cursor_pointer().hover(move |style| style.bg(hover))
+                                .gap(px(4.0))
+                                .when(link.live, |this| {
+                                    this.child(div().size(px(6.0)).rounded_full().bg(faint))
                                 })
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.native_kanban_jump_to_session(&jump_id, cx);
-                                }))
-                                .child(titlebar_svg_icon(icon, 13.0, muted)),
+                                .child(
+                                    div()
+                                        .id(ElementId::Name(
+                                            format!("kanban-card-jump-{id}").into(),
+                                        ))
+                                        .size(px(22.0))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .rounded(px(6.0))
+                                        .when(busy, |this| this.opacity(0.45))
+                                        .when(!busy, |this| {
+                                            this.cursor_pointer()
+                                                .hover(move |style| style.bg(hover))
+                                        })
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            cx.stop_propagation();
+                                            this.native_kanban_jump_to_session(&jump_id, cx);
+                                        }))
+                                        .child(titlebar_svg_icon(
+                                            if link.openable {
+                                                "titlebar/arrow-up-right.svg"
+                                            } else {
+                                                "titlebar/player-play.svg"
+                                            },
+                                            13.0,
+                                            muted,
+                                        )),
+                                ),
                         ),
                 )
             })
@@ -379,6 +399,7 @@ impl GhostexGpuiApp {
                     )
                 },
             )
+            .when(done, |this| this.opacity(0.62))
             .into_any_element()
     }
 }

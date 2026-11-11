@@ -220,6 +220,9 @@ pub(crate) struct SidebarMenuState {
     /// Keeps `window`'s tooltips hidden while the menu is up (`Root::suppress_tooltips`). `None`
     /// only while the pointer is on a row's (i), whose tooltip is the one exception.
     pub(crate) tooltips: Option<gpui::TooltipSuppression>,
+    /// Where the menu may sit, when it opens outside the sidebar (the Beads view's menus, in the
+    /// side panel); `None` keeps it inside the sidebar.
+    pub(crate) region: Option<Bounds<Pixels>>,
 }
 
 impl SidebarMenuPanel {

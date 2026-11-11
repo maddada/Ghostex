@@ -97,11 +97,12 @@ impl GhostexGpuiApp {
         let description_value = issue
             .map(|issue| issue.description.clone())
             .unwrap_or_default();
-        let title_placeholder = if mode == KanbanFormMode::New {
-            "Auto-generated from prompt when left empty"
-        } else {
-            "Title"
-        };
+        let title_placeholder =
+            if mode == KanbanFormMode::New && self.native_kanban.title_generation == Some(true) {
+                "Auto-generated from prompt when left empty"
+            } else {
+                "Title"
+            };
         let (title, title_subscription) =
             self.native_kanban_input(title_placeholder, &title_value, window, cx);
         let (description, description_subscription) = self.native_kanban_text_area(
@@ -177,7 +178,7 @@ impl GhostexGpuiApp {
         self.native_kanban.panel = Some(KanbanPanel::Ticket(Box::new(form)));
         let issue_id = ticket_id.to_string();
         self.native_kanban_spawn(
-            move |context| show_issue(context, &issue_id),
+            move |context| async move { show_issue(&context, &issue_id).await },
             move |this, result, cx| {
                 let Ok(Some(shown)) = result else {
                     return;

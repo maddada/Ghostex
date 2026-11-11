@@ -22,9 +22,34 @@ impl GhostexGpuiApp {
     ///
     /// Runs in the app's render: the title, toolbar, notice and side panel are drawn here and the
     /// lanes by the cached view (`view.rs`). `None` when the current context has no Kanban
-    /// (Quick/projectless or the feature is off), which keeps the static placeholder.
+    /// (Quick/projectless or the feature is off), which keeps the static placeholder. The board's
+    /// own window draws this whole board.
+    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the page has no board window
     pub(crate) fn render_native_kanban(
         &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        self.render_native_kanban_host(false, window, cx)
+    }
+
+    /// The Board layout under the Beads view's header: no title row, search box, Refresh or
+    /// `+ Ticket`, because the header has the view's title, search, sync and New bead. Filters,
+    /// columns and card details stay as the board's second row, over the lanes and side panel.
+    ///
+    /// CDXC:ProjectBoard 2026-11-10 WHY:
+    /// The Kanban view became the Beads view's Board layout, which shares one header (title, Tree/Board switch, search, sync, New bead) with the Tree; drawing the board's own title, search and New button under it would show each of them twice.
+    pub(crate) fn render_native_kanban_embedded(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        self.render_native_kanban_host(true, window, cx)
+    }
+
+    fn render_native_kanban_host(
+        &mut self,
+        embedded: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -73,7 +98,12 @@ impl GhostexGpuiApp {
                         this.focus_project_editor_surface(TitlebarMode::Kanban, window, cx);
                     }),
                 )
-                .child(self.render_native_kanban_board(lanes.into_any_element(), window, cx))
+                .child(self.render_native_kanban_board(
+                    lanes.into_any_element(),
+                    embedded,
+                    window,
+                    cx,
+                ))
                 .into_any_element(),
         )
     }
@@ -94,7 +124,7 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let p = self.native_kanban_palette(window);
-        let lane_count = self.native_kanban.columns.len();
+        let lane_count = self.native_kanban.derived().shown.len();
         let scroll = self.native_kanban.lanes_scroll.clone();
         let in_view = lanes_in_view(
             lane_count,
@@ -141,10 +171,12 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The board around the cached `lanes`: title, toolbar, notice and side panel.
+    /// The board around the cached `lanes`: title, toolbar, notice and side panel. `embedded`
+    /// leaves out the title row and the toolbar's search, Refresh and `+ Ticket`.
     fn render_native_kanban_board(
         &mut self,
         lanes: AnyElement,
+        embedded: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -171,7 +203,13 @@ impl GhostexGpuiApp {
             }
             None => None,
         };
-        let toolbar = self.render_native_kanban_toolbar(&p, filter_count, window, cx);
+        let toolbar = self.render_native_kanban_toolbar(
+            &p,
+            filter_count,
+            embedded.then_some(status),
+            window,
+            cx,
+        );
         let display_name = state.display_name.clone();
         div()
             .id("native-kanban")
@@ -191,50 +229,53 @@ impl GhostexGpuiApp {
             .text_size(px(13.0))
             .text_color(p.foreground)
             .when(!p.glass, |this| this.bg(p.page))
-            .child(
-                div()
-                    .flex()
-                    .flex_none()
-                    .items_end()
-                    .justify_between()
-                    .gap(px(12.0))
-                    // The title keeps its width and the status beside it truncates: with both
-                    // allowed to shrink, the title collapsed and wrapped one letter per line.
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_shrink_0()
-                            .max_w(gpui::relative(0.6))
-                            .child(
+            .when(!embedded, |this| {
+                this.child(
+                    div()
+                        .flex()
+                        .flex_none()
+                        .items_end()
+                        .justify_between()
+                        .gap(px(12.0))
+                        // The title keeps its width and the status beside it truncates: with both
+                        // allowed to shrink, the title collapsed and wrapped one letter per line.
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .flex_shrink_0()
+                                .max_w(gpui::relative(0.6))
+                                .child(
+                                    div()
+                                        .text_size(px(12.0))
+                                        .text_color(p.muted)
+                                        .child("Project"),
+                                )
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_size(px(15.0))
+                                        .text_color(p.foreground)
+                                        .child(display_name),
+                                ),
+                        )
+                        .when_some(status, |this, status| {
+                            this.child(
                                 div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_right()
                                     .text_size(px(12.0))
                                     .text_color(p.muted)
-                                    .child("Project"),
+                                    .child(status),
                             )
-                            .child(
-                                div()
-                                    .truncate()
-                                    .text_size(px(15.0))
-                                    .text_color(p.foreground)
-                                    .child(display_name),
-                            ),
-                    )
-                    .when_some(status, |this, status| {
-                        this.child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .truncate()
-                                .text_right()
-                                .text_size(px(12.0))
-                                .text_color(p.muted)
-                                .child(status),
-                        )
-                    }),
-            )
+                        }),
+                )
+            })
             .child(toolbar)
             .children(notice)
+            .children(self.native_kanban_menu_overlay(&p, cx))
             .child(
                 div()
                     .flex()

@@ -150,6 +150,7 @@ impl GhostexGpuiApp {
                 TITLEBAR_ICON_PANEL_BOTTOM,
                 None,
             ))
+            .child(self.render_web_beads_button(cx))
             .child(self.render_web_changes_button(cx))
             .into_any_element()
     }
@@ -258,6 +259,34 @@ impl GhostexGpuiApp {
                 .build(window, cx)
             })
             .on_click(cx.listener(|app, _, _, cx| app.web_toggle_changes(cx)))
+            .into_any_element()
+    }
+
+    /// The Beads button shows and hides the Beads view beside the chat, as Changes does.
+    fn render_web_beads_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        let text = titlebar_active_text_color();
+        let open = self.beads_open;
+        div()
+            .id("web-header-beads")
+            .size(px(TITLEBAR_CONTROL_HEIGHT))
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.0))
+            .cursor_pointer()
+            .when(open, |button| button.bg(titlebar_popup_menu_hover_color()))
+            .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
+            .child(titlebar_svg_icon("titlebar/route.svg", 16.0, text))
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(if open {
+                    "Hide Beads"
+                } else {
+                    "Show Beads"
+                })
+                .build(window, cx)
+            })
+            .on_click(cx.listener(|app, _, _, cx| app.web_toggle_beads(cx)))
             .into_any_element()
     }
 
@@ -396,6 +425,7 @@ impl Render for GhostexGpuiApp {
         }
         let header = self.render_workarea_header(cx);
         let changes = self.render_web_changes_panel(window, cx);
+        let beads = self.render_web_beads_panel(window, cx);
         let side_chat = self.render_web_side_chat_panel(cx);
         let terminal_bar =
             (shows_terminal && surface.is_some()).then(|| self.render_terminal_action_bar(cx));
@@ -464,6 +494,7 @@ impl Render for GhostexGpuiApp {
                                         status.unwrap_or_else(|| "Select a session".to_string()),
                                     ),
                             })
+                            .children(beads)
                             .children(changes)
                             .children(side_chat),
                     )
