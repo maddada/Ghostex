@@ -23,7 +23,11 @@ impl GhostexGpuiApp {
     ) {
         let target = ChatPageOpenTarget::from_settings();
         if target == ChatPageOpenTarget::Popup {
-            visual_page_modal::open_timing::start(cef::context_initialized());
+            visual_page_modal::open_timing::start(
+                cef::context_initialized(),
+                message["url"].as_str().unwrap_or_default(),
+                message["title"].as_str().unwrap_or_default(),
+            );
         }
         let Some(remote_project) = self
             .remote_project_for_terminal_target(GpuiEngineTerminalEventTarget::Agents(session_id))

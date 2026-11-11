@@ -131,6 +131,40 @@ impl NoticeScreen {
             == crate::session_chat_composer::SessionChatComposerState::Ready
     }
 
+    /// CDXC:AgentScreenDetection 2026-11-11 WHY:
+    /// A coordinator printed other threads' screens (`ghostex read-text`) in its own tool output,
+    /// and a thread report quoted one: Claude's account-limit chooser ("You've hit your limit",
+    /// "What do you want to do?", "1. Stop and wait for limit to reset", "Enter to confirm · Esc to
+    /// cancel") then sat in the coordinator's banner window, and its own chat showed "Usage limit
+    /// reached" with Switch account while gxserver held its queued deliveries. The live chooser
+    /// replaces Claude's input box, so the chooser's rows with Claude's own ready input box painted
+    /// below them are text on the screen, not this session's limit. A bare limit line with no
+    /// chooser rows after it (Claude's own banner over its input box) still counts.
+    pub(super) fn has_quoted_claude_limit_chooser(&self, needle: &str) -> bool {
+        let Some(index) = self.folded.iter().rposition(|line| line.contains(needle)) else {
+            return false;
+        };
+        let Some(row) = self.folded[index + 1..].iter().rposition(|line| {
+            [
+                "What do you want to do?",
+                "Stop and wait for limit to reset",
+                "Wait here, then continue automatically",
+                "Switch to usage credits",
+                "Enter to confirm",
+            ]
+            .iter()
+            .any(|chooser| line.contains(chooser))
+        }) else {
+            return false;
+        };
+        crate::session_chat_composer::detect_session_chat_composer_ready(
+            Some("claude"),
+            &self.display[index + 1 + row + 1..].join("\n"),
+        )
+        .state
+            == crate::session_chat_composer::SessionChatComposerState::Ready
+    }
+
     /// CDXC:AgentScreenDetection 2026-09-05 WHY:
     /// A successful `/model` command can leave the previous model's quota error within the banner window indefinitely.
     /// Its confirmation followed by a normal composer supersedes that evidence, but says nothing about the new model's quota; any later limit still counts.

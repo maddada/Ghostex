@@ -168,10 +168,49 @@ impl GhostexGpuiApp {
 
     /// CDXC:Sidebar 2026-09-21 DECISION:
     /// User: the sidebar menu drops down from its trigger button rather than opening where the pointer was: its right edge lines up with the button's right edge, and it sits below the button with a gap (4px since 2026-09-25, `HEADER_MENU_TRIGGER_GAP`). Clicking the button again closes it.
-    /// The More menu with its Collapse All row saying what the next press does to the Unified
-    /// groups, which fold without the menu being rebuilt.
-    pub(crate) fn native_sidebar_more_menu_now(&self, items: &Value) -> Value {
+    /// The More menu as it opens now: its Collapse All row says what the next press does to the
+    /// Unified groups, which fold without the menu being rebuilt, and the rows that have another
+    /// place on screen or are switched off are left out.
+    ///
+    /// CDXC:Sidebar 2026-11-11 DECISION:
+    /// User (main menu page, Q2502): Add Project leaves the menu, since its button sits in the top row beside the menu, and comes back as the menu's first row while the sidebar is too narrow for that button (`add_project_in_row` is the top row's own answer, `top_row_fit`). The rows of Tools and Help that open one of the app's panels are listed only while that panel is offered (its Settings switch, and for Dev servers and Extensions the project's scope: titlebar/menu_panels.rs), as they were in the three-dots menu; the menu itself is built without those switches, so they are asked here, when it opens.
+    pub(crate) fn native_sidebar_more_menu_now(
+        &self,
+        items: &Value,
+        add_project_in_row: bool,
+    ) -> Value {
         let mut items = items.clone();
+        if let Some(rows) = items.as_array_mut() {
+            let offered = |row: &Value| {
+                let message = &row["command"]["message"];
+                message["type"] != ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE
+                    || message["panel"]
+                        .as_str()
+                        .is_some_and(|panel| self.sidebar_menu_panel_offered(panel))
+            };
+            if add_project_in_row {
+                rows.retain(|row| {
+                    row["command"]["type"] != "sidebarAction"
+                        || row["command"]["action"] != ghostex_gx_core::ADD_PROJECT_ACTION
+                });
+            }
+            for row in rows.iter_mut() {
+                if let Some(children) = row.get_mut("children").and_then(Value::as_array_mut) {
+                    let listed = children.len();
+                    children.retain(offered);
+                    if children.len() != listed {
+                        trim_menu_separators(children);
+                    }
+                }
+            }
+            // A submenu every row of which is switched off has nothing to open.
+            rows.retain(|row| {
+                row.get("children")
+                    .and_then(Value::as_array)
+                    .is_none_or(|children| !children.is_empty())
+            });
+            trim_menu_separators(rows);
+        }
         let all_folded = self.native_sidebar.unified.as_ref().is_some_and(|unified| {
             let saved = &self.gx_store.unified_sidebar.saved;
             !unified.groups.is_empty()
@@ -397,6 +436,21 @@ impl GhostexGpuiApp {
         });
     }
 
+    /// Where a submenu may open beside its menu, in the menu's window `window`
+    /// (`SidebarMenuPlacement::Beside` says why): the whole window while each panel is drawn in a
+    /// frosted host window of its own and in the web page, otherwise the sidebar alone.
+    fn native_sidebar_submenu_room(&self, window: &Window) -> Bounds<Pixels> {
+        use crate::app::window::frosted_host::frosted_hosting_active;
+        if frosted_hosting_active() || cfg!(target_family = "wasm") {
+            Bounds {
+                origin: Point::default(),
+                size: window.viewport_size(),
+            }
+        } else {
+            self.native_sidebar.bounds
+        }
+    }
+
     pub(crate) fn dismiss_native_sidebar_menu(&mut self, cx: &mut gpui::Context<Self>) {
         if let Some(menu) = self.native_sidebar.menu.take() {
             cx.defer(move |cx| {
@@ -601,9 +655,12 @@ impl GhostexGpuiApp {
             });
             return;
         }
+        let sidebar = self.native_sidebar.bounds;
+        let submenu_room = self.native_sidebar_submenu_room(window);
         let Some(menu) = self.native_sidebar.menu.as_mut() else {
             return;
         };
+        let scale = menu.scale;
         let child_open = menu.panels.len() > panel_index + 1;
         let Some(panel) = menu.panels.get_mut(panel_index) else {
             return;
@@ -639,14 +696,32 @@ impl GhostexGpuiApp {
             } else {
                 panel.selected = Some(item_index);
                 panel.child_item = Some(item_index);
+                // A submenu that opens beside its menu (the sidebar menu's Tools, Help, Ghostex and
+                // Keep Awake) hangs from this panel's side, level with the row.
+                let placement = if item["presentation"] == "beside" {
+                    SidebarMenuPlacement::Beside {
+                        parent: panel.bounds(sidebar, scale, panel_index > 0),
+                        row: row_bounds,
+                        room: submenu_room,
+                        gap: px(SIDEBAR_MENU_OWNER_GAP * scale),
+                    }
+                } else {
+                    SidebarMenuPlacement::Pointer
+                };
                 truncate_panels(menu, panel_index + 1);
-                menu.panels.push(SidebarMenuPanel::new(
-                    children.clone(),
-                    Point::new(
-                        row_bounds.left(),
-                        row_bounds.bottom() + px(4.0 * menu.scale),
-                    ),
-                ));
+                let mut child = SidebarMenuPanel {
+                    placement,
+                    ..SidebarMenuPanel::new(
+                        children.clone(),
+                        Point::new(row_bounds.left(), row_bounds.bottom() + px(4.0 * scale)),
+                    )
+                };
+                // Opened with the keyboard (Right, Enter or Space), the cursor moves into it, on
+                // its first row; Left comes back out.
+                if !toggle {
+                    child.select_first_row();
+                }
+                menu.panels.push(child);
             }
         } else if let Some(command) = item.get("command") {
             if command["type"] == "sessionAccounts" && command["action"] == "load" {
@@ -719,6 +794,21 @@ impl GhostexGpuiApp {
                     {
                         return;
                     }
+                    app.dismiss_native_sidebar_menu_by_press(event.position, window, cx);
+                }),
+            )
+            // A submenu beside its menu makes this frame an L: a press in the corner neither panel
+            // covers is a press outside the menu. The panels take their own presses, so only those
+            // reach here.
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|app, event: &gpui::MouseDownEvent, window, cx| {
+                    app.dismiss_native_sidebar_menu_by_press(event.position, window, cx);
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|app, event: &gpui::MouseDownEvent, window, cx| {
                     app.dismiss_native_sidebar_menu_by_press(event.position, window, cx);
                 }),
             )
@@ -1480,6 +1570,21 @@ impl GhostexGpuiApp {
         window.prevent_default();
         cx.stop_propagation();
         cx.notify();
+    }
+}
+
+/// Takes out the separators that rows left out of a menu leave behind: one at either end, and the
+/// second of two in a row.
+fn trim_menu_separators(rows: &mut Vec<Value>) {
+    let mut after_separator = true;
+    rows.retain(|row| {
+        let separator = row["separator"] == true;
+        let keep = !(separator && after_separator);
+        after_separator = separator;
+        keep
+    });
+    if rows.last().is_some_and(|row| row["separator"] == true) {
+        rows.pop();
     }
 }
 

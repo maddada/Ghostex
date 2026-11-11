@@ -517,7 +517,7 @@ impl ExtensionsTab {
         // A terminal pane has no view tab, so its page says where it opens from.
         let enabled_subtitle = if extension.is_terminal_pane() {
             format!(
-                "Open it from its header icon while pinned, Quick Access (Open {}), or the header ⋯ menu > Extensions.",
+                "Open it from its header icon while pinned, Quick Access (Open {}), or Tools > Extensions in the sidebar's menu.",
                 extension.title()
             )
         } else {

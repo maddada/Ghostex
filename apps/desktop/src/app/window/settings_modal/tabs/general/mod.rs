@@ -7,6 +7,7 @@
 //! into a collapsed Advanced fold at its bottom (CDXC:Settings 2026-10-29 in search.rs).
 //! Experimental and Reset to defaults moved to About.
 mod chat_tools;
+mod commands_pane;
 mod computer_startup;
 mod marked_sections_preview;
 mod powershell;

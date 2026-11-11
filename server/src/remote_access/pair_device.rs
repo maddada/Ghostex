@@ -71,6 +71,8 @@ pub const PAIR_DEVICE_RATE_LIMITED_ERROR: &str = "pairingRateLimited";
 /// The computer's administrator prompt was declined (Windows administrator
 /// accounts). The phone shows the message; it must never contain "expired".
 pub const PAIR_DEVICE_APPROVAL_DECLINED_ERROR: &str = "pairingApprovalDeclined";
+/// The tailcat key a pairing names is another paired device's (`PairDeviceError::KeyHeldByAnotherDevice`).
+pub const PAIR_DEVICE_KEY_HELD_ERROR: &str = "pairingKeyHeldByAnotherDevice";
 /// The phone's app is older than pairing v2 (it sent no device key). Must never contain "expired".
 pub const PAIR_DEVICE_NEEDS_UPDATE_ERROR: &str = "pairingNeedsAppUpdate";
 /// A signed pairing or renewal ask whose signature or time didn't check out.
@@ -157,6 +159,14 @@ pub enum PairDeviceError {
     BadSignature(String),
     /// The Windows administrator prompt for the keys file was declined.
     ApprovalDeclined,
+    /// The tailcat key the request names belongs to another paired device (another device key):
+    /// the request cannot be that device (`paired_devices::tailcat_key_held_by_another_device`).
+    /// `name` and `paired` (the day, as Settings > Remote words it) say which entry holds it, so
+    /// the user removes the right one. Only a caller that spent a valid code gets this far.
+    KeyHeldByAnotherDevice {
+        name: String,
+        paired: String,
+    },
     Internal(anyhow::Error),
 }
 
@@ -438,6 +448,17 @@ pub fn begin_pairing(
         return Err(PairDeviceError::CodeExpired);
     }
     pairing_runtime.forget_secret();
+    // Checked once the code is spent, so it tells nobody without a code which keys are paired
+    // (CDXC:RemotePairing 2026-11-11 SECURITY in paired_devices.rs).
+    if let Some(client_key) = params.tailcat_client_key.as_deref() {
+        if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
+            db,
+            client_key,
+            &device_key.public_key,
+        )? {
+            return Err(key_held_by(&holder));
+        }
+    }
 
     let pending_id = format!("pd_{}", uuid::Uuid::new_v4().simple());
     let words = match_words(&params.secret, &device_key.public_key);
@@ -853,15 +874,6 @@ fn finish_pairing(
     let device_id = uuid::Uuid::new_v4().simple().to_string();
     let device_api_token = phone.then(mint_device_api_token);
     let token_expires_at = chrono::Utc::now() + DEVICE_API_TOKEN_TTL;
-    if let Some(key) = &key {
-        (context.append_key)(key, &device_id, &pending.name).map_err(|error| {
-            if error.is::<AdministratorApprovalDeclined>() {
-                PairDeviceError::ApprovalDeclined
-            } else {
-                PairDeviceError::Internal(error)
-            }
-        })?;
-    }
     let approver_key = pending.approver_key.clone().map(|mut key| {
         key.device_id = device_id.clone();
         key.added_at_ms = now_ms();
@@ -888,28 +900,81 @@ fn finish_pairing(
         legacy_key_line_removed: false,
     };
     let repository = RemotePairingRepository::new(context.db);
-    if let Err(error) = repository.insert_device(&record) {
-        if key.is_none() {
-            return Err(error.into());
-        }
-        // The key line grants access; never leave it behind without its row.
-        return Err(match (context.remove_key)(&device_id) {
-            Ok(_) => error.into(),
-            Err(rollback_error) => {
-                log_authorized_key_rollback_failure(context.logger, &device_id, &rollback_error);
-                anyhow::anyhow!(
-                    "{error:#}; additionally, the SSH key line ghostex-paired:{device_id} could not be removed from authorized_keys and must be deleted by hand: {rollback_error:#}"
-                )
-                .into()
+    /*
+    CDXC:RemotePairing 2026-11-11 SECURITY:
+    Review of 951cab347, finding 5: each pairing finishes on its own database connection, and nothing
+    held the key check, the new entry's insert and the choice of the entries it retires together, so
+    two approved pairings stating one key that finished at the same moment could both pass the check
+    and both be saved, neither retiring the other. The three now run in one IMMEDIATE transaction
+    (SQLite's write lock, taken at its start), so the second waits for the first and then finds its
+    entry; the same goes for link and purpose key registration (paired_devices.rs). Nothing slow runs
+    under the lock: the SSH key line is written after the commit (the entry is taken back if that
+    fails, and no token is live before `reload_device_api_tokens` below), and the earlier entries are
+    retired after it (their key lines, the push store, the allow-list).
+    */
+    let earlier = {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            context.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(anyhow::Error::from)?;
+        // Checked again here: a device may have paired with that key while this one waited.
+        if let Some(client_key) = pending.tailcat_client_key.as_deref() {
+            if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
+                context.db,
+                client_key,
+                &pending.device_key.public_key,
+            )? {
+                return Err(key_held_by(&holder));
             }
-        });
+        }
+        repository.insert_device(&record)?;
+        let earlier = super::paired_devices::earlier_pairings_of_same_device(
+            context.db,
+            &device_id,
+            pending.tailcat_client_key.as_deref(),
+            // Proven: `pairing_status` checked this key's signature before finishing the pairing.
+            &pending.device_key.public_key,
+        )?;
+        transaction.commit().map_err(anyhow::Error::from)?;
+        earlier
+    };
+    if let Some(key) = &key {
+        if let Err(error) = (context.append_key)(key, &device_id, &pending.name) {
+            // No key line, no entry.
+            let _ = repository.remove_device(&device_id);
+            return Err(if error.is::<AdministratorApprovalDeclined>() {
+                PairDeviceError::ApprovalDeclined
+            } else {
+                PairDeviceError::Internal(error)
+            });
+        }
+        // The key line grants access; never leave it behind without its entry.
+        if repository.find_device(&device_id)?.is_none() {
+            return Err(match (context.remove_key)(&device_id) {
+                Ok(_) => {
+                    anyhow::anyhow!("The new pairing was removed while it was being saved.").into()
+                }
+                Err(rollback_error) => {
+                    log_authorized_key_rollback_failure(
+                        context.logger,
+                        &device_id,
+                        &rollback_error,
+                    );
+                    anyhow::anyhow!(
+                        "The new pairing was removed while it was being saved, and the SSH key line ghostex-paired:{device_id} could not be removed from authorized_keys and must be deleted by hand: {rollback_error:#}"
+                    )
+                    .into()
+                }
+            });
+        }
     }
 
-    let replaced = super::paired_devices::replace_earlier_pairings_of_same_phone(
+    let replaced = super::paired_devices::retire_earlier_pairings(
         context.paths,
         context.db,
         &device_id,
-        pending.tailcat_client_key.as_deref(),
+        earlier,
         |id: &str| (context.remove_key)(id),
         |device, error| log_replaced_pairing_kept(context.logger, device, error),
     )?;
@@ -1104,6 +1169,9 @@ pub fn register_computer_keys_signed(
         &keys,
     )? {
         Ok(changed) => Ok(json!({ "changed": changed })),
+        Err(super::paired_devices::LinkKeyError::HeldByAnotherDevice { name, paired }) => {
+            Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired })
+        }
         Err(_) => Err(PairDeviceError::BadRequest(
             "keys must name app or server, each with a nodekey: public key.".to_string(),
         )),
@@ -1164,6 +1232,30 @@ fn log_replaced_pairing_kept(
         error: Some(format!("{error:#}")),
         details: Some(serde_json::json!({ "deviceId": device.id })),
     });
+}
+
+/// The refusal naming the entry that holds the key (review of finding 6, finding 2): its name and
+/// the day it paired, in the words Settings > Remote uses for it ("today", "yesterday", "Nov 10").
+fn key_held_by(holder: &RemotePairedDeviceRecord) -> PairDeviceError {
+    PairDeviceError::KeyHeldByAnotherDevice {
+        name: holder.name.clone(),
+        paired: paired_day(&holder.paired_at, chrono::Local::now()),
+    }
+}
+
+/// As `format_paired_device_day` in the desktop's Settings > Remote model.
+pub(crate) fn paired_day(iso: &str, now: chrono::DateTime<chrono::Local>) -> String {
+    use chrono::Datelike as _;
+    let Ok(time) = chrono::DateTime::parse_from_rfc3339(iso) else {
+        return "on an unknown day".to_string();
+    };
+    let time = time.with_timezone(&chrono::Local);
+    match (now.date_naive() - time.date_naive()).num_days() {
+        days if days <= 0 => "today".to_string(),
+        1 => "yesterday".to_string(),
+        _ if time.year() == now.year() => format!("{} {}", time.format("%b"), time.day()),
+        _ => format!("{} {}, {}", time.format("%b"), time.day(), time.year()),
+    }
 }
 
 fn record_pair_device_attempt() -> Result<(), PairDeviceError> {

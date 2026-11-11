@@ -87,7 +87,7 @@ fn usage_only_provider(provider: &str) -> bool {
 }
 
 /// A usage-only provider's agent logo, in the chrome's ink where the artwork is plain white.
-fn usage_only_icon(provider: &str) -> Arc<gpui::Image> {
+pub(crate) fn usage_only_icon(provider: &str) -> Arc<gpui::Image> {
     static ICONS: OnceLock<
         std::sync::Mutex<std::collections::HashMap<(String, bool), Arc<gpui::Image>>>,
     > = OnceLock::new();

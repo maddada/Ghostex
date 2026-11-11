@@ -1,0 +1,5 @@
+# /etc/ghostex-push-relay/apns.conf (root:ghostex-push-relay, mode 0640). The two ids of the Apple push key
+# in AuthKey.p8 beside this file: the Key ID shown with the key in the Apple Developer account
+# (Certificates, Identifiers & Profiles > Keys) and the account's Team ID (Membership details).
+KEY_ID=XXXXXXXXXX
+TEAM_ID=XXXXXXXXXX

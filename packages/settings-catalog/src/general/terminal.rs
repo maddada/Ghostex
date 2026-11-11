@@ -42,6 +42,11 @@ pub(crate) fn terminal(platform: Platform) -> Section {
         row("clickToWakeSleepingSessions", "Keep sleeping tabs asleep until clicked", "Select sleeping pane tabs without waking them until the empty pane is clicked."),
         row("showQuickModelPickerInTerminal", "Model picker in terminal view", format!("Show a model button in the terminal bar and open the model picker with its shortcut ({} by default) in agent terminal sessions. Turn off to use terminal bindings.", hotkey_label("alt+p", platform))),
         row("showSessionIdInTerminalPanes", "Show session id in terminal panes", "Show the provider session id in the top-right corner of terminal panes."),
+        // CDXC:Settings 2026-11-11 DECISION in apps/desktop settings_modal/model.rs (`RailTier`, Q2511): the four Commands pane rows moved here from Sidebar & Sessions; the pane is a terminal under or beside the work area, not part of the sidebar.
+        row("commandsPanelDefaultHeightPx", "Commands pane height on double-click", "Height used when opening the command pane and when double-clicking its top resize rail."),
+        row("commandsPanelSide", "Commands pane side", "Dock the command pane below the workspace or to its right.").options(COMMANDS_PANEL_SIDE_OPTIONS),
+        row("commandsPanelAutoMinimize", "Auto-minimize Commands pane", "Minimize the Commands pane this long after you move focus elsewhere and the pointer leaves it. Commands keep running. Off keeps the pane open."),
+        row("commandsPanelAutoMinimizeDelaySeconds", "Minimize after (set with Auto-minimize Commands pane)", "How long the Commands pane stays open after focus and the pointer leave it.").num_options(COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS),
         row("promptEditorBackend", format!("Editor for {} and $EDITOR prompts", hotkey_label("ctrl+g", platform)), format!("Choose which editor {} uses when a terminal prompt asks for $EDITOR.", hotkey_label("ctrl+g", platform))).options(PROMPT_EDITOR_BACKEND_OPTIONS),
     ]);
     // Custom shaders (`terminalShadersEnabled`) is the Terminal shaders switch in Settings >

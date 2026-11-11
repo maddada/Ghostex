@@ -183,7 +183,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("A panel of short tips for getting more out of Ghostex, opened from the ⋯ menu.")),
+        ("description", J::Str("A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu.")),
         ("category", J::Str("menus-and-panels")),
         ("id", J::Str("tips")),
         ("placement", J::Str("titlebar-button")),
@@ -200,7 +200,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("A ⋯ menu entry with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.")),
+        ("description", J::Str("An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.")),
         ("category", J::Str("menus-and-panels")),
         ("id", J::Str("help")),
         ("placement", J::Str("titlebar-button")),
@@ -208,7 +208,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Ghostex Help")),
     ]),
     J::Obj(&[
-        ("description", J::Str("A ⋯ menu panel listing development servers running on this computer. A new Browser tab shows the same list.")),
+        ("description", J::Str("A panel listing development servers running on this computer, opened from Tools in the sidebar's menu.")),
         ("category", J::Str("menus-and-panels")),
         ("id", J::Str("devServers")),
         ("placement", J::Str("titlebar-button")),
@@ -217,7 +217,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("A ⋯ menu panel listing what Ghostex is running right now, with the CPU and memory each part is using.")),
+        ("description", J::Str("A panel listing what Ghostex is running right now, with the CPU and memory each part is using, opened from Tools in the sidebar's menu.")),
         ("category", J::Str("menus-and-panels")),
         ("id", J::Str("resources")),
         ("placement", J::Str("titlebar-button")),
@@ -411,7 +411,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsPages", J::Arr(&[J::Str("debugging")])),
     ]),
     J::Obj(&[
-        ("description", J::Str("An entry in the work area header’s ⋯ menu that lists your installed extensions.")),
+        ("description", J::Str("An entry under Tools in the sidebar's menu that lists your installed extensions.")),
         ("category", J::Str("menus-and-panels")),
         ("id", J::Str("extensionsButton")),
         ("placement", J::Str("titlebar-button")),
@@ -428,7 +428,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // Integration lost their gate. Someone who had the old switch on keeps what it showed:
     // `migrate_experimental_features_switch` in lib.rs.
     J::Obj(&[
-        ("description", J::Str("Keep this computer awake for a while from the ⋯ menu or the button at the top of the window, with its own settings under Settings > General > Power.")),
+        ("description", J::Str("Keep this computer awake for a while from the sidebar's menu or the button at the top of the window, with its own settings under Settings > General > Power.")),
         ("category", J::Str("experimental")),
         ("id", J::Str("keepAwake")),
         ("placement", J::Str("feature")),

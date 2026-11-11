@@ -9,10 +9,6 @@ pub(crate) struct NativeSidebarState {
     /// The Unified sidebar, installed only while Settings › Sidebar selects it
     /// (gx_store/unified_sidebar.rs); the classic snapshot below is still built and kept.
     pub(crate) unified: Option<Arc<super::unified::model::UnifiedSidebarSnapshot>>,
-    /// The machine tabs' sideways scroll, while they need one.
-    pub(crate) machine_tabs_scroll: gpui::ScrollHandle,
-    /// The selected tab and row width the scroll last revealed, so a manual scroll stays put.
-    pub(crate) machine_tabs_revealed: std::cell::RefCell<Option<(String, u32)>>,
     /// A dragged project header is over this group, and below its middle when `true`.
     pub(crate) unified_drop_target: Option<(String, bool)>,
     /// Redraws the Unified sidebar once a second while a card shows a running timer.

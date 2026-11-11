@@ -258,7 +258,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
 ) -> std::result::Result<usize, DomainStateError> {
     let lock = session_send_lock(project_id, session_id);
     let _owned = lock.lock().await;
-    send_session_chat_message_locked(
+    let sent = send_session_chat_message_locked(
         state,
         project_id,
         session_id,
@@ -268,7 +268,42 @@ pub(crate) async fn send_session_chat_message_with_draft(
         draft_version,
         interrupt,
     )
-    .await
+    .await;
+    if sent.is_ok() {
+        settle_work_replies(state, project_id, session_id, text, image_paths, source);
+    }
+    sent
+}
+
+/// A user's message that reached a coordinator answers its open work asks named "W7 Q12: …"
+/// (coordinators/work.rs `settle_chat_replies`). Not a message from another agent, which may quote
+/// such a line, and not a recovery or account-switch resend of one already sent.
+fn settle_work_replies(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+    image_paths: &[String],
+    source: SessionChatMessageSource,
+) {
+    let from_user = matches!(
+        source,
+        SessionChatMessageSource::Composer
+            | SessionChatMessageSource::AutomaticQueue
+            | SessionChatMessageSource::ManualQueue
+    );
+    if !from_user
+        || crate::coordinators::chat_replies(text).is_empty()
+        || text
+            .lines()
+            .any(|line| line.trim() == crate::coordinators::AGENT_MESSAGE_OPENER)
+    {
+        return;
+    }
+    if let Ok(db) = open_gxserver_database(&state.paths) {
+        let key = (project_id.to_string(), session_id.to_string());
+        let _ = crate::coordinators::settle_chat_replies(&db, &key, text, image_paths.len());
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

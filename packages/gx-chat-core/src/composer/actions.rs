@@ -227,6 +227,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             action.param("confirm").and_then(Value::as_bool) == Some(true),
         ),
         ActionKind::Send | ActionKind::Queue | ActionKind::Compact => {
+            state.composer.submissions_received += 1;
             let image_paths: Vec<String> = action
                 .param("imagePaths")
                 .and_then(Value::as_array)

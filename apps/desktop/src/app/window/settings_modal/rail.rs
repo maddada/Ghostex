@@ -1,7 +1,7 @@
-//! `SettingsSidebarNavigation`: the left rail with every Settings page under its tier label (App,
-//! Setup, More: CDXC:Settings 2026-10-29 in model.rs), the expandable Hotkeys sections (titles
-//! navigate, only the chevrons expand: CDXC:Settings 2026-09-12 DECISION), About last of the Setup
-//! tier, the Extensions page and its folding pages at the bottom (CDXC:Settings 2026-10-27 in
+//! `SettingsSidebarNavigation`: the left rail with every Settings page under its group's label
+//! (CDXC:Settings 2026-11-11 at `RailTier` in model.rs), the expandable Hotkeys sections (titles
+//! navigate, only the chevrons expand: CDXC:Settings 2026-09-12 DECISION), About last of the System
+//! group, the Extensions page and its folding pages at the bottom (CDXC:Settings 2026-10-27 in
 //! model.rs). The Show Advanced switch that stood in the footer is gone (CDXC:Settings
 //! 2026-10-29 in search.rs): advanced rows fold at the bottom of their page.
 use super::super::native_modal_kit::*;
@@ -261,7 +261,7 @@ fn rail_fold(
     )
 }
 
-/// A group's label above its pages (CDXC:Settings 2026-11-08 in model.rs).
+/// A group's label above its pages (CDXC:Settings 2026-11-11 at `RailTier` in model.rs).
 ///
 /// CDXC:Settings 2026-11-08 DECISION:
 /// User: "Please more separation here the labels for different sections are blending with the
@@ -722,7 +722,7 @@ pub(crate) fn render_rail(
             extension_pages.push(element);
         } else {
             // A label opens each group's run of shown pages, so a group whose pages are all hidden
-            // shows none (CDXC:Settings 2026-11-08 in model.rs).
+            // shows none (CDXC:Settings 2026-11-11 at `RailTier` in model.rs).
             if let Some(label) = RailTier::label_before(tier, tab) {
                 groups.push(render_tier_label(p, label, tier.is_some()));
             }

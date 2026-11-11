@@ -1568,6 +1568,85 @@ pub fn settle_answered_items(
     Ok(changed)
 }
 
+/// The "W7 Q12: words" answers in a message the user sent: each line that starts so begins an
+/// answer, which runs to the next such line or the end. Words may be empty (a picture alone).
+pub fn chat_replies(text: &str) -> Vec<(i64, String, String)> {
+    let mut replies: Vec<(i64, String, String)> = Vec::new();
+    for line in text.lines() {
+        let opener = line.trim_start().split_once(':').and_then(|(head, rest)| {
+            let (item, tag) = head.trim().split_once(' ')?;
+            let number = item.strip_prefix(['W', 'w'])?.parse::<i64>().ok()?;
+            Some((number, question_tag(tag)?, rest.trim().to_string()))
+        });
+        match (opener, replies.last_mut()) {
+            (Some(reply), _) => replies.push(reply),
+            (None, Some((_, _, words))) => {
+                words.push('\n');
+                words.push_str(line);
+            }
+            (None, None) => {}
+        }
+    }
+    for (_, _, words) in &mut replies {
+        *words = words.trim().to_string();
+    }
+    replies
+}
+
+/// Settles the open asks the user answered in a message that reached the coordinator ("W7 Q12:
+/// words"), as the dock's Reply records them (`reply` above), and says whether any changed. An
+/// answer already recorded (the dock's Send answer records before its message goes) is left as it
+/// is.
+///
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// User, of a question he had answered with the dock's Reply: "i answered this question with a
+/// reply, why do i still see it as needs you!!!". Enter in the Reply box is Add to prompt, which
+/// puts "W218 Q2498: words" in the chat box; that message reached the coordinator, who takes the
+/// prefix as recorded, but nothing recorded it, so Q2498 stayed open and in Needs you. A message
+/// with that prefix now settles its ask whichever way it was sent (Add to prompt, typed, the
+/// phone, the web), with words, a picture alone, or both.
+pub fn settle_chat_replies(
+    db: &Connection,
+    key: &SessionKey,
+    text: &str,
+    pictures: usize,
+) -> Result<bool, DomainStateError> {
+    let mut changed = false;
+    for (number, tag, words) in chat_replies(text) {
+        let Some(mut item) = read_item(db, key, number)? else {
+            continue;
+        };
+        let Some(ask) = item
+            .asks
+            .iter_mut()
+            .find(|ask| ask.tag == tag && ask.is_open())
+        else {
+            continue;
+        };
+        let now = now_iso();
+        ask.answered = if !words.is_empty() {
+            words.chars().take(2_000).collect()
+        } else if pictures > 0 {
+            "Sent a picture".to_string()
+        } else {
+            "Answered in the chat".to_string()
+        };
+        ask.settled_at = Some(now.clone());
+        let line = format!(
+            "{tag}: {}",
+            ask.answered.chars().take(120).collect::<String>()
+        );
+        item.record("answer", line, &now);
+        finish_if_only_asking(&mut item, &now);
+        write_work_item(db, key, &item)?;
+        changed = true;
+    }
+    if changed {
+        prune(db, key)?;
+    }
+    Ok(changed)
+}
+
 /// Whether the coordinator has an open ask or Needs you item naming a tag, so its ledger is worth
 /// asking about tags (`settle_answered_items`).
 pub fn has_question_items(db: &Connection, key: &SessionKey) -> bool {

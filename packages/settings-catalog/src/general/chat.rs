@@ -8,7 +8,6 @@ pub(crate) fn chat() -> Section {
         "Chat",
         vec![
             row("preferredAgentInterface", "Default view for compatible agents", "Automatically switch to chat as soon as Ghostex detects that an agent session supports it.").options(PREFERRED_AGENT_INTERFACE_OPTIONS),
-            row("closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs."),
             row("sessionChatCustomTranscriptWidthEnabled", "Custom transcript width (set with Transcript width)", "On once Transcript width is dragged to a percentage; off keeps Auto, where the transcript matches the prompt composer's width."),
             row("sessionChatTranscriptWidthPercent", "Transcript width", "The widest the centered transcript gets. Auto matches the prompt composer; drag to set a percentage of the window instead. Side panels you open take the empty space beside it first, so the text only narrows once none is left. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on."),
             row("sessionChatFileEditPreviews", "Show file edit previews", "Show the first seven code lines in each file edit. Turn off to show only the path and change counts."),
@@ -30,7 +29,6 @@ pub(crate) fn chat() -> Section {
             row("chatAnswersWaitForIdle", "Wait for turn end before sending form answers", "Send answers from Ghostex forms and Ghostex pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes."),
             row("chatPageOpenTarget", "Open Ghostex pages in", "Where a Ghostex page (gx page) an agent shows in chat, such as a mockup or a comparison, opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer.").options(CHAT_PAGE_OPEN_TARGET_OPTIONS),
             row("coordinatorBoardView", "Coordinator board opens as", "What the Work pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.").options(COORDINATOR_BOARD_VIEW_OPTIONS),
-            row("agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it."),
             row("orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh."),
             row("orchestratorPlaybook", "Coordinator playbook", "How your coordinators work: Ghostex's playbook, then your overrides, which they follow over it."),
             /*
@@ -43,7 +41,6 @@ pub(crate) fn chat() -> Section {
                 num_opt("0.75×", 0.75), num_opt("1×", 1.0), num_opt("1.25×", 1.25), num_opt("1.5×", 1.5), num_opt("2×", 2.0),
             ]),
             row("readAloudUnavailable", "Read aloud", "Read aloud can't speak on this computer, so it has no controls here. It works in the Ghostex phone app and in Ghostex in a browser connected to this computer."),
-            row("sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it. Shown while the Session details panel extension is on."),
         ],
     )
 }

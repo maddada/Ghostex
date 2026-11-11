@@ -7,13 +7,9 @@ use gpui::{
 };
 use serde_json::{Value, json};
 
-#[derive(Clone, Copy)]
-enum ReplyAction {
-    Copy,
-    Annotate,
-    SaveMarkdown,
-    ReadAloud,
-}
+/// Toggle key in `menu_toggle.rs` for every message's ⋯ menu: a second press on a ⋯ while its
+/// menu is up only closes it.
+const MESSAGE_MENU_TRIGGER: &str = "chat-message-more";
 
 impl NativeChatView {
     /// The focus a reply tracks for its action row; at Message spacing Compact (`compact`) your
@@ -118,13 +114,8 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
         let id = text(message, "id");
-        let work_open = work.is_some_and(|work| work.expanded);
-        // Message spacing Compact: the footer keeps its space, and holds nothing while it is
-        // hidden (message_spacing.rs).
+        let _ = focused;
         let compact = p.compact();
-        if compact && !work_open && !self.message_bar_shown(&id, focused) {
-            return Some(super::message_spacing::message_footer(p).into_any_element());
-        }
         let work_button = work.map(|work| {
             self.work_button(
                 work,
@@ -137,114 +128,13 @@ impl NativeChatView {
                 cx,
             )
         });
-        let markdown = text(message, "copyText");
-        let icon_color = if compact {
+        let rows = self.reply_menu_rows(message);
+        let tone = if compact {
             p.muted.opacity(super::message_spacing::FOOTER_DIM)
-        } else if p.light {
+        } else {
             p.muted
-        } else {
-            p.primary
         };
-        let button_size = if compact {
-            super::message_spacing::FOOTER_BUTTON
-        } else {
-            24.0
-        };
-        let hover_background = if p.light {
-            gpui::rgb(0xfafafa).into()
-        } else {
-            gpui::Hsla::from(gpui::rgb(0xffffff)).opacity(5.0 / 255.0)
-        };
-        let button = |action: ReplyAction, label: &'static str, icon: &'static str| {
-            let click_id = id.clone();
-            let click_markdown = markdown.clone();
-            div()
-                .id(format!("reply-action:{id}:{label}"))
-                .group("native-chat-reply-action")
-                .role(gpui::Role::Button)
-                .aria_label(label)
-                .tab_index(0)
-                .size(px(button_size * p.scale))
-                .flex_shrink_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(if compact { 4.0 } else { 8.0 } * p.scale))
-                .border(px(p.scale))
-                .border_color(gpui::transparent_black())
-                .chat_cursor_pointer()
-                .focus_visible(|mut style| {
-                    style = style.border_color(p.ring);
-                    style.box_shadow = Some(vec![gpui::BoxShadow {
-                        color: p.ring.opacity(0.2),
-                        offset: gpui::point(px(0.0), px(0.0)),
-                        blur_radius: px(0.0),
-                        spread_radius: px(3.0 * p.scale),
-                        inset: false,
-                    }]);
-                    style
-                })
-                .hover(|style| style.bg(hover_background))
-                .tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(label).build(window, cx)
-                })
-                .child(
-                    svg()
-                        .path(icon)
-                        .size(px(12.0 * p.scale))
-                        .text_color(icon_color)
-                        .group_hover("native-chat-reply-action", |style| {
-                            style.text_color(p.foreground)
-                        }),
-                )
-                .on_click(cx.listener(move |chat, _, _, cx| {
-                    chat.perform_reply_action(action, &click_id, &click_markdown, cx)
-                }))
-        };
-        let can_annotate =
-            self.config.app.is_some() && message["actionContent"]["canAnnotate"] == true;
-        let can_save = message["actionContent"]["canSaveMarkdown"] == true;
-        let read_aloud = &self.snapshot["readAloud"];
-        let can_read_aloud = read_aloud["available"] == true;
-        let reading = can_read_aloud && read_aloud["speakingId"] == message["id"];
-        let buttons = div()
-            .flex()
-            .items_center()
-            .gap(px(2.0 * p.scale))
-            .child(button(
-                ReplyAction::Copy,
-                "Copy message",
-                "chat-actions/copy",
-            ))
-            .when(can_annotate, |actions| {
-                actions.child(button(
-                    ReplyAction::Annotate,
-                    "Reply by Annotating",
-                    "chat-actions/annotate",
-                ))
-            })
-            .when(can_save, |actions| {
-                actions.child(button(
-                    ReplyAction::SaveMarkdown,
-                    "Save message to Markdown",
-                    "chat-actions/save",
-                ))
-            })
-            /*
-            CDXC:VoiceMode 2026-10-21 DECISION:
-            User (Q24): the desktop's Read aloud action goes last in the reply's hover row, just before the time. It reads Stop reading on the reply being read; the core decides both (packages/gx-chat-core/src/read_aloud/actions.rs), and it shows only while Read aloud is on and this computer has a voice (`readAloud.available`).
-            */
-            .when(can_read_aloud, |actions| {
-                actions.child(if reading {
-                    button(
-                        ReplyAction::ReadAloud,
-                        "Stop reading",
-                        "titlebar/player-stop.svg",
-                    )
-                } else {
-                    button(ReplyAction::ReadAloud, "Read aloud", "titlebar/volume.svg")
-                })
-            });
+        let more = self.message_more_button(&id, rows, compact, tone, p, cx);
         // The prose column: the marker's 2px inset, its 16px slot, and the 6px gap before the text,
         // or the column's own edge for an answer drawn without the dot.
         let prose_column = if self.is_flush_reply(message) {
@@ -253,7 +143,7 @@ impl NativeChatView {
             24.0
         };
         // Message spacing Compact: the work button at the footer's left, from the prose column,
-        // the buttons and the time at its right (message_spacing.rs).
+        // the time and the ⋯ at its right (message_spacing.rs).
         if compact {
             return Some(
                 super::message_spacing::message_footer(p)
@@ -265,22 +155,149 @@ impl NativeChatView {
                             .ml_auto()
                             .flex()
                             .items_center()
-                            .child(buttons)
-                            .children(footer_time(&id, message, p)),
+                            .children(footer_time(&id, message, p))
+                            .child(more),
                     )
                     .into_any_element(),
             );
         }
-        let fill = |row: gpui::Div| {
-            row.tab_group()
-                .children(work_button)
-                .child(buttons)
-                .when_some(message_time(&id, message, p), |row, time| row.child(time))
-        };
         Some(
-            fill(message_actions_row(p, focused || work_open).pl(px(prose_column * p.scale)))
+            message_actions_row(p)
+                .pl(px(prose_column * p.scale))
+                .tab_group()
+                .children(work_button)
+                .children(message_time(&id, message, p))
+                .child(more)
                 .into_any_element(),
         )
+    }
+
+    /// What a final reply's ⋯ menu offers: Copy, Reply by Annotating (in the app, for a reply that
+    /// can be annotated), Save to Markdown (where it can be saved) and Read aloud or Stop reading
+    /// (while Read aloud is on and this computer has a voice), the actions its row of buttons held.
+    ///
+    /// CDXC:VoiceMode 2026-10-21 DECISION:
+    /// User (Q24): the desktop's Read aloud action goes last among the reply's actions. It reads Stop reading on the reply being read; the core decides both (packages/gx-chat-core/src/read_aloud/actions.rs), and it shows only while Read aloud is on and this computer has a voice (`readAloud.available`).
+    fn reply_menu_rows(&self, message: &Value) -> Vec<Value> {
+        let id = text(message, "id");
+        let markdown = text(message, "copyText");
+        let mut rows = vec![json!({
+            "label":"Copy message","iconPath":"chat-actions/copy",
+            "command":{"type":"copyText","text":markdown},
+        })];
+        if self.config.app.is_some() && message["actionContent"]["canAnnotate"] == true {
+            rows.push(json!({
+                "label":"Reply by Annotating","iconPath":"chat-actions/annotate",
+                "command":{"type":"host","action":"annotateReply","markdown":markdown},
+            }));
+        }
+        if message["actionContent"]["canSaveMarkdown"] == true {
+            rows.push(json!({
+                "label":"Save message to Markdown","iconPath":"chat-actions/save",
+                "command":{"type":"markdownSaveOpen","markdown":markdown},
+            }));
+        }
+        let read_aloud = &self.snapshot["readAloud"];
+        if read_aloud["available"] == true {
+            let reading = read_aloud["speakingId"] == message["id"];
+            rows.push(json!({
+                "label": if reading { "Stop reading" } else { "Read aloud" },
+                "iconPath": if reading { "titlebar/player-stop.svg" } else { "titlebar/volume.svg" },
+                "command":{"type":"readAloudMessage","messageId":id},
+            }));
+        }
+        rows
+    }
+
+    /// The ⋯ after a message's time, in the time's quiet tone: it opens the message's actions in
+    /// the chat's own dropdown, at the pointer.
+    ///
+    /// CDXC:SessionChat 2026-11-11 DECISION:
+    /// User: "I don't like these appear as empty space, please make it show the time and 3 dots under messages everywhere. i click the 3 dots to see the current options. this is for user messages and agent last replies that we show time under now". The line under your prompts and under the agent's last reply of a turn is always drawn, at rest and on hover alike: the time (its tooltip has the full date), then a ⋯ in the same quiet tone, which opens the chat's dropdown with every action that line's row of icon buttons offered, each with its icon and name. No row of icon buttons any more. Then, seeing it: "swap these 2 when they are below user message and make the 3 dots only appear when im hovering on that message or on the time or on the row that has the 3 dots and time". So under your message the ⋯ comes first and the time last, at the bubble's edge (a left-aligned message keeps the time at its left edge, then the ⋯); under a reply the time then the ⋯, as before. The ⋯ shows only while the pointer is on the message, its time or its line, while it has keyboard focus, or while its menu is up; its place is kept, so nothing moves and the time never shifts. Supersedes the 2026-09-19 row that showed on hover (React's `CopyFooter`) and, for these buttons, the 2026-11-07 Compact footer that filled in on hover (packages/gx-chat-core/src/transcript/chat_look.rs).
+    fn message_more_button(
+        &self,
+        id: &str,
+        rows: Vec<Value>,
+        compact: bool,
+        tone: gpui::Hsla,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let size = if compact {
+            super::message_spacing::FOOTER_BUTTON
+        } else {
+            24.0
+        };
+        // Shown while its menu is up, wherever the pointer is.
+        let pinned = self.chat_menu_is_open(MESSAGE_MENU_TRIGGER)
+            && self.message_menu.as_deref() == Some(id);
+        let menu_id = id.to_string();
+        div()
+            .id(gpui::SharedString::from(format!("message-more:{id}")))
+            // Its place is always kept, so nothing moves when it shows: hidden at rest, shown while
+            // the pointer is on the message's row (its bubble or text, the time, this line) or the
+            // ⋯ has keyboard focus.
+            .when(!pinned, |button| {
+                button
+                    .opacity(0.0)
+                    .group_hover("native-chat-message", |style| style.opacity(1.0))
+            })
+            .group("native-chat-message-more")
+            .role(gpui::Role::Button)
+            .aria_label("Message actions")
+            .tab_index(0)
+            .size(px(size * s))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(if compact { 4.0 } else { 6.0 } * s))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.border.opacity(0.4)))
+            .focus_visible(|mut style| {
+                style.opacity = Some(1.0);
+                style.box_shadow = Some(vec![gpui::BoxShadow {
+                    color: p.ring.opacity(0.2),
+                    offset: gpui::point(px(0.0), px(0.0)),
+                    blur_radius: px(0.0),
+                    spread_radius: px(3.0 * s),
+                    inset: false,
+                }]);
+                style
+            })
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Message actions").build(window, cx)
+            })
+            .child(
+                svg()
+                    .path("titlebar/dots.svg")
+                    .size(px(14.0 * s))
+                    .text_color(tone)
+                    .group_hover("native-chat-message-more", |style| {
+                        style.text_color(p.foreground)
+                    }),
+            )
+            .on_click(
+                cx.listener(move |chat, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    if chat.chat_menu_toggled_shut(MESSAGE_MENU_TRIGGER, cx) {
+                        return;
+                    }
+                    let at = event.position();
+                    // A chat drawn in one of its own windows (the floating chat) keeps the menu there.
+                    let in_main = chat
+                        .open_main_window(cx)
+                        .is_none_or(|main| main == window.window_handle());
+                    chat.message_menu = Some(menu_id.clone());
+                    if in_main {
+                        chat.show_chat_menu_at(rows.clone(), at, 240.0, window, cx);
+                    } else {
+                        chat.show_chat_menu_in_window_at(rows.clone(), at, 240.0, window, cx);
+                    }
+                }),
+            )
+            .into_any_element()
     }
 
     /// CDXC:SavedPrompts 2026-09-06 DECISION:
@@ -304,16 +321,57 @@ impl NativeChatView {
         if prompt.is_empty() {
             return None;
         }
-        // Message spacing Compact: the footer keeps its space, and holds nothing while it is
-        // hidden (message_spacing.rs).
+        let _ = focused;
         let compact = p.compact();
         let left = p.left_aligned();
-        if compact && !self.message_bar_shown(&id, focused) {
-            return Some(super::message_spacing::message_footer(p).into_any_element());
-        }
-        let saved = self.snapshot["savedPrompts"][id.as_str()]
-            .as_str()
-            .unwrap_or("");
+        let rows = self.user_menu_rows(message, &id, &prompt);
+        let tone = if compact {
+            p.muted.opacity(super::message_spacing::FOOTER_DIM)
+        } else {
+            p.muted
+        };
+        let more = self.message_more_button(&id, rows, compact, tone, p, cx);
+        // The time, then the ⋯, on the message's side: at the bubble's right edge, or from the
+        // left edge of a left-aligned message (user_message_look.rs). Compact keeps its footer's
+        // height (message_spacing.rs).
+        // The time sits at the line's outer edge and never moves: under a bubble at the right the
+        // ⋯ comes first and the time last, at the bubble's edge; under a left-aligned message
+        // the time comes first, at the left edge, then the ⋯ (`message_more_button` has the user's
+        // words).
+        let time = if compact {
+            footer_time(&id, message, p)
+        } else {
+            message_time(&id, message, p)
+        };
+        let line = if compact {
+            super::message_spacing::message_footer(p)
+                .when(!left, |row| row.justify_end().pr(px(4.0 * p.scale)))
+        } else {
+            message_actions_row(p)
+                .when(!left, |row| row.pr(px(4.0 * p.scale)))
+                .when(left, |row| row.w_full().justify_start())
+        };
+        let line = if left {
+            line.children(time).child(more)
+        } else {
+            line.child(more).children(time)
+        };
+        Some(line.into_any_element())
+    }
+
+    /// What a prompt's ⋯ menu offers, the actions its row of buttons held: Copy, Save prompt (where
+    /// the host can stash), Rewind to here (where the agent's rewind can run now), and for a
+    /// message still waiting for the agent Edit, Back to composer and Delete.
+    ///
+    /// CDXC:SavedPrompts 2026-09-06 DECISION:
+    /// User: add Save prompt between Copy and Rewind on user messages, using the input box's stack-push icon.
+    ///
+    /// Rewind is offered only when the host can reach `/api/rewindSessionChat`, the session runs an
+    /// agent whose rewind Ghostex drives, and the composer could send right now, because the daemon
+    /// types the rewind into that same pane. Which prompt is a rewind target at all is decided in
+    /// the core (`canRewind`, packages/gx-chat-core/src/transcript/presentation.rs).
+    fn user_menu_rows(&self, message: &Value, id: &str, prompt: &str) -> Vec<Value> {
+        let saved = self.snapshot["savedPrompts"][id].as_str().unwrap_or("");
         // A rewind types into the session's own pane, so a child transcript never offers one
         // (React's subagent viewer mounted its list without `rewindToMessage` for the same reason).
         let rewindable = !self.in_subagent
@@ -338,123 +396,50 @@ impl NativeChatView {
                 .as_array()
                 .is_some_and(|ids| ids.iter().any(|queued| queued == &message["id"]));
         let taking_back = self.snapshot["queueTakeBackBusy"] == message["id"];
-        let take_back_label = format!(
-            "Back to composer ({})",
-            text(&self.snapshot, "queueTakeBackHotkey")
-        );
-        /*
-        CDXC:SessionChat 2026-09-19 SEE-ALSO:
-        `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css (deleted 2026-09-25)
-        carried the user decision this mirrors: the prompt's actions sit right-aligned below the bubble, led by the time it
-        was sent, in the order Rewind, Save prompt, Copy, so Copy lands at the bubble's edge.
-        */
-        let button = |key: &str, label: String, icon: &'static str, action: Value| {
-            Self::user_action_button(&id, key, label, icon, action, compact, p, cx)
-        };
-        // Under a left-aligned message the order is mirrored, so Copy still lands at the bubble's
-        // edge, then Save prompt, Rewind and the time.
-        let buttons = div()
-            .flex()
-            .items_center()
-            .gap(px(2.0 * p.scale))
-            .when(left, |buttons| buttons.flex_row_reverse())
-            .when(editable, |buttons| {
-                buttons.child(button(
-                    "edit-waiting",
-                    "Edit message".into(),
-                    "titlebar/pencil.svg",
-                    json!({"type":"removeQueue","promptId":waiting_prompt.clone(),"edit":true}),
-                ))
-            })
-            .when(takeable, |buttons| {
-                buttons.child(button(
-                    "take-back",
-                    if taking_back {
-                        "Taking the message back…".into()
-                    } else {
-                        take_back_label.clone()
-                    },
-                    if taking_back {
-                        "titlebar/loader2.svg"
-                    } else {
-                        "titlebar/arrow-back-up.svg"
-                    },
-                    json!({"type":"takeBackQueued","messageId":id.clone()}),
-                ))
-            })
-            .when(removable, |buttons| {
-                buttons.child(button(
-                    "delete-waiting",
-                    "Delete message".into(),
-                    "titlebar/trash.svg",
-                    json!({"type":"removeQueue","promptId":waiting_prompt.clone()}),
-                ))
-            })
-            .when(rewindable, |buttons| {
-                buttons.child(button(
-                    "rewind",
-                    "Rewind to here".into(),
-                    "chat-actions/rewind",
-                    json!({"type":"rewindOpen","messageId":id.clone(),"prompt":prompt.clone()}),
-                ))
-            })
-            .when(savable, |buttons| {
-                buttons.child(button(
-                    "save-prompt",
-                    match saved {
-                        "saved" => "Prompt saved",
-                        "saving" => "Saving prompt",
-                        "error" => "Could not save prompt. Click to retry.",
-                        _ => "Save prompt",
-                    }
-                    .into(),
-                    if saved == "saved" {
-                        "chat-actions/saved"
-                    } else {
-                        "chat-actions/savePrompt"
-                    },
-                    json!({"type":"savePrompt","messageId":id.clone(),"prompt":prompt.clone()}),
-                ))
-            })
-            .child(button(
-                "copy",
-                "Copy message".into(),
-                "chat-actions/copy",
-                json!({"type":"copyPrompt","text":prompt.clone()}),
-            ));
-        // Under a left-aligned message the row starts at its left edge (user_message_look.rs).
-        // Message spacing Compact: the buttons, then the time, on the message's side of its
-        // footer (message_spacing.rs).
-        if compact {
-            return Some(
-                super::message_spacing::message_footer(p)
-                    .when(!left, |row| row.justify_end().pr(px(4.0 * p.scale)))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .child(buttons)
-                            .children(footer_time(&id, message, p)),
-                    )
-                    .into_any_element(),
-            );
+        let mut rows = vec![json!({
+            "label":"Copy message","iconPath":"chat-actions/copy",
+            "command":{"type":"copyText","text":prompt},
+        })];
+        if savable {
+            rows.push(json!({
+                "label": match saved {
+                    "saved" => "Prompt saved",
+                    "saving" => "Saving prompt",
+                    "error" => "Could not save prompt. Click to retry.",
+                    _ => "Save prompt",
+                },
+                "iconPath": if saved == "saved" { "chat-actions/saved" } else { "chat-actions/savePrompt" },
+                "command":{"type":"savePrompt","messageId":id,"prompt":prompt},
+            }));
         }
-        let fill = |row: gpui::Div| {
-            let time = message_time(&id, message, p);
-            if left {
-                row.child(buttons).children(time)
-            } else {
-                row.children(time).child(buttons)
-            }
-        };
-        Some(
-            fill(
-                message_actions_row(p, false)
-                    .when(!left, |row| row.pr(px(4.0 * p.scale)))
-                    .when(left, |row| row.w_full().justify_start()),
-            )
-            .into_any_element(),
-        )
+        if rewindable {
+            rows.push(json!({
+                "label":"Rewind to here","iconPath":"chat-actions/rewind",
+                "command":{"type":"rewindOpen","messageId":id,"prompt":prompt},
+            }));
+        }
+        if editable {
+            rows.push(json!({
+                "label":"Edit message","iconPath":"titlebar/pencil.svg",
+                "command":{"type":"removeQueue","promptId":waiting_prompt.clone(),"edit":true},
+            }));
+        }
+        if takeable {
+            rows.push(json!({
+                "label": if taking_back { "Taking the message back\u{2026}" } else { "Back to composer" },
+                "iconPath": if taking_back { "titlebar/loader2.svg" } else { "titlebar/arrow-back-up.svg" },
+                "detail": text(&self.snapshot, "queueTakeBackHotkey"),
+                "disabled": taking_back,
+                "command":{"type":"takeBackQueued","messageId":id},
+            }));
+        }
+        if removable {
+            rows.push(json!({
+                "label":"Delete message","iconPath":"titlebar/trash.svg",
+                "command":{"type":"removeQueue","promptId":waiting_prompt},
+            }));
+        }
+        rows
     }
 
     /// One of a prompt's action buttons: a 24px square with a 12px icon, a hover fill and a
@@ -530,7 +515,7 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let id = text(message, "id");
-        message_actions_row(p, false)
+        hover_actions_row(p)
             .child(Self::user_action_button(
                 &id,
                 "copy",
@@ -543,44 +528,24 @@ impl NativeChatView {
             ))
             .into_any_element()
     }
-
-    fn perform_reply_action(
-        &mut self,
-        action: ReplyAction,
-        id: &str,
-        markdown: &str,
-        cx: &mut Context<Self>,
-    ) {
-        match action {
-            ReplyAction::Copy => {
-                crate::app::helpers::gpui_copy_to_clipboard(
-                    gpui::ClipboardItem::new_string(markdown.to_owned()),
-                    cx,
-                );
-            }
-            ReplyAction::SaveMarkdown => {
-                self.invoke(json!({"type":"markdownSaveOpen","markdown":markdown}), cx)
-            }
-            ReplyAction::Annotate => self.host("annotateReply", json!({"markdown":markdown}), cx),
-            // On the reply being read the core stops instead.
-            ReplyAction::ReadAloud => {
-                self.invoke(json!({"type":"readAloudMessage","messageId":id}), cx)
-            }
-        }
-    }
 }
 
-/// The row under a message that holds its actions and time; hidden until the message is hovered
-/// or, for a reply, holds keyboard focus (React: `.ghostex-chat-message-actions`).
+/// The line under a message that holds its time and ⋯, always drawn, so a message is as tall at
+/// rest as on hover (`message_more_button` has the user's words).
 ///
 /// CDXC:SessionChat 2026-09-19 WHY:
 /// The row takes no negative margin and no `flex_shrink_0`. The list measures a row at min-content height, where taffy sizes a non-shrinking item with a negative main-axis margin as `basis + basis * margin`, which made a reply's row about 94px too short and drew the next message over it.
-fn message_actions_row(p: &ChatAppearance, focused: bool) -> gpui::Div {
+fn message_actions_row(p: &ChatAppearance) -> gpui::Div {
+    div().flex().items_center().gap(px(4.0 * p.scale))
+}
+
+/// The hover row a `!` command's floating Copy sits in: it shows while the message is hovered.
+fn hover_actions_row(p: &ChatAppearance) -> gpui::Div {
     div()
         .flex()
         .items_center()
         .gap(px(8.0 * p.scale))
-        .opacity(if focused { 1.0 } else { 0.0 })
+        .opacity(0.0)
         .group_hover("native-chat-message", |style| style.opacity(1.0))
 }
 

@@ -44,30 +44,30 @@ pub(super) fn space_tile_selected_colors(
 /// before the zoom (CDXC:Sidebar 2026-11-11 DECISION in navigation.rs: even spacing).
 pub(crate) const SIDEBAR_TOP_ROW_GAP: f32 = 8.0;
 pub(crate) const SIDEBAR_TOP_LIST_GAP: f32 = 10.0;
+/// How narrow a computer tile or a Space tile may get while the two share the row, before the zoom.
+pub(crate) const SHARED_ROW_TILE_MIN: f32 = 24.0;
 
 impl GhostexGpuiApp {
     pub(crate) fn render_native_sidebar_selectors(
         &self,
         snapshot: &NativeSidebarSnapshot,
         appearance: &SidebarAppearance,
-        window: &gpui::Window,
+        _window: &gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
         // The New session row sits right under the top row (new_session_row.rs); the computers and
-        // the Spaces follow, each `SIDEBAR_TOP_ROW_GAP` below the row before, and the list starts
-        // `SIDEBAR_TOP_LIST_GAP` below the last.
-        let machine_tabs = self.render_native_machine_tabs(snapshot, appearance, window, cx);
-        let space_row = self.render_native_sidebar_space_row(snapshot, appearance, true, cx);
+        // the Spaces share the row that follows, `SIDEBAR_TOP_ROW_GAP` below it, and the list
+        // starts `SIDEBAR_TOP_LIST_GAP` below the last.
+        let switch_row = self.render_native_sidebar_space_row(snapshot, appearance, true, true, cx);
         let gap = |height: f32| div().h(px(height * scale)).flex_shrink_0();
         v_flex()
             .w_full()
             .flex_shrink_0()
             .child(self.render_native_sidebar_new_session_row(appearance, cx))
             .children(
-                [machine_tabs, space_row]
+                switch_row
                     .into_iter()
-                    .flatten()
                     .flat_map(|row| [gap(SIDEBAR_TOP_ROW_GAP).into_any_element(), row]),
             )
             .child(gap(SIDEBAR_TOP_LIST_GAP))
@@ -75,19 +75,43 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The Spaces row of the selected machine, or `None` while that machine has Spaces off. The
-    /// Unified header draws it too, without the Bots slot (`with_bots`): that list has no Bots mode.
+    /// The row of the computers (with more than this one, `with_machines`) and the selected
+    /// machine's Spaces, or `None` when it has neither. The Unified header draws it too, without the
+    /// Bots slot (`with_bots`), since that list has no Bots mode, and without the computers, which
+    /// its filter lists (machines.rs).
     pub(crate) fn render_native_sidebar_space_row(
         &self,
         snapshot: &NativeSidebarSnapshot,
         appearance: &SidebarAppearance,
         with_bots: bool,
+        with_machines: bool,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if !snapshot.spaces_enabled {
-            return None;
-        }
         let scale = appearance.scale;
+        let edge = super::navigation::SIDEBAR_TOP_EDGE_INSET;
+        let row_room = self.sidebar_width / scale - edge * 2.0;
+        let machines = if with_machines && snapshot.machines.len() > 1 {
+            snapshot.machines.len()
+        } else {
+            0
+        };
+        if !snapshot.spaces_enabled {
+            if machines == 0 {
+                return None;
+            }
+            // The computers alone: they fold only when even their tiles do not fit.
+            let folded = machines as f32 * 32.0 - 4.0 > row_room;
+            return Some(
+                h_flex()
+                    .id("native-sidebar-machine-row")
+                    .w_full()
+                    .h(px(28.0 * scale))
+                    .px(px(edge * scale))
+                    .gap(px(4.0 * scale))
+                    .children(self.render_native_machine_icons(snapshot, appearance, folded, cx))
+                    .into_any_element(),
+            );
+        }
         // A Space tile is at least 28 wide with a 4 gap; the tiles then share the row's whole width.
         // The Hermes slot and its hairline take one Space's room plus the hairline's at the end.
         let bots_room = if with_bots && snapshot.bots_enabled {
@@ -95,15 +119,42 @@ impl GhostexGpuiApp {
         } else {
             0.0
         };
-        let edge = super::navigation::SIDEBAR_TOP_EDGE_INSET;
-        let capacity = (((self.sidebar_width / scale - edge * 2.0) + 4.0 - bots_room) / 32.0)
-            .floor()
-            .max(2.0) as usize;
         let user_spaces: Vec<_> = snapshot
             .spaces
             .iter()
             .filter(|space| space.id != "other")
             .collect();
+        // The computers come first (machines.rs). Sharing the row, the computer tiles and the Space
+        // tiles may narrow from 28 to `SHARED_ROW_TILE_MIN`; the computers fold into one button
+        // only when every Space and Other still cannot fit beside them at that, and after that the
+        // Spaces fold into More as before. Create space, shown while there is no Space, counts as
+        // about 110.
+        //
+        // CDXC:RemoteMachines 2026-11-11 WHY:
+        // At the user's 220pt sidebar two computers and five Spaces need 225pt at 28 each but the row has 204, so the 28 minimum folded the computers into one button there, which read as folding with room to spare. At 24 the row holds them all from about 213pt wide; a 16pt icon still has 4pt either side.
+        let tile_min = if machines > 0 {
+            SHARED_ROW_TILE_MIN
+        } else {
+            28.0
+        };
+        let pitch_min = tile_min + 4.0;
+        let computers_room = |shown: usize| {
+            if machines == 0 {
+                0.0
+            } else {
+                super::machines::machine_icons_room(shown) - shown as f32 * (28.0 - tile_min)
+            }
+        };
+        let spaces_need = if user_spaces.is_empty() {
+            110.0 + 4.0 + tile_min
+        } else {
+            (user_spaces.len() + 1) as f32 * pitch_min - 4.0
+        };
+        let folded = machines > 0 && row_room - bots_room - computers_room(machines) < spaces_need;
+        let leading = computers_room(if folded { 1 } else { machines });
+        let capacity = ((row_room + 4.0 - bots_room - leading) / pitch_min)
+            .floor()
+            .max(2.0) as usize;
         let overflow = user_spaces.len() + 1 > capacity;
         let mut visible: Vec<_> = user_spaces
             .iter()
@@ -133,18 +184,26 @@ impl GhostexGpuiApp {
         // tiles that stretch (the shown Spaces, Other and the More tile) share what the Create
         // button and the Bots slot leave of the row.
         let stretched = visible.len() + 1 + usize::from(overflow);
-        let shared = self.sidebar_width / scale - edge * 2.0 - bots_room + 4.0;
-        let pitch = (shared / stretched as f32).max(32.0);
+        let shared = row_room - bots_room - leading + 4.0;
+        let pitch = (shared / stretched as f32).max(pitch_min);
+        let computers = if machines > 0 {
+            self.render_native_machine_icons(snapshot, appearance, folded, cx)
+        } else {
+            Vec::new()
+        };
         // CDXC:Spaces 2026-10-11 DECISION: User: Create a space fits its content, and the Spaces row has no background behind it (a left-aligned row in a rounded track was tried and removed the same day). The workspace tile left the row for the sidebar's bottom bar (workspace_tile.rs).
         // CDXC:Spaces 2026-11-11 DECISION: User (sidebar top page, Q2424 C): the Spaces stretch across their row: the tiles share its full width evenly between the same 8pt edges as New session, so both edges line up with the rows above. The Bots slot keeps its size. This supersedes the centred row of 2026-09-21 and 2026-10-11.
         let radius = super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS;
         Some(
             h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(28.0 * scale)).px(px(edge * scale)).gap(px(4.0 * scale))
-                .when(user_spaces.is_empty(), |row| row.child(h_flex().id("native-sidebar-create-space").role(gpui::Role::Button).aria_label("Create space").flex_shrink_0().h(px(28.0 * scale)).px(px(10.0 * scale)).gap(px(6.0 * scale)).rounded(px(radius * scale)).border_1().border_color(appearance.muted.opacity(0.25)).text_size(px(12.0 * scale))
-                    .text_color(appearance.chrome_label).child(titlebar_svg_icon("titlebar/plus.svg", 14.0 * scale, appearance.chrome_icon)).child("Create space")
+                .children(computers)
+                .when(machines > 0, |row| row.child(div().flex_shrink_0().w(px(1.0)).h(px(16.0 * scale)).bg(appearance.foreground.opacity(0.12))))
+                // Words give way first: on a narrow row Create space keeps its plus and loses its label.
+                .when(user_spaces.is_empty(), |row| row.child(h_flex().id("native-sidebar-create-space").role(gpui::Role::Button).aria_label("Create space").flex_shrink(1.0).min_w(px(28.0 * scale)).overflow_hidden().h(px(28.0 * scale)).px(px(10.0 * scale)).gap(px(6.0 * scale)).rounded(px(radius * scale)).border_1().border_color(appearance.muted.opacity(0.25)).text_size(px(12.0 * scale))
+                    .text_color(appearance.chrome_label).child(div().flex_shrink_0().child(titlebar_svg_icon("titlebar/plus.svg", 14.0 * scale, appearance.chrome_icon))).child(div().min_w_0().whitespace_nowrap().overflow_hidden().child("Create space"))
                     .on_click(cx.listener(|app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({"type": "editSpace"}), cx); }))))
-                .children(visible.into_iter().chain(snapshot.spaces.iter().filter(|space| space.id == "other")).map(|space| self.render_native_sidebar_space(space, &visible_ids, pitch, appearance, cx)))
-                .when(overflow, |row| row.child(div().id("native-sidebar-more-spaces").on_prepaint(super::menus::record_menu_owner(&more_owner)).role(gpui::Role::Button).aria_label("More spaces").h(px(28.0 * scale)).flex_1().min_w(px(28.0 * scale)).flex().items_center().justify_center().rounded(px(radius * scale)).hover(|row| row.bg(appearance.hover))
+                .children(visible.into_iter().chain(snapshot.spaces.iter().filter(|space| space.id == "other")).map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, leading, tile_min), appearance, cx)))
+                .when(overflow, |row| row.child(div().id("native-sidebar-more-spaces").on_prepaint(super::menus::record_menu_owner(&more_owner)).role(gpui::Role::Button).aria_label("More spaces").h(px(28.0 * scale)).flex_1().min_w(px(tile_min * scale)).flex().items_center().justify_center().rounded(px(radius * scale)).hover(|row| row.bg(appearance.hover))
                     .child(titlebar_svg_icon("titlebar/dots.svg", 16.0 * scale, appearance.chrome_icon))
                     .on_click(cx.listener(move |_, event: &gpui::ClickEvent, window, cx| {
                         // CDXC:Spaces 2026-09-20 DECISION: User: the More menu lists the overflowing Spaces first and puts New Space last, under a separator.
@@ -162,7 +221,7 @@ impl GhostexGpuiApp {
         &self,
         space: &NativeSidebarSpace,
         visible_ids: &[String],
-        pitch: f32,
+        (pitch, leading, tile_min): (f32, f32, f32),
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
@@ -210,6 +269,7 @@ impl GhostexGpuiApp {
             preview: super::drag::SidebarDragPreview::Space(super::space_drag::SpaceDragPreview {
                 visible_ids: visible_ids.to_vec(),
                 pitch,
+                leading,
                 icon: space.icon.clone(),
                 color,
                 background: if space.selected {
@@ -258,7 +318,7 @@ impl GhostexGpuiApp {
             .relative()
             .h(px(28.0 * scale))
             .flex_1()
-            .min_w(px(28.0 * scale))
+            .min_w(px(tile_min * scale))
             .items_center()
             .justify_center()
             .rounded(px(super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))

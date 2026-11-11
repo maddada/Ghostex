@@ -496,13 +496,6 @@ pub(crate) struct RunGpuiTitlebarGlobalAction {
     pub(crate) command_id: String,
 }
 
-/// One row of the titlebar's ⋯ menu, by its position in `GpuiTitlebarMoreMenuItem::ALL`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct OpenGpuiTitlebarMoreMenuItem {
-    pub(crate) item_index: u64,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarGitMenuAction {

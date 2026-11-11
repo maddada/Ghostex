@@ -57,18 +57,8 @@ impl NativeChatView {
             "interrupt" => ("send", true),
             mode => (mode, false),
         };
-        crate::support_logs::append_for_scenario(
-            crate::support_logs::GpuiSupportLog::SessionChat,
-            "gpui.sessionChat.viewState",
-            "sessionChat.nativeSubmit",
-            json!({
-                "composerReady": self.composer_ready,
-                "hasDraft": !self.draft.trim().is_empty(),
-                "pendingSend": self.pending_send,
-                "status": self.snapshot["status"],
-                "hasRuntime": self.runtime.is_some(),
-            }),
-        );
+        // One line per send, always kept (send_watch.rs).
+        self.log_send(mode, interrupt);
         if !self.composer_ready {
             return;
         }
@@ -131,7 +121,10 @@ impl NativeChatView {
         }
         cx.emit(super::state::NativeChatEvent::DraftState(true));
         self.end_answer_hold_for_send();
+        let text = submission["text"].as_str().unwrap_or_default().to_owned();
         self.invoke(submission, cx);
+        // The box is empty now: the words come back to it unless the core counts this send.
+        self.watch_send(text, cx);
     }
 
     /// The chat's neutral filled text button (Load earlier turns, Retry, Use / Dismiss, the
@@ -433,6 +426,10 @@ impl NativeChatView {
         let mut working_card = working_card;
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();
+        // A message that left the box and the core has not taken in yet (send_watch.rs).
+        if let Some(sending) = self.render_unconfirmed_sends(p) {
+            waiting.push(sending);
+        }
         // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
         // (saved_draft_pill.rs), which replaced the notice row here (CDXC:Drafts 2026-11-04).
         // A `composerNotReady` refusal gets its own card instead of the plain error line.

@@ -6,6 +6,31 @@
 // `cef/shell.rs`. See docs/2026-08-22/repo-restructure/SPLITS.md C4.
 use super::*;
 
+/// When something first asked for the runtime (a web view about to be shown) and when
+/// `initialize` began, for the `gpui.cefRuntime.ready` line.
+static CEF_FIRST_REQUESTED_AT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+static CEF_INITIALIZE_STARTED_AT: std::sync::OnceLock<std::time::Instant> =
+    std::sync::OnceLock::new();
+
+/// CDXC:CefRuntime 2026-11-11 WHY:
+/// A page that took more than ten seconds to open on an overloaded Mac left no trace of whether
+/// Chromium's start was the slow step. One always-kept line in the host lifecycle log says how long
+/// the runtime took to be ready, from the first request for it and from the start of `initialize`
+/// (the page open's own steps are `gpui.visualPage.openTiming`, open_timing.rs).
+fn log_runtime_ready() {
+    let since = |at: &std::sync::OnceLock<std::time::Instant>| {
+        at.get().map(|at| at.elapsed().as_millis() as u64)
+    };
+    crate::support_logs::append_always(
+        crate::support_logs::GpuiSupportLog::HostLifecycle,
+        "gpui.cefRuntime.ready",
+        serde_json::json!({
+            "sinceFirstRequestMs": since(&CEF_FIRST_REQUESTED_AT),
+            "sinceInitializeMs": since(&CEF_INITIALIZE_STARTED_AT),
+        }),
+    );
+}
+
 pub fn initialize(cx: &gpui::App) -> Result<()> {
     let state = CEF_RUNTIME.get_or_init(|| Mutex::new(None));
     let mut state = state
@@ -14,6 +39,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     if state.is_some() {
         return Ok(());
     }
+    CEF_INITIALIZE_STARTED_AT.get_or_init(std::time::Instant::now);
     CEF_SHUTDOWN_IN_PROGRESS.store(false, Ordering::Release);
 
     let args = cef::args::Args::new();
@@ -184,6 +210,7 @@ fn runtime_demand() -> &'static CefRuntimeDemand {
 /// User: defer CEF at launch so startup is as fast as possible, and start it when it is actually needed.
 /// Browser creation is the one place that knows a web view is wanted right now, and it runs inside app updates, so it only signals here; the app's listener starts the runtime on its next turn and the existing "not yet" retry paths create the view once the context is ready.
 pub fn request_runtime() {
+    CEF_FIRST_REQUESTED_AT.get_or_init(std::time::Instant::now);
     let _ = runtime_demand().sender.unbounded_send(());
 }
 
@@ -280,7 +307,9 @@ wrap_browser_process_handler! {
             imply that Chromium has reached that point, especially with a new
             profile on first launch.
             */
-            CEF_CONTEXT_INITIALIZED.store(true, Ordering::Release);
+            if !CEF_CONTEXT_INITIALIZED.swap(true, Ordering::AcqRel) {
+                log_runtime_ready();
+            }
             if let Some(context) = cef::request_context_get_global_context() {
                 turn_off_browser_password_manager(&context);
             }
