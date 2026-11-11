@@ -27,6 +27,8 @@ const STORE_VERSION: u32 = 1;
 /// notification token). The relay checks the same.
 const TOKEN_HEX_MIN: usize = 64;
 const TOKEN_HEX_MAX: usize = 512;
+/// The phone's other computers a registration may name.
+const MAX_PHONE_COMPUTERS: usize = 32;
 
 /// Which of Apple's services the phone's build talks to: production (TestFlight, App Store) or sandbox
 /// (a development build).
@@ -72,6 +74,32 @@ pub(crate) struct LiveActivityPhone {
     pub(crate) environment: LiveActivityEnvironment,
     /// When the phone last sent these tokens (RFC 3339).
     pub(crate) seen_at: String,
+    /// The phone's ids for its other paired computers, by their server ids, so a row of a connected
+    /// computer opens that session on the phone; a connected computer the phone is not paired with has
+    /// none, and its rows open the app.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) computers: Vec<PhoneComputer>,
+}
+
+/// One of the phone's other computers: its server id and the id the phone uses for it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PhoneComputer {
+    pub(crate) server_id: String,
+    pub(crate) machine_id: String,
+}
+
+impl LiveActivityPhone {
+    /// The id this phone uses for the computer `server_id` (`this_server_id` is this computer).
+    pub(crate) fn machine_id_for(&self, server_id: &str, this_server_id: &str) -> Option<String> {
+        if server_id == this_server_id {
+            return Some(self.machine_id.clone());
+        }
+        self.computers
+            .iter()
+            .find(|computer| computer.server_id == server_id)
+            .map(|computer| computer.machine_id.clone())
+    }
 }
 
 // The tokens are send credentials, so a debug print never shows them.
@@ -85,6 +113,7 @@ impl fmt::Debug for LiveActivityPhone {
             .field("push_to_start_token", &redacted(&self.push_to_start_token))
             .field("environment", &self.environment)
             .field("seen_at", &self.seen_at)
+            .field("computers", &self.computers)
             .finish()
     }
 }
@@ -226,6 +255,7 @@ pub(crate) fn save_live_activity_tokens(
     activity_token: Option<String>,
     push_to_start_token: Option<String>,
     environment: LiveActivityEnvironment,
+    computers: Vec<PhoneComputer>,
 ) -> Result<(), LiveActivityStoreError> {
     let store = LiveActivityStore::open(paths);
     let mut phones = store.read()?;
@@ -237,6 +267,7 @@ pub(crate) fn save_live_activity_tokens(
             push_to_start_token,
             environment,
             seen_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            computers,
         });
     }
     store.write(&phones)
@@ -291,6 +322,11 @@ fn phones_are_valid(phones: &[LiveActivityPhone]) -> bool {
                 .as_deref()
                 .is_none_or(is_live_activity_token)
             && chrono::DateTime::parse_from_rfc3339(&phone.seen_at).is_ok()
+            && phone.computers.len() <= MAX_PHONE_COMPUTERS
+            && phone.computers.iter().all(|computer| {
+                crate::connected_computers::is_server_id(&computer.server_id)
+                    && is_printable_id(&computer.machine_id, MACHINE_ID_MAX)
+            })
             && phones[..index]
                 .iter()
                 .all(|earlier| earlier.machine_id != phone.machine_id)

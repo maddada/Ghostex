@@ -54,6 +54,7 @@ pub(crate) fn closed_live_activity(
             "http://127.0.0.1:9/live-activity/v1/send".to_string(),
         ),
         crate::live_activity::runtime::Timings::default(),
+        Arc::new(Vec::new),
     ))
 }
 

@@ -37,12 +37,15 @@ use crate::{
 };
 
 use super::{
-    content::{collect_candidates, render, shape_of, Candidates, FinishedMemory},
+    content::{collect_candidates, render, shape_of, Candidates, FinishedMemory, Source},
     relay::{RelayClient, RelayOutcome},
     store::{
         forget_live_activity_token, token_label, LiveActivityPhone, LiveActivityStore, TokenKind,
     },
 };
+
+/// A connected computer's read gives up after this long, so one that went away delays the banner little.
+const REMOTE_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The timings; `Default` is what gxserver uses, tests shorten them.
 #[derive(Clone, Copy, Debug)]
@@ -58,6 +61,10 @@ pub(crate) struct Timings {
     pub(crate) tick_ms: u64,
     /// After a failure that may pass (no answer, a server error, the relay without its key).
     pub(crate) failure_backoff_ms: i64,
+    /// How often a connected computer's session list is read while some phone has a banner.
+    pub(crate) remote_poll_ms: i64,
+    /// How long a connected computer that stopped answering keeps its last rows on the banner.
+    pub(crate) remote_keep_ms: i64,
 }
 
 impl Default for Timings {
@@ -71,6 +78,8 @@ impl Default for Timings {
             settle_ms: 500,
             tick_ms: 15_000,
             failure_backoff_ms: 60_000,
+            remote_poll_ms: 10_000,
+            remote_keep_ms: 2 * 60_000,
         }
     }
 }
@@ -113,7 +122,14 @@ struct Shared {
     client: RelayClient,
     timings: Timings,
     logger: Arc<GxserverLogger>,
+    /// Reads of connected computers that finished on their own threads, for the next pass.
+    remote_reads: Mutex<Vec<RemoteRead>>,
+    connected: ConnectedComputers,
 }
+
+/// The computers connected to this one: the registry in gxserver; a test passes its own.
+pub(crate) type ConnectedComputers =
+    Arc<dyn Fn() -> Vec<crate::connected_computers::ConnectedComputer> + Send + Sync>;
 
 impl Shared {
     fn lock(&self) -> MutexGuard<'_, Queue> {
@@ -152,6 +168,7 @@ impl LiveActivityRuntime {
             Arc::new(SystemClock),
             RelayClient::new(super::relay::relay_url_from_env()),
             Timings::default(),
+            Arc::new(crate::connected_computers::list),
         )
     }
 
@@ -162,6 +179,7 @@ impl LiveActivityRuntime {
         clock: Arc<dyn PushClock>,
         client: RelayClient,
         timings: Timings,
+        connected: ConnectedComputers,
     ) -> Self {
         let shared = Arc::new(Shared {
             queue: Mutex::new(Queue::default()),
@@ -173,13 +191,15 @@ impl LiveActivityRuntime {
             client,
             timings,
             logger,
+            remote_reads: Mutex::new(Vec::new()),
+            connected,
         });
         let (done_tx, done_rx) = mpsc::channel();
         let worker_shared = shared.clone();
         let worker = std::thread::Builder::new()
             .name("gxserver-live-activity".into())
             .spawn(move || {
-                run(&worker_shared);
+                run(worker_shared);
                 let _ = done_tx.send(());
             })
             .ok()
@@ -225,9 +245,11 @@ impl LiveActivityRuntime {
     }
 }
 
-fn run(shared: &Shared) {
+fn run(shared: Arc<Shared>) {
+    let shared = &shared;
     let mut phones: HashMap<String, PhoneState> = HashMap::new();
     let mut memory = FinishedMemory::new();
+    let mut remotes = Remotes::default();
     let mut next_due: Option<i64> = None;
     loop {
         {
@@ -266,7 +288,7 @@ fn run(shared: &Shared) {
             queue.poked = false;
             queue.busy = true;
         }
-        next_due = pass(shared, &mut phones, &mut memory);
+        next_due = pass(shared, &mut phones, &mut memory, &mut remotes);
         let mut queue = shared.lock();
         queue.busy = false;
         queue.passes += 1;
@@ -313,8 +335,7 @@ fn registered_phones(shared: &Shared) -> Option<Vec<(LiveActivityPhone, bool)>> 
     )
 }
 
-/// The rows the phone's session list would hold now: running sessions of active projects, as mobile summary
-/// rows, and the launchers that name custom agents.
+/// This computer's rows as the phone's session list would hold them now, and its launchers.
 fn read_rows(shared: &Shared, now: i64) -> Result<(Vec<Value>, Vec<Value>), String> {
     let db = open_gxserver_database(&shared.paths).map_err(|error| error.to_string())?;
     let repository = DomainRepository::new(&db, shared.server_id.as_str());
@@ -322,7 +343,13 @@ fn read_rows(shared: &Shared, now: i64) -> Result<(Vec<Value>, Vec<Value>), Stri
     let sessions = repository
         .list_sessions_excluding_stopped(None)
         .map_err(|error| error.message)?;
-    let launchers = crate::sidebar_hud::sidebar_agent_buttons_from_projects(&projects)
+    Ok(rows_of(&projects, &sessions, now))
+}
+
+/// One computer's mobile summary rows (running sessions of active projects, zmx only, as the phone keeps
+/// them) and the launchers that name its custom agents, from its projects and sessions.
+fn rows_of(projects: &[Value], sessions: &[Value], now: i64) -> (Vec<Value>, Vec<Value>) {
+    let launchers = crate::sidebar_hud::sidebar_agent_buttons_from_projects(projects)
         .as_array()
         .cloned()
         .unwrap_or_default();
@@ -331,6 +358,7 @@ fn read_rows(shared: &Shared, now: i64) -> Result<(Vec<Value>, Vec<Value>), Stri
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let rows = sessions
         .iter()
+        .filter(|session| session.get("lifecycleState").and_then(Value::as_str) != Some("stopped"))
         .filter_map(|session| {
             let project_id = session.get("projectId")?;
             let project = projects
@@ -355,18 +383,212 @@ fn read_rows(shared: &Shared, now: i64) -> Result<(Vec<Value>, Vec<Value>), Stri
                 project,
                 &presentation,
             );
-            // The phone keeps only zmx sessions.
             (row.get("provider").and_then(Value::as_str) == Some("zmx")).then_some(row)
         })
         .collect();
-    Ok((rows, launchers))
+    (rows, launchers)
+}
+
+/// A read of a connected computer, finished on its own thread.
+struct RemoteRead {
+    server_id: String,
+    name: String,
+    started_at: i64,
+    result: Option<(Vec<Value>, Vec<Value>)>,
+}
+
+/// What the worker knows of the connected computers between passes.
+#[derive(Default)]
+struct Remotes {
+    lists: HashMap<String, RemoteList>,
+    in_flight: HashSet<String>,
+    /// When to try again a computer that never answered yet.
+    retry_at: HashMap<String, i64>,
+}
+
+/// A connected computer's last good read.
+struct RemoteList {
+    name: String,
+    rows: Vec<Value>,
+    launchers: Vec<Value>,
+    read_at: i64,
+    next_read: i64,
+    /// Its last read failed (logged once, when it stopped answering).
+    unanswered: bool,
+}
+
+/// One request to a connected computer over the connection this computer has to it, with the token it gave
+/// this one; its gxserver allows only the peer endpoints (`connected_computers::scope`).
+fn peer_rpc(
+    computer: &crate::connected_computers::ConnectedComputer,
+    path: &str,
+    params: Value,
+) -> Option<Value> {
+    // Only a listener of this account gets the token (as coordinator_remote_runtime.rs and relay.rs).
+    ghostex_paths::loopback_owner::check_url(&computer.base_url).ok()?;
+    let body = json!({
+        "params": params,
+        "protocolVersion": crate::constants::GXSERVER_PROTOCOL_VERSION,
+    });
+    let response = crate::http_agent::answering_agent()
+        .post(format!("{}{path}", computer.base_url))
+        .header("authorization", format!("Bearer {}", computer.token()))
+        .header("content-type", "application/json")
+        .header(
+            crate::constants::GXSERVER_PROTOCOL_HEADER,
+            crate::constants::GXSERVER_PROTOCOL_VERSION.to_string(),
+        )
+        .config()
+        .timeout_global(Some(REMOTE_READ_TIMEOUT))
+        .build()
+        .send(body.to_string())
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let envelope: Value = crate::http_agent::read_json(response).ok()?;
+    envelope.get("result").cloned()
+}
+
+/// A connected computer's rows, read now; None when it does not answer.
+fn read_remote(
+    computer: &crate::connected_computers::ConnectedComputer,
+    now: i64,
+) -> Option<(Vec<Value>, Vec<Value>)> {
+    let projects = peer_rpc(computer, "/api/listProjects", json!({}))?
+        .get("projects")?
+        .as_array()?
+        .clone();
+    let sessions = peer_rpc(
+        computer,
+        "/api/listSessions",
+        json!({ "includeStopped": false }),
+    )?
+    .get("sessions")?
+    .as_array()?
+    .clone();
+    Some(rows_of(&projects, &sessions, now))
+}
+
+/// CDXC:Notifications 2026-11-11 DECISION: User, on which computer's banner wins while the phone is locked:
+/// "u should push from 1 machine. since usually ppl connect their machines together like their 2 pcs for ex.
+/// so u can actually push status of both machines from 1 main machine." The computer that holds the phone's
+/// tokens covers itself and every computer connected to it (Settings > Remote), read over the connection the
+/// computers already have, as the sidebar shows them. A computer whose agents may not reach this one (Agent
+/// access off, or the approval still waiting) is not read; one that stops answering keeps its last rows for
+/// `remote_keep_ms`, so the banner never says "working" for a computer that went away.
+fn refresh_remotes(shared: &Arc<Shared>, remotes: &mut Remotes, now: i64) -> Option<i64> {
+    let finished: Vec<RemoteRead> = std::mem::take(
+        &mut *shared
+            .remote_reads
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+    );
+    for read in finished {
+        remotes.in_flight.remove(&read.server_id);
+        match read.result {
+            Some((rows, launchers)) => {
+                remotes.lists.insert(
+                    read.server_id,
+                    RemoteList {
+                        name: read.name,
+                        rows,
+                        launchers,
+                        read_at: read.started_at,
+                        next_read: read.started_at + shared.timings.remote_poll_ms,
+                        unanswered: false,
+                    },
+                );
+            }
+            None => {
+                let next = now + shared.timings.remote_poll_ms;
+                remotes.retry_at.insert(read.server_id.clone(), next);
+                if let Some(list) = remotes.lists.get_mut(&read.server_id) {
+                    list.next_read = next;
+                    if !list.unanswered {
+                        list.unanswered = true;
+                        shared.log(
+                            LogLevel::Warn,
+                            "liveActivity.computerUnreadable",
+                            json!({ "serverId": read.server_id }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    let connected: Vec<_> = (shared.connected)()
+        .into_iter()
+        .filter(|computer| {
+            computer.agent_access
+                && computer.waiting.is_none()
+                && !computer.base_url.is_empty()
+                && computer.server_id != shared.server_id
+        })
+        .collect();
+    let keep = shared.timings.remote_keep_ms;
+    remotes.lists.retain(|server_id, list| {
+        connected
+            .iter()
+            .any(|computer| &computer.server_id == server_id)
+            && now - list.read_at < keep
+    });
+    remotes.retry_at.retain(|server_id, _| {
+        connected
+            .iter()
+            .any(|computer| &computer.server_id == server_id)
+    });
+    let mut next: Option<i64> = None;
+    for computer in connected {
+        if remotes.in_flight.contains(&computer.server_id) {
+            // Its read wakes the worker when it finishes.
+            continue;
+        }
+        let due = remotes
+            .lists
+            .get(&computer.server_id)
+            .map(|list| list.next_read)
+            .or_else(|| remotes.retry_at.get(&computer.server_id).copied())
+            .unwrap_or(0);
+        if now < due {
+            next = Some(next.map_or(due, |current: i64| current.min(due)));
+            continue;
+        }
+        // A computer that is slow or asleep never holds up this computer's updates: each read runs on its own
+        // thread and wakes the worker when it is done.
+        remotes.in_flight.insert(computer.server_id.clone());
+        let reader = shared.clone();
+        let spawned = std::thread::Builder::new()
+            .name("gxserver-live-activity-read".into())
+            .spawn(move || {
+                let result = read_remote(&computer, now);
+                reader
+                    .remote_reads
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(RemoteRead {
+                        server_id: computer.server_id.clone(),
+                        name: computer.name.clone(),
+                        started_at: now,
+                        result,
+                    });
+                let mut queue = reader.lock();
+                queue.poked = true;
+                reader.wake.notify_all();
+            });
+        if spawned.is_err() {
+            remotes.in_flight.clear();
+        }
+    }
+    next
 }
 
 /// One pass over every phone; returns when the next pass is due without a change.
 fn pass(
-    shared: &Shared,
+    shared: &Arc<Shared>,
     states: &mut HashMap<String, PhoneState>,
     memory: &mut FinishedMemory,
+    remotes: &mut Remotes,
 ) -> Option<i64> {
     let phones = registered_phones(shared)?;
     states.retain(|machine_id, _| {
@@ -376,6 +598,8 @@ fn pass(
     });
     if phones.is_empty() {
         memory.clear();
+        remotes.lists.clear();
+        remotes.retry_at.clear();
         return None;
     }
     let now = shared.clock.now_ms();
@@ -390,8 +614,29 @@ fn pass(
             return Some(now + shared.timings.failure_backoff_ms);
         }
     };
-    let candidates = collect_candidates(&rows, &launchers, now, memory);
-    let mut next_due: Option<i64> = None;
+    let remote_due = refresh_remotes(shared, remotes, now);
+    let this_name = crate::connected_computers::this_computer_name();
+    let mut sources = vec![Source {
+        server_id: &shared.server_id,
+        computer: &this_name,
+        rows: &rows,
+        launchers: &launchers,
+        read_at: now,
+    }];
+    let mut remote_ids: Vec<&String> = remotes.lists.keys().collect();
+    remote_ids.sort();
+    for server_id in remote_ids {
+        let list = &remotes.lists[server_id];
+        sources.push(Source {
+            server_id,
+            computer: &list.name,
+            rows: &list.rows,
+            launchers: &list.launchers,
+            read_at: list.read_at,
+        });
+    }
+    let candidates = collect_candidates(&sources, now, memory);
+    let mut next_due: Option<i64> = remote_due;
     let mut due = |at: i64| next_due = Some(next_due.map_or(at, |current: i64| current.min(at)));
     for (phone, names) in phones {
         let state = states.entry(phone.machine_id.clone()).or_default();
@@ -426,7 +671,8 @@ fn phone_pass(
         .iter()
         .any(|stint| !state.known_stints.contains(stint));
     state.known_stints = candidates.working_stints.clone();
-    let content = render(candidates, &phone.machine_id, names, now);
+    let target = |server_id: &str| phone.machine_id_for(server_id, &shared.server_id);
+    let content = render(candidates, &target, names, now);
     let shape = shape_of(&content);
     let active = candidates.active();
 

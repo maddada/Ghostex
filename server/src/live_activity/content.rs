@@ -52,6 +52,9 @@ impl RowState {
 /// A row before it knows which phone it is for: both names, so each phone's switch picks one.
 #[derive(Clone, Debug)]
 pub(crate) struct Shown {
+    /// The computer the session runs on (its server id) and its name.
+    pub(crate) server_id: String,
+    pub(crate) computer: String,
     pub(crate) session_id: String,
     pub(crate) agent_name: String,
     /// The session's title as the Sessions list shows it ('' for none).
@@ -76,8 +79,8 @@ pub(crate) struct Candidate {
     pub(crate) finished_at_ms: Option<i64>,
 }
 
-/// The finished events seen, by session: each stays a row for its 2 minutes also once the computer drops the
-/// session's attention (an acknowledgement on any device).
+/// The finished events seen, by computer and session: each stays a row for its 2 minutes also once the
+/// computer drops the session's attention (an acknowledgement on any device).
 pub(crate) type FinishedMemory = HashMap<String, Candidate>;
 
 /// One pass's candidates, the same for every phone; `render` makes one phone's content from them.
@@ -86,9 +89,24 @@ pub(crate) struct Candidates {
     pub(crate) list: Vec<Candidate>,
     pub(crate) working: usize,
     pub(crate) waiting: usize,
-    /// One key per working agent: its session and the start of its stint. A key the last pass did not have
-    /// is a working stint that began.
+    /// One key per working agent: its computer, its session and the start of its stint. A key the last pass
+    /// did not have is a working stint that began.
     pub(crate) working_stints: HashSet<String>,
+    /// When each computer's list was read (ms).
+    pub(crate) read_at: HashMap<String, i64>,
+    /// The computers with an agent on the banner (a working, waiting or recently finished candidate).
+    pub(crate) shown_computers: HashSet<String>,
+}
+
+/// One computer's session list as the phone's summary carries it: this computer's, or a connected
+/// computer's read over the connection to it.
+pub(crate) struct Source<'a> {
+    pub(crate) server_id: &'a str,
+    /// Its name, which a row carries when the banner shows more than one computer.
+    pub(crate) computer: &'a str,
+    pub(crate) rows: &'a [Value],
+    pub(crate) launchers: &'a [Value],
+    pub(crate) read_at: i64,
 }
 
 impl Candidates {
@@ -368,6 +386,8 @@ pub(crate) fn candidate_for(row: &Value, launchers: &[Value], now: i64) -> Optio
     );
     let session_id = text(row, "sessionId").to_string();
     let shown_with = |state: RowState, started: i64, finished: Option<i64>, sort_time: i64| Shown {
+        server_id: String::new(),
+        computer: String::new(),
         session_id: session_id.clone(),
         agent_name: agent_name.clone(),
         session_name: truncate(first_non_empty(&[
@@ -428,51 +448,87 @@ pub(crate) fn candidate_for(row: &Value, launchers: &[Value], now: i64) -> Optio
     None
 }
 
-/// Every candidate over the rows at `now`, with the finished ones `memory` keeps (updated here).
+/// Every candidate over the computers' rows at `now`, with the finished ones `memory` keeps (updated here; a
+/// computer not read this pass keeps its remembered finishes out, as the phone does).
 pub(crate) fn collect_candidates(
-    rows: &[Value],
-    launchers: &[Value],
+    sources: &[Source<'_>],
     now: i64,
     memory: &mut FinishedMemory,
 ) -> Candidates {
     let mut candidates = Candidates::default();
-    for row in rows {
-        let session_id = text(row, "sessionId");
-        if session_id.is_empty() {
-            continue;
-        }
-        let candidate = candidate_for(row, launchers, now);
-        if let Some(candidate) = candidate
-            .as_ref()
-            .filter(|candidate| candidate.state == RowState::Finished)
-        {
-            memory.insert(session_id.to_string(), candidate.clone());
-            continue;
-        }
-        // Working, waiting or in another attention: a finish remembered for this session is over.
-        if candidate.is_some() || text(row, "activity") == "attention" {
-            memory.remove(session_id);
-        }
-        let Some(candidate) = candidate else { continue };
-        match candidate.state {
-            RowState::Working => {
-                candidates.working += 1;
-                candidates
-                    .working_stints
-                    .insert(format!("{session_id}\n{}", text(row, "workingStartedAt")));
+    for source in sources {
+        candidates
+            .read_at
+            .insert(source.server_id.to_string(), source.read_at);
+        for row in source.rows {
+            let session_id = text(row, "sessionId");
+            if session_id.is_empty() {
+                continue;
             }
-            RowState::Waiting => candidates.waiting += 1,
-            RowState::Finished => {}
+            let key = format!("{}\n{session_id}", source.server_id);
+            let mut candidate = candidate_for(row, source.launchers, now);
+            if let Some(shown) = candidate
+                .as_mut()
+                .and_then(|candidate| candidate.shown.as_mut())
+            {
+                shown.server_id = source.server_id.to_string();
+                shown.computer = source.computer.to_string();
+            }
+            if let Some(candidate) = candidate
+                .as_ref()
+                .filter(|candidate| candidate.state == RowState::Finished)
+            {
+                memory.insert(key, candidate.clone());
+                continue;
+            }
+            // Working, waiting or in another attention: a finish remembered for this session is over.
+            if candidate.is_some() || text(row, "activity") == "attention" {
+                memory.remove(&key);
+            }
+            let Some(candidate) = candidate else { continue };
+            match candidate.state {
+                RowState::Working => {
+                    candidates.working += 1;
+                    candidates
+                        .working_stints
+                        .insert(format!("{key}\n{}", text(row, "workingStartedAt")));
+                }
+                RowState::Waiting => candidates.waiting += 1,
+                RowState::Finished => {}
+            }
+            candidates
+                .shown_computers
+                .insert(source.server_id.to_string());
+            candidates.list.push(candidate);
         }
-        candidates.list.push(candidate);
     }
     memory.retain(|_, candidate| {
         candidate
             .finished_at_ms
             .is_some_and(|finished| now - finished < FINISHED_ROW_MS)
     });
-    candidates.list.extend(memory.values().cloned());
+    for (key, candidate) in memory.iter() {
+        let server_id = key.split('\n').next().unwrap_or_default();
+        if candidates.read_at.contains_key(server_id) {
+            candidates.shown_computers.insert(server_id.to_string());
+            candidates.list.push(candidate.clone());
+        }
+    }
     candidates
+}
+
+/// The data time: when the oldest list with an agent on the banner was read; with none, the newest read;
+/// `now` when nothing was read (the phone's `dataTimeOf`).
+fn data_time(candidates: &Candidates, now: i64) -> i64 {
+    let shown = candidates
+        .read_at
+        .iter()
+        .filter(|(server_id, _)| candidates.shown_computers.contains(*server_id))
+        .map(|(_, at)| *at)
+        .min();
+    shown
+        .or_else(|| candidates.read_at.values().copied().max())
+        .unwrap_or(now)
 }
 
 fn compare(a: &Shown, b: &Shown) -> std::cmp::Ordering {
@@ -487,13 +543,17 @@ fn compare(a: &Shown, b: &Shown) -> std::cmp::Ordering {
             }
         })
         .then_with(|| a.session_id.cmp(&b.session_id))
+        .then_with(|| a.server_id.cmp(&b.server_id))
 }
 
-/// One phone's content: `machine_id` is the id that phone uses for this computer (its rows open sessions
-/// through it), `show_session_names` its switch, `now` the data time.
+/// One phone's content. `target` gives the id that phone uses for a computer (its rows open sessions through
+/// it): this computer's is the phone's registration id, another computer's is what the phone said it calls
+/// it, and a computer the phone does not know gets '' (a tap then opens the app). `show_session_names` is the
+/// phone's switch. A row names its computer (`computer`) when the banner shows more than one; the app's own
+/// builder has no such field yet, and an app that does not read it draws the row as before.
 pub(crate) fn render(
     candidates: &Candidates,
-    machine_id: &str,
+    target: &dyn Fn(&str) -> Option<String>,
     show_session_names: bool,
     now: i64,
 ) -> Value {
@@ -503,16 +563,19 @@ pub(crate) fn render(
         .filter_map(|candidate| candidate.shown.as_ref())
         .collect();
     shown.sort_by(|a, b| compare(a, b));
+    let several = candidates.shown_computers.len() > 1;
     let rows: Vec<Value> = shown
         .iter()
         .take(MAX_ROWS)
-        .filter(|_| routable(machine_id))
         .map(|shown| {
             let leading = if show_session_names && !shown.session_name.is_empty() {
                 &shown.session_name
             } else {
                 &shown.agent_name
             };
+            let machine_id = target(&shown.server_id)
+                .filter(|id| routable(id))
+                .unwrap_or_default();
             let mut row = Map::new();
             row.insert(
                 "target".into(),
@@ -522,6 +585,9 @@ pub(crate) fn render(
             row.insert("agentIcon".into(), json!(shown.agent_icon));
             row.insert("agentTint".into(), json!(shown.agent_tint));
             row.insert("project".into(), json!(shown.project));
+            if several {
+                row.insert("computer".into(), json!(truncate(&shown.computer)));
+            }
             row.insert("state".into(), json!(shown.state.wire()));
             row.insert("startedAt".into(), json!(iso(shown.started_at_ms)));
             if let Some(finished) = shown.finished_at_ms {
@@ -535,7 +601,7 @@ pub(crate) fn render(
         })
         .collect();
     fit(json!({
-        "updatedAt": iso(now),
+        "updatedAt": iso(data_time(candidates, now)),
         "counts": { "working": candidates.working, "waiting": candidates.waiting },
         "moreCount": candidates.list.len() - rows.len(),
         "agents": rows,
