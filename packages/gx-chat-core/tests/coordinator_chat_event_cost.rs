@@ -124,7 +124,51 @@ fn coordinator_chat(turns: usize, items: usize) -> ChatState {
     state.messages.composed = rows.clone();
     state.messages.list = rows;
     state.session.coordinator_threads = Some(work(items));
+    // Quiet View, as a coordinator's chat has it by default.
+    ghostex_gx_chat_core::transcript::quiet_view::apply_settings(
+        &mut state,
+        ghostex_gx_chat_core::transcript::quiet_view::QuietViewSettings {
+            coordinators: true,
+            chats: false,
+            expand_last: false,
+        },
+    );
     state
+}
+
+/// The Quiet View lines a core keeps between documents are the ones a fresh build makes, at
+/// another time, on another day and after a row arrived (CDXC:SessionChat 2026-11-11
+/// in `transcript/quiet_view.rs` on `document_kept`).
+#[test]
+fn kept_quiet_view_lines_are_the_lines_a_fresh_build_makes() {
+    let mut state = coordinator_chat(60, 12);
+    ghostex_gx_chat_core::transcript::rows::refresh(&mut state, &at(T0));
+    let mut cache = AssembleCache::default();
+    let lines = |state: &ChatState, now: i64, cache: &mut AssembleCache| {
+        let kept = assemble_with(state, &at(now), cache).quiet_view;
+        let fresh = assemble_with(state, &at(now), &mut AssembleCache::default()).quiet_view;
+        assert_eq!(kept, fresh, "kept lines equal a fresh build at {now}");
+        kept.expect("a coordinator's chat has Quiet View")
+    };
+    let first = lines(&state, T0, &mut cache);
+    assert!(
+        first.on && !first.stretches.is_empty(),
+        "the chat folds into lines"
+    );
+    // The clock alone: the same lines.
+    assert_eq!(lines(&state, T0 + 5_000, &mut cache), first);
+    // The next day a line's times are written with the date: built again, and still a fresh
+    // build's lines (these have no times to differ by).
+    lines(&state, T0 + 86_400_000, &mut cache);
+    // A new row: the projection hands out a new list and the lines follow it.
+    let mut rows = state.messages.composed.clone();
+    rows.extend(transcript(61).split_off(60 * 5));
+    state.messages.composed = rows.clone();
+    state.messages.list = rows;
+    state.messages.compose_generation += 1;
+    ghostex_gx_chat_core::transcript::rows::refresh(&mut state, &at(T0));
+    let grown = lines(&state, T0, &mut cache);
+    assert_ne!(grown, first);
 }
 
 fn at(now_ms: i64) -> ChatContext {

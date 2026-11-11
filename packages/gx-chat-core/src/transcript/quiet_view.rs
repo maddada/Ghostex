@@ -71,11 +71,17 @@ pub struct QuietViewDocument {
     /// What the chat would be in without a choice of its own.
     pub default_on: bool,
     /// The lines, oldest first; empty while Quiet View is off or the chat is in Summary view.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub stretches: Vec<QuietStretch>,
+    /// Shared with the lines a core keeps between documents (`document_kept`), so a document that
+    /// changed no line copies none.
+    #[serde(default, skip_serializing_if = "shared_is_empty")]
+    pub stretches: std::sync::Arc<Vec<QuietStretch>>,
     /// The cards of the user's answers, each drawn shut as its own small line.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub answers: Vec<QuietAnswers>,
+    #[serde(default, skip_serializing_if = "shared_is_empty")]
+    pub answers: std::sync::Arc<Vec<QuietAnswers>>,
+}
+
+fn shared_is_empty<T>(list: &std::sync::Arc<Vec<T>>) -> bool {
+    list.is_empty()
 }
 
 /// One answers card under Quiet View: a page's or a form's answers row (`id` is the row's), or a
@@ -340,26 +346,82 @@ pub fn document(
     work_cards: &Value,
     approvals: &Value,
 ) -> Option<QuietViewDocument> {
+    document_kept(state, context, work_cards, approvals, &mut None)
+}
+
+/// The lines as last built, with everything they were built from: the rows (the projection's own
+/// list, which is a new one whenever a row changed), what [`Inputs`] holds, and the day and
+/// timezone their times were written in.
+#[derive(Clone, Debug)]
+pub struct KeptQuiet {
+    items: std::sync::Arc<crate::transcript::items::TranscriptItems>,
+    inputs: Inputs,
+    utc_offset_minutes: i32,
+    local_day: i64,
+    lines: (
+        std::sync::Arc<Vec<QuietStretch>>,
+        std::sync::Arc<Vec<QuietAnswers>>,
+    ),
+}
+
+/// [`document`], reusing the lines `kept` holds while the rows and everything else they read are
+/// the ones they were built from.
+///
+/// CDXC:SessionChat 2026-11-11 WHY:
+/// User: "why is the chat engine busy, it used to be so fast". Every document walked every row of
+/// the transcript again for these lines, and a core builds two documents an event: a sample of
+/// his app showed a fifth of the chat engine's thread here on a long coordinator chat, for events
+/// that changed no row (a keystroke, a session's activity). The lines read the rows, a few flags
+/// and the day, so they are built again only when one of those moved.
+pub fn document_kept(
+    state: &ChatState,
+    context: &ChatContext,
+    work_cards: &Value,
+    approvals: &Value,
+    kept: &mut Option<KeptQuiet>,
+) -> Option<QuietViewDocument> {
     let default_on = default_on(state)?;
     let on = chosen(state)?;
     let (stretches, answers) = if state.transcript_view.quiet_view_on {
         let items = crate::transcript::rows::rows_shared(state, context);
-        stretches(
-            items.iter(),
-            &Inputs {
-                coordinator: coordinator(state),
-                working: crate::transcript::foreign::is_working(state),
-                expand_last: state
-                    .transcript_view
-                    .quiet_view_settings
-                    .is_some_and(|settings| settings.expand_last),
-                approvals: open_approval_anchors(approvals),
-                cards: turn_lines(work_cards),
-            },
-            context,
+        let inputs = Inputs {
+            coordinator: coordinator(state),
+            working: crate::transcript::foreign::is_working(state),
+            expand_last: state
+                .transcript_view
+                .quiet_view_settings
+                .is_some_and(|settings| settings.expand_last),
+            approvals: open_approval_anchors(approvals),
+            cards: turn_lines(work_cards),
+        };
+        let local_day = crate::transcript::message_time::civil(
+            context.now_millis(),
+            context.utc_offset_minutes,
         )
+        .local_day;
+        match kept.as_ref().filter(|kept| {
+            std::sync::Arc::ptr_eq(&kept.items, &items)
+                && kept.inputs == inputs
+                && kept.utc_offset_minutes == context.utc_offset_minutes
+                && kept.local_day == local_day
+        }) {
+            Some(kept) => kept.lines.clone(),
+            None => {
+                let (stretches, answers) = stretches(items.iter(), &inputs, context);
+                let lines = (std::sync::Arc::new(stretches), std::sync::Arc::new(answers));
+                *kept = Some(KeptQuiet {
+                    items,
+                    inputs,
+                    utc_offset_minutes: context.utc_offset_minutes,
+                    local_day,
+                    lines: lines.clone(),
+                });
+                lines
+            }
+        }
     } else {
-        (Vec::new(), Vec::new())
+        *kept = None;
+        Default::default()
     };
     Some(QuietViewDocument {
         on,
@@ -370,6 +432,7 @@ pub fn document(
 }
 
 /// What the lines are built from besides the rows.
+#[derive(Clone, Debug, PartialEq)]
 struct Inputs {
     coordinator: bool,
     working: bool,

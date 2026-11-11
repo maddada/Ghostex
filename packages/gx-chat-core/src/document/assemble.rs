@@ -27,6 +27,7 @@ pub struct AssembleCache {
     board: Option<crate::extras::coordinator_board::KeptBoard>,
     question_list: Option<crate::questions::open_questions::KeptList>,
     work: Option<crate::extras::work_cards::KeptWork>,
+    quiet: Option<crate::transcript::quiet_view::KeptQuiet>,
 }
 
 /// [`assemble`], reusing what `cache` kept: the same document, built once per change of inputs.
@@ -64,7 +65,7 @@ pub fn assemble_with(
     extras::document_with_board(state, context, &mut document, board);
     crate::read_aloud::document(state, context, &mut document);
     // After the work item lines and relayed approvals, which the quiet lines read.
-    document.quiet_view = crate::transcript::quiet_view::document(
+    document.quiet_view = crate::transcript::quiet_view::document_kept(
         state,
         context,
         document
@@ -75,6 +76,7 @@ pub fn assemble_with(
             .relayed_approvals
             .value()
             .unwrap_or(&serde_json::Value::Null),
+        &mut cache.quiet,
     );
     document
 }
