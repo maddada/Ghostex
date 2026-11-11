@@ -130,6 +130,14 @@ pub struct Document {
     pub composer_placeholder: String,
     /// Why sending is blocked, or `null` when it is not.
     pub send_blocked_reason: Option<String>,
+    /// Why a message sent now would wait in the chat instead of going at once (an account or mode
+    /// switch, a dialog in the agent's terminal), or `null`. A send is still taken: it shows as
+    /// waiting with these words and goes once the wait clears (composer/policy.rs `hold_words`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_hold_reason: Option<String>,
+    /// How many submissions from the chat box the core has taken in (`ComposerState`).
+    #[serde(default)]
+    pub submissions_received: u64,
     pub composer_collapse_eligible: bool,
     pub composer_collapsed: bool,
     pub composer_overflow: ComposerOverflow,

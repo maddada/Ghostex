@@ -26,6 +26,9 @@ use crate::session::terminal::{
 };
 use crate::session::text::{collapse_whitespace, is_js_space, parse_command_envelope};
 use crate::state::ChatState;
+
+/// The id the drawn copy of a gate-held echo carries in its `startupDelivery` (`held_echo`).
+pub const HELD_BY_GATE_PREFIX: &str = "gate-held-";
 use crate::transcript::noise::is_compaction_record;
 
 /// `countSessionChatCompactionRecords`: how many compactions the authoritative transcript records.
@@ -193,6 +196,8 @@ pub struct ComposeKey {
     pub queue: Option<Vec<serde_json::Value>>,
     pub app_commands: Vec<serde_json::Value>,
     pub shell: Option<serde_json::Value>,
+    /// The echo the send gate holds and its words (`composer::send::held_echo`).
+    pub held: Option<(String, String)>,
 }
 
 /// Rebuilds `state.messages.boundaried` when the transcript or the markers changed, and keeps it
@@ -262,6 +267,7 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
         queue: state.session.queue_prompts.clone(),
         app_commands: state.session.app_commands.clone(),
         shell: state.pending.terminal_shell.clone(),
+        held: crate::composer::send::held_echo(state),
     };
     if state.messages.compose_key.as_ref() == Some(&key) {
         return;
@@ -344,11 +350,28 @@ fn compose_after(
     } else {
         visible_pending_sends(&startup_pending, &pending_transcript(state, boundaried))
     };
-    let pending_messages = crate::transcript::local_command::with_live_shell_output(
+    let mut pending_messages = crate::transcript::local_command::with_live_shell_output(
         pending_sends_as_messages(&visible),
         state.pending.terminal_shell.as_ref(),
         boundaried,
     );
+    // A message the send gate holds says so at once, with why, under its bubble (CDXC:SessionChat
+    // 2026-11-11 on `hold_words` in composer/policy.rs). Only the drawn row carries it, and it keeps
+    // its own `queued` mark: the echo is no queue row, so nothing that settles queue rows reads it.
+    if let Some((pending_id, words)) = crate::composer::send::held_echo(state) {
+        let id = format!("{}{pending_id}", crate::session::constants::PENDING_ID_PREFIX);
+        if let Some(row) = pending_messages
+            .iter_mut()
+            .find(|row| row.id == id && row.startup_delivery.is_none())
+        {
+            row.startup_delivery = Some(ghostex_gx_protocol::StartupDelivery {
+                prompt_id: format!("{HELD_BY_GATE_PREFIX}{pending_id}"),
+                state: "waiting".to_string(),
+                error_message: None,
+                wait_reason: Some(words),
+            });
+        }
+    }
     let key = TranscriptPartKey {
         boundaried: BoundariedKey::of(state),
         app_commands: state.session.app_commands.clone(),

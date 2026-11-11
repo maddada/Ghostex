@@ -330,6 +330,9 @@ pub(crate) struct NativeChatView {
     /// A send left this composer and has not settled; Enter does not wait for it (the core holds
     /// later sends behind it), so only summaries read it.
     pub(crate) pending_send: bool,
+    /// A send the chat core has not counted yet (send_watch.rs), and the last watch's number.
+    pub(super) send_watch: Option<super::send_watch::SendWatch>,
+    pub(super) send_watch_token: u64,
     pub(crate) composer_ready: bool,
     pub(crate) expanded: FoldKeys,
     /// Scroll offsets of the capped boxes inside transcript rows (nested_scroll.rs).
@@ -631,6 +634,8 @@ impl NativeChatView {
             draft: String::new(),
             draft_revision: 0,
             pending_send: false,
+            send_watch: None,
+            send_watch_token: 0,
             composer_ready: false,
             expanded: FoldKeys::default(),
             nested_scrolls: Default::default(),
@@ -924,7 +929,11 @@ impl NativeChatView {
         };
         for output in runtime.take_outputs() {
             match output {
-                ChatRuntimeOutput::Drained(output) => self.apply_output(output, cx),
+                ChatRuntimeOutput::Drained(output) => {
+                    self.apply_output(output, cx);
+                    // Whatever the frame carried, the host thread is alive (send_watch.rs).
+                    self.note_send_progress();
+                }
                 ChatRuntimeOutput::Error(error) => {
                     self.error = Some(error);
                     cx.notify();
