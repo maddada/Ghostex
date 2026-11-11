@@ -341,7 +341,9 @@ pub(crate) fn start_provider(
 
 /// Moves a coordinator's goal, instructions, memory, threads (here and on other computers) and
 /// board items, and the record of the guide it last read, from session `old` to session `new`,
-/// and drops the old coordinator row.
+/// and drops the old coordinator row. All of it is one transaction: a coordinator reading its
+/// guide meanwhile never sees the old row gone with its guide records not yet moved (it would
+/// drop them as a removed coordinator's), and a failure moves nothing.
 pub(super) fn move_coordinator(
     db: &Connection,
     old: &SessionKey,
@@ -351,6 +353,10 @@ pub(super) fn move_coordinator(
         code: "internalError",
         message: format!("SQLite Chief of Staff error: {error}"),
     };
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql)?;
+    let db = &*transaction;
     if let Some(mut record) = read_coordinator(db, &old.0, &old.1)? {
         record.project_id = new.0.clone();
         record.session_id = new.1.clone();
@@ -377,5 +383,44 @@ pub(super) fn move_coordinator(
         rusqlite::params![old.0, old.1],
     )
     .map_err(sql)?;
-    crate::coordinators::carry_guide_records(db, old, new)
+    crate::coordinators::carry_guide_records(db, old, new)?;
+    transaction.commit().map_err(sql)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coordinators::insert_coordinator;
+    use crate::paths::get_gxserver_paths;
+    use crate::storage::{initialize_gxserver_storage, open_gxserver_database};
+
+    #[test]
+    fn a_move_that_fails_to_carry_the_guide_records_moves_nothing() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        initialize_gxserver_storage(&paths).expect("storage init");
+        let db = open_gxserver_database(&paths).expect("open db");
+        let old = ("P1".to_string(), "OLD".to_string());
+        let new = ("P1".to_string(), "NEW".to_string());
+        insert_coordinator(&db, &old.0, &old.1, "The goal", "").expect("old");
+        insert_coordinator(&db, &new.0, &new.1, "", "").expect("new");
+        db.execute(
+            "INSERT INTO metadata (key, value, updatedAt) VALUES ('coordinatorGuideReads', ?1, '')",
+            [json!({ "P1:OLD": "version" }).to_string()],
+        )
+        .expect("read record");
+        db.execute_batch(
+            "CREATE TRIGGER refuse_metadata_update BEFORE UPDATE ON metadata \
+             BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END; \
+             CREATE TRIGGER refuse_metadata_insert BEFORE INSERT ON metadata \
+             BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END;",
+        )
+        .expect("trigger");
+
+        assert!(move_coordinator(&db, &old, &new).is_err());
+        let old_record = read_coordinator(&db, &old.0, &old.1).expect("read old");
+        assert_eq!(old_record.expect("old row kept").goal, "The goal");
+        let new_record = read_coordinator(&db, &new.0, &new.1).expect("read new");
+        assert_eq!(new_record.expect("new row").goal, "");
+    }
 }
