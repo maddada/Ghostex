@@ -895,7 +895,9 @@ impl NativeChatView {
                 cx,
             ));
         }
-        let beside = !open || fit;
+        // Opened, the answers always take their own line under the text, so the title is the
+        // only thing that shares its width with the age and the ⋯.
+        let beside = !open;
         let detail = text(row, "body");
         let title_runs = &row["titleRuns"];
         let count = text(row, "count");
@@ -938,15 +940,9 @@ impl NativeChatView {
                 ))
                 .into_any_element()
         } else {
-            // Opened: the title whole, the work it belongs to as a small label under it, then the
-            // whole description (or where a line of work stands). Nothing is cut; the row's own
-            // open and shut hides it.
-            let mut column = div()
+            div()
                 .flex_1()
                 .min_w_0()
-                .flex()
-                .flex_col()
-                .gap(px(2.0 * s))
                 .child(self.ask_title(
                     &key,
                     &title,
@@ -957,7 +953,25 @@ impl NativeChatView {
                     PROSE_LINE_HEIGHT,
                     p,
                     cx,
-                ));
+                ))
+                .into_any_element()
+        };
+        // Opened: the work it belongs to as a small label under the title, then the whole
+        // description (or where a line of work stands). Nothing is cut; the row's own open and
+        // shut hides it. It sits under the title line, from the title's left edge to the card's
+        // right padding, not in a column beside the age and the ⋯.
+        //
+        // CDXC:Coordinators 2026-11-12 DECISION:
+        // User, of an opened row whose description stopped where the age and the ⋯ sit: "It
+        // should take up the full width of this card when I expand".
+        let opened_detail = open.then(|| {
+            let mut column = div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.0 * s))
+                .pl(px(DOCK_LEAD * s));
             if row["waitedBy"].is_array() {
                 // An ask's own item, then the other items that wait on its answer: one line.
                 column = column.child(
@@ -1024,22 +1038,14 @@ impl NativeChatView {
                         .child(line.to_string()),
                 );
             }
-            column.into_any_element()
-        };
+            column
+        });
         let mut head = div()
-            .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
             .w_full()
             .min_w_0()
             .flex()
             .items_start()
             .gap(px(DOCK_GAP * s))
-            .px(px(DOCK_ROW_PAD_X * s))
-            .py(px(6.0 * s))
-            .rounded(px(8.0 * s))
-            .chat_cursor_pointer()
-            .when(!open, |head| {
-                head.hover(|style| style.bg(p.foreground.opacity(0.04)))
-            })
             .child(
                 div()
                     .h(px(PROSE_LINE_HEIGHT * s))
@@ -1076,9 +1082,8 @@ impl NativeChatView {
         if page_row {
             let page = row["open"].clone();
             let right_menu = page_row_menu(row);
-            head = head
+            let head = Self::dock_row_press(&key, open, head.child(age_menu), None, p)
                 .group(hover.clone())
-                .child(age_menu)
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.invoke(page.clone(), cx);
                 }))
@@ -1094,8 +1099,7 @@ impl NativeChatView {
             }
             return div().w_full().child(head).into_any_element();
         }
-        head = head
-            .child(age_menu)
+        let head = Self::dock_row_press(&key, open, head.child(age_menu), opened_detail, p)
             .on_click(cx.listener(move |this, _, _, cx| {
                 // One row open at a time: opening this one shuts the one that was open.
                 if !this.expanded.remove(&toggle) {
@@ -1107,8 +1111,8 @@ impl NativeChatView {
         if !open {
             return div().w_full().group(hover).child(head).into_any_element();
         }
-        // Opened: its own card, a little lighter than the dock, with the answers that did not fit
-        // beside the title on a line under it and the ⋯ at that line's right end.
+        // Opened: its own card, a little lighter than the dock, with the answers on a line under
+        // its text.
         //
         // CDXC:Coordinators 2026-11-11 DECISION:
         // User, picking on the opened row page (opened-row-page.html): "C. Answers and one menu"
@@ -1153,6 +1157,33 @@ impl NativeChatView {
             );
         }
         card.into_any_element()
+    }
+
+    /// A dock row's clickable surface: its title line, then, opened, what sits under it.
+    fn dock_row_press(
+        key: &str,
+        open: bool,
+        line: gpui::Div,
+        detail: Option<gpui::Div>,
+        p: &ChatAppearance,
+    ) -> gpui::Stateful<gpui::Div> {
+        let s = p.scale;
+        div()
+            .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(2.0 * s))
+            .px(px(DOCK_ROW_PAD_X * s))
+            .py(px(6.0 * s))
+            .rounded(px(8.0 * s))
+            .chat_cursor_pointer()
+            .when(!open, |head| {
+                head.hover(|style| style.bg(p.foreground.opacity(0.04)))
+            })
+            .child(line)
+            .children(detail)
     }
 
     /// An opened row's menu: Show in chat, Dismiss and Snooze (`page_row_menu`), then Mention,
