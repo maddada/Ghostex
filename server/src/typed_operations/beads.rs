@@ -1,17 +1,17 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
 use crate::toolchain::require_system_bd;
 
 use super::values::{
-    chmod_executable_if_supported, command_summary_json, display_unknown_value, normalize_issue_id,
+    command_summary_json, display_unknown_value, normalize_issue_id,
     normalize_nullish_required_text, normalize_required_text, nullish_value_to_string,
-    resolve_path_against, run_process_command, typed_result, value_to_string, ProcessCommand,
-    StringOrElse, TypedOperationContext, TypedOperationError,
+    resolve_path_against, run_process_command, typed_result, value_to_string, CommandOutput,
+    ProcessCommand, StringOrElse, TypedOperationContext, TypedOperationError,
 };
 
 const BEADS_BOARD_RESPONSE_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -36,9 +36,14 @@ pub(crate) async fn run_beads_action(
 ) -> Result<Value, TypedOperationError> {
     let action = normalize_beads_action(params.get("action"))?;
     if action == "storageExists" {
-        let exists = Path::new(&resolve_beads_cwd(context))
-            .join(".beads")
-            .is_dir();
+        let exists = match require_system_bd() {
+            Ok(bd) => matches!(
+                resolve_beads_workspace(&resolve_beads_cwd(context), &bd.executable_path, context)
+                    .await,
+                BeadsWorkspace::Workspace(_)
+            ),
+            Err(_) => false,
+        };
         return Ok(json!({
             "action": action,
             "exitCode": if exists { 0 } else { 1 },
@@ -117,9 +122,11 @@ pub(crate) fn build_beads_command_with_executable(
 ) -> Result<ProcessCommand, TypedOperationError> {
     let cwd = resolve_beads_cwd(context);
     Ok(match action {
-        "board" | "list" => {
-            ProcessCommand::new(bd_executable_path, vec!["list", "--all", "--json"], &cwd)
-        }
+        "board" | "list" => ProcessCommand::new(
+            bd_executable_path,
+            vec!["list", "--all", "-n", "0", "--json"],
+            &cwd,
+        ),
         "addLabel" => ProcessCommand::new(
             bd_executable_path,
             vec![
@@ -222,7 +229,11 @@ pub(crate) fn build_beads_command_with_executable(
             CDXC:ProjectBoard 2026-06-19-14:38:
             Beads label vocabulary requests must share the board list read path instead of calling `label list-all`, because the board list output already contains the labels needed by the UI and avoids the slower issue-by-issue inventory path.
             */
-            ProcessCommand::new(bd_executable_path, vec!["list", "--all", "--json"], &cwd)
+            ProcessCommand::new(
+                bd_executable_path,
+                vec!["list", "--all", "-n", "0", "--json"],
+                &cwd,
+            )
         }
         "removeLabel" => ProcessCommand::new(
             bd_executable_path,
@@ -336,101 +347,620 @@ pub(crate) fn build_beads_command_with_executable(
     })
 }
 
+/// What `bd where` says about a folder's Beads workspace.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BeadsWorkspace {
+    /// The folder belongs to the workspace at this absolute `.beads` path.
+    Workspace(String),
+    /// bd found no workspace (`no_beads_directory`), or only the home folder's `~/.beads`.
+    None,
+    /// bd failed for another reason, timed out, or printed something unreadable.
+    Failed(String),
+}
+
+/// CDXC:ProjectBoard 2026-11-10 WHY:
+/// A `.beads` folder is not a Beads workspace: `~/.beads` holds only bd's machine id, and an empty folder or one with only `issues.jsonl` has no workspace either, while a worktree or a subfolder with no `.beads` of its own can belong to one through bd's walk-up and `.beads/redirect`. So bd decides, through `bd where --json`. The home folder's `~/.beads` never counts, because counting it made the commit check skip every pre-commit hook in repositories under the home folder.
+pub(crate) async fn resolve_beads_workspace(
+    cwd: &str,
+    bd_executable_path: &str,
+    context: &TypedOperationContext,
+) -> BeadsWorkspace {
+    let command = ProcessCommand::new(bd_executable_path, vec!["where", "--json"], cwd);
+    let output = match run_process_command(&command, context).await {
+        Ok(output) => output,
+        Err(error) => return BeadsWorkspace::Failed(error.message),
+    };
+    if output.exit_code != 0 {
+        if beads_where_reports_no_workspace(&output.stdout)
+            || beads_where_reports_no_workspace(&output.stderr)
+        {
+            return BeadsWorkspace::None;
+        }
+        return BeadsWorkspace::Failed(output.stderr.or_else("bd where failed."));
+    }
+    match normalize_beads_where_directory(&output.stdout) {
+        Ok(path) if is_home_beads_directory(&path) => BeadsWorkspace::None,
+        Ok(path) => BeadsWorkspace::Workspace(path),
+        Err(error) => BeadsWorkspace::Failed(error.message),
+    }
+}
+
+fn beads_where_reports_no_workspace(text: &str) -> bool {
+    serde_json::from_str::<Value>(text.trim())
+        .ok()
+        .and_then(|parsed| {
+            parsed
+                .get("error")
+                .and_then(Value::as_str)
+                .map(|error| error == "no_beads_directory")
+        })
+        .unwrap_or(false)
+}
+
+fn is_home_beads_directory(beads_path: &str) -> bool {
+    let home = ghostex_paths::user_home_dir();
+    if !home.is_absolute() {
+        return false;
+    }
+    match (
+        fs::canonicalize(beads_path),
+        fs::canonicalize(home.join(".beads")),
+    ) {
+        (Ok(beads), Ok(home_beads)) => beads == home_beads,
+        _ => false,
+    }
+}
+
 pub(crate) async fn ensure_beads_git_hooks(
     context: &TypedOperationContext,
 ) -> Result<Value, TypedOperationError> {
-    /*
-    CDXC:ProjectBoard 2026-06-22-01:09:
-    The Rust port must install the same Ghostex-managed Beads hooks as the TypeScript server. Generated hooks live under the common Git directory, call the resolved machine-installed bd by absolute path, pin BEADS_DIR to `bd where --json`, and are written before core.hooksPath is pointed at them.
-    */
-    if !Path::new(&context.cwd).join(".beads").is_dir() {
-        return Ok(json!({
-            "action": "ensureBeadsHooks",
-            "exitCode": 0,
-            "stderr": "",
-            "stdout": "skipped: no Beads workspace",
-        }));
-    }
-    let bd = require_system_bd().map_err(TypedOperationError::dependency_unavailable)?;
-    ensure_beads_git_hooks_with_executable(context, &bd.executable_path).await
+    let bd = require_system_bd().ok().map(|tool| tool.executable_path);
+    ensure_beads_git_hooks_with_executable(context, bd.as_deref()).await
 }
 
+/// CDXC:ProjectBoard 2026-11-10 WHY:
+/// Ghostex no longer writes Beads hooks: pointing the shared `core.hooksPath` at its own `ghostex-hooks` folder turned off the repository's own hooks in the main checkout and every worktree, and its hooks never ran the ones they replaced. Creating or opening a worktree now only repairs an old install, and when in doubt it keeps the path: it unsets `core.hooksPath` only when it points at Ghostex's folder, every file there is byte-identical to a template Ghostex once wrote, and bd says the repository uses no bd git hooks (no Beads workspace, no tracked JSONL file, or both `export.auto` and `import.auto` off). In every other case it keeps the path: when it established that the repository tracks a JSONL file it tells the user to unset the path and run `bd hooks install`, and when bd or git could not answer (bd missing, a failed read or probe, a timeout) it names that reason instead, because a failed check proves nothing and unsetting the path before `bd hooks install` works would leave the repository without the import hooks it needs. It never fails the worktree action for this (`exitCode` is non-zero only when git itself fails), and it never writes or deletes a file.
 pub(crate) async fn ensure_beads_git_hooks_with_executable(
     context: &TypedOperationContext,
-    bd_executable_path: &str,
+    bd_executable_path: Option<&str>,
 ) -> Result<Value, TypedOperationError> {
-    let where_command =
-        ProcessCommand::new(bd_executable_path, vec!["where", "--json"], &context.cwd);
-    let where_result = run_process_command(&where_command, context).await?;
-    if where_result.exit_code != 0 {
-        return Ok(json!({
-            "action": "ensureBeadsHooks",
-            "exitCode": 0,
-            "stderr": "",
-            "stdout": "skipped: no Beads workspace",
-        }));
-    }
-    let beads_path = normalize_beads_where_directory(&where_result.stdout)?;
-    let common_git_dir = run_process_command(
-        &ProcessCommand::new("git", vec!["rev-parse", "--git-common-dir"], &context.cwd),
-        context,
-    )
-    .await?;
-    if common_git_dir.exit_code != 0 || common_git_dir.stdout.trim().is_empty() {
-        return Err(TypedOperationError::bad_request(
-            common_git_dir
-                .stderr
-                .or_else("Could not resolve Git common directory."),
+    let configured =
+        run_hooks_git(context, &["config", "--local", "--get", "core.hooksPath"]).await?;
+    if configured.exit_code == 1 {
+        return Ok(beads_hooks_result(
+            0,
+            "skipped: no Ghostex hooks setting",
+            "",
         ));
     }
-    let hooks_path =
-        resolve_path_against(&context.cwd, common_git_dir.stdout.trim()).join("ghostex-hooks");
-    fs::create_dir_all(&hooks_path).map_err(|error| {
-        TypedOperationError::bad_request(format!("Could not create Beads hooks directory: {error}"))
-    })?;
-    for hook_name in BEADS_GIT_HOOK_NAMES {
-        let hook_path = hooks_path.join(hook_name);
-        fs::write(
-            &hook_path,
-            build_ghostex_beads_git_hook_script(hook_name, bd_executable_path, &beads_path),
-        )
-        .map_err(|error| {
-            TypedOperationError::bad_request(format!("Could not write Beads Git hook: {error}"))
-        })?;
-        chmod_executable_if_supported(&hook_path)?;
+    if configured.exit_code != 0 {
+        return Ok(beads_hooks_git_failure(
+            configured,
+            "Could not read the Git hooks setting.",
+        ));
     }
-    let config_output = run_process_command(
-        &ProcessCommand::new(
-            "git",
-            vec![
-                "config".to_string(),
-                "core.hooksPath".to_string(),
-                hooks_path.to_string_lossy().to_string(),
-            ],
-            &context.cwd,
+    let common_git_dir = run_hooks_git(context, &["rev-parse", "--git-common-dir"]).await?;
+    if common_git_dir.exit_code != 0 || common_git_dir.stdout.trim().is_empty() {
+        return Ok(beads_hooks_git_failure(
+            common_git_dir,
+            "Could not resolve Git common directory.",
+        ));
+    }
+    let common_git_dir = resolve_path_against(&context.cwd, common_git_dir.stdout.trim());
+    let ghostex_hooks = common_git_dir.join("ghostex-hooks");
+    let configured_path = resolve_path_against(&context.cwd, configured.stdout.trim());
+    if !same_directory_path(&configured_path, &ghostex_hooks) {
+        return Ok(beads_hooks_result(
+            0,
+            "skipped: no Ghostex hooks setting",
+            "",
+        ));
+    }
+    let repo_root = beads_hooks_repo_root(&common_git_dir, &context.cwd);
+    if !ghostex_beads_hooks_folder_is_unchanged(&ghostex_hooks) {
+        return Ok(beads_hooks_result(
+            0,
+            "kept: changed by hand",
+            &format!(
+                "Ghostex left this repository's git hooks setting alone because its Beads hooks folder was edited. Check core.hooksPath in {repo_root}."
+            ),
+        ));
+    }
+    match repository_bd_hooks_use(context, bd_executable_path, &common_git_dir).await {
+        BdHooksUse::NotUsed => {}
+        BdHooksUse::TrackedJsonl(file) => {
+            return Ok(beads_hooks_result(
+                0,
+                "needsBdHooksInstall",
+                &format!(
+                    "Ghostex kept its Beads git hooks because this repository keeps issues in a tracked JSONL file ({}). To use your own hooks again, run `git config --unset core.hooksPath`, then `bd hooks install`, in {repo_root}.",
+                    file.display()
+                ),
+            ));
+        }
+        BdHooksUse::Unknown { result, reason } => {
+            return Ok(beads_hooks_result(
+                0,
+                result,
+                &format!(
+                    "Ghostex kept its Beads git hooks setting because {reason}, so it could not tell whether this repository still needs them. Fix that first, then create or open a worktree again and Ghostex checks again ({repo_root})."
+                ),
+            ));
+        }
+    }
+    let unset = run_hooks_git(context, &["config", "--local", "--unset", "core.hooksPath"]).await?;
+    if unset.exit_code != 0 {
+        return Ok(beads_hooks_git_failure(
+            unset,
+            "Could not reset the Git hooks setting.",
+        ));
+    }
+    Ok(beads_hooks_result(
+        0,
+        "repaired: the repository's own git hooks run again",
+        "",
+    ))
+}
+
+/// Whether the repository still relies on bd's git hooks. Anything Ghostex could not establish is `Unknown`, which keeps the path.
+enum BdHooksUse {
+    /// No Beads workspace, both auto flags off, or no JSONL file tracked by this repository.
+    NotUsed,
+    /// This repository tracks this JSONL file and an auto flag is on.
+    TrackedJsonl(PathBuf),
+    /// `result` is the answer's `stdout` token; `reason` finishes "Ghostex kept its Beads git hooks setting because …".
+    Unknown {
+        result: &'static str,
+        reason: String,
+    },
+}
+
+async fn repository_bd_hooks_use(
+    context: &TypedOperationContext,
+    bd: Option<&str>,
+    common_git_dir: &Path,
+) -> BdHooksUse {
+    let bd_failed = |reason: String| BdHooksUse::Unknown {
+        result: "kept: bd failed",
+        reason,
+    };
+    let Some(bd) = bd else {
+        return BdHooksUse::Unknown {
+            result: "kept: bd not found",
+            reason: "it could not find the bd command (install Beads or put bd on the PATH)"
+                .to_string(),
+        };
+    };
+    let workspace = match resolve_beads_workspace(&context.cwd, bd, context).await {
+        BeadsWorkspace::Workspace(path) => path,
+        BeadsWorkspace::None => return BdHooksUse::NotUsed,
+        BeadsWorkspace::Failed(message) => {
+            return bd_failed(format!("`bd where` failed: {}", one_line(&message)))
+        }
+    };
+    let mut values = Vec::new();
+    for key in ["export.auto", "import.auto", "export.path", "import.path"] {
+        match read_beads_config_value(context, bd, key).await {
+            Ok(value) => values.push(value),
+            Err(message) => {
+                return bd_failed(format!(
+                    "it could not read bd's config (`bd config get {key}`: {})",
+                    one_line(&message)
+                ))
+            }
+        }
+    }
+    let mut flags = Vec::new();
+    for (key, value, default) in [
+        ("export.auto", &values[0], false),
+        ("import.auto", &values[1], true),
+    ] {
+        match beads_config_flag(value, default) {
+            Some(flag) => flags.push(flag),
+            None => {
+                return bd_failed(format!(
+                    "bd's `{key}` setting has a value it does not understand ({value})"
+                ))
+            }
+        }
+    }
+    if flags.iter().all(|flag| !flag) {
+        return BdHooksUse::NotUsed;
+    }
+    let workspace = Path::new(&workspace);
+    let mut candidates = vec![workspace.join("issues.jsonl")];
+    for configured in [&values[2], &values[3]] {
+        if !configured.is_empty() {
+            candidates.push(workspace.join(configured));
+        }
+    }
+    let files_unreadable = |error: std::io::Error| BdHooksUse::Unknown {
+        result: "kept: files unreadable",
+        reason: format!(
+            "it could not list the Beads folder {}: {error}",
+            workspace.display()
         ),
+    };
+    let entries = match fs::read_dir(workspace) {
+        Ok(entries) => entries,
+        Err(error) => return files_unreadable(error),
+    };
+    for entry in entries {
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(error) => return files_unreadable(error),
+        };
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "jsonl")
+        {
+            candidates.push(path);
+        }
+    }
+    for candidate in candidates {
+        match jsonl_tracked_by_repository(context, &candidate, common_git_dir).await {
+            Ok(false) => {}
+            Ok(true) => return BdHooksUse::TrackedJsonl(candidate),
+            Err(message) => {
+                return BdHooksUse::Unknown {
+                    result: "kept: git check failed",
+                    reason: format!(
+                        "git could not tell whether {} is tracked: {}",
+                        candidate.display(),
+                        one_line(&message)
+                    ),
+                }
+            }
+        }
+    }
+    BdHooksUse::NotUsed
+}
+
+/// `Ok(false)` only when git says the file is not tracked by this repository (its folder is outside any repository, in another one, or git lists no such file); every other failure is `Err`.
+async fn jsonl_tracked_by_repository(
+    context: &TypedOperationContext,
+    file: &Path,
+    common_git_dir: &Path,
+) -> Result<bool, String> {
+    // A tracked file can be missing from the checkout, so ask from its nearest existing folder.
+    let mut folder = file.parent().ok_or("it has no parent folder")?;
+    loop {
+        match fs::metadata(folder) {
+            Ok(metadata) if metadata.is_dir() => break,
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("{}: {error}", folder.display())),
+        }
+        folder = folder.parent().ok_or("none of its folders exist")?;
+    }
+    let relative = file
+        .strip_prefix(folder)
+        .map_err(|_| "its path could not be resolved".to_string())?
+        .to_string_lossy()
+        .to_string();
+    let folder_text = folder.to_string_lossy().to_string();
+    let folder_common = run_tracked_probe(
         context,
+        &folder_text,
+        vec!["rev-parse".to_string(), "--git-common-dir".to_string()],
     )
     .await?;
-    if config_output.exit_code != 0 {
-        return Ok(json!({
-            "action": "ensureBeadsHooks",
-            "exitCode": config_output.exit_code,
-            "stderr": config_output.stderr,
-            "stdout": if config_output.stdout.is_empty() {
-                "Could not configure Git hooks path for Beads worktree support.".to_string()
-            } else {
-                config_output.stdout
-            },
-        }));
+    if folder_common.exit_code != 0 {
+        if git_found_no_repository_above(folder, &folder_common.stderr)? {
+            return Ok(false);
+        }
+        return Err(folder_common.stderr.or_else("git rev-parse failed"));
     }
-    Ok(json!({
-        "action": "ensureBeadsHooks",
-        "exitCode": 0,
-        "stderr": "",
-        "stdout": "installed",
-    }))
+    if !same_directory_path(
+        &resolve_path_against(&folder_text, folder_common.stdout.trim()),
+        common_git_dir,
+    ) {
+        return Ok(false);
+    }
+    let listed = run_tracked_probe(
+        context,
+        &folder_text,
+        vec![
+            "--literal-pathspecs".to_string(),
+            "ls-files".to_string(),
+            "--error-unmatch".to_string(),
+            "--".to_string(),
+            relative,
+        ],
+    )
+    .await?;
+    match listed.exit_code {
+        0 => Ok(true),
+        1 => Ok(false),
+        _ => Err(listed.stderr.or_else("git ls-files failed")),
+    }
 }
+
+/// True only for a folder outside any repository (a redirected workspace): git's discovery message, and no `.git` file or folder in the folder or any folder above it. A `.git` that git could not use (a stale `gitdir:` pointer prints "not a git repository: <path>") is broken repository metadata, not proof the file is outside this repository.
+fn git_found_no_repository_above(folder: &Path, stderr: &str) -> Result<bool, String> {
+    if !stderr.starts_with("fatal: not a git repository (or any") {
+        return Ok(false);
+    }
+    for ancestor in folder.ancestors() {
+        match fs::symlink_metadata(ancestor.join(".git")) {
+            Ok(_) => return Ok(false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("{}: {error}", ancestor.join(".git").display())),
+        }
+    }
+    Ok(true)
+}
+
+/// A git probe whose start failure or timeout is an error, never an answer.
+async fn run_tracked_probe(
+    context: &TypedOperationContext,
+    cwd: &str,
+    args: Vec<String>,
+) -> Result<CommandOutput, String> {
+    let output = run_process_command(&ProcessCommand::new("git", args, cwd), context)
+        .await
+        .map_err(|error| error.message)?;
+    match &output.error {
+        Some(error) => Err(error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("git did not answer")
+            .to_string()),
+        None => Ok(output),
+    }
+}
+
+/// The `value` of `bd config get <key> --json`, or why it could not be read.
+async fn read_beads_config_value(
+    context: &TypedOperationContext,
+    bd: &str,
+    key: &str,
+) -> Result<String, String> {
+    let output = run_process_command(
+        &ProcessCommand::new(bd, vec!["config", "get", key, "--json"], &context.cwd),
+        context,
+    )
+    .await
+    .map_err(|error| error.message)?;
+    if let Some(error) = &output.error {
+        return Err(error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("bd did not answer")
+            .to_string());
+    }
+    if output.exit_code != 0 {
+        return Err(output.stderr.or_else("bd exited with an error"));
+    }
+    let parsed: Value = serde_json::from_str(output.stdout.trim())
+        .map_err(|_| "bd's answer was not JSON".to_string())?;
+    if parsed.get("key").and_then(Value::as_str) != Some(key) {
+        return Err("bd answered for another key".to_string());
+    }
+    parsed
+        .get("value")
+        .and_then(Value::as_str)
+        .map(|value| value.trim().to_string())
+        .ok_or_else(|| "bd's answer had no value".to_string())
+}
+
+/// The first line of a tool's message, for a one-line reason.
+fn one_line(message: &str) -> &str {
+    message.lines().next().unwrap_or("").trim()
+}
+
+/// An unset flag takes bd's default; a value bd's config parser might read differently counts as unknown.
+fn beads_config_flag(value: &str, default: bool) -> Option<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "" => Some(default),
+        "true" | "1" | "yes" | "on" => Some(true),
+        "false" | "0" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+async fn run_hooks_git(
+    context: &TypedOperationContext,
+    args: &[&str],
+) -> Result<CommandOutput, TypedOperationError> {
+    run_process_command(
+        &ProcessCommand::new("git", args.to_vec(), &context.cwd),
+        context,
+    )
+    .await
+}
+
+fn beads_hooks_result(exit_code: i32, stdout: &str, stderr: &str) -> Value {
+    json!({
+        "action": "ensureBeadsHooks",
+        "exitCode": exit_code,
+        "stderr": stderr,
+        "stdout": stdout,
+    })
+}
+
+fn beads_hooks_git_failure(output: CommandOutput, fallback: &str) -> Value {
+    beads_hooks_result(
+        if output.exit_code == 0 {
+            1
+        } else {
+            output.exit_code
+        },
+        "",
+        &output.stderr.or_else(fallback),
+    )
+}
+
+/// The main checkout's folder for the messages: the parent of a `.git` common directory, else the worktree's own folder.
+fn beads_hooks_repo_root(common_git_dir: &Path, cwd: &str) -> String {
+    if common_git_dir
+        .file_name()
+        .is_some_and(|name| name == ".git")
+    {
+        if let Some(parent) = common_git_dir.parent() {
+            return parent.to_string_lossy().to_string();
+        }
+    }
+    cwd.to_string()
+}
+
+fn same_directory_path(left: &Path, right: &Path) -> bool {
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
+}
+
+/// True when the folder holds only Ghostex hook files, each byte-identical to a template Ghostex once wrote for its own header values. An empty folder, a link, an extra file or any changed byte means someone edited it.
+fn ghostex_beads_hooks_folder_is_unchanged(folder: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return false;
+    };
+    let mut hook_files = 0usize;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !BEADS_GIT_HOOK_NAMES.contains(&name.as_str()) {
+            return false;
+        }
+        let path = entry.path();
+        let is_file = fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file());
+        let Some(text) = is_file
+            .then(|| fs::read(&path).ok())
+            .flatten()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+        else {
+            return false;
+        };
+        let (Some(bd), Some(beads_path), Some(hook_name)) = (
+            ghostex_beads_hook_header_value(&text, "BD_BIN="),
+            ghostex_beads_hook_header_value(&text, "BEADS_DIR_VALUE="),
+            ghostex_beads_hook_header_value(&text, "HOOK_NAME="),
+        ) else {
+            return false;
+        };
+        if hook_name != name
+            || !ghostex_beads_hook_templates(&bd, &beads_path, &hook_name).contains(&text)
+        {
+            return false;
+        }
+        hook_files += 1;
+    }
+    hook_files > 0
+}
+
+/// The unquoted value of a `NAME='value'` header line, or `None` when it is missing or not quoted the way Ghostex quoted it.
+fn ghostex_beads_hook_header_value(text: &str, prefix: &str) -> Option<String> {
+    let quoted = text.lines().find_map(|line| line.strip_prefix(prefix))?;
+    let value = quoted
+        .strip_prefix('\'')?
+        .strip_suffix('\'')?
+        .replace("'\\''", "'");
+    (shell_single_quote(&value) == quoted).then_some(value)
+}
+
+/// The exact bytes of every hook template Ghostex ever wrote, for one hook.
+pub(crate) fn ghostex_beads_hook_templates(
+    bd: &str,
+    beads_path: &str,
+    hook_name: &str,
+) -> [String; 3] {
+    let header = format!(
+        "{GHOSTEX_BEADS_HOOK_PREAMBLE}BD_BIN={}\nBEADS_DIR_VALUE={}\nHOOK_NAME={}\n",
+        shell_single_quote(bd),
+        shell_single_quote(beads_path),
+        shell_single_quote(hook_name),
+    );
+    [
+        format!("{header}{GHOSTEX_BEADS_HOOK_BODY_TYPESCRIPT}"),
+        format!("{header}{GHOSTEX_BEADS_HOOK_BODY_FIRST_RUST}"),
+        build_ghostex_beads_git_hook_script(hook_name, bd, beads_path),
+    ]
+}
+
+const GHOSTEX_BEADS_HOOK_PREAMBLE: &str = "#!/usr/bin/env sh\n# Ghostex-managed Beads hook. This local file is generated under the common Git directory.\n";
+
+/// The body (after the three header lines) of the hooks the TypeScript gxserver wrote (June 2026).
+const GHOSTEX_BEADS_HOOK_BODY_TYPESCRIPT: &str = r#"if [ ! -x "$BD_BIN" ]; then
+  echo "Warning: Ghostex bundled bd is missing; skipping Beads hook" >&2
+  exit 0
+fi
+export BEADS_DIR="$BEADS_DIR_VALUE"
+export BD_GIT_HOOK=1
+export PATH="$(dirname "$BD_BIN"):$PATH"
+run_bd_hook() {
+  _bd_timeout=${BEADS_HOOK_TIMEOUT:-300}
+  _bd_used_perl=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$_bd_timeout" "$BD_BIN" hooks run "$HOOK_NAME" "$@"
+    _bd_exit=$?
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$_bd_timeout" "$BD_BIN" hooks run "$HOOK_NAME" "$@"
+    _bd_exit=$?
+  elif command -v perl >/dev/null 2>&1; then
+    _bd_used_perl=1
+    perl -e 'alarm shift; exec @ARGV' "$_bd_timeout" "$BD_BIN" hooks run "$HOOK_NAME" "$@"
+    _bd_exit=$?
+  else
+    echo >&2 "beads: hook '$HOOK_NAME' running without timeout; install coreutils or perl to enable BEADS_HOOK_TIMEOUT"
+    "$BD_BIN" hooks run "$HOOK_NAME" "$@"
+    _bd_exit=$?
+  fi
+  if [ $_bd_exit -eq 124 ] || { [ $_bd_used_perl -eq 1 ] && [ $_bd_exit -eq 142 ]; }; then
+    echo >&2 "beads: hook '$HOOK_NAME' timed out after ${_bd_timeout}s; continuing without beads"
+    _bd_exit=0
+  fi
+  if [ $_bd_exit -eq 3 ]; then
+    echo >&2 "beads: database not initialized; skipping hook '$HOOK_NAME'"
+    _bd_exit=0
+  fi
+  return $_bd_exit
+}
+run_bd_hook "$@"
+exit $?
+"#;
+
+/// The body of the hooks the first Rust gxserver wrote (June to August 2026), before its missing-bd warning was reworded.
+const GHOSTEX_BEADS_HOOK_BODY_FIRST_RUST: &str = r#"if [ ! -x "$BD_BIN" ]; then
+echo "Warning: Ghostex bundled bd is missing; skipping Beads hook" >&2
+exit 0
+fi
+export BEADS_DIR="$BEADS_DIR_VALUE"
+export BD_GIT_HOOK=1
+export PATH="$(dirname "$BD_BIN"):$PATH"
+run_bd_hook() {
+_bd_timeout=${BEADS_HOOK_TIMEOUT:-300}
+_bd_used_perl=0
+if command -v timeout >/dev/null 2>&1; then
+timeout "$_bd_timeout" "$BD_BIN" hooks run "$HOOK_NAME" "$@"
+_bd_exit=$?
+elif command -v gtimeout >/dev/null 2>&1; then
+gtimeout "$_bd_timeout" "$BD_BIN" hooks run "$HOOK_NAME" "$@"
+_bd_exit=$?
+elif command -v perl >/dev/null 2>&1; then
+_bd_used_perl=1
+perl -e 'alarm shift; exec @ARGV' "$_bd_timeout" "$BD_BIN" hooks run "$HOOK_NAME" "$@"
+_bd_exit=$?
+else
+echo >&2 "beads: hook '$HOOK_NAME' running without timeout; install coreutils or perl to enable BEADS_HOOK_TIMEOUT"
+"$BD_BIN" hooks run "$HOOK_NAME" "$@"
+_bd_exit=$?
+fi
+if [ $_bd_exit -eq 124 ] || { [ $_bd_used_perl -eq 1 ] && [ $_bd_exit -eq 142 ]; }; then
+echo >&2 "beads: hook '$HOOK_NAME' timed out after ${_bd_timeout}s; continuing without beads"
+_bd_exit=0
+fi
+if [ $_bd_exit -eq 3 ]; then
+echo >&2 "beads: database not initialized; skipping hook '$HOOK_NAME'"
+_bd_exit=0
+fi
+return $_bd_exit
+}
+run_bd_hook "$@"
+exit $?
+"#;
 
 pub(crate) fn normalize_beads_where_directory(stdout: &str) -> Result<String, TypedOperationError> {
     let parsed: Value = serde_json::from_str(stdout.trim())

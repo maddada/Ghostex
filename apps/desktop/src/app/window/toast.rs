@@ -238,10 +238,22 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// What the toast says, for telling a repeat from a new toast.
+/// A toast id that starts with this names what the toast is about after it (`<prefix><scope>`),
+/// and the scope is part of the toast's repeat key.
+///
+/// CDXC:AppModal 2026-11-11 WHY:
+/// Two toasts can say the same thing about different things: the Beads hooks warning of two
+/// repositories whose folders share a name. Their text is kept short, so the repeat rule below
+/// would hide the second one. A toast whose id carries a scope (the repository's full path and
+/// computer, hashed) is a repeat only of a toast with the same text and the same scope. Toasts
+/// without one compare by their text alone, exactly as before.
+pub(crate) const GPUI_APP_TOAST_REPEAT_SCOPE_PREFIX: &str = "repeat-scope:";
+
+/// What the toast says, and what it is about when its id names a scope, for telling a repeat
+/// from a new toast.
 fn gpui_app_toast_repeat_key(toast: &GpuiAppToast) -> String {
     format!(
-        "{}\u{1f}{}\u{1f}{}",
+        "{}\u{1f}{}\u{1f}{}\u{1f}{}",
         toast.level.key(),
         gpui_app_toast_comparable_text(&toast.title),
         toast
@@ -249,11 +261,15 @@ fn gpui_app_toast_repeat_key(toast: &GpuiAppToast) -> String {
             .as_deref()
             .map(gpui_app_toast_comparable_text)
             .unwrap_or_default(),
+        toast
+            .id
+            .strip_prefix(GPUI_APP_TOAST_REPEAT_SCOPE_PREFIX)
+            .unwrap_or_default(),
     )
 }
 
-/// CDXC:AppModal 2026-10-24 DECISION:
-/// User: "i see this error appear a lot of times (should appear once, our errors in the app shouldn't keep spamming toasts like this)". A toast that says the same thing as one already on screen (same level, title and description) does not stack a second card: it takes the shown toast's place and restarts its timer. A warning or error raised again within `GPUI_APP_TOAST_REPEAT_QUIET` of the last time it was raised, after it closed or was dismissed, is not shown again. Toasts that update themselves by id (progress, Committing… then Committed) are unaffected. The desktop's toast window and the GPUI web build's toast overlay both pass every toast through here.
+/// CDXC:AppModal 2026-11-11 DECISION:
+/// User (2026-10-24): "i see this error appear a lot of times (should appear once, our errors in the app shouldn't keep spamming toasts like this)". A toast that says the same thing as one already on screen (same level, title and description) does not stack a second card: it takes the shown toast's place and restarts its timer. A warning or error raised again within `GPUI_APP_TOAST_REPEAT_QUIET` of the last time it was raised, after it closed or was dismissed, is not shown again. Toasts that update themselves by id (progress, Committing… then Committed) are unaffected. Superseded in one point on 2026-11-11 (user: "Yes, opt-in scope"): a toast may opt into a repeat scope through a `repeat-scope:` id, and then only a toast with the same text and the same scope counts as the same toast, so the same warning about two different repositories shows twice while each repository's repeat stays quiet. The desktop's toast window and the GPUI web build's toast overlay both pass every toast through here.
 /// SEE-ALSO: apps/desktop/src/app/modals/modal_messages_and_toasts.rs and apps/gpui-web/src/app/web_host/toasts.rs (`upsert_gpui_app_toast`).
 ///
 /// The toast to show, with the id of the shown toast it repeats, or `None` when it stays quiet.

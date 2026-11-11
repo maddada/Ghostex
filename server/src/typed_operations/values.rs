@@ -700,19 +700,6 @@ pub(crate) fn resolve_path_against(cwd: &str, path_text: &str) -> PathBuf {
     resolved.components().collect()
 }
 
-#[cfg(unix)]
-pub(crate) fn chmod_executable_if_supported(path: &Path) -> Result<(), TypedOperationError> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).map_err(|error| {
-        TypedOperationError::bad_request(format!("Could not chmod Beads Git hook: {error}"))
-    })
-}
-
-#[cfg(not(unix))]
-pub(crate) fn chmod_executable_if_supported(_path: &Path) -> Result<(), TypedOperationError> {
-    Ok(())
-}
-
 pub(crate) fn json_value_to_javascript_string(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),

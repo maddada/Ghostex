@@ -18,18 +18,21 @@ bead statuses, add bead comments, or link a session to a card.
 
 ## Requirements
 
-- Run bead commands from the repository root so Beads finds the project database
-  and `.beads` JSONL export.
+- Run bead commands from inside the project. Recent `bd` versions find the
+  workspace from a subfolder or a git worktree, and follow `.beads/redirect` to
+  a workspace kept outside the repository. `bd where` shows the workspace your
+  installed `bd` resolved.
 - Use the normal `bd` CLI installed in the environment running the project—
   macOS, Linux, or the selected WSL distribution.
 - Prefer `bd --help` and `bd <command> --help` as the source of truth for the
   installed Beads version.
 - Inspect nearby beads before creating a new one so title, labels, status, and
   external-ref style match the project.
-- If the project has no Beads workspace yet (no `.beads` folder, or `bd` says
-  no beads database was found), stop and ask the user whether they want Beads
-  set up in this project. Run `bd init`, or anything else that creates `.beads`
-  files, only after they say yes.
+- If the project has no Beads workspace yet (`bd where` reports no active beads
+  workspace), stop and ask the user whether they want Beads set up in this
+  project. Run `bd init`, or anything else that creates `.beads` files, only
+  after they say yes. When a `bd` command fails for any other reason, report
+  that error instead of offering setup.
 
 ## Working A Bead: Link This Session First
 
