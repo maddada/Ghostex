@@ -1,20 +1,18 @@
 //! The view's small menus (a bead's ⋯, Defer, Priority, Sort, the form's Epic and Blocked by
-//! pickers, the Sync panel), drawn inside the view so the desktop and the web build show the same
-//! thing. They hang below where they were opened, on the sidebar menu's solid surface, and close
-//! on a click outside or on Escape.
+//! pickers, Sync), shown with the sidebar's own menu (`native_sidebar/menus.rs`: its rows, its
+//! frosted host on the desktop, its dismissal), kept inside the Beads view's area. A row runs the
+//! entry this file built for it.
 
-use ghostex_gx_core::beads_view::{BeadsSort, local_date_after};
-use gpui::prelude::FluentBuilder as _;
-use gpui::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div,
-    point, px,
-};
-use serde_json::json;
+use std::cell::Cell;
+use std::rc::Rc;
+
+use ghostex_gx_core::beads_view::{BeadsSort, local_date_after, parse_bd_time_ms, relative_ago};
+use gpui::{Bounds, Context, Pixels, Point, Window, point, px, size};
+use serde_json::{Value, json};
 
 use super::view::BeadsView;
-use crate::app::helpers::titlebar_svg_icon;
-use crate::app::native_kanban::palette::KanbanPalette;
+use crate::GhostexGpuiApp;
+use crate::app::native_sidebar::menus::SidebarMenuOpener;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BeadsMenuKind {
@@ -31,13 +29,25 @@ pub(crate) enum BeadsMenuKind {
 pub(crate) struct BeadsMenu {
     pub(crate) kind: BeadsMenuKind,
     pub(crate) position: Point<Pixels>,
+    /// Set when the menu is asked for; the next draw hands it to the sidebar's menu.
+    pub(crate) pending: bool,
+    /// Which opening a row belongs to, so a stale row never runs.
+    pub(crate) serial: u64,
 }
 
 impl BeadsMenu {
     pub(crate) fn new(kind: BeadsMenuKind, position: Point<Pixels>) -> Self {
-        Self { kind, position }
+        Self {
+            kind,
+            position,
+            pending: true,
+            serial: 0,
+        }
     }
 }
+
+/// Where the Beads view was last drawn, the area its menus stay inside.
+pub(crate) type ViewBounds = Rc<Cell<Option<Bounds<Pixels>>>>;
 
 struct Entry {
     label: String,
@@ -75,27 +85,23 @@ impl BeadsView {
                 let closed = row.status == "closed";
                 if !closed && row.assignee.is_none() && self.has_capability(capability::CLAIM) {
                     let id = id.clone();
-                    entries.push(entry(
-                        "Claim",
-                        Some("titlebar/user.svg"),
-                        move |this, window, cx| {
-                            this.simple_action(
-                                "claim",
-                                &id,
-                                json!({}),
-                                "Couldn't claim this bead",
-                                window,
-                                cx,
-                            )
-                        },
-                    ));
+                    entries.push(entry("Claim", Some("user"), move |this, window, cx| {
+                        this.simple_action(
+                            "claim",
+                            &id,
+                            json!({}),
+                            "Couldn't claim this bead",
+                            window,
+                            cx,
+                        )
+                    }));
                 }
                 if closed {
                     if self.has_capability(capability::REOPEN) {
                         let id = id.clone();
                         entries.push(entry(
                             "Reopen",
-                            Some("titlebar/rotate-clockwise.svg"),
+                            Some("rotateClockwise"),
                             move |this, window, cx| {
                                 this.simple_action(
                                     "reopen",
@@ -110,25 +116,21 @@ impl BeadsView {
                     }
                 } else {
                     let id_close = id.clone();
-                    entries.push(entry(
-                        "Close",
-                        Some("titlebar/check.svg"),
-                        move |this, window, cx| {
-                            this.simple_action(
-                                "close",
-                                &id_close,
-                                json!({}),
-                                "Couldn't close this bead",
-                                window,
-                                cx,
-                            )
-                        },
-                    ));
+                    entries.push(entry("Close", Some("check"), move |this, window, cx| {
+                        this.simple_action(
+                            "close",
+                            &id_close,
+                            json!({}),
+                            "Couldn't close this bead",
+                            window,
+                            cx,
+                        )
+                    }));
                     if row.status == "deferred" && self.has_capability(capability::DEFER) {
                         let id = id.clone();
                         entries.push(entry(
                             "Bring back",
-                            Some("titlebar/player-play.svg"),
+                            Some("playerPlay"),
                             move |this, window, cx| {
                                 this.simple_action(
                                     "undefer",
@@ -146,7 +148,7 @@ impl BeadsView {
                     let id = id.clone();
                     entries.push(entry(
                         "Dismiss the decision",
-                        Some("titlebar/x.svg"),
+                        Some("x"),
                         move |this, window, cx| {
                             this.simple_action(
                                 "humanDismiss",
@@ -160,17 +162,9 @@ impl BeadsView {
                     ));
                 }
                 let copy = id.clone();
-                entries.push(entry(
-                    "Copy ID",
-                    Some("titlebar/copy.svg"),
-                    move |this, window, cx| {
-                        (this.host.clone())(
-                            super::view::BeadsRequest::Copy(copy.clone()),
-                            window,
-                            cx,
-                        )
-                    },
-                ));
+                entries.push(entry("Copy ID", Some("copy"), move |this, window, cx| {
+                    (this.host.clone())(super::view::BeadsRequest::Copy(copy.clone()), window, cx)
+                }));
                 entries
             }
             // CDXC:ProjectBoard 2026-11-11 DECISION: User (the approved mockup): Defer offers Tomorrow, Next week, Pick a date… (the app's date picker) and On ice, which waits until Bring back.
@@ -184,23 +178,21 @@ impl BeadsView {
                     .into_iter()
                     .map(|(label, until)| {
                         let id = id.clone();
-                        entry(
-                            label,
-                            Some("titlebar/clock.svg"),
-                            move |this, window, cx| this.defer(&id, until.clone(), window, cx),
-                        )
+                        entry(label, Some("clock"), move |this, window, cx| {
+                            this.defer(&id, until.clone(), window, cx)
+                        })
                     })
                     .collect();
                 let pick = id.clone();
                 entries.push(entry(
                     "Pick a date…",
-                    Some("titlebar/clock-check.svg"),
+                    Some("clockCheck"),
                     move |this, window, cx| this.open_defer_picker(&pick, window, cx),
                 ));
                 let ice = id.clone();
                 entries.push(entry(
                     "On ice",
-                    Some("titlebar/player-pause.svg"),
+                    Some("playerPause"),
                     move |this, window, cx| this.defer(&ice, None, window, cx),
                 ));
                 entries
@@ -248,11 +240,9 @@ impl BeadsView {
                     .filter(|row| row.issue_type == "epic" && row.status != "closed")
                 {
                     let id = row.id.clone();
-                    let mut item = entry(
-                        row.title.clone(),
-                        Some("titlebar/stack.svg"),
-                        move |this, _, cx| this.set_create_epic(Some(id.clone()), cx),
-                    );
+                    let mut item = entry(row.title.clone(), Some("stack"), move |this, _, cx| {
+                        this.set_create_epic(Some(id.clone()), cx)
+                    });
                     item.checked = current.as_deref() == Some(row.id.as_str());
                     entries.push(item);
                 }
@@ -282,103 +272,137 @@ impl BeadsView {
         }
     }
 
-    pub(crate) fn render_menu(
+    /// Hands a menu asked for since the last draw to the sidebar's menu.
+    pub(crate) fn show_pending_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(menu) = self.menu.as_mut().filter(|menu| menu.pending) else {
+            return;
+        };
+        menu.pending = false;
+        self.menu_serial += 1;
+        menu.serial = self.menu_serial;
+        let menu = menu.clone();
+        let items: Vec<Value> = if menu.kind == BeadsMenuKind::Sync {
+            self.sync_items(menu.serial)
+        } else {
+            self.menu_entries(&menu.kind)
+                .into_iter()
+                .enumerate()
+                .map(|(index, entry)| {
+                    let mut item = json!({
+                        "label": entry.label,
+                        "command": { "type": "beadsMenu", "serial": menu.serial, "index": index },
+                    });
+                    if let Some(icon) = entry.icon {
+                        item["icon"] = json!(icon);
+                    }
+                    if entry.checked {
+                        item["checked"] = json!(true);
+                    }
+                    if entry.disabled {
+                        item["disabled"] = json!(true);
+                    }
+                    item
+                })
+                .collect()
+        };
+        if items.is_empty() {
+            self.menu = None;
+            return;
+        }
+        let owner = Bounds {
+            origin: point(menu.position.x - px(1.0), menu.position.y - px(12.0)),
+            size: size(px(2.0), px(24.0)),
+        };
+        let region = self
+            .bounds
+            .get()
+            .unwrap_or_else(|| Bounds::new(point(px(0.0), px(0.0)), window.viewport_size()));
+        let opener = SidebarMenuOpener::below(owner)
+            .toggled_by(format!("beads-menu-{:?}", menu.kind), Some(menu.position));
+        GhostexGpuiApp::show_native_menu_in_region(
+            &Value::Array(items),
+            opener,
+            region,
+            window,
+            cx,
+        );
+    }
+
+    /// A row of a menu this view opened was picked (`type: beadsMenu`).
+    pub(crate) fn run_menu_command(
         &mut self,
-        p: &KanbanPalette,
+        command: &Value,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let menu = self.menu.clone()?;
-        let keeps_open = matches!(menu.kind, BeadsMenuKind::CreateBlockedBy);
-        let body = if menu.kind == BeadsMenuKind::Sync {
-            self.render_sync_panel(p, window, cx)
-        } else {
-            let entries = self.menu_entries(&menu.kind);
-            if entries.is_empty() {
-                return None;
-            }
-            let hover = p.card_hover;
-            div()
-                .flex()
-                .flex_col()
-                .py(px(4.0))
-                .min_w(px(180.0))
-                .max_w(px(320.0))
-                .max_h(px(360.0))
-                .id("beads-menu-rows")
-                .overflow_y_scroll()
-                .children(entries.into_iter().enumerate().map(|(index, entry)| {
-                    let Entry {
-                        label,
-                        icon,
-                        checked,
-                        disabled,
-                        run,
-                    } = entry;
-                    div()
-                        .id(SharedString::from(format!("beads-menu-row-{index}")))
-                        .flex()
-                        .items_center()
-                        .gap(px(8.0))
-                        .mx(px(4.0))
-                        .px(px(8.0))
-                        .h(px(28.0))
-                        .rounded(px(6.0))
-                        .text_size(px(13.0))
-                        .text_color(p.foreground)
-                        .when(disabled, |this| this.opacity(0.45))
-                        .when(!disabled, |this| {
-                            this.cursor_pointer().hover(move |style| style.bg(hover))
-                        })
-                        .child(
-                            div()
-                                .w(px(14.0))
-                                .flex_none()
-                                .when(checked, |this| {
-                                    this.child(titlebar_svg_icon(
-                                        "titlebar/check.svg",
-                                        13.0,
-                                        p.foreground,
-                                    ))
-                                })
-                                .when(!checked, |this| {
-                                    this.when_some(icon, |this, icon| {
-                                        this.child(titlebar_svg_icon(icon, 13.0, p.muted))
-                                    })
-                                }),
-                        )
-                        .child(div().truncate().child(label))
-                        .when_some(run.filter(|_| !disabled), |this, run| {
-                            this.on_click(cx.listener(move |this, _, window, cx| {
-                                if !keeps_open {
-                                    this.menu = None;
-                                }
-                                run(this, window, cx);
-                                cx.notify();
-                            }))
-                        })
-                }))
-                .into_any_element()
+    ) {
+        let Some(menu) = self.menu.take() else {
+            return;
         };
-        let position = point(menu.position.x, menu.position.y + px(6.0));
-        Some(
-            deferred(
-                anchored().position(position).snap_to_window().child(
-                    div()
-                        .id("beads-menu")
-                        .occlude()
-                        .bg(super::render::solid_surface(p))
-                        .border_1()
-                        .border_color(p.border_strong)
-                        .rounded(px(10.0))
-                        .shadow_lg()
-                        .font_family(p.font.clone())
-                        .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_menu(cx)))
-                        .child(body),
-                ),
-            )
-            .with_priority(3)
-            .into_any_element(),
-        )
+        if command["serial"].as_u64() != Some(menu.serial) {
+            return;
+        }
+        let Some(index) = command["index"].as_u64().map(|index| index as usize) else {
+            return;
+        };
+        if menu.kind == BeadsMenuKind::Sync {
+            match command["action"].as_str() {
+                Some("pull") => self.start_sync("pull", window, cx),
+                Some("push") => self.start_sync("push", window, cx),
+                _ => {}
+            }
+            return;
+        }
+        let entries = self.menu_entries(&menu.kind);
+        if let Some(run) = entries.into_iter().nth(index).and_then(|entry| entry.run) {
+            run(self, window, cx);
+        }
+        cx.notify();
+    }
+
+    /// Sync: the remote, the last push and pull, then Pull and Push.
+    fn sync_items(&self, serial: u64) -> Vec<Value> {
+        let sync = self
+            .snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.sync.clone())
+            .unwrap_or_default();
+        let clock = self.clock;
+        let ago = |time: &Option<String>| {
+            time.as_deref()
+                .and_then(parse_bd_time_ms)
+                .map(|time| relative_ago(time, &clock))
+                .unwrap_or_else(|| "not yet".to_string())
+        };
+        let running = sync.running.is_some();
+        let mut items = vec![
+            json!({ "heading": "Sync" }),
+            json!({
+                "label": match sync.remote.as_ref() {
+                    Some(remote) => format!("Remote: {} {}", remote.name, remote.url),
+                    None => "No remote set up".to_string(),
+                },
+                "icon": "cloud",
+                "disabled": true,
+            }),
+            json!({ "label": format!("Last push: {}", ago(&sync.last_push_at)), "disabled": true }),
+            json!({ "label": format!("Last pull: {}", ago(&sync.last_pull_at)), "disabled": true }),
+            json!({
+                "label": "Push sends this computer's changes. Pull brings in changes from your other computers.",
+                "disabled": true,
+            }),
+        ];
+        if sync.remote.is_some() {
+            items.push(json!({ "separator": true }));
+            for (action, label, icon) in [("pull", "Pull", "download"), ("push", "Push", "upload")]
+            {
+                items.push(json!({
+                    "label": label,
+                    "icon": icon,
+                    "disabled": running,
+                    "command": { "type": "beadsMenu", "serial": serial, "index": 0, "action": action },
+                }));
+            }
+        }
+        items
     }
 }

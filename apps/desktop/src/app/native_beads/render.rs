@@ -5,9 +5,9 @@ use ghostex_gx_core::beads_view::BeadsFilter;
 use gpui::Focusable as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, ClickEvent, Context, ElementId, FontWeight, Hsla, InteractiveElement as _,
-    IntoElement, KeyDownEvent, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div, list, px, rgb,
+    AnyElement, ClickEvent, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement,
+    KeyDownEvent, ParentElement as _, Render, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Window, div, list, px,
 };
 use gpui_component::input::Input;
 use gpui_component::{Sizable as _, Size as ComponentSize};
@@ -21,15 +21,6 @@ use crate::app::window::native_modal_kit::{
     ModalRailItem, ModalSegmentedItem, modal_bordered_segmented_control, modal_segmented_control,
     modal_switch,
 };
-
-/// The menus' fill: solid, so nothing under a menu reads through it.
-pub(crate) fn solid_surface(p: &KanbanPalette) -> Hsla {
-    if p.foreground.l < 0.5 {
-        rgb(0xfbfbfb).into()
-    } else {
-        rgb(0x1d1d1d).into()
-    }
-}
 
 pub(crate) fn section_label(text: impl Into<SharedString>, p: &KanbanPalette) -> gpui::Div {
     div()
@@ -279,7 +270,9 @@ impl BeadsView {
                     if let Some(fetch) = this.fetch_now(true, cx) {
                         fetch.detach();
                     }
-                    (this.host.clone())(super::view::BeadsRequest::Changed, window, cx);
+                    if this.layout == BeadsLayout::Board {
+                        (this.host.clone())(super::view::BeadsRequest::Refresh, window, cx);
+                    }
                 })),
             )
             .child(
@@ -442,7 +435,8 @@ impl Render for BeadsView {
             true => self.render_create(&p, window, cx),
             false => self.render_details(&p, window, cx),
         };
-        let menu = self.render_menu(&p, window, cx);
+        self.show_pending_menu(window, cx);
+        let bounds = self.bounds.clone();
         let main: AnyElement = if tree_layout && !ready {
             div()
                 .flex()
@@ -529,7 +523,11 @@ impl Render for BeadsView {
                     )
                     .children(side.map(|side| div().pt(px(14.0)).h_full().child(side))),
             )
-            .children(menu)
+            .child(
+                gpui::canvas(move |area, _, _| bounds.set(Some(area)), |_, _, _, _| {})
+                    .absolute()
+                    .size_full(),
+            )
             .into_any_element()
     }
 }

@@ -90,7 +90,7 @@ pub(crate) struct BeadsHostInfo {
     pub(crate) board: Option<AnyElement>,
     /// The app can start an agent on a bead (the Board's Start work); the web build can too.
     pub(crate) can_start_work: bool,
-    /// The `beadsViewLayout` setting: `None` is `auto`.
+    /// The `beadsViewLayout` setting (`None`: unset, Tree).
     pub(crate) saved_layout: Option<BeadsLayout>,
 }
 
@@ -103,11 +103,14 @@ pub(crate) enum BeadsRequest {
     SaveLayout(BeadsLayout),
     /// The header's search, which the Board filters by too.
     Search(String),
-    /// A write landed: the Board reloads at once.
+    /// A write landed while the Board is shown: it reads Beads again (without its setup writes).
     Changed,
-    /// The Board's Create & Start: start an agent on the new bead.
+    /// The header's Refresh while the Board is shown: it reloads as its own Refresh does.
+    Refresh,
+    /// The Board's Create & Start: start an agent on the bead bd just created (its `create`
+    /// row, so the Board knows the bead before it starts work on it).
     StartWork {
-        issue_id: String,
+        issue: Value,
     },
     InstallBeads,
     Copy(String),
@@ -130,8 +133,6 @@ pub(crate) struct BeadsView {
     pub(crate) target: Option<BeadsTarget>,
     pub(crate) generation: u64,
     pub(crate) layout: BeadsLayout,
-    /// The setting is `auto`: each project opens on Board when the Kanban set it up, else Tree.
-    pub(crate) layout_auto: bool,
     /// The setting as last seen, so a change made in Settings applies (and a page, which cannot
     /// save it, keeps the user's switch).
     last_saved_layout: Option<Option<BeadsLayout>>,
@@ -161,11 +162,16 @@ pub(crate) struct BeadsView {
     pub(crate) details: Option<Details>,
     pub(crate) create: Option<CreateForm>,
     pub(crate) menu: Option<BeadsMenu>,
+    pub(crate) menu_serial: u64,
+    /// Where the view was last drawn: its menus stay inside it.
+    pub(crate) bounds: super::menus::ViewBounds,
     pub(crate) notice: Option<BeadsNotice>,
     pub(crate) writes_in_flight: usize,
     pub(crate) hovered_row: Option<String>,
     pub(crate) last_drawn: Option<Instant>,
     poll: Option<Task<()>>,
+    /// The generation the running poll was started for; it stops itself when that moves on.
+    poll_generation: u64,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -193,7 +199,6 @@ impl BeadsView {
             target: None,
             generation: 0,
             layout: BeadsLayout::Tree,
-            layout_auto: true,
             last_saved_layout: None,
             palette: None,
             modal: None,
@@ -220,11 +225,14 @@ impl BeadsView {
             details: None,
             create: None,
             menu: None,
+            menu_serial: 0,
+            bounds: Default::default(),
             notice: None,
             writes_in_flight: 0,
             hovered_row: None,
             last_drawn: None,
             poll: None,
+            poll_generation: 0,
             _subscriptions: vec![subscription],
         }
     }
@@ -245,16 +253,7 @@ impl BeadsView {
         self.global_beads_directory = info.global_beads_directory;
         if self.last_saved_layout != Some(info.saved_layout) {
             self.last_saved_layout = Some(info.saved_layout);
-            match info.saved_layout {
-                Some(layout) => {
-                    self.layout = layout;
-                    self.layout_auto = false;
-                }
-                None => {
-                    self.layout_auto = true;
-                    self.apply_auto_layout();
-                }
-            }
+            self.layout = info.saved_layout.unwrap_or_default();
         }
         if self.sessions != info.sessions {
             self.sessions = info.sessions;
@@ -277,7 +276,8 @@ impl BeadsView {
             self.rebuild_tree();
             self.poll = None;
         }
-        if self.poll.is_none() && self.target.is_some() {
+        if (self.poll.is_none() || self.poll_generation != self.generation) && self.target.is_some()
+        {
             self.start_polling(cx);
         }
     }
@@ -352,13 +352,17 @@ impl BeadsView {
 
     fn start_polling(&mut self, cx: &mut Context<Self>) {
         let generation = self.generation;
+        self.poll_generation = generation;
         self.poll = Some(cx.spawn(async move |this, cx| {
             loop {
-                let Ok(should) = this.update(cx, |this, _| {
-                    this.generation == generation && this.visible()
+                let Ok((current, should)) = this.update(cx, |this, _| {
+                    (this.generation == generation, this.visible())
                 }) else {
                     break;
                 };
+                if !current {
+                    break;
+                }
                 if should {
                     let Ok(Some(fetch)) = this.update(cx, |this, cx| this.fetch_now(false, cx))
                     else {
@@ -457,8 +461,12 @@ impl BeadsView {
             .as_ref()
             .is_some_and(|old| old.workspace.key != snapshot.workspace.key);
         if workspace_changed {
+            // CDXC:ProjectBoard 2026-11-11 WHY: another workspace (a redirect changed) is another set of beads: writes still in flight for the old one must not land their callbacks on this one, so the generation moves on and the poll restarts with it.
+            self.generation += 1;
             self.details = None;
             self.create = None;
+            self.menu = None;
+            self.notice = None;
         }
         let mut snapshot = snapshot;
         snapshot.beads = None;
@@ -470,7 +478,6 @@ impl BeadsView {
             }
         }
         self.snapshot = Some(snapshot);
-        self.apply_auto_layout();
         if let Some(rows) = rows {
             let changed = self.rows != rows;
             self.rows = rows;
@@ -532,40 +539,15 @@ impl BeadsView {
             return;
         }
         self.layout = layout;
-        self.layout_auto = false;
         self.menu = None;
         (self.host.clone())(BeadsRequest::SaveLayout(layout), window, cx);
         cx.notify();
     }
 
-    /// `auto`: Board where the Kanban already set this workspace up (its backlog, test and review
-    /// statuses), Tree everywhere else.
-    fn apply_auto_layout(&mut self) {
-        if !self.layout_auto {
-            return;
-        }
-        let Some(snapshot) = self.snapshot.as_ref() else {
-            return;
-        };
-        let kanban_used = ["backlog", "test", "review"].iter().all(|status| {
-            snapshot
-                .custom_statuses
-                .iter()
-                .any(|custom| custom == status)
-        });
-        self.layout = if kanban_used {
-            BeadsLayout::Board
-        } else {
-            BeadsLayout::Tree
-        };
-    }
-
+    /// Asks for a menu; the next draw shows it with the sidebar's menu, which also closes it when
+    /// its button is pressed again.
     pub(crate) fn open_menu(&mut self, menu: BeadsMenu, cx: &mut Context<Self>) {
-        let same = self
-            .menu
-            .as_ref()
-            .is_some_and(|open| open.kind == menu.kind);
-        self.menu = if same { None } else { Some(menu) };
+        self.menu = Some(menu);
         cx.notify();
     }
 
@@ -609,7 +591,10 @@ impl BeadsView {
                     match answer {
                         Ok(reply) if reply.get("exitCode").and_then(Value::as_i64) == Some(0) => {
                             done(this, &reply, window, cx);
-                            (this.host.clone())(BeadsRequest::Changed, window, cx);
+                            // CDXC:ProjectBoard 2026-11-11 WHY: a write from the Tree reloads the Board only while the Board is shown, and then without the Board's setup writes (backlog/test/review statuses, the prefix), so using the Tree never changes a workspace's configuration.
+                            if this.layout == BeadsLayout::Board {
+                                (this.host.clone())(BeadsRequest::Changed, window, cx);
+                            }
                         }
                         Ok(reply) => {
                             this.notice = Some(super::cards::write_failure(failure_title, &reply));

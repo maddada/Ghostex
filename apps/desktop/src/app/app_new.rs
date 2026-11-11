@@ -617,6 +617,7 @@ impl GhostexGpuiApp {
             let command_gxserver_restore_started =
                 this.restore_command_terminal_gxserver_sessions_from_shell_state(cx);
             this.retry_pending_command_gxserver_cleanup(cx);
+            this.migrate_beads_layout_setting();
             if startup_activity_changed
                 || delayed_send_changed
                 || agents_delayed_send_changed

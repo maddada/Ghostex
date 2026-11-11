@@ -683,13 +683,9 @@ pub const SIDEBAR_THEME_SETTING_OPTIONS: &[Opt] = &[
     opt("System", "system"),
 ];
 
-/// CDXC:ProjectBoard 2026-11-11 WHY:
-/// `auto` opens Board on a project whose Beads workspace the Kanban already set up (its backlog, test and review statuses are there) and Tree everywhere else, so someone who used the Kanban lands where they were; the Tree | Board switch saves `tree` or `board`.
-pub const BEADS_VIEW_LAYOUT_OPTIONS: &[Opt] = &[
-    opt("Tree, or Board where the Kanban was used", "auto"),
-    opt("Tree", "tree"),
-    opt("Board", "board"),
-];
+/// The Tree | Board switch saves this; someone who had the Kanban tab saved starts on Board (the
+/// desktop's one-time migration in native_beads/host.rs).
+pub const BEADS_VIEW_LAYOUT_OPTIONS: &[Opt] = &[opt("Tree", "tree"), opt("Board", "board")];
 
 pub const SIDEBAR_VISIBILITY_MEMORY_OPTIONS: &[Opt] = &[
     opt("Same in every view", "shared"),

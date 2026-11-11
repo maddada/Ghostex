@@ -2794,12 +2794,8 @@
       "section": "fileOpening",
       "sectionTitle": "File opening",
       "type": "enum",
-      "default": "auto",
+      "default": "tree",
       "options": [
-        {
-          "label": "Tree, or Board where the Kanban was used",
-          "value": "auto"
-        },
         {
           "label": "Tree",
           "value": "tree"

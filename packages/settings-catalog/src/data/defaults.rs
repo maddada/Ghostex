@@ -62,7 +62,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("documentFileOpenTarget", J::Str("files")),
     ("fileChangesOpenTarget", J::Str("changes")),
     ("changesHideTestFiles", J::Bool(false)),
-    ("beadsViewLayout", J::Str("auto")),
+    ("beadsViewLayout", J::Str("tree")),
     ("otherFileOpenTarget", J::Str("files")),
     ("videoFileOpenTarget", J::Str("files")),
     ("audioFileOpenTarget", J::Str("files")),

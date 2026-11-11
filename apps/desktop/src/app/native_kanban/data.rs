@@ -257,6 +257,15 @@ impl GhostexGpuiApp {
         self.native_kanban_request_conversation_state(cx);
     }
 
+    /// A write from the Beads view's Tree or form landed: the board reads Beads again without
+    /// its setup writes (statuses, prefix), which only the board's own loads make.
+    pub(crate) fn native_kanban_refresh_quietly(&mut self, cx: &mut Context<Self>) {
+        if self.native_kanban.project.is_some() {
+            self.native_kanban_refresh(KanbanRefreshMode::Background, cx);
+            self.native_kanban_request_conversation_state(cx);
+        }
+    }
+
     /// The Beads header's search drives the board's filter. The board's own search box (drawn
     /// only in its own window) is made again on its next render with this text.
     pub(crate) fn native_kanban_set_search_query(&mut self, query: String, cx: &mut Context<Self>) {

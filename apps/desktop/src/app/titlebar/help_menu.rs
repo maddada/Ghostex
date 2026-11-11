@@ -67,9 +67,10 @@ pub(crate) const GPUI_TITLEBAR_HELP_QUESTIONS: &[GpuiTitlebarHelpQuestion] = &[
         question: "Play a sound and notify me when an agent finishes.",
     },
     GpuiTitlebarHelpQuestion {
-        icon_path: "titlebar/layout-board-split.svg",
-        label: "Kanban board and starting work",
-        question: "What does the Kanban board do, and how do I start work on a card?",
+        // CDXC:ProjectBoard 2026-11-11 DECISION: User (Q20): the sample is "Beads view and starting work", asked about the Beads view.
+        icon_path: "titlebar/route.svg",
+        label: "Beads view and starting work",
+        question: "What does the Beads view do, and how do I start work on a bead?",
     },
 ];
 

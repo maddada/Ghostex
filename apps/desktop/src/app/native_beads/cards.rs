@@ -7,7 +7,7 @@ use ghostex_gx_protocol::beads_view::{BeadsSyncResult, BeadsWorkspaceState};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use serde_json::Value;
 
@@ -396,84 +396,6 @@ impl BeadsView {
             Some(buttons.into_any_element()),
             p,
         ))
-    }
-
-    pub(crate) fn render_sync_panel(
-        &mut self,
-        p: &KanbanPalette,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let sync = self
-            .snapshot
-            .as_ref()
-            .map(|snapshot| snapshot.sync.clone())
-            .unwrap_or_default();
-        let clock = self.clock;
-        let ago = |time: &Option<String>| {
-            time.as_deref()
-                .and_then(parse_bd_time_ms)
-                .map(|time| relative_ago(time, &clock))
-                .unwrap_or_else(|| "Not yet".to_string())
-        };
-        let row = |label: &'static str, value: String| {
-            div()
-                .flex()
-                .gap(px(12.0))
-                .text_size(px(13.0))
-                .child(div().w(px(90.0)).text_color(p.muted).child(label))
-                .child(div().flex_1().min_w_0().truncate().child(value))
-        };
-        let running = sync.running.is_some();
-        let remote = sync
-            .remote
-            .as_ref()
-            .map(|remote| format!("{}  {}", remote.name, remote.url))
-            .unwrap_or_else(|| "None set up".to_string());
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(10.0))
-            .p(px(14.0))
-            .w(px(380.0))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.0))
-                    .child(titlebar_svg_icon("titlebar/cloud.svg", 15.0, p.muted))
-                    .child(div().font_weight(FontWeight::MEDIUM).child("Sync")),
-            )
-            .child(row("Remote", remote))
-            .child(row("Last push", ago(&sync.last_push_at)))
-            .child(row("Last pull", ago(&sync.last_pull_at)))
-            .child(
-                div()
-                    .text_size(px(12.0))
-                    .text_color(p.muted)
-                    .child("Push sends this computer's changes. Pull brings in changes from your other computers."),
-            )
-            .when(sync.remote.is_some(), |this| {
-                this.child(
-                    div()
-                        .flex()
-                        .justify_end()
-                        .gap(px(8.0))
-                        .child(
-                            kanban_button("beads-sync-pull", Some("titlebar/download.svg"), Some("Pull".into()), KanbanButtonKind::Secondary, running, p)
-                                .when(!running, |this| {
-                                    this.on_click(cx.listener(|this, _, window, cx| this.start_sync("pull", window, cx)))
-                                }),
-                        )
-                        .child(
-                            kanban_button("beads-sync-push", Some("titlebar/upload.svg"), Some("Push".into()), KanbanButtonKind::Primary, running, p)
-                                .when(!running, |this| {
-                                    this.on_click(cx.listener(|this, _, window, cx| this.start_sync("push", window, cx)))
-                                }),
-                        ),
-                )
-            })
-            .into_any_element()
     }
 }
 

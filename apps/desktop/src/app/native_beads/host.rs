@@ -15,7 +15,7 @@ use crate::shared_settings;
 /// The setting that remembers Tree or Board.
 pub(crate) const BEADS_LAYOUT_SETTING: &str = "beadsViewLayout";
 
-/// `None` is `auto` (and anything unknown).
+/// `None` when unset or unknown (Tree).
 fn saved_layout() -> Option<BeadsLayout> {
     shared_settings::shared_sidebar_settings_snapshot()
         .object()
@@ -135,7 +135,18 @@ impl GhostexGpuiApp {
                 project_id,
                 session_id,
             } => {
-                let session = SessionKey::local(&project_id, &session_id).to_sidebar_session_id();
+                // The session lives on the computer that owns the project (a remote one too).
+                let machine = self
+                    .beads_target()
+                    .and_then(|target| self.git_scope_for_project(&target.project_key).ok())
+                    .map(|scope| scope.key.machine.clone())
+                    .unwrap_or(MachineId::Local);
+                let session = SessionKey {
+                    machine,
+                    project_id,
+                    session_id,
+                }
+                .to_sidebar_session_id();
                 self.dispatch_native_sidebar_ui(
                     json!({ "type": "selectSession", "mode": "focus", "sessionId": session }),
                     cx,
@@ -143,12 +154,87 @@ impl GhostexGpuiApp {
             }
             BeadsRequest::SaveLayout(layout) => self.save_beads_layout(layout),
             BeadsRequest::Search(query) => self.native_kanban_set_search_query(query, cx),
-            BeadsRequest::Changed => self.native_kanban_refresh_now(cx),
-            BeadsRequest::StartWork { issue_id } => self.native_kanban_start_work(&issue_id, cx),
+            BeadsRequest::Changed => self.native_kanban_refresh_quietly(cx),
+            BeadsRequest::Refresh => self.native_kanban_refresh_now(cx),
+            BeadsRequest::StartWork { issue } => {
+                let issue = crate::app::native_kanban::model::BeadsIssue::from_value(&issue);
+                match issue {
+                    Some(issue) => {
+                        let id = issue.id.clone();
+                        self.native_kanban_upsert_local_issue(issue);
+                        self.native_kanban_start_work(&id, cx);
+                    }
+                    None => self.native_kanban_toast(
+                        "Couldn't start work",
+                        "The new bead was created; start work on it from its card.",
+                        cx,
+                    ),
+                }
+            }
             BeadsRequest::InstallBeads => self.beads_install(cx),
             BeadsRequest::Copy(text) => cx.write_to_clipboard(ClipboardItem::new_string(text)),
         }
         cx.notify();
+    }
+
+    /// A Beads view menu row was picked in the sidebar's menu.
+    pub(crate) fn run_beads_menu_command(
+        &mut self,
+        command: &Value,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(view) = self.native_beads.clone() {
+            view.update(cx, |view, cx| view.run_menu_command(command, window, cx));
+        }
+    }
+
+    /// The Board's lane `+`: the Beads view's New bead form with that lane's status. False when
+    /// there is no Beads view to show it in.
+    pub(crate) fn beads_open_create_in_lane(
+        &mut self,
+        lane_key: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(view) = self.native_beads.clone() else {
+            return false;
+        };
+        let status = crate::app::native_kanban::model::board_status_beads_value(
+            lane_key,
+            &self.native_kanban.columns,
+        );
+        view.update(cx, |view, cx| {
+            view.open_create(None, Some(status), window, cx)
+        });
+        true
+    }
+
+    /// CDXC:ProjectBoard 2026-11-11 DECISION:
+    /// User: someone who had the Kanban tab saved opens the Beads view on Board; everyone else starts on Tree. Read once, the first time this Ghostex starts without a saved `beadsViewLayout`: the restored view tabs say whether the Kanban tab was saved, and the answer is written so later starts (and a Beads tab opened since) never move it again.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn migrate_beads_layout_setting(&mut self) {
+        let saved: Option<serde_json::Map<String, Value>> =
+            std::fs::read_to_string(shared_settings::shared_sidebar_settings_path())
+                .ok()
+                .and_then(|text| serde_json::from_str(&text).ok());
+        if saved
+            .as_ref()
+            .is_some_and(|saved| saved.contains_key(BEADS_LAYOUT_SETTING))
+        {
+            return;
+        }
+        let kanban_tab_saved =
+            self.view_strip_layout
+                .order
+                .contains(&crate::app::model::ViewStripTabKey::View(
+                    crate::app::model::TitlebarMode::Kanban,
+                ));
+        self.save_beads_layout(if kanban_tab_saved {
+            BeadsLayout::Board
+        } else {
+            BeadsLayout::Tree
+        });
     }
 
     #[cfg(not(target_arch = "wasm32"))]

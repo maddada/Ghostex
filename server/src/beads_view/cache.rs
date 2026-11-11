@@ -30,7 +30,6 @@ pub(crate) struct Published {
     pub(crate) rows: Vec<BeadsViewRow>,
     pub(crate) readiness: BeadsReadiness,
     pub(crate) custom_statuses: Vec<String>,
-    pub(crate) error: Option<String>,
     /// The earliest dated defer still in the future: once it passes, a read wakes it.
     pub(crate) next_wake_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -45,7 +44,15 @@ pub(crate) struct EntryState {
     pub(crate) written: bool,
     pub(crate) actor: Option<Option<String>>,
     pub(crate) remote: Option<Option<BeadsSyncRemote>>,
+    /// When reading the remotes last failed, so a failure is retried, but not on every poll.
+    pub(crate) remote_failed_at: Option<Instant>,
     pub(crate) sync: SyncState,
+    /// A refresh is running in the background; polls answer with what is published meanwhile.
+    pub(crate) refreshing: bool,
+    /// The header's Refresh: read everything again, whatever the change token says.
+    pub(crate) force: bool,
+    /// Why the last refresh failed, until one succeeds.
+    pub(crate) last_error: Option<String>,
 }
 
 pub(crate) struct WorkspaceEntry {
@@ -74,6 +81,21 @@ impl WorkspaceEntry {
 
     pub(crate) fn state(&self) -> std::sync::MutexGuard<'_, EntryState> {
         self.state.lock().expect("beads workspace state")
+    }
+
+    /// Whether another Ghostex bd call holds the workspace right now.
+    pub(crate) fn lock_busy(&self) -> bool {
+        self.lock.try_lock().is_err()
+    }
+
+    /// The header's Refresh: forget every cached read and side fact and read the workspace again.
+    pub(crate) fn invalidate(&self) {
+        let mut state = self.state();
+        state.reads.clear();
+        state.force = true;
+        state.remote = None;
+        state.remote_failed_at = None;
+        state.actor = None;
     }
 
     /// After a write: every cached read is stale, and server mode re-reads.

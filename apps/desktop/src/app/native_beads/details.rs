@@ -120,14 +120,28 @@ impl BeadsView {
                                 })
                         });
                         if reply.get("exitCode").and_then(Value::as_i64) != Some(0) {
-                            // CDXC:ProjectBoard 2026-11-11 WHY: a bead deleted elsewhere while its details are open closes them with one plain line rather than an empty panel.
-                            this.details = None;
-                            this.notice = Some(super::view::BeadsNotice {
-                                title: "That bead is gone".to_string(),
-                                message: "It was deleted or renamed elsewhere.".to_string(),
-                                details: None,
-                                pull_now: false,
-                            });
+                            let said = [reply.get("stderr"), reply.get("stdout")]
+                                .into_iter()
+                                .flatten()
+                                .filter_map(Value::as_str)
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                                .to_lowercase();
+                            if said.contains("no issue found") || said.contains("no issues found") {
+                                // CDXC:ProjectBoard 2026-11-11 WHY: only bd's own "no issue found" closes the details (the bead was deleted elsewhere); any other failure (a timeout, a refusal) keeps the panel and its unsent comment or answer, and says the read failed.
+                                this.details = None;
+                                this.notice = Some(super::view::BeadsNotice {
+                                    title: "That bead is gone".to_string(),
+                                    message: "It was deleted or renamed elsewhere.".to_string(),
+                                    details: None,
+                                    pull_now: false,
+                                });
+                            } else {
+                                this.notice = Some(super::cards::write_failure(
+                                    "Couldn't read this bead",
+                                    &reply,
+                                ));
+                            }
                         } else {
                             details.shown = issue;
                         }

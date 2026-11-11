@@ -23,33 +23,97 @@ use super::change::ChangeToken;
 use super::discovery::WorkspaceInfo;
 use super::reads::{cached_reply, current_token, store_list_replies, workspace_mode};
 
-/// A view poll waits this long for a refresh another caller is running before it answers with
-/// the data it has and `busy`.
-const POLL_LOCK_WAIT: Duration = Duration::from_millis(1500);
 /// Each bd read in a refresh, lock wait included, gives up after this long.
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
+/// One refresh, waiting for the workspace lock included, gives up after this long.
+const REFRESH_BUDGET: Duration = Duration::from_secs(15);
+/// Readiness that bd could not give, or gave inconsistently, is asked again this often.
+const READINESS_RETRY: Duration = Duration::from_secs(10);
+/// A side read (the remotes) that failed is retried this often.
+const SIDE_FACT_RETRY: Duration = Duration::from_secs(30);
 const EMBEDDED_ATTEMPTS: usize = 3;
 
+/// CDXC:ProjectBoard 2026-11-11 WHY:
+/// A view poll never waits on bd for long: a refresh runs as its own background task under the workspace lock and one 15-second budget (lock wait, `ready`, `list` and the side reads together), and the poll waits at most 1.5 seconds for it before answering with what is published and `busy`. A sync or an agent holding the workspace therefore never stalls the view.
 pub(crate) async fn read_snapshot(
     entry: Arc<WorkspaceEntry>,
-    info: &WorkspaceInfo,
-    bd_executable_path: &str,
-    cwd: &str,
-    context: &TypedOperationContext,
-    known_revision: Option<&str>,
+    info: WorkspaceInfo,
+    bd_executable_path: String,
+    cwd: String,
+    context: TypedOperationContext,
+    known_revision: Option<String>,
+    poll_deadline: tokio::time::Instant,
 ) -> BeadsViewSnapshot {
-    let guard = entry.lock_within(POLL_LOCK_WAIT).await;
-    let busy = guard.is_none();
-    let mut error = None;
-    if guard.is_some() {
-        let token = current_token(info);
-        if needs_refresh(&entry, &token) {
-            error = refresh(&entry, info, bd_executable_path, cwd, context).await;
+    let wanted = {
+        let token = current_token(&info);
+        needs_refresh(&entry, &token) || side_facts_missing(&entry)
+    };
+    let start = wanted && {
+        let mut state = entry.state();
+        let start = !state.refreshing;
+        state.refreshing = true;
+        start
+    };
+    if start {
+        let task = tokio::spawn(run_refresh(
+            entry.clone(),
+            info.clone(),
+            bd_executable_path,
+            cwd,
+            context,
+        ));
+        let _ = tokio::time::timeout_at(poll_deadline, task).await;
+    } else if wanted {
+        while entry.state().refreshing && tokio::time::Instant::now() < poll_deadline {
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        ensure_side_facts(&entry, info, bd_executable_path, cwd, context).await;
     }
-    drop(guard);
-    build_reply(&entry, info, busy, error, known_revision)
+    let busy = entry.state().refreshing || entry.lock_busy();
+    build_reply(&entry, &info, busy, known_revision.as_deref())
+}
+
+async fn run_refresh(
+    entry: Arc<WorkspaceEntry>,
+    info: WorkspaceInfo,
+    bd: String,
+    cwd: String,
+    context: TypedOperationContext,
+) {
+    let deadline = tokio::time::Instant::now() + REFRESH_BUDGET;
+    let error = match entry.lock_within(REFRESH_BUDGET).await {
+        None => Some("Beads stayed busy. Showing what it last said.".to_string()),
+        Some(guard) => {
+            let token = current_token(&info);
+            let error = if needs_refresh(&entry, &token) {
+                refresh(&entry, &info, &bd, &cwd, &context, deadline).await
+            } else {
+                None
+            };
+            ensure_side_facts(&entry, &info, &bd, &cwd, &context, deadline).await;
+            drop(guard);
+            error
+        }
+    };
+    let mut state = entry.state();
+    state.refreshing = false;
+    state.last_error = error;
+}
+
+/// What is left of the refresh budget for one bd read, never more than a read's own limit.
+fn budget(deadline: tokio::time::Instant) -> Duration {
+    deadline
+        .saturating_duration_since(tokio::time::Instant::now())
+        .min(READ_TIMEOUT)
+        .max(Duration::from_millis(1))
+}
+
+fn side_facts_missing(entry: &WorkspaceEntry) -> bool {
+    let state = entry.state();
+    state.actor.is_none()
+        || (state.remote.is_none()
+            && state
+                .remote_failed_at
+                .is_none_or(|failed| failed.elapsed() >= SIDE_FACT_RETRY))
 }
 
 fn needs_refresh(entry: &WorkspaceEntry, token: &Option<ChangeToken>) -> bool {
@@ -57,7 +121,10 @@ fn needs_refresh(entry: &WorkspaceEntry, token: &Option<ChangeToken>) -> bool {
     let Some(published) = state.published.as_ref() else {
         return true;
     };
-    if !still_current(&published.token, published.at, token, state.written) {
+    if state.force || !still_current(&published.token, published.at, token, state.written) {
+        return true;
+    }
+    if published.readiness != BeadsReadiness::Ok && published.at.elapsed() >= READINESS_RETRY {
         return true;
     }
     published
@@ -77,6 +144,7 @@ async fn refresh(
     bd: &str,
     cwd: &str,
     context: &TypedOperationContext,
+    deadline: tokio::time::Instant,
 ) -> Option<String> {
     let embedded = workspace_mode(info) == "embedded";
     let attempts = if embedded { EMBEDDED_ATTEMPTS } else { 1 };
@@ -88,10 +156,11 @@ async fn refresh(
     for _ in 0..attempts {
         let before = current_token(info);
         super::log::bd_call("refresh", "ready");
-        let ready = run_process_command_with_timeout(&ready_command, context, READ_TIMEOUT).await;
+        let ready =
+            run_process_command_with_timeout(&ready_command, context, budget(deadline)).await;
         let middle = current_token(info);
         super::log::bd_call("refresh", "list");
-        let list = run_process_command_with_timeout(&list_command, context, READ_TIMEOUT).await;
+        let list = run_process_command_with_timeout(&list_command, context, budget(deadline)).await;
         let after = current_token(info);
         let list = match list {
             Ok(output) if output.exit_code == 0 && output.error.is_none() => output,
@@ -113,7 +182,9 @@ async fn refresh(
         };
         store_list_replies(entry, context, &list, &after);
         publish(entry, &after, rows, readiness, embedded);
-        entry.state().settling = false;
+        let mut state = entry.state();
+        state.settling = false;
+        state.force = false;
         return None;
     }
     entry.state().settling = true;
@@ -260,22 +331,32 @@ fn parse_readiness(stdout: &str) -> Option<Readiness> {
     Some(Readiness { ready, blocked })
 }
 
-/// Server mode: does bd's ready answer agree with the list's own dependency facts?
+/// Server mode: does bd's ready answer agree with the list's own facts? A ready bead must be one
+/// bd counts as workable in the list (not closed, deferred, in progress or blocked) with no open
+/// blocker; a blocked bead's blockers must name every open `blocks` dependency the list shows, and
+/// each must still be open. Anything else means a write landed between the two reads.
 fn readiness_agrees(rows: &[ListRow], readiness: &Readiness) -> bool {
     let by_id: HashMap<&str, &ListRow> =
         rows.iter().map(|row| (row.row.id.as_str(), row)).collect();
     let open = |id: &str| by_id.get(id).is_some_and(|row| row.row.status != "closed");
     let ready_ok = readiness.ready.iter().all(|id| {
         by_id.get(id.as_str()).is_some_and(|row| {
-            row.row.status != "closed"
-                && row.row.status != "deferred"
-                && !row.blocked_on.iter().any(|blocker| open(blocker))
+            !matches!(
+                row.row.status.as_str(),
+                "closed" | "deferred" | "in_progress" | "blocked"
+            ) && !row.blocked_on.iter().any(|blocker| open(blocker))
+                && !readiness.blocked.contains_key(id)
         })
     });
     let blocked_ok = readiness.blocked.iter().all(|(id, by)| {
         by_id.get(id.as_str()).is_some_and(|row| {
-            by.iter()
-                .all(|blocker| row.blocked_on.contains(blocker) && open(blocker))
+            row.row.status != "closed"
+                && by.iter().all(|blocker| open(blocker))
+                && row
+                    .blocked_on
+                    .iter()
+                    .filter(|blocker| open(blocker))
+                    .all(|blocker| by.contains(blocker))
         })
     });
     ready_ok && blocked_ok
@@ -352,7 +433,6 @@ fn publish(
         rows,
         readiness: readiness_state,
         custom_statuses,
-        error: None,
         next_wake_at,
     });
 }
@@ -370,11 +450,12 @@ async fn ensure_side_facts(
     bd: &str,
     cwd: &str,
     context: &TypedOperationContext,
+    deadline: tokio::time::Instant,
 ) {
     let token = current_token(info);
     let statuses_reply = match cached_reply(entry, "configGet", &token) {
         Some(reply) => Some(reply),
-        None => read_config_statuses(entry, &token, context).await,
+        None => read_config_statuses(entry, &token, context, budget(deadline)).await,
     };
     if let Some(reply) = statuses_reply {
         let statuses = parse_custom_statuses(&reply);
@@ -397,15 +478,27 @@ async fn ensure_side_facts(
         let actor = resolve_actor(cwd).await;
         entry.state().actor = Some(actor);
     }
-    let needs_remote = entry.state().remote.is_none();
+    let needs_remote = {
+        let state = entry.state();
+        state.remote.is_none()
+            && state
+                .remote_failed_at
+                .is_none_or(|failed| failed.elapsed() >= SIDE_FACT_RETRY)
+    };
     if needs_remote {
         let command = bd_read(bd, &["dolt", "remote", "list", "--json"], cwd);
         super::log::bd_call("refresh", "remoteList");
-        let remote = match run_process_command_with_timeout(&command, context, READ_TIMEOUT).await {
-            Ok(output) if output.exit_code == 0 => parse_remote(&output.stdout),
-            _ => None,
-        };
-        entry.state().remote = Some(remote);
+        let read = run_process_command_with_timeout(&command, context, budget(deadline)).await;
+        let mut state = entry.state();
+        match read {
+            // A read that worked is kept (no remote included) until a sync or the header's Refresh.
+            Ok(output) if output.exit_code == 0 && output.error.is_none() => {
+                state.remote = Some(parse_remote(&output.stdout));
+                state.remote_failed_at = None;
+            }
+            // A failed read is not taken as "no remote": it is asked again later.
+            _ => state.remote_failed_at = Some(Instant::now()),
+        }
     }
 }
 
@@ -413,10 +506,11 @@ async fn read_config_statuses(
     entry: &WorkspaceEntry,
     token: &Option<ChangeToken>,
     context: &TypedOperationContext,
+    limit: Duration,
 ) -> Option<Value> {
     let command = beads_action_command("configGet", &Map::new(), context).ok()?;
     super::log::bd_call("refresh", "configGet");
-    let output = run_process_command_with_timeout(&command, context, READ_TIMEOUT)
+    let output = run_process_command_with_timeout(&command, context, limit)
         .await
         .ok()?;
     if output.exit_code != 0 || output.error.is_some() {
@@ -504,7 +598,6 @@ fn build_reply(
     entry: &WorkspaceEntry,
     info: &WorkspaceInfo,
     busy: bool,
-    error: Option<String>,
     known_revision: Option<&str>,
 ) -> BeadsViewSnapshot {
     let state = entry.state();
@@ -526,7 +619,7 @@ fn build_reply(
             .collect(),
         busy,
         settling: state.settling,
-        error: error.or_else(|| state.published.as_ref().and_then(|p| p.error.clone())),
+        error: state.last_error.clone(),
         sync: state.sync.info(state.remote.clone().flatten()),
         ..Default::default()
     };

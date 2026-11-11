@@ -200,7 +200,10 @@ impl BeadsView {
             window,
             cx,
             move |this, reply, window, cx| {
-                let Some(id) = created_id(reply) else {
+                let Some(issue) = created_issue(reply) else {
+                    return;
+                };
+                let Some(id) = issue.get("id").and_then(Value::as_str).map(str::to_string) else {
                     return;
                 };
                 if let Some(status) = status.filter(|_| !start_after) {
@@ -214,13 +217,7 @@ impl BeadsView {
                     );
                 }
                 if start_after {
-                    (this.host.clone())(
-                        BeadsRequest::StartWork {
-                            issue_id: id.clone(),
-                        },
-                        window,
-                        cx,
-                    );
+                    (this.host.clone())(BeadsRequest::StartWork { issue }, window, cx);
                 }
                 if generate_title {
                     this.generate_title(&id, &description, cx);
@@ -245,7 +242,27 @@ impl BeadsView {
                 json!({ "projectId": target.rpc_project_id, "prompt": prompt }),
             )
             .await;
-            let Some(title) = answer.ok().and_then(|answer| {
+            let title = match answer {
+                Ok(answer) => Some(answer),
+                Err(error) => {
+                    let _ = this.update(cx, |this, cx| {
+                        if this.generation == generation {
+                            this.notice = Some(super::view::BeadsNotice {
+                                title: "Couldn't write a title".to_string(),
+                                message: format!(
+                                    "The bead keeps its first words as its title. {}",
+                                    error.message
+                                ),
+                                details: None,
+                                pull_now: false,
+                            });
+                            cx.notify();
+                        }
+                    });
+                    None
+                }
+            };
+            let Some(title) = title.and_then(|answer| {
                 answer
                     .get("title")
                     .and_then(Value::as_str)
@@ -640,7 +657,7 @@ impl BeadsView {
 }
 
 /// The new bead's id from bd's `create --json` reply.
-fn created_id(reply: &Value) -> Option<String> {
+fn created_issue(reply: &Value) -> Option<Value> {
     let stdout = reply.get("stdout").and_then(Value::as_str)?;
     let parsed: Value = serde_json::from_str(stdout.trim()).ok()?;
     let data = parsed.get("data").cloned().unwrap_or(parsed);
@@ -648,5 +665,6 @@ fn created_id(reply: &Value) -> Option<String> {
         Value::Array(mut items) if !items.is_empty() => items.remove(0),
         other => other,
     };
-    data.get("id").and_then(Value::as_str).map(str::to_string)
+    data.get("id").and_then(Value::as_str)?;
+    Some(data)
 }

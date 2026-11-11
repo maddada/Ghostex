@@ -4089,8 +4089,8 @@ the sync status with **Pull** and **Push**, Refresh, and **New bead**.
   second monitor; the panel shows a card with **Show Window** and **Bring
   Back**, and closing the window brings it back too.
 
-Related settings: `beadsViewLayout` (Tree, Board, or Tree except Board where
-the Kanban was used), Settings > Projects (beads directory and display key),
+Related settings: `beadsViewLayout` (Tree or Board; if you had the Kanban tab
+open before it became Beads, the view starts on Board), Settings > Projects (beads directory and display key),
 `globalBeadsDirectory`, `globalBeadsDisplayKey`. Hotkey: Switch to Beads
 (`switchKanbanView`).
 
@@ -6942,5 +6942,5 @@ terminalViewWidthMode match-chat`.
   menu bar badges (always on; remove the item from the menu bar itself), and the
   sidebar bell (kept visible with `notificationsTitlebarButtonHidden false`)
   lists every finished turn with what the agent said.
-- "What does the Kanban board do" / "What is the Beads view": see Beads view (was Kanban).
+- "What does the Beads view do, and how do I start work on a bead?" (also asked as "What does the Kanban board do"): see Beads view (was Kanban); on the Board, Start work on a card dispatches an agent to it, and from the command line `ghostex board start-work <bead-id>`.
 - "Does a coordinator use the Kanban board?": not on its own. A coordinator's Work pill is its own list of work (see Coordinators, Work items and The Work panel); the Beads view shows the Beads issues in the repository (Beads view). Tell the coordinator "use Beads to manage the work" (with the Ghostex Project Board Beads skill installed) or "work the high-priority beads on the board" and it keeps tasks as cards and starts a thread per card. Docs: ghostex.dev/docs/workflows/orchestrators.

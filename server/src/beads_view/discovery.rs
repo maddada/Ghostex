@@ -54,13 +54,47 @@ fn flights() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>> {
 }
 
 /// Forgets what bd said about `cwd` (the header's Refresh, a bd call that failed on the workspace).
+/// The answer is kept as the last one known (a poll that cannot wait shows it), but the next
+/// discovery asks bd again.
 pub(crate) fn forget(cwd: &str) {
-    records().lock().expect("beads discovery").remove(cwd);
+    if let Some(record) = records().lock().expect("beads discovery").get_mut(cwd) {
+        record.signature.clear();
+        record.signature.push("forgotten".to_string());
+    }
 }
 
 /// CDXC:ProjectBoard 2026-11-11 WHY:
 /// `bd where` opens the workspace's storage, so asking it on a timer kept an idle view spawning bd. The answer is kept until its signature changes, read from the files bd decides by: a `.beads` folder in each folder from the project up to the one bd found, each such folder's entries (so a `.beads` that an agent initializes in place, where `metadata.json`, `config.yaml` and the database folder appear, invalidates a cached "no workspace"), the redirect file's content and the target's entries. Only one `bd where` runs per folder at a time, under the workspace's own lock when one is known, and it gives up after 10 seconds.
 pub(crate) async fn discover(
+    cwd: &str,
+    bd_executable_path: &str,
+    context: &TypedOperationContext,
+) -> Discovered {
+    // One deadline for the whole discovery, the waits for the per-folder and workspace locks
+    // included; past it the last answer stands (or "busy" when there is none), uncached.
+    match tokio::time::timeout(
+        DISCOVERY_TIMEOUT,
+        discover_within(cwd, bd_executable_path, context),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => last_known(cwd).unwrap_or_else(|| {
+            Discovered::Failed("Beads stayed busy. Try again in a moment.".to_string())
+        }),
+    }
+}
+
+/// What bd last said about `cwd`, even if the files it was read from changed since.
+pub(crate) fn last_known(cwd: &str) -> Option<Discovered> {
+    records()
+        .lock()
+        .expect("beads discovery")
+        .get(cwd)
+        .map(|record| record.result.clone())
+}
+
+async fn discover_within(
     cwd: &str,
     bd_executable_path: &str,
     context: &TypedOperationContext,

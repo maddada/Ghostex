@@ -239,6 +239,12 @@ impl GhostexGpuiApp {
                                     }
                                 })
                                 .on_click(cx.listener(move |this, _, window, cx| {
+                                    // CDXC:ProjectBoard 2026-11-11 DECISION: User: a lane's + opens the Beads view's New bead form with that lane's status (the Board-only Estimate and Create & Start included), the same capability-gated form the header's New bead opens; only the board in its own window keeps its own form.
+                                    if !this.native_kanban_in_own_window(window)
+                                        && this.beads_open_create_in_lane(&add_key, window, cx)
+                                    {
+                                        return;
+                                    }
                                     this.native_kanban_open_new_ticket(&add_key, window, cx);
                                 }))
                                 .child(titlebar_svg_icon("titlebar/plus.svg", 14.0, p.muted)),

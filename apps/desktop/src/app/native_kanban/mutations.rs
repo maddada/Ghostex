@@ -37,7 +37,7 @@ impl GhostexGpuiApp {
         self.native_kanban_rebuild_tickets();
     }
 
-    fn native_kanban_upsert_local_issue(&mut self, issue: BeadsIssue) {
+    pub(crate) fn native_kanban_upsert_local_issue(&mut self, issue: BeadsIssue) {
         let issues = &mut self.native_kanban.issues;
         match issues.iter_mut().find(|candidate| candidate.id == issue.id) {
             Some(existing) => *existing = issue,
@@ -405,6 +405,15 @@ impl GhostexGpuiApp {
                         generate_and_store_title(&context, &id, &prompt).await
                     },
                     move |this, result, cx| {
+                        if let Err(error) = &result {
+                            // A computer whose Ghostex predates title generation, or an agent that
+                            // failed: the bead keeps its first words, and the user is told so.
+                            this.native_kanban_toast(
+                                "Couldn't write a title",
+                                &format!("The bead keeps its first words as its title. {error}"),
+                                cx,
+                            );
+                        }
                         if let Ok(title) = result
                             && let Some(issue) = this
                                 .native_kanban
