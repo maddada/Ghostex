@@ -52,7 +52,7 @@ mod transcribe;
 mod transcribe_tests;
 mod when;
 
-pub(crate) use clip::handle_voice_agent_clip_http;
+pub(crate) use clip::{handle_voice_agent_clip_http, handle_voice_agent_text_http};
 pub(crate) use gbot_call::voice_choices as gbot_voice_choices;
 pub(crate) use http::{
     handle_forget_voice_agent_memory_http, handle_read_voice_agent_http,

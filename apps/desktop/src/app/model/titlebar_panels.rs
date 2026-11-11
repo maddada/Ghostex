@@ -5,14 +5,6 @@
 
 use crate::*;
 
-#[derive(Clone, Copy)]
-pub(crate) struct GpuiNativeTitlebarTip {
-    pub(crate) body: &'static str,
-    pub(crate) icon_path: &'static str,
-    pub(crate) id: &'static str,
-    pub(crate) title: &'static str,
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiNativeResourceProcess {
     pub(crate) command: String,

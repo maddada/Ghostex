@@ -41,7 +41,8 @@ impl GhostexGpuiApp {
 
         CDXC:Titlebar 2026-09-20 DECISION:
         User: the window has no titlebar row, and the view buttons are not in it. This header carries
-        the project breadcrumb, Start/Open/Commit, the trailing ⋯ menu and the two panel toggles, with
+        the project breadcrumb, Start/Open/Commit and the two panel toggles (the trailing ⋯ menu it
+        also carried left on 2026-11-11: CDXC:Titlebar 2026-11-11 in titlebar/menu_panels.rs), with
         no line under it; which views are open is the view panel's own tab strip
         (render/view_tab_strip.rs), so the centred mode switcher and its compact dropdown are gone.
         This supersedes the 2026-06-14 full-width titlebar strip and the 2026-09-11 rule that kept

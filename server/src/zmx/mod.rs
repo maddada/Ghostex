@@ -5,6 +5,7 @@ pub mod endpoint;
 pub mod env;
 #[cfg(not(windows))]
 mod fish_startup;
+mod foreground_job;
 mod grok_startup;
 #[cfg(unix)]
 pub(crate) mod ipc_frame;
@@ -40,6 +41,7 @@ mod zsh_startup;
 
 pub use endpoint::*;
 pub(crate) use env::*;
+pub(crate) use foreground_job::zmx_session_runs_foreground_command;
 pub(crate) use launch::*;
 pub use probe_cache::*;
 pub(crate) use process_identity::*;

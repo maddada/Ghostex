@@ -43,9 +43,16 @@ pub(in crate::app::native_chat) fn failure_copy(
             "Can't open this image",
             "The file isn't a recognized image.".to_string(),
         ),
+        // The type the read said, so a picture refused for its type says which one arrived: a
+        // PNG named here would mean the answer, not the file, was wrong.
         "unsupported" => (
             "Can't open this image",
-            "This image format can't be shown here.".to_string(),
+            match failure.error.trim() {
+                "" => "Ghostex got no picture type for this file, so it can't show it.".to_string(),
+                media_type => {
+                    format!("Ghostex got this file as {media_type}, which it can't show.")
+                }
+            },
         ),
         "damaged" => (
             "Can't open this image",

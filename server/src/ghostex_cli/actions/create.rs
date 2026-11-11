@@ -276,7 +276,12 @@ pub(super) fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> C
     if group_id.is_some() {
         params.insert("sessionGroupProjectId".to_string(), json!(project_id));
     }
-    for (key, flag) in [("agentModel", "--model"), ("agentEffort", "--effort")] {
+    // `--account`: gxserver resolves and checks it like `coordinator start-thread --account` (agents/launch_plan.rs).
+    for (key, flag) in [
+        ("agentModel", "--model"),
+        ("agentEffort", "--effort"),
+        ("account", "--account"),
+    ] {
         match payload.get(key) {
             None | Some(Value::Null) => {}
             Some(Value::String(value)) if !value.trim().is_empty() => {

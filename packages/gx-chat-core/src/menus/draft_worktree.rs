@@ -463,6 +463,10 @@ pub fn tray(state: &ChatState) -> Option<Value> {
         answer.get("currentBranch").cloned().unwrap_or(Value::Null),
     );
     value.insert(
+        "defaultBranch".to_string(),
+        answer.get("defaultBranch").cloned().unwrap_or(Value::Null),
+    );
+    value.insert(
         "baseBranch".to_string(),
         json!(selected_base(state, answer)),
     );
@@ -580,6 +584,44 @@ pub fn where_part(tray: &Value) -> Value {
 /// `{kind, label, glyph, prefix?, tooltip?, star?, placeholder?, menuTitle?, menuWidth?, menu}`.
 /// `kind` is `branch` (This folder's branch, only shown: `menu` is `null`), `baseBranch`,
 /// `worktree` or `cloudBox`. While a move runs or failed there is none: the status line says it.
+/// The base branch list's order: the picked base first, then the default branch (its local
+/// name, else its `origin/` one), then the rest in gxserver's order.
+///
+/// CDXC:Worktrees 2026-11-10 DECISION:
+/// User: "wtf is this please fix!! make it have search also. should have logical limit on size and make placement of it better" about the base branch list. The coordinator's brief set its order: the current base first and marked, then the default branch, then the rest as before. Both renderers draw this order (the desktop's search card in draft_project_picker.rs, the phone's tray menu).
+fn base_branch_order<'a>(
+    branches: &'a [Value],
+    base: &str,
+    default: Option<&str>,
+) -> Vec<&'a Value> {
+    let name = |branch: &Value| {
+        branch
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let default = default.and_then(|default| {
+        [default.to_string(), format!("origin/{default}")]
+            .into_iter()
+            .find(|wanted| branches.iter().any(|branch| &name(branch) == wanted))
+    });
+    let rank = |branch: &Value| {
+        let name = name(branch);
+        if name == base {
+            0
+        } else if default.as_deref() == Some(name.as_str()) {
+            1
+        } else {
+            2
+        }
+    };
+    let mut ordered: Vec<&Value> = branches.iter().collect();
+    // Stable, so the rest keep gxserver's order.
+    ordered.sort_by_key(|branch| rank(branch));
+    ordered
+}
+
 pub fn detail_part(tray: &Value) -> Value {
     if !tray.get("status").is_some_and(Value::is_null)
         || tray
@@ -598,13 +640,21 @@ pub fn detail_part(tray: &Value) -> Value {
     match text(tray, "mode").as_deref() {
         Some(MODE_NEW) => {
             let base = text(tray, "baseBranch").unwrap_or_else(|| "main".to_string());
-            let menu: Vec<Value> = list("branches")
-                .iter()
+            let default = text(tray, "defaultBranch");
+            let menu: Vec<Value> = base_branch_order(&list("branches"), &base, default.as_deref())
+                .into_iter()
                 .filter_map(|branch| {
                     let name = text(branch, "name")?;
+                    let detail = if branch.get("current").and_then(Value::as_bool) == Some(true) {
+                        "Current"
+                    } else if default.as_deref() == Some(name.as_str()) {
+                        "Default"
+                    } else {
+                        ""
+                    };
                     Some(json!({
                         "label": name,
-                        "detail": if branch.get("current").and_then(Value::as_bool) == Some(true) { "Current" } else { "" },
+                        "detail": detail,
                         "checked": name == base,
                         "command": { "type": "setDraftWorktree", "baseBranch": name },
                     }))

@@ -467,7 +467,10 @@ fn terminal_section(
             cx,
         ));
     }
-    if !g.search.is_searching() {
+    // The two links are not settings, so only the page body's pass draws them: drawn in the
+    // Advanced fold's pass too they showed twice once the fold opened, with the same element ids
+    // (a duplicate a11y node, a panic in a debug build).
+    if !g.search.is_searching() && !g.search.is_advanced_pass() {
         rows.push(monospace_font_link(&p, cx));
         rows.push(font_size_link(&p, cx));
     }
@@ -705,6 +708,9 @@ fn terminal_section(
         "Show the provider session id in the top-right corner of each terminal pane.",
         false,
         cx,
+    ));
+    rows.extend(super::commands_pane::commands_pane_rows(
+        page, g, s, window, cx,
     ));
     if g.visible(s, "promptEditorBackend") {
         let ctrl_g = settings_catalog().hotkey_label("ctrl+g");

@@ -764,6 +764,7 @@ impl SidebarViewModel {
         super::chief::lift_chief_into_home(&mut plans);
 
         // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
+        let mut project_copies = std::collections::BTreeMap::new();
         if merging {
             let (cache, outcome) = super::merged::merge_machines(
                 previous.as_mut().and_then(|previous| previous.merge.take()),
@@ -787,6 +788,7 @@ impl SidebarViewModel {
             {
                 drawn_focus.active_group_id = Some(entry.clone());
             }
+            project_copies = outcome.copies;
         }
 
         // Every coordinator's threads, wherever they are drawn: a worktree thread is in its
@@ -915,6 +917,7 @@ impl SidebarViewModel {
             &row_context,
         );
         state.view.machines_with_home = super::chief::machines_with_home(store, &state.view.chiefs);
+        state.view.project_copies = project_copies;
         // The waiting copy of an empty sidebar moves with the clock alone.
         state.next_deadline_ms = min_deadline(
             state.next_deadline_ms,

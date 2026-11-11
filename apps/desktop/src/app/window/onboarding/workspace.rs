@@ -1,10 +1,10 @@
-//! Panel 3, Workspace: the view toggles and the mock workspace window whose titlebar tabs follow
-//! them (panels/workspace.tsx (deleted 2026-10-01), previews/workspace-window.tsx (deleted 2026-10-01), styles/workspace.css).
+//! Panel 3, Workspace: the view toggles, Spaces, the Unified sidebar and Fast Computer & Browser
+//! use, and the mock workspace window whose titlebar tabs follow the views (panels/workspace.tsx (deleted 2026-10-01), previews/workspace-window.tsx (deleted 2026-10-01), styles/workspace.css).
 use super::GpuiOnboardingWindow;
 use super::OnboardingCommand;
-use super::agents::window_tab;
+use super::agents::{perm_pill, window_tab};
 use super::interact;
-use super::model::{VIEW_KEYS, ViewKey, views_patch};
+use super::model::{ComputerUseState, VIEW_KEYS, ViewKey, views_patch};
 use super::primitives::*;
 use super::stage::*;
 use super::welcome::foot_actions;
@@ -33,6 +33,11 @@ pub(crate) struct WorkspaceState {
     pub(super) drive_since: Instant,
     drive: bool,
     pub(super) docs_saved: bool,
+    /// The Fast Computer & Browser use preview stands in for the mock window, and since when.
+    computer_use_shown: bool,
+    computer_use_since: Instant,
+    /// Its switch was turned on and the install has not reported back yet.
+    pub(super) computer_use_requested: bool,
 }
 
 impl WorkspaceState {
@@ -48,11 +53,16 @@ impl WorkspaceState {
             drive_since: now,
             drive: false,
             docs_saved: false,
+            computer_use_shown: false,
+            computer_use_since: now,
+            computer_use_requested: false,
         }
     }
 }
 
-const VIEW_ROWS: [(ViewKey, &str, &str, &str, f32); 4] = [
+/// CDXC:Onboarding 2026-11-11 DECISION:
+/// User, on the first-run page (step 8, Workspace): "keep this but make spaces enabled by default and add unified sidebar as an optoin and remove kanban and automate mentino 25+ extensions that can be installed from settings later", and (step 7) "move computer use to the workspace page. call it Fast Computer & Browse use" (Browser, as the coordinator read it). Kanban and Automate leave the list (a first run still starts with them off; the view picker and Settings > Extensions turn them on); Spaces (on for a first run, mod.rs), the Unified sidebar and Fast Computer & Browser use take their rows, and one line under them points to the other extensions.
+const VIEW_ROWS: [(ViewKey, &str, &str, &str, f32); 2] = [
     (
         ViewKey::Docs,
         "list",
@@ -67,21 +77,11 @@ const VIEW_ROWS: [(ViewKey, &str, &str, &str, f32); 4] = [
         "VS Code, built in: source, diffs and review.",
         532.0,
     ),
-    (
-        ViewKey::Kanban,
-        "kanban",
-        "Kanban",
-        "Split work into cards and hand each one to an agent.",
-        600.0,
-    ),
-    (
-        ViewKey::Automate,
-        "bolt",
-        "Automate",
-        "Run agents on a schedule, once or on repeat.",
-        668.0,
-    ),
 ];
+/// Extensions Settings > Extensions offers beyond these rows: 47 built in and 10 in the Store on
+/// 2026-11-11, so "25+" stays true however many a user already has on.
+const EXTENSIONS_LINE: &str =
+    "25+ more extensions can be turned on or installed later in Settings > Extensions.";
 const RECOMMENDED: [ViewKey; 2] = [ViewKey::Docs, ViewKey::Browser];
 const TAB_ORDER: [ViewKey; 5] = [
     ViewKey::Code,
@@ -138,7 +138,61 @@ impl GpuiOnboardingWindow {
 
     fn ws_show_tab(&mut self, next: WsTab) {
         self.workspace.previewed = None;
+        self.workspace.computer_use_shown = false;
         self.workspace.tab = next;
+    }
+
+    /// A row's click: the mock window shows that view without turning it on.
+    fn ws_preview(&mut self, tab: WsTab) {
+        self.workspace.previewed = Some(tab);
+        self.workspace.computer_use_shown = false;
+    }
+
+    pub(super) fn ws_show_computer_use(&mut self) {
+        if !self.workspace.computer_use_shown {
+            self.workspace.computer_use_shown = true;
+            self.workspace.computer_use_since = Instant::now();
+        }
+    }
+
+    /// CDXC:Onboarding 2026-11-11 WHY: the switch only ever turns Fast Computer & Browser use on, after a click, and says first what the computer will ask for (the preview beside it and its toast); nothing in setup installs it or raises a permission prompt by itself. Turning it off is Settings > Integrations, as the preview says.
+    fn ws_toggle_computer_use(&mut self, cx: &mut Context<Self>) {
+        self.ws_show_computer_use();
+        if self.computer_use_state() != ComputerUseState::Off
+            || self.workspace.computer_use_requested
+        {
+            cx.notify();
+            return;
+        }
+        self.workspace.computer_use_requested = true;
+        let before = self.computer_use_state();
+        self.computer_use_install_requested = true;
+        self.computer_use_install_deadline = Some(Instant::now() + Duration::from_secs(150));
+        let install_driver = self
+            .cli_status
+            .as_ref()
+            .and_then(|status| status.get("cuaDriverInstalled"))
+            .and_then(serde_json::Value::as_bool)
+            != Some(true);
+        self.send(OnboardingCommand::InstallComputerUse { install_driver }, cx);
+        self.after_computer_use_changed(before, cx);
+        self.show_toast(
+            super::model::computer_use_copy(super::model::ComputerUseDesktop::current()).turned_on,
+            cx,
+        );
+    }
+
+    /// The install reported a new state: the switch follows it from here.
+    pub(super) fn after_computer_use_changed(
+        &mut self,
+        before: ComputerUseState,
+        cx: &mut Context<Self>,
+    ) {
+        let state = self.computer_use_state();
+        if state != before && state != ComputerUseState::Off {
+            self.workspace.computer_use_requested = false;
+        }
+        cx.notify();
     }
 
     fn ws_set_view(&mut self, key: ViewKey, on: bool, cx: &mut Context<Self>) {
@@ -147,6 +201,7 @@ impl GpuiOnboardingWindow {
             self.workspace.recent.retain(|item| *item != key);
             self.workspace.recent.push(key);
             self.workspace.tab = WsTab::View(key);
+            self.workspace.computer_use_shown = false;
             if self.workspace.previewed != Some(WsTab::View(key)) {
                 self.workspace.previewed = None;
             }
@@ -330,7 +385,7 @@ impl GpuiOnboardingWindow {
             interact::Keys::EnterSpace,
             cx,
             |this, _, cx| {
-                this.workspace.previewed = Some(WsTab::View(ViewKey::Browser));
+                this.ws_preview(WsTab::View(ViewKey::Browser));
                 cx.notify();
             },
         );
@@ -413,7 +468,7 @@ impl GpuiOnboardingWindow {
             interact::Keys::EnterSpace,
             cx,
             |this, _, cx| {
-                this.workspace.previewed = Some(WsTab::View(ViewKey::Browser));
+                this.ws_preview(WsTab::View(ViewKey::Browser));
                 cx.notify();
             },
         );
@@ -486,7 +541,7 @@ impl GpuiOnboardingWindow {
                     interact::Keys::EnterSpace,
                     cx,
                     move |this, _, cx| {
-                        this.workspace.previewed = Some(WsTab::View(key));
+                        this.ws_preview(WsTab::View(key));
                         cx.notify();
                     },
                 )
@@ -496,26 +551,20 @@ impl GpuiOnboardingWindow {
         // CDXC:Onboarding 2026-11-06 DECISION:
         // A Discord request from a new user: Spaces is an extension that is off by default, so
         // nobody finds it. The Workspace panel gets a Spaces switch that writes the same key as
-        // Settings > Extensions (`sidebarSpacesEnabled`). It is not a view tab, so the mock window
+        // Settings > Extensions (`sidebarSpacesEnabled`, now Settings > Sidebar & Sessions > Spaces:
+        // CDXC:Spaces 2026-11-10). It is not a view tab, so the mock window
         // has nothing to preview for it.
         let spaces_on = self.settings.spaces_on;
-        let spaces_thumb = self.thumb("ws-Spaces", spaces_on, now);
-        let spaces_toggle = self.control(
+        out.push(self.ws_setting_row(
             s,
-            toggle(
-                s,
-                "ws-toggle-Spaces",
-                spaces_on,
-                spaces_thumb,
-                ToggleSize::Lg,
-                false,
-            ),
-            "ws-toggle-Spaces",
-            interact::Ring::new(17.0, 1.0),
-            interact::Keys::EnterSpace,
+            now,
+            "Spaces",
+            "layers",
+            "Group projects in the sidebar into Spaces.",
+            600.0,
+            spaces_on,
             cx,
-            move |this, _, cx| {
-                cx.stop_propagation();
+            move |this, cx| {
                 let mut patch = serde_json::Map::new();
                 patch.insert(
                     "sidebarSpacesEnabled".to_string(),
@@ -523,37 +572,38 @@ impl GpuiOnboardingWindow {
                 );
                 this.update_settings(patch, cx);
             },
-        );
-        let spaces_border = interact::hover_color(
-            "ws-row-Spaces",
-            "border",
-            rgba(150, 165, 205, 0.12),
-            rgba(180, 195, 235, 0.22),
-            250,
-        );
+        ));
+        // The same key as Settings > Sidebar's Sidebar choice (CDXC:Sidebar 2026-10-30 in the
+        // settings catalog's options.rs): on is the Unified sidebar, off the Project sidebar.
+        let unified = self.settings.unified_sidebar;
+        out.push(self.ws_setting_row(
+            s,
+            now,
+            "Unified sidebar",
+            "sidebar",
+            "Every session in one list, the ones that need you on top.",
+            668.0,
+            unified,
+            cx,
+            move |this, cx| {
+                let mut patch = serde_json::Map::new();
+                patch.insert(
+                    "sidebarView".to_string(),
+                    serde_json::Value::String(
+                        if unified { "project" } else { "unified" }.to_string(),
+                    ),
+                );
+                this.update_settings(patch, cx);
+            },
+        ));
+        out.push(self.ws_computer_use_row(s, now, cx));
         out.push(
-            glass(s)
-                .absolute()
-                .left(s.px(60.0))
-                .top(s.px(736.0))
-                .w(s.px(632.0))
-                .h(s.px(58.0))
+            abs(s, 60.0, 806.0, Some(632.0), None)
                 .flex()
                 .items_center()
-                .gap(s.px(26.0))
-                .pl(s.px(30.0))
-                .pr(s.px(20.0))
-                .id(SharedString::from("ws-row-Spaces"))
-                .border_color(spaces_border)
-                .child(icon(s, "layers", 22.0, 1.6, hex(0xd6dbe5)))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(nm(s, 17.0, 500.0).child("Spaces"))
-                        .child(ss(s, 12.5).child("Group projects in the sidebar into Spaces.")),
-                )
-                .child(spaces_toggle)
+                .gap(s.px(10.0))
+                .child(icon(s, "plus", 15.0, 1.6, hex(0x8e97a8)))
+                .child(sans(s, 14.0, 400.0, hex(0xaeb6c4)).child(EXTENSIONS_LINE))
                 .into_any_element(),
         );
         out.push(
@@ -577,8 +627,185 @@ impl GpuiOnboardingWindow {
                 ))
                 .into_any_element(),
         );
-        out.extend(self.render_workspace_window(s, now, views, drive, current, cx));
+        if self.workspace.computer_use_shown {
+            // Centred where the mock window stands (758 + 875 / 2, less half the panel's 700).
+            out.push(self.render_computer_use_panel(
+                s,
+                845.0,
+                self.workspace.computer_use_since,
+                now,
+                cx,
+            ));
+        } else {
+            out.extend(self.render_workspace_window(s, now, views, drive, current, cx));
+        }
         out
+    }
+
+    /// A Workspace row with a switch for one setting: the whole row toggles it.
+    #[allow(clippy::too_many_arguments)]
+    fn ws_setting_row(
+        &mut self,
+        s: S,
+        now: Instant,
+        title: &'static str,
+        icon_name: &'static str,
+        detail: &'static str,
+        top: f32,
+        on: bool,
+        cx: &mut Context<Self>,
+        flip: impl Fn(&mut Self, &mut Context<Self>) + Clone + 'static,
+    ) -> AnyElement {
+        let row_key = format!("ws-row-{title}");
+        let toggle_key = format!("ws-toggle-{title}");
+        let thumb = self.thumb(&format!("ws-{title}"), on, now);
+        let toggle_flip = flip.clone();
+        let row_toggle = self.control(
+            s,
+            toggle(s, toggle_key.clone(), on, thumb, ToggleSize::Lg, false),
+            toggle_key,
+            interact::Ring::new(17.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            move |this, _, cx| {
+                cx.stop_propagation();
+                toggle_flip(this, cx);
+            },
+        );
+        let border = interact::hover_color(
+            &row_key,
+            "border",
+            rgba(150, 165, 205, 0.12),
+            rgba(180, 195, 235, 0.22),
+            250,
+        );
+        let row = glass(s)
+            .absolute()
+            .left(s.px(60.0))
+            .top(s.px(top))
+            .w(s.px(632.0))
+            .h(s.px(58.0))
+            .flex()
+            .items_center()
+            .gap(s.px(26.0))
+            .pl(s.px(30.0))
+            .pr(s.px(20.0))
+            .id(SharedString::from(row_key.clone()))
+            .border_color(border)
+            .cursor_pointer()
+            .child(icon(s, icon_name, 22.0, 1.6, hex(0xd6dbe5)))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(nm(s, 17.0, 500.0).child(title))
+                    .child(ss(s, 12.5).child(detail)),
+            )
+            .child(row_toggle);
+        self.control(
+            s,
+            row,
+            row_key,
+            interact::Ring::new(14.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            move |this, _, cx| flip(this, cx),
+        )
+        .into_any_element()
+    }
+
+    /// Fast Computer & Browser use (Computer Use, moved here from the Agents panel): the row shows
+    /// what it does and asks for in the preview beside it; only its switch installs it.
+    fn ws_computer_use_row(&mut self, s: S, now: Instant, cx: &mut Context<Self>) -> AnyElement {
+        let state = self.computer_use_state();
+        let requested = self.workspace.computer_use_requested;
+        let on = state != ComputerUseState::Off || requested;
+        let pill = match state {
+            ComputerUseState::Installing => Some(
+                perm_pill(s, false)
+                    .child(spinner(s, 12.0, 1.5, self.opened_at, now))
+                    .child(div().ml(s.px(6.0)).child("Installing…")),
+            ),
+            ComputerUseState::Permissions => Some(perm_pill(s, false).child("Needs OS permission")),
+            ComputerUseState::On => Some(perm_pill(s, true).child("On")),
+            ComputerUseState::Off if requested => {
+                Some(perm_pill(s, false).child("Needs OS permission"))
+            }
+            ComputerUseState::Off => None,
+        };
+        let thumb = self.thumb("ws-computer-use", on, now);
+        let switch = self.control(
+            s,
+            toggle(
+                s,
+                "ws-toggle-computer-use",
+                on,
+                thumb,
+                ToggleSize::Lg,
+                false,
+            ),
+            "ws-toggle-computer-use",
+            interact::Ring::new(17.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| {
+                cx.stop_propagation();
+                this.ws_toggle_computer_use(cx);
+            },
+        );
+        let row_key = "ws-row-computer-use";
+        let border = interact::hover_color(
+            row_key,
+            "border",
+            if on {
+                rgba(110, 150, 255, 0.42)
+            } else {
+                rgba(150, 165, 205, 0.12)
+            },
+            rgba(180, 195, 235, 0.22),
+            250,
+        );
+        let row = glass(s)
+            .absolute()
+            .left(s.px(60.0))
+            .top(s.px(736.0))
+            .w(s.px(632.0))
+            .h(s.px(58.0))
+            .flex()
+            .items_center()
+            .gap(s.px(26.0))
+            .pl(s.px(30.0))
+            .pr(s.px(20.0))
+            .id(SharedString::from(row_key))
+            .border_color(border)
+            .cursor_pointer()
+            .child(icon(s, "monitor", 22.0, 1.6, hex(0xd6dbe5)))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(nm(s, 17.0, 500.0).child("Fast Computer & Browser use"))
+                    .child(ss(s, 12.5).child(if cfg!(target_os = "macos") {
+                        "Agents drive other apps and web pages. macOS asks for two permissions."
+                    } else {
+                        "Agents drive other apps and web pages, off until you turn it on."
+                    })),
+            )
+            .children(pill)
+            .child(switch);
+        self.control(
+            s,
+            row,
+            row_key,
+            interact::Ring::new(14.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            |this, _, cx| {
+                this.ws_show_computer_use();
+                cx.notify();
+            },
+        )
+        .into_any_element()
     }
 
     fn render_workspace_window(

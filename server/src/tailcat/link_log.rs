@@ -181,19 +181,133 @@ impl LinkPeers {
     }
 }
 
-/// Reads one helper's log until it closes, recording every link event; the rest is dropped.
-pub(crate) fn follow_tailcat_log(stream: impl Read, context: LinkLogContext, peers: LinkPeers) {
+/// The full key (`nodekey:<hex>`) of a client the allow-list turned away, when `line` says so.
+pub(crate) fn refused_client_key(line: &str) -> Option<&str> {
+    let key = first_word(line.split("ignoring meow from ").nth(1)?);
+    let hex = key.strip_prefix("nodekey:")?;
+    (hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(key)
+}
+
+/// Reads one helper's log until it closes, recording every link event and a relay that keeps
+/// resetting; the rest is dropped. `refused` hears the key of every client the allow-list turned
+/// away (`door.rs` lets a new device in on it while a pairing code is shown). `relay_check` reads
+/// every line first and takes out the hellos of its own check (`relay_check.rs`).
+pub(crate) fn follow_tailcat_log(
+    stream: impl Read,
+    context: LinkLogContext,
+    peers: LinkPeers,
+    relay_check: Option<super::relay_check::RelayCheck>,
+    refused: impl Fn(&str),
+) {
     let mut tracker = LinkTracker::default();
+    let mut relay = RelayResets::default();
     let reader = BufReader::new(stream);
     for line in reader.split(b'\n') {
         let Ok(line) = line else {
             return;
         };
         let line = String::from_utf8_lossy(&line);
-        if let Some(event) = tracker.observe(&line, Instant::now()) {
+        let now = Instant::now();
+        if relay_check
+            .as_ref()
+            .is_some_and(|check| check.observe(&line))
+        {
+            continue;
+        }
+        if let Some(key) = refused_client_key(&line) {
+            refused(key);
+        }
+        if let Some(event) = tracker.observe(&line, now) {
             peers.note(&event);
             record_link_event(&context, &event);
         }
+        match relay.observe(&line, now) {
+            Some(RelayNote::Resetting { resets }) => log_record(
+                &context,
+                "easyConnect.relay",
+                true,
+                json!({
+                    "lane": context.lane,
+                    "relay": context.relay,
+                    "phase": "resetting",
+                    "resetsLastMinute": resets,
+                }),
+            ),
+            Some(RelayNote::Steady) => log_record(
+                &context,
+                "easyConnect.relay",
+                false,
+                json!({
+                    "lane": context.lane,
+                    "relay": context.relay,
+                    "phase": "steady",
+                }),
+            ),
+            None => {}
+        }
+    }
+}
+
+/// The helper's connection to its relay ended this many times within [`RELAY_RESET_WINDOW`] before
+/// the relay is logged as resetting.
+const RELAY_RESETS_TO_WARN: usize = 3;
+const RELAY_RESET_WINDOW: Duration = Duration::from_secs(60);
+/// A relay that was resetting is logged as steady after this long without its connection ending.
+const RELAY_STEADY_AFTER: Duration = Duration::from_secs(120);
+
+/// What the helper's log says about its relay connection.
+#[derive(Debug, PartialEq, Eq)]
+enum RelayNote {
+    /// The connection ended `resets` times in the last minute.
+    Resetting { resets: usize },
+    /// It has held since a `Resetting` note.
+    Steady,
+}
+
+/*
+CDXC:RemotePairing 2026-11-10 WHY:
+On 2026-11-10 Ghostex's relay closed every connection about every 3 s for 20 minutes (its server kept exiting on an accept-rate limit and starting again). Phones that dial that relay first sat on it, the once-a-minute `/generate_204` check passed about half the time, and no computer's log said anything: the only trace was in the helpers' own logs, which are dropped. The helper prints `derp.Recv(derp-N): … EOF` each time its relay connection ends; three of those within a minute now write one `easyConnect.relay` warning (`phase: resetting`, with the count), repeated at most once a minute while it lasts, and `phase: steady` once the connection has held for two minutes. Links that already went direct are not affected by such a relay, so this is a line for whoever reads the log, not a reason to end a link.
+*/
+#[derive(Default)]
+struct RelayResets {
+    recent: std::collections::VecDeque<Instant>,
+    warned_at: Option<Instant>,
+    resetting: bool,
+}
+
+impl RelayResets {
+    fn observe(&mut self, line: &str, now: Instant) -> Option<RelayNote> {
+        if line.contains("derp.Recv(derp-") {
+            self.recent.push_back(now);
+            while self
+                .recent
+                .front()
+                .is_some_and(|at| now.saturating_duration_since(*at) > RELAY_RESET_WINDOW)
+            {
+                self.recent.pop_front();
+            }
+            let warned_recently = self
+                .warned_at
+                .is_some_and(|at| now.saturating_duration_since(at) < RELAY_RESET_WINDOW);
+            if self.recent.len() >= RELAY_RESETS_TO_WARN && !warned_recently {
+                self.warned_at = Some(now);
+                self.resetting = true;
+                return Some(RelayNote::Resetting {
+                    resets: self.recent.len(),
+                });
+            }
+            return None;
+        }
+        let held = self
+            .recent
+            .back()
+            .is_none_or(|at| now.saturating_duration_since(*at) >= RELAY_STEADY_AFTER);
+        if self.resetting && held {
+            self.resetting = false;
+            self.recent.clear();
+            return Some(RelayNote::Steady);
+        }
+        None
     }
 }
 
@@ -215,6 +329,28 @@ pub(crate) fn record_helper_event(
         details["uptimeMs"] = json!(uptime_ms);
     }
     log_record(context, "easyConnect.helper", phase == "exited", details);
+}
+
+/// One look at whether the relay still delivers to a helper (`relay_check.rs`): `phase` is
+/// `answered`, `silent` or `unknown`, and `restarting` says the helper is started again for it.
+pub(crate) fn record_relay_check(
+    context: &LinkLogContext,
+    phase: &str,
+    took_ms: u64,
+    restarting: bool,
+) {
+    log_record(
+        context,
+        "easyConnect.relayCheck",
+        phase == "silent",
+        json!({
+            "lane": context.lane,
+            "relay": context.relay,
+            "phase": phase,
+            "tookMs": took_ms,
+            "restarting": restarting,
+        }),
+    );
 }
 
 /// The end of every link the helper carried, for `reason` (the helper stopped or exited).

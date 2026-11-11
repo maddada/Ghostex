@@ -372,7 +372,7 @@ fn render_mermaid(source: &str, light: bool) -> Option<Rendered> {
     rasterize_svg(&svg, MAX_DIAGRAM_WIDTH)
 }
 
-fn svg_tree(svg: &str) -> Option<resvg::usvg::Tree> {
+pub(crate) fn svg_tree(svg: &str) -> Option<resvg::usvg::Tree> {
     let options = resvg::usvg::Options {
         fontdb: fontdb(),
         ..Default::default()

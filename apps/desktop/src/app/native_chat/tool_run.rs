@@ -583,7 +583,7 @@ impl NativeChatView {
             .px(px(ROW_PAD_X * s))
             .py(px(2.0 * s))
             .rounded(px(8.0 * s))
-            .text_size(px(13.5 * s))
+            .text_size(px(super::chat_text_look::PROSE_SIZE * s))
             .text_color(p.muted)
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.03)))
@@ -689,7 +689,7 @@ impl NativeChatView {
             .px(px(ROW_PAD_X * s))
             .py(px(5.0 * s))
             .rounded(px(8.0 * s))
-            .text_size(px(13.5 * s))
+            .text_size(px(super::chat_text_look::PROSE_SIZE * s))
             .when(failed, |this| this.bg(p.error().opacity(0.06)))
             .when(has_detail, |this| {
                 this.chat_cursor_pointer()

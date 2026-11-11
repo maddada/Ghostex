@@ -55,7 +55,7 @@ impl GhostexGpuiApp {
         self.close_gpui_titlebar_popup(None, window, cx);
         /*
         CDXC:Titlebar 2026-09-27 WHY:
-        A dropdown can be asked to open before its trigger has painted (a hotkey, a ⋯ menu row, the
+        A dropdown can be asked to open before its trigger has painted (a hotkey, a menu row, the
         very first frame), so its bounds are unknown. This used to call `request_animation_frame`,
         which is only valid while a view paints: from an event or a task it unwrapped an empty view
         stack and crashed the app, and even when it didn't the dropdown never opened. The request
@@ -107,7 +107,6 @@ impl GhostexGpuiApp {
                 | GpuiTitlebarPopupKind::Git
                 | GpuiTitlebarPopupKind::Help
                 | GpuiTitlebarPopupKind::Updates
-                | GpuiTitlebarPopupKind::More
                 | GpuiTitlebarPopupKind::OpenTargets
         ) && content_height > popup_height;
         let content = self.build_gpui_titlebar_popup_content(
@@ -145,7 +144,11 @@ impl GhostexGpuiApp {
             is_minimizable: false,
             titlebar: None,
             // Under window glass the dropdown blurs what is behind it, rounded to its 8px panel.
-            window_background: if window_glass_active() {
+            // The usage panel opens without its glass and turns it on as it fades in, once it has
+            // fitted itself to its content (`reveal_popup_window` in account_usage/panel.rs).
+            window_background: if window_glass_active()
+                && !matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_))
+            {
                 WindowBackgroundAppearance::Blurred
             } else {
                 WindowBackgroundAppearance::Transparent
@@ -155,23 +158,12 @@ impl GhostexGpuiApp {
         let popup_window = match cx.open_window(options, {
             let content = content.clone();
             move |popup_window, cx| {
-                // The Share popover's glass panel is rounded 10px (share_popover_view.rs).
-                popup_window.set_background_corner_radius(px(
-                    if matches!(
-                        kind,
-                        GpuiTitlebarPopupKind::CollabShare | GpuiTitlebarPopupKind::Jobs
-                    ) {
-                        10.0
-                    } else {
-                        8.0
-                    },
-                ));
+                // Every dropdown, the Share and Jobs popovers included, is rounded like the
+                // menus' panel (`popup_menu_frame`).
+                popup_window.set_background_corner_radius(px(POPUP_MENU_RADIUS));
                 apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
-                if matches!(
-                    kind,
-                    GpuiTitlebarPopupKind::AccountUsage(_) | GpuiTitlebarPopupKind::Notifications
-                ) {
+                if matches!(kind, GpuiTitlebarPopupKind::Notifications) {
                     crate::app::window::popup_frame::fade_in_popup_window(
                         popup_window,
                         cx.reduce_motion(),
@@ -198,9 +190,6 @@ impl GhostexGpuiApp {
             trigger_bounds,
         });
         self.titlebar_popup_window = Some(popup_window);
-        if kind == GpuiTitlebarPopupKind::Tips {
-            self.request_gpui_titlebar_tips_runtime_status(cx);
-        }
         cx.notify();
     }
 
@@ -484,16 +473,6 @@ impl GhostexGpuiApp {
                     )
                 }))
             }
-            GpuiTitlebarPopupKind::More => {
-                GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.build_gpui_titlebar_more_popup_menu(
-                        menu,
-                        menu_width,
-                        menu_max_height,
-                        menu_scrollable,
-                    )
-                }))
-            }
             GpuiTitlebarPopupKind::OpenTargets => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
                     self.build_gpui_open_targets_popup_menu(
@@ -509,26 +488,6 @@ impl GhostexGpuiApp {
                 GpuiTitlebarPopupContent::Reading(
                     cx.new(|_| GpuiTitlebarReadingPanel::resources(main_app, snapshot)),
                 )
-            }
-            GpuiTitlebarPopupKind::Tips => {
-                let live_agent_ids = self
-                    .agents_workspace
-                    .terminal_sessions
-                    .iter()
-                    .filter(|session| session.presentation_state.is_running())
-                    .filter_map(|session| session.agent_icon)
-                    .filter_map(gpui_default_sidebar_agent_by_icon)
-                    .map(|agent| agent.agent_id.to_string())
-                    .collect();
-                GpuiTitlebarPopupContent::Reading(cx.new(|_| {
-                    GpuiTitlebarReadingPanel::tips(
-                        main_app,
-                        self.titlebar_tips_cli_status.clone(),
-                        self.titlebar_tips_agent_hook_status.clone(),
-                        live_agent_ids,
-                        self.titlebar_tips_sidebar_agent_ids.clone(),
-                    )
-                }))
             }
             GpuiTitlebarPopupKind::Notifications => {
                 let feed = self.notification_feed_state.clone();

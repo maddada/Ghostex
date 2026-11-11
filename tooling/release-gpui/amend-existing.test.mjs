@@ -14,7 +14,7 @@ import {
 import {
   customerDownloadUrl,
   DOWNLOADS_START,
-  IOS_DISCORD_URL,
+  IOS_APP_STORE_URL,
   renderIosAvailabilityNotes,
 } from './customer-downloads.mjs';
 import { releaseProvenanceAssetName } from './provenance.mjs';
@@ -270,7 +270,7 @@ describe('release notes merge', () => {
     expect(merged).toContain(customerDownloadUrl(VERSION, dmg));
     expect(merged).toContain(customerDownloadUrl(VERSION, apk));
     expect(merged).toContain(renderIosAvailabilityNotes());
-    expect(merged).toContain(`[Discord](${IOS_DISCORD_URL})`);
+    expect(merged).toContain(`[App Store](${IOS_APP_STORE_URL})`);
     expect(merged.indexOf('**Android:**')).toBeLessThan(merged.indexOf('iOS:'));
     expect(merged).not.toContain('## Download Ghostex');
     expect(merged).not.toContain('SHA256');

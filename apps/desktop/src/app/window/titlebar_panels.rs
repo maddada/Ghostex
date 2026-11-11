@@ -1,5 +1,4 @@
 mod resources;
-mod tips;
 
 // C1 wave-2 extraction: the titlebar popup/reading/tips/resources panel window entities moved verbatim out of main.rs (pure
 // move, no logic changes; items made pub(crate) so main.rs and sibling
@@ -25,13 +24,11 @@ pub(crate) enum GpuiTitlebarPopupKind {
     Extensions,
     Git,
     Help,
-    More,
     Notifications,
     OpenTargets,
     Resources,
     RemoteSites,
     SessionLinks,
-    Tips,
     Updates,
 }
 
@@ -48,13 +45,11 @@ impl GpuiTitlebarPopupKind {
             Self::Extensions => "extensions",
             Self::Git => "git",
             Self::Help => "help",
-            Self::More => "more",
             Self::Notifications => "notifications",
             Self::OpenTargets => "openTargets",
             Self::Resources => "resources",
             Self::RemoteSites => "remoteSites",
             Self::SessionLinks => "sessionLinks",
-            Self::Tips => "tips",
             Self::Updates => "updates",
         }
     }
@@ -111,13 +106,11 @@ impl GpuiTitlebarPopupWindow {
             GpuiTitlebarPopupKind::Extensions => "Ghostex Extensions",
             GpuiTitlebarPopupKind::Git => "Ghostex Commit",
             GpuiTitlebarPopupKind::Help => "Ghostex Help",
-            GpuiTitlebarPopupKind::More => "Ghostex More",
             GpuiTitlebarPopupKind::Notifications => "Ghostex Notifications",
             GpuiTitlebarPopupKind::OpenTargets => "Ghostex Open",
             GpuiTitlebarPopupKind::Resources => "Ghostex Resources",
             GpuiTitlebarPopupKind::RemoteSites => "Ghostex Remote Sites",
             GpuiTitlebarPopupKind::SessionLinks => "Ghostex Session Links",
-            GpuiTitlebarPopupKind::Tips => "Ghostex Tips",
             GpuiTitlebarPopupKind::Updates => "Ghostex Updates",
         });
         /*
@@ -215,30 +208,6 @@ impl GpuiTitlebarPopupWindow {
     ) {
         if let GpuiTitlebarPopupContent::AccountUsage(panel) = &self.content {
             panel.update(cx, |panel, cx| panel.update_account(account, cx));
-        }
-    }
-
-    pub(crate) fn update_tips_runtime_status(
-        &mut self,
-        payload: serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if let GpuiTitlebarPopupContent::Reading(panel) = &self.content {
-            panel.update(cx, |panel, cx| {
-                panel.update_tips_runtime_status(payload, cx);
-            });
-        }
-    }
-
-    pub(crate) fn update_tips_sidebar_agent_ids(
-        &mut self,
-        sidebar_agent_ids: HashSet<String>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if let GpuiTitlebarPopupContent::Reading(panel) = &self.content {
-            panel.update(cx, |panel, cx| {
-                panel.update_tips_sidebar_agent_ids(sidebar_agent_ids, cx);
-            });
         }
     }
 
@@ -358,28 +327,6 @@ impl Render for GpuiTitlebarPopupWindow {
                     this.close_from_popup_window(window, cx);
                 }),
             )
-            /*
-            The ⋯ window closes first and the row's own panel opens on the next
-            effect cycle: opening it inline would make the main app close this
-            window while this window is mid-update.
-            */
-            .on_action(
-                cx.listener(|this, action: &OpenGpuiTitlebarMoreMenuItem, window, cx| {
-                    let Some(item) =
-                        crate::app::titlebar::more_menu::GpuiTitlebarMoreMenuItem::from_index(
-                            action.item_index,
-                        )
-                    else {
-                        return;
-                    };
-                    this.update_main_window(cx, move |_, main_window, cx| {
-                        cx.defer_in(main_window, move |app, window, cx| {
-                            app.open_titlebar_more_menu_item(item, window, cx);
-                        });
-                    });
-                    this.close_from_popup_window(window, cx);
-                }),
-            )
             .on_action(cx.listener(|this, _: &BrowseGpuiExtensions, window, cx| {
                 this.update_main_window(cx, |app, main_window, cx| {
                     app.open_gpui_settings_extensions_page(Some(main_window), cx);
@@ -424,24 +371,6 @@ impl Render for GpuiTitlebarPopupWindow {
                             GpuiTitlebarGitMenuActionId::SyncRemote.selector(),
                             cx,
                         );
-                    });
-                }),
-            )
-            .on_action(cx.listener(
-                |this, action: &RunGpuiTitlebarTipsHeaderAction, _window, cx| {
-                    this.update_main_window(cx, |app, window, cx| {
-                        app.run_gpui_titlebar_tips_header_action(
-                            action.action_index as usize,
-                            window,
-                            cx,
-                        );
-                    });
-                },
-            ))
-            .on_action(
-                cx.listener(|this, action: &RunGpuiTitlebarTip, _window, cx| {
-                    this.update_main_window(cx, |app, window, cx| {
-                        app.run_gpui_titlebar_tip(action.tip_index as usize, window, cx);
                     });
                 }),
             )
@@ -525,14 +454,6 @@ impl Render for GpuiTitlebarPopupWindow {
 }
 
 pub(crate) enum GpuiTitlebarReadingPanelState {
-    Tips {
-        agent_hook_status: Option<serde_json::Value>,
-        cli_status: Option<serde_json::Value>,
-        live_agent_ids: HashSet<String>,
-        read_ids: HashSet<String>,
-        /// Built-in agent ids the sidebar launchers use; `None` while the HUD read is still pending.
-        sidebar_agent_ids: Option<HashSet<String>>,
-    },
     Resources {
         /// Clean RAM just copied its prompt; the button reads "Copied" until
         /// the reset timer clears this.
@@ -558,76 +479,7 @@ pub(crate) struct GpuiTitlebarReadingPanel {
     pub(super) state: GpuiTitlebarReadingPanelState,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum GpuiNativeTitlebarNoticeTarget {
-    AgentHooks,
-    DebuggingMode,
-    GhostexCli,
-}
-
-pub(crate) struct GpuiNativeTitlebarNotice {
-    body: String,
-    target: GpuiNativeTitlebarNoticeTarget,
-    title: String,
-}
-
 impl GpuiTitlebarReadingPanel {
-    pub(crate) fn tips(
-        main_app: gpui::WeakEntity<GhostexGpuiApp>,
-        cli_status: Option<serde_json::Value>,
-        agent_hook_status: Option<serde_json::Value>,
-        live_agent_ids: HashSet<String>,
-        sidebar_agent_ids: Option<HashSet<String>>,
-    ) -> Self {
-        Self {
-            main_app,
-            scroll_handle: ScrollHandle::new(),
-            state: GpuiTitlebarReadingPanelState::Tips {
-                agent_hook_status,
-                cli_status,
-                live_agent_ids,
-                read_ids: gpui_titlebar_tips_read_ids_from_settings(),
-                sidebar_agent_ids,
-            },
-        }
-    }
-
-    pub(crate) fn update_tips_sidebar_agent_ids(
-        &mut self,
-        next_sidebar_agent_ids: HashSet<String>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let GpuiTitlebarReadingPanelState::Tips {
-            sidebar_agent_ids, ..
-        } = &mut self.state
-        else {
-            return;
-        };
-        *sidebar_agent_ids = Some(next_sidebar_agent_ids);
-        cx.notify();
-    }
-
-    pub(crate) fn update_tips_runtime_status(
-        &mut self,
-        payload: serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let GpuiTitlebarReadingPanelState::Tips {
-            agent_hook_status,
-            cli_status,
-            ..
-        } = &mut self.state
-        else {
-            return;
-        };
-        match payload.get("type").and_then(serde_json::Value::as_str) {
-            Some("ghostexCliStatus") => *cli_status = Some(payload),
-            Some("agentHookStatus") => *agent_hook_status = Some(payload),
-            _ => return,
-        }
-        cx.notify();
-    }
-
     /// CDXC:Resources 2026-09-07 DECISION:
     /// User: closing and reopening Resources must collapse all rows. Each new panel records only explicit expansions, so hidden sections cannot shift the initial collapse indexes.
     pub(crate) fn resources(
@@ -652,7 +504,6 @@ impl GpuiTitlebarReadingPanel {
         let _ = self.main_app.update_in(cx, |app, _main_window, cx| {
             app.clear_gpui_titlebar_popup_from_window(
                 match self.state {
-                    GpuiTitlebarReadingPanelState::Tips { .. } => GpuiTitlebarPopupKind::Tips,
                     GpuiTitlebarReadingPanelState::Resources { .. } => {
                         GpuiTitlebarPopupKind::Resources
                     }
@@ -664,57 +515,6 @@ impl GpuiTitlebarReadingPanel {
             );
         });
         window.remove_window();
-    }
-
-    fn run_tip_header_action(
-        &self,
-        action_index: usize,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.main_app.update_in(cx, |app, main_window, cx| {
-            app.run_gpui_titlebar_tips_header_action(action_index, main_window, cx);
-        });
-        self.close_popup(window, cx);
-    }
-
-    fn open_tip_action(
-        &mut self,
-        tip_index: usize,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.main_app.update_in(cx, |app, main_window, cx| {
-            app.run_gpui_titlebar_tip(tip_index, main_window, cx);
-        });
-        self.close_popup(window, cx);
-    }
-
-    fn mark_tip_read(&mut self, tip_index: usize, cx: &mut gpui::Context<Self>) {
-        let Some(tip) = GPUI_NATIVE_TITLEBAR_TIPS.get(tip_index) else {
-            return;
-        };
-        gpui_mark_titlebar_tip_read(tip.id);
-        if let GpuiTitlebarReadingPanelState::Tips { read_ids, .. } = &mut self.state {
-            read_ids.insert(tip.id.to_string());
-        }
-        let _ = self.main_app.update_in(cx, |app, _window, cx| {
-            app.titlebar_tips_unread_count = gpui_titlebar_tips_unread_count_from_settings();
-            cx.notify();
-        });
-        cx.notify();
-    }
-
-    fn open_notice_settings(
-        &self,
-        target: GpuiNativeTitlebarNoticeTarget,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.main_app.update_in(cx, |app, main_window, cx| {
-            app.open_gpui_titlebar_notice_settings(target, main_window, cx);
-        });
-        self.close_popup(window, cx);
     }
 
     fn run_resource_secondary_action(
@@ -778,9 +578,6 @@ impl GpuiTitlebarReadingPanel {
 impl Render for GpuiTitlebarReadingPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         match self.state {
-            GpuiTitlebarReadingPanelState::Tips { .. } => {
-                resource_panel_frame().child(self.render_tips(cx))
-            }
             GpuiTitlebarReadingPanelState::Resources { .. } => {
                 resource_panel_frame().child(self.render_resources(cx))
             }

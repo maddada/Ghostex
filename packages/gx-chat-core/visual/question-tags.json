@@ -6,8 +6,8 @@
   "gap": 3,
   "states": {
     "open": {
-      "dark": { "text": "#d2b48f", "border": "#c9a47a", "borderAlpha": 0.34 },
-      "light": { "text": "#8a6339", "border": "#a97a4a", "borderAlpha": 0.34 }
+      "dark": { "text": "#f472b6", "border": "#f472b6", "borderAlpha": 0.4 },
+      "light": { "text": "#be185d", "border": "#be185d", "borderAlpha": 0.4 }
     },
     "answered": {
       "dark": { "text": "#a3c9aa", "border": "#8fbf99", "borderAlpha": 0.3 },

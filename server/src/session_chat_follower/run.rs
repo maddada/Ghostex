@@ -122,6 +122,8 @@ pub async fn run_session_chat_follower(
     // session stopped, the daemon went away) must not put the composer back
     // under a loading skeleton.
     let mut published_screen_probed = false;
+    // Whether the agent is gone with no notice saying so (`agentGone`), last published.
+    let mut published_agent_gone = false;
     // The statusline watch fired during the resolve-poll sleep; the next pass probes for it.
     let mut statusline_landed = false;
     let mut reconcile_ticks: u64 = 0;
@@ -308,7 +310,8 @@ pub async fn run_session_chat_follower(
                         detection.workflows.as_ref(),
                         published_workflows.as_ref(),
                     )
-                    || (detection.attempted && !published_screen_probed);
+                    || (detection.attempted && !published_screen_probed)
+                    || (detection.captured && detection.agent_gone != published_agent_gone);
                 if !emitted_starting || starting_changed {
                     emit_state_frame(
                         &emit,
@@ -327,12 +330,14 @@ pub async fn run_session_chat_follower(
                             tasks: detection.tasks.as_ref(),
                             workflows: detection.workflows.as_ref(),
                             probed: published_screen_probed || detection.attempted,
+                            agent_gone: detection.agent_gone,
                         },
                     );
                     if options_changed {
                         published_options = detection.options;
                     }
                     published_notice = detection.notice;
+                    published_agent_gone = detection.agent_gone;
                     published_activity = activity;
                     published_fleet = detection.fleet;
                     published_tasks = detection.tasks;
@@ -489,8 +494,10 @@ pub async fn run_session_chat_follower(
                         tasks: snapshot_detection.tasks.as_ref(),
                         workflows: snapshot_detection.workflows.as_ref(),
                         probed: published_screen_probed || snapshot_detection.attempted,
+                        agent_gone: snapshot_detection.agent_gone,
                     },
                 );
+                published_agent_gone = snapshot_detection.agent_gone;
                 published_screen_probed = published_screen_probed || snapshot_detection.attempted;
                 if snapshot_detection.options.is_some() {
                     published_options = snapshot_detection.options;
@@ -688,6 +695,7 @@ pub async fn run_session_chat_follower(
                         tasks: published_tasks.as_ref(),
                         workflows: published_workflows.as_ref(),
                         probed: published_screen_probed,
+                        agent_gone: published_agent_gone,
                     },
                 );
             }
@@ -913,6 +921,8 @@ pub async fn run_session_chat_follower(
                 };
                 let prompt_changed = detected_prompt != published_prompt;
                 let probed_changed = detection.attempted && !published_screen_probed;
+                let agent_gone_changed =
+                    detection.captured && detection.agent_gone != published_agent_gone;
                 if options_changed
                     || working_changed
                     || notice_changed
@@ -922,6 +932,7 @@ pub async fn run_session_chat_follower(
                     || workflows_changed
                     || prompt_changed
                     || probed_changed
+                    || agent_gone_changed
                 {
                     if options_changed {
                         published_options = detection.options;
@@ -945,6 +956,9 @@ pub async fn run_session_chat_follower(
                         published_prompt = detected_prompt;
                     }
                     published_screen_probed = published_screen_probed || detection.attempted;
+                    if agent_gone_changed {
+                        published_agent_gone = detection.agent_gone;
+                    }
                     emit_state_frame(
                         &emit,
                         &config,
@@ -966,6 +980,7 @@ pub async fn run_session_chat_follower(
                             tasks: published_tasks.as_ref(),
                             workflows: published_workflows.as_ref(),
                             probed: published_screen_probed,
+                            agent_gone: published_agent_gone,
                         },
                     );
                 }

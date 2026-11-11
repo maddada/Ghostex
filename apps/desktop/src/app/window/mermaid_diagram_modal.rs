@@ -383,33 +383,50 @@ impl GpuiMermaidDiagramModalWindow {
                     cx,
                 ));
         }
-        actions = actions
-            .child(self.toolbar_button(
-                "mermaid-copy",
-                if self.copied { ICON_COPIED } else { ICON_COPY },
-                if self.copied { "Copied" } else { "Copy source" },
-                true,
-                |this, cx| this.copy_source(cx),
-                cx,
-            ))
-            .child(self.toolbar_button(
-                "mermaid-close",
-                ICON_CLOSE,
-                "Close",
-                true,
-                |this, cx| this.close(cx),
-                cx,
-            ));
+        actions = actions.child(self.toolbar_button(
+            "mermaid-copy",
+            if self.copied { ICON_COPIED } else { ICON_COPY },
+            if self.copied { "Copied" } else { "Copy source" },
+            true,
+            |this, cx| this.copy_source(cx),
+            cx,
+        ));
+        let close = self.toolbar_button(
+            "mermaid-close",
+            ICON_CLOSE,
+            "Close",
+            true,
+            |this, cx| this.close(cx),
+            cx,
+        );
+        // The X leads the toolbar on macOS (CDXC:AppModal 2026-11-10 in
+        // window/round_close_button.rs), and ends it elsewhere.
+        let (leading_close, trailing_close) = if super::round_close_button::close_buttons_on_left()
+        {
+            (Some(close), None)
+        } else {
+            (None, Some(close))
+        };
         h_flex()
             .flex_shrink_0()
             .items_center()
             .justify_between()
             .gap(px(6.0))
-            .p(px(6.0))
+            // 9pt at the sides: the 32pt mode switch makes the row taller than the 26pt X, which
+            // then sits 3pt lower, so this keeps the X as far from the window's side as from its
+            // top (CDXC:SessionChat 2026-11-11 in visual_page_modal/band_geometry.rs).
+            .px(px(9.0))
+            .py(px(6.0))
             .border_b_1()
             .border_color(hsla(p.hairline))
-            .child(div().w(px(180.0)).child(mode))
-            .child(actions)
+            .child(
+                h_flex()
+                    .items_center()
+                    .gap(px(6.0))
+                    .children(leading_close)
+                    .child(div().w(px(180.0)).child(mode)),
+            )
+            .child(actions.children(trailing_close))
             .into_any_element()
     }
 

@@ -18,7 +18,7 @@ use crate::paths::{get_gxserver_paths, GxserverPaths};
 /// CDXC:MarkedHandovers 2026-10-14 DECISION:
 /// User: "change our skill/instructions/memory so that we capitalize bullets". Every bullet and sub-bullet starts with a capital letter, even when it continues a lead-in sentence, so no lowercase starts and no list-ending semicolons or "and" chains; the note, the orchestrator playbook (coordinators/role.md) and the thread brief (coordinators/brief.rs) all say it.
 /// CDXC:MarkedHandovers 2026-10-24 DECISION:
-/// User: "this shouldn't have been \"waiting for you\" it should've been under Needs you ... I didn't know u needed me here". Anything that waits on the user (a check only they can do, a sign-in, a thread kept open until they try something) goes under ❓ Needs you with what to do, never under 🔄 In progress or 🧪 Untested; In progress is only work that carries on without them. The orchestrator playbook (skills/ghostex-orchestrator/SKILL.md) says the same.
+/// User: "this shouldn't have been \"waiting for you\" it should've been under Needs you ... I didn't know u needed me here". Anything that waits on the user (a check only they can do, a sign-in, a thread kept open until they try something) goes under ❓ Needs you with what to do, never under 🔄 In progress or 🧪 Untested; In progress is only work that carries on without them. The orchestrator playbook (skills/ghostex-coordinator/SKILL.md) says the same.
 /// CDXC:MarkedHandovers 2026-11-05 DECISION:
 /// User (Q1232, Q1233): four more sections, 💡 Suggestions, ⏸️ Parked (so In progress lists only running work), 📦 Held for release and 📣 Comms (the user renamed "Posted" to "Comms"); "we should only send the ones that the user needs to see": a section appears only when it has something; and "move Suggestions, Needs you, Blocked and other ones like that that I must pay attention to at the bottom of the messages u send so i don't miss them". Status sections (✅ 🚀 📣 🛫 🔄 📦 🧪) come first and actionable ones (⚠️ 🛑 💡 ❓) last, with ❓ Needs you the very last. ⚠️ Read this sits with the actionable ones because it is something the user must take in before acting, not a report of what happened.
 /// CDXC:MarkedHandovers 2026-11-05 DECISION:
@@ -56,10 +56,21 @@ pub(crate) fn marked_handovers_enabled(paths: &GxserverPaths) -> bool {
     bool_setting(paths, SETTING_KEY)
 }
 
-/// Whether orchestrators answer without markers (no note in their role), read fresh like
-/// [`marked_handovers_enabled`].
+/// Whether Coordinators answer without markers is on, read fresh like
+/// [`marked_handovers_enabled`]. It only matters while Marked handovers is on (see
+/// [`coordinator_marks_replies`]).
 pub(crate) fn orchestrator_plain_replies(paths: &GxserverPaths) -> bool {
     bool_setting(paths, ORCHESTRATOR_PLAIN_SETTING_KEY)
+}
+
+/// Whether a coordinator writes its replies as marked sections: Marked handovers is on and
+/// Coordinators answer without markers is off. Since 2026-11-11 a coordinator follows the Marked
+/// handovers setting like every other session (CDXC:Coordinators 2026-11-11 DECISION in
+/// coordinators/role.rs `coordinator_guide_for`), which supersedes "orchestrators get it unless
+/// Orchestrators answer without markers is on" in the 2026-10-17 decision above; threads still
+/// mark their reports whatever the settings say.
+pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
+    marked_handovers_enabled(paths) && !orchestrator_plain_replies(paths)
 }
 
 fn bool_setting(paths: &GxserverPaths, key: &str) -> bool {
@@ -73,7 +84,7 @@ fn bool_setting(paths: &GxserverPaths, key: &str) -> bool {
 }
 
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
-/// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless they answer without markers; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-orchestrator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
+/// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless they answer without markers; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-coordinator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
 /// CDXC:AgentGuide 2026-11-02 WHY:
 /// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file) and Droid (`--append-system-prompt-file`) get the joined text through their own flags; OpenCode, Gemini, Cursor, Copilot, Amp and the rest have no flag Ghostex can use and get the note as the `ghostex-agent-guide` skill instead.
 /// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with), server/src/agents/ghostex_note.rs.
@@ -93,7 +104,7 @@ pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &st
         let role_file = crate::coordinators::coordinator_role_file(&paths);
         if command.contains(role_file.to_string_lossy().as_ref()) {
             // A Claude orchestrator reads its role file at every start and resume, so it is
-            // rewritten here to follow Orchestrators answer without markers; its note is the role's.
+            // rewritten here to follow the Marked handovers settings; its note is the role's.
             let _ = crate::coordinators::ensure_coordinator_role_file(&paths);
             return command.to_string();
         }
@@ -102,8 +113,8 @@ pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &st
         let pointer_arg = crate::coordinators::codex_developer_instructions_arg(
             crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS,
         );
-        // An older Codex coordinator keeps only its guide pointer: its work item cards take over
-        // the handover's sections (coordinators/role.rs `COORDINATOR_REPLY_FORMAT`).
+        // An older Codex coordinator keeps only its guide pointer: the guide it points to ends
+        // with the reply format (coordinators/role.rs `coordinator_guide_for`).
         if command.contains(&pointer_arg) {
             return command.to_string();
         }

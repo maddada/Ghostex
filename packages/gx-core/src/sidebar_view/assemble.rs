@@ -361,6 +361,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         .filter(|group_id| !owner_project_collapsed(group_id, input.ui))
         .collect();
     fold_hidden_group_summaries(&mut groups, input.ui);
+    mark_inactive_projects(&mut groups);
     mark_projects_holding_active_session_group(&mut groups);
     let mut collections: Vec<CollectionView> = Vec::new();
     let mut order: Vec<OrderItem> = Vec::new();
@@ -620,6 +621,8 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         chiefs: Vec::new(),
         home_headers: Vec::new(),
         machines_with_home: Vec::new(),
+        // Filled by the caller from the merge (`merged.rs`).
+        project_copies: Default::default(),
         show_all_projects_row: (empty_projects > 0).then_some(ShowAllProjectsRow {
             empty_projects,
             showing: input.ui.show_all_projects,
@@ -694,7 +697,12 @@ fn empty_state(
             can_add_project,
             copy: copy.to_string(),
             detail: detail.to_string(),
-            action_label: TRY_NOW_LABEL.to_string(),
+            // Nothing is wrong while Ghostex is still starting, so there is nothing to retry.
+            action_label: if wait == DaemonWait::Starting {
+                String::new()
+            } else {
+                TRY_NOW_LABEL.to_string()
+            },
             ..EmptyState::default()
         };
     }
@@ -893,6 +901,7 @@ fn fold_hidden_group_summaries(groups: &mut [GroupView], ui: &SidebarUiState) {
         total.question_count += summary.question_count;
         total.approval_count += summary.approval_count;
         total.awake_count += summary.awake_count;
+        total.running_count += summary.running_count;
     }
     if hidden
         .values()
@@ -914,7 +923,33 @@ fn fold_hidden_group_summaries(groups: &mut [GroupView], ui: &SidebarUiState) {
         core.summary.question_count += total.question_count;
         core.summary.approval_count += total.approval_count;
         core.summary.awake_count += total.awake_count;
+        core.summary.running_count += total.running_count;
         group.core = std::sync::Arc::new(core);
+    }
+}
+
+/// Sets `inactive` on every project group: nothing in it or in its session groups runs, works or
+/// waits on the user (the "Dim inactive projects" setting dims those headers).
+fn mark_inactive_projects(groups: &mut [GroupView]) {
+    let mut busy: BTreeSet<String> = BTreeSet::new();
+    for group in groups.iter() {
+        if !group.core.summary.is_quiet() {
+            busy.insert(
+                owner_project_group_id(&group.core.group_id)
+                    .unwrap_or_else(|| group.core.group_id.clone()),
+            );
+        }
+    }
+    for group in groups.iter_mut() {
+        if owner_project_group_id(&group.core.group_id).is_some() {
+            continue;
+        }
+        let inactive = !busy.contains(&group.core.group_id);
+        if group.core.summary.inactive != inactive {
+            let mut core = (*group.core).clone();
+            core.summary.inactive = inactive;
+            group.core = std::sync::Arc::new(core);
+        }
     }
 }
 

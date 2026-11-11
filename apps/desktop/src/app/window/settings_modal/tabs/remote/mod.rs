@@ -65,6 +65,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 use style::RemoteTokens;
+pub(crate) use tailscale::{TAILSCALE_OFF_NOTE, TailscaleCheck, tailscale_checklist_of_status};
 
 /// A request timeout for the polls and quick actions.
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
@@ -732,16 +733,75 @@ impl RemoteTab {
             |this, result, cx| {
                 match result.and_then(|value| read_tailcat_status_result(&value)) {
                     Ok(status) => {
+                        // Turning Easy Connect on without the helper starts its install.
+                        let installing = status.installing;
                         this.easy_connect = Some(status);
                         this.request_error = None;
                         // The address is published a moment after the sidecar starts.
                         this.refresh_fast(cx);
+                        if installing {
+                            this.follow_easy_connect_install(cx);
+                        }
                     }
                     Err(error) => this.request_error = Some(error),
                 }
                 cx.notify();
             },
         );
+    }
+
+    /// Install of the Easy Connect helper (`/api/installTailcat`, which returns at once and runs in
+    /// gxserver); the card reads the install's step every second until it ends.
+    pub(super) fn install_easy_connect_helper(&mut self, cx: &mut Context<Self>) {
+        if !self.rpc_available(cx) || self.install_pending {
+            return;
+        }
+        self.install_pending = true;
+        self.install_request_error = None;
+        cx.notify();
+        self.rpc(
+            "/api/installTailcat",
+            json!({}),
+            RPC_TIMEOUT,
+            cx,
+            |this, result, cx| {
+                this.install_pending = false;
+                match result.and_then(|value| read_tailcat_status_result(&value)) {
+                    Ok(status) => {
+                        let installing = status.installing;
+                        this.easy_connect = Some(status);
+                        if installing {
+                            this.follow_easy_connect_install(cx);
+                        }
+                    }
+                    Err(error) => this.install_request_error = Some(error),
+                }
+                cx.notify();
+            },
+        );
+    }
+
+    /// Reads the Easy Connect status every second while the helper installs.
+    fn follow_easy_connect_install(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
+                let installing = this
+                    .update(cx, |this, cx| {
+                        this.refresh_fast(cx);
+                        this.easy_connect
+                            .as_ref()
+                            .is_some_and(|status| status.installing)
+                    })
+                    .unwrap_or(false);
+                if !installing {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     /// `enableSshAccess`: one admin prompt; a cancelled or failed attempt shows under the button.
@@ -1219,7 +1279,7 @@ impl RemoteTab {
                     "Relay, ports, allowed keys, the pairing address, raw status".to_string()
                 }
             };
-            rows.push(style::fold_row(
+            let header = style::fold_row(
                 t,
                 fold.anchor(),
                 fold.title(),
@@ -1227,22 +1287,25 @@ impl RemoteTab {
                 open,
                 move |tab: &mut Self, _window, cx| tab.toggle_fold(fold, cx),
                 cx,
-            ));
+            );
             if !open {
+                rows.push(style::fold_group(t, header, Vec::new()));
                 continue;
             }
-            match fold {
+            // What an open fold holds is set in under its header (CDXC:Settings 2026-11-10 on
+            // `style::fold_row`).
+            let body = match fold {
                 RemoteFold::ThisComputer => {
-                    rows.extend(current_machine::this_computer_rows(self, t, window, cx));
+                    current_machine::this_computer_rows(self, t, window, cx)
                 }
-                RemoteFold::Tailscale => rows.push(
+                RemoteFold::Tailscale => vec![
                     div()
                         .w_full()
                         .p(px(12.0))
                         .child(tailscale::tailscale_panel(self, t, cx))
                         .into_any_element(),
-                ),
-                RemoteFold::Advanced => rows.push(
+                ],
+                RemoteFold::Advanced => vec![
                     div()
                         .w_full()
                         .p(px(12.0))
@@ -1252,8 +1315,9 @@ impl RemoteTab {
                             no_server_line(t)
                         })
                         .into_any_element(),
-                ),
-            }
+                ],
+            };
+            rows.push(style::fold_group(t, header, body));
         }
         paired_devices::rows_frame(t, rows)
     }

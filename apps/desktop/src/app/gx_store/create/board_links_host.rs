@@ -381,6 +381,19 @@ async fn start_worktree_work(
             .map(project_id)
             .filter(|id| !id.is_empty())
             .ok_or("gxserver did not register the new checkout as a worktree project.")?;
+        let _ = this.update(cx, |this, cx| {
+            let place = crate::app::gx_store::git::worktree_warning_place(
+                board.get("name").and_then(Value::as_str),
+                board.get("path").and_then(Value::as_str),
+                None,
+            );
+            let identity = crate::app::gx_store::git::worktree_warning_identity(
+                "local",
+                board.get("path").and_then(Value::as_str),
+                &project_id(board),
+            );
+            this.git_show_worktree_warnings(&response, &place, &identity, cx)
+        });
         let session = create_agent_record(
             this,
             cx,

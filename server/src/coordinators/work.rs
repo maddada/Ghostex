@@ -33,8 +33,11 @@ use serde_json::{json, Map, Value};
 use super::records::{now_iso, sql_error, SessionKey};
 use crate::domain::DomainStateError;
 
-/// The statuses, in the order the Work panel lists them: Needs you first.
-pub const WORK_STATUSES: [&str; 6] = ["needs", "blocked", "moving", "waiting", "later", "finished"];
+/// The statuses, in the order the Work panel lists them: Needs you first. `idle` (Not being worked
+/// on) is never stored: it is what an In progress item nobody is on is shown as (`derive`).
+pub const WORK_STATUSES: [&str; 7] = [
+    "needs", "blocked", "moving", "idle", "waiting", "later", "finished",
+];
 
 /// How many history events an item keeps.
 const HISTORY_KEEP: usize = 40;
@@ -63,7 +66,16 @@ pub struct WorkThread {
 pub struct WorkAsk {
     /// Its question tag (`Q2101`), "" for an ask moved from the board without one.
     pub tag: String,
+    /// What it asks, as its title: one short plain question or instruction.
     pub text: String,
+    /// The longer explanation under the title (why, what to check, where), "" for none; asks
+    /// stored before it read as "".
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, of dock rows showing the first words of a whole paragraph: "please we need to tell
+    /// the agent to write a easy to understand title, and then the description can describe
+    /// more". `item ask W7 "<title>" --detail "<the rest>"`.
+    pub detail: String,
     /// One-click answers, the recommended one ending in `*` ("Yes*,No"); "" for a task.
     pub answers: String,
     /// The work stops until the user does it: the item is Blocked while it is open.
@@ -76,6 +88,9 @@ pub struct WorkAsk {
     /// Answered, done or withdrawn.
     pub settled_at: Option<String>,
     pub withdrawn: bool,
+    /// Snoozed by the user until this moment (ISO): out of the dock and the Needs you count until
+    /// then, still listed in the Work panel (`snooze` below).
+    pub snoozed_until: Option<String>,
 }
 
 impl WorkAsk {
@@ -109,7 +124,8 @@ pub struct WorkStep {
 #[serde(rename_all = "camelCase", default)]
 pub struct WorkEvent {
     pub at: String,
-    /// add, now, step, ask, answer, wait, done, drop, restore, status, thread, edit, moved, settle.
+    /// add, now, step, ask, answer, reply, wait, done, drop, restore, status, thread, edit, moved,
+    /// settle.
     pub kind: String,
     pub text: String,
     /// The coordinator's status after the change.
@@ -408,6 +424,7 @@ pub fn status_heading(status: &str) -> &'static str {
         // the board: "rename to in progress please"). Wherever the user reads it, the `moving` status is
         // "In progress"; the stored value stays `moving` and `--status` takes `moving` or `in-progress`.
         "moving" => "In progress",
+        "idle" => "Not being worked on",
         "waiting" => "Waiting",
         "later" => "Later",
         "finished" => "Finished",
@@ -429,6 +446,9 @@ fn text(value: &Value, key: &str) -> String {
 pub struct WorkContext<'a> {
     threads: HashMap<(String, String), &'a Value>,
     items: &'a [WorkItem],
+    /// An In progress item with no thread on it that the coordinator last changed before this is
+    /// not being worked on (turns.rs `idle_floor`); `None` keeps every such item In progress.
+    idle_floor: Option<DateTime<Utc>>,
 }
 
 impl<'a> WorkContext<'a> {
@@ -439,6 +459,33 @@ impl<'a> WorkContext<'a> {
                 .map(|row| ((text(row, "projectId"), text(row, "sessionId")), row))
                 .collect(),
             items,
+            idle_floor: None,
+        }
+    }
+
+    /// The same, telling items nobody is on from the ones the coordinator is on (turns.rs).
+    pub fn with_idle_floor(mut self, floor: Option<DateTime<Utc>>) -> Self {
+        self.idle_floor = floor;
+        self
+    }
+
+    /// The coordinator's own In progress for `item`, or Not being worked on when it last changed
+    /// the item before the start of its last turn.
+    fn coordinator_on(&self, item: &WorkItem) -> (&'static str, Value) {
+        let idle = self.idle_floor.is_some_and(|floor| {
+            DateTime::parse_from_rfc3339(coordinator_changed_at(item))
+                .is_ok_and(|at| at.with_timezone(&Utc) < floor)
+        });
+        if idle && item.asks.iter().any(WorkAsk::is_open) {
+            // Nobody is on it but it asks the user something: the ball is theirs.
+            ("needs", json!({ "kind": "user", "label": "You" }))
+        } else if idle {
+            ("idle", json!({ "kind": "", "label": "" }))
+        } else {
+            (
+                "moving",
+                json!({ "kind": "coordinator", "label": "Coordinator" }),
+            )
         }
     }
 
@@ -479,6 +526,16 @@ impl<'a> WorkContext<'a> {
         }
         out
     }
+}
+
+/// When the coordinator last changed the item itself: its newest history event that is not the
+/// user's (an answer, a settled ask) or a move from the board, else its creation.
+pub fn coordinator_changed_at(item: &WorkItem) -> &str {
+    item.history
+        .iter()
+        .rev()
+        .find(|event| !matches!(event.kind.as_str(), "answer" | "settle" | "moved"))
+        .map_or(item.created_at.as_str(), |event| event.at.as_str())
 }
 
 /// `W12`, `w12`, `B12` (the board's name for the same item) or `12`.
@@ -556,12 +613,7 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
             None if waits.is_empty() => {
                 return ("waiting", json!({ "kind": "outside", "label": "" }));
             }
-            None => {
-                return (
-                    "moving",
-                    json!({ "kind": "coordinator", "label": "Coordinator" }),
-                )
-            }
+            None => return context.coordinator_on(item),
         }
     }
     if item.status == "moving" {
@@ -572,10 +624,7 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
         {
             return ("moving", thread_owner(row));
         }
-        return (
-            "moving",
-            json!({ "kind": "coordinator", "label": "Coordinator" }),
-        );
+        return context.coordinator_on(item);
     }
     if item.asks.iter().any(WorkAsk::is_open) || item.status == "needs" {
         return ("needs", you());
@@ -654,7 +703,11 @@ fn ask_value(ask: &WorkAsk) -> Value {
         "open": ask.is_open(),
         "askedAt": ask.asked_at,
     });
-    for (key, value) in [("steps", &ask.steps), ("answered", &ask.answered)] {
+    for (key, value) in [
+        ("detail", &ask.detail),
+        ("steps", &ask.steps),
+        ("answered", &ask.answered),
+    ] {
         if !value.is_empty() {
             out[key] = json!(value);
         }
@@ -664,6 +717,22 @@ fn ask_value(ask: &WorkAsk) -> Value {
     }
     if ask.withdrawn {
         out["withdrawn"] = json!(true);
+    }
+    // A snooze still running; one that has ended reads as if there was none.
+    if let Some((until, at)) = ask.snoozed_until.as_deref().and_then(|until| {
+        let at = DateTime::parse_from_rfc3339(until)
+            .ok()?
+            .with_timezone(&Local);
+        (at.with_timezone(&Utc) > Utc::now()).then_some((until, at))
+    }) {
+        out["snoozedUntil"] = json!(until);
+        // "3:40 PM", or "Tue 9:40 AM" past today, as the Work panel says it.
+        let label = if at.date_naive() == Local::now().date_naive() {
+            at.format("%-I:%M %p").to_string()
+        } else {
+            at.format("%a %-I:%M %p").to_string()
+        };
+        out["snoozedUntilLabel"] = json!(label);
     }
     out
 }
@@ -764,6 +833,11 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
     if item.untested {
         out["untested"] = json!(true);
     }
+    // The user said Done on it and the coordinator has not changed it since: its cards show Done
+    // as given (gx-chat-core `work_panel`).
+    if said_done(item) {
+        out["saidDone"] = json!(true);
+    }
     // Its link as the board showed it: a PR with its checks, an issue, a ticket or a file.
     if !item.link.is_empty() {
         super::board::note_item_github_link(&item.link);
@@ -858,8 +932,14 @@ fn loose_threads(threads: &[Value], items: &[WorkItem], now: DateTime<Utc>) -> V
 
 /// The coordinator's work: every item (`all`) or the chat's copy (live items, and the finished and
 /// dropped ones of the last few days with a short history), and every thread on no item.
-pub fn work_value(threads: &[Value], items: &[WorkItem], all: bool, now: DateTime<Utc>) -> Value {
-    let context = WorkContext::new(threads, items);
+pub fn work_value(
+    threads: &[Value],
+    items: &[WorkItem],
+    all: bool,
+    now: DateTime<Utc>,
+    idle_floor: Option<DateTime<Utc>>,
+) -> Value {
+    let context = WorkContext::new(threads, items).with_idle_floor(idle_floor);
     let today = now.with_timezone(&Local).date_naive();
     let mut rows: Vec<Value> = items
         .iter()
@@ -912,6 +992,32 @@ pub fn work_value(threads: &[Value], items: &[WorkItem], all: bool, now: DateTim
         })
         .collect();
     json!({ "items": rows, "asks": asks, "counts": counts })
+}
+
+/// What `item list` and `status` tell the coordinator about its items nobody is on (`idle`), or
+/// `None` when there are none. It only asks: Ghostex never finishes an item itself.
+pub fn idle_notice(work: &Value) -> Option<String> {
+    let idle: Vec<String> = work["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| item["status"] == "idle")
+        .map(|item| format!("{} {}", text(item, "ref"), text(item, "title")))
+        .collect();
+    let first = idle.first()?.split(' ').next().unwrap_or("W1").to_string();
+    Some(format!(
+        "Not being worked on (In progress, but no thread is on it and you have not changed it since your last turn): {}. Finished? Mark it done: `ghostex coordinator item done {first} \"<what was done>\"`. Otherwise say what it waits on (`item wait {first} --on ...`), ask the user (`item ask`), or say where it stands now (`item now`).",
+        idle.join("; ")
+    ))
+}
+
+/// [`idle_notice`] for one coordinator, read from its items and its panel's thread rows.
+pub fn idle_notice_for(db: &Connection, key: &SessionKey) -> Option<String> {
+    let items = list_work_items(db, key).ok()?;
+    let threads = super::panel::cached_thread_rows(key);
+    let now = Utc::now();
+    let floor = super::turns::idle_floor_for(db, key, now);
+    idle_notice(&work_value(&threads, &items, false, now, Some(floor)))
 }
 
 fn param_text(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -1017,10 +1123,19 @@ fn finish_if_only_asking(item: &mut WorkItem, at: &str) {
     }
 }
 
+/// Whether the user said Done on the item (it had no open question) and the coordinator has not
+/// changed it since: its latest change is that answer.
+fn said_done(item: &WorkItem) -> bool {
+    item.history.last().is_some_and(|event| {
+        event.kind == "answer" && event.text == "Done" && event.at == item.updated_at
+    })
+}
+
 /// What a request for an item answers: the item as clients and the CLI read it.
 fn answer(item: &WorkItem, threads: &[Value], db: &Connection, key: &SessionKey) -> Value {
     let items = list_work_items(db, key).unwrap_or_default();
-    let context = WorkContext::new(threads, &items);
+    let floor = super::turns::idle_floor_for(db, key, Utc::now());
+    let context = WorkContext::new(threads, &items).with_idle_floor(Some(floor));
     item_value(item, &context, PANEL_HISTORY)
 }
 
@@ -1042,7 +1157,13 @@ pub fn handle_work_request(
     if op == "list" {
         let items = list_work_items(db, key)?;
         let all = params.get("all").and_then(Value::as_bool) == Some(true);
-        return Ok((work_value(threads, &items, all, Utc::now()), false));
+        let now = Utc::now();
+        let floor = super::turns::idle_floor_for(db, key, now);
+        let mut work = work_value(threads, &items, all, now, Some(floor));
+        if let Some(notice) = idle_notice(&work) {
+            work["idleNotice"] = json!(notice);
+        }
+        return Ok((work, false));
     }
     if op == "add" {
         let title = param_text(params, "title").ok_or_else(|| bad("An item needs a title."))?;
@@ -1129,6 +1250,7 @@ pub fn handle_work_request(
             item.asks.push(WorkAsk {
                 tag: tag.clone(),
                 text: words.clone(),
+                detail: param_text(params, "detail").unwrap_or_default(),
                 answers: param_text(params, "answers").unwrap_or_default(),
                 holds: params.get("holds").and_then(Value::as_bool) == Some(true),
                 steps: param_text(params, "steps").unwrap_or_default(),
@@ -1226,6 +1348,23 @@ pub fn handle_work_request(
         "answer" => {
             let given = param_text(params, "answer").ok_or_else(|| bad("Say the answer."))?;
             let wanted = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            // The Done on an item that waits on the user with no question (the client then tells
+            // the coordinator "W7: Done"): kept as said until the coordinator next changes the
+            // item (`said_done`), so a second click or another client cannot send it again.
+            //
+            // CDXC:Coordinators 2026-11-10 DECISION:
+            // User, of a Needs you item with no question whose card had only Show in chat and
+            // Mention: "why don't i see a button to say All good on this task???? please fix for
+            // always". Every Needs you item with no open question offers Done.
+            if wanted.is_none() && given == "Done" && !item.asks.iter().any(WorkAsk::is_open) {
+                if said_done(&item) {
+                    return Err(bad(format!("{name} was already answered: Done.")));
+                }
+                item.record("answer", "Done", &now);
+                write_work_item(db, key, &item)?;
+                prune(db, key)?;
+                return Ok((answer(&item, threads, db, key), true));
+            }
             // A task's Mark done on its card ("Done"): the ask is done, recorded once.
             let task = item.asks.iter().position(|ask| {
                 wanted.as_ref().is_some_and(|tag| ask.tag == *tag)
@@ -1267,6 +1406,74 @@ pub fn handle_work_request(
             let tag = ask.tag.clone();
             item.record("answer", format!("{tag}: {given}").trim_start_matches(": ").to_string(), &now);
             finish_if_only_asking(&mut item, &now);
+        }
+        // The user snoozed an open ask for `hours` from its card (1, 6 or 24), or cancelled it:
+        // cancelled, it is withdrawn for good and the client tells the coordinator so, as it sends
+        // an answer (gx-chat-core `coordinator_board::answer`).
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User: "for any ask i should be able to click 'Snooze' and snooze it for 1h 6h 24h or
+        // cancel it". A snoozed ask leaves the dock and the Needs you count until its end and comes
+        // back by itself (`snoozedUntil` is read against the clock); the Work panel keeps it under
+        // a quiet "Snoozed until".
+        // The user's own words for an open ask (the dock's Reply): recorded once as its answer,
+        // whatever answers it offers; the client then tells the coordinator "W7 Q12: words".
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User: "whenever u send me a question card (needs you) ALWAYS have a button i can click to
+        // reply to the question with my own text", then "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU
+        // STUFF".
+        "reply" => {
+            let given = param_text(params, "answer").ok_or_else(|| bad("Say the reply."))?;
+            let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            // The user's words on an item with no open question ("W7: words"): kept in its
+            // history; the item stays where it is for the coordinator to act on.
+            if tag.is_none() && !item.asks.iter().any(WorkAsk::is_open) {
+                let words: String = given.chars().take(120).collect();
+                item.record("reply", words, &now);
+                write_work_item(db, key, &item)?;
+                prune(db, key)?;
+                return Ok((answer(&item, threads, db, key), true));
+            }
+            let ask = item
+                .asks
+                .iter_mut()
+                .find(|ask| tag.as_ref().is_none_or(|tag| ask.tag == *tag))
+                .ok_or_else(|| bad(format!("{name} has no ask{}.", tag.as_ref().map(|tag| format!(" {tag}")).unwrap_or_default())))?;
+            if !ask.is_open() {
+                return Err(bad(format!("{name} was already answered: {}.", if ask.answered.is_empty() { "withdrawn" } else { ask.answered.as_str() })));
+            }
+            ask.answered = given.chars().take(2_000).collect();
+            ask.settled_at = Some(now.clone());
+            let words = format!("{}: {}", ask.tag, ask.answered.chars().take(120).collect::<String>());
+            item.record("answer", words, &now);
+            finish_if_only_asking(&mut item, &now);
+        }
+        "snooze" | "cancel" => {
+            let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            let ask = item
+                .asks
+                .iter_mut()
+                .filter(|ask| ask.is_open())
+                .find(|ask| tag.as_ref().is_none_or(|tag| ask.tag == *tag))
+                .ok_or_else(|| bad(format!("{name} has no open ask{}.", tag.as_ref().map(|tag| format!(" {tag}")).unwrap_or_default())))?;
+            if op == "cancel" {
+                ask.settled_at = Some(now.clone());
+                ask.withdrawn = true;
+                let words = format!("{} dismissed by the user", ask.tag);
+                item.record("settle", words.trim().to_string(), &now);
+                finish_if_only_asking(&mut item, &now);
+            } else {
+                let hours = params
+                    .get("hours")
+                    .and_then(Value::as_u64)
+                    .filter(|hours| (1..=24 * 14).contains(hours))
+                    .ok_or_else(|| bad("Say for how many hours (1 to 336)."))?;
+                ask.snoozed_until = Some(
+                    (Utc::now() + chrono::Duration::hours(hours as i64))
+                        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                );
+            }
         }
         // An ask the user did (a task's Mark done, `item ask W7 --done Q12`) or the coordinator
         // withdrew (`--withdraw`).
@@ -1432,6 +1639,85 @@ pub fn settle_answered_items(
             write_work_item(db, key, &item)?;
             changed = true;
         }
+    }
+    Ok(changed)
+}
+
+/// The "W7 Q12: words" answers in a message the user sent: each line that starts so begins an
+/// answer, which runs to the next such line or the end. Words may be empty (a picture alone).
+pub fn chat_replies(text: &str) -> Vec<(i64, String, String)> {
+    let mut replies: Vec<(i64, String, String)> = Vec::new();
+    for line in text.lines() {
+        let opener = line.trim_start().split_once(':').and_then(|(head, rest)| {
+            let (item, tag) = head.trim().split_once(' ')?;
+            let number = item.strip_prefix(['W', 'w'])?.parse::<i64>().ok()?;
+            Some((number, question_tag(tag)?, rest.trim().to_string()))
+        });
+        match (opener, replies.last_mut()) {
+            (Some(reply), _) => replies.push(reply),
+            (None, Some((_, _, words))) => {
+                words.push('\n');
+                words.push_str(line);
+            }
+            (None, None) => {}
+        }
+    }
+    for (_, _, words) in &mut replies {
+        *words = words.trim().to_string();
+    }
+    replies
+}
+
+/// Settles the open asks the user answered in a message that reached the coordinator ("W7 Q12:
+/// words"), as the dock's Reply records them (`reply` above), and says whether any changed. An
+/// answer already recorded (the dock's Send answer records before its message goes) is left as it
+/// is.
+///
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// User, of a question he had answered with the dock's Reply: "i answered this question with a
+/// reply, why do i still see it as needs you!!!". Enter in the Reply box is Add to prompt, which
+/// puts "W218 Q2498: words" in the chat box; that message reached the coordinator, who takes the
+/// prefix as recorded, but nothing recorded it, so Q2498 stayed open and in Needs you. A message
+/// with that prefix now settles its ask whichever way it was sent (Add to prompt, typed, the
+/// phone, the web), with words, a picture alone, or both.
+pub fn settle_chat_replies(
+    db: &Connection,
+    key: &SessionKey,
+    text: &str,
+    pictures: usize,
+) -> Result<bool, DomainStateError> {
+    let mut changed = false;
+    for (number, tag, words) in chat_replies(text) {
+        let Some(mut item) = read_item(db, key, number)? else {
+            continue;
+        };
+        let Some(ask) = item
+            .asks
+            .iter_mut()
+            .find(|ask| ask.tag == tag && ask.is_open())
+        else {
+            continue;
+        };
+        let now = now_iso();
+        ask.answered = if !words.is_empty() {
+            words.chars().take(2_000).collect()
+        } else if pictures > 0 {
+            "Sent a picture".to_string()
+        } else {
+            "Answered in the chat".to_string()
+        };
+        ask.settled_at = Some(now.clone());
+        let line = format!(
+            "{tag}: {}",
+            ask.answered.chars().take(120).collect::<String>()
+        );
+        item.record("answer", line, &now);
+        finish_if_only_asking(&mut item, &now);
+        write_work_item(db, key, &item)?;
+        changed = true;
+    }
+    if changed {
+        prune(db, key)?;
     }
     Ok(changed)
 }

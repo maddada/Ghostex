@@ -17,6 +17,37 @@ pub(crate) async fn handle_session_chat_queue_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    // Retry on a failed row whose message the agent's transcript already records retires the row
+    // instead of typing it again (CDXC:SessionChat 2026-11-11 in session_chat_send_failure.rs on
+    // `retire_instead_of_retry`), and answers with the queue as it then stands.
+    let retried = (endpoint_path == "/api/updateSessionChatQueuedPrompt"
+        && params.get("retry").and_then(Value::as_bool) == Some(true))
+    .then(|| session_chat_queue_prompt_target(&params).ok())
+    .flatten();
+    if let Some((project_id, session_id, prompt_id)) = retried {
+        if crate::session_chat_send_failure::retire_instead_of_retry(
+            state,
+            &project_id,
+            &session_id,
+            &prompt_id,
+        )
+        .await
+        {
+            return match crate::session_chat_queue::handle_session_chat_queue_endpoint(
+                &state.paths,
+                state.metadata.server_id.as_str(),
+                "/api/readSessionChatQueue",
+                &params,
+            ) {
+                Ok(result) => routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result.value),
+                ),
+                Err(error) => domain_error_response(endpoint_path, request_id, error),
+            };
+        }
+    }
     if endpoint_path == "/api/sendSessionChatQueuedPrompt" {
         return handle_send_session_chat_queued_prompt_http(
             state,
@@ -80,6 +111,34 @@ pub(crate) async fn handle_send_session_chat_queued_prompt_http(
         Ok(target) => target,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    // Send now on a failed row is a Retry: a message the transcript already records is not
+    // typed again (session_chat_send_failure.rs `retire_instead_of_retry`).
+    if crate::session_chat_send_failure::retire_instead_of_retry(
+        state,
+        &project_id,
+        &session_id,
+        &prompt_id,
+    )
+    .await
+    {
+        return match crate::session_chat_queue::handle_session_chat_queue_endpoint(
+            &state.paths,
+            state.metadata.server_id.as_str(),
+            "/api/readSessionChatQueue",
+            params,
+        ) {
+            Ok(result) => {
+                let mut value = result.value;
+                value["sent"] = json!(true);
+                routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(request_id, value),
+                )
+            }
+            Err(error) => domain_error_response(endpoint_path, request_id, error),
+        };
+    }
     let sender = session_chat_queue_sender(
         state,
         &project_id,

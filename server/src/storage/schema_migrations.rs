@@ -1349,7 +1349,11 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         sql: include_str!("migrations/0074_coordinator_work_items.sql"),
     },
     Migration {
-        id: "0075_sessions_session_id_index",
-        sql: include_str!("migrations/0075_sessions_session_id_index.sql"),
+        id: "0075_coordinator_thread_watch_stamps",
+        sql: include_str!("migrations/0075_coordinator_thread_watch_stamps.sql"),
+    },
+    Migration {
+        id: "0076_sessions_session_id_index",
+        sql: include_str!("migrations/0076_sessions_session_id_index.sql"),
     },
 ];

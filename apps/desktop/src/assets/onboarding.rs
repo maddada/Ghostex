@@ -5,6 +5,11 @@ use std::borrow::Cow;
 
 const ICON_PATHS: &[(&str, &str)] = &[
     ("terminal", r#"<path d="M5 7l5 5-5 5M12.5 18h6.5"/>"#),
+    // The Workspace panel's Unified sidebar row: a window with its sidebar column.
+    (
+        "sidebar",
+        r#"<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9.5 4.5v15M5.6 8.5h1.6M5.6 11.5h1.6"/>"#,
+    ),
     (
         "browser",
         r#"<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9h18"/><path d="M6.3 6.8h.01M8.8 6.8h.01" stroke-width="2.2"/>"#,
@@ -196,6 +201,13 @@ pub(crate) fn asset(key: &str) -> Option<Cow<'static, [u8]>> {
         "phone/home-quiet.webp" => {
             return Some(Cow::Borrowed(include_bytes!(
                 "../../assets/onboarding/phone/home-quiet.webp"
+            )));
+        }
+        // The Welcome panel's Coordinators picture (window/onboarding/welcome.rs), 810x440 points at 2x
+        // with transparency, drawn from the first-run art folder's welcome-coordinators@2x.png.
+        "welcome-coordinators.webp" => {
+            return Some(Cow::Borrowed(include_bytes!(
+                "../../assets/onboarding/welcome-coordinators.webp"
             )));
         }
         // A frame of the intro video (10.2s), drawn under the intro page's player and in place of it

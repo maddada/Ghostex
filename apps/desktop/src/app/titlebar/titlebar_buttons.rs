@@ -123,7 +123,6 @@ impl GhostexGpuiApp {
                     self.updates_badge_items().len(),
                 )
             }
-            GpuiTitlebarPopupKind::More => self.titlebar_more_popup_content_height(),
             GpuiTitlebarPopupKind::OpenTargets => self.titlebar_open_targets_popup_content_height(),
             GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_MAX_HEIGHT,
             GpuiTitlebarPopupKind::Jobs => crate::app::window::jobs_popover::jobs_popover_height(
@@ -146,9 +145,9 @@ impl GhostexGpuiApp {
                         .map_or(saved.clone(), |links| links.folded_groups_on_open(&saved)),
                 )
             }
-            GpuiTitlebarPopupKind::Resources
-            | GpuiTitlebarPopupKind::Tips
-            | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,
+            GpuiTitlebarPopupKind::Resources | GpuiTitlebarPopupKind::RemoteSites => {
+                TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT
+            }
         }
     }
 }

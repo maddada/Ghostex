@@ -75,10 +75,8 @@ pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
         GpuiTitlebarPopupKind::Git => TITLEBAR_POPUP_GIT_WIDTH,
         GpuiTitlebarPopupKind::Help => TITLEBAR_POPUP_HELP_WIDTH,
         GpuiTitlebarPopupKind::Updates => 300.0,
-        GpuiTitlebarPopupKind::More => TITLEBAR_POPUP_COMPACT_WIDTH,
         GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_WIDTH,
         GpuiTitlebarPopupKind::Resources => TITLEBAR_POPUP_RESOURCES_WIDTH,
-        GpuiTitlebarPopupKind::Tips => TITLEBAR_POPUP_TIPS_WIDTH,
     }
 }
 
@@ -132,9 +130,9 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
             crate::app::window::collab_share::COLLAB_SHARE_POPUP_HEIGHT
         }
         GpuiTitlebarPopupKind::Jobs => crate::app::window::jobs_popover::JOBS_POPOVER_MAX_HEIGHT,
-        GpuiTitlebarPopupKind::Resources
-        | GpuiTitlebarPopupKind::Tips
-        | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,
+        GpuiTitlebarPopupKind::Resources | GpuiTitlebarPopupKind::RemoteSites => {
+            TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT
+        }
         _ => TITLEBAR_POPUP_MENU_MAX_HEIGHT,
     };
     if let GpuiTitlebarPopupKind::AccountUsage(_) = kind
@@ -153,7 +151,9 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     // The Notifications bell and the account usage meters sit at the left edge of
     // the window, in the sidebar, so their dropdowns grow to the right from the
     // trigger like a context menu instead of hanging off the trigger's right edge
-    // like the titlebar's right-region buttons.
+    // like the titlebar's right-region buttons. So do the panels of the sidebar's menu
+    // (Ask Ghostex, Resources, Dev servers, Extensions), which hang from the
+    // menu button beside the bell (titlebar/menu_panels.rs).
     let desired_left = main_window_bounds.origin.x.as_f32()
         + if matches!(
             kind,
@@ -161,6 +161,10 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
                 | GpuiTitlebarPopupKind::ContextMenu
                 | GpuiTitlebarPopupKind::Notifications
                 | GpuiTitlebarPopupKind::SessionLinks
+                | GpuiTitlebarPopupKind::Help
+                | GpuiTitlebarPopupKind::Resources
+                | GpuiTitlebarPopupKind::RemoteSites
+                | GpuiTitlebarPopupKind::Extensions
         ) {
             trigger_bounds.left().as_f32()
         } else {

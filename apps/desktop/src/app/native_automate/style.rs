@@ -41,11 +41,12 @@ pub(crate) struct AutomatePalette {
     pub(crate) accent: Hsla,
     pub(crate) success: Hsla,
     pub(crate) danger: Hsla,
-    pub(crate) control_primary: Hsla,
     /// The neutral filled button (CDXC:AppModal 2026-10-14 on `neutral_button_fills`).
     pub(crate) button: crate::app::native_chat::appearance::ChatButtonFills,
     pub(crate) switch_off: Hsla,
     pub(crate) switch_thumb: Hsla,
+    /// The chat's appearance is light: the on switch takes the light look.
+    pub(crate) light: bool,
 }
 
 impl AutomatePalette {
@@ -77,10 +78,10 @@ impl AutomatePalette {
             accent: chat.accent,
             success: rgb(if chat.light { 0x059669 } else { 0x34d399 }).into(),
             danger: chat.error(),
-            control_primary: chat.control_primary,
             button: chat.neutral_button_fills(),
             switch_off: ink.opacity(if chat.light { 0.15 } else { 0.18 }),
             switch_thumb: chat.background,
+            light: chat.light,
         }
     }
 
@@ -169,28 +170,20 @@ pub(crate) fn secondary_button<V: 'static>(
         .child(label.into())
 }
 
-/// The app-wide switch shape (packages/components/ui/switch.tsx (deleted 2026-10-01)): 32x20 track, 6px track radius,
-/// 16px thumb with a 4px radius.
+/// The app-wide switch ([`draw_switch`]): 32x20 track, 6px track radius, 16px thumb with a 4px
+/// radius; off is Automate's own quiet track.
 pub(crate) fn switch(p: &AutomatePalette, checked: bool, disabled: bool) -> Div {
-    div()
-        .flex_shrink_0()
-        .w(px(32.0))
-        .h(px(20.0))
-        .p(px(2.0))
-        .rounded(px(6.0))
-        .bg(if checked {
-            p.control_primary
-        } else {
-            p.switch_off
-        })
-        .when(disabled, |this| this.opacity(0.5))
-        .child(
-            div()
-                .size(px(16.0))
-                .ml(px(if checked { 12.0 } else { 0.0 }))
-                .rounded(px(4.0))
-                .bg(p.switch_thumb),
-        )
+    crate::app::window::native_modal_kit::draw_switch(
+        crate::app::window::native_modal_kit::SwitchShape::REGULAR,
+        crate::app::window::native_modal_kit::SwitchOff {
+            track: p.switch_off.into(),
+            edge: None,
+            thumb: p.switch_thumb.into(),
+        },
+        p.light,
+        checked,
+        disabled,
+    )
 }
 
 /// `AutomationGroupCard`: a rounded card whose rows are split by hairlines.

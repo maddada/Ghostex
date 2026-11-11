@@ -405,10 +405,13 @@ impl Render for DocsPictureViewer {
         let surface_hover =
             surface.blend(crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1));
         let completed = self.completed;
+        // The X takes the top-left corner on macOS and the toolbar the whole right one
+        // (CDXC:AppModal 2026-11-10 in window/round_close_button.rs).
+        let close_on_left = crate::app::window::round_close_button::close_buttons_on_left();
         let toolbar = div()
             .absolute()
             .top(px(12.0))
-            .right(px(56.0))
+            .right(px(if close_on_left { 12.0 } else { 56.0 }))
             .flex()
             .items_center()
             .rounded(px(8.0))
@@ -441,18 +444,23 @@ impl Render for DocsPictureViewer {
                 &p,
                 cx,
                 |this, cx| {
-                    crate::app::helpers::gpui_copy_to_clipboard(
-                        gpui::ClipboardItem::new_image(&this.picture),
-                        cx,
-                    );
-                    this.completed = Some("Image copied");
+                    // The tick only for a copy that landed; a failed one says so itself.
+                    this.completed =
+                        crate::app::helpers::gpui_copy_picture_to_clipboard(&this.picture, cx)
+                            .then_some("Image copied");
                     cx.notify();
                 },
             ));
         let close = div()
             .absolute()
             .top(px(12.0))
-            .right(px(12.0))
+            .map(|close| {
+                if close_on_left {
+                    close.left(px(12.0))
+                } else {
+                    close.right(px(12.0))
+                }
+            })
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 div()

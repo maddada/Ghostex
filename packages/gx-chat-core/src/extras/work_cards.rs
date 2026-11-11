@@ -26,6 +26,9 @@ use crate::state::{ChatContext, ChatState};
 
 /// The changes that are the coordinator's own and so make a card in its turn. The user's answer
 /// on a card (`answer`) and the move from the board (`moved`) do not.
+/// A turn that changed more items than this shows one card for them all.
+const TURN_CARDS_MAX: usize = 3;
+
 const TURN_KINDS: [&str; 12] = [
     "add", "now", "step", "ask", "wait", "done", "drop", "restore", "status", "edit", "thread",
     "settle",
@@ -35,12 +38,12 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-fn at_ms(at: &str) -> Option<i64> {
+pub(crate) fn at_ms(at: &str) -> Option<i64> {
     crate::jstime::parse_iso_millis_utc(at).map(|at| at as i64)
 }
 
 /// One turn of the chat: from a message of the user's (or a thread's report) to the next.
-struct Turn {
+pub struct Turn {
     start_ms: i64,
     /// The message starting it.
     id: String,
@@ -48,7 +51,20 @@ struct Turn {
     anchor: Option<String>,
 }
 
-fn turns(state: &ChatState) -> Vec<Turn> {
+/// The chat's turns, read once for everything a document builds from them: the cards, the dock
+/// and every row of the Work panel.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "sending messages is the most important part of this app and it's broken", after messages
+/// sent from his coordinator's chat reached the agent 7 to 18 seconds late. Every chat runs on one
+/// engine thread, which a sample of his app showed busy 40% of the time, more than half of it
+/// here: the Work panel was built again on nearly every event (its kept copy ran out with every
+/// minute of every one of 231 items, about three times a second), and each of its rows walked the
+/// whole chat for its Show in chat, copying every reply's text to ask whether it had words. One
+/// walk now serves a whole document, it copies nothing (`prose::has_prose`), and the kept panel
+/// stands until a label on it really changes (`coordinator_board.rs` `ages_change_at`).
+/// `tests/coordinator_chat_event_cost.rs` pins both.
+pub fn turns(state: &ChatState) -> Vec<Turn> {
     let mut turns: Vec<Turn> = Vec::new();
     for message in &state.messages.composed {
         if message.role == ChatRole::User {
@@ -65,15 +81,40 @@ fn turns(state: &ChatState) -> Vec<Turn> {
             let Some(turn) = turns.last_mut() else {
                 continue;
             };
-            if !crate::transcript::prose::prose_markdown(&message.blocks)
-                .trim()
-                .is_empty()
-            {
+            if crate::transcript::prose::has_prose(&message.blocks) {
                 turn.anchor = Some(message.id.clone());
             }
         }
     }
     turns
+}
+
+/// What of `turns` a kept Show in chat depends on: how many there are, the first (older turns
+/// loaded above it), and the newest with the reply its cards sit under. A turn before the newest
+/// keeps its reply, so these four say whether any row's place in the chat moved.
+pub fn turns_mark(turns: &[Turn]) -> (usize, String, String, Option<String>) {
+    let id = |turn: Option<&Turn>| turn.map(|turn| turn.id.clone()).unwrap_or_default();
+    (
+        turns.len(),
+        id(turns.first()),
+        id(turns.last()),
+        turns.last().and_then(|turn| turn.anchor.clone()),
+    )
+}
+
+/// [`turns`] for a chat with work items, and none for any other: only their cards read them.
+pub fn turns_for_work(state: &ChatState) -> Vec<Turn> {
+    let has_work = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .is_some();
+    if has_work {
+        turns(state)
+    } else {
+        Vec::new()
+    }
 }
 
 /// The turn a change at `at` happened in: the last one that started at or before it.
@@ -89,6 +130,7 @@ pub fn status_label(status: &str) -> &'static str {
         "blocked" => "Blocked",
         // In progress, never Moving (`work_panel.rs` `WORK_GROUPS` holds the user's words).
         "moving" => "In progress",
+        "idle" => "Not being worked on",
         "waiting" => "Waiting",
         "later" => "Later",
         "finished" => "Finished",
@@ -150,7 +192,7 @@ pub fn waits_line(item: &Value) -> String {
 /// the border and make them look better also i don't know wtf is You there, just remove it". The
 /// chips are an icon and muted words with no outline or fill (the renderers), and an owner shows
 /// only where it says something the card does not: which thread has the work.
-pub fn item_chips(item: &Value) -> Vec<Value> {
+pub fn item_chips(item: &Value, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
     for thread in item["threads"].as_array().into_iter().flatten() {
         let title = text(thread, "title");
@@ -181,7 +223,11 @@ pub fn item_chips(item: &Value) -> Vec<Value> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|ask| ask["open"] == true)
+        // A snoozed ask waits in Later until its snooze ends, so it is not "for you" meanwhile.
+        .filter(|ask| {
+            ask["open"] == true
+                && !at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
+        })
         .count();
     if open > 0 && !matches!(text(item, "status"), "needs" | "blocked") {
         chips.push(json!({ "kind": "question", "label": format!("{open} for you") }));
@@ -224,19 +270,6 @@ fn steps_chip(steps: &str) -> Value {
     })
 }
 
-/// What a change said, for an earlier card's one line.
-fn event_words(event: &Value) -> String {
-    let words = text(event, "text");
-    match text(event, "kind") {
-        "add" => "Started".to_string(),
-        "drop" => "Dropped".to_string(),
-        "restore" => "Back on the list".to_string(),
-        "done" if words.is_empty() => "Finished".to_string(),
-        "done" => format!("Finished: {words}"),
-        _ => words.to_string(),
-    }
-}
-
 /// The clock time of an ISO moment, as the transcript words its stamps ("1:48 AM").
 fn clock(at: i64, context: &ChatContext) -> String {
     crate::transcript::message_time::message_time(Some(at), context)["label"]
@@ -276,11 +309,996 @@ fn ask_buttons(item: &Value, ask: &Value, key: &str, picked: Option<&str>) -> Ve
         .collect()
 }
 
+/// The key that locks a Needs you item's Done (its one answer when it asks no open question), or
+/// `None` when it asks one or does not need the user. It names the item's last change, so once the
+/// coordinator changes the item its Done is offered afresh.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User, of a Needs you item with no question whose card had only Show in chat and Mention: "why
+/// don't i see a button to say All good on this task???? please fix for always". Every Needs you
+/// item with no open question has Done, in the answers' look, on its Work panel card, Columns card
+/// and dock row; a click tells the coordinator "W7: Done", and Reply stays for anything else.
+pub(crate) fn done_answer_key(item: &Value) -> Option<String> {
+    let asks_open = item["asks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|ask| ask["open"] == true);
+    (text(item, "kind") == "item" && text(item, "status") == "needs" && !asks_open)
+        .then(|| format!("work-done:{}:{}", text(item, "ref"), text(item, "at")))
+}
+
+/// A Needs you item's Done button (`done_answer_key`), as an ask's answer buttons are built.
+fn done_button(item: &Value, key: &str, picked: bool) -> Value {
+    let reference = text(item, "ref");
+    json!({
+        "label": "Done",
+        "recommended": false,
+        "picked": picked,
+        "command": {
+            "type": "coordinatorBoardAnswer",
+            "key": key,
+            "item": reference,
+            "label": "Done",
+            "text": format!("{reference}: Done"),
+        },
+    })
+}
+
+/// The words a Reply sent for an ask from here: this client's pick when it is none of the ask's
+/// own answers, "" otherwise.
+fn replied_words(ask: &Value, picked: Option<&str>) -> String {
+    let Some(picked) = picked else {
+        return String::new();
+    };
+    let preset = ask["answers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|answer| text(answer, "label") == picked);
+    if preset || (picked == "Done" && ask["answers"].as_array().is_none_or(Vec::is_empty)) {
+        String::new()
+    } else {
+        picked.to_string()
+    }
+}
+
+/// The other lines of work that wait on an ask's answer (`item wait W8 --on Q12`), as
+/// `[{title, ref, command}]` where the command shows that item in the Work panel.
+fn waited_by(items: &[&Value], own: &Value, tag: &str) -> Value {
+    if tag.is_empty() {
+        return json!([]);
+    }
+    Value::Array(
+        items
+            .iter()
+            .filter(|other| text(other, "ref") != text(own, "ref"))
+            .filter(|other| !matches!(text(other, "status"), "finished" | "dropped"))
+            .filter(|other| {
+                other["waits"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|wait| text(wait, "on").eq_ignore_ascii_case(tag) && wait["open"] != false)
+            })
+            .map(|other| {
+                json!({
+                    "title": text(other, "title"),
+                    "ref": text(other, "ref"),
+                    "command": { "type": "jumpToWorkCard", "key": text(other, "key") },
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here.
+fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
+    at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
+        || state
+            .extras
+            .panels
+            .work_snoozed
+            .get(key)
+            .is_some_and(|until| *until > now_ms)
+}
+
+/// Snooze for 1, 6 or 24 hours, as the dock's cards offer it (`command` per hours).
+fn snooze_choices(snooze: impl Fn(u64) -> Value) -> Value {
+    Value::Array(
+        [(1, "1 hour"), (6, "6 hours"), (24, "24 hours")]
+            .into_iter()
+            .map(|(hours, label)| json!({ "label": label, "command": snooze(hours) }))
+            .collect(),
+    )
+}
+
+/// An ask's card: its question, what waits on it, the work it belongs to, and its buttons while
+/// open; folded once settled (its answer whole in `foldOutcome`).
+fn ask_card(
+    item: &Value,
+    ask: &Value,
+    picked: Option<&str>,
+    at: i64,
+    now_ms: i64,
+    context: &ChatContext,
+) -> Value {
+    let reference = text(item, "ref");
+    let tag = text(ask, "tag");
+    let key = format!("work-ask:{reference}:{tag}");
+    let open = ask["open"] == true && picked.is_none();
+    let answered: String = text(ask, "answered").chars().take(200).collect();
+    let line = if ask["holds"] == true {
+        format!("{} waits on this", text(item, "title"))
+    } else {
+        "Nothing waits on it".to_string()
+    };
+    let mut ask_chips = vec![json!({ "kind": "item", "label": text(item, "title") })];
+    if !text(ask, "steps").is_empty() {
+        ask_chips.push(steps_chip(text(ask, "steps")));
+    }
+    let ask_status = if ask["holds"] == true {
+        "blocked"
+    } else {
+        "needs"
+    };
+    let buttons = if open || (picked.is_some() && ask["open"] == true) {
+        ask_buttons(item, ask, &key, picked)
+    } else {
+        Vec::new()
+    };
+    let snooze = snooze_choices(
+        |hours| json!({ "type": "snoozeWorkAsk", "key": key, "item": reference, "ask": tag, "hours": hours }),
+    );
+    let cancel = json!({
+        "type": "coordinatorBoardAnswer",
+        "op": "cancel",
+        "key": key,
+        "item": reference,
+        "ask": tag,
+        "label": "Dismissed",
+        // Dismiss, one word for taking it off for good (the user's "Dismiss is the same thing as
+        // Cancel").
+        "text": format!("{reference} {tag}: I dismissed this; no need to ask it again."),
+    });
+    json!({
+        "snooze": if open { snooze } else { Value::Null },
+        "cancel": if open { cancel } else { Value::Null },
+        "key": key,
+        "kind": "ask",
+        "folded": ask["open"] != true,
+        "ref": reference,
+        "title": text(ask, "text"),
+        // Its longer explanation under the short title (`item ask --detail`), "" for none.
+        "body": text(ask, "detail"),
+        "status": ask_status,
+        "statusLabel": status_label(ask_status),
+        "tag": tag,
+        "holds": ask["holds"] == true,
+        "line": line,
+        "chips": ask_chips,
+        "buttons": buttons,
+        "busy": picked.is_some() && ask["open"] == true,
+        // A settled ask's line: a check once answered or done.
+        "foldStatus": if ask["open"] == true { ask_status } else { "finished" },
+        "answered": answered,
+        "foldText": format!("{tag} \u{b7} {}", text(ask, "text")),
+        "foldOutcome": if answered.is_empty() { "Answered".to_string() } else { answered.clone() },
+        "age": crate::transcript::message_time::age_label(now_ms, at),
+        "time": clock(at, context),
+    })
+}
+
+/// The dock above a coordinator's chat box: `{cards, line}`. `cards` is every open ask, newest
+/// first, as its full card with its buttons; `line` is the one status line under them
+/// (`{parts: [{text, tone, group}]}`, "1 needs you · 5 in progress · 1 waiting"), counted from the
+/// Work panel's own groups (`work_panel::work_board`), so the line and the panel never disagree.
+/// `null` when the chat is not a coordinator's or it has no work.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User (placement page, "C. Asks docked, the rest one line", with "Asks, blocked, done card,
+/// should be shown there. also please let's show those inline htmls from the agent replies there
+/// docked above while not answered. also for any ask i should be able to click 'Snooze' and snooze
+/// it for 1h 6h 24h or cancel it"): what needs him docks above the chat box as its full card, and
+/// everything else is one status line under it that opens the Work panel. An open ask is drawn
+/// only there, never also under its reply; it leaves the dock once settled.
+pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
+    dock_with(state, context, &turns_for_work(state))
+}
+
+/// [`dock`], over turns the caller already read (`turns_for_work`).
+pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Value {
+    let now_ms = context.now_millis();
+    // (sinks, at, row): a row that needs him is newest first, but one older than a day sinks below
+    // the newer ones, so long-lived tasks do not squat in the first rows (they stay reachable under
+    // "N more need you" and in the Work panel).
+    let mut needs: Vec<(bool, i64, Value)> = question_rows(state, context, now_ms)
+        .into_iter()
+        .map(|(at, row)| (now_ms - at > DAY_MS, at, row))
+        .collect();
+    let work = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"));
+    let items: Vec<&Value> = work
+        .and_then(|work| work["items"].as_array())
+        .into_iter()
+        .flatten()
+        // Lines of work and threads on no item, as the Work panel lists them.
+        .filter(|item| text(item, "status") != "dropped")
+        .collect();
+    let answers = &state.extras.panels.board_answers;
+    let mut later: Vec<(i64, Value)> = Vec::new();
+    for item in &items {
+        for ask in item["asks"].as_array().into_iter().flatten() {
+            if ask["open"] != true {
+                continue;
+            }
+            let key = format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag"));
+            // A snoozed ask waits out of the dock until its end.
+            if snoozed(ask, &key, state, now_ms) {
+                continue;
+            }
+            let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
+            let card = ask_card(
+                item,
+                ask,
+                answers.get(&key).map(String::as_str),
+                at,
+                now_ms,
+                context,
+            );
+            let asked_in = item["history"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|event| {
+                    text(event, "kind") == "ask"
+                        && text(event, "text").split(':').next() == Some(text(ask, "tag"))
+                })
+                .filter_map(|event| at_ms(text(event, "at")))
+                .next_back()
+                .unwrap_or(at);
+            let mut row = json!({
+                "key": key,
+                "kind": "ask",
+                "status": card["status"],
+                "title": card["title"],
+                // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
+                "titleRuns": crate::questions::form_links::word_runs(text(ask, "text")),
+                "body": card["body"],
+                "age": card["age"],
+                // The line under it names only its own item (`chips`); whether it holds that item
+                // up is the row's mark. Other items that wait on its answer follow (`waitedBy`).
+                //
+                // CDXC:Coordinators 2026-11-10 DECISION:
+                // User, picking on the dock item line page (footer-page.html) after a line read
+                // "<item> · <item> waits on this": "C. Only the name", other items that wait "B.
+                // Name it when it is one, count when it is more", and "A. One line: the name is
+                // cut" when it does not fit.
+                "detail": [],
+                "waitedBy": waited_by(&items, item, text(ask, "tag")),
+                "buttons": card["buttons"],
+                "busy": card["busy"],
+                // The words sent from here as its Reply, which its Reply button shows until gxserver
+                // settles it (an answer picked from its buttons is marked on that button instead).
+                "replied": replied_words(ask, answers.get(&key).map(String::as_str)),
+                "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag") },
+                "mention": mention_of(item),
+                "dismiss": card["cancel"],
+                "snooze": card["snooze"],
+                "chips": card["chips"],
+                "needs": true,
+            });
+            row["showInChat"] = show_in_chat(&turns, asked_in, &key);
+            needs.push((now_ms - at > DAY_MS, at, row));
+        }
+    }
+    // Every Needs you line of work with no open question, with its Done and Reply.
+    for item in &items {
+        let Some(key) = done_answer_key(item) else {
+            continue;
+        };
+        let picked =
+            item["saidDone"] == true || answers.get(&key).is_some_and(|label| label == "Done");
+        let at = at_ms(text(item, "at")).unwrap_or(now_ms);
+        let card = dock_item_card(item, now_ms, None);
+        let changed_at = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|event| at_ms(text(event, "at")))
+            .max()
+            .unwrap_or(at);
+        let mut row = json!({
+            "key": key,
+            "kind": "item",
+            "status": "needs",
+            "title": card["title"],
+            "age": card["age"],
+            "detail": [card["line"]],
+            "buttons": [done_button(item, &key, picked)],
+            "busy": picked && item["saidDone"] != true,
+            "reply": { "item": text(item, "ref"), "key": key, "tag": "" },
+            "mention": mention_of(item),
+            "chips": card["chips"],
+            "needs": true,
+        });
+        row["showInChat"] = show_in_chat(&turns, changed_at, &key);
+        needs.push((now_ms - at > DAY_MS, at, row));
+    }
+    // Then every blocked line of work no holding ask already stands for (a stuck thread, or the
+    // coordinator's word), and what the newest turn finished: a finished row leaves after the next
+    // turn, or with its x.
+    for item in items
+        .iter()
+        .filter(|item| text(item, "status") == "blocked")
+    {
+        if item["asks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|ask| ask["open"] == true && ask["holds"] == true)
+        {
+            continue;
+        }
+        let at = at_ms(text(item, "at")).unwrap_or(0);
+        later.push((at, work_row(item, &turns, now_ms, None)));
+    }
+    let newest_turn = turns.len().checked_sub(1);
+    let dismissed = &state.extras.panels.work_dock_dismissed;
+    for item in items
+        .iter()
+        .filter(|item| text(item, "status") == "finished")
+    {
+        let Some(done_at) = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|event| text(event, "kind") == "done")
+            .filter_map(|event| at_ms(text(event, "at")))
+            .max()
+        else {
+            continue;
+        };
+        let turn = turn_of(&turns, done_at);
+        if turn.is_none() || turn != newest_turn {
+            continue;
+        }
+        let key = format!(
+            "work-dock:{}:{}:done",
+            text(item, "ref"),
+            turns[turn.unwrap_or(0)].id
+        );
+        if !dismissed.contains(&key) {
+            later.push((done_at, work_row(item, &turns, now_ms, Some(key))));
+        }
+    }
+    needs.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
+    later.sort_by(|left, right| right.0.cmp(&left.0));
+    let rows: Vec<Value> = needs
+        .into_iter()
+        .map(|(_, _, row)| row)
+        .chain(later.into_iter().map(|(_, row)| row))
+        .collect();
+    if rows.is_empty() {
+        return Value::Null;
+    }
+    // Hidden by the reader: it stays hidden until shown again or a row that was not there when it
+    // was hidden arrives, since that is news he has not seen. The phone hides the whole dock with
+    // its x and its Work pill brings it back; the computer draws `hidden` as the dock collapsed to
+    // its header, whose chevron opens it again (native_chat/work_cards.rs).
+    //
+    // CDXC:Coordinators 2026-11-10 DECISION:
+    // User: "please let's allow fully collapsing the needs u row". One click hides the dock
+    // completely; the Work pill keeps its "N need you" and brings it back. On the computer the
+    // user later picked a header that collapses the dock to one bar instead (its renderer has the
+    // picks), and a collapsed dock opens by itself when something new needs him.
+    let hidden = state
+        .extras
+        .panels
+        .work_dock_hidden
+        .as_ref()
+        .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))));
+    // At most four rows show (three on the phone); the rest are "N more need you", which opens the
+    // Work panel at Needs you. The counts are the Work pill's (`coordinator_board::pill`).
+    json!({
+        "rows": rows,
+        "hidden": hidden,
+        "limit": 4,
+        "phoneLimit": 3,
+        "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
+    })
+}
+
+/// A Work panel row's actions for its opened card, the same as the dock's opened row: an ask's
+/// Reply, Show in chat, Dismiss and Snooze; any other line of work's Show in chat. `null` for none.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU STUFF", for every needs-you item wherever it is
+/// drawn: the dock, the Work panel and Columns open to the same actions.
+pub fn panel_actions(state: &ChatState, context: &ChatContext, row: &Value) -> Value {
+    panel_actions_with(state, context, row, &turns_for_work(state))
+}
+
+/// [`panel_actions`], over turns the caller already read: the Work panel asks this of every row
+/// it builds (`coordinator_board.rs`), and a walk of the chat per row was most of its cost.
+pub fn panel_actions_with(
+    state: &ChatState,
+    context: &ChatContext,
+    row: &Value,
+    turns: &[Turn],
+) -> Value {
+    let Some(items) = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+    else {
+        return Value::Null;
+    };
+    let reference = text(row, "ref");
+    let Some(item) = items.iter().find(|item| text(item, "ref") == reference) else {
+        return Value::Null;
+    };
+    let now_ms = context.now_millis();
+    if row["askRow"] == true {
+        let tag = text(row, "ask");
+        let Some(ask) = item["asks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|ask| text(ask, "tag") == tag && ask["open"] == true)
+        else {
+            return Value::Null;
+        };
+        let key = format!("work-ask:{reference}:{tag}");
+        let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
+        let picked = state
+            .extras
+            .panels
+            .board_answers
+            .get(&key)
+            .map(String::as_str);
+        let card = ask_card(item, ask, picked, at, now_ms, context);
+        let asked_in = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|event| {
+                text(event, "kind") == "ask" && text(event, "text").split(':').next() == Some(tag)
+            })
+            .filter_map(|event| at_ms(text(event, "at")))
+            .next_back()
+            .unwrap_or(at);
+        return json!({
+            "reply": { "item": reference, "key": key, "tag": tag },
+            "dismiss": card["cancel"],
+            "snooze": card["snooze"],
+            "showInChat": show_in_chat(&turns, asked_in, &key),
+        });
+    }
+    let changed_at = item["history"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|event| at_ms(text(event, "at")))
+        .max()
+        .unwrap_or(0);
+    let show = show_in_chat(&turns, changed_at, text(row, "key"));
+    // A Needs you item with no open question: Reply too, for anything besides its Done.
+    if let Some(key) = done_answer_key(item) {
+        return json!({
+            "reply": { "item": reference, "key": key, "tag": "" },
+            "showInChat": show,
+        });
+    }
+    if show.is_null() {
+        Value::Null
+    } else {
+        json!({ "showInChat": show })
+    }
+}
+
+/// A form's or page's actions for its opened Work panel card, the dock's row's.
+pub fn question_actions(state: &ChatState, context: &ChatContext, id: &str) -> Value {
+    let key = format!("dock-questions:{id}");
+    question_rows(state, context, context.now_millis())
+        .into_iter()
+        .map(|(_, row)| row)
+        .find(|row| row["key"] == key.as_str())
+        .map_or(Value::Null, |row| {
+            json!({
+                "reply": row["reply"],
+                "open": row["open"],
+                "dismiss": row["dismiss"],
+                "snooze": row["snooze"],
+                "showInChat": row["showInChat"],
+            })
+        })
+}
+
+/// A day, in ms: a needs-you row older than this sinks below the newer ones (`dock`).
+const DAY_MS: i64 = 86_400_000;
+
+/// The mention a work item's Mention button puts in the chat box: `[title](board:B12)`, the
+/// reference a + pick inserts.
+fn mention_of(item: &Value) -> String {
+    let reference = text(item, "ref").replacen('W', "B", 1);
+    if reference.is_empty() || text(item, "kind") != "item" {
+        return String::new();
+    }
+    format!(
+        "[{}](board:{reference})",
+        text(item, "title").replace(['[', ']'], "")
+    )
+}
+
+/// "Show in chat": the reply of the turn holding `at`, or `null` when no loaded turn does. It
+/// scrolls only when pressed (`showInChat`), the one deliberate exception to "nothing scrolls".
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "i think we should have jump to reference to jump to the place it was asked if i want to
+/// see more from the agent chat there", then "do this one for all of them so i can go to the turn
+/// that gave me this q cuz maybe agent mentioned something in that turn end about it". Every row's
+/// expanded card has it: an ask's goes to the reply of the turn that asked it, a form's or page's
+/// to the reply that sent it, any other line of work's to the latest turn that changed it.
+fn show_in_chat(turns: &[Turn], at: i64, target: &str) -> Value {
+    match turn_of(turns, at).and_then(|turn| turns[turn].anchor.clone()) {
+        Some(anchor) => json!({ "type": "showInChat", "messageId": anchor, "target": target }),
+        None => Value::Null,
+    }
+}
+
+/// A blocked or just-finished line of work's dock row (`done_key`: the finished row's, with the x
+/// that dismisses it).
+fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>) -> Value {
+    let card = dock_item_card(item, now_ms, done_key.clone());
+    let changed_at = item["history"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|event| at_ms(text(event, "at")))
+        .max()
+        .unwrap_or(0);
+    let key = text(&card, "key").to_string();
+    json!({
+        "key": key,
+        "kind": if done_key.is_some() { "finished" } else { "blocked" },
+        "status": card["status"],
+        "title": card["title"],
+        "age": card["age"],
+        "detail": [card["line"]],
+        "buttons": [],
+        "mention": mention_of(item),
+        "dismiss": card["dismiss"],
+        "chips": card["chips"],
+        "showInChat": show_in_chat(turns, changed_at, &key),
+        "needs": false,
+    })
+}
+
+/// The forms, pages and one-click questions in the chat's replies that still wait on the reader,
+/// as dock rows with when they were asked. They are the ? pill's own unanswered list
+/// (`questions::open_questions::unanswered`), so For later ones stay out and nothing is counted
+/// twice; one leaves the dock once every question on it is answered, skipped or withdrawn.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "also please let's show those inline htmls from the agent replies there docked above while
+/// not answered", then, of questions asked inside a reply: "i need to scroll back to see that
+/// question ... should always be shown as card ... this can be smaller just for 1 off quick
+/// question". A one-click question is one compact row with its answers on it (the recommended one
+/// starred) and Reply; a form of several questions, a text question or a page keeps "N questions
+/// open" and Open (the answer popup, or the page). Any agent chat, not only a coordinator's.
+fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(i64, Value)> {
+    let _ = context;
+    crate::questions::open_questions::unanswered(state)
+        .into_iter()
+        .map(|asker| {
+            let at = asker.at.unwrap_or(now_ms);
+            let form = matches!(asker.kind, crate::transcript::open_questions::AskerKind::Form);
+            let open = asker.waiting(None);
+            let noun = if open == 1 { "question" } else { "questions" };
+            let snooze = snooze_choices(
+                |hours| json!({ "type": "snoozeQuestion", "id": asker.id, "hours": hours }),
+            );
+            let base = json!({
+                "key": format!("dock-questions:{}", asker.id),
+                "status": "needs",
+                "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
+                "age": crate::transcript::message_time::age_label(now_ms, at),
+                "dismiss": { "type": "cancelQuestion", "id": asker.id },
+                "snooze": snooze,
+                "showInChat": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
+                "mention": "",
+                "needs": true,
+            });
+            let mut row = base;
+            // A one-click question: its answers on the row and Reply, no Open step.
+            if let Some(question) = form.then(|| one_click(state, &asker.message_id, &asker.id)).flatten() {
+                row["kind"] = json!("question");
+                row["title"] = json!(question.question);
+                row["buttons"] = json!(question
+                    .choices
+                    .iter()
+                    .enumerate()
+                    .map(|(index, choice)| json!({
+                        "label": choice.label,
+                        "recommended": choice.recommended,
+                        "command": { "type": "inlineAnswer", "form": asker.id, "choice": index },
+                    }))
+                    .collect::<Vec<_>>());
+                row["reply"] = json!({ "form": asker.id, "tag": question.tag });
+                row["detail"] = json!([]);
+            } else {
+                row["kind"] = json!("form");
+                // A Ghostex page (not a form): its mark is a page (desktop `row_mark`), a click
+                // opens it, and its name carries how much it still asks (`page_count`).
+                row["page"] = json!(!form);
+                if !form {
+                    row["pageId"] = json!(asker.id);
+                    row["count"] = json!(page_count(state, &asker));
+                }
+                row["buttons"] = json!([]);
+                // A page that asks nothing waits to be marked seen (`Asker::seen_only`).
+                let detail = if asker.seen_only {
+                    "Page, not seen yet".to_string()
+                } else {
+                    format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })
+                };
+                row["detail"] = json!([detail]);
+                row["open"] = json!({ "type": "openResource", "id": asker.id });
+            }
+            (at, row)
+        })
+        .collect()
+}
+
+/// `{type: "loadPageQuestionCounts", pageId}`: asks the page's gxserver how many of its questions
+/// the reader's draft answers (`readVisualPageSource`), unless a read is already out.
+pub fn load_page_counts(state: &mut ChatState, page_id: &str) -> Vec<crate::effect::Effect> {
+    let page_id = page_id.to_ascii_lowercase();
+    let panels = &state.extras.panels;
+    if page_id.is_empty()
+        || panels
+            .page_count_requests
+            .values()
+            .any(|asked| *asked == page_id)
+    {
+        return Vec::new();
+    }
+    let request_id = state.core.allocate_request_id();
+    state
+        .extras
+        .panels
+        .page_count_requests
+        .insert(request_id, page_id.clone());
+    vec![crate::effect::Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::ReadVisualPageSource,
+        params: Box::new(json!({ "pageId": page_id })),
+    }]
+}
+
+/// Takes the answer to [`load_page_counts`]: the counts, kept by page; nothing for a refused read
+/// (an older gxserver), whose rows keep their count from the page's own markup.
+pub fn settle_page_counts(
+    state: &mut ChatState,
+    request_id: u64,
+    answer: Result<&Value, String>,
+) -> Option<Vec<crate::effect::Effect>> {
+    let page_id = state
+        .extras
+        .panels
+        .page_count_requests
+        .remove(&request_id)?;
+    state.core.claim_refusal();
+    if let Ok(result) = answer {
+        if let (Some(answered), Some(total)) = (
+            result["questionsAnswered"].as_u64(),
+            result["questionsTotal"].as_u64(),
+        ) {
+            state
+                .extras
+                .panels
+                .page_question_counts
+                .insert(page_id, (answered, total));
+        }
+    }
+    Some(Vec::new())
+}
+
+/// How much a page still asks, after its name in the quieter colour: "(14 questions)" while none
+/// is answered, "(10/16 answered)" once some are (a pick or words in the page's saved draft
+/// counts, sent or not), "(not seen yet)" for a page that asks nothing and waits to be marked
+/// seen. Before its gxserver has said, the questions its block lists, none answered.
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User, of a page row in the dock: "also show (10/16 answered) or (14 questions) next to the
+/// page name to know how many i need to answer".
+pub(crate) fn page_count(
+    state: &ChatState,
+    asker: &crate::transcript::open_questions::Asker,
+) -> String {
+    if asker.seen_only {
+        return "(not seen yet)".to_string();
+    }
+    let (answered, total) = state
+        .extras
+        .panels
+        .page_question_counts
+        .get(&asker.id.to_ascii_lowercase())
+        .copied()
+        .unwrap_or((0, asker.tags.len() as u64));
+    match (answered, total) {
+        (_, 0) => String::new(),
+        (0, 1) => "(1 question)".to_string(),
+        (0, total) => format!("({total} questions)"),
+        (answered, total) => format!("({answered}/{total} answered)"),
+    }
+}
+
+/// The one-click question (a reply's answer links) a form id names, when the form is one.
+fn one_click(
+    state: &ChatState,
+    message_id: &str,
+    form_id: &str,
+) -> Option<crate::transcript::inline_answers::InlineQuestion> {
+    let message = state
+        .messages
+        .composed
+        .iter()
+        .find(|message| message.id == message_id)?;
+    let prose = crate::transcript::prose::prose_markdown(&message.blocks);
+    crate::transcript::inline_answers::inline_questions(&prose)
+        .into_iter()
+        .find(|question| question.form().id == form_id)
+}
+
+/// The Work panel row key of the open ask a question tag names (`work-ask:W3:Q12`), if a work item
+/// asks it.
+pub fn ask_key_of_tag(state: &ChatState, tag: &str) -> Option<String> {
+    let items = state
+        .session
+        .coordinator_threads
+        .as_ref()?
+        .get("work")?
+        .get("items")?
+        .as_array()?;
+    items.iter().find_map(|item| {
+        item["asks"]
+            .as_array()?
+            .iter()
+            .find(|ask| text(ask, "tag").eq_ignore_ascii_case(tag))
+            .map(|ask| format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag")))
+    })
+}
+
+/// A line of work's card in the dock: blocked, or finished in the latest turn (`done_key`, with
+/// the command that dismisses it).
+fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value {
+    let status = text(item, "status");
+    let at = at_ms(text(item, "at")).unwrap_or(now_ms);
+    let mut line = text(item, "now").to_string();
+    if line.is_empty() {
+        if let Some(why) = item["owner"]["why"].as_str() {
+            line = why.to_string();
+        }
+    }
+    let key = done_key
+        .clone()
+        .unwrap_or_else(|| format!("work-dock:{}:{status}", text(item, "ref")));
+    let mut card = json!({
+        "key": key,
+        "kind": "item",
+        "ref": text(item, "ref"),
+        "title": text(item, "title"),
+        "status": status,
+        "statusLabel": status_label(status),
+        "line": line,
+        "chips": item_chips(item, now_ms),
+        "age": crate::transcript::message_time::age_label(now_ms, at),
+        "at": at,
+    });
+    if let Some(key) = done_key {
+        card["dismiss"] = json!({ "type": "dismissWorkDockCard", "key": key });
+    }
+    card
+}
+
+/// The turn whose line joins the "Worked for" line above the chat box: the newest, once it has
+/// finished and that line shows its time.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User (the target page): under a reply "one quiet line ... Worked for 40s · Started <item>",
+/// not the turn's line and "Worked for" stacked as two.
+fn merged_turn(state: &ChatState, turns: &[Turn]) -> Option<usize> {
+    let shows = state.transcript_view.worked_line.is_some()
+        && !state.transcript_view.chat_look.status_in_transcript;
+    shows.then(|| turns.len().checked_sub(1)).flatten()
+}
+
+/// The newest finished turn's line, for the end of its "Worked for" line
+/// (`extras::working_card`): "Pairing page started · 1 ask".
+pub fn turn_summary(state: &ChatState) -> Option<String> {
+    // Asked on every document: no walk of the chat unless its line shows on a chat with work.
+    let shows = state.transcript_view.worked_line.is_some()
+        && !state.transcript_view.chat_look.status_in_transcript;
+    if !shows {
+        return None;
+    }
+    let turns = turns_for_work(state);
+    let newest = merged_turn(state, &turns)?;
+    let turn_id = turns.get(newest)?.id.clone();
+    let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
+    let items = state
+        .session
+        .coordinator_threads
+        .as_ref()?
+        .get("work")?
+        .get("items")?
+        .as_array()?;
+    for item in items.iter().filter(|item| item["kind"] == "item") {
+        let events: Vec<&Value> = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|event| TURN_KINDS.contains(&text(event, "kind")))
+            .filter(|event| {
+                at_ms(text(event, "at")).and_then(|at| turn_of(&turns, at)) == Some(newest)
+            })
+            .collect();
+        if events.is_empty() {
+            continue;
+        }
+        let summary = lines.entry(newest).or_default();
+        let kinds: Vec<&str> = events.iter().map(|event| text(event, "kind")).collect();
+        summary.asks += kinds.iter().filter(|kind| **kind == "ask").count();
+        if kinds.iter().all(|kind| *kind == "ask") {
+            continue;
+        }
+        let verb = if kinds.contains(&"done") {
+            "finished"
+        } else if kinds.contains(&"drop") {
+            "dropped"
+        } else if kinds.contains(&"add") {
+            "started"
+        } else if kinds.contains(&"wait") {
+            "waiting"
+        } else {
+            "updated"
+        };
+        summary
+            .parts
+            .push(format!("{} {verb}", text(item, "title")));
+    }
+    let _ = turn_id;
+    let summary = lines.remove(&newest)?;
+    let mut words: Vec<String> = summary.parts.iter().take(3).cloned().collect();
+    if summary.parts.len() > 3 {
+        words.push(format!("{} more", summary.parts.len() - 3));
+    }
+    match summary.asks {
+        0 => {}
+        1 => words.push("1 ask".to_string()),
+        asks => words.push(format!("{asks} asks")),
+    }
+    (!words.is_empty()).then(|| words.join(" \u{b7} "))
+}
+
+/// What one turn changed, for its quiet line (`project`).
+#[derive(Default)]
+struct TurnLine {
+    parts: Vec<String>,
+    asks: usize,
+    finished: bool,
+    at: i64,
+    item_key: String,
+    /// What the turn did to each item it touched, in the order it touched them (`turn_change`).
+    changes: Vec<TurnChange>,
+}
+
+/// One item a turn changed, said plainly for its card: "Work item updated", the item's title set
+/// apart, the one line that changed, and the item's state after it as the card's pill.
+#[derive(Default)]
+struct TurnChange {
+    /// "Work item updated", "added", "finished", "dropped", "needs you", "asked you", "now waiting".
+    lead: String,
+    title: String,
+    /// The line that changed: its new status line, the question asked, what it waits on.
+    detail: String,
+    /// The state the pill names (`status_label`), empty for none.
+    status: String,
+    key: String,
+    at: i64,
+}
+
+/// What a turn's events did to one item, for its card (`TurnChange`). The strongest change names
+/// it (finished, dropped, a question still open, added, waiting, then any other change), and its
+/// own event's words are the line that changed. The pill is the item's state now when this turn
+/// changed it last, else the state that change left it in.
+fn turn_change(item: &Value, events: &[&Value], latest: bool) -> TurnChange {
+    let last_text = |kinds: &[&str]| {
+        events
+            .iter()
+            .rev()
+            .find(|event| kinds.contains(&text(event, "kind")))
+            .map(|event| text(event, "text").to_string())
+            .unwrap_or_default()
+    };
+    let has = |kind: &str| events.iter().any(|event| text(event, "kind") == kind);
+    // A question asked in this turn that is still open.
+    let open_ask = events
+        .iter()
+        .rev()
+        .filter(|event| text(event, "kind") == "ask")
+        .find(|event| {
+            let tag = text(event, "text").split(':').next().unwrap_or_default();
+            item["asks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|ask| text(ask, "tag") == tag && ask["open"] == true)
+        })
+        .map(|event| text(event, "text").to_string());
+    let (lead, detail, status) = if has("done") {
+        ("finished", last_text(&["done"]), "finished")
+    } else if has("drop") {
+        ("dropped", String::new(), "dropped")
+    } else if let Some(question) = open_ask {
+        ("needs you", question, "needs")
+    } else if has("add") {
+        ("added", last_text(&["now", "step", "status"]), "")
+    } else if has("wait") {
+        ("now waiting", last_text(&["wait"]), "waiting")
+    } else if has("ask") {
+        ("asked you", last_text(&["ask"]), "")
+    } else {
+        (
+            "updated",
+            last_text(&[
+                "now", "step", "status", "edit", "thread", "settle", "restore",
+            ]),
+            "",
+        )
+    };
+    let current = text(item, "status");
+    let status = if latest && !current.is_empty() {
+        current.to_string()
+    } else {
+        status.to_string()
+    };
+    TurnChange {
+        lead: format!("Work item {lead}"),
+        title: text(item, "title").to_string(),
+        detail,
+        status,
+        key: text(item, "key").to_string(),
+        at: events
+            .iter()
+            .filter_map(|event| at_ms(text(event, "at")))
+            .max()
+            .unwrap_or_default(),
+    }
+}
+
 /// The cards, in transcript order: `[{ key, kind ("item" | "ask"), anchorId, turnId, folded,
 /// ref, title, status, statusLabel, line, chips: [{kind, label}], age, at, foldText, time, tag,
 /// holds, buttons: [{label, recommended, picked, command}], answered, busy }]`, and the open asks
 /// the ? pill steps through: `[{ key, anchorId, at }]`.
 pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>) {
+    project_with(state, context, &turns_for_work(state))
+}
+
+/// [`project`], over turns the caller already read (`turns_for_work`).
+pub fn project_with(
+    state: &ChatState,
+    context: &ChatContext,
+    turns: &[Turn],
+) -> (Value, Vec<OpenAsk>) {
     let Some(items) = state
         .session
         .coordinator_threads
@@ -291,16 +1309,15 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
     else {
         return (json!([]), Vec::new());
     };
-    let turns = turns(state);
     if turns.is_empty() {
         return (json!([]), Vec::new());
     }
     let now_ms = context.now_millis();
-    let answers = &state.extras.panels.board_answers;
     // Each card with the moment it orders by.
     // Each card with where it goes: its turn, then needs-you first (`priority`), then its moment.
     let mut cards: Vec<(i64, u8, i64, Value)> = Vec::new();
     let mut open_asks = Vec::new();
+    let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
     for item in items.iter().filter(|item| item["kind"] == "item") {
         let reference = text(item, "ref");
         // The coordinator's changes by turn, oldest first.
@@ -316,22 +1333,17 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                 by_turn.entry(turn).or_default().push(event);
             }
         }
-        // The newest turn that drew the item's own card (a turn that only asked draws an ask card).
-        let newest = by_turn
-            .iter()
-            .filter(|(_, events)| events.iter().any(|event| text(event, "kind") != "ask"))
-            .map(|(turn, _)| *turn)
-            .next_back();
         for (turn_index, events) in &by_turn {
             let turn = &turns[*turn_index];
-            let Some(anchor) = turn.anchor.as_deref() else {
+            if turn.anchor.is_none() {
                 continue;
-            };
+            }
             let first_at = at_ms(text(events[0], "at")).unwrap_or(turn.start_ms);
-            let last = events[events.len() - 1];
-            let last_at = at_ms(text(last, "at")).unwrap_or(first_at);
-            // Asks made in this turn: a card each.
+            let summary = lines.entry(*turn_index).or_default();
+            // Asks made in this turn: counted on its line; an open one waits in the dock, and the
+            // ? pill counts it.
             for event in events.iter().filter(|event| text(event, "kind") == "ask") {
+                summary.asks += 1;
                 let tag = text(event, "text").split(':').next().unwrap_or_default();
                 let Some(ask) = item["asks"]
                     .as_array()
@@ -341,382 +1353,142 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                 else {
                     continue;
                 };
-                // A withdrawn ask draws nothing under the reply: it stays in the item's history
-                // and the Work panel.
-                //
-                // CDXC:Coordinators 2026-11-10 DECISION:
-                // User, of "Q2209 · After the next rebuild, look at the header: are the Claude
-                // and Grok Bot buttons in the rig…" cut before its Withdrawn: "this doesn't tell
-                // me question withdrawn.. and actually no need to show question withdrawn by
-                // itself". The folds that remain keep their outcome (the answer, the status) and
-                // time whole, and only the question or title gives way (`foldOutcome`).
-                if ask["withdrawn"] == true {
-                    continue;
-                }
                 let key = format!("work-ask:{reference}:{tag}");
-                let picked = answers.get(&key).map(String::as_str);
-                let open = ask["open"] == true && picked.is_none();
-                let answered: String = text(ask, "answered").chars().take(200).collect();
                 let at = at_ms(text(event, "at")).unwrap_or(first_at);
-                let line = if ask["holds"] == true {
-                    format!("{} waits on this", text(item, "title"))
-                } else {
-                    "Nothing waits on it".to_string()
-                };
-                let mut ask_chips = vec![json!({ "kind": "item", "label": text(item, "title") })];
-                if !text(ask, "steps").is_empty() {
-                    ask_chips.push(steps_chip(text(ask, "steps")));
-                }
-                let ask_status = if ask["holds"] == true {
-                    "blocked"
-                } else {
-                    "needs"
-                };
-                let buttons = if open || (picked.is_some() && ask["open"] == true) {
-                    ask_buttons(item, ask, &key, picked)
-                } else {
-                    Vec::new()
-                };
-                let ask_fold = format!("{tag} \u{b7} {}", text(ask, "text"));
-                let ask_outcome = if answered.is_empty() {
-                    "Answered".to_string()
-                } else {
-                    answered.clone()
-                };
-                if ask["open"] == true {
+                if ask["open"] == true && !snoozed(ask, &key, state, now_ms) {
                     open_asks.push(OpenAsk {
-                        key: key.clone(),
-                        anchor: anchor.to_string(),
+                        key,
+                        anchor: turn.anchor.clone().unwrap_or_default(),
                         at,
                     });
                 }
-                cards.push((
-                    turn.start_ms,
-                    if ask["open"] == true { 0 } else { 5 },
-                    at,
-                    json!({
-                        "key": key,
-                        "kind": "ask",
-                        "anchorId": anchor,
-                        "turnId": turn.id,
-                        "folded": ask["open"] != true,
-                        "ref": reference,
-                        "title": text(ask, "text"),
-                        "status": ask_status,
-                        "statusLabel": status_label(ask_status),
-                        "tag": tag,
-                        "holds": ask["holds"] == true,
-                        "line": line,
-                        "chips": ask_chips,
-                        "buttons": buttons,
-                        "busy": picked.is_some() && ask["open"] == true,
-                        // A settled ask's line: a check once answered or done.
-                        "foldStatus": if ask["open"] == true { ask_status } else { "finished" },
-                        "answered": answered,
-                        "foldText": ask_fold,
-                        "foldOutcome": ask_outcome,
-                        "time": clock(at, context),
-                    }),
-                ));
             }
-            // The item's own card, unless the turn only asked.
-            if events.iter().all(|event| text(event, "kind") == "ask") {
+            let last_at = events
+                .iter()
+                .filter_map(|event| at_ms(text(event, "at")))
+                .max()
+                .unwrap_or(first_at);
+            summary.at = summary.at.max(last_at);
+            // What the turn did to the item, for its own card (`turn_change`).
+            let latest = by_turn.keys().next_back() == Some(turn_index);
+            summary.changes.push(turn_change(item, events, latest));
+            // What the turn did to the item, in a word, unless it only asked.
+            let kinds: Vec<&str> = events.iter().map(|event| text(event, "kind")).collect();
+            if kinds.iter().all(|kind| *kind == "ask") {
                 continue;
             }
-            let live = Some(*turn_index) == newest;
-            let words = events
-                .iter()
-                .rev()
-                // An ask has a card of its own.
-                .filter(|event| !matches!(text(event, "kind"), "ask" | "thread"))
-                .map(|event| event_words(event))
-                .find(|words| !words.is_empty())
-                .unwrap_or_default();
-            let status = text(item, "status");
-            let mut line = text(item, "now").to_string();
-            if status == "waiting" {
-                let waits = waits_line(item);
-                if !waits.is_empty() {
-                    line = waits;
-                }
-            }
-            let updated = at_ms(text(item, "at")).unwrap_or(last_at);
-            // A finished item with nothing more to read is its one line, so a turn that changed a
-            // dozen things stays short (Q2166 A).
-            let folded = !live || (status == "finished" && line.chars().count() <= 120);
-            let priority = if folded {
-                5
+            let verb = if kinds.contains(&"done") {
+                summary.finished = true;
+                "finished"
+            } else if kinds.contains(&"drop") {
+                "dropped"
+            } else if kinds.contains(&"add") {
+                "started"
+            } else if kinds.contains(&"wait") {
+                "waiting"
             } else {
-                match status {
-                    "needs" | "blocked" => 0,
-                    "moving" => 1,
-                    "waiting" => 2,
-                    "later" => 3,
-                    _ => 4,
-                }
+                "updated"
             };
-            let fold_text = [text(item, "title"), words.as_str()]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join(" \u{b7} ");
-            cards.push((
-                turn.start_ms,
-                priority,
-                first_at,
-                json!({
-                    "key": format!("work:{reference}:{}", turn.id),
-                    "kind": "item",
-                    "anchorId": anchor,
-                    "turnId": turn.id,
-                    "folded": folded,
-                    "ref": reference,
-                    "title": text(item, "title"),
-                    "status": status,
-                    "statusLabel": status_label(status),
-                    "line": line,
-                    "chips": item_chips(item),
-                    "age": crate::transcript::message_time::age_label(now_ms, updated),
-                    "at": updated,
-                    "foldText": fold_text,
-                    "foldOutcome": status_label(text(last, "status")),
-                    "foldStatus": text(last, "status"),
-                    "time": clock(last_at, context),
-                }),
-            ));
+            summary
+                .parts
+                .push(format!("{} {verb}", text(item, "title")));
+            if summary.item_key.is_empty() {
+                summary.item_key = text(item, "key").to_string();
+            }
         }
     }
-    // Everything still running, under the newest reply: one quiet row (Q2166 A).
-    if let Some(row) = moving_row(items, &turns, &cards, now_ms) {
-        cards.push(row);
+    // One quiet line per turn under its reply: what the turn changed, its asks and when. It opens
+    // the Work panel at the first line of work it names; the cards themselves live in the dock
+    // (`dock`) and the Work panel.
+    //
+    // CDXC:Coordinators 2026-11-10 DECISION:
+    // User (placement page, C): "The transcript keeps one quiet line per turn". The cards under a
+    // reply and the In progress row there are gone: what needs the user docks above the chat box,
+    // the In progress list opens from the status line, and the Work panel keeps the rest.
+    let merged = merged_turn(state, &turns);
+    for (turn_index, summary) in lines {
+        let turn = &turns[turn_index];
+        let Some(anchor) = turn.anchor.as_deref() else {
+            continue;
+        };
+        // The newest finished turn's line rides on its "Worked for" line instead (`turn_summary`).
+        if Some(turn_index) == merged {
+            continue;
+        }
+        // One card per item the turn changed, said plainly: "Work item updated", the item's
+        // title, the line that changed and its state now as the pill. A turn that changed more
+        // than `TURN_CARDS_MAX` items is one card naming how many, its titles as the line.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the thin line "Usage meters: a click must not make the main window flicker
+        // updated" above a "Message from" card: "make this one look like the other card please"
+        // and "please make it clearer, i dont get what this card means". The title with "updated"
+        // on its end read as part of the title. Each card now leads with what happened to a work
+        // item, sets the item's title apart, and opens it in the Work panel (`jumpToWorkCard`).
+        // Supersedes the one line per turn joining "<title> updated" parts.
+        let base = |key: String, status: &str, at: i64| {
+            json!({
+                "key": key,
+                "kind": "turnLine",
+                "anchorId": anchor,
+                "turnId": turn.id,
+                "folded": true,
+                "foldStatus": if status.is_empty() { "moving" } else { status },
+                "time": clock(at, context),
+            })
+        };
+        if summary.changes.len() > TURN_CARDS_MAX {
+            let titles: Vec<&str> = summary
+                .changes
+                .iter()
+                .map(|change| change.title.as_str())
+                .collect();
+            let lead = format!("{} work items changed", titles.len());
+            let mut line = base(format!("work-turn:{}", turn.id), "moving", summary.at);
+            line["lead"] = json!(lead);
+            line["title"] = json!("");
+            line["detail"] = json!(titles.join(" \u{b7} "));
+            line["foldText"] = json!(format!("{lead}: {}", titles.join(" \u{b7} ")));
+            line["foldOutcome"] = json!("");
+            if let Some(first) = summary
+                .changes
+                .first()
+                .filter(|change| !change.key.is_empty())
+            {
+                line["command"] = json!({ "type": "jumpToWorkCard", "key": first.key });
+            }
+            cards.push((turn.start_ms, 5, summary.at, line));
+            continue;
+        }
+        for (index, change) in summary.changes.iter().enumerate() {
+            let mut line = base(
+                format!("work-turn:{}:{index}", turn.id),
+                &change.status,
+                change.at.max(turn.start_ms),
+            );
+            line["lead"] = json!(change.lead);
+            line["title"] = json!(change.title);
+            line["detail"] = json!(change.detail);
+            line["status"] = json!(change.status);
+            line["statusLabel"] = json!(if change.status.is_empty() {
+                ""
+            } else {
+                status_label(&change.status)
+            });
+            // The words the phone's line shows until it draws the card's parts.
+            line["foldText"] = json!(format!("{}: {}", change.lead, change.title));
+            line["foldOutcome"] = json!("");
+            if !change.key.is_empty() {
+                line["command"] = json!({ "type": "jumpToWorkCard", "key": change.key });
+            }
+            cards.push((turn.start_ms, 5, change.at, line));
+        }
     }
     cards.sort_by_key(|(turn, priority, at, _)| (*turn, *priority, *at));
     open_asks.sort_by_key(|ask| ask.at);
     (
         Value::Array(cards.into_iter().map(|(_, _, _, card)| card).collect()),
         open_asks,
-    )
-}
-
-/// The "Moving · 7" row under the newest reply: every line of work really moving that has no card
-/// of its own there, which opens to a list; a row of the list goes to the item's newest card.
-/// Waiting and Later items stay out of the reply unless its turn changed them (they have their
-/// card then); the Work panel lists them.
-///
-/// CDXC:Coordinators 2026-11-10 DECISION:
-/// User, on "Moving · 18 … 12 waiting": "why 12 waiting here??". The row counts and lists only
-/// Moving items, with no "N waiting" tail.
-///
-/// CDXC:Coordinators 2026-11-10 DECISION:
-/// User (Q2166 "A. A card per item that changed, news on top"): the reply is a few sentences of
-/// news, then a card per line of work the turn touched, needs-you first; a settled ask folds to its
-/// line; "everything still running is one 'Moving · 7' row that opens to a list"; finished items
-/// with nothing to read draw as the one-line fold, so a turn with twelve changes stays short.
-fn moving_row(
-    items: &[Value],
-    turns: &[Turn],
-    cards: &[(i64, u8, i64, Value)],
-    now_ms: i64,
-) -> Option<(i64, u8, i64, Value)> {
-    let turn = turns.iter().rev().find(|turn| turn.anchor.is_some())?;
-    let anchor = turn.anchor.clone()?;
-    let shown: Vec<&str> = cards
-        .iter()
-        .filter(|(_, _, _, card)| card["anchorId"] == anchor.as_str() && card["folded"] != true)
-        .map(|(_, _, _, card)| text(card, "ref"))
-        .collect();
-    let mut rows: Vec<(u8, i64, Value)> = Vec::new();
-    for item in items.iter().filter(|item| item["kind"] == "item") {
-        let status = text(item, "status");
-        let reference = text(item, "ref");
-        if status != "moving" || shown.contains(&reference) {
-            continue;
-        }
-        let at = at_ms(text(item, "at")).unwrap_or(0);
-        // Its newest card, which a click on its row goes to.
-        let target = cards
-            .iter()
-            .filter(|(_, _, _, card)| card["kind"] == "item" && card["ref"] == reference)
-            .max_by_key(|(turn, _, _, _)| *turn)
-            .map(|(_, _, _, card)| card);
-        let (rank, group, group_label, who) = who_has(item);
-        let mut row = json!({
-            "ref": reference,
-            "title": text(item, "title"),
-            "status": status,
-            "line": text(item, "now"),
-            "age": crate::transcript::message_time::age_label(now_ms, at),
-            "group": group,
-            "groupLabel": group_label,
-            "who": who,
-        });
-        if let Some(target) = target {
-            row["command"] = json!({
-                "type": "jumpToWorkCard",
-                "anchorId": target["anchorId"],
-                "key": target["key"],
-            });
-        }
-        rows.push((rank, at, row));
-    }
-    if rows.is_empty() {
-        return None;
-    }
-    // By who has it (with you, waiting outside, threads, the coordinator), newest first in each.
-    rows.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
-    let mut groups: Vec<Value> = Vec::new();
-    for (_, _, row) in &rows {
-        match groups.last_mut() {
-            Some(group) if group["key"] == row["group"] => {
-                group["count"] = json!(group["count"].as_u64().unwrap_or(0) + 1);
-            }
-            _ => groups.push(json!({
-                "key": row["group"],
-                "label": row["groupLabel"],
-                "kind": row["who"]["kind"],
-                "count": 1,
-            })),
-        }
-    }
-    // The closed row says who has what: "1 with you · 1 on GitHub · 5 threads".
-    let count_of = |kind: &str| {
-        groups
-            .iter()
-            .filter(|group| group["kind"] == kind)
-            .map(|group| group["count"].as_u64().unwrap_or(0))
-            .sum::<u64>()
-    };
-    let mut parts: Vec<Value> = Vec::new();
-    let you = count_of("you");
-    if you > 0 {
-        parts.push(json!({ "text": format!("{you} with you"), "tone": "question" }));
-    }
-    let github = count_of("github");
-    if github > 0 {
-        parts.push(json!({ "text": format!("{github} on GitHub"), "tone": "" }));
-    }
-    let outside = count_of("outside");
-    if outside > 0 {
-        parts.push(json!({ "text": format!("{outside} waiting outside"), "tone": "" }));
-    }
-    let threads = count_of("thread");
-    if threads > 0 {
-        let noun = if threads == 1 { "thread" } else { "threads" };
-        parts.push(json!({ "text": format!("{threads} {noun}"), "tone": "" }));
-    }
-    let coordinator = count_of("coordinator");
-    if coordinator > 0 {
-        parts.push(json!({ "text": format!("{coordinator} with the coordinator"), "tone": "" }));
-    }
-    let who_summary = parts
-        .iter()
-        .map(|part| text(part, "text"))
-        .collect::<Vec<_>>()
-        .join(" \u{b7} ");
-    let titles: Vec<&str> = rows.iter().map(|(_, _, row)| text(row, "title")).collect();
-    Some((
-        turn.start_ms,
-        4,
-        i64::MAX,
-        json!({
-            "key": format!("work-moving:{anchor}"),
-            "kind": "moving",
-            "anchorId": anchor,
-            "turnId": turn.id,
-            "title": format!("In progress \u{b7} {}", rows.len()),
-            "summary": titles.join(", "),
-            "whoSummary": who_summary,
-            "summaryParts": parts,
-            "groups": groups,
-            "rows": rows.into_iter().map(|(_, _, row)| row).collect::<Vec<_>>(),
-        }),
-    ))
-}
-
-/// Who has a moving item, for the Moving list's groups: the user when it asks them something, the
-/// outside thing it waits on (GitHub, a review), the threads working on it, else the coordinator.
-/// Returns its group's rank, key and label, and `{kind, label, agentIcon}` for its icon and the
-/// table's Who column.
-///
-/// CDXC:Coordinators 2026-11-10 DECISION:
-/// User (Q2207 "B. Grouped by who has it", with "i like the table for wider screen but then
-/// switch to not table when narrower screen"): the opened Moving list groups its rows by who has
-/// them under quiet labels, With you first, then waiting on something outside, then threads
-/// working; a wide chat draws them as the compact table (Item, Where it stands, Who, Age), a
-/// narrow one and the phone as rows with the full text. The list keeps only Moving items (the
-/// user's "why 12 waiting here??"), so "waiting outside" is a moving item whose thread works
-/// while it also waits on something the coordinator named (`item wait --on`).
-fn who_has(item: &Value) -> (u8, String, String, Value) {
-    let asks_you = item["asks"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .any(|ask| ask["open"] == true);
-    let waits: Vec<&Value> = item["waits"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|wait| wait["open"] == true)
-        .collect();
-    if asks_you || waits.iter().any(|wait| wait["kind"] == "ask") {
-        return (
-            0,
-            "you".to_string(),
-            "With you".to_string(),
-            json!({ "kind": "you", "label": "You" }),
-        );
-    }
-    if let Some(wait) = waits.iter().find(|wait| wait["kind"] == "outside") {
-        let label = text(wait, "label");
-        let lower = label.to_lowercase();
-        let github = lower.contains("github")
-            || lower.contains("pull request")
-            || lower.contains("pr #")
-            || lower
-                .split(|c: char| !c.is_alphanumeric())
-                .any(|word| word == "ci");
-        return if github {
-            (
-                1,
-                "outside:github".to_string(),
-                "Waiting on GitHub".to_string(),
-                json!({ "kind": "github", "label": "GitHub" }),
-            )
-        } else {
-            (
-                1,
-                format!("outside:{label}"),
-                format!("Waiting on {label}"),
-                json!({ "kind": "outside", "label": label }),
-            )
-        };
-    }
-    let threads: Vec<&Value> = item["threads"].as_array().into_iter().flatten().collect();
-    if let Some(first) = threads.first() {
-        let agent = text(first, "agent");
-        let mut name = crate::transcript::agent_message_card::agent_display_name(agent, agent);
-        if name.is_empty() {
-            name = "Thread".to_string();
-        }
-        if threads.len() > 1 {
-            name = format!("{name} \u{d7}{}", threads.len());
-        }
-        return (
-            2,
-            "threads".to_string(),
-            "Threads working".to_string(),
-            json!({
-                "kind": "thread",
-                "label": name,
-                "agentIcon": crate::transcript::agent_message_card::agent_icon(agent, ""),
-            }),
-        );
-    }
-    (
-        3,
-        "coordinator".to_string(),
-        "With the coordinator".to_string(),
-        json!({ "kind": "coordinator", "label": "Coordinator" }),
     )
 }
 
@@ -733,16 +1505,36 @@ pub fn open_asks(state: &ChatState, context: &ChatContext) -> Vec<OpenAsk> {
     project(state, context).1
 }
 
-/// When the first age on a live card changes after `now_ms`: the next whole minute since its item
-/// last changed (`age_label` reads only whole minutes).
-pub fn ages_change_at(cards: &Value, now_ms: i64) -> Option<i64> {
-    cards
-        .as_array()?
-        .iter()
+/// When the cards next read differently with nothing but the clock moving: the first age on a
+/// live card to change (`age_label_changes_at`), or the first snooze to end, which brings its ask
+/// back.
+pub fn ages_change_at(state: &ChatState, cards: &Value, now_ms: i64) -> Option<i64> {
+    let ages = cards
+        .as_array()
+        .into_iter()
+        .flatten()
         .filter(|card| card["folded"] != true)
         .filter_map(|card| card["at"].as_i64())
-        .map(|at| at + ((now_ms - at).max(0) / 60_000 + 1) * 60_000)
-        .min()
+        .map(|at| crate::transcript::message_time::age_label_changes_at(now_ms, at));
+    ages.chain(snoozes_end_at(state, now_ms)).min()
+}
+
+/// When the first snooze still running at `now_ms` ends: gxserver's `snoozedUntil` on an open ask,
+/// or one sent from here. Its ask is back under Needs you from then, in the dock and the panel.
+pub fn snoozes_end_at(state: &ChatState, now_ms: i64) -> Option<i64> {
+    let sent = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .flat_map(|item| item["asks"].as_array().into_iter().flatten())
+        .filter_map(|ask| at_ms(text(ask, "snoozedUntil")));
+    let local = state.extras.panels.work_snoozed.values().copied();
+    sent.chain(local).filter(|until| *until > now_ms).min()
 }
 
 /// Everything [`project`] reads besides the clock, kept beside the cards it built
@@ -760,16 +1552,23 @@ pub struct WorkInputs {
     /// The stamp of the panels `answers` was read from.
     panels: u64,
     answers: BTreeMap<String, String>,
+    /// The newest turn's line rides on "Worked for" while that shows (`merged_turn`).
+    worked: bool,
+    /// Snoozes sent from here (`snoozed`).
+    snoozed: BTreeMap<String, i64>,
 }
 
 /// Whether the chat's last message is a reply with words in it.
 fn last_has_words(state: &ChatState) -> bool {
     state.messages.composed.last().is_some_and(|message| {
-        message.role == ChatRole::Assistant
-            && !crate::transcript::prose::prose_markdown(&message.blocks)
-                .trim()
-                .is_empty()
+        message.role == ChatRole::Assistant && crate::transcript::prose::has_prose(&message.blocks)
     })
+}
+
+/// Whether the newest turn's line rides on "Worked for" (`merged_turn`).
+fn worked(state: &ChatState) -> bool {
+    state.transcript_view.worked_line.is_some()
+        && !state.transcript_view.chat_look.status_in_transcript
 }
 
 fn work_of(state: &ChatState) -> Option<&Value> {
@@ -791,6 +1590,8 @@ impl WorkInputs {
             last_has_words: last_has_words(state),
             panels: state.extras.panels.stamp(),
             answers: state.extras.panels.board_answers.clone(),
+            worked: worked(state),
+            snoozed: state.extras.panels.work_snoozed.clone(),
         }
     }
 
@@ -805,6 +1606,7 @@ impl WorkInputs {
                     .last()
                     .map_or("", |message| message.id.as_str())
             || self.last_has_words != last_has_words(state)
+            || self.worked != worked(state)
         {
             return false;
         }
@@ -823,7 +1625,9 @@ impl WorkInputs {
         }
         let panels = state.extras.panels.stamp();
         if self.panels != panels {
-            if self.answers != state.extras.panels.board_answers {
+            if self.answers != state.extras.panels.board_answers
+                || self.snoozed != state.extras.panels.work_snoozed
+            {
                 return false;
             }
             self.panels = panels;
@@ -846,6 +1650,7 @@ pub fn project_kept(
     state: &ChatState,
     context: &ChatContext,
     kept: &mut Option<KeptWork>,
+    turns: &[Turn],
 ) -> (crate::document::SharedValue, Vec<OpenAsk>) {
     // Not a coordinator, or a gxserver that sends no work: nothing to build or keep.
     if state
@@ -864,8 +1669,8 @@ pub fn project_kept(
             return value.clone();
         }
     }
-    let (cards, asks) = project(state, context);
-    let changes_at = ages_change_at(&cards, now_ms);
+    let (cards, asks) = project_with(state, context, turns);
+    let changes_at = ages_change_at(state, &cards, now_ms);
     let value = (crate::document::SharedValue::from(cards), asks);
     *kept = Some((WorkInputs::of(state), now_ms, changes_at, value.clone()));
     value

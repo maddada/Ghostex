@@ -224,8 +224,9 @@ pub use crate::sidebar_menu::{
     project_header_actions, unified_default_hover_buttons, unified_delete_worktree_menu,
     unified_hover_buttons, workspace_menu, workspace_switch_target, HeaderCommand, HoverAction,
     HoverSlot, HoverStrip, LauncherAgent, MenuCommand, MenuGroup, MenuHost, MenuItem,
-    MenuOpenTarget, MenuSecondary, MenuSplit, SessionActions, SidebarMenus,
-    CLONE_PROJECT_ON_MACHINE, UNIFIED_TOGGLE_GROUPS_ACTION,
+    MenuOpenTarget, MenuSecondary, MenuSplit, SessionActions, SidebarMenus, ADD_PROJECT_ACTION,
+    CLONE_PROJECT_ON_MACHINE, COMMANDS_ACTION, MENU_PANEL_DEV_SERVERS, MENU_PANEL_EXTENSIONS,
+    MENU_PANEL_HELP, MENU_PANEL_MESSAGE_TYPE, MENU_PANEL_RESOURCES, UNIFIED_TOGGLE_GROUPS_ACTION,
 };
 pub use crate::sidebar_menu::{
     AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,
@@ -239,6 +240,7 @@ pub use crate::sidebar_ui::{
     HIDDEN_ITEMS_STORAGE_KEY, MACHINE_TAB_STORAGE_KEY, PROJECT_COLLECTIONS_STORAGE_KEY,
     SIDEBAR_WINDOW_SCOPE_ID,
 };
+pub use crate::sidebar_view::project_sidebar_icon_data_url;
 pub use crate::sidebar_view::{
     armed_actions_by_session, close_project_group_is_active, close_project_successor_candidates,
     close_project_successor_group_order, first_awake_successor_session_id, is_awake_successor_row,
@@ -252,9 +254,9 @@ pub use crate::sidebar_view::{
     FocusedRowSpace, FoldedStatus, FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary,
     GroupView, LabelDeadline, MachineChip, MachineNotice, MachineSummary, MachineTabInput,
     MachineTabLayout, MachineTabView, NeedsYou, OrderItem, OrderKind, PinnedSessionOrder,
-    ProjectContextView, ProjectDiffStats, ProjectDropLanding, ProjectDropRow, ProjectSlotPlan,
-    RemoteMachineView, RowNesting, RowWorktree, SectionCollapse, SectionId, SectionView,
-    SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone, SessionLinks,
+    ProjectContextView, ProjectCopy, ProjectDiffStats, ProjectDropLanding, ProjectDropRow,
+    ProjectSlotPlan, RemoteMachineView, RowNesting, RowWorktree, SectionCollapse, SectionId,
+    SectionView, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone, SessionLinks,
     SessionLinksBadge, SessionLinksChatPill, SessionLinksDisplay, SessionLinksRow,
     SessionMenuFacts, SessionRow, SessionSlotPlan, SessionSortMode, SessionTiming, SessionView,
     SessionWork, ShowAllProjectsRow, SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs,

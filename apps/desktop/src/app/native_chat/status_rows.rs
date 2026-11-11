@@ -197,6 +197,8 @@ impl NativeChatView {
         let glyph = match subject {
             "compaction" => "titlebar/arrows-diagonal-minimize.svg",
             "command" => "titlebar/terminal-2.svg",
+            // A prompt the agent's own hook refused (gx-chat-core `transcript/hook_blocked.rs`).
+            "hook" => "titlebar/barrier-block.svg",
             _ => "titlebar/adjustments-horizontal.svg",
         };
         let tile = match tone_name {

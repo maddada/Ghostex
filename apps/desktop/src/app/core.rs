@@ -214,7 +214,6 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_accounts: Vec<serde_json::Value>,
     pub(crate) titlebar_accounts_refresh_in_flight: std::collections::HashSet<String>,
     pub(crate) titlebar_accounts_revision: u64,
-    pub(crate) titlebar_tips_unread_count: u64,
     // Platform-neutral updater state drives the native titlebar. Sparkle owns
     // macOS delivery and Velopack owns Windows delivery; Linux only announces
     // the release. The Windows and Linux backends retain release metadata for
@@ -308,6 +307,8 @@ pub struct GhostexGpuiApp {
     pub(crate) remote_browser: crate::app::remote_browser::RemoteBrowserRuntime,
     pub(crate) remote_gxserver_connect_generations: HashMap<String, u64>,
     pub(crate) remote_gxserver_watchdog_probe_in_flight: bool,
+    /// When each computer's link came up or was dropped, for the remote log (helpers/remote/link_log.rs).
+    pub(crate) remote_link_log: crate::app::helpers::GpuiRemoteLinkLog,
     /*
     CDXC:RemoteMachines 2026-06-24-19:54:
     Live remote presentation streams are owned by Rust beside the saved-machine tunnel. Use a runtime generation counter plus per-connection cancel flag so reconnect/disconnect prevents stale WebSocket snapshots or deltas from mutating a newer machine-scoped sidebar cache.
@@ -642,6 +643,8 @@ pub struct GhostexGpuiApp {
     pub(crate) sidebar_primary_agent_launcher_id: Option<String>,
     /// The open native GPUI app modal, if any; see app/native_app_modal_lifecycle.rs.
     pub(crate) native_app_modal: Option<NativeAppModal>,
+    /// Ghostex pages put aside, still running, oldest first; see app/visual_page_hidden.rs.
+    pub(crate) hidden_visual_pages: Vec<crate::app::visual_page_hidden::HiddenVisualPage>,
     /// The native Automate view, created the first time the view panel shows Automate; see app/native_automate/.
     pub(crate) native_automate: Option<Entity<crate::app::native_automate::NativeAutomateView>>,
     /// The Changes view (app/native_changes/), made the first time it is drawn.
@@ -978,11 +981,6 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_popup_menu: Option<GpuiTitlebarPopupState>,
     pub(crate) context_menu: Option<crate::app::context_menu::GpuiContextMenu>,
     pub(crate) titlebar_popup_window: Option<WindowHandle<GpuiTitlebarPopupWindow>>,
-    /// Last painted bounds of the titlebar Help button, so the `openGhostexHelp`
-    /// hotkey can anchor the Help popup without a click.
-    /// The trailing ⋯ button's last painted bounds. Its menu rows and the Ghostex
-    /// Help hotkey both anchor their panels here.
-    pub(crate) titlebar_more_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// The top bar's update button, which anchors the Updates list (titlebar/updates_menu.rs).
     pub(crate) titlebar_update_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// A header dropdown asked to open before its trigger button had painted (a hotkey, a menu row
@@ -990,10 +988,6 @@ pub struct GhostexGpuiApp {
     pub(crate) pending_titlebar_popup_open: Option<GpuiTitlebarPopupKind>,
     pub(crate) titlebar_extension_popup_generation: u64,
     pub(crate) titlebar_extension_popup: Option<GpuiTitlebarExtensionPopupState>,
-    pub(crate) titlebar_tips_cli_status: Option<serde_json::Value>,
-    pub(crate) titlebar_tips_agent_hook_status: Option<serde_json::Value>,
-    /// Built-in agent ids the sidebar launchers map to; `None` until the first HUD read completes.
-    pub(crate) titlebar_tips_sidebar_agent_ids: Option<HashSet<String>>,
     pub(crate) agent_hook_status_request_in_flight: bool,
     /// A status walk asked for while one was running (`Some(None)` = every agent), run when it ends.
     pub(crate) agent_hook_status_request_queued: Option<Option<Vec<String>>>,

@@ -120,17 +120,6 @@ fn gpui_onboarding_theme_table() -> ThemeTable {
     }
 }
 
-/// The folder chooser's first sentence: why the system dialog did not open, in a user's words.
-/// GPUI reports a missing Linux portal with its own long message; the log keeps the raw reason.
-fn gpui_folder_dialog_unavailable_copy(reason: &str) -> String {
-    let lowered = reason.to_ascii_lowercase();
-    if lowered.contains("portal") {
-        "This computer has no system folder picker (Ghostex uses the desktop portal's file chooser, xdg-desktop-portal), so choose the folder here.".to_string()
-    } else {
-        "The system folder picker could not open, so choose the folder here.".to_string()
-    }
-}
-
 fn open_message_has_projects(message: &serde_json::Value) -> bool {
     message
         .get("latestSidebarStateMessage")
@@ -192,7 +181,6 @@ impl GhostexGpuiApp {
             system_light: gpui_system_uses_light_appearance(),
             cli_available: true,
             initial_panel: InitialPanel::Panel(1),
-            picked_folder: None,
             intro_video,
             notification_problem: gpui_attention_notification_problem(),
         };
@@ -388,33 +376,15 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            OnboardingCommand::PickProjectFolder => {
-                self.handle_gpui_pick_first_launch_project_folder_message(cx);
-            }
-            OnboardingCommand::FinishFirstLaunch {
-                request_id,
-                agent_id,
-                path,
-            } => {
-                let command = serde_json::json!({
-                    "agentId": agent_id,
-                    "path": path,
-                    "requestId": request_id,
-                    "type": "firstLaunchCreateProjectSession",
-                });
-                if let Some(command) = command.as_object() {
-                    self.handle_gpui_first_launch_create_project_session_message(command, cx);
-                }
-            }
             OnboardingCommand::Leave => {
                 self.close_gpui_onboarding_window(cx);
                 self.open_app_modal_from_bridge(GpuiAppModalKind::AddProject.open_message(), cx);
             }
             OnboardingCommand::Finish(target) => {
+                let has_projects = self.gpui_onboarding_has_projects(cx);
                 self.complete_first_launch_setup();
                 self.close_gpui_onboarding_window(cx);
                 match target {
-                    FinishTarget::None => {}
                     FinishTarget::Settings(tab) => {
                         let mut message =
                             serde_json::json!({ "modal": "settings", "type": "open" });
@@ -422,16 +392,51 @@ impl GhostexGpuiApp {
                             message["initialTab"] = serde_json::json!(tab);
                         }
                         self.open_app_modal_from_bridge(message, cx);
+                        // With no project yet, closing Settings leads on to Add Project, as Open Ghostex does.
+                        if !has_projects {
+                            self.queue_add_project_after_settings();
+                        }
                     }
-                    // The sidebar menu's Connect a phone window, where that menu now leads
-                    // (CDXC:RemotePairing 2026-11-10 in window/connect_device_modal.rs).
-                    FinishTarget::RemoteSettings => {
-                        self.open_app_modal_from_bridge(
-                            serde_json::json!({ "modal": "remoteSetup", "type": "open" }),
-                            cx,
-                        );
+                    FinishTarget::None | FinishTarget::RemoteSettings => {
+                        // "Pair my phone after setup": the Connect a Device window (CDXC:RemotePairing
+                        // 2026-11-10 in window/connect_device_modal.rs) waits for the first reply.
+                        if target == FinishTarget::RemoteSettings {
+                            self.queue_connect_device_after_first_reply();
+                        }
+                        // CDXC:Onboarding 2026-11-11 WHY: setup no longer asks for a folder (DECISION in window/onboarding/get_started.rs), so it can end with no project; Add Project opens then, so the app is never an empty shell.
+                        if !has_projects {
+                            self.open_app_modal_from_bridge(
+                                GpuiAppModalKind::AddProject.open_message(),
+                                cx,
+                            );
+                        }
                     }
                 }
+            }
+            OnboardingCommand::AgentSignIn {
+                agent_id,
+                operation,
+            } => {
+                let params = serde_json::json!({ "agentId": agent_id, "operation": operation });
+                let background = cx.background_executor().clone();
+                cx.spawn(async move |this, cx| {
+                    let answer = background
+                        .spawn(async move {
+                            gpui_gxserver_rpc_result(
+                                "/api/agentSignIn",
+                                &params,
+                                Duration::from_secs(30),
+                            )
+                            .ok()
+                        })
+                        .await;
+                    let _ = this.update(cx, |app, cx| {
+                        app.update_gpui_onboarding(cx, |view, cx| {
+                            view.receive_agent_sign_in(&agent_id, answer, cx)
+                        });
+                    });
+                })
+                .detach();
             }
             OnboardingCommand::AgentCli {
                 request_id,
@@ -467,65 +472,6 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
-        }
-    }
-
-    /// Host messages for the open onboarding (`firstLaunchProjectFolderPicked`,
-    /// `firstLaunchCreateProjectSessionResult`). Returns false for any other message.
-    pub(crate) fn receive_gpui_onboarding_modal_message(
-        &mut self,
-        message: &serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        match message.get("type").and_then(serde_json::Value::as_str) {
-            Some("firstLaunchProjectFolderPicked") => {
-                let Some(path) = message
-                    .get("path")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_string)
-                else {
-                    return false;
-                };
-                self.update_gpui_onboarding(cx, |view, cx| view.receive_picked_folder(path, cx))
-            }
-            Some("firstLaunchProjectFolderDialogUnavailable") => {
-                let reason = gpui_folder_dialog_unavailable_copy(
-                    message
-                        .get("reason")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default(),
-                );
-                self.update_native_app_modal(
-                    KIND,
-                    cx,
-                    |view: &mut GpuiOnboardingWindow, window, cx| {
-                        view.open_folder_chooser(reason, window, cx)
-                    },
-                )
-                .is_some()
-            }
-            Some("firstLaunchCreateProjectSessionResult") => {
-                let Some(request_id) = message
-                    .get("requestId")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_string)
-                else {
-                    return false;
-                };
-                let ok = message.get("ok").and_then(serde_json::Value::as_bool) == Some(true);
-                let error = message
-                    .get("error")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_string);
-                self.update_gpui_onboarding(cx, |view, cx| {
-                    if ok {
-                        // The project now exists, so the window may close.
-                        view.set_has_projects(true, cx);
-                    }
-                    view.receive_finish_result(&request_id, ok, error, cx);
-                })
-            }
-            _ => false,
         }
     }
 

@@ -8,6 +8,8 @@
 //! implementation, drawn by the GPUI chat and the phone's native chat. Supersedes the 2026-09-17
 //! decision that kept React as the desktop default with GPUI opt-in.
 
+use std::collections::HashSet;
+
 use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, DeferredWork};
 
@@ -392,7 +394,7 @@ pub(crate) fn report_lands_mid_response(messages: &[ChatRow], at: usize) -> bool
 /// ([`report_lands_mid_response`]), or a background task's end that gxserver handed back holding
 /// the rows after it (`deferredWork`), which opens a turn here so those rows still load.
 ///
-/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default still reads it the old way.
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default keeps the notification as one of the turn's calls and reads its section with the turn's own instead (`turn_section`).
 fn work_lands_mid_response(messages: &[ChatRow], at: usize) -> bool {
     report_lands_mid_response(messages, at)
         || messages.get(at).is_some_and(|row| {
@@ -400,6 +402,101 @@ fn work_lands_mid_response(messages: &[ChatRow], at: usize) -> bool {
                 && row.deferred_work.is_some()
                 && lands_mid_response(messages, at)
         })
+}
+
+/// Whether the words in `rows[0]` introduce a question the agent asks after them (its
+/// `AskUserQuestion` and the like, in the same row or a later one): they are not the turn's reply.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: the turn's Completed can reach the chat before the reply the agent wrote after the answer, and for that moment the turn read as finished with the question's sentence as its reply. Under Reduced and Quiet the turn's tail draws its answered card, and the sentence's row drew the same card again, so a second answered card and the sentence showed for about a second until the reply landed.
+fn introduces_question(rows: &[ChatRow]) -> bool {
+    let Some((first, later)) = rows.split_first() else {
+        return false;
+    };
+    let after_words = first
+        .blocks
+        .iter()
+        .rposition(|block| matches!(block, ChatBlock::Text { .. } | ChatBlock::ImageRef { .. }))
+        .map_or(&first.blocks[..], |at| &first.blocks[at + 1..]);
+    after_words
+        .iter()
+        .chain(later.iter().flat_map(|row| row.blocks.iter()))
+        .any(|block| {
+            matches!(block, ChatBlock::ToolCall { name, .. }
+                if crate::questions::exchange::is_question_tool_name(name))
+        })
+}
+
+/// The user rows of `raw` (the rows as they arrived, before the chat's tool fold) that reached the
+/// agent in the middle of its response, so they belong to the turn already running instead of
+/// opening one: a thread's report, another agent's message, or words the reader sent while the
+/// agent worked.
+///
+/// Claude hands such a message to the model with a call's result and records it as a
+/// `queued_command` row stamped with the time it was queued; gxserver gives a user row whose time is
+/// earlier than the row before it in the file that row's time (`stamp_user_row_after_predecessor`
+/// in server/src/session_chat.rs). So a mid-response row has exactly the time of the row before it,
+/// and that row is the agent's call or a call's result (or another such message, several landing
+/// at once), while a prompt the reader sends after a turn ended is later than everything before
+/// it, even after a turn that ended on a call. In an older turn whose work gxserver holds back, the
+/// row before it is the prompt, whose held-back rows end at that same time (`completedAt`), with
+/// no reply in view (gxserver keeps a finished reply in view, `collapse_snapshot_messages`). An
+/// Interrupted marker, a reply, a slash command or its output before it means the agent had
+/// stopped. A background task's end has its own rule (`background_rows.rs`).
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User, of a coordinator chat where "Used 4 tools", "Message to Pill menus open off screen" and
+/// "Used 1 tool" stood above the turn's "Worked for 28s" row: "why aren't we putting those 3 cards
+/// (used tools / Message to Pill menus... / Used 1 tool) under Worked for 28s? pls fix". A message
+/// that lands mid-response no longer cuts the turn: the turn runs from the prompt to its reply, its
+/// one "Worked for" row times and counts all of its work, and the message stays where it was
+/// shown before, a row of the turn kept in view (`partition_completed_work`): another agent's
+/// message or a thread's report folds into the row as its message card where messages fold
+/// (`folded_cards.rs`) and stands under the row elsewhere, and the reader's own words stand under
+/// the row, above the reply that answers them. While the turn runs it stays one live stretch from
+/// its prompt (`active_response_start_index`). Agent work Reduced and Quiet keep their own rule for
+/// a subagent's report (`report_lands_mid_response`) and still cut their lines at such a row.
+pub fn mid_response_rows(raw: &[ChatRow]) -> HashSet<String> {
+    let mut found: HashSet<String> = HashSet::new();
+    for at in 1..raw.len() {
+        let row = &raw[at];
+        let Some(time) = row.timestamp else {
+            continue;
+        };
+        if row.role != ChatRole::User
+            || row.queued
+            || is_hidden_message(row)
+            || is_command_turn(row)
+            || is_command_output_turn(row)
+            || is_background_task_row(row)
+            || suppressed_turn_label(row).as_deref() == Some(INTERRUPTED_LABEL)
+        {
+            continue;
+        }
+        let previous = &raw[at - 1];
+        let agent_mid_call = is_agent_work_row(previous)
+            && !is_background_task_row(previous)
+            && matches!(
+                previous.blocks.last(),
+                Some(ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. })
+            );
+        let continues = if previous.timestamp == Some(time) {
+            agent_mid_call || found.contains(&previous.id)
+        } else {
+            false
+        };
+        let held_back = previous.role == ChatRole::User
+            && !previous.queued
+            && !is_command_turn(previous)
+            && suppressed_turn_label(previous).is_none()
+            && previous
+                .deferred_work
+                .as_ref()
+                .is_some_and(|work| work.completed_at == Some(time));
+        if continues || held_back {
+            found.insert(row.id.clone());
+        }
+    }
+    found
 }
 
 /// Whether the agent's last row before `at` is not a finished reply ([`is_settled_reply`]), past
@@ -420,21 +517,32 @@ fn lands_mid_response(messages: &[ChatRow], at: usize) -> bool {
 /// mid-response and a prompt the agent CLI is still holding in its queue both arrive as user rows;
 /// neither starts a new response, so neither may settle the one in flight. Falls back to 0 when no
 /// such row exists (stitched scroll-back that opens mid-conversation).
-pub(crate) fn active_response_start_index(messages: &[ChatRow]) -> usize {
+pub(crate) fn active_response_start_index(
+    messages: &[ChatRow],
+    mid_response: &HashSet<String>,
+) -> usize {
     (0..messages.len())
         .rev()
-        .find(|at| is_accepted_user_prompt(&messages[*at]) || wakes_settled_agent(messages, *at))
+        .find(|at| {
+            (is_accepted_user_prompt(&messages[*at]) && !mid_response.contains(&messages[*at].id))
+                || wakes_settled_agent(messages, *at)
+        })
         .unwrap_or(0)
 }
 
 /// One copy affordance per response: the last assistant text before the next user turn.
 /// The ids are returned in transcript order, not sorted: the document's `finalIds` is the
 /// JavaScript `Set`'s insertion order and the renderer keys rows off it.
-pub fn final_assistant_message_ids(messages: &[ChatRow], is_working: bool) -> Vec<String> {
+/// `mid_response` is [`mid_response_rows`] of the rows before the tool fold.
+pub fn final_assistant_message_ids(
+    messages: &[ChatRow],
+    is_working: bool,
+    mid_response: &HashSet<String>,
+) -> Vec<String> {
     let mut ids: Vec<String> = Vec::new();
     let mut final_assistant_id: Option<String> = None;
     let active_start = if is_working {
-        active_response_start_index(messages)
+        active_response_start_index(messages, mid_response)
     } else {
         messages.len()
     };
@@ -471,9 +579,10 @@ pub fn final_assistant_message_ids(messages: &[ChatRow], is_working: bool) -> Ve
             continue;
         }
         if message.role == ChatRole::User {
-            // A user row past the active response's start is a held prompt: the text before it is
+            // A user row past the active response's start is a held prompt, and one that landed
+            // mid-response (`mid_response_rows`) is part of the response: the text before it is
             // still commentary, so it must not mint a final reply.
-            if index > active_start {
+            if index > active_start || mid_response.contains(&message.id) {
                 final_assistant_id = None;
             } else if let Some(id) = final_assistant_id.take() {
                 if !ids.contains(&id) {
@@ -521,8 +630,9 @@ pub fn completed_work_render_items(
     // The words a subagent's report cut short, which are commentary rather than a reply.
     let mut demoted = Vec::new();
     let raw_index = |id: &str| raw_messages.iter().position(|message| message.id == id);
+    let mid_response = mid_response_rows(raw_messages);
     let active_start = if is_working {
-        active_response_start_index(messages)
+        active_response_start_index(messages, &mid_response)
     } else {
         messages.len()
     };
@@ -556,7 +666,9 @@ pub fn completed_work_render_items(
                     && !(grouped && messages[next_user_index].deferred_work.is_some()))
                 || (message.deferred_work.is_some()
                     && messages[next_user_index].byte_offset.is_none()
-                    && !is_command_turn(&messages[next_user_index])))
+                    && !is_command_turn(&messages[next_user_index]))
+                // A message that reached the agent mid-response is one of the turn's rows.
+                || (!grouped && mid_response.contains(&messages[next_user_index].id)))
         {
             next_user_index += 1;
         }
@@ -576,9 +688,14 @@ pub fn completed_work_render_items(
         let opener_is_work = message.role != ChatRole::User
             || is_background_task_row(message)
             || (grouped && is_subagent_report(message));
-        // Reduced and Quiet: words a subagent's report cut short are not a reply.
+        // Reduced and Quiet: words a subagent's report cut short are not a reply, nor are the
+        // words that introduce a question.
         let final_index = match final_index {
-            Some(at) if grouped && work_lands_mid_response(messages, next_user_index) => {
+            Some(at)
+                if grouped
+                    && (work_lands_mid_response(messages, next_user_index)
+                        || introduces_question(&turn_messages[at..])) =>
+            {
                 demoted.push(turn_messages[at].id.clone());
                 None
             }
@@ -653,7 +770,7 @@ pub fn completed_work_render_items(
                 .cloned()
                 .collect(),
             final_message,
-            section: section.clone(),
+            section: turn_section(section.as_ref(), turn_messages),
             // Only a wake-up's turn takes its rows from the same section.
             next_opener: (next_user_index < messages.len()
                 && opens_omp_turn(messages, next_user_index))
@@ -667,6 +784,41 @@ pub fn completed_work_render_items(
         index = next_user_index;
     }
     (items, demoted)
+}
+
+/// The section a turn loads when opened: its opener's (`section`), reaching on to the end of the
+/// last section a background task's end inside the turn holds, so one walk reads all of them.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification that lands mid-response and stays one of the turn's calls (Agent work Default) holds the rest of the response in its own `deferredWork`; loading only the opener's section drew the turn up to the notification and lost everything after it. The rows between the sections are the turn's own, so a walk from the first section's start to the last one's end reads exactly the turn. Reduced and Quiet open a turn at such a row instead (`work_lands_mid_response`).
+fn turn_section(section: Option<&DeferredWork>, turn_messages: &[ChatRow]) -> Option<DeferredWork> {
+    turn_messages
+        .iter()
+        // A background task's end, and a message that reached the agent mid-response
+        // (`mid_response_rows`), each hold the rows after them in a section of their own.
+        .filter(|row| is_background_task_row(row) || row.role == ChatRole::User)
+        .filter_map(|row| row.deferred_work.as_ref())
+        .fold(section.cloned(), |merged, later| {
+            Some(match merged {
+                None => later.clone(),
+                Some(mut merged) => {
+                    merged.before_offset = later.before_offset;
+                    merged.end_id = later.end_id.clone();
+                    merged.completed_at = later.completed_at.or(merged.completed_at);
+                    merged.message_count += later.message_count + 1;
+                    for path in &later.file_paths {
+                        if !merged.file_paths.contains(path) {
+                            merged.file_paths.push(path.clone());
+                        }
+                    }
+                    for path in &later.image_paths {
+                        if !merged.image_paths.contains(path) {
+                            merged.image_paths.push(path.clone());
+                        }
+                    }
+                    merged
+                }
+            })
+        })
 }
 
 /// `stickySessionChatTranscriptWorking` in `packages/shared/session-chat-presentation/turns.ts`:

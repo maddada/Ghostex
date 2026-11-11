@@ -239,6 +239,12 @@ pub(crate) struct GpuiFirstRunOnboardingState {
     pub(crate) windows_terminal_setup_complete: bool,
     /// The first-run intro video page was left (Continue), so it never opens again.
     pub(crate) intro_video_seen: bool,
+    /// Agents whose "Connect Ghostex to …" dialog was answered Not now: it no longer asks at their
+    /// start (CDXC:Onboarding 2026-11-11 in window/onboarding/agents.rs).
+    pub(crate) agent_hooks_declined: Vec<String>,
+    /// Setup's "Pair my phone after setup" was on: Connect a Device opens once the first agent
+    /// reply has arrived (os_integration/first_run_onboarding.rs).
+    pub(crate) connect_device_after_first_reply: bool,
 }
 
 /// CDXC:Onboarding 2026-08-18: the markers whose surfaces are
@@ -290,6 +296,20 @@ pub(crate) fn load_gpui_first_run_onboarding_state() -> GpuiFirstRunOnboardingSt
             .get("introVideoSeen")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
+        agent_hooks_declined: value
+            .get("agentHooksDeclined")
+            .and_then(serde_json::Value::as_array)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        connect_device_after_first_reply: value
+            .get("connectDeviceAfterFirstReply")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
     }
 }
 
@@ -306,6 +326,8 @@ pub(crate) fn persist_gpui_first_run_onboarding_state(state: &GpuiFirstRunOnboar
         "firstLaunchSetupComplete": state.first_launch_setup_complete,
         "windowsTerminalSetupComplete": state.windows_terminal_setup_complete,
         "introVideoSeen": state.intro_video_seen,
+        "agentHooksDeclined": state.agent_hooks_declined,
+        "connectDeviceAfterFirstReply": state.connect_device_after_first_reply,
     });
     let _ = fs::write(path, payload.to_string());
 }

@@ -1,7 +1,7 @@
 //! What the sidebar draws: the same content the native renderer once read from the TypeScript
 //! snapshot, minus menus, hover actions and header actions (`sidebar_menu/` builds those).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::keys::SessionKey;
@@ -66,6 +66,29 @@ pub struct SidebarView {
     /// The machines of `chiefs` that have a home project (drawn in this Space or not): their Chief
     /// is a home header, never the row under the Spaces bar.
     pub machines_with_home: Vec<String>,
+    /// Every copy of a project the one list merged from more than one copy, keyed by each copy's
+    /// group id (`merged.rs`), whether or not the entry is drawn. Read through
+    /// [`SidebarView::project_copies`].
+    pub project_copies: BTreeMap<String, Arc<Vec<ProjectCopy>>>,
+}
+
+/// One copy of a merged project: another computer's, or a second clone here
+/// (`SidebarView::project_copies`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectCopy {
+    /// That copy's own sidebar group id, which names its machine and project.
+    pub group_id: String,
+    /// Its computer's name, and the end of its folder's path when that computer has two copies
+    /// ("This computer · customer-a/repo").
+    pub label: String,
+    /// Its computer's name alone.
+    pub computer: String,
+    /// [`super::inputs::LOCAL_MACHINE_ID`] or the remote machine's id.
+    pub machine_id: String,
+    /// The raw project id in that machine's daemon.
+    pub project_id: String,
+    /// Its computer's stream is live.
+    pub connected: bool,
 }
 
 /// What the list of a remote machine that is not connected says about its connection.
@@ -88,6 +111,17 @@ pub struct MachineNotice {
 }
 
 impl SidebarView {
+    /// Every copy of the merged project `group_id` is one copy of, in the entry's order (this
+    /// computer's first); `None` for a project with one copy, and in Separate by machine.
+    ///
+    /// CDXC:RemoteMachines 2026-11-09 WHY:
+    /// A merged entry's New Coordinator went to the copy a session last started in with no way to choose or see it. The New Coordinator dialog lists these copies so the user picks the computer (or the clone) it runs on. They are recorded by the merge itself, before hiding, Spaces and filters, so a project the list does not draw (opened from the New thread picker) still has them; worktrees and bots are never copies.
+    pub fn project_copies(&self, group_id: &str) -> Option<&[ProjectCopy]> {
+        self.project_copies
+            .get(group_id)
+            .map(|copies| copies.as_slice())
+    }
+
     pub fn group(&self, group_id: &str) -> Option<&GroupView> {
         self.groups
             .iter()
@@ -337,6 +371,24 @@ pub struct GroupSummary {
     /// Rows waiting for approval (the red dot); counted here only, not as questions or attention.
     pub approval_count: usize,
     pub awake_count: usize,
+    /// Rows of any kind whose session is running (not asleep, closed or errored).
+    pub running_count: usize,
+    /// A project with nothing running, working or waiting on the user, its session groups
+    /// included; a project with no sessions at all is inactive. Set by `assemble`
+    /// (`mark_inactive_projects`) for project groups only.
+    pub inactive: bool,
+}
+
+impl GroupSummary {
+    /// No row works, runs or waits on the user.
+    pub(crate) fn is_quiet(&self) -> bool {
+        self.working_count == 0
+            && self.attention_count == 0
+            && self.background_work_count == 0
+            && self.question_count == 0
+            && self.approval_count == 0
+            && self.running_count == 0
+    }
 }
 
 /// One heading of a project's session list.

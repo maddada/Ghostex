@@ -104,6 +104,8 @@ pub(super) enum Input {
     TalkCancel,
     /// The client's Mute; gxserver drops the microphone's audio while it is on.
     Mute(bool),
+    /// `voiceAgentCallMode` was saved: `true` push-to-talk, `false` Regular (`set_call_mode`).
+    CallMode(bool),
     /// Hand the remembered last conversation to the agent (Continue).
     ContinueMemory,
     /// The user forgot the remembered conversation.
@@ -257,7 +259,15 @@ pub(super) struct Conversation {
     confirm: Option<OpenConfirm>,
     /// What the log says about the call (`client_trouble` and `finish`).
     diagnostics: CallDiagnostics,
+    /// The provider committed a turn the user spoke and no reply has started for it yet.
+    turn_unanswered: bool,
 }
+
+/// How long after a reply ends gxserver waits for the provider to answer a turn spoken during it
+/// before asking for the reply itself.
+///
+/// CDXC:VoiceMode 2026-11-10 WHY: User: "whenever I speak and send you a message, and you speak and reply to me at the same time, if I send the message at the same time, then you are not getting my messages" (seen on Android; every client). Speech that started while a reply was still being made only cut the reply's audio on the device: the provider kept making it, so the turn it then committed got no reply of its own (it refuses a second one, `conversation_already_has_active_response`, which is ignored below) and nothing asked again. Speech now cancels a running reply at the provider too, and a committed turn with no reply started for it gets one once the running reply ends. The user then saw it in push-to-talk (2026-11-10): a held turn's reply that the provider refuses marks the turn too, since the provider may not confirm a manual commit.
+const UNANSWERED_TURN_GRACE: Duration = Duration::from_millis(400);
 
 /// A recorded turn shorter than this (a quarter second) holds no speech.
 const MIN_CLIP_BYTES: usize = 250 * BYTES_PER_MS;
@@ -354,6 +364,7 @@ impl Conversation {
             briefing_pending: focus.is_some(),
             focus,
             scope_changes: 0,
+            turn_unanswered: false,
             diagnostics: CallDiagnostics {
                 client: "unknown".to_string(),
                 client_remote,
@@ -520,20 +531,12 @@ impl Conversation {
                     })));
                     let _ = previous.send(ClientFrame::Close);
                 }
-                let _ = out.send(ClientFrame::Json(json!({
-                    "type": "ready",
-                    "conversationId": self.id,
-                    "provider": self.provider.id(),
-                    "voice": self.voice,
-                    "voiceOptions": self.provider.voices(),
-                    "callMode": if self.push_to_talk { "pushToTalk" } else { "regular" },
-                    "resumed": resumed,
-                    "memory": if self.started_focused { Value::Null } else { memory::client_view(&self.state.paths) },
-                    "memoryContinued": !self.started_focused && self.call_log.continued(),
-                    "focus": focus::client_view(self.focus.as_ref()),
-                    "idleHangupMs": IDLE_HANGUP.as_millis() as u64,
-                    "audio": {"encoding": "pcm16", "sampleRate": super::provider::SAMPLE_RATE, "channels": 1},
-                })));
+                let memory = if self.started_focused {
+                    Value::Null
+                } else {
+                    memory::client_view(&self.state.paths)
+                };
+                let _ = out.send(ClientFrame::Json(self.ready_frame(resumed, memory)));
                 if resumed {
                     for frame in &self.replay {
                         let _ = out.send(ClientFrame::Json(frame.clone()));
@@ -643,6 +646,7 @@ impl Conversation {
                     self.drop_held_turn().await?;
                 }
             }
+            Input::CallMode(push_to_talk) => self.set_call_mode(push_to_talk).await?,
             Input::PlaybackRate(rate) => {
                 let rate = rate.clamp(*PLAYBACK_RATE_RANGE.start(), *PLAYBACK_RATE_RANGE.end());
                 let now = Instant::now();
@@ -862,6 +866,7 @@ impl Conversation {
 
     async fn create_response_now(&mut self) -> Result<(), Ended> {
         self.create_at = None;
+        self.turn_unanswered = false;
         self.outputs_waiting = false;
         self.announcing = false;
         self.set_state("thinking");
@@ -1069,6 +1074,12 @@ impl Conversation {
             "input_audio_buffer.speech_started" => {
                 self.user_speaking = true;
                 self.last_talk = Instant::now();
+                // The user talks over a reply still being made: it stops at the provider too, so the
+                // provider can answer this turn (`turn_unanswered`).
+                if self.response_active {
+                    self.provider_send(json!({"type": "response.cancel"}))
+                        .await?;
+                }
                 self.stop_playback(true).await?;
                 // The reply to this speech will see the tool results; a separate one would repeat it.
                 if self.create_at.take().is_some() {
@@ -1102,8 +1113,12 @@ impl Conversation {
                     self.to_client(json!({"type": "caption", "role": "user", "itemId": item_id, "text": text, "final": true}));
                 }
             }
+            "input_audio_buffer.committed" => self.turn_unanswered = true,
             "response.created" => {
                 self.response_active = true;
+                // This reply answers what is waiting: the user's turn, and any tool results.
+                self.turn_unanswered = false;
+                self.create_at = None;
                 if self.client_state != "speaking" {
                     self.set_state("thinking");
                 }
@@ -1266,6 +1281,12 @@ impl Conversation {
                     self.to_client(json!({"type": "error", "code": "providerError", "message": message, "fatal": false}));
                 }
                 self.schedule_response_after_tools();
+                // A turn the user spoke while this reply ran got no reply of its own (the provider
+                // refuses a second one): ask for it, unless the provider starts one in a moment.
+                if self.turn_unanswered && self.create_at.is_none() && self.pending_calls.is_empty()
+                {
+                    self.create_at = Some(Instant::now() + UNANSWERED_TURN_GRACE);
+                }
                 if !self.playing() && self.pending_calls.is_empty() && self.create_at.is_none() {
                     self.set_state("listening");
                 }
@@ -1295,6 +1316,16 @@ impl Conversation {
                     );
                     self.voice_answer(&change.voice, "nextConversation", "refused");
                     return Ok(());
+                }
+                // A reply gxserver asked for (a push-to-talk turn, a typed one, a tool follow-up) was
+                // refused because another was still running: it is asked for again once that one
+                // ends, or now when it already has. The provider may not confirm a manual commit
+                // (`input_audio_buffer.committed`), so the refusal is what marks the turn.
+                if code == "conversation_already_has_active_response" {
+                    self.turn_unanswered = true;
+                    if !self.response_active && self.create_at.is_none() {
+                        self.create_at = Some(Instant::now() + UNANSWERED_TURN_GRACE);
+                    }
                 }
                 // Cancelling a reply that just finished is harmless.
                 if code != "response_cancel_not_active"
@@ -1552,13 +1583,74 @@ impl Conversation {
         }));
     }
 
+    /// The saved call mode changed: the call switches now. The talk gate follows (a hold in progress
+    /// is dropped), the provider's turn detection is switched with the call's own configuration, and
+    /// the client hears `callMode` so its hold button and notice follow (`CDXC:VoiceMode 2026-11-10`
+    /// at `talk_start`).
+    async fn set_call_mode(&mut self, push_to_talk: bool) -> Result<(), Ended> {
+        if self.push_to_talk == push_to_talk {
+            return Ok(());
+        }
+        self.push_to_talk = push_to_talk;
+        let dropped = self.talk.set_push_to_talk(push_to_talk) == Cancel::Cleared;
+        self.session_update = self
+            .provider
+            .with_call_mode(&self.session_update, push_to_talk);
+        let update = self.session_update.clone();
+        self.provider_send(update).await?;
+        if push_to_talk || dropped {
+            // What the microphone sent so far was for the other mode's turn.
+            self.provider_send(json!({"type": "input_audio_buffer.clear"}))
+                .await?;
+            self.user_speaking = false;
+        }
+        self.last_talk = Instant::now();
+        self.to_client(json!({
+            "type": "callMode",
+            "callMode": if push_to_talk { "pushToTalk" } else { "regular" },
+        }));
+        // CDXC:VoiceMode 2026-11-10 WHY: The phone's native call (GhostexVoice.swift / .kt, app 11.2.1) and the desktop's capture gate the microphone with the mode they read from `ready`, so after a switch to Regular they kept sending nothing until Talk was held, the very bug the user reported. Every client already takes the mode from `ready`, so the attached client gets `ready` again with the new mode: their microphone gates follow without a new app. The memory card is left out (the user already answered it) unless the call continued the last one, which keeps "Remembering last conversation".
+        if let Some((_, out)) = &self.client {
+            let memory = if !self.started_focused && self.call_log.continued() {
+                memory::client_view(&self.state.paths)
+            } else {
+                Value::Null
+            };
+            let _ = out.send(ClientFrame::Json(self.ready_frame(true, memory)));
+        }
+        if self.client_state == "userSpeaking" {
+            self.set_state("listening");
+        }
+        Ok(())
+    }
+
+    /// The `ready` frame a client gets when it attaches, and again when the call switches mode.
+    fn ready_frame(&self, resumed: bool, memory: Value) -> Value {
+        json!({
+            "type": "ready",
+            "conversationId": self.id,
+            "provider": self.provider.id(),
+            "voice": self.voice,
+            "voiceOptions": self.provider.voices(),
+            "callMode": if self.push_to_talk { "pushToTalk" } else { "regular" },
+            // This gxserver switches a running call when the call mode is saved (`callMode` frames).
+            "callModeLive": true,
+            "resumed": resumed,
+            "memoryContinued": !self.started_focused && self.call_log.continued(),
+            "memory": memory,
+            "focus": focus::client_view(self.focus.as_ref()),
+            "idleHangupMs": IDLE_HANGUP.as_millis() as u64,
+            "audio": {"encoding": "pcm16", "sampleRate": super::provider::SAMPLE_RATE, "channels": 1},
+        })
+    }
+
     /// Talk pressed. In a push-to-talk call, talking over the agent cuts its reply, as Stop does,
     /// then the microphone's audio collects in the provider's buffer until Talk is released. In a
     /// muted Regular call the hold only opens the microphone; the provider's turn detection does
     /// the rest (`talk.rs`).
     ///
-    /// CDXC:VoiceMode 2026-10-21 DECISION:
-    /// User: "I feel we're overcomplicating things. Let's just have two modes: push-to-talk and regular, and mention the pricing difference between the two in settings for the mobile app and for the desktop app. No need to switch when I'm muted, and only any of that. Let's just keep it simple: two modes in the settings, please." `voiceAgentCallMode` (`regular` default, `pushToTalk`) is read when a call starts and never switched mid-call; mute is a plain microphone mute in both modes. Supersedes the 2026-10-21 "Push-to-talk while muted" switch, which xAI kept billing for connected time. The 2026-10-24 hold to unmute in talk.rs leaves the mode alone.
+    /// CDXC:VoiceMode 2026-11-10 DECISION:
+    /// User: "I had push-to-talk selected, then switched to regular mode mid-conversation, and after that it kept forcing me to use hold-to-speak instead of regular. ... Please fix the mode switching so selecting regular from push-to-talk reliably switches the conversation to regular mode." Saving `voiceAgentCallMode` now switches every running call at once, both ways (`set_call_mode`), and the client is told with a `callMode` frame. Supersedes the 2026-10-21 rule that the mode is read when a call starts and never switched mid-call; the two modes themselves stay as the user set them then ("Let's just have two modes: push-to-talk and regular, and mention the pricing difference"), and mute is still a plain microphone mute in both.
     async fn talk_start(&mut self) -> Result<(), Ended> {
         match self.talk.press() {
             Press::Ignored => Ok(()),

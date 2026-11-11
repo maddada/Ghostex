@@ -78,7 +78,11 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         self.remove_gpui_app_modal_window_without_focus_restore(cx);
-        self.remove_native_app_modal_window(cx);
+        // A Ghostex page is put aside rather than closed, so opening a second page (or any other
+        // modal) over it loses nothing (app/visual_page_hidden.rs).
+        if !self.hide_visual_page_modal(cx) {
+            self.remove_native_app_modal_window(cx);
+        }
         // Settings is back: the Back to Settings button of a claude.ai sign-in has done its job.
         if kind == GpuiAppModalKind::Settings {
             crate::app::claude_cloud_sign_in_return::hide_claude_sign_in_return_button(cx);
@@ -94,10 +98,20 @@ impl GhostexGpuiApp {
         // (CDXC:SessionChat 2026-11-04 DECISION in app/window/visual_page_modal/frame.rs).
         let movable = kind == GpuiAppModalKind::VisualPage;
         let window_bounds = if movable {
-            crate::app::window::visual_page_modal::frame::opening_frame(
-                self.main_window_bounds,
-                window_size,
-            )
+            use crate::app::window::visual_page_modal::frame;
+            // Placed in the space all displays share, against the displays there are now, and
+            // given back measured from the main window's display, as `display_id` below reads it.
+            let shift = self
+                .main_window_popup_owner()
+                .to_global(gpui::point(px(0.0), px(0.0)), cx);
+            let main =
+                crate::app::ghostex_capture::platform::window_frame(self.parent_ns_view as usize)
+                    .unwrap_or(gpui::Bounds::new(
+                        self.main_window_bounds.origin + shift,
+                        self.main_window_bounds.size,
+                    ));
+            let opening = frame::opening_frame(main, window_size, &frame::Screens::now(main, cx));
+            gpui::Bounds::new(opening.origin - shift, opening.size)
         } else {
             gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size)
         };
@@ -341,7 +355,6 @@ impl GhostexGpuiApp {
             kind if kind.is_settings_modal_entry() => {
                 self.receive_native_settings_modal_payload(message, cx)
             }
-            GpuiAppModalKind::Onboarding => self.receive_gpui_onboarding_modal_message(message, cx),
             // NATIVE-MODAL-MESSAGE-ARMS: one arm per modal kind that receives host messages.
             _ => {
                 let _ = cx;

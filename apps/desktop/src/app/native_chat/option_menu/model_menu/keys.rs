@@ -131,7 +131,11 @@ impl ChatOptionMenuPanel {
             return false;
         };
         let rows = state.rows().len();
-        let count = rows + state.traits().len();
+        // The cursor runs through the models, the Legacy models row (when the tab has one), then
+        // the footer buttons.
+        let fold = state.fold_stop();
+        let footer = state.footer_start();
+        let count = footer + state.traits().len();
         let search_enabled = state.view["searchEnabled"] == true;
         match key {
             // Escape empties a typed filter first; only an empty one closes the picker.
@@ -168,11 +172,20 @@ impl ChatOptionMenuPanel {
             }
             "up" | "ctrl-p" | "down" | "ctrl-n" if count > 0 => {
                 let up = key == "up" || key == "ctrl-p";
-                // The footer is one stop below the last model (Left and Right move along its
-                // buttons); the first model and the footer are the ends.
-                state.active = if state.active >= rows {
+                // The Legacy models row is one stop below the last model and the footer one stop
+                // below that (Left and Right move along its buttons); the first model and the
+                // footer are the ends.
+                state.active = if state.active >= footer {
+                    if up {
+                        fold.or(rows.checked_sub(1)).unwrap_or(state.active)
+                    } else {
+                        state.active
+                    }
+                } else if fold == Some(state.active) {
                     if up && rows > 0 {
                         rows - 1
+                    } else if !up && count > footer {
+                        footer
                     } else {
                         state.active
                     }
@@ -199,14 +212,24 @@ impl ChatOptionMenuPanel {
                     if self.model_menu_pick_with_effort(active, session_only, cx) {
                         self.menu.update(cx, |menu, cx| menu.close(None, cx));
                     }
+                } else if fold == Some(active) {
+                    let open = state.fold_open();
+                    self.model_menu_send(json!({"type":"modelMenuView","legacyOpen":!open}), cx);
                 } else {
-                    self.activate_model_button(active - rows, session_only, window, cx);
+                    self.activate_model_button(active - footer, session_only, window, cx);
                 }
             }
-            "left" | "right" if state.active >= rows => {
-                let buttons = count - rows;
-                let index = state.active - rows;
-                state.active = rows
+            // Right opens the Legacy models list and Left shuts it, as on any disclosure row.
+            "left" | "right" if fold == Some(state.active) => {
+                let open = state.fold_open();
+                if open == (key == "left") {
+                    self.model_menu_send(json!({"type":"modelMenuView","legacyOpen":!open}), cx);
+                }
+            }
+            "left" | "right" if state.active >= footer => {
+                let buttons = count - footer;
+                let index = state.active - footer;
+                state.active = footer
                     + if key == "left" {
                         (index + buttons - 1) % buttons
                     } else {
@@ -238,7 +261,7 @@ impl ChatOptionMenuPanel {
                 }) else {
                     return false;
                 };
-                state.active = rows + index;
+                state.active = footer + index;
                 self.activate_model_button(index, false, window, cx);
             }
             _ => {

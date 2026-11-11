@@ -94,18 +94,7 @@ impl GhostexGpuiApp {
         }
         self.native_sidebar.pending_reveal = None;
         let viewport = self.native_sidebar.scroll.bounds();
-        let pinned_height = px(30.0 * scale);
-        let padding = px(50.0 * scale)
-            .min(((viewport.size.height - pinned_height - bounds.size.height) / 2.0).max(px(0.0)));
-        let top = viewport.top() + pinned_height + padding;
-        let bottom = viewport.bottom() - padding;
-        let delta = if bounds.top() < top {
-            bounds.top() - top
-        } else if bounds.bottom() > bottom {
-            bounds.bottom() - bottom
-        } else {
-            px(0.0)
-        };
+        let delta = reveal_delta(viewport, bounds, scale);
         if self.gx_store_selection_is_settling() {
             // A held previous or next session key reveals one row per key repeat. Following it is an instant scroll with no animation and no flash per row; the row the key is released on is revealed again once the selection settles (gx_store/session_walk.rs).
             if delta.abs() >= px(1.0) {
@@ -130,6 +119,23 @@ impl GhostexGpuiApp {
         }
         window.request_animation_frame();
         cx.notify();
+    }
+}
+
+/// How far the list must scroll so `bounds` sits inside `viewport`, clear of a pinned project
+/// header at its top and with some room around it; zero when it already does.
+pub(crate) fn reveal_delta(viewport: Bounds<Pixels>, bounds: Bounds<Pixels>, scale: f32) -> Pixels {
+    let pinned_height = px(30.0 * scale);
+    let padding = px(50.0 * scale)
+        .min(((viewport.size.height - pinned_height - bounds.size.height) / 2.0).max(px(0.0)));
+    let top = viewport.top() + pinned_height + padding;
+    let bottom = viewport.bottom() - padding;
+    if bounds.top() < top {
+        bounds.top() - top
+    } else if bounds.bottom() > bottom {
+        bounds.bottom() - bottom
+    } else {
+        px(0.0)
     }
 }
 

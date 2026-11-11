@@ -21,6 +21,8 @@ const FADE: Duration = Duration::from_millis(200);
 /// The bubble's own window: wide enough for the label in any font, with room around the bubble for
 /// its shadow.
 const WINDOW_WIDTH: f32 = 140.0;
+/// The bubble's window for a failed copy, wide enough for "Couldn't copy the image".
+const FAILED_WINDOW_WIDTH: f32 = 240.0;
 const WINDOW_HEIGHT: f32 = 48.0;
 /// Room under the bubble inside its window, where the shadow falls.
 const SHADOW_INSET: f32 = 10.0;
@@ -37,6 +39,7 @@ impl Global for CopiedIndicator {}
 
 struct CopiedIndicatorView {
     shown_at: Instant,
+    label: &'static str,
 }
 
 impl Render for CopiedIndicatorView {
@@ -74,7 +77,7 @@ impl Render for CopiedIndicatorView {
                     .px_2()
                     .text_sm()
                     .opacity(opacity)
-                    .child("Copied!"),
+                    .child(self.label),
             )
     }
 }
@@ -92,12 +95,23 @@ impl Render for CopiedIndicatorView {
 /// serves them all without each root drawing an overlay. It never takes key status, ignores the
 /// mouse, and lives in every Space, so it shows over a fullscreen window as well.
 pub(crate) fn show_copied_indicator(cx: &mut App) {
+    show_indicator("Copied!", WINDOW_WIDTH, cx);
+}
+
+/// CDXC:Clipboard 2026-11-11 WHY: a copy that did not land (Copy image on Windows did nothing at
+/// all) says so where "Copied!" would have shown, in the same tooltip or bubble, with the
+/// failure's own plain words, so the user never takes silence for success.
+pub(crate) fn show_copy_failed_indicator(message: &'static str, cx: &mut App) {
+    show_indicator(message, FAILED_WINDOW_WIDTH, cx);
+}
+
+fn show_indicator(label: &'static str, window_width: f32, cx: &mut App) {
     // Opened outside the update that copied, the way every other popup of the app is opened.
-    cx.defer(|cx| {
+    cx.defer(move |cx| {
         let Some(pointer) = pointer_position(cx) else {
             return;
         };
-        if flash_clicked_tooltip(pointer, cx) {
+        if flash_clicked_tooltip(pointer, label, cx) {
             return;
         }
         if !cx.has_global::<CopiedIndicator>() {
@@ -111,7 +125,7 @@ pub(crate) fn show_copied_indicator(cx: &mut App) {
             indicator.generation += 1;
             indicator.generation
         };
-        let size = size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT));
+        let size = size(px(window_width), px(WINDOW_HEIGHT));
         let mut origin = point(
             pointer.x - size.width / 2.0,
             pointer.y - px(POINTER_GAP) - size.height + px(SHADOW_INSET),
@@ -156,6 +170,7 @@ pub(crate) fn show_copied_indicator(cx: &mut App) {
                     .detach();
                     CopiedIndicatorView {
                         shown_at: Instant::now(),
+                        label,
                     }
                 })
             },
@@ -185,7 +200,7 @@ pub(crate) fn show_copied_indicator(cx: &mut App) {
 /// gpui-component's managed tooltips (the trigger just pressed) before GPUI's own. False when no
 /// such control is there, including when GPUI's idea of the pointer is stale because the click
 /// went to a CEF or terminal view that takes the mouse events.
-fn flash_clicked_tooltip(pointer: Point<Pixels>, cx: &mut App) -> bool {
+fn flash_clicked_tooltip(pointer: Point<Pixels>, label: &'static str, cx: &mut App) -> bool {
     let Some(handle) = cx.active_window() else {
         return false;
     };
@@ -197,14 +212,13 @@ fn flash_clicked_tooltip(pointer: Point<Pixels>, cx: &mut App) -> bool {
             {
                 return false;
             }
-            Root::flash_pressed_tooltip(window, cx, TOOLTIP_FLASH, copied_tooltip)
-                || window.flash_hovered_tooltip(TOOLTIP_FLASH, copied_tooltip, cx)
+            let tooltip = move |window: &mut Window, cx: &mut App| -> AnyView {
+                Tooltip::new(label).build(window, cx)
+            };
+            Root::flash_pressed_tooltip(window, cx, TOOLTIP_FLASH, tooltip)
+                || window.flash_hovered_tooltip(TOOLTIP_FLASH, tooltip, cx)
         })
         .unwrap_or(false)
-}
-
-fn copied_tooltip(window: &mut Window, cx: &mut App) -> AnyView {
-    Tooltip::new("Copied!").build(window, cx)
 }
 
 /// GPUI's last pointer position in `window`, in the shared space [`pointer_position`] returns.

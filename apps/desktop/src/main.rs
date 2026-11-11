@@ -17,6 +17,7 @@ mod cef_component_window;
 #[cfg(any(target_os = "linux", test))]
 mod cef_library_version;
 mod component_store;
+mod data_url_image;
 mod fold_motion;
 mod ghostty_kit;
 mod ghostty_vt;

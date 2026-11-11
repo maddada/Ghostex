@@ -14,8 +14,8 @@ use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsValues, post_store_message};
 use super::ExtensionsTab;
 use super::cards::{
-    GridCardSpec, GridCell, add_view_card, card_grid, card_group, card_option_row, card_status,
-    empty_state, extension_icon_tile, grid_card, grid_columns, page_column_width, tabler_tile,
+    EXTENSION_LIST_COLUMNS, GridCardSpec, GridCell, add_view_card, card_grid, card_group,
+    card_option_row, card_status, empty_state, extension_icon_tile, grid_card, tabler_tile,
 };
 use super::data::{
     InstalledExtension, OfficialExtension, custom_views, extension_view_scope_key, filter_store,
@@ -205,20 +205,13 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let columns = grid_columns(page_column_width(window));
+        let columns = EXTENSION_LIST_COLUMNS;
         let values = self.store.read(cx).values();
         let status = self
             .store
             .read(cx)
             .host_payload("pluginSettingsStatus")
             .cloned();
-        let plugin = |id: &str| -> Option<Value> {
-            status
-                .as_ref()
-                .and_then(|status| status["plugins"].as_array())
-                .and_then(|plugins| plugins.iter().find(|plugin| plugin["id"] == id))
-                .cloned()
-        };
         let mut groups: Vec<AnyElement> = Vec::new();
         let filter = self.page_filter(cx);
         for category in official_categories() {
@@ -237,108 +230,15 @@ impl ExtensionsTab {
             }
             let mut cells: Vec<GridCell> = Vec::new();
             for extension in &visible {
-                let runtime = (extension.id == "code").then(|| plugin("code")).flatten();
-                let scope_key = official_view_scope_key(&extension.id);
-                let scoped = !extension.app_wide;
-                let blocked = official_blocked_by(&values, extension);
-                let editing = scoped
-                    && self
-                        .scope_editor
-                        .as_ref()
-                        .is_some_and(|editor| editor.key == scope_key);
-                // The type ends the (i) tooltip of a view, a header button or a menu item. A
-                // feature has none: "Feature · Every project" said the same thing on every card
-                // (User, Q2036).
-                let meta = if extension.placement == "sidebar" {
-                    "Sidebar".to_string()
-                } else if extension.placement == "feature" {
-                    String::new()
-                } else {
-                    category.type_label.clone()
-                };
-                let enabled = is_official_enabled(&values, extension) && blocked.is_none();
-                let settings_key = extension.settings_key.clone();
-                let switch_extension = (*extension).clone();
-                let title = extension.title.clone();
-                let control = small_switch_control(
+                cells.push(self.official_cell(
                     p,
-                    SharedString::from(format!("official-{}-switch", extension.id)),
-                    title.clone(),
-                    enabled,
-                    blocked.is_some(),
-                    blocked.map(|blocked| format!("Turn on {} first", blocked.title).into()),
-                    move |page: &mut Self, next, _window, cx| {
-                        let store = page.store.clone();
-                        let key = settings_key.clone();
-                        let value = official_switch_value(&switch_extension, next);
-                        store.update(cx, |store, cx| store.update_setting(&key, json!(value), cx));
-                    },
+                    extension,
+                    &category.type_label,
+                    &values,
+                    status.as_ref(),
+                    window,
                     cx,
-                );
-                let mut actions: Vec<AnyElement> = Vec::new();
-                // `OFFICIAL_EXTENSION_RUNTIME_IDS`: the Code editor's component can be reinstalled.
-                if extension.id == "code" {
-                    let status = runtime.clone().unwrap_or(Value::Null);
-                    actions.push(self.reinstall_button(p, "code", &title, &status, cx));
-                }
-                if scoped {
-                    let key = scope_key.clone();
-                    let scope_title = title.clone();
-                    actions.push(self.pencil_button(
-                        p,
-                        SharedString::from(format!("official-{}-scope", extension.id)),
-                        false,
-                        move |page: &mut Self, _window, cx| {
-                            page.edit_scope(key.clone(), scope_title.clone(), cx)
-                        },
-                        cx,
-                    ));
-                }
-                let runtime_meta = runtime
-                    .as_ref()
-                    .map(runtime_meta)
-                    .filter(|meta| !meta.is_empty());
-                // The whole build id of a runtime whose version is one, in the info tooltip.
-                let meta = match runtime
-                    .as_ref()
-                    .and_then(|runtime| runtime["version"].as_str())
-                    .filter(|version| is_long_value(version))
-                {
-                    Some(version) if meta.is_empty() => format!("Version {version}"),
-                    Some(version) => format!("{meta} · Version {version}"),
-                    None => meta,
-                };
-                let blocked_reason =
-                    blocked.map(|blocked| format!("Turn on {} first", blocked.title));
-                let card = grid_card(
-                    p,
-                    GridCardSpec {
-                        id: SharedString::from(format!("official-{}", extension.id)),
-                        icon: tabler_tile(p, official_icon(&extension.id), false),
-                        control: Some(control.into_any_element()),
-                        leading: None,
-                        title: extension.title.clone().into(),
-                        badge: extension.badge.clone().map(Into::into),
-                        description: extension.description.clone().into(),
-                        extra: None,
-                        scope_summary: scoped
-                            .then(|| self.describe_scope(&scope_key, cx))
-                            .flatten(),
-                        meta: meta.into(),
-                        status: runtime_meta.or(blocked_reason).map(Into::into),
-                        actions,
-                        editing,
-                        enabled,
-                        dragging: false,
-                        open: None,
-                    },
-                );
-                let wide = if scoped {
-                    self.render_scope_editor_for(p, &scope_key, window, cx)
-                } else {
-                    None
-                };
-                cells.push(GridCell { card, wide });
+                ));
             }
             let first = groups.is_empty();
             // A tab of one category (Built-in, Experimental) shows its tiles under the section
@@ -381,7 +281,7 @@ impl ExtensionsTab {
                 ),
                 super::page_tabs::PageTab::PanelsMenus => (
                     "Panels & menus",
-                    "Buttons in the work area header and entries in its ⋯ menu.",
+                    "Buttons in the work area header and entries in the sidebar's menu.",
                 ),
                 super::page_tabs::PageTab::Experimental => (
                     "Experimental",
@@ -397,6 +297,128 @@ impl ExtensionsTab {
             Some(refresh),
             v_flex().w_full().children(groups).into_any_element(),
         )
+    }
+
+    /// One built-in card with its scope editor under it: the Built-in, Views, Panels & menus and
+    /// Experimental tabs and the On tab draw it the same way.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn official_cell(
+        &mut self,
+        p: &SettingsPalette,
+        extension: &OfficialExtension,
+        type_label: &str,
+        values: &SettingsValues,
+        status: Option<&Value>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> GridCell {
+        let plugin = |id: &str| -> Option<Value> {
+            status
+                .and_then(|status| status["plugins"].as_array())
+                .and_then(|plugins| plugins.iter().find(|plugin| plugin["id"] == id))
+                .cloned()
+        };
+        let runtime = (extension.id == "code").then(|| plugin("code")).flatten();
+        let scope_key = official_view_scope_key(&extension.id);
+        let scoped = !extension.app_wide;
+        let blocked = official_blocked_by(&values, extension);
+        let editing = scoped
+            && self
+                .scope_editor
+                .as_ref()
+                .is_some_and(|editor| editor.key == scope_key);
+        // The type ends the (i) tooltip of a view, a header button or a menu item. A
+        // feature has none: "Feature · Every project" said the same thing on every card
+        // (User, Q2036).
+        let meta = if extension.placement == "sidebar" {
+            "Sidebar".to_string()
+        } else if extension.placement == "feature" {
+            String::new()
+        } else {
+            type_label.to_string()
+        };
+        let enabled = is_official_enabled(&values, extension) && blocked.is_none();
+        let settings_key = extension.settings_key.clone();
+        let switch_extension = (*extension).clone();
+        let title = extension.title.clone();
+        let control = small_switch_control(
+            p,
+            SharedString::from(format!("official-{}-switch", extension.id)),
+            title.clone(),
+            enabled,
+            blocked.is_some(),
+            blocked.map(|blocked| format!("Turn on {} first", blocked.title).into()),
+            move |page: &mut Self, next, _window, cx| {
+                let store = page.store.clone();
+                let key = settings_key.clone();
+                let value = official_switch_value(&switch_extension, next);
+                store.update(cx, |store, cx| store.update_setting(&key, json!(value), cx));
+            },
+            cx,
+        );
+        let mut actions: Vec<AnyElement> = Vec::new();
+        // `OFFICIAL_EXTENSION_RUNTIME_IDS`: the Code editor's component can be reinstalled.
+        if extension.id == "code" {
+            let status = runtime.clone().unwrap_or(Value::Null);
+            actions.push(self.reinstall_button(p, "code", &title, &status, cx));
+        }
+        if scoped {
+            let key = scope_key.clone();
+            let scope_title = title.clone();
+            actions.push(self.pencil_button(
+                p,
+                SharedString::from(format!("official-{}-scope", extension.id)),
+                false,
+                move |page: &mut Self, _window, cx| {
+                    page.edit_scope(key.clone(), scope_title.clone(), cx)
+                },
+                cx,
+            ));
+        }
+        let runtime_meta = runtime
+            .as_ref()
+            .map(runtime_meta)
+            .filter(|meta| !meta.is_empty());
+        // The whole build id of a runtime whose version is one, in the info tooltip.
+        let meta = match runtime
+            .as_ref()
+            .and_then(|runtime| runtime["version"].as_str())
+            .filter(|version| is_long_value(version))
+        {
+            Some(version) if meta.is_empty() => format!("Version {version}"),
+            Some(version) => format!("{meta} · Version {version}"),
+            None => meta,
+        };
+        let blocked_reason = blocked.map(|blocked| format!("Turn on {} first", blocked.title));
+        let card = grid_card(
+            p,
+            GridCardSpec {
+                id: SharedString::from(format!("official-{}", extension.id)),
+                icon: tabler_tile(p, official_icon(&extension.id), false),
+                control: Some(control.into_any_element()),
+                leading: None,
+                title: extension.title.clone().into(),
+                badge: extension.badge.clone().map(Into::into),
+                description: extension.description.clone().into(),
+                extra: None,
+                scope_summary: scoped
+                    .then(|| self.describe_scope(&scope_key, cx))
+                    .flatten(),
+                meta: meta.into(),
+                status: runtime_meta.or(blocked_reason).map(Into::into),
+                actions,
+                editing,
+                enabled,
+                dragging: false,
+                open: None,
+            },
+        );
+        let wide = if scoped {
+            self.render_scope_editor_for(p, &scope_key, window, cx)
+        } else {
+            None
+        };
+        GridCell { card, wide }
     }
 
     /// The Install / Reinstall button of the Code editor's runtime component.
@@ -553,7 +575,7 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let columns = grid_columns(page_column_width(window));
+        let columns = EXTENSION_LIST_COLUMNS;
         let filter = self.page_filter(cx);
         let (mut installed_matches, mut store_matches) = filter_store(
             &filter,
@@ -621,7 +643,7 @@ impl ExtensionsTab {
     /// CDXC:Extensions 2026-09-18 DECISION:
     /// User: an installed extension gets the same Edit button and the same scope editor as a built-in view, so it can be limited to selected projects or spaces.
     /// `InstalledExtensionCard`.
-    fn installed_card(
+    pub(super) fn installed_card(
         &mut self,
         p: &SettingsPalette,
         extension: &InstalledExtension,
@@ -828,7 +850,7 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let columns = grid_columns(page_column_width(window));
+        let columns = EXTENSION_LIST_COLUMNS;
         let filter = self.page_filter(cx);
         let filter_active = filter.is_active();
         let visible: Vec<super::data::CustomView> = self
@@ -905,15 +927,13 @@ impl ExtensionsTab {
         )
     }
 
-    /// `CustomViewCard`.
-    #[allow(clippy::too_many_arguments)]
-    fn custom_view_card(
+    /// `CustomViewCard` without its reorder grip and row: the On tab shows it outside the
+    /// sortable list.
+    pub(super) fn custom_view_tile(
         &mut self,
         p: &SettingsPalette,
         view: &super::data::CustomView,
-        index: usize,
-        slot: usize,
-        sortable: bool,
+        leading: Option<AnyElement>,
         dragging: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -982,6 +1002,46 @@ impl ExtensionsTab {
                 cx,
             )
         };
+        grid_card(
+            p,
+            GridCardSpec {
+                badge: None,
+                id: SharedString::from(format!("custom-{id}")),
+                icon: tabler_tile(p, "modals/settings/world.svg", false),
+                control: Some(control.into_any_element()),
+                leading,
+                title: view.name().into(),
+                description: view.description().into(),
+                extra: None,
+                scope_summary: None,
+                meta: view.kind_label().into(),
+                status: None,
+                actions: vec![edit, remove],
+                editing: self
+                    .view_editor
+                    .as_ref()
+                    .is_some_and(|editor| editor.id.as_deref() == Some(id.as_str())),
+                enabled: view.enabled(),
+                dragging,
+                open: None,
+            },
+        )
+    }
+
+    /// `CustomViewCard`.
+    #[allow(clippy::too_many_arguments)]
+    fn custom_view_card(
+        &mut self,
+        p: &SettingsPalette,
+        view: &super::data::CustomView,
+        index: usize,
+        slot: usize,
+        sortable: bool,
+        dragging: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let id = view.id();
+        let name = view.name();
         let grip = sortable.then(|| {
             let muted = p.muted;
             let hover = if p.light {
@@ -1007,30 +1067,7 @@ impl ExtensionsTab {
                 .into_any_element();
             reorder_handle(p, CUSTOM_VIEW_LIST, index, name.clone(), grip)
         });
-        let card = grid_card(
-            p,
-            GridCardSpec {
-                badge: None,
-                id: SharedString::from(format!("custom-{id}")),
-                icon: tabler_tile(p, "modals/settings/world.svg", false),
-                control: Some(control.into_any_element()),
-                leading: grip,
-                title: view.name().into(),
-                description: view.description().into(),
-                extra: None,
-                scope_summary: None,
-                meta: view.kind_label().into(),
-                status: None,
-                actions: vec![edit, remove],
-                editing: self
-                    .view_editor
-                    .as_ref()
-                    .is_some_and(|editor| editor.id.as_deref() == Some(id.as_str())),
-                enabled: view.enabled(),
-                dragging,
-                open: None,
-            },
-        );
+        let card = self.custom_view_tile(p, view, grip, dragging, cx);
         let row = div().w_full().flex().child(card).into_any_element();
         reorder_row(
             self,

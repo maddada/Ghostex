@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use super::{
     file_page::page_for_file,
-    prepare::inline_local_images,
+    prepare::{inline_local_images, PAGE_CONTENT_SECURITY_POLICY},
     serve::{with_page_state, with_read_only},
     store::{read_page, read_record, VISUAL_PAGE_MAX_BYTES},
 };
@@ -117,7 +117,13 @@ fn page_with_state(
         .and_then(Value::as_str)
         .unwrap_or("Ghostex page")
         .to_string();
-    let page = with_page_state(read_page(gxserver_state_dir, id)?, Some(record), false);
+    // The guest's viewer frames this HTML itself, so the page has no gxserver address to name.
+    let page = with_page_state(
+        read_page(gxserver_state_dir, id)?,
+        Some(record),
+        false,
+        PAGE_CONTENT_SECURITY_POLICY,
+    );
     let page = if answerable {
         page
     } else {

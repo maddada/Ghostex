@@ -37,6 +37,7 @@ pub mod streaming;
 pub mod terminal;
 pub mod terminal_text;
 pub mod text;
+pub mod thread_patch;
 pub mod timers;
 pub mod view_state;
 pub mod working;

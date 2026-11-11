@@ -63,7 +63,20 @@ void GhostexGpuiRemoveToastPopupWindowChrome(void *nativeView) {
      border, or window shadow behind the actual toast card. Keep only the
      card border/background in GPUI.
      */
+    /*
+     CDXC:VoiceMode 2026-11-11 WHY:
+     User: "i can't type in the text box" (the voice panel's, a pop-up with this chrome). Setting the
+     style mask rebuilds the window's frame and leaves the window itself as first responder instead
+     of GPUI's view, so a pop-up that takes the keyboard drew its caret but every typed key went to
+     the window and was dropped (Cmd+C still worked: key equivalents travel the view tree). Measured
+     on the panel's own window options: GPUIView before, GPUIPanel after. The responder the window
+     had is put back.
+     */
+    NSResponder *responder = window.firstResponder;
     window.styleMask = NSWindowStyleMaskNonactivatingPanel;
+    if (responder != nil && responder != window && window.firstResponder != responder) {
+      [window makeFirstResponder:responder];
+    }
     window.titleVisibility = NSWindowTitleHidden;
     window.titlebarAppearsTransparent = YES;
     window.opaque = NO;
@@ -212,14 +225,18 @@ void GhostexGpuiSetChildWindowContentFrame(void *childNativeView,
 
 // Fades a just-opened popup window in, its backdrop blur and shadow with it. Runs before the window's
 // first flush, so it never shows at full alpha first.
-void GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
+// CDXC:AgentProviders 2026-11-11 WHY:
+// The user's trace of a usage meter click showed the main window's own alpha drop to 0 and climb
+// back over 150ms: this fade was handed the main window. The app's main window is never faded
+// (a pop-up or chat menu window never becomes main); it is refused (0) so the caller can log it.
+int GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
   @autoreleasepool {
     if (nativeView == NULL) {
-      return;
+      return 0;
     }
     NSWindow *window = ((__bridge NSView *)nativeView).window;
-    if (window == nil) {
-      return;
+    if (window == nil || window == NSApp.mainWindow || window.isMainWindow) {
+      return 0;
     }
     window.alphaValue = 0.0;
     [NSAnimationContext
@@ -230,6 +247,7 @@ void GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
           window.animator.alphaValue = 1.0;
         }
         completionHandler:nil];
+    return 1;
   }
 }
 

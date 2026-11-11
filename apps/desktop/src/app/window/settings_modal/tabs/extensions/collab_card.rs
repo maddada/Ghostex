@@ -17,13 +17,15 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use serde_json::{Value, json};
 
 use super::super::super::super::native_modal_kit::hsla;
 use super::super::super::fields::{
     SizedButtonSize, SizedButtonVariant, is_long_value, settings_sized_button, short_version,
+    tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{refresh_collab_component, store_gxserver_rpc};
@@ -64,6 +66,28 @@ impl ExtensionsTab {
         filter: &ExtensionFilter,
         columns: usize,
         first: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let card = self.render_collab_card(p, filter, cx)?;
+        Some(card_group(
+            p,
+            "Sharing".to_string(),
+            Some(1),
+            first,
+            card_grid(vec![GridCell { card, wide: None }], None, columns),
+        ))
+    }
+
+    /// Whether Collab is installed (what the On tab counts as on).
+    pub(crate) fn collab_installed(&self, cx: &gpui::App) -> bool {
+        self.store.read(cx).collab_component()["installed"] == true
+    }
+
+    /// The Collab card, or `None` when the filter hides it.
+    pub(crate) fn render_collab_card(
+        &mut self,
+        p: &SettingsPalette,
+        filter: &ExtensionFilter,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         if !collab_matches(filter) {
@@ -200,8 +224,13 @@ impl ExtensionsTab {
             )
         };
         let extra = div()
-            .mt(px(8.0))
+            .id("collab-status-line")
             .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
+            .tooltip(tooltip_text(status.clone()))
             .text_size(px(13.0))
             .line_height(px(18.57))
             .text_color(hsla(p.muted))
@@ -235,13 +264,7 @@ impl ExtensionsTab {
                 open: None,
             },
         );
-        Some(card_group(
-            p,
-            "Sharing".to_string(),
-            Some(1),
-            first,
-            card_grid(vec![GridCell { card, wide: None }], None, columns),
-        ))
+        Some(card)
     }
 
     /// Reads the component again: every 2 seconds while something is under way, else every 15.

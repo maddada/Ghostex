@@ -273,6 +273,60 @@ pub fn write(state: &mut ChatState, id: &str, question: usize, text: &str) -> Ve
     save(state, id)
 }
 
+/// One of a form's text boxes: a question's (its note, or a text question's answer) or the form's
+/// own notes box. A renderer names it `slot`: the question's index, or `"notes"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FormBox {
+    Question(usize),
+    Notes,
+}
+
+impl FormBox {
+    /// The notes box's `slot`.
+    const NOTES: &'static str = "notes";
+
+    pub fn of(slot: &Value) -> Option<Self> {
+        match slot {
+            Value::String(slot) if slot == Self::NOTES => Some(Self::Notes),
+            slot => slot.as_u64().map(|index| Self::Question(index as usize)),
+        }
+    }
+
+    pub fn to_json(self) -> Value {
+        match self {
+            Self::Question(index) => json!(index),
+            Self::Notes => json!(Self::NOTES),
+        }
+    }
+
+    /// The box's name in a form's `dictated`: the question's index, or `notes`.
+    pub fn key(self) -> String {
+        match self {
+            Self::Question(index) => index.to_string(),
+            Self::Notes => Self::NOTES.to_string(),
+        }
+    }
+}
+
+/// The text of the form's box while the reader can still write in it (`write`, `write_notes`);
+/// `None` once the form was sent, answered or withdrawn, when the chat no longer has the form, or
+/// when the form has no such box. The form as the chat holds it now decides: the picks of a form
+/// the transcript replaced are kept (`sync` never drops them) and are not a box.
+pub(crate) fn box_text<'a>(state: &'a ChatState, id: &str, slot: FormBox) -> Option<&'a str> {
+    if !open(state, id) {
+        return None;
+    }
+    let asked = form(state, id)?;
+    let entry = state.questions.forms.get(id)?;
+    match slot {
+        FormBox::Question(question) => {
+            asked.questions.get(question)?;
+            entry.drafts.get(question).map(|draft| draft.other.as_str())
+        }
+        FormBox::Notes => takes_notes(asked).then_some(entry.notes.as_str()),
+    }
+}
+
 fn asked_text(state: &ChatState, id: &str, question: usize) -> bool {
     form(state, id)
         .and_then(|form| form.questions.get(question))
@@ -654,6 +708,17 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
             durable: false,
         });
     }
+    // A form that takes no more text has no copy left to be behind (`questions/dictation.rs`):
+    // one whose answers the transcript carries, and one gxserver lists as removed. Any other can
+    // take text again: a removal can still fail, answers that are sending or queued can come
+    // back, and Withdrawn is how the Resources modal reads a form, not the form's end.
+    if !state.questions.dictations.is_empty() {
+        let forms = &state.questions.forms;
+        let removed = &state.session.removed_question_ids;
+        state.questions.dictations.retain(|id, _| {
+            !removed.contains(id) && forms.get(id).is_none_or(|entry| !entry.cleared)
+        });
+    }
     let open_forms: Vec<(String, usize)> = all_forms(state)
         .filter(|form| {
             form.error.is_empty()
@@ -753,6 +818,8 @@ pub struct QuestionsInputs {
     later: Stamped<crate::questions::later::LaterState>,
     recorded_answers: Stamped<crate::questions::recorded_answers::RecordedAnswers>,
     resource_modal: Stamped<Option<crate::questions::resource_modal::ResourceModal>>,
+    /// The core's name every form carries (`core`, `questions/dictation.rs`).
+    core_id: String,
 }
 
 impl QuestionsInputs {
@@ -764,6 +831,7 @@ impl QuestionsInputs {
             later: questions.later.clone(),
             recorded_answers: questions.recorded_answers.clone(),
             resource_modal: questions.resource_modal.clone(),
+            core_id: questions.core_id.clone(),
         }
     }
 
@@ -776,6 +844,7 @@ impl QuestionsInputs {
             && self.later.same_as(&questions.later)
             && self.recorded_answers.same_as(&questions.recorded_answers)
             && self.resource_modal.same_as(&questions.resource_modal)
+            && self.core_id == questions.core_id
     }
 }
 
@@ -1027,6 +1096,21 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                 );
                 object.insert("takesNotes".to_string(), json!(takes_notes));
                 object.insert("notes".to_string(), json!(notes));
+                // What a box's edits carry back (`questions/dictation.rs`): this core's name, and
+                // how many dictations it typed into each box that took one (`rev`).
+                object.insert("core".to_string(), json!(state.questions.core_id));
+                if !entry.dictated.is_empty() {
+                    object.insert(
+                        "dictated".to_string(),
+                        Value::Object(
+                            entry
+                                .dictated
+                                .iter()
+                                .map(|(slot, rev)| (slot.clone(), json!(rev)))
+                                .collect(),
+                        ),
+                    );
+                }
                 object.insert(
                     "sendError".to_string(),
                     json!(entry.error.clone().unwrap_or_default()),

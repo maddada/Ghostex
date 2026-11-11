@@ -508,7 +508,7 @@ and the hook prints it for zcode to fold into context. Only a ZCode SessionStart
 a coordinators row, of a thread, or any ZCode SessionStart while Marked handovers is on (its note
 follows the pointer; agents/marked_handovers.rs), is answered, so every other hook response stays
 unchanged. Every ZCode SessionStart also gets the Ghostex note while Tell agents about Ghostex is on
-(agents/ghostex_note.rs). Since 2026-10-17 a new coordinator takes its role from the `ghostex-orchestrator` skill
+(agents/ghostex_note.rs). Since 2026-10-17 a new coordinator takes its role from the `ghostex-coordinator` skill
 (coordinators/role.rs), so only coordinators made before then get the pointer; every coordinator
 still gets the Marked handovers note unless coordinators answer without markers.
 */
@@ -525,6 +525,24 @@ fn coordinator_session_start_context(
     );
     let is_session_start = read_text(params, "eventName")
         .is_some_and(|event| event.eq_ignore_ascii_case("SessionStart"));
+    // A Claude or Codex coordinator whose new conversation lost its first message gets its role
+    // again (coordinators/role.rs `coordinator_role_again`, GitHub #570).
+    if matches!(agent.as_str(), "claude" | "codex") && is_session_start {
+        let key = (lifecycle.project_id.clone(), lifecycle.session_id.clone());
+        let skill_coordinator = crate::coordinators::coordinator_role_is_skill(session)
+            && crate::coordinators::read_coordinator(repository.connection(), &key.0, &key.1)?
+                .is_some();
+        if !skill_coordinator {
+            return Ok(None);
+        }
+        let source = read_text(params, "hookSource").unwrap_or_default();
+        return Ok(crate::coordinators::coordinator_role_again(
+            repository.connection(),
+            &key,
+            &agent,
+            &source,
+        ));
+    }
     if !(agent == "zcode" && is_session_start) {
         return Ok(None);
     }
@@ -542,7 +560,7 @@ fn coordinator_session_start_context(
     .is_some();
     let paths = crate::paths::get_gxserver_paths(None);
     let marked = if coordinator {
-        !super::orchestrator_plain_replies(&paths)
+        super::coordinator_marks_replies(&paths)
     } else {
         thread || super::marked_handovers_enabled(&paths)
     };

@@ -1,7 +1,7 @@
 use serde_json::{json, Map, Value};
 
 use super::registration::{is_printable_id, NOTIFICATION_ID_MAX, SESSION_ID_MAX};
-use super::store::PushKinds;
+use super::store::{AlertChoice, PushKinds, PushRegistration};
 
 /// How long an alert may wait for the phone, counted from the event.
 pub(crate) const ALERT_TTL_MS: i64 = 3_600_000;
@@ -31,6 +31,9 @@ pub(crate) enum AlertKind {
     /// A session blocked on every account being out of usage (the red dot): the phone's Error
     /// switch, as `failed`. An error recovery could not get past is a `Failed` row already.
     Blocked,
+    /// A thread under a coordinator finished a turn: the alert rule keeps it quiet on the computer,
+    /// and only a phone whose Thread reports choice is not Off hears of it.
+    ThreadReport,
 }
 
 impl AlertKind {
@@ -42,6 +45,7 @@ impl AlertKind {
             // kind (its Error switch and Failed section); only the words differ.
             Self::Failed | Self::Stuck | Self::Blocked => "failed",
             Self::Security => "security",
+            Self::ThreadReport => "threadReport",
         }
     }
 
@@ -54,6 +58,7 @@ impl AlertKind {
             Self::Security => "Security: check this was you",
             Self::Stuck => "Not moving: it may be stuck",
             Self::Blocked => "Blocked: out of usage on every account",
+            Self::ThreadReport => "Reported to its coordinator",
         }
     }
 
@@ -65,6 +70,34 @@ impl AlertKind {
             Self::Failed | Self::Stuck | Self::Blocked => kinds.error,
             // CDXC:Security 2026-11-08 WHY: the point of the notice is that the owner sees every sensitive action at once, so no per-kind switch turns it off.
             Self::Security => true,
+            // A phone older than the choices never asked for thread reports.
+            Self::ThreadReport => false,
+        }
+    }
+
+    /// How `registration`'s phone wants this kind: its choice when it sent choices, else its switch
+    /// for the kind with the sound, as before the choices.
+    /// CDXC:Notifications 2026-11-11 DECISION: the phone's Sound, Silent or Off for each kind
+    /// (apps/mobile/app/src/notifications/settings.ts) decides here, so the computer sends nothing
+    /// the phone would drop and a Silent kind without its sound. The security notice is never Off:
+    /// it takes Needs you's sound, silent when Needs you is Off.
+    pub(crate) fn delivery(self, registration: &PushRegistration) -> AlertChoice {
+        let Some(alerts) = registration.alerts else {
+            return if self.enabled(&registration.kinds) {
+                AlertChoice::Sound
+            } else {
+                AlertChoice::Off
+            };
+        };
+        match self {
+            Self::Finished => alerts.finished,
+            Self::NeedsInput => alerts.needs_you,
+            Self::Failed | Self::Stuck | Self::Blocked => alerts.errors,
+            Self::ThreadReport => alerts.thread_reports,
+            Self::Security => match alerts.needs_you {
+                AlertChoice::Off => AlertChoice::Silent,
+                choice => choice,
+            },
         }
     }
 }
@@ -79,6 +112,9 @@ pub(crate) struct AlertEvent {
     pub(crate) notification_id: String,
     pub(crate) agent_name: String,
     pub(crate) project_name: String,
+    /// The session's title as the app shows it; an alert's title uses it only for a phone whose "Show session names"
+    /// switch is on (`PushRegistration::session_names`).
+    pub(crate) session_title: String,
     /// When the event happened, in wall-clock milliseconds; the alert expires an hour later.
     pub(crate) occurred_at_ms: i64,
 }
@@ -101,18 +137,27 @@ pub(crate) struct AgentStartEvent {
 ///
 /// CDXC:Notifications 2026-11-04 WHY:
 /// The phone shows the same events through its own notifications while the app is open, so the push uses the phone's `agent · project` title and event words and an alert reads the same whether the app is open or closed. The push title is kept to one line and at most 120 characters (the push message's title limit): line breaks in a name become spaces, and a longer title is cut with an ellipsis.
+/// CDXC:Notifications 2026-11-11 DECISION: the push's first name follows the phone's "Show session names" switch, as its Live Activity and widgets do: off (the default), the agent's name as the app shows it; on, the session's title (the agent's name when the session has none). The switch reaches the computer with the phone's registration (`sessionNames`), so a session title never goes into a push for a phone that did not turn names on, an older phone included.
 pub(crate) fn alert_message(
     token: &str,
     machine_id: &str,
     event: &AlertEvent,
+    session_names: bool,
+    sound: bool,
     has_question: bool,
     ttl_secs: i64,
 ) -> Option<String> {
     let mut message = Map::new();
     message.insert("to".into(), json!(token));
+    let session_title = one_line(&event.session_title);
+    let leading_name = if session_names && !session_title.is_empty() {
+        session_title.as_str()
+    } else {
+        event.agent_name.as_str()
+    };
     message.insert(
         "title".into(),
-        json!(alert_title(&event.agent_name, &event.project_name)),
+        json!(alert_title(leading_name, &event.project_name)),
     );
     message.insert("body".into(), json!(event.kind.words(has_question)));
     message.insert(
@@ -125,7 +170,15 @@ pub(crate) fn alert_message(
         }),
     );
     message.insert(CONTENT_AVAILABLE_FIELD.into(), json!(true));
-    message.insert("sound".into(), json!(ALERT_SOUND));
+    // A Silent kind, or a notice right after another one sounded, shows without the sound.
+    if sound {
+        message.insert("sound".into(), json!(ALERT_SOUND));
+    }
+    // The notices of one session of one computer stack together on iOS (`aps.thread-id`), and
+    // replace each other on Android (`tag`), instead of a row each.
+    let stack = format!("{machine_id}:{}", event.session_id);
+    message.insert("threadId".into(), json!(stack));
+    message.insert("tag".into(), json!(stack));
     message.insert("ttl".into(), json!(ttl_secs));
     message.insert("priority".into(), json!(ALERT_PRIORITY));
     within_limit(Value::Object(message))
@@ -155,7 +208,7 @@ fn within_limit(message: Value) -> Option<String> {
     (text.len() <= MESSAGE_BYTES_MAX).then_some(text)
 }
 
-/// `<agent> · <project>`, or the one name that is there, on one line and at most 120 characters.
+/// `<name> · <project>`, or the one name that is there, on one line and at most 120 characters.
 fn alert_title(agent_name: &str, project_name: &str) -> String {
     let agent = one_line(agent_name);
     let project = one_line(project_name);

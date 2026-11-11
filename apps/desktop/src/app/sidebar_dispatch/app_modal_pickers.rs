@@ -210,8 +210,8 @@ impl GhostexGpuiApp {
     }
 
     /// The system folder dialog could not open (on Linux: no xdg-desktop-portal file chooser).
-    /// The reason is logged, and the open onboarding chooses the folder itself
-    /// (window/onboarding/folder_chooser.rs) instead of the click doing nothing.
+    /// The reason is logged and posted to the open app modal. The native onboarding no longer asks
+    /// for a folder (window/onboarding/get_started.rs), so only a bridge caller reaches this.
     fn first_launch_folder_dialog_unavailable(
         &mut self,
         reason: &str,

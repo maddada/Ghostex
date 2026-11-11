@@ -113,6 +113,37 @@ pub(crate) fn new_thread_picker_window_height(
         + agent_count.min(NEW_THREAD_PICKER_MAX_AGENT_ROWS) as f32 * NEW_THREAD_PICKER_ROW_HEIGHT
 }
 
+/// The picker never covers more than this share of the window it opens over.
+const NEW_THREAD_PICKER_MAX_WINDOW_SHARE: f32 = 0.7;
+/// The room the picker keeps above and below itself inside that window.
+const NEW_THREAD_PICKER_WINDOW_MARGIN: f32 = 16.0;
+/// The shortest the cap goes, so a very short window still shows the header and a few rows.
+const NEW_THREAD_PICKER_MIN_HEIGHT: f32 = 240.0;
+
+/// `height` held to the window the picker opens over (`room`, the app window's bounds, or the
+/// page in the web build): at most 70 percent of its height, and never past its bottom edge less a
+/// margin when the picker's `top` is known (resizing keeps the top where it is). The list scrolls
+/// inside what is left; with no `room` (the preview) the height is unchanged.
+///
+/// CDXC:AgentLauncher 2026-11-11 DECISION:
+/// User ("are u serious man? where's the max height here??"): the project list was sized to twelve rows plus the second line of every row with computers, about 870px, and grew down from where the short agent list had centred it, so on a normal window it ran past the bottom edge with no scrolling. The picker's height is now capped to the window it opens over, whatever mode it is in.
+pub(crate) fn new_thread_picker_capped_height(
+    height: f32,
+    room: Option<gpui::Bounds<gpui::Pixels>>,
+    top: Option<f32>,
+) -> f32 {
+    let Some(room) = room else {
+        return height;
+    };
+    let room_height = f32::from(room.size.height);
+    let mut cap = (room_height * NEW_THREAD_PICKER_MAX_WINDOW_SHARE)
+        .min(room_height - 2.0 * NEW_THREAD_PICKER_WINDOW_MARGIN);
+    if let Some(top) = top {
+        cap = cap.min(f32::from(room.bottom()) - NEW_THREAD_PICKER_WINDOW_MARGIN - top);
+    }
+    height.min(cap.max(NEW_THREAD_PICKER_MIN_HEIGHT.min(height)))
+}
+
 /// The `.quick-access-surface` tokens the React palette layers over the app
 /// theme, resolved from the kit palette.
 #[derive(Clone, Copy)]
@@ -310,6 +341,9 @@ pub(crate) struct NewThreadPickerConfig {
     /// The projects a thread can start in and where the picker starts; `None` (the preview) draws
     /// no project row and starts in the active project.
     pub(crate) place: Option<NewThreadPickerPlace>,
+    /// The window the picker opens over, which caps its height; `None` (the preview) leaves the
+    /// height uncapped.
+    pub(crate) room: Option<gpui::Bounds<gpui::Pixels>>,
 }
 
 /// What the picker asks its host to do. The picker removes its own window
@@ -405,6 +439,8 @@ pub(crate) struct GpuiNewThreadPickerWindow {
     cloud_default_account: Option<String>,
     /// See `NewThreadPickerConfig::place`.
     place: Option<NewThreadPickerPlace>,
+    /// See `NewThreadPickerConfig::room`.
+    room: Option<gpui::Bounds<gpui::Pixels>>,
     /// The list shows the projects (new_thread_picker_place.rs).
     choosing_project: bool,
     /// A project row is highlighted; the list opens with none, so the first Down is its top row.
@@ -430,13 +466,17 @@ impl GpuiNewThreadPickerWindow {
         let change_subscription = cx.subscribe_in(
             &input,
             window,
-            |this: &mut Self, input, event: &InputEvent, _window, cx| {
+            |this: &mut Self, input, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::Change) {
                     this.query = input.read(cx).value().to_string();
                     this.selected = 0;
                     // Typing highlights the best match, as the agent list does.
                     this.project_cursor = !this.query.trim().is_empty();
                     this.scroll.scroll_to_item(0);
+                    // The project list is as tall as the projects the search leaves.
+                    if this.choosing_project {
+                        this.fit_window_height(window);
+                    }
                     cx.notify();
                 }
             },
@@ -488,6 +528,7 @@ impl GpuiNewThreadPickerWindow {
             was_active: window.is_window_active(),
             close_when_inactive: config.close_when_inactive,
             place: config.place,
+            room: config.room,
             choosing_project: false,
             project_cursor: false,
             row_places: Default::default(),
@@ -525,6 +566,7 @@ impl GpuiNewThreadPickerWindow {
         self.cloud_default_account = config.cloud_default_account;
         let start_machine = config.place.as_ref().map(|place| place.machine);
         self.place = config.place;
+        self.room = config.room;
         self.choosing_project = false;
         self.set_placeholder(PLACEHOLDER_AGENTS, window, cx);
         if let Some(machine) = start_machine {
@@ -588,6 +630,11 @@ impl GpuiNewThreadPickerWindow {
                 self.place.is_none() && self.run_on.shown(),
             )
         };
+        let height = new_thread_picker_capped_height(
+            height,
+            self.room,
+            Some(f32::from(window.bounds().origin.y)),
+        );
         window.resize(size(px(NEW_THREAD_PICKER_WIDTH), px(height)));
     }
 
@@ -1453,6 +1500,12 @@ impl GpuiNewThreadPickerWindow {
                     .iter()
                     .filter(|row| matches!(row, PickerRow::Agent(_)))
                     .count();
+                // One search for every "Start <agent> in" row drawn below.
+                let start_places = if first_start_row(&rows).is_some() {
+                    self.start_row_places()
+                } else {
+                    Vec::new()
+                };
                 for (position, row) in rows.iter().enumerate() {
                     let selected = position == self.selected;
                     if agent_rows > 0 && position == agent_rows {
@@ -1463,7 +1516,12 @@ impl GpuiNewThreadPickerWindow {
                     }
                     children.push(match *row {
                         PickerRow::Agent(index) => self.render_agent_row(index, selected, cx),
-                        PickerRow::StartIn(index) => self.render_start_row(index, selected, cx),
+                        PickerRow::StartIn(index) => self.render_start_row(
+                            index,
+                            start_places.iter().find(|start| start.choice == index),
+                            selected,
+                            cx,
+                        ),
                         PickerRow::Coordinator => self.render_plain_row(
                             "new-thread-coordinator",
                             PickerRow::Coordinator,

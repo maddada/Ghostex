@@ -57,18 +57,8 @@ impl NativeChatView {
             "interrupt" => ("send", true),
             mode => (mode, false),
         };
-        crate::support_logs::append_for_scenario(
-            crate::support_logs::GpuiSupportLog::SessionChat,
-            "gpui.sessionChat.viewState",
-            "sessionChat.nativeSubmit",
-            json!({
-                "composerReady": self.composer_ready,
-                "hasDraft": !self.draft.trim().is_empty(),
-                "pendingSend": self.pending_send,
-                "status": self.snapshot["status"],
-                "hasRuntime": self.runtime.is_some(),
-            }),
-        );
+        // One line per send, always kept (send_watch.rs).
+        self.log_send(mode, interrupt);
         if !self.composer_ready {
             return;
         }
@@ -107,9 +97,20 @@ impl NativeChatView {
                 return;
             }
         };
+        // The message's name from here to the agent: every attempt goes under it, the chat core
+        // takes an action carrying it once, and gxserver delivers it once (send_watch.rs).
+        let send_request_id = match crate::app::helpers::gpui_random_uuid_string() {
+            Ok(id) => id,
+            Err(error) => {
+                self.error = Some(error);
+                cx.notify();
+                return;
+            }
+        };
         self.close_maximized(cx);
         self.pending_send = true;
         let mut submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
+            "sendRequestId":send_request_id,
             "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
         // The pictures still on their way go where the caret is, as a paste that lands writes
         // them (packages/gx-chat-core/src/composer/attaching.rs).
@@ -131,7 +132,9 @@ impl NativeChatView {
         }
         cx.emit(super::state::NativeChatEvent::DraftState(true));
         self.end_answer_hold_for_send();
-        self.invoke(submission, cx);
+        self.invoke(submission.clone(), cx);
+        // The box is empty now: the view watches the message until the core has it.
+        self.watch_send(send_request_id, submission, cx);
     }
 
     /// The chat's neutral filled text button (Load earlier turns, Retry, Use / Dismiss, the
@@ -305,11 +308,37 @@ impl NativeChatView {
             )
             // Resting on the microphone offers Transcribe previous; right-click always opens its menu.
             .when(action == "dictate", |this| {
+                let pressed = self.dictate_pressed.clone();
                 // The press must not move focus to the chat surface: the chat box keeps its caret
-                // where the dictated text will land (dictation.rs).
-                this.on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
-                    window.prevent_default()
-                })
+                // where the dictated text will land (dictation.rs). It is also not a pointer that
+                // came to rest: the hover menu waits until the pointer has left (`hover_dictation`).
+                this.on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _: &gpui::MouseDownEvent, window, _| {
+                        window.prevent_default();
+                        this.press_dictation();
+                    }),
+                )
+                .child(
+                    gpui::canvas(
+                        |_, _, _| {},
+                        move |bounds, _, window, _| {
+                            // The pointer has left the button: it moved outside it, or it left
+                            // the window, which comes without a last movement.
+                            let moved = pressed.clone();
+                            window.on_mouse_event(move |event: &gpui::MouseMoveEvent, _, _, _| {
+                                if moved.get() && !bounds.contains(&event.position) {
+                                    moved.set(false);
+                                }
+                            });
+                            window.on_mouse_event(move |_: &gpui::MouseExitEvent, _, _, _| {
+                                pressed.set(false);
+                            });
+                        },
+                    )
+                    .absolute()
+                    .inset(px(0.0)),
+                )
                 .on_hover(cx.listener(|this, hovered: &bool, window, cx| {
                     this.hover_dictation(*hovered, window, cx);
                 }))
@@ -375,7 +404,22 @@ impl NativeChatView {
             .set(super::indicator_overlay::WORKING_LEAD, None);
         self.indicator_overlay
             .set(super::indicator_overlay::WORKING_TRACK, None);
-        let working_card = if maximized || self.snapshot["workingCard"]["inTranscript"] == true {
+        self.wake_when_worked_line_ends(cx);
+        // A coordinator's dock (work_cards.rs), built first: with a dock the status rides on its
+        // header bar (`work_dock_header`) and has no bar of its own.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, picking on the chat box bars page: "A. The status joins the dock's quiet line",
+        // always on that bar while the chat has a dock; a chat with no dock keeps its own bar.
+        let dock = if maximized {
+            None
+        } else {
+            self.render_work_dock(p, cx)
+        };
+        let working_card = if maximized
+            || dock.is_some()
+            || self.snapshot["workingCard"]["inTranscript"] == true
+        {
             None
         } else {
             self.render_working_card(p, cx)
@@ -391,8 +435,10 @@ impl NativeChatView {
         // The last transcript row's own gap is the space above the card (working_card.rs).
         footer = footer
             .when(card_above_box, |this| this.pt_0())
-            .children(computer_card)
-            .children(working_card);
+            .children(computer_card);
+        // The working card joins the stack under the dock (below), so it can sit between the dock
+        // and the box.
+        let mut working_card = working_card;
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();
         // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
@@ -454,9 +500,23 @@ impl NativeChatView {
         }
         if let Some(prompt) = self.render_prompt(p, window, cx) {
             if self.snapshot["prompt"]["kind"] == "question" {
+                // The question replaces the box and the dock, so the status keeps its own bar.
+                let working_card = match working_card {
+                    None if dock.is_some()
+                        && self.snapshot["workingCard"]["inTranscript"] != true =>
+                    {
+                        self.render_working_card(p, cx)
+                    }
+                    card => card,
+                };
                 return self
                     .composer_row()
-                    .child(footer.children(waiting).child(prompt))
+                    .child(
+                        footer
+                            .children(working_card)
+                            .children(waiting)
+                            .child(prompt),
+                    )
                     .into_any_element();
             }
             waiting.push(prompt.into_any_element());
@@ -467,6 +527,17 @@ impl NativeChatView {
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
+        // A coordinator's dock (work_cards.rs) sits above the working card, which says how long
+        // the turn took and what it changed, so the order over the box is the transcript, the
+        // dock, that card, then the box. With no dock (none, stepped aside for a long message, or
+        // the Work panel docked beside the chat) the card stays where it always was.
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User, of the "Worked for 34s · ... updated" bar above the dock: "please i beg you. move
+        // this bar which shows how long we worked for etc to be below the work items cards
+        // please". The gaps stay the stack's own.
+        let dock_shown = dock.is_some();
+        footer = footer.children(dock).children(working_card.take());
         self.sync_files_links_menu(window, cx);
         self.sync_resource_modal_menu(window, cx);
         if maximized && let Some(suggestions) = self.inline_suggestions(window, cx) {
@@ -671,6 +742,8 @@ impl NativeChatView {
             0.0
         } else if card_above_box {
             super::working_card::WORKING_CARD_GAP - 8.0
+        } else if dock_shown {
+            0.0
         } else {
             8.0
         };

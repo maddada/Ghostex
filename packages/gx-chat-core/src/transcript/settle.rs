@@ -49,6 +49,15 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
                 state.transcript_view.projection_inputs = None;
             }
         }
+        if key.store == crate::composer::storage::QUIET_VIEW_STORE {
+            if let (Some(next), None) = (
+                state.transcript_view.pending_quiet_view_override.take(),
+                error,
+            ) {
+                state.transcript_view.quiet_view_override = next;
+                crate::transcript::quiet_view::sync(state);
+            }
+        }
         if key.store == crate::composer::storage::VERBOSE_STORE {
             if let (Some(next), None) =
                 (state.transcript_view.pending_verbose_override.take(), error)
@@ -69,6 +78,15 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
     // hook: calling it here would project the previous turn's transcript.
     // `scheduleBackfill` is a zero-delay timer that promotes 24 placeholders per pass, newest
     // first, and re-arms itself while any are left.
+    // The bar's "Worked for" minute is up: the newest turn's fold gets its time back
+    // (`rows::worked_line_shown`).
+    if matches!(event, Event::Tick)
+        && state
+            .core
+            .timer_fired(crate::transcript::rows::WORKED_LINE_TIMER)
+    {
+        state.core.request_publish();
+    }
     if matches!(event, Event::Tick) && state.core.timer_fired(BACKFILL_TIMER) {
         crate::transcript::rows::advance(state, context);
         // The TypeScript's `onBackfill` published without a state change of its own.

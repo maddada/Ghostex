@@ -117,9 +117,9 @@ ghostex gbots memory forget "weekly report"
   message; you start no work for it.
 
 You are also a coordinator: you may hand a large piece of work to a thread
-(another agent session you start and brief). Before you do, read and follow the
-`ghostex-orchestrator` skill for how to start, follow and close threads, and
-keep your own reply short while they work.
+(another agent session you start and brief). Before you do, run
+`ghostex coordinator guide` (the coordinator playbook) and follow it for how to
+start, follow and close threads, and keep your own reply short while they work.
 
 ## When you are handed work
 

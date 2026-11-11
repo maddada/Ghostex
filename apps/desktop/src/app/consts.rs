@@ -176,7 +176,7 @@ nothing on the left.
 pub(crate) const WINDOW_CONTROLS_LEADING_RESERVE: f32 = 88.0;
 
 /// CDXC:Titlebar 2026-09-23 DECISION:
-/// User: on Windows and Linux the Toggle sidebar and Agents Panel buttons sit at the top left of
+/// User: on Windows and Linux the Toggle sidebar button sits at the top left of
 /// the sidebar, as on macOS, from the same code; the only difference is that macOS clears its
 /// traffic lights first. This is the button's window x on every OS, whichever of the docked
 /// Search row or the collapsed header draws it. Off macOS it is the reveal edge strip's width, so
@@ -408,9 +408,6 @@ pub(crate) const TITLEBAR_ICON_CHEVRON_DOWN: &str = "titlebar/chevron-down.svg";
 
 pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR: &str = "titlebar/layout-sidebar.svg";
 
-pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_EXPAND: &str =
-    "titlebar/layout-sidebar-left-expand.svg";
-
 pub(crate) const TITLEBAR_ICON_LAYOUT_BOARD_SPLIT: &str = "titlebar/layout-board-split.svg";
 
 pub(crate) const TITLEBAR_ICON_LAYOUT_COLUMNS: &str = "titlebar/layout-columns.svg";
@@ -420,7 +417,6 @@ pub(crate) const TITLEBAR_ICON_PANEL_BOTTOM: &str = "titlebar/panel-bottom.svg";
 pub(crate) const TITLEBAR_ICON_PANEL_RIGHT: &str = "titlebar/panel-right.svg";
 
 pub(crate) const TITLEBAR_ICON_TERMINAL: &str = "titlebar/terminal-2.svg";
-pub(crate) const TITLEBAR_ICON_MESSAGE: &str = "titlebar/message.svg";
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub(crate) const TITLEBAR_ICON_WINDOW_MINIMIZE: &str = "titlebar/window-minimize.svg";
@@ -473,21 +469,6 @@ pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL: &str = "titlebar/arrows-diagonal
 
 pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL_MINIMIZE: &str =
     "titlebar/arrows-diagonal-minimize.svg";
-
-pub(crate) const TITLEBAR_TIP_IDS: &[&str] = &[
-    "command-palette-all-actions",
-    "customize-sidebar-layout-and-tools",
-    "sleep-idle-sessions-from-resources",
-    "run-same-project-in-a-worktree",
-    "use-ghostex-computer-use-skill",
-    "use-ghostex-browser-use-skill",
-    "use-ghostex-embedded-browser-use-skill",
-    "schedule-recurring-agent-work",
-    "continue-session-from-mobile-app",
-    "find-session-by-prompt-text",
-    "star-prompts-you-want-again",
-    "add-todos-to-kanban-page",
-];
 
 // Both platform backends probe quietly at launch and every 15 minutes. The
 // titlebar is the shared availability surface; platform-specific UI is only
@@ -549,7 +530,9 @@ pub(crate) const BROWSER_FAVICON_HTTP_REDIRECT_LIMIT: u32 = 3;
 
 pub(crate) const BROWSER_FAVICON_DATA_URL_MAX_CHARS: usize = 96 * 1024;
 
-pub(crate) const BROWSER_FAVICON_IMAGE_MAX_BYTES: usize = 64 * 1024;
+/// The web build (apps/gpui-web) shares this file but has no favicon fetcher to read it.
+#[allow(unused_imports)]
+pub(crate) use crate::data_url_image::BROWSER_FAVICON_IMAGE_MAX_BYTES;
 
 pub(crate) const BROWSER_FAVICON_IMAGE_MAX_DIMENSION: u32 = 512;
 
@@ -679,15 +662,6 @@ pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH: f32 = 560.
 
 pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT: f32 = 380.0;
 
-/*
-CDXC:RemotePairing 2026-09-03:
-Remote Setup opens on a frame tall enough for both sections; the one-shot
-fit-height pass then sizes the child window down to what React rendered.
-*/
-pub(crate) const APP_MODAL_HOST_REMOTE_SETUP_WINDOW_WIDTH: f32 = 560.0;
-
-pub(crate) const APP_MODAL_HOST_REMOTE_SETUP_WINDOW_HEIGHT: f32 = 760.0;
-
 pub(crate) const APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_WIDTH: f32 = 640.0;
 
 pub(crate) const APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_HEIGHT: f32 = 560.0;
@@ -720,8 +694,6 @@ pub(crate) const TITLEBAR_POPUP_BROWSER_DEVICE_VIEW_WIDTH: f32 = 290.0;
 pub(crate) const TITLEBAR_POPUP_GIT_WIDTH: f32 = 300.0;
 
 pub(crate) const TITLEBAR_POPUP_EXTENSIONS_WIDTH: f32 = 340.0;
-
-pub(crate) const TITLEBAR_POPUP_TIPS_WIDTH: f32 = 556.0;
 
 pub(crate) const TITLEBAR_POPUP_HELP_WIDTH: f32 = 380.0;
 
@@ -785,8 +757,6 @@ pub(crate) const TITLEBAR_POPUP_MENU_BORDER_CHROME: f32 = 2.0;
 
 pub(crate) const TITLEBAR_POPUP_ACTION_PREVIEW_TEXT_SIZE: f32 = 11.0;
 
-pub(crate) const GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY: &str = "gpuiTitlebarTipsReadIds";
-
 pub(crate) const TITLEBAR_ACTION_UNCONFIGURED_PREVIEW: &str = "Set the command";
 
 pub(crate) const TITLEBAR_UPDATE_AVAILABLE_TOOLTIP: &str =
@@ -803,8 +773,6 @@ pub(crate) const BROWSER_ICON_HISTORY: &str = "titlebar/history.svg";
 pub(crate) const COMMAND_ICON_PLUS: &str = "titlebar/plus.svg";
 
 pub(crate) const COMMAND_ICON_CLOCK: &str = "titlebar/clock.svg";
-
-pub(crate) const COMMAND_ICON_COMMAND: &str = "titlebar/command.svg";
 
 pub(crate) const COMMAND_ICON_CHEVRON_UP: &str = "titlebar/chevron-up.svg";
 
@@ -823,15 +791,6 @@ pub(crate) const BROWSER_ICON_LOCK_FILLED: &str = "titlebar/lock-filled.svg";
 pub(crate) const BROWSER_ICON_WORLD: &str = "titlebar/world.svg";
 
 pub(crate) const BROWSER_ICON_TOOLS: &str = "titlebar/tools.svg";
-
-/*
-GPUI Tips uses the same child-window path as the other titlebar dropdowns.
-Its Docs and Updates actions open only these first-party URLs in a GPUI
-Browser pane.
-*/
-pub(crate) const GHOSTEX_CHANGELOG_URL: &str = "https://github.com/maddada/ghostex/releases";
-
-pub(crate) const GHOSTEX_DOCS_URL: &str = "https://ghostex.dev/docs";
 
 pub(crate) const BROWSER_ICON_POINTER: &str = "titlebar/pointer.svg";
 

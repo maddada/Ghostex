@@ -344,7 +344,7 @@ impl ChatOptionMenuPanel {
         if traits.is_empty() {
             return None;
         }
-        let rows = view["rows"].as_array().map_or(0, Vec::len);
+        let rows = super::state::footer_start(view);
         let open = self
             .model_menu
             .as_ref()
@@ -538,10 +538,14 @@ impl ChatOptionMenuPanel {
     }
 
     /// The tab's Legacy models toggle under its rows; the core lists the legacy rows after the
-    /// current ones while it is open.
+    /// current ones while it is open. It is one stop of the keyboard cursor (`index`, `lit` when
+    /// the cursor is on it), so Up and Down reach it and Enter or Right opens it.
+    #[allow(clippy::too_many_arguments)]
     fn render_model_legacy_toggle(
         &self,
         legacy: &serde_json::Map<String, Value>,
+        index: usize,
+        lit: bool,
         appearance: &ChatAppearance,
         palette: &Palette,
         cx: &mut Context<Self>,
@@ -572,7 +576,17 @@ impl ChatOptionMenuPanel {
             .gap(px(6.0 * scale))
             .text_size(px(12.0 * scale))
             .text_color(palette.muted)
+            .when(lit, |row| row.bg(hover))
             .hover(move |style| style.bg(hover))
+            // Hover moves the keyboard cursor here, as it does over a model.
+            .on_mouse_move(cx.listener(move |panel, _, _, cx| {
+                if let Some(state) = panel.model_menu.as_mut()
+                    && state.active != index
+                {
+                    state.active = index;
+                    cx.notify();
+                }
+            }))
             .on_click(cx.listener(move |panel, _, _, cx| {
                 panel.model_menu_send(json!({"type":"modelMenuView","legacyOpen":!open}), cx);
             }))
@@ -613,6 +627,9 @@ impl ChatOptionMenuPanel {
         let scroll = state.scroll.clone();
         let search = state.search.clone();
         let count = state.rows().len();
+        // The list's room: the card's list area less its padding and, on a tab with one, the
+        // Legacy models row under it.
+        let list_room = LIST_HEIGHT - 8.0 - if state.has_fold() { 28.0 } else { 0.0 };
         let list = if count == 0 {
             div()
                 .px(px(8.0 * scale))
@@ -650,7 +667,10 @@ impl ChatOptionMenuPanel {
                         .collect()
                 }),
             )
-            .size_full()
+            // Its height is its rows' (or the room it is given, when they do not fit).
+            .with_sizing_behavior(gpui::ListSizingBehavior::Infer)
+            .w_full()
+            .max_h(px(list_room * scale))
             .px(px(4.0 * scale))
             .track_scroll(&scroll)
             .into_any_element()
@@ -756,10 +776,14 @@ impl ChatOptionMenuPanel {
                     .opacity(if view["disabled"] == true { 0.5 } else { 1.0 })
                     .flex()
                     .flex_col()
-                    .child(div().flex_1().min_h_0().child(list))
+                    // The Legacy models row sits right under the last model on a short list and
+                    // stays at the bottom of the list's room on a long one, which scrolls above it.
+                    .child(div().min_h_0().child(list))
                     .when_some(view["legacy"].as_object().cloned(), |area, legacy| {
                         area.child(self.render_model_legacy_toggle(
                             &legacy,
+                            count,
+                            active == count,
                             &appearance,
                             &palette,
                             cx,

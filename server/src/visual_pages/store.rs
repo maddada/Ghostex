@@ -288,6 +288,20 @@ pub(super) fn dismiss_layout_notice(
     write_record(gxserver_state_dir, id, &record).map_err(StoreAnswersError::Io)
 }
 
+/// Marks a page just published as waiting until the reader marks it seen (`awaitsSeen`,
+/// publish.rs).
+pub(super) fn note_awaits_seen(
+    gxserver_state_dir: &Path,
+    id: &str,
+) -> Result<(), StoreAnswersError> {
+    let _guard = RECORD_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut record = read_record(gxserver_state_dir, id).ok_or(StoreAnswersError::NotFound)?;
+    record["awaitsSeen"] = json!(true);
+    write_record(gxserver_state_dir, id, &record).map_err(StoreAnswersError::Io)
+}
+
 /// Replaces the record whole (written beside it, then renamed), so a reader never sees half.
 fn write_record(
     gxserver_state_dir: &Path,

@@ -19,6 +19,48 @@ pub(crate) enum SidebarMenuPlacement {
         align_right: bool,
         gap: Pixels,
     },
+    /// A submenu beside the panel that opened it (`parent`), `gap` to its right with its first
+    /// row level with the row that opened it (`row`); to the panel's left when `room` ends before
+    /// it fits on the right, and moved up or down to stay inside `room`. With no room on either
+    /// side it opens as `Pointer` does, at the panel's anchor under its row.
+    ///
+    /// CDXC:ContextMenus 2026-11-11 WHY:
+    /// `room` is where a panel can be drawn and reached, in the menu's window: the whole window where each panel is a window of its own (the frosted hosts, under window glass on macOS and Windows) and in the web page, which is one canvas; only the sidebar otherwise, because Browser, Files and Kanban pages are native views above everything the main window paints, so a panel painted beside the sidebar there could sit under one. The floating sidebar is a window as wide as the sidebar, and leaving it for a panel beside it would slide it away, so its submenus have no room beside and open under their row.
+    Beside {
+        parent: Bounds<Pixels>,
+        row: Bounds<Pixels>,
+        room: Bounds<Pixels>,
+        gap: Pixels,
+    },
+}
+
+/// Where a `width` by `height` submenu goes beside `parent` inside `room`, or `None` when it fits
+/// on neither side: right of the parent, else left of it, its top `inset` above the opening row's
+/// (the panel's own padding, so the first row sits level with that row) and kept `margin` inside
+/// `room`'s top and bottom.
+pub(crate) fn submenu_origin_beside(
+    parent: Bounds<Pixels>,
+    row: Bounds<Pixels>,
+    room: Bounds<Pixels>,
+    gap: Pixels,
+    inset: Pixels,
+    margin: Pixels,
+    width: Pixels,
+    height: Pixels,
+) -> Option<Point<Pixels>> {
+    let right = parent.right() + gap;
+    let left = parent.left() - gap - width;
+    let x = if right + width <= room.right() - margin {
+        right
+    } else if left >= room.left() + margin {
+        left
+    } else {
+        return None;
+    };
+    let y = (row.top() - inset)
+        .min(room.bottom() - height - margin)
+        .max(room.top() + margin);
+    Some(Point::new(x, y))
 }
 
 /// The left edge of a `width`-wide menu lined up with the button `from` between `min_left` and
@@ -219,7 +261,7 @@ impl SidebarMenuPanel {
         self
     }
 
-    fn select_first_row(&mut self) {
+    pub(crate) fn select_first_row(&mut self) {
         self.selected = self.items.iter().position(|item| {
             item["separator"] != true && item["heading"] != true && item["disabled"] != true
         });
@@ -234,11 +276,13 @@ impl SidebarMenuPanel {
             SIDEBAR_MENU_SEPARATOR_HEIGHT
         } else if item["heading"] == true {
             SIDEBAR_MENU_HEADING_HEIGHT
-        } else if self.search.is_some()
+        } else if (self.search.is_some() || item["twoLineRow"] == true)
             && item["detail"]
                 .as_str()
                 .is_some_and(|detail| !detail.is_empty())
         {
+            // `twoLineRow`: a menu that is not searchable asks for the two-line height per row
+            // (the folded computers button's, native_sidebar/machines.rs); the rest keep theirs.
             SIDEBAR_MENU_TWO_LINE_ROW_HEIGHT
         } else {
             SIDEBAR_MENU_ROW_HEIGHT
@@ -453,8 +497,8 @@ impl SidebarMenuPanel {
     ) -> Bounds<Pixels> {
         let margin = gpui::px(12.0 * scale);
         let launcher = self.is_agent_launcher();
-        let width = gpui::px(self.fitted_width(nested) * scale)
-            .min((sidebar.size.width - margin * 2.0).max(gpui::px(0.0)));
+        let fitted_width = gpui::px(self.fitted_width(nested) * scale);
+        let width = fitted_width.min((sidebar.size.width - margin * 2.0).max(gpui::px(0.0)));
         let estimate = if launcher {
             super::agent_launcher_menu::estimated_height(&self.items, width, scale)
         } else {
@@ -472,6 +516,35 @@ impl SidebarMenuPanel {
                     * scale,
             )
         };
+        if let SidebarMenuPlacement::Beside {
+            parent,
+            row,
+            room,
+            gap,
+        } = self.placement
+        {
+            // Beside the menu the panel has its own width and the room's height to fit in, not
+            // the sidebar's.
+            let height = self
+                .measured_height
+                .unwrap_or(estimate)
+                .min((room.size.height - margin * 2.0).max(gpui::px(0.0)));
+            if let Some(origin) = submenu_origin_beside(
+                parent,
+                row,
+                room,
+                gap,
+                gpui::px(6.0 * scale),
+                margin,
+                fitted_width,
+                height,
+            ) {
+                return Bounds {
+                    origin,
+                    size: gpui::size(fitted_width, height),
+                };
+            }
+        }
         let height = self
             .measured_height
             .unwrap_or(estimate)

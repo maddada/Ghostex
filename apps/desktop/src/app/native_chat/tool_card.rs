@@ -278,7 +278,12 @@ impl NativeChatView {
             text(card, "title")
         };
         let failed = text(card, "failedLabel");
-        let time = text(card, "time");
+        let time = self.live_time(
+            text(card, "time"),
+            &card["startedAt"],
+            ghostex_gx_chat_core::transcript::work_summary::tool_duration_label,
+            cx,
+        );
         let more = card["moreIcons"].as_u64().unwrap_or(0);
         let (card_surface, _, _, hover, _, _) = card_colors(p);
         // A line has no box: its circles are cut out of the chat's own background.
@@ -347,7 +352,10 @@ impl NativeChatView {
             // Drawn over the row, not in it (row_motion.rs).
             self.running_shimmer(
                 SharedString::from(format!("{key}:live")),
-                div().min_w_0().truncate().text_size(px(13.5 * s)),
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(super::chat_text_look::PROSE_SIZE * s)),
                 live_label.clone(),
                 p,
             )
@@ -355,7 +363,7 @@ impl NativeChatView {
             let plain = div()
                 .min_w_0()
                 .truncate()
-                .text_size(px(13.5 * s))
+                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                 .text_color(p.muted)
                 .child(title.clone());
             if animate {
@@ -502,7 +510,12 @@ impl NativeChatView {
         let label = text(entry, "label");
         let reason = text(entry, "reason");
         let result = text(entry, "result");
-        let time = text(entry, "time");
+        let time = self.live_time(
+            text(entry, "time"),
+            &entry["startedAt"],
+            ghostex_gx_chat_core::transcript::work_summary::tool_time_label,
+            cx,
+        );
         let (_, _, _, hover, added_color, removed_color) = card_colors(p);
         let has_detail = match kind.as_str() {
             "file" => true,
@@ -521,7 +534,10 @@ impl NativeChatView {
             // Drawn over the row, not in it (row_motion.rs).
             self.running_shimmer(
                 SharedString::from(format!("{key}:shimmer")),
-                div().min_w_0().truncate().text_size(px(13.5 * s)),
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(super::chat_text_look::PROSE_SIZE * s)),
                 label.clone(),
                 p,
             )
@@ -529,7 +545,7 @@ impl NativeChatView {
             div()
                 .min_w_0()
                 .truncate()
-                .text_size(px(13.5 * s))
+                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                 .text_color(label_color)
                 .child(label.clone())
                 .into_any_element()
@@ -636,7 +652,7 @@ impl NativeChatView {
                             div()
                                 .min_w_0()
                                 .truncate()
-                                .text_size(px(12.0 * s))
+                                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                                 .text_color(p.muted)
                                 .child(reason.clone()),
                         )
@@ -658,7 +674,19 @@ impl NativeChatView {
         let mut row = div().w_full().min_w_0().flex().flex_col().child(trigger);
         if expanded || motion.is_some() {
             let body = match kind.as_str() {
-                "file" => self.file_entry_diff(&key, &source, p, cx),
+                // The card's edited files, for the diff's Review all (the turn's files fold,
+                // which had it, is not drawn where the card lists the edits; gx-chat-core
+                // `turn_files_fold`).
+                "file" => {
+                    let mut review: Vec<String> = Vec::new();
+                    for file in message["files"].as_array().into_iter().flatten() {
+                        let path = text(file, "path");
+                        if !path.is_empty() && !review.contains(&path) {
+                            review.push(path);
+                        }
+                    }
+                    self.file_entry_diff(&key, &source, review, p, cx)
+                }
                 _ => self.tool_detail_body(&key, message_id, index, &source, p, cx),
             };
             if let Some(body) = body {
@@ -701,4 +729,45 @@ fn enter_animation() -> Animation {
     Animation::new(ENTER)
         .with_easing(gpui::ease_out_quint())
         .with_max_fps(INDICATOR_MAX_FPS)
+}
+
+impl NativeChatView {
+    /// A call's or a card's time: the finished `time` the core wrote, or while it runs the time so
+    /// far since `started_at` (epoch ms, gx-chat-core `tool_card.rs`, where the user's decision
+    /// is), in the same words (`format`). Counting books one redraw for the next whole second of
+    /// the oldest visible clock; the chat's other visible rows draw again with it, but nothing is
+    /// re-projected. No start, no time.
+    pub(super) fn live_time(
+        &self,
+        time: String,
+        started_at: &Value,
+        format: fn(i64) -> String,
+        cx: &mut Context<Self>,
+    ) -> String {
+        let Some(start) = started_at.as_i64().filter(|_| time.is_empty()) else {
+            return time;
+        };
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|since| since.as_millis() as i64)
+            .unwrap_or(start);
+        let ran = (now - start).max(0);
+        if !self.tool_clock_tick.replace(true) {
+            let wait = Duration::from_millis((1_000 - ran % 1_000).max(50) as u64);
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(wait).await;
+                let _ = this.update(cx, |this, cx| {
+                    this.tool_clock_tick.set(false);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+        // Whole seconds ("1.0s", "12s"), and nothing in the first one, so it never counts
+        // milliseconds up.
+        if ran < 1_000 {
+            return String::new();
+        }
+        format(ran - ran % 1_000)
+    }
 }

@@ -408,6 +408,11 @@ pub(crate) fn gpui_terminal_attachment_sanitized_filename(path: &Path) -> Result
     }
 }
 
+/// CDXC:RemoteMachines 2026-11-10 WHY:
+/// SSH asks the far side for a sign of life after this long without hearing from it and gives up after the count below, 45 s in all, as before (15 s three times). Asking every 5 s costs a hundred bytes and means a connection that works is never silent for longer, which is what lets an Easy Connect link tell a helper that stopped carrying from one that is only idle (`ghostex_paths::tailcat_forward`, `SUSPECT_AFTER`).
+const GPUI_REMOTE_SSH_ALIVE_INTERVAL_OPTION: &str = "ServerAliveInterval=5";
+const GPUI_REMOTE_SSH_ALIVE_COUNT_OPTION: &str = "ServerAliveCountMax=9";
+
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 pub(crate) fn gpui_remote_ssh_client_options(has_saved_password: bool) -> Vec<String> {
     /*
@@ -420,9 +425,9 @@ pub(crate) fn gpui_remote_ssh_client_options(has_saved_password: bool) -> Vec<St
         "-o".to_string(),
         "ConnectTimeout=8".to_string(),
         "-o".to_string(),
-        "ServerAliveInterval=15".to_string(),
+        GPUI_REMOTE_SSH_ALIVE_INTERVAL_OPTION.to_string(),
         "-o".to_string(),
-        "ServerAliveCountMax=3".to_string(),
+        GPUI_REMOTE_SSH_ALIVE_COUNT_OPTION.to_string(),
         "-o".to_string(),
         "TCPKeepAlive=yes".to_string(),
         "-o".to_string(),
@@ -453,9 +458,9 @@ pub(crate) fn gpui_remote_ssh_client_options(has_saved_password: bool) -> Vec<St
         "-o".to_string(),
         "ConnectTimeout=8".to_string(),
         "-o".to_string(),
-        "ServerAliveInterval=15".to_string(),
+        GPUI_REMOTE_SSH_ALIVE_INTERVAL_OPTION.to_string(),
         "-o".to_string(),
-        "ServerAliveCountMax=3".to_string(),
+        GPUI_REMOTE_SSH_ALIVE_COUNT_OPTION.to_string(),
         "-o".to_string(),
         "TCPKeepAlive=yes".to_string(),
         "-o".to_string(),

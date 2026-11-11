@@ -12,10 +12,9 @@ use super::{
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Entity, InteractiveElement as _, IntoElement, MouseDownEvent,
-    ParentElement as _, Styled as _, Window, div, px, rgb,
+    AnyElement, Context, InteractiveElement as _, IntoElement, MouseDownEvent, ParentElement as _,
+    Styled as _, Window, div, px, rgb,
 };
-use gpui_component::input::TextareaState;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -30,7 +29,7 @@ fn change_action(key: &str, text: &str) -> Option<Value> {
 }
 
 /// The byte offset of `units` UTF-16 code units into `text`.
-fn utf16_to_byte(text: &str, units: usize) -> usize {
+pub(super) fn utf16_to_byte(text: &str, units: usize) -> usize {
     let mut seen = 0;
     text.char_indices()
         .find_map(|(byte, ch)| {
@@ -67,19 +66,24 @@ impl NativeChatView {
             .join("\n")
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn finish_form_attachments(
         &mut self,
         key: String,
         modal: bool,
-        input: Entity<TextareaState>,
         (original, start, end): (String, usize, usize),
         paths: Vec<Value>,
         mut error: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !paths.is_empty() {
+        // The reference goes into a copy of the box that is drawn now: the one the paste started
+        // in, or the box's other copy (the transcript's, the Resources modal's) when that one is
+        // gone. Its text is the draft the write is made from, with the `core` and `rev` that say
+        // so; the text of a box no longer drawn is not, and with no copy drawn nothing is written.
+        let drawn = [modal, !modal]
+            .into_iter()
+            .find_map(|modal| Some((modal, self.inputs_mut(modal).get(&key)?.input.clone())));
+        if let Some((modal, input)) = drawn.filter(|_| !paths.is_empty()) {
             let current = input.read(cx).value().to_string();
             let others = self.form_others_text(&key, modal, cx);
             let result = self.runtime.as_ref().and_then(|runtime| {
@@ -98,15 +102,23 @@ impl NativeChatView {
             });
             match result.as_ref().and_then(|result| result["text"].as_str()) {
                 Some(text) => {
-                    let caret = utf16_to_byte(
-                        text,
-                        result.as_ref().unwrap()["caret"].as_u64().unwrap_or(0) as usize,
-                    );
+                    let units = result.as_ref().unwrap()["caret"].as_u64().unwrap_or(0);
+                    let caret = utf16_to_byte(text, units as usize);
                     input.update(cx, |input, cx| {
                         input.replace_all(text.to_owned(), window, cx);
                         input.set_selected_range(caret..caret, cx);
                     });
-                    if let Some(action) = change_action(&key, text) {
+                    // Like the box's own edits (`sync_form_input_in`), the write says which draft
+                    // its text was made from: the core can have typed a dictation into the box
+                    // that this copy has not drawn yet.
+                    let stamp = self
+                        .inputs_mut(modal)
+                        .get(&key)
+                        .map(|entry| (entry.core.clone(), entry.rev));
+                    if let Some(((core, rev), mut action)) = stamp.zip(change_action(&key, text)) {
+                        action["core"] = json!(core);
+                        action["rev"] = json!(rev);
+                        action["caret"] = json!(units);
                         self.invoke(action, cx);
                     }
                 }
@@ -191,7 +203,9 @@ impl NativeChatView {
     }
 
     /// A form's note or text box with what a paste adds: the paste hook, the pills' click, and a
-    /// line while an image is saved or when it could not be.
+    /// line while an image is saved or when it could not be. While a dictation that started in
+    /// the box records or transcribes, the box is marked as where its words will be typed
+    /// (`note_box`; the pill over the microphone keeps the clock and the ✕, dictation.rs).
     pub(super) fn form_box(
         &self,
         key: &str,
@@ -213,6 +227,8 @@ impl NativeChatView {
         } else {
             entry.paste_error.clone().map(|error| (error, true))
         };
+        // The modal draws its own copy of the box, which no dictation starts in.
+        let dictated_into = !modal && self.dictation_target(cx) == Some(key);
         div()
             .id(gpui::SharedString::from(format!("form-box:{key}")))
             .w_full()
@@ -227,6 +243,7 @@ impl NativeChatView {
                 &entry.input,
                 label,
                 paste,
+                dictated_into,
                 p,
             ))
             .when_some(status, |column, (status, error)| {

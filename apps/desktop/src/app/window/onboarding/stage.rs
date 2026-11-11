@@ -331,14 +331,3 @@ impl Transitions {
 pub(crate) fn clock_stamp(at: chrono::DateTime<chrono::Local>) -> String {
     at.format("%H:%M:%S").to_string()
 }
-
-/// The last path segment of a folder, `/` or `\` separated.
-pub(crate) fn folder_basename(path: &str) -> String {
-    let trimmed = path.trim_end_matches(['/', '\\']);
-    trimmed
-        .rsplit(['/', '\\'])
-        .next()
-        .filter(|part| !part.is_empty())
-        .unwrap_or(trimmed)
-        .to_string()
-}

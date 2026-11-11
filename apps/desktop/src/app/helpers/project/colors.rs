@@ -191,6 +191,7 @@ pub(crate) fn refresh_gpui_visual_settings(
     GPUI_TITLEBAR_FOREGROUND_RGB.store(u64::from(titlebar_foreground), Ordering::Relaxed);
     refresh_window_glass(object);
     refresh_work_area_frame(object);
+    crate::app::window::round_close_button::refresh_close_button_side(object);
     crate::app::panel_motion::refresh_panel_motion_speed(object);
 }
 

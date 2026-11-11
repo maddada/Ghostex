@@ -3,9 +3,9 @@
 use super::super::super::catalog::SettingOption;
 use super::super::super::catalog::settings_catalog;
 use super::super::super::fields::{
-    RowSpec, SELECT_WIDTH, SliderBinding, SliderSaver, grok_logins_field, ignored_ports_field,
-    reset_key, segmented_field, setting_row, settings_section, settings_select_with_unavailable,
-    slider_number_field_with, text_field,
+    PageAction, RowSpec, SELECT_WIDTH, SliderBinding, SliderSaver, action_buttons_field,
+    grok_logins_field, ignored_ports_field, reset_key, segmented_field, setting_row,
+    settings_section, settings_select_with_unavailable, slider_number_field_with, text_field,
 };
 use super::super::super::page::PageBlock;
 use super::super::super::store::SettingsStore;
@@ -40,8 +40,6 @@ fn chat_section(
             cx,
         ));
     }
-    // CDXC:Sessions 2026-10-09 DECISION: the New-session cleanup is an Advanced setting, off by default, that only runs for Chat; gxserver enforces the Chat condition.
-    rows.extend(page.toggle(g, s, "closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.", false, cx));
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q20): Custom transcript width and Transcript
     // width are one slider. It reads Auto (the transcript matches the prompt composer) until it is
     // dragged, which turns the custom width on; its reset goes back to Auto.
@@ -207,11 +205,40 @@ fn chat_section(
             cx,
         ));
     }
+    // CDXC:SessionChat 2026-11-11 SEE-ALSO: Quiet View's user decision is in packages/gx-chat-core/src/transcript/quiet_view.rs.
+    rows.extend(page.toggle(g, s, "chatQuietViewCoordinators", "Coordinators open in Quiet View", "A coordinator's chat shows your messages, its replies, pages and questions, and folds everything between two replies (reports from threads, messages it sent, tool calls) into one line you can click open. A chat's own choice in More actions > View comes first.", false, cx));
+    rows.extend(page.toggle(g, s, "chatQuietViewChats", "Other chats open in Quiet View", "Every other chat opens in Quiet View too: the work between two replies folds into one line you can click open. A chat's own choice in More actions > View comes first.", false, cx));
+    rows.extend(page.toggle(g, s, "chatQuietViewExpandLast", "Expand the last turn in Quiet View", "Show the work after the newest reply, or the turn that is running, open instead of as one line. It folds once a newer reply comes.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatKeepComposerExpanded", "Keep chat box expanded while scrolling", "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatConfirmEscapeInterrupt", "Press Escape twice to interrupt", "While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.", false, cx));
     // CDXC:Settings 2026-11-02 SEE-ALSO: the user's words on Default to Detailed view (an Advanced row) are in packages/settings-catalog/src/general/chat.rs.
     rows.extend(page.toggle(g, s, "sessionChatDetailedView", "Default to Detailed view", "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.", false, cx));
     rows.extend(page.toggle(g, s, "chatCatchMeUp", "Catch me up button", "Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.", false, cx));
+    // CDXC:Onboarding 2026-11-11 SEE-ALSO: the new chat tips card and the user's words on it are in packages/gx-chat-core/src/extras/new_chat_tips.rs.
+    rows.extend(page.toggle(g, s, "newChatTips", "Tips on new chats", "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.", false, cx));
+    if g.visible(s, "newChatTipsReset") {
+        let spec = RowSpec::new("Show tips again").description(
+            "Bring back every tip you marked Got it, so the new chat card shows them again.",
+        );
+        // The app writes the read tips straight to the settings file (`resetNewChatTips`), since
+        // a Settings save keeps the file's own copy of that key.
+        let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            super::super::super::store::post_store_message(
+                &store,
+                json!({ "type": "resetNewChatTips" }),
+                cx,
+            );
+            save(page, "newChatTips", json!(true), cx);
+        });
+        rows.push(action_buttons_field(
+            &g.p,
+            "newChatTipsReset",
+            spec,
+            vec![("Show tips again", reset)],
+            cx,
+        ));
+    }
     rows.extend(page.toggle(g, s, "chatSendOnPick", "Send when you pick an answer", "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.", false, cx));
     rows.extend(page.toggle(g, s, "chatAnswersWaitForIdle", "Wait for turn end before sending form answers", "Send answers from Ghostex forms and Ghostex pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.", false, cx));
     if g.visible(s, "chatPageOpenTarget") {
@@ -246,11 +273,9 @@ fn chat_section(
             cx,
         ));
     }
-    rows.extend(page.toggle(g, s, "agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.", false, cx));
     rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.", false, cx));
     rows.extend(orchestrator_playbook_row(page, g, s, cx));
     rows.extend(read_aloud_rows(page, g, s, window, cx));
-    rows.extend(page.toggle(g, s, "sessionDetailsClaudeTaskTools", "Claude task list", "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.", false, cx));
     settings_section(&g.p, g.section_title("chat", "Chat"), None, None, rows)
         .map(|section| PageBlock::section("chat", section))
 }
@@ -821,9 +846,9 @@ fn marked_handovers_section(
     }
     let s = "markedHandovers";
     let mut rows: Vec<AnyElement> = Vec::new();
-    rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "Coordinators and their threads start each part of the message they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have every other agent session do the same. Applies to sessions started or resumed after you change it.", false, cx));
+    rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "A coordinator's threads start each part of the report they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have your coordinators and every other agent session do the same. A coordinator follows a change from the next message it gets, other sessions once they are started or resumed.", false, cx));
     rows.extend(page.marked_sections_style_row(g, s, window, cx));
-    rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Coordinators answer without markers", "Coordinators answer normally, without marking the sections of their handovers. Their threads still mark the reports they send to the coordinator. Applies to coordinators started or resumed after you change it.", false, cx));
+    rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Coordinators answer without markers", "While Marked handovers is on, coordinators still answer in plain prose, without sections or markers. Their threads still mark the reports they send to the coordinator. A coordinator follows a change from the next message it gets.", false, cx));
     settings_section(
         &g.p,
         g.section_title("markedHandovers", "Marked handovers"),

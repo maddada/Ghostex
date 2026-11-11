@@ -166,6 +166,9 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             if let Some(look) = &settings.chat_look {
                 crate::transcript::chat_look::apply_from_host(&mut state.transcript_view, look);
             }
+            if let Some(quiet) = settings.quiet_view {
+                crate::transcript::quiet_view::apply_settings(state, quiet);
+            }
             state.core.request_publish();
             Vec::new()
         }
@@ -279,6 +282,9 @@ pub fn boot_read(
         if let Some(look) = &settings.chat_look {
             crate::transcript::chat_look::apply_from_host(&mut state.transcript_view, look);
         }
+        if let Some(quiet) = settings.quiet_view {
+            crate::transcript::quiet_view::apply_settings(state, quiet);
+        }
     }
     let config = state.session.boot_config.clone().unwrap_or_default();
     // The `sessionChanged` branch of the subscribe effect (`controller.ts:853`): the agent
@@ -344,6 +350,16 @@ fn frame_arrived(state: &mut ChatState, frame: &ChatFrame, context: &ChatContext
     // frame still proves the stream is alive, and that Ghostex's service is answering.
     state.messages.last_frame_at_ms = context.now_ms;
     crate::session::reads::note_reachable(state, context, true);
+    // A thread-list patch becomes the whole list before anything below reads the frame.
+    let rebuilt;
+    let frame = match crate::session::thread_patch::resolve(state, frame) {
+        crate::session::thread_patch::Resolved::Unchanged => frame,
+        crate::session::thread_patch::Resolved::Patched(whole) => {
+            rebuilt = whole;
+            &rebuilt
+        }
+        crate::session::thread_patch::Resolved::Lost => return resubscribe(state, context),
+    };
     // CDXC:SessionChat 2026-09-22 WHY:
     // An authoritative frame behind the one already accepted, on the same daemon generation, is a
     // late duplicate and rolls the whole transcript backwards for one frame. `snapshot_is_stale`

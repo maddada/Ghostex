@@ -6,6 +6,7 @@ import { COMPONENTS_GITHUB_TOKEN_ENV, componentsGithubRepo } from './release-gpu
 import { resolvePublishRecoveryInputs } from './release-gpui/publish-provenance.mjs';
 import { PUBLISH_STAGE_NAMES } from './release-gpui/publish-stage.mjs';
 import { isAllowedReleaseWorkflowName } from './release-gpui/provenance.mjs';
+import { windowsSigningDecision } from './release-gpui/windows-signing.mjs';
 
 const repo = 'maddada/Ghostex';
 
@@ -53,9 +54,11 @@ Product flags for amend (all are disabled by default; opt-in):
 Release options:
   --skip-sparkle
   --prerelease
-  --windows-signing <auto|required|off>  Default: auto (signs only when the SIGNPATH_SIGNING_POLICY_SLUG
-                                         repository variable is release-signing; required signs with the
-                                         configured policy, test-signing by default)
+  --windows-signing <auto|required|off>  Default: auto (signs with Certum when the CERTUM_SIMPLYSIGN_EMAIL
+                                         and CERTUM_SIMPLYSIGN_TOTP secrets exist, else with SignPath only
+                                         when SIGNPATH_SIGNING_POLICY_SLUG is release-signing; required
+                                         fails without a signer and otherwise signs with Certum, or SignPath
+                                         with the configured policy, test-signing by default)
   --source-run-id <id>                   Required by publish
   --stage <name>                         publish only: one stage of a staged release
                                          (macos, android, linux, linux-arm64, windows-x64, windows-arm64)
@@ -463,31 +466,11 @@ function windowsSigningPolicy() {
   return variable?.value || 'test-signing';
 }
 
-/*
- * SEE-ALSO: CDXC:Release 2026-10-19 DECISION in .github/workflows/release-gpui-windows.yml.
- * `auto` signs only with the production policy, so Windows ships unsigned until
- * SIGNPATH_SIGNING_POLICY_SLUG is release-signing; `required` signs with whatever
- * policy is configured, test-signing included.
- */
+/* SEE-ALSO: CDXC:Release 2026-11-09 DECISION in tooling/release-gpui/windows-signing.mjs. */
 function resolveWindowsSigning(options, secrets) {
-  if (!options.windowsX64 && !options.windowsArm64) return false;
-  const names = ['SIGNPATH_API_TOKEN'];
-  const available = names.every((name) => secrets.has(name));
-  if (options.windowsSigning === 'required' && !available) {
-    requireSecrets(secrets, 'Windows signing', names);
-  }
-  if (options.windowsSigning === 'off') return false;
-  if (options.windowsSigning === 'required') return true;
-  if (!available) return false;
-  const policy = windowsSigningPolicy();
-  if (policy !== 'release-signing') {
-    console.log(
-      `Windows signing stays off: SignPath policy is ${policy}, and auto signs only with release-signing ` +
-        '(gh variable set SIGNPATH_SIGNING_POLICY_SLUG --body release-signing; --windows-signing required test-signs one dispatch).'
-    );
-    return false;
-  }
-  return true;
+  if (!options.windowsX64 && !options.windowsArm64)
+    return { signed: false, signer: 'none', reason: 'no Windows platform in scope' };
+  return windowsSigningDecision(options.windowsSigning, secrets, windowsSigningPolicy);
 }
 
 function validateRequiredSecrets(options, secrets) {
@@ -650,11 +633,14 @@ if ((command === 'start' || command === 'amend') && !options.skipLocalTests) {
 }
 const secrets = configuredSecrets();
 validateRequiredSecrets(options, secrets);
-const windowsSigned = resolveWindowsSigning(options, secrets);
+const windowsSigning = resolveWindowsSigning(options, secrets);
+const windowsSigned = windowsSigning.signed;
 const platforms = expectedPlatforms(options);
 console.log(`Source: ${head}`);
 console.log(`Platforms: ${platforms.join(', ')}`);
-console.log(`Windows signing: ${windowsSigned ? 'enabled' : 'disabled'}`);
+console.log(
+  `Windows signing: ${windowsSigned ? `enabled (${windowsSigning.signer === 'certum' ? 'Certum' : 'SignPath'})` : 'disabled'}: ${windowsSigning.reason}`
+);
 
 if (command === 'start') {
   previewPlan(version, options, windowsSigned, { required: options.dryRun });

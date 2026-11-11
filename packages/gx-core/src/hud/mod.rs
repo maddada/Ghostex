@@ -143,12 +143,9 @@ pub fn compose_sidebar_hud(core: &Core, sources: &HudSources) -> Value {
     if let Some(active) = &sources.active_project_id {
         hud.insert("activeProjectId".into(), Value::from(active.as_str()));
     }
-    // With the Spaces extension off there is one Space: the active project resolves into none, so
-    // per-Space view rules do not apply and the scope editor offers no Space to pick.
-    let spaces_on = ghostex_settings_catalog::built_in_extensions::enabled(
-        raw_settings,
-        ghostex_settings_catalog::built_in_extensions::SPACES,
-    );
+    // With Spaces off there is one Space: the active project resolves into none, so per-Space
+    // view rules do not apply and the scope editor offers no Space to pick.
+    let spaces_on = ghostex_settings_catalog::spaces::enabled(raw_settings);
     hud.insert(
         "activeProjectSpaceRefs".into(),
         if spaces_on {

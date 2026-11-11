@@ -30,8 +30,8 @@ USAGE
                               [--release <name>] [--json]
   ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" | --answer "A" --answer "B"]
-                              [--recommended B]
+  ghostex coordinator item ask <W7> "<title>" [--detail "<the rest>"]
+                              [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex coordinator item wait <W7> --on <W8|Q12|"words">... [--until <when>] ["<line>"] [--json]
@@ -85,10 +85,13 @@ WHAT A COORDINATOR IS
   that no longer runs) is nudged and reported the same way after 10 minutes
   without a new turn. `coordinator status`
   shows when each working thread started and last showed output. The coordinator
-  never has to poll. Its role is the ghostex-orchestrator skill: Ghostex installs it for the
+  never has to poll. Its role is the ghostex-coordinator skill: Ghostex installs it for the
   coordinator's agent, and its first message always starts with "Read and
-  adhere to this skill: /ghostex-orchestrator" ($ghostex-orchestrator for agents
-  other than Claude Code and Copilot). `ghostex coordinator guide` prints the
+  adhere to this skill: /ghostex-coordinator" ($ghostex-coordinator for agents
+  other than Claude Code and Copilot). After a /clear, a compaction or a fresh
+  start of a Claude or Codex coordinator, Ghostex hands it that line and the
+  guide pointer again before its next message (resuming adds nothing, since
+  the conversation still has them). `ghostex coordinator guide` prints the
   playbook in effect for the coordinator's project (see COORDINATOR
   PLAYBOOK) with the reply format the user chose for coordinators and the
   user's playbook overrides.
@@ -118,7 +121,7 @@ PROMOTE
   promote makes a session that already exists (of an agent create accepts) an
   coordinator, keeping its conversation: the sidebar's Advanced > Make
   Coordinator does the same. Without <session-ref> it promotes the session it runs in. It never
-  restarts or interrupts the agent: Ghostex installs the ghostex-orchestrator
+  restarts or interrupts the agent: Ghostex installs the ghostex-coordinator
   skill and queues a message that starts with the skill line, which reaches the
   session once its current turn is over, like the first message of a created
   coordinator. --goal sets the goal. A session that is already a coordinator,
@@ -148,9 +151,9 @@ STATUS
 
 THREADS
   start-thread creates an agent session in the coordinator's project, links it,
-  and sends it the task. Ghostex appends the goal, the standing instructions,
-  the memory notes and the reporting rules to every task, so write only the task
-  itself. The agent defaults to the coordinator's own agent; an --agent turned off
+  and sends it the task. Ghostex appends the goal, the standing instructions
+  and the reporting rules to every task (your memory notes stay yours: add what
+  a thread needs to its task), so write only the task itself. The agent defaults to the coordinator's own agent; an --agent turned off
   in Settings > Agents is refused unless --allow-hidden is passed. --worktree gives the
   thread its own git worktree and branch (from --base-branch, or the default
   branch). --model and --effort apply to this thread only (Claude, Codex, Pi, OMP,
@@ -202,8 +205,9 @@ THREADS
   Mark Thread Done and Reopen Thread on a thread's sidebar menu do the same.
   --keep-open only marks it done and parks the session. A closed thread keeps
   its conversation: reopen resumes the same session and puts it back under its
-  coordinator, and the coordinator's `ghostex agents send <thread-ref> "<text>"`
-  to a closed thread resumes it the same way and reopens it.
+  coordinator, and a message sent to it in its chat, by you or by its coordinator
+  (`ghostex agents send <thread-ref> "<text>"`), resumes it the same way and
+  reopens it; typing in its terminal does not.
   sleep-inactive-threads puts the coordinator's idle threads to sleep, like
   Sleep Inactive Threads on its sidebar menu: threads that are working, waiting
   on a question or approval, or running a background shell stay awake, and so
@@ -216,15 +220,24 @@ WORK ITEMS
   A coordinator tracks each line of work as one work item, named the way the
   user would name it ("iPhone voice calls"), as W<number> (never reused). A
   thread, a rebuild, a release step or a question is never an item: attach it
-  to one (--thread, item step, item ask). The chat draws a card under the
-  coordinator's reply for each item that changed in that turn, and the Work
-  panel lists every item by who has the ball, both from the same record.
+  to one (--thread, item step, item ask). The Work panel lists every item by
+  who has the ball; what needs the user sits as rows above their chat box,
+  under a header with the counts and the button that opens the panel, where
+  they answer, Reply in their own words, Dismiss or Snooze; under the reply
+  one line says what the turn changed. An answer or Reply arrives as "W7 Q12: <answer>" and is
+  already recorded; a Dismiss withdraws the ask for good. A Needs you item
+  with no open ask offers Done: "W7: Done" means the user did what the item
+  asked, so move it on or finish it; Reply on it arrives as "W7: <words>".
   Statuses, in the order the Work panel lists them:
     Needs you  the user has something to do or decide (an open ask)
     Blocked    the work stops until the user acts: an ask with --holds, or a
                thread still not moving after Ghostex's nudge
     In progress  the coordinator or a thread is on it (stored, and accepted
                by --status, as moving or in-progress)
+    Not being worked on  In progress, but no thread is on it and the
+               coordinator has not changed it since its last turn; never
+               stored: item list and status name it until it is finished,
+               asked about, waits on something or changes again
     Waiting    on another item, an ask, or something outside
     Later      nobody is on it yet (next, held for a release, parked, backlog)
     Finished   done; today's show, older ones leave after 14 days
@@ -239,7 +252,13 @@ WORK ITEMS
   append, say where it stands now. step records a step (--done when it is);
   --chore keeps a rebuild or test run out of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
-  chat's, or --tag Q12 for one already asked in the chat): one-click answers
+  chat's, or --tag Q12 for one already asked in the chat). Its title is one
+  short plain question or instruction a person understands at a glance, about
+  ten words, with no item names or code names ("Ship the new pairing screen
+  today?"); everything else (why, what to check, where) goes in --detail, which
+  shows under the title when the user opens the row. --detail takes Markdown
+  and line breaks (bold, code, links, lists; #562 links to the PR): write it as
+  a few short lines or bullets, not one long paragraph. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,
   or give each with --answer "Too small to read, simplify it"), the steps to
   follow with --steps, and --holds when the work
@@ -316,7 +335,7 @@ MEMORY AND INSTRUCTIONS
   a coordinator's sidebar menu save.
 
 COORDINATOR PLAYBOOK
-  The coordinator playbook is the ghostex-orchestrator skill's text: how every
+  The coordinator playbook is the ghostex-coordinator skill's text: how every
   coordinator works. Ghostex's playbook is never edited, so its updates keep
   arriving. The user changes how coordinators work with playbook overrides:
   one plain text for every coordinator ("Never push without asking", "Ignore

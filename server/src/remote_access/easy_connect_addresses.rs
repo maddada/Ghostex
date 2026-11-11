@@ -19,12 +19,20 @@ pub struct EasyConnectAddress {
     /// which it does not check.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reachable: Option<bool>,
+    /// The pairing door's address: named so a phone knows it as this computer's, not to be
+    /// dialled (`easy_connect_addresses_with_doors`).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub door: bool,
 }
 
 /*
 CDXC:RemotePairing 2026-11-06 DECISION:
 User (approved plan): a paired phone asks `/api/easyConnectAddresses` with its device token and gets both addresses, ours first, then dials them in that order; `/api/pairDevice` answers with the same list so a phone paired from the QR (which carries one address) has the fallback at once. The second address is listed while its helper runs, even when its relay missed the last check, because the phone checks the relay itself before dialing it; the public one is always last.
 SEE-ALSO: apps/mobile/app/src/machines/easyConnectAddresses.ts (the phone's dial order), server/src/tailcat/supervisor.rs.
+*/
+/*
+CDXC:RemotePairing 2026-11-10 WHY (the last place changed on 2026-11-11, see `easy_connect_addresses_with_doors`):
+This list never names the door a new phone pairs through among the addresses to dial (tailcat/door.rs): the door stops when the pairing window closes, and a phone dials its saved list in order and waits 20 s on an address that no longer answers before it tries the next. Both helpers below admit a device from the moment it is approved, so they are all it needs; the phone keeps the door's address only as the one it scanned, which it tries last.
 */
 pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectAddress> {
     let mut addresses = Vec::new();
@@ -41,6 +49,7 @@ pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectA
                 _ => "ghostex",
             },
             reachable: status.relay.reachable,
+            door: false,
         });
     }
     if let (true, Some(token)) = (status.running, status.token.as_ref()) {
@@ -49,6 +58,46 @@ pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectA
             relay: PUBLIC_RELAY_LABEL.to_string(),
             kind: "public",
             reachable: None,
+            door: false,
+        });
+    }
+    addresses
+}
+
+/*
+CDXC:RemotePairing 2026-11-11 WHY:
+The list above with the pairing doors' addresses named last (tailcat/door.rs says why: a phone that scans a new code must be able to tell that the door belongs to a computer it already has). Last and flagged `door: true`, because the door answers only while a code is shown: a phone on the old app dials its list in order and so reaches it only after both real addresses failed, which is where the address it scanned already sits for a phone paired since 11.3.0, and the new phone code keeps a flagged address for recognising the computer and never dials it. A list with no real address stays empty.
+*/
+pub fn easy_connect_addresses_with_doors(
+    status: &TailcatStatusPayload,
+    doors: Vec<crate::tailcat::DoorAddress>,
+) -> Vec<EasyConnectAddress> {
+    let mut addresses = easy_connect_addresses(status);
+    if addresses.is_empty() {
+        return addresses;
+    }
+    // Every door a code can carry (both since finding 3 of the review, tailcat/door.rs
+    // `remember_door_address`), each flagged, so whichever one a code names is on the list.
+    for door in doors {
+        if addresses.iter().any(|entry| entry.address == door.address) {
+            continue;
+        }
+        let (relay, kind) = match door.relay_host {
+            Some(host) => (
+                host,
+                match status.relay.mode {
+                    TailcatRelayMode::Custom => "custom",
+                    _ => "ghostex",
+                },
+            ),
+            None => (PUBLIC_RELAY_LABEL.to_string(), "public"),
+        };
+        addresses.push(EasyConnectAddress {
+            address: door.address,
+            relay,
+            kind,
+            reachable: None,
+            door: true,
         });
     }
     addresses
@@ -57,6 +106,8 @@ pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectA
 /*
 CDXC:RemotePairing 2026-11-06 DECISION:
 User (approved plan, "New pairings"): the pairing QR keeps carrying one address, ours, so it gets no denser; the phone learns the public one from `/api/pairDevice`. Ours goes in only while its relay answered the last check: a QR naming a relay that is down could not pair at all. Copy as text keeps the public address, because computers (connection profiles, `rpc.rs`) and Cloud Boxes stay on it, as the plan allows, and a phone that pastes it learns ours once connected.
+
+CDXC:RemotePairing 2026-11-10 WHY: while a code is shown the QR's one address is the door's (tailcat/door.rs), which sits on our relay under the same rule (only while it answered the last check); `/api/remotePairingCode` falls back to the address below only when the door's helper cannot run.
 */
 pub fn pairing_qr_address(status: &TailcatStatusPayload) -> Option<String> {
     let relay_ready = status.relay.running && status.relay.reachable == Some(true);

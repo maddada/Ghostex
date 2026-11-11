@@ -1,8 +1,13 @@
 //! Preview of the Connect a phone window. States: `code` (default: the QR, waiting for a phone),
 //! `preparing` (turning SSH access on, never answers), `failed` (turning on failed), `ask` (a phone
 //! scanned: its three words and Approve), `connected` (after Approve), `computer` (Connect a
-//! computer's code), `presence` (`ask` with Approve asking for Touch ID first).
+//! computer's code), `presence` (`ask` with Approve asking for Touch ID first), `helper` (the
+//! Easy Connect helper isn't installed: Install runs a pretend install, then the code shows),
+//! `helper-failed` (its install failed), `helper-installing` (an install that already runs),
+//! `large` (the phone's code filling the window, as after a click on it), `tailscale` (the
+//! Tailscale way with its checklist), `tailscale-off` (the way while Tailscale is switched off).
 use super::connect_device_modal::*;
+use super::settings_modal::tabs::remote::tailscale_checklist_of_status;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
 use std::cell::RefCell;
@@ -69,6 +74,19 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                                 cx,
                             )
                         }),
+                        "helper" => with_view(&slot, cx, |modal, cx| modal.needs_helper(None, cx)),
+                        "helper-failed" => with_view(&slot, cx, |modal, cx| {
+                            modal.needs_helper(
+                                Some("Ghostex couldn't download what the Easy Connect helper needs. Check that this computer is online, then try again.".to_string()),
+                                cx,
+                            )
+                        }),
+                        "helper-installing" => with_view(&slot, cx, |modal, cx| {
+                            modal.helper_install_progress(
+                                Some("Downloading the build tools… 42% of 66 MB".to_string()),
+                                cx,
+                            )
+                        }),
                         "failed" => with_view(&slot, cx, |modal, cx| {
                             modal.prepared(
                                 Err("SSH access could not be turned on. Remote Login is managed by your organization.".to_string()),
@@ -77,6 +95,38 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                         }),
                         _ => with_view(&slot, cx, |modal, cx| modal.prepared(Ok(()), cx)),
                     }
+                    match state.as_str() {
+                        "tailscale" | "tailscale-off" => with_view(&slot, cx, |modal, cx| {
+                            modal.switch_way(ConnectWay::Tailscale, cx)
+                        }),
+                        "large" => with_view(&slot, cx, |modal, cx| modal.set_large_code(true, cx)),
+                        _ => {}
+                    }
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::InstallHelper => {
+                cx.spawn(async move |cx| {
+                    let steps = [
+                        "Downloading the build tools… 12% of 66 MB",
+                        "Downloading the build tools… 64% of 66 MB",
+                        "Unpacking the build tools…",
+                        "Building the Easy Connect helper. This takes a few minutes…",
+                        "Finishing up…",
+                    ];
+                    for step in steps {
+                        with_view(&slot, cx, |modal, cx| {
+                            modal.helper_install_progress(Some(step.to_string()), cx)
+                        });
+                        cx.background_executor()
+                            .timer(Duration::from_millis(900))
+                            .await;
+                    }
+                    with_view(&slot, cx, |modal, cx| modal.helper_installed(cx));
+                    cx.background_executor()
+                        .timer(Duration::from_millis(500))
+                        .await;
+                    with_view(&slot, cx, |modal, cx| modal.prepared(Ok(()), cx));
                 })
                 .detach();
             }
@@ -105,6 +155,35 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             }
             ConnectDeviceCommand::Copied => eprintln!("copied"),
             ConnectDeviceCommand::OpenExternalUrl(url) => eprintln!("open external url {url}"),
+            ConnectDeviceCommand::ReadTailscale => {
+                cx.spawn(async move |cx| {
+                    let status = serde_json::json!({
+                        "computerName": "Mohamad's Laptop",
+                        "username": "madda",
+                        "platform": "macos",
+                        "ssh": { "enabled": true },
+                        "tailscale": {
+                            "installed": true,
+                            "running": true,
+                            "account": "madda@example.com",
+                            "magicDnsName": "mohamads-laptop.tail1234.ts.net",
+                            "ip": "100.64.0.7",
+                        },
+                    });
+                    with_view(&slot, cx, |modal, cx| {
+                        modal.tailscale_answered(
+                            state != "tailscale-off",
+                            tailscale_checklist_of_status(&status),
+                            cx,
+                        )
+                    });
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::OpenRemote => {
+                eprintln!("open Settings > Remote");
+                cx.quit();
+            }
             ConnectDeviceCommand::OpenTailscale => {
                 eprintln!("open Settings > Remote > Tailscale");
                 cx.quit();
@@ -123,7 +202,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             ConnectDeviceKind::Phone
         },
         computer_name: "Mohamad's Laptop".to_string(),
-        tailscale_enabled: true,
+        tailscale_enabled: demo.state != "tailscale-off",
         require_presence: demo.state == "presence",
     };
     let (window, view) = super::open_modal_window(

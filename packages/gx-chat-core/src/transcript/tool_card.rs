@@ -110,13 +110,24 @@ fn slots<'a>(tools: &[&'a ChatBlock]) -> Vec<Slot<'a>> {
 /// The card for one message's calls, or `None` when it made none the card draws.
 ///
 /// `rows` and `files` are the message's projected `tools` and `files`; `spans` when each call
-/// started and ended, by call id (`work_summary::tool_spans`). `working` is whether the session
-/// is working: a call that never answered after the turn ended reads as stopped, not running.
+/// started and ended, by call id (`work_summary::tool_spans`), and `starts` when each call that has
+/// no result yet started (`work_summary::tool_starts`). `working` is whether the session is
+/// working: a call that never answered after the turn ended reads as stopped, not running.
+///
+/// CDXC:SessionChat 2026-11-10 DECISION: User: "we show how long a tool call took to run when it
+/// finishes running but we don't show how long it's taking so far before it finishes running". A
+/// running call whose start is known carries `startedAt` (epoch ms), and a card with a running call
+/// carries the earliest start among its calls as `startedAt`; the renderers count the call's line
+/// and the header's total up from it once a second, in the place and style of the finished time
+/// (`work_summary::tool_time_label` and `tool_duration_label`), and the final time replaces them
+/// when the call ends. A running call with no known start shows no time, as before.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/tool_card.rs (`live_time`).
 pub fn tool_card(
     tools: &[&ChatBlock],
     rows: &[Value],
     files: &[Value],
     spans: &HashMap<String, (i64, i64)>,
+    starts: &HashMap<String, i64>,
     working_directory: Option<&str>,
     working: bool,
 ) -> Option<Value> {
@@ -173,6 +184,9 @@ pub fn tool_card(
                 if end > start && entry["status"] != "running" {
                     entry["time"] = tool_time_label(end - start).into();
                 }
+            } else if let Some(start) = starts.get(id).filter(|_| entry["status"] == "running") {
+                started = Some(started.map_or(*start, |at| at.min(*start)));
+                entry["startedAt"] = (*start).into();
             }
         }
         entries.push(entry);
@@ -242,6 +256,8 @@ pub fn tool_card(
         "failedLabel": failed_label,
         "time": time,
         "foldedLabel": folded,
+        // While a call runs, what the header's total counts up from.
+        "startedAt": started.filter(|_| running),
     }))
 }
 

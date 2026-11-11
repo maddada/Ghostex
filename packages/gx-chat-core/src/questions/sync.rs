@@ -133,6 +133,7 @@ pub fn adopt_dismissed_notice(state: &mut ChatState, dismissed: Option<Dismissed
 /// handlers run here (`crate::questions::events`), and the reconciliation [`sync`] does then runs
 /// over the result.
 pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Effect> {
+    crate::questions::dictation::name_core(state, context);
     let mut effects = match event {
         Event::RpcSettled {
             request_id,

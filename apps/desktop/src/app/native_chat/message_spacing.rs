@@ -5,9 +5,7 @@
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use ghostex_gx_chat_core::transcript::chat_look::MessageSpacing;
-use gpui::{
-    Context, InteractiveElement as _, StatefulInteractiveElement as _, Styled as _, div, px,
-};
+use gpui::{InteractiveElement as _, Styled as _, div, px};
 
 /// The space every transcript row ends with at Compact (Default: `rowGap` in
 /// packages/gx-chat-core/visual/transcript-layout.json).
@@ -65,12 +63,6 @@ pub(super) const FOOTER_BUTTON: f32 = 20.0;
 pub(super) const FOOTER_DIM: f32 = 0.65;
 
 impl NativeChatView {
-    /// Whether a message's footer row shows its buttons at Compact: while the pointer is on the
-    /// message or it holds keyboard focus.
-    pub(super) fn message_bar_shown(&self, id: &str, focused: bool) -> bool {
-        focused || self.hovered_message.as_deref() == Some(id)
-    }
-
     /// Forgets which message the pointer was on, after the transcript jumped or the pane was
     /// hidden: no footer shows its buttons on a message the pointer is not on.
     pub(super) fn clear_message_hover(&mut self) {
@@ -88,32 +80,14 @@ impl NativeChatView {
             self.subagent_list.remeasure();
         }
     }
-
-    /// Records the pointer entering and leaving a message row that has a footer at Compact, so
-    /// its buttons are built only while they show.
-    pub(super) fn track_message_hover(
-        &self,
-        row: gpui::Stateful<gpui::Div>,
-        id: &str,
-        cx: &Context<Self>,
-    ) -> gpui::Stateful<gpui::Div> {
-        let id = id.to_string();
-        row.on_hover(cx.listener(move |chat, hovered: &bool, _, cx| {
-            let current = chat.hovered_message.as_deref() == Some(id.as_str());
-            if *hovered != current {
-                chat.hovered_message = hovered.then(|| id.clone());
-                cx.notify();
-            }
-        }))
-    }
 }
 
 /// A message's footer row at Compact: its 20px always kept under the message, inside the
-/// message's own row, holding nothing until the message is hovered or focused (or its work is
-/// open).
+/// message's own row, always holding the time and the ⋯ (message_actions.rs `message_more_button`
+/// has the user's words), so showing nothing on hover moves nothing.
 ///
 /// CDXC:SessionChat 2026-11-07 WHY:
-/// The buttons are built only while they show (`message_bar_shown`), so a resting footer has no hitboxes: no pointer cursor, tooltip or click over an invisible button. Keyboard users reach them through the reply or prompt itself, a tab stop at Compact (`focusable_reply`). The footer replaces the floating bar Compact first drew over the message's bottom edge (the hover footer DECISION in packages/gx-chat-core/src/transcript/chat_look.rs); do not lay the buttons over the text again.
+/// The footer replaces the floating bar Compact first drew over the message's bottom edge (the hover footer DECISION in packages/gx-chat-core/src/transcript/chat_look.rs); do not lay anything over the text again.
 ///
 /// CDXC:SessionChat 2026-11-07 SEE-ALSO:
 /// packages/gx-chat-core/src/transcript/chat_look.rs (the user decision), apps/mobile/app/src/chat/native/transcript/MessageActions.tsx (the phone's footer, which always shows its time and work button).

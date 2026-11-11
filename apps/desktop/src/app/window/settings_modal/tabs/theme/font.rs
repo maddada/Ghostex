@@ -16,6 +16,8 @@ use serde_json::json;
 
 const TEXT_STRENGTH_KEY: &str = "sessionChatTextStrengthPercent";
 const MUTED_THINKING_KEY: &str = "sessionChatMutedThinking";
+const ICON_TEXT_STRENGTH: &str = "modals/settings/eye.svg";
+const ICON_MUTED_THINKING: &str = "modals/settings/sparkles.svg";
 
 fn font_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
     &mut page.font_dropdown
@@ -107,7 +109,10 @@ impl ThemeTab {
                     TEXT_STRENGTH_KEY,
                     "Text strength",
                     "How strong agents' replies and your messages read in chat. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Thinking and code keep their colours.",
-                ),
+                )
+                // Every row of the Text card has its icon, so the titles line up (CDXC:Settings
+                // 2026-11-10 on `settings_note_row` in fields/row.rs).
+                .icon(ICON_TEXT_STRENGTH),
                 Some(reset_key::<Self>(TEXT_STRENGTH_KEY)),
                 SliderBinding {
                     key: TEXT_STRENGTH_KEY,
@@ -129,7 +134,8 @@ impl ThemeTab {
                     MUTED_THINKING_KEY,
                     "Show thinking in grey",
                     "Show the agent's thinking in grey, so it reads apart from the agent's replies.",
-                ),
+                )
+                .icon(ICON_MUTED_THINKING),
                 t.values.bool(MUTED_THINKING_KEY),
                 cx,
             ));

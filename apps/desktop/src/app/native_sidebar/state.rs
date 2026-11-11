@@ -9,10 +9,6 @@ pub(crate) struct NativeSidebarState {
     /// The Unified sidebar, installed only while Settings › Sidebar selects it
     /// (gx_store/unified_sidebar.rs); the classic snapshot below is still built and kept.
     pub(crate) unified: Option<Arc<super::unified::model::UnifiedSidebarSnapshot>>,
-    /// The machine tabs' sideways scroll, while they need one.
-    pub(crate) machine_tabs_scroll: gpui::ScrollHandle,
-    /// The selected tab and row width the scroll last revealed, so a manual scroll stays put.
-    pub(crate) machine_tabs_revealed: std::cell::RefCell<Option<(String, u32)>>,
     /// A dragged project header is over this group, and below its middle when `true`.
     pub(crate) unified_drop_target: Option<(String, bool)>,
     /// Redraws the Unified sidebar once a second while a card shows a running timer.
@@ -67,6 +63,8 @@ pub(crate) struct NativeSidebarState {
     /// This frame's project header probes; `hovered_group` follows them.
     pub(crate) header_hover: super::project_hover::ProjectHeaderHoverProbes,
     pub(crate) hovered_session: Option<String>,
+    /// Where the keyboard goes back to when it leaves the sidebar (keyboard.rs).
+    pub(crate) keyboard: super::keyboard::SidebarKeyboardState,
     /// The row whose floating links card is open (window/session_links_card.rs on the desktop,
     /// web_host/session_links.rs in the web build).
     pub(crate) links_card_session: Option<String>,
@@ -96,10 +94,19 @@ pub(crate) struct NativeSidebarState {
     pub(crate) usage_peek_hovered: bool,
     /// The pointer is on the peeking strip's frosted window (under window glass it draws there).
     pub(crate) usage_frosted_hovered: bool,
+    /// The pointer is on the pinned usage strip, which shows its Hide button (usage.rs).
+    pub(crate) usage_strip_hovered: bool,
+    /// The pointer is on the pinned strip's Hide button.
+    pub(crate) usage_hide_hovered: bool,
+    /// While the usage meters are hidden: the pointer is in the bottom strip of the sidebar, which
+    /// shows the usage icon at the bottom right.
+    pub(crate) usage_zone_hovered: bool,
     /// Every painted session card's bounds. A tooltip captures its span the moment hover starts, so the card it belongs to must already be known then.
     pub(crate) session_card_bounds: std::collections::HashMap<String, gpui::Bounds<gpui::Pixels>>,
     /// Armed Delayed Send / Close After Done labels by sidebar session id, for every session rather than only the rows the snapshot shows (session_chat_armed_actions.rs).
     pub(crate) armed_actions: std::collections::HashMap<String, serde_json::Value>,
+    /// The keyboard focus order's stops (focus_order.rs).
+    pub(crate) focus_stops: super::focus_order::SidebarFocusStops,
 }
 
 impl NativeSidebarState {

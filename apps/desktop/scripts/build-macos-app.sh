@@ -194,7 +194,7 @@ bundled_cli_skill_assets=(
 	ghostex-visuals
 	ghostex-secrets
 	ghostex-agent-guide
-	ghostex-orchestrator
+	ghostex-coordinator
 	ghostex-gbots
 )
 
@@ -1484,6 +1484,7 @@ else
 	stage_released_collab_component
 fi
 
+# CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 4), picked "On by default, never ask": SUEnableAutomaticChecks makes Sparkle check for updates on its own from the first launch, so it never asks "Check for updates automatically?" on the second one (tooling/release-gpui/macos.sh checks the key is there).
 cat >"$APP_PATH/Contents/Info.plist" <<EOF_PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1587,6 +1588,8 @@ cat >"$APP_PATH/Contents/Info.plist" <<EOF_PLIST
 	<string>Ghostex turns what you dictate in the chat into text.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Ghostex uses the camera only when you allow a website in a Chromium browser pane to use it, for features such as video calls.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>SUEnableDownloaderService</key>
 	<true/>
 	<key>SUEnableInstallerLauncherService</key>

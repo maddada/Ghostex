@@ -17,46 +17,36 @@ use std::rc::Rc;
 /// CDXC:Settings 2026-09-09 DECISION:
 /// User: never show On or Off text beside a toggle in Settings; the switch itself is the state. A view that cannot be turned off shows a locked-on switch instead of an "Always on" caption.
 /// The Settings switch: a 32x20 track with a 6px radius and a 1px edge, a 16px thumb with a 4px
-/// radius. Off: the raised-hover track with a hairline edge and a foreground thumb (dark) or
-/// surface thumb (light). On: the mid-tone `switch_on_track` and a white thumb.
+/// radius, drawn by the app-wide [`draw_switch`]. Off: the raised-hover track with a hairline
+/// edge and [`settings_switch_off`]'s thumb at the left.
 pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool) -> AnyElement {
-    let thumb = if checked {
-        SWITCH_ON_THUMB
-    } else if !p.light {
-        p.foreground
-    } else if p.glass {
-        p.modal.solid_surface
-    } else {
-        p.surface
-    };
-    div()
-        .flex_shrink_0()
-        .w(px(32.0))
-        .h(px(20.0))
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(if checked {
-            transparent()
+    draw_switch(
+        SwitchShape {
+            edge: 1.0,
+            ..SwitchShape::REGULAR
+        },
+        settings_switch_off(p),
+        p.light,
+        checked,
+        disabled,
+    )
+    .into_any_element()
+}
+
+/// The off look of the Settings switches: the raised-hover track, a hairline edge, and a muted
+/// thumb (dark, so an off switch stays quiet next to the light on track) or surface thumb (light).
+pub(crate) fn settings_switch_off(p: &SettingsPalette) -> SwitchOff {
+    SwitchOff {
+        track: p.raised_hover,
+        edge: Some(p.hairline),
+        thumb: if !p.light {
+            p.muted
+        } else if p.glass {
+            p.modal.solid_surface
         } else {
-            hsla(p.hairline)
-        })
-        .bg(hsla(if checked {
-            switch_on_track(p.foreground, p.light)
-        } else {
-            p.raised_hover
-        }))
-        .when(disabled, |this| this.opacity(0.5))
-        .flex()
-        .items_center()
-        .child(
-            div()
-                .size(px(16.0))
-                .ml(px(if checked { 12.0 } else { 0.0 }))
-                .rounded(px(4.0))
-                .bg(hsla(thumb))
-                .shadow_sm(),
-        )
-        .into_any_element()
+            p.surface
+        },
+    }
 }
 
 /// A clickable switch plus the press that flips it, so the row that holds it can flip it from a

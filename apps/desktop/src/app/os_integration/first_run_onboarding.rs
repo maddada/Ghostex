@@ -186,7 +186,11 @@ impl GhostexGpuiApp {
             }
             let _ = this.update(cx, |this, cx| {
                 // CDXC:Onboarding 2026-09-28 WHY: the onboarding is a native window now (window/onboarding/), so first run no longer starts or downloads the CEF runtime to show it; this supersedes the CDXC:CefRuntime 2026-09-19 wait for CEF here.
-                if show_os_integration_toast {
+                /*
+                CDXC:Onboarding 2026-11-11 DECISION:
+                User, on the first-run page (step 5, the intro video with a toast over it): "remove the toast. keep the vid. use can skip watching the vid if he wants". When setup opens, the OS Integration toast is not shown (it is still marked seen, so it never lands on a later launch either); a computer that already finished setup and never saw it still gets it.
+                */
+                if show_os_integration_toast && first_launch_setup_sidebar_state.is_none() {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
                             copy_text: None,
@@ -205,6 +209,8 @@ impl GhostexGpuiApp {
                         },
                         cx,
                     );
+                }
+                if show_os_integration_toast {
                     this.persist_gpui_first_run_onboarding_marker(
                         GpuiFirstRunOnboardingMarker::OsIntegrationOnboardingSeen,
                         cx,
@@ -563,3 +569,67 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 }
+
+/// Whether Connect a Device waits for the first agent reply, read once from the first-run state.
+fn connect_device_after_first_reply() -> &'static std::sync::atomic::AtomicBool {
+    static PENDING: std::sync::OnceLock<std::sync::atomic::AtomicBool> = std::sync::OnceLock::new();
+    PENDING.get_or_init(|| {
+        std::sync::atomic::AtomicBool::new(
+            load_gpui_first_run_onboarding_state().connect_device_after_first_reply,
+        )
+    })
+}
+
+fn set_connect_device_after_first_reply(pending: bool) {
+    connect_device_after_first_reply().store(pending, std::sync::atomic::Ordering::Relaxed);
+    let mut state = load_gpui_first_run_onboarding_state();
+    if state.connect_device_after_first_reply != pending {
+        state.connect_device_after_first_reply = pending;
+        persist_gpui_first_run_onboarding_state(&state);
+    }
+}
+
+impl GhostexGpuiApp {
+    /// CDXC:Onboarding 2026-11-11 DECISION:
+    /// User, on the first-run page (step 18, windows that open by themselves after setup), picked "Wait until after the first reply": setup's "Pair my phone after setup" no longer opens Connect a Device over the first session the moment setup closes; it opens once an agent first finishes a turn or needs the user (its session goes into attention), and the wait survives a restart until then.
+    pub(crate) fn queue_connect_device_after_first_reply(&mut self) {
+        set_connect_device_after_first_reply(true);
+    }
+
+    /// Called with the sessions that just went into attention: the first time one does after setup
+    /// queued the phone, Connect a Device opens.
+    pub(crate) fn open_queued_connect_device_after_reply(
+        &mut self,
+        sessions_into_attention: usize,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if sessions_into_attention == 0
+            || !connect_device_after_first_reply().load(std::sync::atomic::Ordering::Relaxed)
+            || !self.is_lead_window()
+        {
+            return;
+        }
+        set_connect_device_after_first_reply(false);
+        self.open_app_modal_from_bridge(
+            serde_json::json!({ "modal": "remoteSetup", "type": "open" }),
+            cx,
+        );
+    }
+
+    /// CDXC:Onboarding 2026-11-11 WHY:
+    /// The hands-on check of the new setup: "More theme options" (and "Advanced settings later") with no project ended setup in Settings, and closing Settings left an empty app. Setup must never end there: leaving it for Settings with no project queues Add Project, which opens when Settings closes, as "Open Ghostex" opens it at once.
+    pub(crate) fn queue_add_project_after_settings(&mut self) {
+        ADD_PROJECT_AFTER_SETTINGS.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Settings just closed: Add Project, when setup queued it.
+    pub(crate) fn open_add_project_queued_after_settings(&mut self, cx: &mut gpui::Context<Self>) {
+        if ADD_PROJECT_AFTER_SETTINGS.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            self.open_app_modal_from_bridge(GpuiAppModalKind::AddProject.open_message(), cx);
+        }
+    }
+}
+
+/// Setup ended in Settings with no project: Add Project follows when Settings closes.
+static ADD_PROJECT_AFTER_SETTINGS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);

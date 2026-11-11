@@ -53,6 +53,8 @@ pub(crate) fn schedule_presentation_project_delta(
         "serverId": state.metadata.server_id.clone(),
         "type": "presentationDelta",
     }));
+    // A project's name or visibility is part of what a phone's banner shows.
+    state.live_activity.poke();
     Ok(())
 }
 
@@ -93,6 +95,8 @@ pub(crate) fn schedule_presentation_session_delta(
             "type": "presentationDelta",
         }));
     }
+    // A session's change may change what a phone's Lock Screen banner shows; the worker reads it soon.
+    state.live_activity.poke();
     match repository.get_session(project_id, session_id) {
         Ok(Some(session)) => {
             sync_zmx_title_observer_for_session(state, &session, "presentation-session-delta");

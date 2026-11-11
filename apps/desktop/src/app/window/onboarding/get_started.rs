@@ -1,24 +1,23 @@
-//! Panel 5, Get started: the project card (folder, first agent, default session view) and the look
+//! Panel 5, Get started: the work card (default session view, agent approvals) and the look
 //! card (appearance, theme colour, Colourfulness, transparency) (panels/get-started.tsx (deleted 2026-10-01),
 //! styles/get-started.css, settings-modal/theme-simple-controls.tsx (deleted 2026-10-01), styles/settings-theme.css (deleted 2026-11-06)).
+use super::FinishTarget;
 use super::GpuiOnboardingWindow;
 use super::interact;
 use super::model::{
     COLOURFULNESS_LAST_POSITION, OnboardingSettings, ThemeSwatchPreset, colourfulness_display_step,
-    colourfulness_name, colourfulness_points, colourfulness_step, default_agent_id,
-    installed_agents, matching_preset, theme_preset_label, transparency_strength,
-    transparency_strength_patch,
+    colourfulness_name, colourfulness_points, colourfulness_step, matching_preset,
+    theme_preset_label, transparency_strength, transparency_strength_patch,
 };
 use super::primitives::*;
 use super::stage::*;
 use super::welcome::foot_actions;
-use super::{FinishTarget, OnboardingCommand};
 use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Bounds, Context, Div, FontWeight, InteractiveElement as _, IntoElement,
-    MouseButton, ObjectFit, ParentElement as _, Pixels, RenderImage, SharedString,
-    StatefulInteractiveElement as _, Styled as _, canvas, div, img,
+    AnyElement, Bounds, Context, Div, InteractiveElement as _, IntoElement, MouseButton, ObjectFit,
+    ParentElement as _, Pixels, RenderImage, SharedString, StatefulInteractiveElement as _,
+    Styled as _, canvas, div, img,
 };
 use gpui_component::tooltip::Tooltip;
 use serde_json::Value;
@@ -26,26 +25,14 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-/// Up to this many "Start with" choices keep the name-and-detail tiles in one row; more become chips.
-const MAX_TILE_ROW: usize = 4;
 const CARDS_LEFT: f32 = 156.0;
 const CARDS_TOP: f32 = 290.0;
 const CARDS_WIDTH: f32 = 1360.0;
-/// The React waiter's ceiling for the first-launch create (`ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS`).
-const OPEN_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
 pub(crate) struct GetStartedState {
-    opening: bool,
-    open_error: Option<String>,
-    request_id: Option<String>,
-    request_deadline: Option<Instant>,
-    request_path: Option<String>,
-    /// "Advanced settings later" with a folder chosen: Settings opens once the project exists,
-    /// instead of the "You're set" screen.
-    settings_after_open: bool,
     /// Which appearance's colours the look card shows.
     dark_scheme: bool,
     /// The Dark | Light colour tab was picked by hand, so a system appearance change leaves it.
@@ -71,12 +58,6 @@ impl GetStartedState {
     }
 
     pub(crate) fn reset(&mut self, settings: &OnboardingSettings, system_light: bool) {
-        self.opening = false;
-        self.open_error = None;
-        self.request_id = None;
-        self.request_deadline = None;
-        self.request_path = None;
-        self.settings_after_open = false;
         self.scheme_picked = false;
         self.dark_scheme = match settings.sidebar_theme.as_str() {
             "system" => !system_light,
@@ -85,27 +66,6 @@ impl GetStartedState {
         self.picked_dark = false;
         self.picked_light = false;
         self.dragging = None;
-    }
-}
-
-/// What Get started's secondary footer action does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SkipAction {
-    /// A folder is chosen: add it as the first project, then open Settings.
-    OpenThenSettings,
-    /// A project exists already (Tips > Setup): open Settings.
-    Settings,
-    /// No folder and no project: leave setup unfinished and open Add Project.
-    Leave,
-}
-
-pub(crate) fn skip_action(folder_chosen: bool, has_projects: bool) -> SkipAction {
-    if folder_chosen {
-        SkipAction::OpenThenSettings
-    } else if has_projects {
-        SkipAction::Settings
-    } else {
-        SkipAction::Leave
     }
 }
 
@@ -247,121 +207,6 @@ fn swatch_image(
 }
 
 impl GpuiOnboardingWindow {
-    fn start_with(&self) -> String {
-        self.flow
-            .start_with
-            .clone()
-            .or_else(|| default_agent_id(&self.settings, &self.agents))
-            .unwrap_or_else(|| "terminal".to_string())
-    }
-
-    fn open_ghostex(&mut self, cx: &mut Context<Self>) {
-        let folder = self
-            .picked_folder
-            .clone()
-            .unwrap_or_default()
-            .trim()
-            .to_string();
-        if !folder.is_empty() {
-            if self.get_started.opening {
-                return;
-            }
-            let request_id = format!(
-                "first-launch-project-{}-{}",
-                chrono::Utc::now().timestamp_millis(),
-                self.next_request_id()
-            );
-            self.get_started.opening = true;
-            self.get_started.open_error = None;
-            self.get_started.request_id = Some(request_id.clone());
-            self.get_started.request_path = Some(folder.clone());
-            self.get_started.request_deadline = Some(Instant::now() + OPEN_TIMEOUT);
-            let agent_id = self.start_with();
-            self.send(
-                OnboardingCommand::FinishFirstLaunch {
-                    request_id,
-                    agent_id,
-                    path: folder,
-                },
-                cx,
-            );
-            cx.notify();
-            return;
-        }
-        if self.has_projects {
-            self.finish(FinishTarget::None, cx);
-        }
-    }
-
-    /// The secondary footer action. With a folder chosen it adds the project first; with no folder
-    /// and no project it is "Skip for now", which leaves setup unfinished and opens Add Project
-    /// (`GpuiOnboardingWindow::leave`).
-    fn skip_or_open_settings(&mut self, cx: &mut Context<Self>) {
-        if self.get_started.opening {
-            return;
-        }
-        let folder_chosen = self
-            .picked_folder
-            .as_deref()
-            .is_some_and(|folder| !folder.trim().is_empty());
-        match skip_action(folder_chosen, self.has_projects) {
-            SkipAction::OpenThenSettings => {
-                self.get_started.settings_after_open = true;
-                self.open_ghostex(cx);
-            }
-            SkipAction::Settings => self.finish(FinishTarget::Settings(None), cx),
-            SkipAction::Leave => self.leave(cx),
-        }
-    }
-
-    pub(super) fn get_started_finish_result(
-        &mut self,
-        request_id: &str,
-        ok: bool,
-        error: Option<String>,
-        cx: &mut Context<Self>,
-    ) {
-        if self.get_started.request_id.as_deref() != Some(request_id) {
-            return;
-        }
-        self.get_started.request_id = None;
-        self.get_started.request_deadline = None;
-        if ok && std::mem::take(&mut self.get_started.settings_after_open) {
-            self.has_projects = true;
-            self.finish(FinishTarget::Settings(None), cx);
-            return;
-        }
-        if ok {
-            self.flow.finished_path = self.get_started.request_path.take();
-            self.flow.finished = true;
-            self.panel = super::stage::PANEL_COUNT;
-            self.scene_started = Instant::now();
-            self.mount_panel(self.scene_started, cx);
-        } else {
-            self.get_started.opening = false;
-            self.get_started.settings_after_open = false;
-            self.get_started.open_error = Some(
-                error
-                    .map(|error| error.trim().to_string())
-                    .filter(|error| !error.is_empty())
-                    .unwrap_or_else(|| "Ghostex could not open the project.".to_string()),
-            );
-        }
-        cx.notify();
-    }
-
-    pub(super) fn tick_get_started(&mut self, now: Instant) {
-        if let Some(deadline) = self.get_started.request_deadline
-            && now >= deadline
-        {
-            self.get_started.request_deadline = None;
-            self.get_started.request_id = None;
-            self.get_started.opening = false;
-            self.get_started.settings_after_open = false;
-            self.get_started.open_error = Some("Opening the project timed out.".to_string());
-        }
-    }
-
     fn update_one(&mut self, key: &str, value: Value, cx: &mut Context<Self>) {
         let mut patch = serde_json::Map::new();
         patch.insert(key.to_string(), value);
@@ -455,7 +300,7 @@ impl GpuiOnboardingWindow {
         } else {
             return false;
         };
-        if self.panel != 5 || self.flow.finished {
+        if self.panel != 5 {
             return false;
         }
         let delta = if right { 1.0 } else { -1.0 };
@@ -481,44 +326,7 @@ impl GpuiOnboardingWindow {
         now: Instant,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
-        let default_agent = default_agent_id(&self.settings, &self.agents);
-        let installed = installed_agents(&self.agents);
-        let mut ordered: Vec<_> = installed
-            .iter()
-            .filter(|agent| Some(agent.agent_id.as_str()) == default_agent.as_deref())
-            .cloned()
-            .collect();
-        ordered.extend(
-            installed
-                .iter()
-                .filter(|agent| Some(agent.agent_id.as_str()) != default_agent.as_deref())
-                .cloned(),
-        );
-        let mut tiles: Vec<(String, String, &str)> = ordered
-            .iter()
-            .map(|agent| {
-                (
-                    agent.agent_id.clone(),
-                    agent.name.clone(),
-                    if Some(agent.agent_id.as_str()) == default_agent.as_deref() {
-                        "Default agent"
-                    } else {
-                        "Switch anytime"
-                    },
-                )
-            })
-            .collect();
-        tiles.push(("terminal".into(), "Terminal".into(), "No agent yet"));
-        let start_with = self.start_with();
         let session_view = self.settings.preferred_interface.clone();
-        let folder = self
-            .picked_folder
-            .clone()
-            .unwrap_or_default()
-            .trim()
-            .to_string();
-        let can_open = !folder.is_empty() || self.has_projects;
-        let opening = self.get_started.opening;
 
         let mut out = Vec::new();
         out.push(eyebrow(s, 486.0, 150.0, Some(700.0), "Get started").into_any_element());
@@ -529,7 +337,7 @@ impl GpuiOnboardingWindow {
                 182.0,
                 1000.0,
                 48.0,
-                "Open your first project in Ghostex.",
+                "Make Ghostex yours.",
                 None,
                 true,
             )
@@ -537,7 +345,7 @@ impl GpuiOnboardingWindow {
         );
         out.push(
             sub(s, 336.0, 252.0, 1000.0, 16.5, true)
-                .child("One folder, one agent, one default view and a look you like. Everything else can change later.")
+                .child("How sessions open, how agents ask before they act, and a look you like. Everything else can change later.")
                 .into_any_element(),
         );
         let option =
@@ -579,136 +387,7 @@ impl GpuiOnboardingWindow {
                         )
                     })
             };
-        // `.choose { transition: color 0.2s }`. Built before the tiles: tab order follows the page.
-        let choose_color =
-            interact::hover_color("choose-folder", "color", hex(0x2f4fae), hex(0x6d93ff), 200);
-        let choose_folder = self.control(
-            s,
-            sans(s, 14.5, 400.0, choose_color)
-                .id("choose-folder")
-                .relative()
-                .cursor_pointer()
-                .child("Choose folder"),
-            "choose-folder",
-            interact::Ring::new(0.0, 0.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| this.send(OnboardingCommand::PickProjectFolder, cx),
-        );
-        let tiles_row: AnyElement = if tiles.len() <= MAX_TILE_ROW {
-            div()
-                .flex()
-                .gap(s.px(8.0))
-                .mb(s.px(20.0))
-                .children(tiles.iter().map(|(id, name, detail)| {
-                    let id_owned = id.clone();
-                    let key = SharedString::from(format!("start-{id}"));
-                    self.control(
-                        s,
-                        option(key.clone(), start_with == *id, name, Some(detail), 72.0),
-                        key,
-                        interact::Ring::new(10.0, 1.0),
-                        interact::Keys::EnterSpace,
-                        cx,
-                        move |this, _, cx| {
-                            this.flow.start_with = Some(id_owned.clone());
-                            cx.notify();
-                        },
-                    )
-                }))
-                .into_any_element()
-        } else {
-            div()
-                .flex()
-                .flex_wrap()
-                .gap(s.px(8.0))
-                .mb(s.px(20.0))
-                .children(tiles.iter().map(|(id, name, detail)| {
-                    let id_owned = id.clone();
-                    let detail = detail.to_string();
-                    let selected = start_with == *id;
-                    let key = SharedString::from(format!("start-{id}"));
-                    let (border, bg) = opt_colors(&key, selected);
-                    let tile = div()
-                        .id(key.clone())
-                        .relative()
-                        .flex()
-                        .items_center()
-                        .h(s.px(40.0))
-                        .px(s.px(14.0))
-                        .rounded(s.px(10.0))
-                        .border_1()
-                        .font_family(super::fonts::dm_sans())
-                        .font_weight(FontWeight(500.0))
-                        .text_size(s.px(14.5))
-                        .text_color(hex(0xeef1f7))
-                        .whitespace_nowrap()
-                        .cursor_pointer()
-                        .border_color(border)
-                        .bg(bg)
-                        .when(selected, |this| {
-                            this.shadow(vec![inset_shadow(white(0.04), 0.0, 1.0, 0.0, 0.0, s)])
-                        })
-                        .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
-                        .child(name.clone());
-                    self.control(
-                        s,
-                        tile,
-                        key,
-                        interact::Ring::new(10.0, 1.0),
-                        interact::Keys::EnterSpace,
-                        cx,
-                        move |this, _, cx| {
-                            this.flow.start_with = Some(id_owned.clone());
-                            cx.notify();
-                        },
-                    )
-                }))
-                .into_any_element()
-        };
         let project_card = pcard(s)
-            .child(div().mb(s.px(14.0)).child(label(s, "Project folder")))
-            .child(
-                div()
-                    .relative()
-                    .h(s.px(50.0))
-                    .mb(s.px(24.0))
-                    .flex()
-                    .items_center()
-                    .gap(s.px(14.0))
-                    .pl(s.px(26.0))
-                    .pr(s.px(18.0))
-                    .rounded(s.px(10.0))
-                    .border_1()
-                    .border_color(white(0.06))
-                    .bg(white(0.02))
-                    .child(icon(s, "folder", 22.0, 1.6, hex(0x8e97a8)))
-                    .child(
-                        sans(
-                            s,
-                            16.5,
-                            400.0,
-                            if folder.is_empty() {
-                                hex(0x8e97a8)
-                            } else {
-                                hex(0xeef1f7)
-                            },
-                        )
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .whitespace_nowrap()
-                        .child(if folder.is_empty() {
-                            "Choose a folder to start in".to_string()
-                        } else {
-                            folder.clone()
-                        }),
-                    )
-                    .child(choose_folder),
-            )
-            .child(div().mb(s.px(14.0)).child(label(s, "Start with")))
-            .child(tiles_row)
             .child(div().mb(s.px(14.0)).child(label(s, "Default session view")))
             .child(
                 div().flex().gap(s.px(8.0)).mb(s.px(20.0)).children(
@@ -740,23 +419,12 @@ impl GpuiOnboardingWindow {
             .child(div().mb(s.px(14.0)).child(label(s, "Agent approvals")))
             .child(self.render_agent_approvals(s, cx));
         let look_card = self.render_look_card(s, now, cx);
-        let note: AnyElement = if let Some(error) = &self.get_started.open_error {
-            div()
-                .text_color(hex(0xff6b62))
-                .child(error.clone())
-                .into_any_element()
-        } else if opening {
-            div()
-                .child("Adding the project and opening its first session…")
-                .into_any_element()
-        } else if can_open {
-            div()
-                .child("That's it. The workspace teaches the deeper features once you are inside.")
-                .into_any_element()
+        // CDXC:Onboarding 2026-11-11 DECISION:
+        // User, on the first-run page (step 10, Get started): "remove the picking folder from here please no need", and (step 11) go straight to the app with no "You're set" summary. Setup asks for no folder and starts no session: Open Ghostex ends it, and an app with no project opens Add Project (onboarding_modal_lifecycle.rs) so it is never an empty shell. The "Start with" agent tiles went with the folder (they only chose the first session's agent there); the Agents panel's default agent decides it.
+        let note = if self.has_projects {
+            "That's it. The workspace teaches the deeper features once you are inside."
         } else {
-            div()
-                .child("Choose a folder above to open your first project.")
-                .into_any_element()
+            "That's it. Next you add a project folder, and your first session starts there."
         };
         out.push(
             abs(s, CARDS_LEFT, CARDS_TOP, Some(CARDS_WIDTH), None)
@@ -775,81 +443,51 @@ impl GpuiOnboardingWindow {
                     div()
                         .w_full()
                         .flex()
-                        .justify_center()
+                        .flex_col()
+                        .items_center()
+                        .gap(s.px(8.0))
                         .font_family(super::fonts::dm_sans())
                         .text_size(s.px(15.0))
                         .line_height(s.px(15.0 * 1.45))
                         .text_color(hex(0xb2b9c6))
-                        .child(note),
+                        .child(note)
+                        // CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 2), picked "Say it is starting, and mention usage data once": analytics are on by default, so setup says so once, here, with where to turn them off (Settings > About > Privacy, `analyticsEnabled`).
+                        .child(
+                            sans(s, 13.0, 400.0, hex(0x8e97a8)).child(
+                                "Ghostex sends anonymous usage analytics to get better. Turn them off in Settings > About.",
+                            ),
+                        ),
                 )
                 .into_any_element(),
         );
         out.push(
             foot_actions(s, 5)
-                .child({
-                    let later = ghost(
-                        s,
-                        "advanced-later",
-                        if skip_action(!folder.is_empty(), self.has_projects) == SkipAction::Leave {
-                            "Skip for now"
-                        } else {
-                            "Advanced settings later"
-                        },
-                        16.0,
-                        opening,
-                    );
-                    if opening {
-                        later
-                    } else {
-                        self.control(
-                            s,
-                            later,
-                            "advanced-later",
-                            interact::Ring::new(0.0, 0.0),
-                            interact::Keys::EnterSpace,
-                            cx,
-                            |this, _, cx| this.skip_or_open_settings(cx),
-                        )
-                    }
-                })
-                .child({
-                    let open = cta(
+                .child(self.control(
+                    s,
+                    ghost(s, "advanced-later", "Advanced settings later", 16.0, false),
+                    "advanced-later",
+                    interact::Ring::new(0.0, 0.0),
+                    interact::Keys::EnterSpace,
+                    cx,
+                    |this, _, cx| this.finish(FinishTarget::Settings(None), cx),
+                ))
+                .child(self.control(
+                    s,
+                    cta(
                         s,
                         "open-ghostex",
-                        if opening {
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(s.px(8.0))
-                                .child(spinner(s, 18.0, 2.0, self.opened_at, now))
-                                .child("Opening…")
-                                .into_any_element()
-                        } else {
-                            div().child("Open Ghostex").into_any_element()
-                        },
+                        "Open Ghostex",
                         true,
-                        !opening,
-                        !can_open || opening,
+                        true,
+                        false,
                         CtaSize::Foot,
-                    );
-                    if !can_open || opening {
-                        open
-                    } else {
-                        self.control(
-                            s,
-                            open,
-                            "open-ghostex",
-                            interact::Ring::new(10.0, 1.0),
-                            interact::Keys::EnterSpace,
-                            cx,
-                            move |this, _, cx| {
-                                if can_open && !this.get_started.opening {
-                                    this.open_ghostex(cx);
-                                }
-                            },
-                        )
-                    }
-                })
+                    ),
+                    "open-ghostex",
+                    interact::Ring::new(10.0, 1.0),
+                    interact::Keys::EnterSpace,
+                    cx,
+                    |this, _, cx| this.finish(FinishTarget::None, cx),
+                ))
                 .into_any_element(),
         );
         out
@@ -1094,8 +732,7 @@ impl GpuiOnboardingWindow {
             })
             .collect::<Vec<_>>();
         let readout = theme_preset_label(dark_scheme, &selected_preset);
-        let colourfulness_value =
-            colourfulness.map_or(COLOURFULNESS_LAST_POSITION / 2, |step| step) as f64;
+        let colourfulness_value = colourfulness.unwrap_or(COLOURFULNESS_LAST_POSITION / 2) as f64;
         let colourfulness_text = colourfulness.map_or("Custom".to_string(), |step| {
             colourfulness_name(colourfulness_points(step)).to_string()
         });
@@ -1456,13 +1093,5 @@ mod tests {
         assert_eq!(appearance_label("system", "System", true), "System · Light");
         assert_eq!(appearance_label("system", "System", false), "System · Dark");
         assert_eq!(appearance_label("dark-2", "Dark", true), "Dark");
-    }
-
-    #[test]
-    fn skipping_never_finishes_setup_without_a_project() {
-        assert_eq!(skip_action(false, false), SkipAction::Leave);
-        assert_eq!(skip_action(false, true), SkipAction::Settings);
-        assert_eq!(skip_action(true, false), SkipAction::OpenThenSettings);
-        assert_eq!(skip_action(true, true), SkipAction::OpenThenSettings);
     }
 }

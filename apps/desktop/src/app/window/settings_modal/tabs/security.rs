@@ -7,8 +7,8 @@
 //! SEE-ALSO: server/src/audit/ (the log and its check), packages/settings-catalog/src/pages/security.rs (its search rows), apps/desktop/src/app/gx_store/notifications/commands.rs (a security row in the bell opens this page).
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, card_inset, settings_button,
-    settings_list_item, settings_list_item_wrapped, settings_section, static_note, switch_control,
+    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, settings_button, settings_list_item,
+    settings_list_item_wrapped, settings_note_row, settings_section, static_note, switch_control,
     toggle_from_row,
 };
 use super::super::model::SettingsTabId;
@@ -289,11 +289,7 @@ impl SecurityTab {
         let entries = view["entries"].as_array().cloned().unwrap_or_default();
         if entries.is_empty() {
             // In the row inset, as Secrets' notes are, not flush against the card's edges.
-            rows.push(card_inset(static_note(
-                p,
-                "Nothing yet. Pairing a phone, Easy Connect changes, sharing a chat and the other sensitive actions show here.",
-                false,
-            )));
+            rows.push(settings_note_row(p, "Nothing yet. Pairing a phone, Easy Connect changes, sharing a chat and the other sensitive actions show here."));
         }
         for entry in &entries {
             let (_, status) = outcome_words(entry["outcome"].as_str().unwrap_or_default());
@@ -323,7 +319,7 @@ impl SecurityTab {
             .iter()
             .map(|(_, _, line)| settings_list_item(p, None, None, line.to_string(), None, None))
             .collect();
-        rows.push(card_inset(static_note(p, STILL_ASKS_CLOSING, false)));
+        rows.push(settings_note_row(p, STILL_ASKS_CLOSING));
         settings_section(p, "What still asks", None, None, rows)
     }
 

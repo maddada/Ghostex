@@ -417,11 +417,19 @@ pub fn project_message(
     // (`tool_card.rs`); off, the rows draw as before.
     if tool_cards {
         let (_, tool_blocks) = split_blocks(&message.blocks);
+        // When each unanswered call started, for a running call's live time; only a working
+        // session has running calls, and they are in the live rows.
+        let starts = if working {
+            crate::transcript::work_summary::tool_starts(message, [messages])
+        } else {
+            Default::default()
+        };
         if let Some(card) = crate::transcript::tool_card::tool_card(
             &tool_blocks,
             &rows,
             &files,
             spans,
+            &starts,
             working_directory,
             working,
         ) {
@@ -1459,8 +1467,10 @@ fn turn_items(
                             builder.message_or_placeholder(message, eager, Draw::InWorkFold)
                         })
                         .collect(),
-                    /* The turn's answered question cards, hoisted out of the fold. */
-                    questions: work
+                    /* The turn's answered question cards, hoisted out of the fold. Only the
+                    folded rows' cards: a row kept in view (a picture's) draws its own, and hoisting
+                    it too drew the card twice. */
+                    questions: collapsed_work
                         .iter()
                         .flat_map(|row| {
                             match builder
@@ -1531,6 +1541,16 @@ fn turn_items(
                         extends_to_ms,
                         tool_calls,
                         changed,
+                        // A section still on the server, with gxserver's count of its calls.
+                        held: turn
+                            .section
+                            .as_ref()
+                            .filter(|_| section.is_none())
+                            .and_then(|held| {
+                                Some((held.start_id.clone(), held.tool_call_count? as usize))
+                            })
+                            .into_iter()
+                            .collect(),
                         ..WorkTally::default()
                     }),
                 }

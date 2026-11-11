@@ -101,7 +101,7 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     // The viewer reads in the main chat's look (`transcript/chat_look.rs`): the renderers draw its
     // rows with the main document's `chatLook`, so a look of its own would mix Default cards with
     // Reduced or Quiet lines.
-    let look = state.transcript_view.chat_look;
+    let look = state.transcript_view.effective_chat_look();
     if state.extras.subagent.view.chat_look != look {
         state.extras.subagent.view.chat_look = look;
         state.extras.subagent.view.invalidate();
@@ -134,6 +134,8 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         agent_message_deliveries: None,
         // A subagent's transcript links no Q-tags.
         answers_on_the_way: Vec::new(),
+        // A subagent's viewer has no bar of its own to share a turn's time with.
+        worked_line_shown: false,
     };
     if state.extras.subagent.view.projection_inputs.as_ref() == Some(&inputs) {
         return;

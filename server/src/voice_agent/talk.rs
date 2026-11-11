@@ -78,6 +78,14 @@ impl Talk {
         self.held
     }
 
+    /// The call's mode changed mid-call (`Conversation::set_call_mode`): a hold in progress is
+    /// dropped, since the turn it was collecting belongs to the old mode.
+    pub(super) fn set_push_to_talk(&mut self, push_to_talk: bool) -> Cancel {
+        self.push_to_talk = push_to_talk;
+        self.silence_until = None;
+        self.cancel()
+    }
+
     /// The attached client's Mute is on.
     pub(super) fn muted(&self) -> bool {
         self.muted

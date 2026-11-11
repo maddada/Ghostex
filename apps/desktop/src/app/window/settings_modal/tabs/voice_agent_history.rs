@@ -8,7 +8,9 @@
 //! User: "i want to have a history area at the bototm of the settings voice page that lets you see all that you transcribed and be able to recover stuff you dismissed and be able to play old recordings or download them or transcribe them and get text into your clipboard. recover basically sends that voice recording to the api to get you the text basically (wasn't send because u dismissed)". The look follows Wispr Flow's history (rows grouped by day, the time on the left, actions on hover, a search field). Recordings stay until the user deletes them.
 
 use super::super::super::native_modal_kit::*;
-use super::super::fields::{ButtonSize, ButtonVariant, settings_button_sized, settings_text_input};
+use super::super::fields::{
+    ButtonSize, ButtonVariant, settings_button_sized, settings_note_row, settings_text_input,
+};
 use super::super::palette::SettingsPalette;
 use super::super::store::{SettingsStore, store_copy_to_clipboard, store_gxserver_rpc};
 use gpui::prelude::FluentBuilder as _;
@@ -611,18 +613,15 @@ impl Render for DictationHistory {
             .when(
                 self.loaded && self.items.is_empty() && self.error.is_none(),
                 |this| {
-                    this.child(
-                        div()
-                            .px(px(16.0))
-                            .py(px(12.0))
-                            .text_size(px(13.0))
-                            .text_color(hsla(p.muted))
-                            .child(if self.search.read(cx).value().trim().is_empty() {
-                                "No dictations yet. Press the microphone in a chat box to dictate."
-                            } else {
-                                "No dictation matches your search."
-                            }),
-                    )
+                    // The Settings note row (CDXC:Settings 2026-11-10 on `settings_note_row`).
+                    this.child(settings_note_row(
+                        &p,
+                        if self.search.read(cx).value().trim().is_empty() {
+                            "No dictations yet. Press the microphone in a chat box to dictate."
+                        } else {
+                            "No dictation matches your search."
+                        },
+                    ))
                 },
             )
             .child(list)

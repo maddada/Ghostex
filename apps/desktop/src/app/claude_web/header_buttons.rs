@@ -3,7 +3,7 @@
 //! and shows only while its built-in extension is on and its view can open here.
 //!
 //! CDXC:Extensions 2026-11-10 DECISION:
-//! User: "please move the grok and claude buttons to be on the left of the Talk to the voice agent button in the header". This supersedes the 2026-11-04 choice of the sidebar's bottom bar, right of Commands ("move the claude button from the top of the sidebar to the bottom of it please"), and the same day's "keep it at the top in this case please" for the header's copy of the sidebar's top row while Claude is on: neither the bottom bar nor that row draws them now, so each button exists once. They sit after the pinned extension buttons, Prompt Editor and the jobs button, in Claude then Grok Bot order, and behave as the pinned extension buttons do when the header is narrow (they keep their size). Each shows as on while its page is, and clicking one while the other is on switches pages in place (claude_web/place.rs). They stay in the header while Claude or Grok Bot is on (`HeaderControl::WebBots`), so the page closes from where it was opened.
+//! User: "please move the grok and claude buttons to be on the left of the Talk to the voice agent button in the header". This supersedes the 2026-11-04 choice of the sidebar's bottom bar, right of Commands ("move the claude button from the top of the sidebar to the bottom of it please"), and the same day's "keep it at the top in this case please" for the header's copy of the sidebar's top row while Claude is on: neither the bottom bar nor that row draws them now, so each button exists once. They sit after the pinned extension buttons, Prompt Editor and the jobs button, in Grok Bot then Claude order, and behave as the pinned extension buttons do when the header is narrow (they keep their size). Each shows as on while its page is, and clicking one while the other is on switches pages in place (claude_web/place.rs). They stay in the header while Claude or Grok Bot is on (`HeaderControl::WebBots`), so the page closes from where it was opened.
 //! SEE-ALSO: claude_web/header.rs (what the header keeps while Claude is on), native_sidebar/sessions.rs (the session click).
 //!
 //! CDXC:Extensions 2026-10-25 DECISION:
@@ -32,7 +32,8 @@ impl GhostexGpuiApp {
     /// The buttons to show now: Claude's and Grok Bot's, each while it is on and its view can open
     /// here.
     fn web_bot_buttons(&self) -> Vec<WebBotButton> {
-        WebPlace::ALL
+        // Grok Bot first, then Claude (the user, 2026-11-10, after seeing the header: "just swap them").
+        [WebPlace::Grok, WebPlace::Claude]
             .into_iter()
             .filter(|place| place.enabled() && self.titlebar_mode_available(place.mode()))
             .map(|place| WebBotButton {
@@ -74,6 +75,7 @@ impl GhostexGpuiApp {
                     .px(px(TITLEBAR_BUTTON_HORIZONTAL_PADDING))
                     .items_center()
                     .justify_center()
+                    .rounded(px(TITLEBAR_BUTTON_RADIUS))
                     .when(cfg!(target_os = "windows"), |this| this.occlude())
                     .cursor_default()
                     .when(showing, |this| this.bg(titlebar_active_segment_color()))

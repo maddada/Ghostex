@@ -68,6 +68,15 @@ fn sanitize_log_value(key: &str, value: Value) -> Value {
 }
 
 fn sanitize_string_field(key: &str, value: &str) -> Value {
+    // A push service's failure, as it named it (CDXC:Notifications 2026-11-11 in push/expo.rs): its code is a name
+    // like `InvalidCredentials`, and its words have every push token cut out here again, so the words the secret rule
+    // below would hide ("Credentials", "token") stay readable.
+    if key == PUSH_ERROR_CODE_KEY && is_safe_identifier(value) {
+        return json!(value);
+    }
+    if key == PUSH_ERROR_MESSAGE_KEY {
+        return json!(redact_paths(&redact_urls(&cut_push_tokens(value))));
+    }
     if is_secret_key(key) {
         return json!("[redacted:secret]");
     }
@@ -87,6 +96,42 @@ fn sanitize_string_field(key: &str, value: &str) -> Value {
         return json!("[redacted]");
     }
     json!(sanitize_log_text(value))
+}
+
+/// The log detail keys of a push service's failure, lowercased as the sanitizer compares them.
+const PUSH_ERROR_CODE_KEY: &str = "pusherrorcode";
+const PUSH_ERROR_MESSAGE_KEY: &str = "pusherrormessage";
+/// The longest run of token-like characters a push failure's words may keep.
+const PUSH_TOKEN_RUN_MAX: usize = 24;
+const PUSH_MESSAGE_CHARS_MAX: usize = 300;
+
+/// A push service's words on one line, at most 300 characters, with every push token cut out: a word that holds an
+/// Expo push token (`ExponentPushToken[…]`, `ExpoPushToken[…]`) or a run of more than 24 letters, digits, `-` and
+/// `_` (an APNs or FCM device token) becomes `[push token]`.
+pub(crate) fn cut_push_tokens(text: &str) -> String {
+    let mut out = String::new();
+    for word in text.split_whitespace() {
+        let mut run = 0usize;
+        let mut longest = 0usize;
+        for character in word.chars() {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                run += 1;
+                longest = longest.max(run);
+            } else {
+                run = 0;
+            }
+        }
+        let holds_token = word.contains("PushToken[") || longest > PUSH_TOKEN_RUN_MAX;
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(if holds_token { "[push token]" } else { word });
+    }
+    if out.chars().count() > PUSH_MESSAGE_CHARS_MAX {
+        out = out.chars().take(PUSH_MESSAGE_CHARS_MAX - 1).collect();
+        out.push('…');
+    }
+    out
 }
 
 fn sanitize_log_text(value: &str) -> String {

@@ -862,6 +862,13 @@ impl GpuiAddProjectModalWindow {
                     .mt(px(8.0))
                     .into_any_element()
             }))
+            .children(folder_access_notice(d).map(|text| {
+                self.render_slow_notice(skin, text, cx)
+                    .flex_shrink_0()
+                    .mx(px(12.0))
+                    .mt(px(8.0))
+                    .into_any_element()
+            }))
             .children((self.is_slow && self.busy.is_some()).then(|| {
                 self.render_slow_notice(skin, "Still working. The machine may be reconnecting.", cx)
                     .flex_shrink_0()
@@ -931,4 +938,33 @@ impl Render for GpuiAddProjectModalWindow {
             .on_key_down(cx.listener(Self::on_key_down))
             .child(body)
     }
+}
+
+/// The line that says, before macOS asks, who will ask: browsing Documents, Desktop or Downloads
+/// on this Mac makes macOS ask to let "Ghostex Server" (Ghostex's background service, which reads
+/// and watches the project) open that folder, a name the user has never seen.
+///
+/// CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 12), picked "Local folder first, and explain the folder prompt" (the order is in derive.rs).
+fn folder_access_notice(d: &Derived) -> Option<&'static str> {
+    if !cfg!(target_os = "macos")
+        || !d.is_browsing
+        || d.machine_id.as_deref() != Some(LOCAL_MACHINE_ID)
+    {
+        return None;
+    }
+    let home = std::env::var("HOME").ok()?;
+    let path = d.browse_directory_path.trim();
+    let path = path
+        .strip_prefix("~/")
+        .map(|rest| format!("{}/{rest}", home.trim_end_matches('/')))
+        .unwrap_or_else(|| path.to_string());
+    // macOS folders are case-insensitive, so `~/documents` is the same folder.
+    let path = path.to_lowercase();
+    ["Documents", "Desktop", "Downloads"]
+        .iter()
+        .any(|folder| {
+            let protected = format!("{}/{folder}", home.trim_end_matches('/')).to_lowercase();
+            path == protected || path.starts_with(&format!("{protected}/"))
+        })
+        .then_some("macOS will ask to let \"Ghostex Server\", Ghostex\u{2019}s own service, read this folder: allow it.")
 }

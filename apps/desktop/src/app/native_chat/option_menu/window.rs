@@ -157,6 +157,15 @@ impl ChatOptionMenu {
         self.pill
     }
 
+    /// Whether the panel at `depth`, now at `panel`, hangs above the trigger it opened from, so a
+    /// change of height must keep its bottom edge (`refit_panel_height`) rather than its top, which
+    /// is the edge `Window::resize` keeps.
+    pub(super) fn panel_hangs_above(&self, depth: usize, panel: Bounds<Pixels>) -> bool {
+        self.anchors
+            .get(depth)
+            .is_some_and(|&(anchor, _, _, _)| panel.bottom() <= anchor.top())
+    }
+
     /// Gives the panel at `depth` a new content height, keeping the edge that faces its anchor (a
     /// pill's menu opens above the pill, so its bottom stays put while its rows come and go).
     /// Where a window cannot be moved in place (the web build), the panel reopens instead.
@@ -677,12 +686,12 @@ impl ChatOptionMenu {
                                             let next = next.clone();
                                             panel.rows =
                                                 Arc::new(vec![serde_json::json!({"context":next})]);
-                                            let appearance = &panel.menu.read(cx).appearance;
+                                            let appearance = panel.menu.read(cx).appearance.clone();
                                             let height = match super::context::height(
                                                 &next,
                                                 window.bounds().size.width.as_f32()
                                                     / appearance.scale,
-                                                appearance,
+                                                &appearance,
                                                 cx,
                                             ) {
                                                 Ok(height) => height,
@@ -700,6 +709,24 @@ impl ChatOptionMenu {
                                             panel.heights = vec![height];
                                             let available = panel.menu.read(cx).source_bounds;
                                             let desired = px((height + 14.0) * appearance.scale);
+                                            // The context ring's panel hangs above the ring: its
+                                            // bottom stays and its top moves.
+                                            let depth = panel.depth;
+                                            if panel
+                                                .menu
+                                                .read(cx)
+                                                .panel_hangs_above(depth, window.bounds())
+                                            {
+                                                let rows =
+                                                    vec![serde_json::json!({"context":next})];
+                                                panel.menu.update(cx, |menu, cx| {
+                                                    menu.refit_panel_height(
+                                                        depth, desired, rows, cx,
+                                                    )
+                                                });
+                                                cx.notify();
+                                                return;
+                                            }
                                             window.resize(size(
                                                 window.bounds().size.width,
                                                 desired.min(

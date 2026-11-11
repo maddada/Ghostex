@@ -113,9 +113,17 @@ impl GhostexGpuiApp {
                 self.app_toast_window = None;
             }
         }
+        // The cards stay centred on the anchor: with the × on the left (macOS) the window's
+        // outset for it is on the cards' left (`GpuiAppToastWindow::render`).
+        let close_outset_on_left =
+            if crate::app::window::round_close_button::close_buttons_on_left() {
+                px(GPUI_APP_TOAST_CLOSE_OUTSET)
+            } else {
+                px(0.0)
+            };
         let bounds = Bounds {
             origin: point(
-                anchor.x - px(GPUI_APP_TOAST_WIDTH / 2.0),
+                anchor.x - px(GPUI_APP_TOAST_WIDTH / 2.0) - close_outset_on_left,
                 anchor.y - stack_height - px(GPUI_APP_TOAST_BOTTOM_MARGIN),
             ),
             size: size(px(GPUI_APP_TOAST_WINDOW_WIDTH), stack_height),
@@ -215,6 +223,7 @@ impl GhostexGpuiApp {
         self.gx_store_sync_remote_clients(true, cx);
         self.remote_reconnect_on_status(remote_machine_id, state, cx);
         if state == GpuiRemoteGxserverConnectState::Connected.wire_status_state() {
+            self.note_gpui_remote_link_connected(remote_machine_id);
             self.attach_surfaced_remote_workspace_terminals(remote_machine_id, cx);
         }
         self.refresh_session_chat_runtime_endpoints(false, cx);
@@ -262,7 +271,6 @@ impl GhostexGpuiApp {
             let payload = background.spawn(async move { task() }).await;
             let _ = this.update(cx, |this, cx| {
                 this.dispatch_open_gpui_app_modal_sidebar_state_payload(payload.clone(), cx);
-                this.dispatch_gpui_titlebar_tips_sidebar_state_payload(&payload, cx);
             });
         })
         .detach();
@@ -338,7 +346,6 @@ impl GhostexGpuiApp {
                 next["complete"] = serde_json::Value::Bool(is_error || index == last_index);
                 let dispatched = this.update(cx, |this, cx| {
                     this.dispatch_open_gpui_app_modal_sidebar_state_payload(next.clone(), cx);
-                    this.dispatch_gpui_titlebar_tips_sidebar_state_payload(&next, cx);
                 });
                 if dispatched.is_err() {
                     return;

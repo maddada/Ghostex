@@ -31,6 +31,8 @@ impl GhostexGpuiApp {
         let Some(snapshot) = self.native_sidebar.snapshot.clone() else {
             return div().size_full().into_any_element();
         };
+        self.native_sidebar.focus_stops.begin_frame();
+        let entry_handle = self.native_sidebar.focus_stops.entry_handle(cx);
         // The list keeps showing the outgoing Space while its exit fade runs; the selector row above it already shows the new one.
         let content = self
             .native_sidebar
@@ -56,19 +58,27 @@ impl GhostexGpuiApp {
         // CDXC:Spaces 2026-11-05 DECISION:
         // User: "please implement spaces for the unified sidebar so when that extension is enabled it applies for unified sidebar also not just projecst sidebar". With Spaces on, the Unified header carries the Project sidebar's own Space row (selectors.rs, without the Bots slot), the list takes the same sideways swipe and empty-space drag with the same slide and fade (space_gesture.rs), and the outgoing Space's list stays frozen through the exit fade just as the Project list's does. The scope itself is gx-core's (`unified_space_scope`, `build_unified_sidebar_scoped`).
         let unified = self.native_sidebar.unified.clone();
+        // The rows keep the Project sidebar's even spacing (selectors.rs): the filter has its own row.
+        let gap = |height: f32| div().h(px(height * appearance.scale)).flex_shrink_0();
         let unified_header = unified.as_ref().map(|unified| {
             v_flex()
                 .w_full()
                 .flex_shrink_0()
+                .child(self.render_native_sidebar_new_session_row(&appearance, window, cx))
+                .child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
                 .child(self.render_native_unified_header(unified, &appearance, window, cx))
                 .when(snapshot.spaces_enabled, |header| {
-                    header.child(div().h(px(4.0 * appearance.scale)).flex_shrink_0())
+                    header.child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
                 })
-                .children(self.render_native_sidebar_space_row(&snapshot, &appearance, false, cx))
+                .children(self.render_native_sidebar_space_row(
+                    &snapshot,
+                    &appearance,
+                    false,
+                    false,
+                    cx,
+                ))
                 // CDXC:Chief 2026-11-08 DECISION: User (Q1922): Main Hub shows in the Unified sidebar too, under its header, drawn as in the Project sidebar (native_sidebar/chief.rs); its block lines up with the Unified group headers' box.
-                .when(!snapshot.spaces_enabled, |header| {
-                    header.child(div().h(px(6.0 * appearance.scale)).flex_shrink_0())
-                })
+                .child(gap(super::selectors::SIDEBAR_TOP_LIST_GAP))
                 .children(self.render_native_sidebar_chief(&snapshot, &appearance, true, cx))
                 .into_any_element()
         });
@@ -87,6 +97,13 @@ impl GhostexGpuiApp {
         } else {
             None
         };
+        // The project header pinned at the top: focusing it reveals nothing, its pinned copy shows.
+        let pinned_header = if classic {
+            self.native_sticky_project_group_id(&content, &appearance)
+        } else {
+            None
+        };
+        let reveal_scale = appearance.scale;
         // Built once per frame for the Commands row's button and whichever strip can draw: the
         // pinned one and the peek are exclusive (`sidebar_usage_visible`).
         let usage_meters = self.account_usage_meters();
@@ -111,8 +128,19 @@ impl GhostexGpuiApp {
                         super::pointer::track_bounds(app.native_sidebar.bounds, window);
                     });
                 }
+                // After every part of the sidebar prepainted, the bottom bar's stops included.
+                bounds_view.update(cx, |app, cx| {
+                    app.reveal_focused_native_sidebar_stop(
+                        reveal_scale,
+                        pinned_header.as_deref(),
+                        window,
+                        cx,
+                    );
+                });
             })
             .id("native-sidebar-root")
+            // The arrow keys and Escape while one of the sidebar's controls has focus (keyboard.rs).
+            .on_key_down(cx.listener(Self::native_sidebar_keyboard_key_down))
             // CDXC:Accessibility 2026-09-22 DECISION:
             // User: "add full accessibility to the sidebar, the button at the bottom, and the chat view so that we can drive this UI using AI", for "an e2e tester or an engineer to debug issues", without going "overboard with it if it would affect performance". Every row, header, section and button carries a role, a label and its state words; gpui builds the tree only while an assistive client (a screen reader, cua-driver, the web build's DOM mirror) is connected, so an idle desktop pays nothing.
             .role(gpui::Role::Navigation)
@@ -178,7 +206,7 @@ impl GhostexGpuiApp {
             .text_size(px(super::appearance::SIDEBAR_TEXT_SIZE * appearance.scale))
             .font_family(crate::ui_fonts::UI_FONT)
             .font_weight(FontWeight::LIGHT)
-            .child(self.render_native_sidebar_navigation(&appearance, false, usage_meter_count, cx))
+            .child(self.render_native_sidebar_navigation(&appearance, cx))
             .child(match unified_header {
                 Some(header) => header,
                 None => self.render_native_sidebar_selectors(&snapshot, &appearance, window, cx),
@@ -380,28 +408,17 @@ impl GhostexGpuiApp {
                     ),
             )
             /*
-            The usage strip and the Commands row are one footer child on purpose:
-            `on_children_prepainted` above measures the sidebar from its fourth
-            child, so a strip that appears only when accounts exist must not shift
-            that index.
+            The bottom (the workspace button's line, the usage strip or its handle) is one footer
+            child on purpose, and always there: `on_children_prepainted` above measures the
+            sidebar from its fourth child, so parts that come and go must not shift that index.
             */
-            .child(
-                v_flex()
-                    .w_full()
-                    .flex_shrink_0()
-                    .children(self.render_native_sidebar_usage(
-                        &appearance,
-                        pinned_usage_meters,
-                        window,
-                        cx,
-                    ))
-                    .child(self.render_native_sidebar_navigation(
-                        &appearance,
-                        true,
-                        usage_meter_count,
-                        cx,
-                    )),
-            )
+            .child(self.render_native_sidebar_bottom(
+                &appearance,
+                pinned_usage_meters,
+                usage_meter_count,
+                window,
+                cx,
+            ))
             .child(
                 gpui::canvas(
                     |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
@@ -447,7 +464,7 @@ impl GhostexGpuiApp {
             )
             .children(
                 classic
-                    .then(|| self.render_native_sticky_project(&content, &appearance, cx))
+                    .then(|| self.render_native_sticky_project(&content, &appearance, window, cx))
                     .flatten(),
             )
             .children(self.render_native_sidebar_usage_peek(
@@ -461,6 +478,10 @@ impl GhostexGpuiApp {
             .children(self.render_session_links_page_card(cx))
             // The Main Hub card, where a build draws it in the page (the desktop's is a window).
             .children(self.render_main_hub_page_card(cx))
+            // Where the Focus Sidebar hotkey's entry holds the keyboard while it waits for its row:
+            // no size, so no click ever focuses it. Last, so the children the bounds above count
+            // keep their places.
+            .child(div().absolute().size_0().track_focus(&entry_handle))
             .into_any_element()
     }
 }

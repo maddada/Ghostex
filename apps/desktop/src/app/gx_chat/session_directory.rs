@@ -15,6 +15,9 @@ use ghostex_gx_core::{MachineId, MachineTabInput, PresentationStore};
 #[derive(Default)]
 struct Published {
     revision: u64,
+    /// Moves only when a session's name did (`KnownSession::same_names`): what a transcript
+    /// reads. The other fields are the composer's `+` picker's, live and always moving.
+    names_revision: u64,
     sessions: Arc<Vec<KnownSession>>,
     /// Each machine's daemon revision, row count, name and whether it is connected when the list
     /// was built, so a pump that moved none of them builds nothing.
@@ -132,19 +135,34 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
     }
     current.built_from = built_from;
     if *current.sessions != sessions || current.revision == 0 {
+        if current.revision == 0 || !KnownSession::same_names(&current.sessions, &sessions) {
+            current.names_revision += 1;
+        }
         current.sessions = Arc::new(sessions);
         current.revision += 1;
     }
 }
 
 /// The list and its revision; revision 0 while the store has published nothing.
-pub(super) fn current() -> (u64, Arc<Vec<KnownSession>>) {
+pub(crate) fn current() -> (u64, Arc<Vec<KnownSession>>) {
+    let (revision, _, sessions) = current_named();
+    (revision, sessions)
+}
+
+/// [`current`] with the revision of the names alone between the two.
+pub(super) fn current_named() -> (u64, u64, Arc<Vec<KnownSession>>) {
     let published = PUBLISHED
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     published
         .as_ref()
-        .map(|published| (published.revision, published.sessions.clone()))
+        .map(|published| {
+            (
+                published.revision,
+                published.names_revision,
+                published.sessions.clone(),
+            )
+        })
         .unwrap_or_default()
 }
 

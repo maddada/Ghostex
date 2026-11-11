@@ -35,7 +35,16 @@ fn card_with(blocks: &[ChatBlock], spans: &HashMap<String, (i64, i64)>, working:
     let pairs = pair_tool_blocks(remaining);
     let rows = tool_rows(&pairs, "", Some(WD), &HashMap::new());
     let files = file_rows(&changes, "m1", Some(WD));
-    tool_card(&tools, &rows, &files, spans, Some(WD), working).expect("a card")
+    tool_card(
+        &tools,
+        &rows,
+        &files,
+        spans,
+        &HashMap::new(),
+        Some(WD),
+        working,
+    )
+    .expect("a card")
 }
 
 fn card(blocks: &[ChatBlock]) -> Value {
@@ -366,7 +375,16 @@ fn questions_and_sent_messages_stay_out_of_the_card() {
     let pairs = pair_tool_blocks(tools.iter().copied());
     let rows = tool_rows(&pairs, "", Some(WD), &HashMap::new());
     assert_eq!(rows[0]["exchange"], true);
-    assert!(tool_card(&tools, &rows, &[], &HashMap::new(), Some(WD), true).is_none());
+    assert!(tool_card(
+        &tools,
+        &rows,
+        &[],
+        &HashMap::new(),
+        &HashMap::new(),
+        Some(WD),
+        true
+    )
+    .is_none());
 }
 
 #[test]

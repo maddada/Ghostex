@@ -126,56 +126,137 @@ pub(crate) fn modal_panel_row(
         .child(control)
 }
 
-/// The app-wide toggle: 32x20 track with a 2px border and 6px radius, 16px thumb with 4px radius.
+/// The app-wide toggle: 32x20 track with a 2px inset and 6px radius, 16px thumb with 4px radius.
 /// It only draws; the clickable row that holds it carries `.role(Role::Switch)`,
 /// `.aria_toggled(a11y_toggled(..))` and `.aria_label(<the row's visible label>)`, so a screen
 /// reader names it by that label and never by the row's element id.
 pub(crate) fn modal_switch(p: &ModalPalette, checked: bool, disabled: bool) -> AnyElement {
+    draw_switch(
+        SwitchShape::REGULAR,
+        SwitchOff {
+            track: p.switch_off,
+            edge: None,
+            thumb: p.background,
+        },
+        p.light,
+        checked,
+        disabled,
+    )
+    .into_any_element()
+}
+
+/// A switch's size: the track, its edge (`edge` px, transparent when on or edgeless), and the
+/// thumb with how far it travels to the right when on.
+#[derive(Clone, Copy)]
+pub(crate) struct SwitchShape {
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) edge: f32,
+    pub(crate) thumb: f32,
+    pub(crate) travel: f32,
+}
+
+impl SwitchShape {
+    /// The 32x20 switch with a 16px thumb.
+    pub(crate) const REGULAR: Self = Self {
+        width: 32.0,
+        height: 20.0,
+        edge: 2.0,
+        thumb: 16.0,
+        travel: 12.0,
+    };
+    /// The 24x16 switch with a 12px thumb (shadcn `size='sm'`).
+    pub(crate) const SMALL: Self = Self {
+        width: 24.0,
+        height: 16.0,
+        edge: 1.0,
+        thumb: 12.0,
+        travel: 8.0,
+    };
+
+    pub(crate) fn scaled(self, scale: f32) -> Self {
+        Self {
+            width: self.width * scale,
+            height: self.height * scale,
+            edge: self.edge * scale,
+            thumb: self.thumb * scale,
+            travel: self.travel * scale,
+        }
+    }
+}
+
+/// How a surface draws its switch when off: a quiet track (with an optional hairline edge) and
+/// its thumb at the left. On is the same everywhere ([`switch_on_track`], [`switch_on_thumb`]).
+#[derive(Clone, Copy)]
+pub(crate) struct SwitchOff {
+    pub(crate) track: Rgba,
+    pub(crate) edge: Option<Rgba>,
+    pub(crate) thumb: Rgba,
+}
+
+/// Every switch in the app draws through here (the modal kit's, Settings' regular and small ones,
+/// Automate's, the chat's account menu), so on, off and disabled read the same everywhere.
+///
+/// CDXC:Switches 2026-11-11 DECISION:
+/// User, of Settings > Extensions under dark glass: "it's super hard to tell which are disabled and which enabled <- fix this now pls as part of 11.4.0". An on switch is now a solid track in the app's `--primary`, the colour of a checked checkbox, the slider range and the dark main button (#e5e5e5 in dark looks with the dark `--primary-foreground` thumb at the right; in light looks `--primary` lifted to a mid grey, #5c5c5c, with a white thumb, since the user does not want a black or near-black fill on glass). Off stays each surface's quiet empty track with its thumb at the left. A disabled switch (one that cannot be changed) is dimmed and its thumb is a hollow ring with no shadow, so it never reads as an ordinary off switch. Size, travel and the clickable row are unchanged. Supersedes the 2026-11-08 decision that drew an on switch as a mid-tone foreground track under a white thumb, which read too close to off.
+pub(crate) fn draw_switch(
+    shape: SwitchShape,
+    off: SwitchOff,
+    light: bool,
+    checked: bool,
+    disabled: bool,
+) -> Div {
+    let (track, edge, thumb) = if checked {
+        (switch_on_track(light), None, switch_on_thumb(light))
+    } else {
+        (off.track, off.edge, off.thumb)
+    };
+    let ring = (shape.thumb / 8.0).max(1.0).round();
     div()
         .flex_shrink_0()
-        .w(px(32.0))
-        .h(px(20.0))
+        .w(px(shape.width))
+        .h(px(shape.height))
         .rounded(px(6.0))
-        .border_2()
-        .border_color(transparent())
-        .bg(hsla(if checked {
-            switch_on_track(p.foreground, p.light)
-        } else {
-            p.switch_off
-        }))
+        .border(px(shape.edge))
+        .border_color(edge.map_or_else(transparent, hsla))
+        .bg(hsla(track))
         .when(disabled, |this| this.opacity(0.5))
+        .flex()
+        .items_center()
         .child(
             div()
-                .size(px(16.0))
-                .ml(px(if checked { 12.0 } else { 0.0 }))
+                .size(px(shape.thumb))
+                .ml(px(if checked { shape.travel } else { 0.0 }))
                 .rounded(px(4.0))
-                .bg(hsla(if checked {
-                    SWITCH_ON_THUMB
-                } else {
-                    p.background
-                }))
-                .shadow_sm(),
+                .map(|this| {
+                    if disabled {
+                        this.border(px(ring)).border_color(hsla(thumb))
+                    } else {
+                        this.bg(hsla(thumb)).shadow_sm()
+                    }
+                }),
         )
-        .into_any_element()
 }
 
-/// The track of an on switch: the theme's ink at partial strength, a mid grey that carries the
-/// theme's hue (the dark themes' foregrounds are tinted), so the white [`SWITCH_ON_THUMB`] stands
-/// out on it in every look and the track never turns black on glass.
-///
-/// CDXC:Switches 2026-11-08 DECISION:
-/// User, of an on Settings switch under dark glass (a near-white track with a light grey handle): "i dont like how this looks when enabled fam please make it look better (the color of the handle blends with the white of the toggle)". Every on switch (Settings rows, Settings cards, the modal kit's app-wide switch) now draws a mid-tone track (the foreground at 42% in dark looks, 62% in light ones) under a white handle with a soft shadow, the same in glass and solid. The off state keeps its faint track and its foreground or surface handle at the left, so on reads as a brighter track with a white handle at the right. The light on track was the near-black foreground, which the user does not want as a fill on glass.
-pub(crate) fn switch_on_track(foreground: Rgba, light: bool) -> Rgba {
-    rgba_of(foreground, if light { 0.62 } else { 0.42 })
+/// The track of an on switch: the app's `--primary` (#e5e5e5) in dark looks; in light ones
+/// `--primary` (#262626) lifted 25% toward white, a solid mid grey that is never near-black on glass.
+pub(crate) fn switch_on_track(light: bool) -> Rgba {
+    if light {
+        css_mix(gpui::rgb(0x262626), 0.75, gpui::rgb(0xffffff))
+    } else {
+        gpui::rgb(0xe5e5e5)
+    }
 }
 
-/// The handle of an on switch: white, over [`switch_on_track`].
-pub(crate) const SWITCH_ON_THUMB: Rgba = Rgba {
-    r: 1.0,
-    g: 1.0,
-    b: 1.0,
-    a: 1.0,
-};
+/// The thumb of an on switch over [`switch_on_track`]: `--primary-foreground` (#171717) in dark
+/// looks, white in light ones.
+pub(crate) fn switch_on_thumb(light: bool) -> Rgba {
+    if light {
+        gpui::rgb(0xffffff)
+    } else {
+        gpui::rgb(0x171717)
+    }
+}
 
 /// The faint wash a switch row shows while the pointer is over it: the foreground at 4%, so it is
 /// a light veil on a dark surface and a dark one on a light surface, never a solid fill.

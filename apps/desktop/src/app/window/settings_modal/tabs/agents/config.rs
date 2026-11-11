@@ -32,6 +32,10 @@ const CHIEF_ADDS_GBOTS: &str = "gbotsChiefAddsOnItsOwn";
 const HOME_SECRET_FOLDERS: &str = "homeSecretFolders";
 /// How the agent a project's new-session button starts is remembered (gx-core `agent_choice.rs`).
 const NEW_SESSION_AGENT_SCOPE: &str = "newSessionAgentScope";
+/// The note a session Ghostex starts gets about Ghostex (server/src/agents/ghostex_note.rs).
+const GHOSTEX_NOTE: &str = "agentGhostexNote";
+/// Claude's task list tools, for the Session details panel (server/src/session_details/gate.rs).
+const CLAUDE_TASK_TOOLS: &str = "sessionDetailsClaudeTaskTools";
 /// A shadcn `Select` with this many items becomes the searchable dropdown.
 const SEARCHABLE_SELECT_ITEMS: usize = 8;
 
@@ -62,9 +66,14 @@ impl AgentsTab {
         cx: &mut Context<Self>,
     ) -> Option<Div> {
         let section = search.section("config");
-        let (values, agents) = {
+        let (values, agents, hidden_keys) = {
             let store = self.store.read(cx);
-            (store.values(), agents_from_hud(store.hud()))
+            (
+                store.values(),
+                agents_from_hud(store.hud()),
+                // Rows of a built-in extension that is off (Claude task list below).
+                store.general_search().hidden_keys.clone(),
+            )
         };
         let mut rows: Vec<AnyElement> = Vec::new();
         if should_show_setting(&section, NEW_SESSION_AGENT_SCOPE, None) {
@@ -302,6 +311,38 @@ impl AgentsTab {
                     "Mark each project and worktree folder as trusted before its agent starts, so no session stops at a \"Do you trust this folder?\" prompt. Turn it off to answer that prompt yourself.",
                 ),
                 values.bool(TRUST_PROJECT_FOLDERS),
+                cx,
+            ));
+        }
+        // CDXC:Settings 2026-11-11 DECISION:
+        // User: "move settings around so things make full sense"; Q2511 ("Move all five"): Tell agents about Ghostex and Claude task list moved here from Settings > Chat, because they set what an agent is told and given when it starts, not how the chat looks or acts. Each keeps its name, key and value. Claude task list still shows only while the Session details panel is on (its `settingKeys` in official_extensions.rs).
+        if should_show_setting(&section, GHOSTEX_NOTE, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                GHOSTEX_NOTE,
+                RowSpec::new("Tell agents about Ghostex")
+                    .description(
+                        "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+                    )
+                    .keyed(&values, GHOSTEX_NOTE),
+                values.bool(GHOSTEX_NOTE),
+                cx,
+            ));
+        }
+        if !hidden_keys.contains(&CLAUDE_TASK_TOOLS)
+            && should_show_setting(&section, CLAUDE_TASK_TOOLS, None)
+        {
+            rows.push(toggle_field(
+                self,
+                p,
+                CLAUDE_TASK_TOOLS,
+                RowSpec::new("Claude task list")
+                    .description(
+                        "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it.",
+                    )
+                    .keyed(&values, CLAUDE_TASK_TOOLS),
+                values.bool(CLAUDE_TASK_TOOLS),
                 cx,
             ));
         }

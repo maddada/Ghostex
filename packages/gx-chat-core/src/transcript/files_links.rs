@@ -113,8 +113,11 @@ impl FilesLinksItem {
     }
 }
 
-/// The key a path is listed under: one spelling for `/` and `\`, and a Windows drive path in one
-/// case, which the file system ignores.
+/// The key a path is listed under: one spelling for `/` and `\`, and a Windows drive path wholly
+/// in lower case (the drive letter and every name after it), since Windows ignores case in both.
+/// Every backslash becomes a slash, which on macOS and Linux names a different file: gxserver
+/// compares paths by this key only for Windows paths (`names_by_text` in
+/// server/src/session_files_links.rs).
 pub fn path_key(path: &str) -> String {
     let key = path.replace('\\', "/");
     let bytes = key.as_bytes();

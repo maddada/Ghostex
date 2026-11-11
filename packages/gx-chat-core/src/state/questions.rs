@@ -90,6 +90,17 @@ pub struct QuestionsState {
     // ---- question forms ---------------------------------------------------
     /// The reader's side of each ```questions form, by form id (`crate::questions::forms`).
     pub forms: crate::state::Stamped<std::collections::BTreeMap<String, FormState>>,
+    /// Every dictation typed into a form's boxes, by form id and box, oldest first: what a copy of
+    /// the box that has not shown them yet is given again (`crate::questions::dictation::edited`).
+    /// A form's go once it can take no more text (`crate::questions::forms::sync`).
+    pub dictations: std::collections::BTreeMap<
+        String,
+        std::collections::BTreeMap<String, Vec<crate::questions::dictation::Typed>>,
+    >,
+    /// This core's name for the `rev`s it gives its form boxes (`FormState::dictated`): a fresh
+    /// id with its first event (`crate::questions::dictation::name_core`), which no core started
+    /// in its place has.
+    pub core_id: String,
     /// The real answer rows and send boundaries in the current loaded transcript.
     pub form_answer_index: crate::state::Stamped<crate::session::answer_echoes::AnswerIndex>,
     /// One-click answers being changed (`crate::questions::inline_answers`).
@@ -153,6 +164,9 @@ pub struct FormState {
     pub error: Option<String>,
     /// The reader opened the answered form again (`formToggle`); answered forms start collapsed.
     pub expanded: bool,
+    /// The `rev` of each box that took a dictation, by box (a question's index, or `notes`): how
+    /// many this core typed into it (`crate::questions::dictation`).
+    pub dictated: std::collections::BTreeMap<String, u64>,
 }
 
 /// A question form's answers on their way to the agent.

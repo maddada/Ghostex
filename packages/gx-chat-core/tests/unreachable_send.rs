@@ -1,7 +1,12 @@
-//! A send gxserver never answered (it was restarting, or it dropped the connection): the chat says
-//! it couldn't reach Ghostex instead of the socket's own words, offers Retry, and that Retry is the
-//! same send to gxserver (its first `sendRequestId`), so a send that did land is answered from
-//! gxserver's ledger instead of being typed twice (`session/reads.rs` `humanize_unreachable`).
+//! A send gxserver never answered (it was restarting, or it dropped the connection): the message
+//! says under its bubble that it couldn't reach Ghostex, in those words instead of the socket's,
+//! and goes again by itself as the same send to gxserver (its first `sendRequestId`), so a send
+//! that did land is answered from gxserver's ledger instead of being typed twice
+//! (`session/reads.rs` `humanize_unreachable`, `composer/delivery.rs`). A refusal gxserver sent
+//! itself stays on the message in gxserver's own words.
+//!
+//! Until 2026-11-11 the text went back to the chat box with an error line and a Retry button;
+//! the CDXC:SessionChat 2026-11-11 DECISION in `composer/delivery.rs` supersedes that.
 
 use ghostex_gx_chat_core::composer::send::begin;
 use ghostex_gx_chat_core::composer::submission::SubmissionMode;
@@ -90,8 +95,21 @@ fn core() -> ChatCore {
     core
 }
 
+/// What the message's row says under its bubble: its `startupDelivery`.
+fn note(core: &ChatCore) -> Value {
+    let rows = ghostex_gx_chat_core::transcript::rows::rows(core.state(), &context(7));
+    let row = rows
+        .into_iter()
+        .find_map(|item| match item {
+            ghostex_gx_chat_core::TranscriptItem::Message { message } => Some(message),
+            _ => None,
+        })
+        .expect("the message keeps its row");
+    serde_json::to_value(&row).unwrap()["startupDelivery"].clone()
+}
+
 #[test]
-fn a_send_gxserver_dropped_shows_a_human_line_with_retry_and_retries_under_the_same_id() {
+fn a_send_gxserver_dropped_says_so_in_human_words_and_goes_again_under_the_same_id() {
     let mut core = core();
     let first = send(
         &mut core,
@@ -108,33 +126,39 @@ fn a_send_gxserver_dropped_shows_a_human_line_with_retry_and_retries_under_the_s
         .expect("a named send")
         .to_string();
 
-    assert!(
-        core.state().composer.failed_send.is_some(),
-        "failed send remembered"
-    );
+    // Nothing is handed back: no error line, no Retry to press, the message waits on its row.
     let chat = &core.state().core;
-    assert_eq!(chat.operation_error.as_deref(), Some(UNREACHABLE_MESSAGE));
-    assert_eq!(chat.operation_error_code.as_deref(), Some("unreachable"));
+    assert_eq!(chat.operation_error, None);
     let document = projected(&core);
-    assert_eq!(document.operation_error_resend.as_deref(), Some("send"));
-    let shown = serde_json::to_string(&document).unwrap();
+    assert_eq!(document.operation_error_resend, None);
+    let note = note(&core);
+    assert_eq!(note["state"], "waiting");
+    let shown = note["waitReason"].as_str().expect("why it waits");
+    assert!(shown.starts_with(UNREACHABLE_MESSAGE), "{shown}");
     assert!(!shown.contains("os error"), "no socket text on screen");
     assert!(!shown.contains("127.0.0.1"), "no address on screen");
 
-    // Retry submits the same text again; the host would mint a new id, but the send keeps its own.
-    let retry = send(
-        &mut core,
-        "hello",
-        8,
-        RpcOutcome::Ok {
-            result: serde_json::json!({}),
-        },
-    );
-    assert_eq!(retry["sendRequestId"], first_id.as_str());
+    // Two seconds on it goes again by itself, as the same send.
+    let mut later = context(8);
+    later.now_ms += 2_000.0;
+    let again = core.handle(Event::Tick, later);
+    let retried = again
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::SendRpc { method, params, .. }
+                if *method == ChatRpcMethod::SendSessionChatMessage =>
+            {
+                Some((**params).clone())
+            }
+            _ => None,
+        })
+        .expect("the send went again");
+    assert_eq!(retried["sendRequestId"], first_id.as_str());
+    assert_eq!(retried["text"], "hello");
 }
 
 #[test]
-fn a_refusal_gxserver_sent_itself_keeps_its_own_words_and_offers_no_resend() {
+fn a_refusal_gxserver_sent_itself_keeps_its_own_words_on_the_message() {
     let mut core = core();
     send(
         &mut core,
@@ -146,20 +170,16 @@ fn a_refusal_gxserver_sent_itself_keeps_its_own_words_and_offers_no_resend() {
             endpoint: Some("/api/sendSessionChatMessage".into()),
         },
     );
-    assert_eq!(
-        core.state().core.operation_error.as_deref(),
-        Some("The agent is not running.")
-    );
-    assert_ne!(
-        core.state().core.operation_error_code.as_deref(),
-        Some("unreachable")
-    );
+    assert_eq!(core.state().core.operation_error, None);
     let document = projected(&core);
     assert_eq!(document.operation_error_resend, None);
+    let note = note(&core);
+    assert_eq!(note["state"], "failed");
+    assert_eq!(note["errorMessage"], "Not sent. The agent is not running.");
 }
 
 #[test]
-fn the_phone_bridges_unreachable_code_gets_the_same_line() {
+fn the_phone_bridges_unreachable_code_gets_the_same_words() {
     let mut core = core();
     send(
         &mut core,
@@ -171,8 +191,11 @@ fn the_phone_bridges_unreachable_code_gets_the_same_line() {
             endpoint: None,
         },
     );
-    assert_eq!(
-        core.state().core.operation_error.as_deref(),
-        Some(UNREACHABLE_MESSAGE)
-    );
+    assert_eq!(core.state().core.operation_error, None);
+    let note = note(&core);
+    assert_eq!(note["state"], "waiting");
+    assert!(note["waitReason"]
+        .as_str()
+        .unwrap()
+        .starts_with(UNREACHABLE_MESSAGE));
 }

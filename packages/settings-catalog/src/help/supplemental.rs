@@ -13,7 +13,6 @@ pub(crate) type Tab = (&'static str, &'static str);
 pub(crate) const THEME: Tab = ("theme", "Interface");
 /// The Terminal page, one of the pages General split into (layout.rs).
 const TERMINAL: Tab = ("terminal", "Terminal");
-const CHAT: Tab = ("chat", "Chat");
 const EXTENSIONS: Tab = ("extensions", "Extensions");
 const AGENTS: Tab = ("agents", "Agents");
 const PROJECTS: Tab = ("projects", "Projects");
@@ -337,17 +336,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
-        key: "tipsAndTricksTitlebarButtonHidden",
-        tab: EXTENSIONS,
-        group: None,
-        section: "viewOrder",
-        section_title: "Views",
-        title: "Hide Tips button",
-        subtitle: "Stop offering the Tips & Tricks page, so it is missing from the header ⋯ menu and the view picker.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
         key: "notificationsTitlebarButtonHidden",
         tab: EXTENSIONS,
         group: None,
@@ -365,7 +353,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "viewOrder",
         section_title: "Views",
         title: "Hide Help button",
-        subtitle: "Stop offering the Ask Ghostex page, so it is missing from the header ⋯ menu and the view picker.",
+        subtitle: "Stop offering the Ask Ghostex page, so it is missing from the sidebar's menu and the view picker.",
         options: &[],
         user_only: false,
     },
@@ -376,7 +364,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "viewOrder",
         section_title: "Views",
         title: "Hide Resources button",
-        subtitle: "Stop offering the Resources page, so it is missing from the header ⋯ menu and the view picker.",
+        subtitle: "Stop offering the Resources page, so it is missing from the sidebar's menu and the view picker.",
         options: &[],
         user_only: false,
     },
@@ -387,7 +375,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "viewOrder",
         section_title: "Views",
         title: "Hide Dev Servers button",
-        subtitle: "Hide Dev servers from the header ⋯ menu.",
+        subtitle: "Hide Dev servers from the sidebar's menu.",
         options: &[],
         user_only: false,
     },
@@ -398,7 +386,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "viewOrder",
         section_title: "Views",
         title: "Hide Extensions button",
-        subtitle: "Hide Extensions from the header ⋯ menu.",
+        subtitle: "Hide Extensions from the sidebar's menu.",
         options: &[],
         user_only: false,
     },
@@ -432,17 +420,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section_title: "Built-in",
         title: "Turn off Open In",
         subtitle: "Turn off Open In everywhere: the Open button, the Open In page in Settings and the Open In menus. Your apps and custom commands are kept.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
-        key: "sidebarSpacesEnabled",
-        tab: EXTENSIONS,
-        group: None,
-        section: "official",
-        section_title: "Built-in",
-        title: "Spaces",
-        subtitle: "Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.",
         options: &[],
         user_only: false,
     },
@@ -486,7 +463,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "official",
         section_title: "Built-in",
         title: "Turn off the Session details panel",
-        subtitle: "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Chat. On by default.",
+        subtitle: "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Agents. On by default.",
         options: &[],
         user_only: false,
     },
@@ -552,7 +529,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "official",
         section_title: "Experimental",
         title: "Keep Awake",
-        subtitle: "Turn Keep Awake on or off: Keep Awake in the ⋯ menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default.",
+        subtitle: "Turn Keep Awake on or off: Keep Awake in the sidebar's menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default.",
         options: &[],
         user_only: false,
     },

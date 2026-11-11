@@ -1,4 +1,5 @@
-//! Panel 4, Mobile: the phone and notification switches and the looping Easy Connect pairing demo
+//! Panel 4, Mobile: how Ghostex reaches your phone and other computers, the one "pair my phone"
+//! switch, and the looping Easy Connect pairing demo
 //! (panels/mobile.tsx (deleted 2026-10-01), previews/phone-pairing.tsx (deleted 2026-10-01), styles/mobile.css).
 //!
 //! CDXC:Onboarding 2026-09-28 WHY:
@@ -21,7 +22,6 @@ use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ObjectFit,
     ParentElement as _, SharedString, Styled as _, StyledImage as _, canvas, div, img,
 };
-use serde_json::Value;
 use std::time::{Duration, Instant};
 
 pub(crate) struct MobileState {
@@ -47,28 +47,10 @@ const LOOP: u64 = 12400;
 
 impl GpuiOnboardingWindow {
     /// CDXC:Onboarding 2026-09-15 DECISION:
-    /// User: "in the take ghostex with you section, we need to not download the app. We should just have a toggle saying 'Configure my phone with ghostex after this flow' and all that does is it opens the sidebar menu -> remote screen for the user after the flow". There are no install or pair steps and no APK link; the toggle sets `phone_queued`, which opens Settings -> Remote (Easy Connect) once the flow closes.
+    /// User: "in the take ghostex with you section, we need to not download the app. We should just have a toggle saying 'Configure my phone with ghostex after this flow' and all that does is it opens the sidebar menu -> remote screen for the user after the flow". There are no install or pair steps and no APK link; the toggle sets `phone_queued`, which opens the Connect a Device window once the flow closes.
     fn toggle_phone(&mut self, cx: &mut Context<Self>) {
         self.flow.phone_queued = !self.flow.phone_queued;
         cx.notify();
-    }
-
-    fn toggle_notify(&mut self, cx: &mut Context<Self>) {
-        let mut patch = serde_json::Map::new();
-        patch.insert(
-            "showMacOSAttentionNotifications".into(),
-            Value::Bool(!self.settings.notify),
-        );
-        self.update_settings(patch, cx);
-    }
-
-    fn toggle_floating_capture(&mut self, cx: &mut Context<Self>) {
-        let mut patch = serde_json::Map::new();
-        patch.insert(
-            "ghostexCaptureEnabled".into(),
-            Value::Bool(!self.settings.floating_capture),
-        );
-        self.update_settings(patch, cx);
     }
 
     pub(super) fn render_mobile(
@@ -77,11 +59,12 @@ impl GpuiOnboardingWindow {
         now: Instant,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        // CDXC:Onboarding 2026-11-11 DECISION:
+        // User, on the first-run page (step 9, Mobile), picked "Only the phone question" and wrote "make this page about explaining how ghostex can connect to other devices and can be controlled by your phone by just scanning a qr". The panel explains Connect a Device (the phone app for iPhone and Android, other computers) and asks one thing, whether to open Connect a Device after setup. Agent alerts stay on by default (Settings > Notifications), and Floating Capture leaves setup for Settings, superseding CDXC:GhostexCapture 2026-09-30's "add Floating Capture to the setup toggles": its first capture is what asks for Screen Recording, so it waits until someone turns it on there.
         let notify = self.settings.notify;
-        let floating_capture = self.settings.floating_capture;
         let phone_queued = self.flow.phone_queued;
         let mut out = Vec::new();
-        out.push(eyebrow(s, 46.0, 146.0, None, "Optional · Mobile").into_any_element());
+        out.push(eyebrow(s, 46.0, 146.0, None, "Optional · Your devices").into_any_element());
         out.push(
             heading(
                 s,
@@ -89,7 +72,7 @@ impl GpuiOnboardingWindow {
                 174.0,
                 700.0,
                 52.0,
-                "Take the session with you.",
+                "Your agents, on every device.",
                 None,
                 false,
             )
@@ -97,7 +80,61 @@ impl GpuiOnboardingWindow {
         );
         out.push(
             sub(s, 46.0, 250.0, 660.0, 16.0, false)
-                .child("The agents keep running on your computer while you reply, steer and keep working from your phone.")
+                .child("Sessions keep running on this computer. Your phone and your other computers connect to it and see the same sessions.")
+                .into_any_element(),
+        );
+        // Alerts stay on without a switch here, so a computer that cannot show them says why
+        // in the line about them (Linux without notify-send, Windows with them turned off).
+        let alert_problem = self.notification_problem.clone();
+        let points: [(&str, &str, &str); 3] = [
+            (
+                "phone",
+                "Scan one code with your phone",
+                "Open Connect a Device from the Ghostex menu and scan its code in the Ghostex app for iPhone or Android.",
+            ),
+            (
+                "bell",
+                "Answer from anywhere",
+                "Reply, approve and steer from your phone; it tells you when an agent needs you.",
+            ),
+            (
+                "monitor",
+                "Your other computers too",
+                "Connect a laptop the same way and its sessions sit in the same sidebar.",
+            ),
+        ];
+        out.push(
+            abs(s, 46.0, 330.0, Some(660.0), None)
+                .flex()
+                .flex_col()
+                .gap(s.px(22.0))
+                .children(points.into_iter().map(|(icon_name, title, detail)| {
+                    let problem = alert_problem.clone().filter(|_| icon_name == "bell");
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(s.px(20.0))
+                        .child(ibox(s, 44.0, 11.0).child(icon(
+                            s,
+                            icon_name,
+                            20.0,
+                            1.6,
+                            hex(0xdfe4ee),
+                        )))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(nm(s, 17.0, 500.0).child(title))
+                                .child(match problem {
+                                    Some(problem) => ss(s, 13.0)
+                                        .mt(s.px(4.0))
+                                        .text_color(hex(0xffc46b))
+                                        .child(problem),
+                                    None => ss(s, 13.0).mt(s.px(4.0)).child(detail),
+                                }),
+                        )
+                }))
                 .into_any_element(),
         );
         let phone_thumb = self.thumb("mobile-phone", phone_queued, now);
@@ -120,19 +157,19 @@ impl GpuiOnboardingWindow {
                 this.toggle_phone(cx);
             },
         );
-        let phone_row = switch_row(s, "mobile-phone-row", 326.0, 84.0, (20.0, 30.0), 26.0, None)
+        let phone_row = switch_row(s, "mobile-phone-row", 590.0, 84.0, (20.0, 30.0), 26.0, None)
                 .left(s.px(46.0))
                 .w(s.px(660.0))
-                .child(icon(s, "phone", 22.0, 1.6, hex(0xd6dbe5)))
+                .child(icon(s, "signal", 22.0, 1.6, hex(0xd6dbe5)))
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
-                        .child(nm(s, 17.0, 500.0).child("Configure my phone with Ghostex after this flow"))
+                        .child(nm(s, 17.0, 500.0).child("Pair my phone after setup"))
                         .child(ss(s, 12.5).child(if phone_queued {
-                            "Settings → Remote opens when you finish: turn on Easy Connect and scan the code with Ghostex Mobile."
+                            "Connect a Device opens when setup ends: scan its code with the Ghostex app."
                         } else {
-                            "Pair Ghostex Mobile right after setup, so every session is on your phone too."
+                            "Opens Connect a Device when setup ends."
                         })),
                 )
                 .child(phone_toggle);
@@ -148,133 +185,13 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element(),
         );
-        let notify_thumb = self.thumb("mobile-notify", notify, now);
-        let notify_toggle = self.control(
-            s,
-            toggle(
-                s,
-                "mobile-notify-toggle",
-                notify,
-                notify_thumb,
-                ToggleSize::Lg,
-                false,
-            ),
-            "mobile-notify-toggle",
-            interact::Ring::new(17.0, 1.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| {
-                cx.stop_propagation();
-                this.toggle_notify(cx);
-            },
-        );
-        let notify_row = switch_row(
-            s,
-            "mobile-notify-row",
-            426.0,
-            84.0,
-            (20.0, 30.0),
-            26.0,
-            None,
-        )
-        .left(s.px(46.0))
-        .w(s.px(660.0))
-        .child(icon(s, "bell", 22.0, 1.6, hex(0xd6dbe5)))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(nm(s, 17.0, 500.0).child("Ping me when an agent needs me"))
-                .child(match (&self.notification_problem, notify) {
-                    (Some(problem), true) => {
-                        ss(s, 12.5).text_color(hex(0xffc46b)).child(problem.clone())
-                    }
-                    (_, true) => ss(s, 12.5).child(
-                        "This computer and your phone alert you when an agent needs an answer.",
-                    ),
-                    (_, false) => ss(s, 12.5).child(
-                        "No alerts on this computer or your phone: you find out when you look.",
-                    ),
-                }),
-        )
-        .child(notify_toggle);
         out.push(
-            self.control(
-                s,
-                notify_row,
-                "mobile-notify-row",
-                interact::Ring::new(14.0, 1.0),
-                interact::Keys::EnterSpace,
-                cx,
-                |this, _, cx| this.toggle_notify(cx),
-            )
-            .into_any_element(),
-        );
-        // CDXC:GhostexCapture 2026-09-30 DECISION:
-        // User: add Floating Capture to the setup toggles "so people know about it when they are onboarding onto the app".
-        let capture_thumb = self.thumb("mobile-capture", floating_capture, now);
-        let capture_toggle = self.control(
-            s,
-            toggle(
-                s,
-                "mobile-capture-toggle",
-                floating_capture,
-                capture_thumb,
-                ToggleSize::Lg,
-                false,
-            ),
-            "mobile-capture-toggle",
-            interact::Ring::new(17.0, 1.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| {
-                cx.stop_propagation();
-                this.toggle_floating_capture(cx);
-            },
-        );
-        let capture_row = switch_row(
-            s,
-            "mobile-capture-row",
-            526.0,
-            84.0,
-            (20.0, 30.0),
-            26.0,
-            None,
-        )
-        .left(s.px(46.0))
-        .w(s.px(660.0))
-        .child(icon(s, "capture", 22.0, 1.6, hex(0xd6dbe5)))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(nm(s, 17.0, 500.0).child("Floating Capture"))
-                .child(ss(s, 12.5).child(if floating_capture {
-                    "A small button floats over every app with your agents' counts; screenshot anything and prompt without switching to Ghostex."
-                } else {
-                    "Turn on a floating button to see your agents and send screenshots and prompts from any app."
-                })),
-        )
-        .child(capture_toggle);
-        out.push(
-            self.control(
-                s,
-                capture_row,
-                "mobile-capture-row",
-                interact::Ring::new(14.0, 1.0),
-                interact::Keys::EnterSpace,
-                cx,
-                |this, _, cx| this.toggle_floating_capture(cx),
-            )
-            .into_any_element(),
-        );
-        out.push(
-            abs(s, 46.0, 634.0, None, None)
+            abs(s, 46.0, 704.0, None, None)
                 .flex()
                 .child(
-                    sans(s, 16.0, 400.0, hex(0xaeb6c4)).child("You can set this up anytime from "),
+                    sans(s, 16.0, 400.0, hex(0xaeb6c4)).child("You can do this anytime from the "),
                 )
-                .child(sans(s, 16.0, 600.0, hex(0xeef1f7)).child("Settings → Remote"))
+                .child(sans(s, 16.0, 600.0, hex(0xeef1f7)).child("Ghostex menu → Connect a Device"))
                 .child(sans(s, 16.0, 400.0, hex(0xaeb6c4)).child("."))
                 .into_any_element(),
         );
@@ -527,8 +444,9 @@ impl GpuiOnboardingWindow {
                     .border_b_1()
                     .border_color(white(0.06))
                     .child(lights(s, true).mr(s.px(6.0)))
-                    .child(sans(s, 13.0, 400.0, hex(0x8e97a8)).child("Settings"))
-                    .child(sans(s, 13.0, 700.0, hex(0xeef1f7)).child("Remote"))
+                    // The Connect a Device window the panel points to (CDXC:RemotePairing in
+                    // window/connect_device_modal.rs), not the Settings > Remote page it replaced.
+                    .child(sans(s, 13.0, 700.0, hex(0xeef1f7)).child("Connect a device"))
                     .child(div().flex_1())
                     .when(done && !notify, |this| {
                         this.child(tracked_text(s, "NOTIFICATIONS OFF", PLEX_MONO, 500.0, 8.5, 8.5, 0.12, hex(0x6c7688)))

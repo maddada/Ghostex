@@ -155,8 +155,11 @@ pub fn save(
     version: &DraftVersion,
 ) -> Result<SessionChatDraft, DomainStateError> {
     if content.len() > crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES {
+        // The words the send itself uses (send_http.rs): since 11.4.0 they show under the
+        // message in the chat, which stays there with Retry, Edit and Remove
+        // (packages/gx-chat-core/src/composer/delivery.rs).
         return Err(DomainStateError::bad_request(
-            "Draft exceeds the message size limit.",
+            "This message is too long to send at once. Split it into smaller parts, or attach it as a file.",
         ));
     }
     let transaction =

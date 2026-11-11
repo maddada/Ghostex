@@ -151,27 +151,32 @@ impl Render for ContextEditorWindow {
                     });
                 }
             }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(px(18.0 * s))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Context details"),
-                    )
-                    .child(self.icon_button(
-                        "context-close".into(),
-                        "Close".into(),
-                        "titlebar/x.svg",
-                        json!({"type":"contextCancel"}),
-                        false,
-                        &p,
-                        cx,
-                    )),
-            )
+            .child({
+                // The title's line is as tall as the X, so the X sits as far from the popup's top
+                // as from its side, and it leads the header on macOS (CDXC:AppModal 2026-11-10 in
+                // window/round_close_button.rs; CDXC:SessionChat 2026-11-11 in
+                // window/visual_page_modal/band_geometry.rs).
+                let title = div()
+                    .text_size(px(18.0 * s))
+                    .line_height(px(24.0 * s))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child("Context details");
+                let close = self.icon_button(
+                    "context-close".into(),
+                    "Close".into(),
+                    "titlebar/x.svg",
+                    json!({"type":"contextCancel"}),
+                    false,
+                    &p,
+                    cx,
+                );
+                let head = div().flex().items_center();
+                if crate::app::window::round_close_button::close_buttons_on_left() {
+                    head.gap(px(10.0 * s)).child(close).child(title)
+                } else {
+                    head.justify_between().child(title).child(close)
+                }
+            })
             .child(
                 div()
                     .text_size(px(14.0 * s))

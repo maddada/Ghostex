@@ -10,7 +10,6 @@
 //! The user's words are on gx-chat-core's questions/resource_modal.rs. The phone shows the same in a
 //! sheet (apps/mobile/app/src/chat/native/cards/ResourceSheet.tsx).
 
-use super::side_question::side_button;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -216,24 +215,9 @@ impl NativeChatView {
         let kind = text(&modal, "kind");
         let title = text(&modal, "title");
         let missing = text(&modal, "missing");
-        let going = modal["going"] == true;
         let loading = modal["loading"] == true;
-        let chat = cx.weak_entity();
-        let go_id = id.clone();
-        let go_to_chat = side_button(
-            "chat-resource-go",
-            Some("titlebar/arrow-up.svg"),
-            if going { "Loading…" } else { "Go to chat" },
-            None,
-            going || loading,
-            Some("Scroll the chat to this"),
-            p,
-            move |_, _, app| {
-                let _ = chat.update(app, |this, cx| {
-                    this.invoke(json!({"type": "goToResource", "id": go_id}), cx)
-                });
-            },
-        );
+        // No "Go to chat": nothing the reader clicks scrolls the chat to a question any more
+        // (gx-chat-core questions/open_questions.rs `show`).
         let header = div()
             .flex_shrink_0()
             .h(px(HEADER_HEIGHT * s))
@@ -265,8 +249,7 @@ impl NativeChatView {
                     } else {
                         title
                     }),
-            )
-            .child(go_to_chat);
+            );
         let content = if loading {
             self.modal_note("Reading it from the chat…", p)
         } else if !missing.is_empty() {

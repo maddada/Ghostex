@@ -130,6 +130,24 @@ pub struct Document {
     pub composer_placeholder: String,
     /// Why sending is blocked, or `null` when it is not.
     pub send_blocked_reason: Option<String>,
+    /// Why a message sent now would wait in the chat instead of going at once (an account or mode
+    /// switch, a dialog in the agent's terminal), or `null`. A send is still taken: it shows as
+    /// waiting with these words and goes once the wait clears (composer/policy.rs `hold_words`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_hold_reason: Option<String>,
+    /// The words the message that has not gone yet shows under its bubble, or `null` when none
+    /// waits: the send gate's (`composer::send::held_echo`), or a send waiting to go again after
+    /// a failure time can fix (`composer/delivery.rs`). The host logs when it starts and ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_held: Option<String>,
+    /// How many submissions from the chat box the core has taken in (`ComposerState`).
+    #[serde(default)]
+    pub submissions_received: u64,
+    /// The `sendRequestId`s of the chat box's sends this core has taken in, newest last
+    /// (`composer/delivery.rs` `take`): the host stops sending an action again once its id is
+    /// here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sends_taken: Vec<String>,
     pub composer_collapse_eligible: bool,
     pub composer_collapsed: bool,
     pub composer_overflow: ComposerOverflow,
@@ -291,6 +309,9 @@ pub struct Document {
     /// The question tags work items ask (`extras::work_cards::card_tags`): a one-click question or
     /// form asking only these is drawn once, as the ask card. Family f.
     pub work_ask_tags: Tri<SharedValue>,
+    /// The dock above a coordinator's chat box (`extras::work_cards::dock`): `{cards, line}`, or
+    /// `null` for a chat with no work. Family f.
+    pub work_dock: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,
@@ -336,6 +357,10 @@ pub struct Document {
     /// `messageLayout` is the effective layout and `spacing` shows only at Compact. Family b.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_look: Option<crate::transcript::chat_look::ChatLook>,
+    /// Quiet View (`transcript/quiet_view.rs`): the chat's choice, its default and the quiet
+    /// lines; absent where the host sends no Quiet View settings (the phone). Family b.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet_view: Option<crate::transcript::quiet_view::QuietViewDocument>,
 
     // ---- modes and loading -----------------------------------------------
     pub summary_mode: bool,

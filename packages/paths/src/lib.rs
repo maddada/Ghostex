@@ -15,6 +15,7 @@ pub mod powershell;
 pub mod same_folder;
 pub mod settings_file;
 pub mod tailcat;
+pub mod tailcat_forward;
 pub mod tool_path;
 
 #[cfg(not(target_os = "windows"))]
@@ -95,6 +96,12 @@ impl GhostexPaths {
         let paths = Self::resolve();
         paths.migrate_legacy_layout();
         paths
+    }
+
+    /// The default profile's directories, as `resolve` gives them without `GHOSTEX_HOME` or a
+    /// portable copy, so a separate profile can see what the default one already owns.
+    pub fn default_profile() -> Self {
+        Self::platform_defaults(user_home_dir())
     }
 
     /// Preserve the historical explicit-home behavior used by isolated daemon

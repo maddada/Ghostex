@@ -457,6 +457,29 @@ pub fn refuse_agent_answer(
     ))
 }
 
+/// Whether `kind` is an answer a relayed card sends (an approval's pick, not a plain message).
+pub fn is_relayed_answer_kind(kind: &str) -> bool {
+    RELAYED_KINDS.contains(&kind)
+}
+
+/// Whether the thread has an approval card waiting on the user in its coordinator's chat. An
+/// empty `project_id` matches the session in any project (terminal input routes may name only
+/// the session).
+pub fn thread_card_waits_on_user(project_id: &str, session_id: &str) -> bool {
+    if session_id.is_empty() {
+        return false;
+    }
+    relays()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .any(|((project, session), relay)| {
+            session == session_id
+                && (project_id.is_empty() || project == project_id)
+                && relay.live.is_some()
+        })
+}
+
 /// What the card asked, in a line, for the thread's audit line.
 fn card_question(card: &Value) -> String {
     let notice = &card["notice"];

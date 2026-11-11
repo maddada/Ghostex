@@ -51,12 +51,18 @@ pub(crate) fn gpui_remote_gxserver_presentation_stream_loop(
     client_id: String,
     last_revision: Option<u64>,
 ) {
+    /*
+    CDXC:RemoteMachines 2026-11-10 WHY:
+    A user reported "a lot of reconnects" between app and remote. This stream is only a sign of life (its frames are dropped; the store's own client reads the machine's rows), yet a connection was allowed four stream ends for its whole life: the fourth ordinary end, hours apart (the far gxserver restarting for an update, a closed socket), reported the tunnel failed and tore down a link that worked. Now only ends in a row count, a stream that ran for a while starts the count over, and when the count is reached the tunnel is asked directly: one that answers a health check is kept and the stream simply tries again later.
+    */
     let mut last_revision = last_revision;
-    for attempt in 0..GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_ATTEMPTS {
+    let mut ends_in_a_row = 0;
+    loop {
         if cancel.load(Ordering::SeqCst) {
             return;
         }
-        let _ = gpui_remote_gxserver_presentation_stream_once(
+        let started = Instant::now();
+        let ended = gpui_remote_gxserver_presentation_stream_once(
             &target,
             cancel.as_ref(),
             client_id.as_str(),
@@ -65,8 +71,37 @@ pub(crate) fn gpui_remote_gxserver_presentation_stream_loop(
         if cancel.load(Ordering::SeqCst) {
             return;
         }
-        if attempt + 1 < GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_ATTEMPTS {
-            thread::sleep(GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_RECONNECT_DELAY);
+        if started.elapsed() >= GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_HEALTHY_AFTER {
+            ends_in_a_row = 0;
+        }
+        ends_in_a_row += 1;
+        let mut delay = GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_RECONNECT_DELAY;
+        if ends_in_a_row >= GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_ATTEMPTS {
+            let probe = gpui_remote_health_probe(
+                target.local_port,
+                target.token.as_str(),
+                GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT,
+            );
+            if !matches!(probe, GpuiRemoteHealthProbe::Healthy(_)) {
+                break;
+            }
+            gpui_log_remote_link_event(
+                "liveStreamKeepsEnding",
+                serde_json::json!({
+                    "level": "warning",
+                    "reason": ended.err().unwrap_or_default(),
+                    "tunnel": "answers",
+                }),
+            );
+            ends_in_a_row = 0;
+            delay = GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_RETRY_WHEN_HEALTHY;
+        }
+        let deadline = Instant::now() + delay;
+        while Instant::now() < deadline {
+            if cancel.load(Ordering::SeqCst) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
         }
     }
     if !cancel.load(Ordering::SeqCst) {

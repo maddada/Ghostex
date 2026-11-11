@@ -74,15 +74,29 @@ pub(crate) fn run_agent_metadata_title_sync_once(
         if already_checked {
             continue;
         }
-        let changed = reconcile_agent_metadata_title_for_session(
+        // CDXC:SessionTitles 2026-11-11 WHY: one session's failure is logged and its revision left unrecorded so it retries next pass; returning would hold every later session until then.
+        let synced = reconcile_agent_metadata_title_for_session(
             &repository,
             &project_id,
             &session_id,
             &state.paths.home_dir,
             "metadata-mismatch",
-        )?;
-        if changed {
-            schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id)?;
+        )
+        .and_then(|changed| {
+            if changed {
+                schedule_presentation_session_delta(
+                    state,
+                    &db,
+                    &repository,
+                    &project_id,
+                    &session_id,
+                )?;
+            }
+            Ok(())
+        });
+        if let Err(error) = synced {
+            log_agent_metadata_title_sync_failure(state, &project_id, &session_id, &error.message);
+            continue;
         }
         if let Ok(mut checked) = revisions.lock() {
             checked.insert(key, revision);
@@ -709,6 +723,24 @@ pub(crate) fn log_draft_recovery_prune_failure(state: &Arc<AppState>, message: &
         duration_ms: None,
         error: Some(message.to_string()),
         details: None,
+    });
+}
+
+fn log_agent_metadata_title_sync_failure(
+    state: &Arc<AppState>,
+    project_id: &str,
+    session_id: &str,
+    message: &str,
+) {
+    let _ = state.logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: "agentMetadataTitleSyncFailed".to_string(),
+        server_id: Some(state.metadata.server_id.clone()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(message.to_string()),
+        details: Some(serde_json::json!({ "projectId": project_id, "sessionId": session_id })),
     });
 }
 

@@ -47,6 +47,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleSummary
         | ActionKind::SetVerbose
         | ActionKind::SetDetailLevel
+        | ActionKind::SetQuietView
         | ActionKind::LoadWork
         | ActionKind::RewindOpen
         | ActionKind::RewindCancel
@@ -73,6 +74,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FormSend
         | ActionKind::FormSkipAll
         | ActionKind::FormToggle
+        | ActionKind::InsertDictation
         | ActionKind::InlineAnswer
         | ActionKind::InlineAnswerChange
         | ActionKind::InlineAnswerText
@@ -80,6 +82,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::JumpToQuestion
         | ActionKind::QuestionForLater
         | ActionKind::QuestionRemove
+        | ActionKind::SnoozeQuestion
+        | ActionKind::CancelQuestion
         | ActionKind::QuestionListFilter
         | ActionKind::OpenResource
         | ActionKind::CloseResource
@@ -117,6 +121,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::RestoreReturned
         | ActionKind::ApplyReturned
         | ActionKind::RestoreSubmission
+        | ActionKind::EditUnsent
         | ActionKind::AttachmentsStarted
         | ActionKind::AttachmentsFinished
         | ActionKind::AttachPaths
@@ -186,6 +191,12 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::CoordinatorBoardChange
         | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
+        | ActionKind::LoadPageQuestionCounts
+        | ActionKind::DismissWorkDockCard
+        | ActionKind::SnoozeWorkAsk
+        | ActionKind::ShowInChat
+        | ActionKind::HideWorkDock
+        | ActionKind::ShowWorkDock
         | ActionKind::InsertBoardReference
         | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -365,6 +376,12 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
+        | ActionKind::LoadPageQuestionCounts
+        | ActionKind::DismissWorkDockCard
+        | ActionKind::SnoozeWorkAsk
+        | ActionKind::ShowInChat
+        | ActionKind::HideWorkDock
+        | ActionKind::ShowWorkDock
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -435,6 +452,11 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
             | ActionKind::JumpToWorkCard
+            | ActionKind::DismissWorkDockCard
+            | ActionKind::SnoozeWorkAsk
+            | ActionKind::ShowInChat
+            | ActionKind::HideWorkDock
+            | ActionKind::ShowWorkDock
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
             | ActionKind::ToggleAutopilot

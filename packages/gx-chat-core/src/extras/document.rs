@@ -77,6 +77,14 @@ pub fn document_with_board(
     // User, of the strip reading "Resources 605 · Board · Workers · Stashed": "i asked u to swap the
     // placement of board and resources pills here, pls do it". Order: ?, Board, Resources, Workers.
     // This is the one place the order is set, so the desktop, the web build and the phone follow.
+    // CDXC:Coordinators 2026-11-10 DECISION:
+    // User, of a coordinator chat showing the same state six times (a card and an In progress row
+    // under the reply, a status line above the box, the Work pill and the panel): "This is a mess
+    // man. we need something more cohesive. wtf is this?", then "Maybe we don't actually need the
+    // In progress card inside the chat transcript since we have it in the work sidebar. let's have
+    // it as a pill instead." The Work pill is the one place for the counts, in words while the row
+    // has room ("Work · 4 need you · 7 in progress", `pill`); above the box only the cards he must
+    // act on (`work_cards::dock`); under a reply one quiet line.
     if let Some(pill) = crate::extras::coordinator_board::pill(&board) {
         into.chat_pills.insert(0, pill);
         // Blocked, before the Board pill (just after the renderers' ? pill), while anything is
@@ -112,6 +120,8 @@ pub fn document_with_board(
     into.view_chips = chat_pills::view_chips(crate::transcript::view_level::view_level(
         &state.transcript_view,
     ));
+    into.view_chips
+        .extend(crate::transcript::quiet_view::view_chip(state));
     into.working_card = working_card::working_card(state, &into.working_strip, &into.chat_pills);
     into.agent_fleet_strip = Tri::Value(fleet_strip);
     into.agent_tasks_panel = Tri::Value(tasks_panel);

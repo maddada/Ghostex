@@ -1,5 +1,5 @@
 //! The Unified sidebar's shared fixture: cases in the phone's terms, with what this builder makes
-//! of them, kept in the phone app so its port of the builder is tested against the same answers.
+//! of them, kept in the phone app beside its port of the builder.
 //!
 //! CDXC:Sidebar 2026-10-30 WHY:
 //! The phone draws the Unified list from its own per-machine summaries in TypeScript
@@ -7,8 +7,8 @@
 //! chat core can run this builder in front of its session list. So that the two cannot drift,
 //! this test runs every case of `unifiedFixture.json` through `build_unified_sidebar` and fails
 //! when the file's expected answers differ; `UPDATE_UNIFIED_FIXTURE=1 cargo test -p
-//! ghostex-gx-core unified_fixture` rewrites them. The phone's `unifiedFixture.test.ts` runs the
-//! same cases through its port. A checkout without the phone app skips the comparison.
+//! ghostex-gx-core unified_fixture` rewrites them. The phone no longer runs these cases through its
+//! port: its tests were removed on 2026-11-11 (issue #557). A checkout without the phone app skips the comparison.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;

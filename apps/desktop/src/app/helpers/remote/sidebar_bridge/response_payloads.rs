@@ -62,9 +62,10 @@ pub(crate) fn gpui_remote_sidebar_response_payload(
         | "/api/closeProjectToRecent"
         | "/api/restoreRecentProject"
         | "/api/removeRecentProject"
-        | "/api/removeProject"
-        | "/api/createProjectWorktree"
-        | "/api/openProjectWorktree" => gpui_remote_sidebar_project_response_payload(result),
+        | "/api/removeProject" => gpui_remote_sidebar_project_response_payload(result),
+        "/api/createProjectWorktree" | "/api/openProjectWorktree" => {
+            gpui_remote_sidebar_worktree_project_response_payload(result)
+        }
         "/api/listProjectWorktrees" => {
             gpui_remote_sidebar_project_worktrees_response_payload(result)
         }
@@ -329,6 +330,61 @@ pub(crate) fn gpui_remote_sidebar_project_response_payload(
         response.insert("recentProjects".to_string(), recent_projects);
     }
     serde_json::Value::Object(response)
+}
+
+/// A created or opened worktree's project, plus the warnings that came with it (`{ kind, message }`,
+/// gxserver's Beads hooks repair), so a remote machine's warning reaches its user too. Only string
+/// kinds and messages of a bounded size pass.
+pub(crate) fn gpui_remote_sidebar_worktree_project_response_payload(
+    result: serde_json::Value,
+) -> serde_json::Value {
+    let warnings = result
+        .get("warnings")
+        .and_then(serde_json::Value::as_array)
+        .map(|warnings| {
+            warnings
+                .iter()
+                .filter_map(|warning| {
+                    let kind = warning
+                        .get("kind")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|kind| {
+                            !kind.is_empty()
+                                && kind.len() <= 64
+                                && kind.chars().all(|ch| ch.is_ascii_alphanumeric())
+                        })?;
+                    let message = warning
+                        .get("message")
+                        .and_then(serde_json::Value::as_str)
+                        .map(gpui_remote_sidebar_bounded_warning_message)
+                        .unwrap_or_default();
+                    Some(serde_json::json!({ "kind": kind, "message": message }))
+                })
+                .take(8)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut response = gpui_remote_sidebar_project_response_payload(result);
+    if !warnings.is_empty()
+        && let Some(object) = response.as_object_mut()
+    {
+        object.insert("warnings".to_string(), serde_json::Value::Array(warnings));
+    }
+    response
+}
+
+/// A warning message cut to 4 KiB on a character boundary, with a visible marker when it was cut.
+fn gpui_remote_sidebar_bounded_warning_message(message: &str) -> String {
+    const LIMIT: usize = 4096;
+    const MARKER: &str = " … (cut)";
+    if message.len() <= LIMIT {
+        return message.to_string();
+    }
+    let mut end = LIMIT - MARKER.len();
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{MARKER}", &message[..end])
 }
 
 pub(crate) fn gpui_remote_sidebar_recent_projects_response_payload(

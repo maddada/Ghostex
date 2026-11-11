@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-11-09T19:32:00Z",
+  "updatedAt": "2026-11-10T19:15:48Z",
   "effortLabels": {
     "none": "None",
     "off": "Off",
@@ -28,13 +28,13 @@
         "scope": "model",
         "notes": "Opus 5.5 only; needs usage credits (research preview)."
       },
-      "models": [
+      "groups": [
         {
-          "value": "fable",
-          "label": "Fable 5.1",
-          "description": "Most capable for your hardest and longest-running tasks",
-          "fastMode": false
-        },
+          "id": "legacy",
+          "label": "Legacy models"
+        }
+      ],
+      "models": [
         {
           "value": "opus[1m]",
           "label": "Opus 5.5",
@@ -64,9 +64,17 @@
           "defaultEffort": "medium",
           "fastMode": false,
           "notes": "The `haiku` alias runs claude-haiku-5-5. Its effort rail stops at Max (no Ultracode) and defaults to Medium; Haiku 4.5 had no effort tiers."
+        },
+        {
+          "value": "fable",
+          "label": "Fable 5.1",
+          "description": "Most capable for your hardest and longest-running tasks",
+          "fastMode": false,
+          "group": "legacy",
+          "notes": "Under Legacy models since 2026-11-10 at the user's request, now that Fable 5.2 is offered. The value stays `fable`, so a session already on Fable 5.1 keeps its pill."
         }
       ],
-      "notes": "Re-read from the 2.1.319 /model picker on 2026-11-09: Default (recommended) Fable 5.1, Opus 5.5, Fable 5.2 (new, claude-fable-5-2, \"For your toughest challenges\", Low to Max, default Medium, no fast mode), Sonnet 5.5, Haiku 5.5, then More models: Fable 5.1 (now \"Most capable for your hardest and longest-running tasks\"), Haiku 4.5, Sonnet 5, Opus 5 and older. The `fable` alias still runs claude-fable-5-1, so Fable 5.2 is its own row with its full id as the value; Opus, Sonnet and Haiku rows are unchanged. Re-read from the 2.1.311 /model picker on 2026-10-28: unchanged (Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5, then Haiku 4.5, Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, 4.6 and Sonnet 4.6, none of them listed here). Re-read from the 2.1.293 /model picker on 2026-10-07: Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5 (the `haiku` alias now runs claude-haiku-5-5, with a Low to Max effort rail, default Medium, which replaces Haiku 4.5 at the user's request), then older models (Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, ...). The `sonnet` alias runs claude-sonnet-5-5, so Sonnet 5.5 replaces Sonnet 5, and Opus 5 is not listed: the user asked that Sonnet 5.5 and Opus 5.5 fully replace Sonnet 5 and Opus 5 wherever both are offered. Opus 5.5 is one `opus[1m]` row: the picker has no 200K Opus and `claude -p --model opus` reports a 1,000,000-token window, so the 200K `opus` twin was removed at the user's request and the model menu shows no Context Window choice for it. The older models are not listed, and neither are sonnet[1m] and fable[1m], which `claude --model` accepts but the picker never offers."
+      "notes": "On 2026-11-10 the user moved Fable 5.1 under Legacy models now that Fable 5.2 is offered (\"let's please remove fable 5.1 from the picker for claude code and move it to a 'legacy models' dropdown\"); the same was done for Cursor. Re-read from the 2.1.319 /model picker on 2026-11-09: Default (recommended) Fable 5.1, Opus 5.5, Fable 5.2 (new, claude-fable-5-2, \"For your toughest challenges\", Low to Max, default Medium, no fast mode), Sonnet 5.5, Haiku 5.5, then More models: Fable 5.1 (now \"Most capable for your hardest and longest-running tasks\"), Haiku 4.5, Sonnet 5, Opus 5 and older. The `fable` alias still runs claude-fable-5-1, so Fable 5.2 is its own row with its full id as the value; Opus, Sonnet and Haiku rows are unchanged. Re-read from the 2.1.311 /model picker on 2026-10-28: unchanged (Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5, then Haiku 4.5, Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, 4.6 and Sonnet 4.6, none of them listed here). Re-read from the 2.1.293 /model picker on 2026-10-07: Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5 (the `haiku` alias now runs claude-haiku-5-5, with a Low to Max effort rail, default Medium, which replaces Haiku 4.5 at the user's request), then older models (Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, ...). The `sonnet` alias runs claude-sonnet-5-5, so Sonnet 5.5 replaces Sonnet 5, and Opus 5 is not listed: the user asked that Sonnet 5.5 and Opus 5.5 fully replace Sonnet 5 and Opus 5 wherever both are offered. Opus 5.5 is one `opus[1m]` row: the picker has no 200K Opus and `claude -p --model opus` reports a 1,000,000-token window, so the 200K `opus` twin was removed at the user's request and the model menu shows no Context Window choice for it. The older models are not listed, and neither are sonnet[1m] and fable[1m], which `claude --model` accepts but the picker never offers."
     },
     "codex": {
       "name": "Codex CLI",
@@ -205,13 +213,12 @@
           "fastMode": true
         },
         {
-          "value": "claude-fable-5-1",
-          "label": "Fable 5.1",
-          "pickerLabel": "Claude Fable 5.1",
-          "contextWindows": ["300K", "1M"],
+          "value": "claude-fable-5-2",
+          "label": "Fable 5.2",
+          "pickerLabel": "Claude Fable 5.2",
+          "contextWindows": ["1M"],
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "defaultEffort": "high",
-          "thinking": true,
           "fastMode": false
         },
         {
@@ -241,6 +248,14 @@
           "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
           "defaultEffort": "medium",
           "fastMode": true
+        },
+        {
+          "value": "gemini-4-carbon",
+          "label": "Gemini 4 Carbon",
+          "pickerLabel": "Gemini 4 Carbon",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "medium",
+          "fastMode": false
         },
         {
           "value": "gemini-4-argon",
@@ -317,6 +332,17 @@
           "pickerLabel": "Composer 2.5",
           "efforts": [],
           "fastMode": true,
+          "group": "legacy"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "label": "Fable 5.1",
+          "pickerLabel": "Claude Fable 5.1",
+          "contextWindows": ["300K", "1M"],
+          "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
+          "thinking": true,
+          "fastMode": false,
           "group": "legacy"
         },
         {
@@ -543,7 +569,7 @@
           "group": "legacy"
         }
       ],
-      "notes": "Re-read on 2026.10.22-27dcf5f (2026-10-28) from `cursor-agent --list-models` and the /model picker's Tab panels: DeepSeek V4.1 Flash 1017 (`deepseek-v41-flash-1017`, None to Max without Extra High, default High) is new; Grok 4.7's 500K is a Context choice inside Grok 4.7 (256K or 500K), not a model. The picker also offers GLM 5.3 and GLM 5.3 Flash (Low, High, Max; default High), but `--list-models` omits them and the headless CLI rejects every id tried for them, so they are not listed. The older Claude rows now carry Cursor's current ids (`claude-4.6-sonnet`, `claude-4.6-opus`, `claude-4.5-opus`, `claude-4.5-sonnet`, `claude-4-sonnet`), and every default effort follows the picker. gxserver reads this lineup from `cursor-agent --list-models` since 2026-10-17; these rows serve released apps and a computer whose Cursor never answered. Labels drop the 'Claude' word the TUI shows (Cursor dropped its own 'Cursor Grok' prefix in 2026.09.18); pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash). Re-read on 2026.09.26-dd393fe (2026-09-29): Claude Opus 5.5 (300K/1M, Low to Max, default Medium, Fast) and Claude Sonnet 5.5 (300K/1M, Low to Max, default High, no Fast) replace Opus 5 and Sonnet 5 at the user's request, and no longer share a /model filter with them. Re-read on 2026.10.01-e373342 (2026-10-07): Claude Haiku 5.5 (300K/1M, Low to Max, default High, Thinking toggle) replaces Haiku 4.5 at the user's request and sits at the top level beside Sonnet 5.5; Haiku 4.5 is dropped from the catalog even though the picker still lists it. Checked against `cursor-agent --list-models` on 2026.10.16-e3cb207 (2026-10-17, on the Windows test machine, the only logged-in Cursor): Gemini 4 Argon (Low to High) and Muse Wonder (Minimal to Max, no Fast) added; their picker rows and default efforts were not read from the TUI. Opus 5 and Sonnet 5 stay out at the user's earlier request."
+      "notes": "Re-read on 2026.10.22-27dcf5f (2026-10-28) from `cursor-agent --list-models` and the /model picker's Tab panels: DeepSeek V4.1 Flash 1017 (`deepseek-v41-flash-1017`, None to Max without Extra High, default High) is new; Grok 4.7's 500K is a Context choice inside Grok 4.7 (256K or 500K), not a model. The picker also offers GLM 5.3 and GLM 5.3 Flash (Low, High, Max; default High), but `--list-models` omits them and the headless CLI rejects every id tried for them, so they are not listed. The older Claude rows now carry Cursor's current ids (`claude-4.6-sonnet`, `claude-4.6-opus`, `claude-4.5-opus`, `claude-4.5-sonnet`, `claude-4-sonnet`), and every default effort follows the picker. gxserver reads this lineup from `cursor-agent --list-models` since 2026-10-17; these rows serve released apps and a computer whose Cursor never answered. Labels drop the 'Claude' word the TUI shows (Cursor dropped its own 'Cursor Grok' prefix in 2026.09.18); pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash). Re-read on 2026.09.26-dd393fe (2026-09-29): Claude Opus 5.5 (300K/1M, Low to Max, default Medium, Fast) and Claude Sonnet 5.5 (300K/1M, Low to Max, default High, no Fast) replace Opus 5 and Sonnet 5 at the user's request, and no longer share a /model filter with them. Re-read on 2026.10.01-e373342 (2026-10-07): Claude Haiku 5.5 (300K/1M, Low to Max, default High, Thinking toggle) replaces Haiku 4.5 at the user's request and sits at the top level beside Sonnet 5.5; Haiku 4.5 is dropped from the catalog even though the picker still lists it. Checked against `cursor-agent --list-models` on 2026.10.16-e3cb207 (2026-10-17, on the Windows test machine, the only logged-in Cursor): Gemini 4 Argon (Low to High) and Muse Wonder (Minimal to Max, no Fast) added; their picker rows and default efforts were not read from the TUI. Opus 5 and Sonnet 5 stay out at the user's earlier request. Checked against `cursor-agent --list-models` on 2026.11.05-86047df (2026-11-10, this Mac): Gemini 4 Carbon (`gemini-4-carbon-low`, `-medium`, `-high`) added directly above Gemini 4 Argon at the user's request; its picker row and default effort were not read from the TUI, so it mirrors Argon (default Medium)."
     },
     "grok": {
       "name": "Grok Build",

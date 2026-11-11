@@ -22,6 +22,23 @@ use super::item::MenuItem;
 /// The Unified sidebar's Collapse All row, which folds its project groups.
 pub const UNIFIED_TOGGLE_GROUPS_ACTION: &str = "toggleUnifiedGroups";
 
+/// The menu's Commands row, which opens Quick Access on its Commands tab; the host adds the
+/// hotkey's current binding as the row's hint.
+pub const COMMANDS_ACTION: &str = "commands";
+
+/// The menu's Add Project row, which the host leaves out while the top row shows its Add project
+/// button.
+pub const ADD_PROJECT_ACTION: &str = "addProject";
+
+/// The message a row for one of the app's panels posts: `{ type, panel }`, `panel` being one of
+/// the `MENU_PANEL_*` ids. Only a host that says it has those panels gets the rows
+/// (`MenuHost::menu_panels`).
+pub const MENU_PANEL_MESSAGE_TYPE: &str = "openSidebarMenuPanel";
+pub const MENU_PANEL_HELP: &str = "help";
+pub const MENU_PANEL_RESOURCES: &str = "resources";
+pub const MENU_PANEL_DEV_SERVERS: &str = "devServers";
+pub const MENU_PANEL_EXTENSIONS: &str = "extensions";
+
 const DISCORD_URL: &str = "https://discord.gg/df7b3G92CS";
 
 /// `KEEP_AWAKE_DURATION_OPTIONS`.
@@ -198,9 +215,17 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     while sort.last().is_some_and(|item| item.separator) {
         sort.pop();
     }
+    /*
+    CDXC:Sidebar 2026-11-11 DECISION:
+    User (main menu page, Q2500 B, Q2501 C, Q2502 and its notes): the sidebar's menu and the three dots above the chat are one menu, "the shortest: three doors at the end". Sort & Filter and Collapse All come first; then Agents Hub, All Automations, Connect a Device and Keep Awake; then three submenus: Tools (Search by Prompt, Import Sessions, and the Extensions, Dev servers and Resources panels the three dots held), Help (Ask Ghostex, Join Discord, Send Bug / Feedback; Tips & Tricks left it on 2026-11-11, see below) and Ghostex (New Window, Check for Updates, Restart and the two Quits, where the host is the desktop app); and last, alone in its own group, Settings ("also let's move settings to a new item by itself bottom of menu"). Sessions leaves (the Search button beside the menu opens the same window), Import Sessions stays, and Add Project is the first row only while the top row is too narrow for its button, which the host decides when the menu opens. Customize has no row: Settings and the Extensions panel's "Browse extensions…" open the same page. The Ghostex row wears the app's mark in one colour ("the ghostex icon but as svg", the phone's status bar shape).
+    This supersedes the 2026-09-21 rule that the menu has no Settings entry (the gear left the sidebar's bottom the same day: CDXC:Sidebar 2026-11-11 DECISION in apps/desktop/src/app/native_sidebar/usage.rs), the 2026-09-30 rule that the app rows end the menu flat below Join Discord (they are the Ghostex submenu; Windows and Linux, which have no menu bar, find them there), and the 2026-10-16 rule that Send Bug / Feedback is the top-level row under Join Discord (both are in Help, in that order). About and the Hide rows stay in the macOS menu bar only.
+    CDXC:Onboarding 2026-11-11 DECISION: User (first-run page, step 19): "let's remove tips and tricks modal from the whole app, we should the help on new chats instead". Help keeps Ask Ghostex, Join Discord and Send Bug / Feedback; the tips are a card on new chats (packages/gx-chat-core/src/extras/new_chat_tips.rs).
+    Tools, Help and Ghostex open beside the menu, to its right, as the page drew them (confirmed for Q2503), so an open submenu covers nothing; Keep Awake opens the same way, so every submenu of this menu behaves alike, and Sort & Filter stays a page inside the menu. Where the host has no room beside the menu on either side, the submenu opens under its row as the sidebar's other submenus do (apps/desktop/src/app/native_sidebar/menu_state.rs `SidebarMenuPlacement::Beside`).
+    SEE-ALSO: packages/gx-core/src/app_lifecycle.rs (the app rows, shared with Quick Access's Commands tab), apps/desktop/src/app/titlebar/menu_panels.rs (the panels, and which of them a project is offered), apps/desktop/src/app/native_sidebar/menus.rs `native_sidebar_more_menu_now` (what the host takes out when the menu opens).
+    */
     let mut more: Vec<MenuItem> = Vec::new();
     if is_local || input.host.machine_connected {
-        more.push(intent("Add Project", "plus", "addProject"));
+        more.push(intent("Add Project", "plus", ADD_PROJECT_ACTION));
     }
     if !sort.is_empty() {
         more.push(
@@ -249,23 +274,20 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     if !is_local {
         more.push(intent("Edit Machine", "pencil", "editMachine"));
     }
-    more.push(MenuItem::separator());
-    more.push(intent("Sessions", "history", "sessions"));
-    more.push(intent("Import Sessions", "download", "importSessions"));
-    more.push(MenuItem::row(
-        "Search by Prompt",
-        "file-search",
-        MenuCommand::command(message::search_previous_sessions_by_text()),
-    ));
-    more.push(MenuItem::separator());
+    if !more.is_empty() {
+        more.push(MenuItem::separator());
+    }
+    // CDXC:Sidebar 2026-11-11 DECISION: User (sidebar bottom page, Q2530 A and Q2531): the row of buttons under the usage meters goes away, and Commands, its lightning button, becomes a row of this menu, above Agents Hub, with its hotkey as the hint. Settings, the gear of that row, is already this menu's last row.
+    more.push(intent("Commands", "bolt", COMMANDS_ACTION));
     more.push(intent("Agents Hub", "users-group", "agentsHub"));
     more.push(MenuItem::row(
         "All Automations",
         "clock",
         MenuCommand::command(message::open_automations_page()),
     ));
-    more.push(MenuItem::separator());
-    more.push(intent("Connect a phone", "devices", "remoteSetup"));
+    // CDXC:RemotePairing 2026-11-11 DECISION: User: "rename it in the menu to Connect a Device". The
+    // window it opens keeps its own title until the window's mockup decides it.
+    more.push(intent("Connect a Device", "devices", "remoteSetup"));
     if input.settings.keep_awake_enabled && !input.settings.hide_keep_awake_titlebar_control {
         let active = input.host.keep_awake_minutes;
         let mut children: Vec<MenuItem> = KEEP_AWAKE_OPTIONS
@@ -288,38 +310,70 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         }
         children.push(MenuItem::separator());
         children.push(intent("Power Settings", "settings", "powerSettings"));
-        more.push(MenuItem::submenu(
-            "Keep Awake",
-            if active.is_some() { "coffee" } else { "moon" },
-            children,
-        ));
+        more.push(
+            MenuItem::submenu(
+                "Keep Awake",
+                if active.is_some() { "coffee" } else { "moon" },
+                children,
+            )
+            .with_beside(),
+        );
     }
-    /*
-    CDXC:Sidebar 2026-09-30 DECISION:
-    User: "add the buttons that we have only in mac os menu bar under Ghostex to the dropdown in the sidebar (for example check for updates, quit ghostex, quit bg services, restart". The menu ends with those app rows, below Join Discord, wherever the host is the desktop app; Windows and Linux have no menu bar to find them in. This supersedes the 2026-09-21 rule that the menu ends at Join Discord. The rest of that rule stands: the menu has no Settings or Hotkeys entries, because Settings is the gear beside the Commands row and Hotkeys is a page inside Settings. About and the Hide rows stay in the macOS menu bar only.
-    The frozen TypeScript twin of this menu (`tooling/gx-core/sidebar-page-frozen/navigation.ts`) is deleted; this is the only builder.
-    SEE-ALSO: packages/gx-core/src/app_lifecycle.rs (the rows, shared with Quick Access's Commands tab).
-    */
-    more.push(MenuItem::row(
+    more.push(MenuItem::separator());
+
+    let panel = |label: &str, icon: &str, panel: &str| {
+        MenuItem::row(
+            label,
+            icon,
+            MenuCommand::command(message::open_menu_panel(panel)),
+        )
+    };
+    let mut tools = vec![
+        MenuItem::row(
+            "Search by Prompt",
+            "file-search",
+            MenuCommand::command(message::search_previous_sessions_by_text()),
+        ),
+        intent("Import Sessions", "download", "importSessions"),
+    ];
+    if input.host.menu_panels {
+        tools.push(MenuItem::separator());
+        tools.push(panel("Extensions", "puzzle", MENU_PANEL_EXTENSIONS));
+        tools.push(panel("Dev servers", "world", MENU_PANEL_DEV_SERVERS));
+        tools.push(panel("Resources", "device-desktop", MENU_PANEL_RESOURCES));
+    }
+    more.push(MenuItem::submenu("Tools", "tools", tools).with_beside());
+
+    let mut help = Vec::new();
+    if input.host.menu_panels {
+        help.push(panel("Ask Ghostex", "help-circle", MENU_PANEL_HELP));
+    }
+    help.push(MenuItem::row(
         "Join Discord",
         "users-group",
         MenuCommand::command(message::open_external_url(DISCORD_URL)),
     ));
-    /*
-    CDXC:Feedback 2026-10-16 DECISION:
-    User: "please move the feedback button to be inside the more options dropdown in the sidebar under join discord" (2026-10-14) and "please also rename the option to Send Bug / Feedback" (2026-10-16). Send Bug / Feedback is the row directly under Join Discord, with the chat-bubble icon, and opens the Send Bug / Feedback pop-up (apps/desktop/src/app/window/feedback_modal/). This supersedes the 2026-10-11 rule that put a chat-bubble button in the sidebar's bottom bar right of the workspace switcher.
-    */
-    more.push(intent("Send Bug / Feedback", "message-circle", "feedback"));
+    // Opens the Send Bug / Feedback pop-up (apps/desktop/src/app/window/feedback_modal/).
+    help.push(intent("Send Bug / Feedback", "message-circle", "feedback"));
+    more.push(MenuItem::submenu("Help", "help-circle", help).with_beside());
+
     if input.host.app_lifecycle {
-        more.push(MenuItem::separator());
+        let mut app = Vec::new();
         for action in APP_LIFECYCLE_ACTIONS {
-            more.push(MenuItem::row(
+            // A line sets Restart and the two Quits apart from New Window and Check for Updates.
+            if action.id == "restart" {
+                app.push(MenuItem::separator());
+            }
+            app.push(MenuItem::row(
                 action.title,
                 action.icon,
                 MenuCommand::command(message::app_lifecycle(action.id)),
             ));
         }
+        more.push(MenuItem::submenu("Ghostex", "ghostex", app).with_beside());
     }
+    more.push(MenuItem::separator());
+    more.push(intent("Settings", "settings", "settings"));
     more
 }
 

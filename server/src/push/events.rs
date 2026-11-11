@@ -25,6 +25,17 @@ pub(crate) fn announce_feed_row(
     enqueue_row_alert(state, repository, session, row, kind);
 }
 
+/// A thread's finished turn under a coordinator, which the alert rule keeps quiet: it goes only to
+/// the phones whose Thread reports choice is not Off (`AlertKind::ThreadReport`).
+pub(crate) fn announce_thread_report(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    row: &Value,
+) {
+    enqueue_row_alert(state, repository, session, row, AlertKind::ThreadReport);
+}
+
 /// Why a red-dot row goes to the phones (`announce_red_dot`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BlockedWhy {
@@ -80,9 +91,8 @@ fn enqueue_row_alert(
     let occurred_at_ms = chrono::DateTime::parse_from_rfc3339(text("createdAt"))
         .map(|at| at.timestamp_millis())
         .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
-    let agents = repository
+    let projects = repository
         .list_projects_without_session_history()
-        .map(|projects| crate::sidebar_hud::sidebar_agent_buttons_from_projects(&projects))
         .unwrap_or_else(|error| {
             let _ = state.logger.log(GxserverLogInput {
                 level: LogLevel::Warn,
@@ -94,8 +104,12 @@ fn enqueue_row_alert(
                 error: Some(error.message),
                 details: None,
             });
-            Value::Null
+            Vec::new()
         });
+    let agents = crate::sidebar_hud::sidebar_agent_buttons_from_projects(&projects);
+    let project = projects.iter().find(|project| {
+        project.get("projectId").and_then(Value::as_str) == Some(text("projectId"))
+    });
     let agent_id = session
         .get("agentId")
         .and_then(Value::as_str)
@@ -111,9 +125,15 @@ fn enqueue_row_alert(
         .map(str::trim)
         .filter(|name| !name.is_empty())
         .map(str::to_string)
-        .or_else(|| crate::presentation::read_runtime_text(session, "agentName"))
-        .or_else(|| crate::presentation::custom_agent_display_name(None, session))
-        .unwrap_or_else(|| agent_id.trim().to_string());
+        .or_else(|| crate::presentation::session_agent_name(project, session))
+        // Never a custom agent's internal id (CDXC:AgentProviders 2026-11-11 in presentation/util.rs).
+        .or_else(|| {
+            Some(agent_id.trim())
+                .filter(|id| !id.is_empty() && !crate::presentation::is_custom_agent_id(id))
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "Agent".to_string());
+    let session_title = crate::coordinators::session_title_of(session);
     state.push.enqueue_alert(AlertEvent {
         kind,
         project_id: text("projectId").to_string(),
@@ -121,6 +141,7 @@ fn enqueue_row_alert(
         notification_id: text("id").to_string(),
         agent_name,
         project_name: text("subtitle").to_string(),
+        session_title,
         occurred_at_ms,
     });
 }

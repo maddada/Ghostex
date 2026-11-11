@@ -314,6 +314,8 @@ struct Turn {
     end_id: Option<String>,
     completed_at: Option<i64>,
     count: usize,
+    /// The tool calls of every row of the turn, which `deferredWork.toolCallCount` carries.
+    tool_calls: usize,
     deferred: usize,
     final_found: bool,
     /// The agent worked or replied after the rows pushed so far, before any user row.
@@ -395,6 +397,7 @@ impl Turn {
                 }
             }
             if let SessionChatBlock::ToolCall { name, input, .. } = block {
+                self.tool_calls += 1;
                 collect_file_paths(name, input, &mut self.files);
             }
         }
@@ -685,7 +688,8 @@ impl Turn {
             let mut value = json!(user);
             if self.deferred > 0 {
                 value["deferredWork"] = json!({"beforeOffset": before, "startId": user.id,
-                    "endId": self.end_id, "completedAt": self.completed_at, "messageCount": self.count, "filePaths": self.files});
+                    "endId": self.end_id, "completedAt": self.completed_at, "messageCount": self.count, "filePaths": self.files,
+                    "toolCallCount": self.tool_calls});
                 let mut image_paths: Vec<&String> = Vec::new();
                 for path in &self.images {
                     if !image_paths.contains(&path) {

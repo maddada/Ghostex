@@ -508,6 +508,7 @@ fn native_group(
             "questionCount": core.summary.question_count,
             "approvalCount": core.summary.approval_count,
             "awakeCount": core.summary.awake_count,
+            "inactive": core.summary.inactive,
         }),
         collapsed: core.collapsed,
         hover_actions_expanded: core.hover_actions_expanded,

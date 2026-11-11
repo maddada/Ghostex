@@ -84,6 +84,20 @@ pub(crate) use transport::current_model_catalog;
 pub(crate) use worker::{ChatHostHandle, set_endpoint};
 pub(crate) use world::ChatHostOutput;
 
+/// The context the host hands a core for `state`: its clock, timezone and formatted stamps. For
+/// the view's own projection of a message it just sent (`native_chat/send_watch.rs`), so that row
+/// reads its time as the core's row will.
+pub(crate) fn chat_context(
+    state: &ghostex_gx_chat_core::ChatState,
+) -> ghostex_gx_chat_core::ChatContext {
+    world::context(state)
+}
+
+/// The host's session list, which names the sessions a message mentions.
+pub(crate) fn known_sessions() -> std::sync::Arc<Vec<ghostex_gx_chat_core::KnownSession>> {
+    session_directory::current().1
+}
+
 /// The chat host's clock in epoch milliseconds (the page's on the web build), for what the chat
 /// words by age (`native_chat/questions_list.rs`).
 pub(crate) fn now_millis() -> i64 {

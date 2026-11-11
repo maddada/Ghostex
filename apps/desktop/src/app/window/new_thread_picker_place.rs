@@ -14,6 +14,9 @@
 //! User (Q1224, randomsand: with a project on 3 computers "the computer chips push the project name out of view"; "project name on top, the computers below it"): a project row that lists its computers is two lines, the name (and "No sessions") on top and the chips below it, wrapping when there are many, with the `owner/repo` of a project whose name another project shares in front of them. A project only on this computer stays one line.
 //! SEE-ALSO: packages/gx-core/src/unified_sidebar/choices.rs (the rows, the start, the machine), apps/desktop/src/app/gx_store/unified_new_session.rs (what the host passes in and does after a launch), apps/mobile/app/src/chat/native/composer/ProjectPickerSheet.tsx (the phone's list).
 use super::*;
+use ghostex_gx_core::unified_sidebar::{
+    NewThreadStartRow, UnifiedProjectChoice, new_thread_start_heading, new_thread_start_rows,
+};
 
 /// The top row: an 8px gap above it, then 34px.
 pub(crate) const NEW_THREAD_PICKER_PLACE_HEIGHT: f32 = 40.0;
@@ -33,8 +36,6 @@ const HINT_CHOOSE: &str = "Choose";
 const HINT_PLACE: &str = "Machine";
 /// A project row with its computers (or its `owner/repo`) on a second line is this much taller.
 const TALL_ROW_EXTRA: f32 = 22.0;
-/// The most projects the agent list's search shows.
-const START_ROWS_MAX: usize = 5;
 
 /// The project tile's width and the gap after it, which a row's second line is indented by.
 const PROJECT_TILE_INDENT: f32 = 16.0 + 8.0;
@@ -47,36 +48,11 @@ pub(super) fn first_start_row(rows: &[PickerRow]) -> Option<usize> {
 const ICON_CHEVRON_DOWN: &str = "titlebar/chevron-down.svg";
 const ICON_CHEVRON_UP: &str = "titlebar/chevron-up.svg";
 
-/// One machine that has the project.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct NewThreadPickerMachine {
-    /// `local` for this computer.
-    pub(crate) machine_id: String,
-    pub(crate) label: String,
-    /// A thread can start there now; one that can't keeps its chip, dimmed.
-    pub(crate) connected: bool,
-    /// The project on that machine a launch there goes to.
-    pub(crate) project_id: String,
-}
-
-/// One row of the project list: a repository, on every machine that has it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct NewThreadPickerProject {
-    pub(crate) repo_key: String,
-    pub(crate) label: String,
-    pub(crate) has_sessions: bool,
-    pub(crate) recent: bool,
-    pub(crate) machines: Vec<NewThreadPickerMachine>,
-    /// The machine chip a pick of this project starts on.
-    pub(crate) start_machine: usize,
-    /// What tells it from another project with the same name (`owner/repo`, "no remote").
-    pub(crate) detail: Option<String>,
-}
-
-/// The projects and where the picker starts.
+/// The projects (gx-core's project list rows, each starting on its `selected` machine) and where
+/// the picker starts.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct NewThreadPickerPlace {
-    pub(crate) projects: Vec<NewThreadPickerProject>,
+    pub(crate) projects: Vec<UnifiedProjectChoice>,
     /// The project the picker starts on.
     pub(crate) project: usize,
     /// Its machine chip.
@@ -93,17 +69,17 @@ pub(crate) struct NewThreadPickerTarget {
     pub(crate) project_id: String,
 }
 
-impl NewThreadPickerProject {
-    pub(super) fn run_on_machines(&self) -> Vec<RunOnMachine> {
-        self.machines
-            .iter()
-            .map(|machine| RunOnMachine {
-                label: machine.label.clone(),
-                connected: machine.connected,
-                local: machine.machine_id == "local",
-            })
-            .collect()
-    }
+/// A project's machines as the Run on row lists them.
+pub(super) fn run_on_machines(project: &UnifiedProjectChoice) -> Vec<RunOnMachine> {
+    project
+        .machines
+        .iter()
+        .map(|machine| RunOnMachine {
+            label: machine.label.clone(),
+            connected: machine.connected,
+            local: machine.machine_id == "local",
+        })
+        .collect()
 }
 
 /// The letter tile of a project, as the sidebar draws one for a project with no icon.
@@ -117,7 +93,7 @@ fn initial(label: &str) -> String {
 
 impl GpuiNewThreadPickerWindow {
     /// The project the picker starts the thread in.
-    pub(super) fn place_project(&self) -> Option<&NewThreadPickerProject> {
+    pub(super) fn place_project(&self) -> Option<&UnifiedProjectChoice> {
         let place = self.place.as_ref()?;
         place.projects.get(place.project)
     }
@@ -137,7 +113,7 @@ impl GpuiNewThreadPickerWindow {
     pub(super) fn apply_place_machines(&mut self, machine: usize) {
         let machines = self
             .place_project()
-            .map(NewThreadPickerProject::run_on_machines)
+            .map(run_on_machines)
             .unwrap_or_default();
         self.run_on.set_machines(machines, machine);
     }
@@ -170,23 +146,33 @@ impl GpuiNewThreadPickerWindow {
         )
     }
 
-    /// The search's own rows in the agent list: up to five projects it found, each started with the
-    /// first agent (the last one used) in one Enter.
-    ///
-    /// CDXC:AgentLauncher 2026-11-04 DECISION:
-    /// User (Q1224, randomsand: use the picker's search bar to find the project and the computer, and give "what to run" a default so a search plus Enter starts a session): while something is typed, the agent list ends with "Start <agent> in", the projects the search finds (a computer's name in it picks that computer, `project_query_match`), each on the computer it starts on. The agent is the list's first, the one you used last; Enter on such a row starts it there at once. An agent the search finds still comes first, so typing an agent's name works as before, and the project row at the top still opens the full list.
+    /// The search's own rows in the agent list: the projects gx-core's `new_thread_start_rows`
+    /// finds, each started with the first agent (the last one used) in one Enter. They need an
+    /// agent to start and aren't offered inside an agent's account list.
     pub(super) fn start_rows(&self) -> Vec<PickerRow> {
-        if self.query.trim().is_empty() || self.agents.is_empty() || self.scope.is_some() {
+        if self.agents.is_empty() || self.scope.is_some() {
             return Vec::new();
         }
-        let Some(place) = self.place.as_ref() else {
-            return Vec::new();
-        };
-        (0..place.projects.len())
-            .filter(|index| self.project_match(*index).is_some())
-            .take(START_ROWS_MAX)
-            .map(PickerRow::StartIn)
+        self.start_row_places()
+            .into_iter()
+            .map(|row| PickerRow::StartIn(row.choice))
             .collect()
+    }
+
+    /// The "Start <agent> in" rows for what is typed (gx-core); `render_list` draws them all from
+    /// one search.
+    pub(super) fn start_row_places(&self) -> Vec<NewThreadStartRow> {
+        self.place
+            .as_ref()
+            .map(|place| new_thread_start_rows(&place.projects, &self.query))
+            .unwrap_or_default()
+    }
+
+    /// The gx-core row a `PickerRow::StartIn(index)` launches.
+    fn start_row_place(&self, index: usize) -> Option<NewThreadStartRow> {
+        self.start_row_places()
+            .into_iter()
+            .find(|row| row.choice == index)
     }
 
     /// 1 when `selected` is at or past the "Start <agent> in" heading.
@@ -198,11 +184,8 @@ impl GpuiNewThreadPickerWindow {
     pub(super) fn start_in(&self, index: usize) -> Option<(String, NewThreadPickerTarget)> {
         let agent = self.agents.first()?;
         let project = self.place.as_ref()?.projects.get(index)?;
-        let machine = self
-            .project_match(index)
-            .flatten()
-            .unwrap_or(project.start_machine);
-        let machine = project.machines.get(machine)?;
+        let row = self.start_row_place(index)?;
+        let machine = project.machines.get(row.machine)?;
         Some((
             agent.agent_id.clone(),
             NewThreadPickerTarget {
@@ -228,14 +211,16 @@ impl GpuiNewThreadPickerWindow {
             .line_height(px(14.0))
             .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_color(hsla(rgba_of(self.colors.muted, 0.85)))
-            .child(format!("START {} IN", name.to_uppercase()))
+            .child(new_thread_start_heading(&name).to_uppercase())
             .into_any_element()
     }
 
     /// `[G] Ghostex  Windows` with the agent at the right: a project the search found.
+    /// `start` is the gx-core row for `index` from the list's one search (`start_row_places`).
     pub(super) fn render_start_row(
         &self,
         index: usize,
+        start: Option<&NewThreadStartRow>,
         selected: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -247,26 +232,7 @@ impl GpuiNewThreadPickerWindow {
         else {
             return div().into_any_element();
         };
-        let machine = self
-            .project_match(index)
-            .flatten()
-            .unwrap_or(project.start_machine);
-        let machine_label = project
-            .machines
-            .get(machine)
-            .filter(|_| {
-                project.machines.len() > 1
-                    || project
-                        .machines
-                        .iter()
-                        .any(|machine| machine.machine_id != "local")
-            })
-            .map(|machine| machine.label.clone());
-        // Then what tells two same-named projects apart.
-        let machine_label = match (machine_label, project.detail.clone()) {
-            (Some(machine), Some(detail)) => Some(format!("{machine} · {detail}")),
-            (machine, detail) => machine.or(detail),
-        };
+        let machine_label = start.and_then(|row| row.place.clone());
         let agent = self.agents.first().cloned();
         self.row_shell(
             ElementId::Name(format!("new-thread-start-{index}").into()),
@@ -439,7 +405,7 @@ impl GpuiNewThreadPickerWindow {
         }
         Some(
             self.run_on
-                .for_machines(project.run_on_machines(), project.start_machine),
+                .for_machines(run_on_machines(project), project.selected),
         )
     }
 
@@ -472,7 +438,7 @@ impl GpuiNewThreadPickerWindow {
     }
 
     /// Whether a row draws its chips: there is a place to choose, or it isn't this computer.
-    fn row_shows_places(chips: &[RunOnChip], project: &NewThreadPickerProject) -> bool {
+    fn row_shows_places(chips: &[RunOnChip], project: &UnifiedProjectChoice) -> bool {
         chips.len() > 1
             || project
                 .machines
@@ -515,7 +481,7 @@ impl GpuiNewThreadPickerWindow {
         let Some(project) = place.projects.get(index) else {
             return;
         };
-        let machine = project.start_machine;
+        let machine = project.selected;
         let same_project = place.project == index;
         place.project = index;
         place.machine = machine;
@@ -909,18 +875,18 @@ mod tests {
             selectable: true,
             tooltip: None,
         };
-        let project = |machine_id: &str| NewThreadPickerProject {
+        let project = |machine_id: &str| UnifiedProjectChoice {
             repo_key: "r".to_string(),
             label: "r".to_string(),
             has_sessions: true,
             recent: false,
-            machines: vec![NewThreadPickerMachine {
+            machines: vec![ghostex_gx_core::unified_sidebar::UnifiedChoiceMachine {
                 machine_id: machine_id.to_string(),
                 label: machine_id.to_string(),
                 connected: true,
                 project_id: "p".to_string(),
             }],
-            start_machine: 0,
+            selected: 0,
             detail: None,
         };
         let here = project("local");

@@ -55,6 +55,7 @@ impl GhostexGpuiApp {
             close_when_inactive: true,
             cloud_default_account: None,
             place,
+            room: None,
         };
         let page = web_sys::window()
             .map(|window| {
@@ -67,8 +68,17 @@ impl GhostexGpuiApp {
                 )
             })
             .unwrap_or((1280.0, 800.0));
-        let height =
-            new_thread_picker_window_height(config.agents.len(), config.place.is_some(), false);
+        // The page is the window the picker must stay inside: it is capped to it.
+        let room = Bounds::new(gpui::point(px(0.0), px(0.0)), size(px(page.0), px(page.1)));
+        let config = NewThreadPickerConfig {
+            room: Some(room),
+            ..config
+        };
+        let height = new_thread_picker_capped_height(
+            new_thread_picker_window_height(config.agents.len(), config.place.is_some(), false),
+            config.room,
+            None,
+        );
         let bounds = Bounds::centered_at(
             gpui::point(px(page.0 / 2.0), px(page.1 / 2.0)),
             size(px(NEW_THREAD_PICKER_WIDTH), px(height)),
@@ -102,6 +112,33 @@ impl GhostexGpuiApp {
             .zip(view)
             .map(|(window, view)| WebNewThreadPicker { window, view });
         self.refresh_web_new_thread_picker_accounts(cx);
+    }
+
+    /// The sidebar's New session button (native_sidebar/new_session_row.rs): the picker's first
+    /// row, the agent picked last, started in the open project without the picker, as the
+    /// desktop's New Agent Session does (new_agent_session.rs). Before any agent is known the
+    /// picker opens instead.
+    pub(crate) fn start_new_agent_session(&mut self, cx: &mut Context<Self>) {
+        let hud_agents = self
+            .new_thread_picker_agents
+            .clone()
+            .or_else(|| {
+                self.native_sidebar
+                    .snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.hud["agents"].as_array().cloned())
+            })
+            .unwrap_or_default();
+        let primary = crate::app::gx_store::read_primary_agent_launcher_id();
+        let Some(agent) = rows::order_new_thread_picker_agents(&hud_agents, primary.as_deref())
+            .into_iter()
+            .next()
+        else {
+            self.open_gpui_new_thread_picker(cx);
+            return;
+        };
+        let message = json!({ "type": "runSidebarAgent", "agentId": agent.agent_id });
+        self.dispatch_gpui_sidebar_host_message(message, cx);
     }
 
     fn close_web_new_thread_picker(&mut self, cx: &mut Context<Self>) {

@@ -9,7 +9,7 @@
 //! the Settings window pick it up without new code.
 //!
 //! CDXC:Extensions 2026-10-01 DECISION:
-//! User: "We need to simplify the app." Actions, Open In and Spaces become built-in extensions with an on/off switch on Settings > Extensions. Turning one off disables the whole feature: its Settings pages and rows, its header button, its hotkeys, its Quick Access rows and menus, and its `ghostex` verbs (which say it is turned off). Its saved configuration is kept, so turning it back on restores everything. More features are expected to follow with one entry each.
+//! User: "We need to simplify the app." Actions, Open In and Spaces (Spaces left on 2026-11-10: spaces.rs) become built-in extensions with an on/off switch on Settings > Extensions. Turning one off disables the whole feature: its Settings pages and rows, its header button, its hotkeys, its Quick Access rows and menus, and its `ghostex` verbs (which say it is turned off). Its saved configuration is kept, so turning it back on restores everything. More features are expected to follow with one entry each.
 //! SEE-ALSO: packages/settings-catalog/src/data/official_extensions.rs, apps/desktop/src/app/window/settings_modal/tabs/extensions/sections.rs, server/src/ghostex_cli/built_in_extensions.rs.
 
 use crate::data::GHOSTEX_OFFICIAL_EXTENSIONS;
@@ -22,8 +22,6 @@ use serde_json::{Map, Value};
 pub const ACTIONS: &str = "quickActions";
 /// The Open In feature (Open button, Settings > Open In, Open In menus).
 pub const OPEN_IN: &str = "openIn";
-/// Spaces (the sidebar's Space row, Space menus and Settings rows).
-pub const SPACES: &str = "spaces";
 /// Cloud Boxes (Settings > Cloud Boxes, the new thread's Run on choice, Run in box menus, the
 /// `ghostex agentbox` verbs). macOS and Linux only.
 pub const CLOUD_BOXES: &str = "cloudBoxes";
@@ -57,7 +55,7 @@ pub const GROK_WEB: &str = "grokWeb";
 /// by default.
 pub const CONNECTORS: &str = "connectors";
 /// The Session details panel (the panel beside a Claude chat, its context ring in the header, its
-/// Claude task-list row on Settings > Chat). Beta, off by default.
+/// Claude task-list row on Settings > Agents). Beta, off by default.
 pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
 /// Session notes (a session's Note menu row and hover button, its card's note dot and tooltip
 /// line, the chat's Session note row, the note dialog, its hotkey, `ghostex session-note`). Off by
@@ -267,6 +265,13 @@ pub fn hidden_setting_keys_with(read: impl Fn(&str) -> Option<bool>) -> Vec<&'st
                 .is_some_and(|id| !on_with(id, &read))
         })
         .flat_map(|entry| strings(entry, "settingKeys"))
+        .chain(
+            (!crate::spaces::enabled_with(&read))
+                .then_some(crate::spaces::SETTING_KEYS)
+                .unwrap_or(&[])
+                .iter()
+                .copied(),
+        )
         .collect()
 }
 
@@ -277,7 +282,11 @@ pub fn page_shown_with(page_id: &str, read: impl Fn(&str) -> Option<bool>) -> bo
 
 /// Hotkey `hotkey_id` is listed and fires: no feature owns it, or its feature is on and its gate
 /// is open.
+/// The Go to Space hotkeys follow the Spaces switch the same way (spaces.rs).
 pub fn hotkey_shown_with(hotkey_id: &str, read: impl Fn(&str) -> Option<bool>) -> bool {
+    if crate::spaces::HOTKEYS.contains(&hotkey_id) && !crate::spaces::enabled_with(&read) {
+        return false;
+    }
     feature_owning_hotkey(hotkey_id).is_none_or(|id| on_with(id, read))
 }
 

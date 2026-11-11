@@ -1,5 +1,6 @@
 //! The frame every native app modal window draws: the modal itself, plus a round close button
-//! centred on the modal's top-right corner while the pointer is over the top of the modal.
+//! centred on the modal's top-right corner (top-left on macOS, `close_buttons_on_left`) while the
+//! pointer is over the top of the modal.
 //!
 //! CDXC:AppModal 2026-10-04 DECISION:
 //! User: "lets make it actually show on the top right corner when the user is at the top of the modal anywhere not just if near top right corner, so top 80px of top of the modal", then "can we make it appear ON the top right corner not inside the modal?". The X is centred on the modal's top-right corner, half outside the card, and appears while the pointer is anywhere in the modal's top 80px, full width (or on the X itself). This supersedes the 2026-10-02 "show the x only when hovering very close to the top right" rule; the rest of the 2026-10-02 and 2026-09-30 decisions stands: "the x needs to be ON the top right corner of the modals", and "let's not make the modals close when i click away anymore", for "all the big modals that appear center of the app". The 2026-09-30 decision superseded the 2026-09-27 click-away list (Rename Session, Rename Worktree, Delete Worktree closed when the main window became key again) and the focus-loss close of Quick Access, Browser History and the Markdown table and Mermaid viewers: no app modal closes on a click outside it now, except those the user asked on 2026-10-08 to close on click-away again: Quick Access (CDXC:AppModal 2026-10-08 in window/quick_access/window.rs), and every Settings page kind, Search by Prompt, Browser History, the Markdown table and Mermaid diagram viewers, the Git file diff, the Export transcript result, the Agents Hub, and (asked 2026-10-09) Rename Session and Rename Worktree (CDXC:AppModal 2026-10-09 on `close_app_modal_on_click_away` in window/popup_dismissal.rs). The button runs the modal's own Escape close (`ModalCornerClose::close_from_corner`), so it cancels exactly what Escape cancels.
@@ -14,6 +15,7 @@ use gpui::{
     WindowKind, WindowOptions, canvas, div, point, px, size,
 };
 use gpui_component::Root;
+use std::cell::Cell;
 use std::rc::Rc;
 
 /// Whether the corner close button is drawn: shared by the modal's frame, which reports the
@@ -51,8 +53,13 @@ pub(crate) struct ModalWindowFrame {
     dismiss: Rc<dyn Fn(&mut Window, &mut App)>,
     shows_corner_close: Rc<dyn Fn(&App) -> bool>,
     palette: ModalPalette,
-    /// Created on the first render, which also opens the button's window.
+    /// Created on the first render, which also opens the button's window, and again when the
+    /// close button changes sides.
     reveal: Option<Entity<CornerCloseReveal>>,
+    /// The corner the button's window was opened on: true for the top left.
+    reveal_on_left: bool,
+    /// The button's window, once open, so a change of side can close it.
+    button_window: Rc<Cell<Option<AnyWindowHandle>>>,
 }
 
 impl ModalWindowFrame {
@@ -69,6 +76,8 @@ impl ModalWindowFrame {
             }),
             palette,
             reveal: None,
+            reveal_on_left: false,
+            button_window: Rc::new(Cell::new(None)),
         }
     }
 
@@ -91,11 +100,23 @@ impl ModalWindowFrame {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Entity<CornerCloseReveal> {
+        let on_left = super::round_close_button::close_buttons_on_left();
         if let Some(reveal) = &self.reveal {
-            return reveal.clone();
+            if self.reveal_on_left == on_left {
+                return reveal.clone();
+            }
+            // Close buttons on the right changed while the modal is open: the X's window cannot
+            // move, so it closes and a new one opens on the other corner.
+            if let Some(old) = self.button_window.take() {
+                cx.defer(move |cx| {
+                    let _ = old.update(cx, |_, window, _| window.remove_window());
+                });
+            }
         }
         let reveal = cx.new(|_| CornerCloseReveal::default());
         self.reveal = Some(reveal.clone());
+        self.reveal_on_left = on_left;
+        let button_window = self.button_window.clone();
         let modal = window.window_handle();
         let frame = cx.entity();
         let dismiss = self.dismiss.clone();
@@ -103,7 +124,16 @@ impl ModalWindowFrame {
         let button_reveal = reveal.clone();
         // The modal's window must exist (and on Windows be the active window) first.
         cx.defer(move |cx| {
-            open_corner_close_window(modal, frame, button_reveal, dismiss, palette, cx);
+            let opened = open_corner_close_window(
+                modal,
+                frame,
+                button_reveal,
+                dismiss,
+                palette,
+                on_left,
+                cx,
+            );
+            button_window.set(opened);
         });
         reveal
     }
@@ -169,19 +199,21 @@ impl Render for ModalWindowFrame {
     }
 }
 
-/// Opens the corner close button's window centred on the modal window's top-right corner.
+/// Opens the corner close button's window centred on the modal window's top-right corner, or its
+/// top-left one with `on_left`.
 fn open_corner_close_window(
     modal: AnyWindowHandle,
     frame: Entity<ModalWindowFrame>,
     reveal: Entity<CornerCloseReveal>,
     dismiss: Rc<dyn Fn(&mut Window, &mut App)>,
     palette: ModalPalette,
+    on_left: bool,
     cx: &mut App,
-) {
+) -> Option<AnyWindowHandle> {
     // CDXC:AppModal 2026-10-27 WHY:
     // A page's windows are canvases that the web platform always draws opaque (it ignores a transparent background), so the X's own 24px window showed as a black square on every app modal's corner in the GPUI web build. The page has no X there; its modals close with Escape, their buttons or a click away.
     if cfg!(target_arch = "wasm32") {
-        return;
+        return None;
     }
     let Ok((modal_bounds, owner, modal_native)) = modal.update(cx, |_, window, cx| {
         (
@@ -190,10 +222,14 @@ fn open_corner_close_window(
             native_window_ref(window),
         )
     }) else {
-        return;
+        return None;
     };
     let half = MODAL_CORNER_CLOSE_SIZE / 2.0;
-    let corner = modal_bounds.top_right();
+    let corner = if on_left {
+        modal_bounds.origin
+    } else {
+        modal_bounds.top_right()
+    };
     let screen = Bounds::new(
         point(corner.x - px(half), corner.y - px(half)),
         size(px(MODAL_CORNER_CLOSE_SIZE), px(MODAL_CORNER_CLOSE_SIZE)),
@@ -212,7 +248,7 @@ fn open_corner_close_window(
         window_background: WindowBackgroundAppearance::Transparent,
         ..Default::default()
     };
-    let _ = cx.open_window(options, move |window, cx| {
+    let opened = cx.open_window(options, move |window, cx| {
         attach_corner_close_window(window, modal_native);
         let view = cx.new(|cx| ModalCornerCloseButton {
             _subscriptions: vec![
@@ -236,6 +272,7 @@ fn open_corner_close_window(
                 .bg(gpui::transparent_black())
         })
     });
+    opened.ok().map(Into::into)
 }
 
 /// The round X in its own window (`open_corner_close_window`).

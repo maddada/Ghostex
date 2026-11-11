@@ -19,7 +19,7 @@ const MAX_REFUSAL_NAMES: usize = 24;
 /// a short camelCase identifier (`invalidParams`); a refusal WITHOUT one never came from gxserver at
 /// all, because gxserver spells `error` on every refusal, so it is the desktop's own transport
 /// failing, and it is classed from the fixed sentences `native_chat/rpc.rs` and the typed-operation
-/// helpers write (`unreachable`, `transport`, `invalidResponse`, `httpStatus`, `authToken`). The
+/// helpers write (`unreachable`, `transport`, `cutOff`, `invalidResponse`, `httpStatus`, `authToken`). The
 /// MESSAGE is never counted, and the map stops admitting new names at 24.
 pub(super) fn note_rpc_refusal(counters: &mut HostCounters, arguments: &[Value]) {
     let Some(error) = arguments.get(2).filter(|value| !value.is_null()) else {
@@ -69,7 +69,11 @@ fn transport_class(message: Option<&str>) -> &'static str {
         "unreachable"
     } else if message.contains("auth token") {
         "authToken"
-    } else if message.contains("invalid json")
+    } else if message.contains("was cut off") || message.contains("didn't arrive") {
+        // ide_open.rs `remote_cut_off_message`, typed_operations.rs `gxserver_cut_off_message`.
+        "cutOff"
+    } else if message.contains("couldn't be read")
+        || message.contains("invalid json")
         || message.contains("invalid http")
         || message.contains("invalid chunked")
     {
@@ -95,6 +99,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::ReadSessionChatImage => "readSessionChatImage",
         ChatRpcMethod::ReadSessionChatResource => "readSessionChatResource",
         ChatRpcMethod::ReadVisualPageThumbnail => "readVisualPageThumbnail",
+        ChatRpcMethod::ReadVisualPageSource => "readVisualPageSource",
         ChatRpcMethod::SendSessionChatMessage => "sendSessionChatMessage",
         ChatRpcMethod::InterruptSessionChat => "interruptSessionChat",
         ChatRpcMethod::AnswerSessionChatPrompt => "answerSessionChatPrompt",

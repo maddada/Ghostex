@@ -87,11 +87,18 @@ pub fn completed_chat_work(turn: &CompletedWorkTurn, deferred: Option<&[ChatRow]
 }
 
 /// The rows of a loaded section that belong to `turn`: after its opener (the prompt that owns the
-/// section is not in it), up to the OMP wake-up that opens the next turn.
+/// section is not in it) or the row of its work that holds it, up to the OMP wake-up that opens
+/// the next turn.
 ///
 /// CDXC:SessionChat 2026-10-30 WHY: gxserver folds a prompt and the OMP wake-ups the agent answered after it into one `deferredWork` stretch, the shape every chat core reads, so an older chat that does not open turns at OMP rows still reaches all of the work through the prompt. This core opens a turn at each such wake-up (`wakes_settled_agent`) and cuts the loaded stretch at them, so each fold holds its own work, whichever of their folds loaded it.
 pub(crate) fn section_part<'a>(turn: &CompletedWorkTurn, section: &'a [ChatRow]) -> &'a [ChatRow] {
-    let start = if turn.user.deferred_work.is_some() {
+    // A section that starts at a row of the turn's own work (a background task's end,
+    // `turns::turn_section`) is all this turn's.
+    let own_row = turn
+        .section
+        .as_ref()
+        .is_some_and(|section| turn.work.iter().any(|row| row.id == section.start_id));
+    let start = if turn.user.deferred_work.is_some() || own_row {
         0
     } else {
         match section.iter().position(|row| row.id == turn.user.id) {
@@ -199,7 +206,8 @@ fn project_normalized(
     grouped: bool,
 ) -> TranscriptProjection {
     let rendered = fold_chat_transcript(&normalized);
-    let mut final_ids = final_assistant_message_ids(&rendered, working);
+    let mid_response = crate::transcript::turns::mid_response_rows(&normalized);
+    let mut final_ids = final_assistant_message_ids(&rendered, working, &mid_response);
     let (items, demoted) = completed_work_render_items(
         &rendered,
         working,
@@ -209,7 +217,7 @@ fn project_normalized(
     );
     final_ids.retain(|id| !demoted.contains(id));
     let live_ids = if working {
-        rendered[crate::transcript::turns::active_response_start_index(&rendered)..]
+        rendered[crate::transcript::turns::active_response_start_index(&rendered, &mid_response)..]
             .iter()
             .map(|message| message.id.clone())
             .collect()

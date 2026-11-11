@@ -78,6 +78,17 @@ fn settle_with_ids(
                 next_request_id(),
             ) {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::work_cards::settle_page_counts(state, *request_id, answer.clone())
+            {
+                effects.extend(more);
+            } else if let Some(more) = crate::extras::coordinator_board::wait_out_answer(
+                state,
+                *request_id,
+                outcome.as_ref(),
+                context,
+            ) {
+                effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_board::settle_answer(
                 state,
                 *request_id,
@@ -165,6 +176,16 @@ fn settle_with_ids(
             if state.core.timer_fired(FLEET_CLOCK) {
                 state.core.request_publish();
             }
+            // Board answers gxserver never answered go again (`wait_out_answer`).
+            if state
+                .core
+                .timer_fired(crate::extras::coordinator_board::BOARD_ANSWER_RETRY_TIMER)
+            {
+                effects.extend(crate::extras::coordinator_board::resend_waiting_answers(
+                    state,
+                    &mut next_request_id,
+                ));
+            }
             // `setInterval(() => setNow(Date.now()), ACTIVITY_CLOCK_TICK_MS)`: a new clock, so a
             // state change the lifecycle publishes on.
             if state.core.timer_fired(ACTIVITY_CLOCK) {
@@ -222,7 +243,20 @@ fn settle_with_ids(
     state.extras.search.folds.quiet_style = state.transcript_view.chat_look.agent_work
         != crate::transcript::chat_look::AgentWork::Default;
     state.extras.search.folds.hidden = state.transcript_view.hidden_work();
+    // A closed Quiet View line's rows are out of sight (`transcript/quiet_view.rs`).
+    let mut items = items;
+    if state.extras.search.open {
+        for rows in
+            crate::transcript::quiet_view::closed_rows(state, context, &state.extras.search.folds)
+        {
+            for row in items.iter_mut().take(rows.end).skip(rows.start) {
+                *row = Value::Null;
+            }
+        }
+    }
+    state.extras.search.more_unloaded = state.messages.has_more;
     search::settle(&mut state.extras.search, &items);
+    effects.extend(search::advance_seek(state, context));
     settle_activity_clock(state, context);
     arm_timers(state, context);
     effects

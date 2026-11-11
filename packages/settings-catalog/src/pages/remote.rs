@@ -17,11 +17,11 @@ pub(crate) fn page() -> Page {
 pub(crate) fn current_machine() -> Section {
     section(
         "currentMachine",
-        "Current machine",
+        "This computer",
         vec![
             row("computerName", "Name", "This computer's name, set by the system; your phone and other computers show it."),
             row("computerShortName", "Short name", "This computer's 2-character name on the sidebar's computer pills; empty uses one made from its name."),
-            row("sshAccess", "SSH access", "Lets your phone and other computers sign in to this one; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt."),
+            row("sshAccess", "SSH access", "Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt."),
         ],
     )
 }
@@ -29,13 +29,11 @@ pub(crate) fn current_machine() -> Section {
 pub(crate) fn easy_connect() -> Section {
     section(
         "easyConnect",
-        "Easy Connect",
+        "Phones and computers that can reach this machine",
         vec![
-            row("easyConnectEnabled", "Easy Connect", "Connect a phone or a remote machine. Install the Tailcat CLI helper with one click."),
-            row("pairingCode", "Pairing code", "Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password."),
-            row("pairedDevices", "Paired devices", "Phones and computers paired with this computer; remove one to unpair it and revoke its access."),
-            row("pairedDevicesOnly", "Only paired devices can connect", "Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing."),
-            row("easyConnectRelay", "Relay", "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run."),
+            row("easyConnectEnabled", "Easy Connect", "Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself."),
+            row("pairingCode", "Connect a Device", "Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes."),
+            row("pairedDevices", "Paired devices", "Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off."),
         ],
     )
 }
@@ -45,7 +43,7 @@ pub(crate) fn tailscale() -> Section {
         "tailscale",
         "Tailscale",
         vec![
-            row("tailscaleEnabled", "Tailscale on or off", "Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup."),
+            row("tailscaleEnabled", "Tailscale on or off", "Offer the Tailscale path; off leaves it out of the Connect a Device window."),
             row("tailscaleSteps", "Tailscale checklist", "Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone."),
             row("tailscaleCode", "Tailscale code", "Scan the Tailscale code with the Ghostex app, or type the host, IP and username."),
         ],
@@ -55,9 +53,9 @@ pub(crate) fn tailscale() -> Section {
 pub(crate) fn remote_machines() -> Section {
     section(
         "remoteMachines",
-        "Remote machines",
+        "Computers this machine connects to",
         vec![
-            row("addMachine", "Add a machine", "Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections."),
+            row("addMachine", "Add a computer", "Add a computer by SSH details or its code; saved computers appear as sidebar sections."),
             row("showInSidebar", "Show in sidebar", "Hide a saved remote machine from the sidebar without deleting it."),
             row("shortName", "Short names", "Each remote machine's 2-character name on the sidebar's computer pills, set in its settings."),
             row("sshHost", "SSH host", "Remote machine SSH host."),
@@ -76,6 +74,7 @@ pub(crate) fn remote_advanced() -> Section {
         "remoteAdvanced",
         "Advanced",
         vec![
+            row("easyConnectRelay", "Relay", "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run."),
             row(
                 "servedPorts",
                 "Easy Connect served ports",

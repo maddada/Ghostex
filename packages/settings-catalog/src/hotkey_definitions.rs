@@ -291,7 +291,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "openNewThreadPalette",
         title: "New Thread in Active Project",
-        description: "Pick an agent, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
+        description: "Pick an agent, Coordinator, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
         default_key: "cmd+n",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -1182,7 +1182,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     // CDXC:Spaces 2026-10-06 DECISION:
     // User: "Can we have a hotkey like cmd/ctrl + ctrl/option + shift + 1 / 2 / 3 / 4 etc to switch space? Should be dynamic based on the order of the spaces." Go to Space N picks the Nth Space in the sidebar's current order (a number with no Space does nothing) and plays the swipe's slide-and-fade. The default is Cmd+Option+Shift+N on macOS, because Cmd+Ctrl+Shift+3/4 are the system's screenshot-to-clipboard keys, and Ctrl+Alt+Shift+N on Windows and Linux (`cmd` is Ctrl there); an AltGr character on those keys still types, because GPUI skips bindings for keys that produce text in a focused input. Spaces owns them, so they are off while Spaces is off.
-    // SEE-ALSO: apps/desktop/src/app/native_sidebar/space_gesture.rs (`go_to_native_space`), packages/settings-catalog/src/data/official_extensions.rs (the Spaces entry's `hotkeys`).
+    // SEE-ALSO: apps/desktop/src/app/native_sidebar/space_gesture.rs (`go_to_native_space`), packages/settings-catalog/src/spaces.rs (`HOTKEYS`).
     HotkeyDefinition {
         id: "goToSpace1",
         title: "Go to Space 1",
@@ -1614,5 +1614,17 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         alternate_default_keys: &[],
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("focusLastTerminal")), ("kind", J::Str("terminalFocus"))]),
+    },
+    // CDXC:Hotkeys 2026-11-11 DECISION:
+    // User (GitHub #558, "Add all three" on its comments): a Focus sidebar hotkey, because a terminal consumes Tab and a keyboard user in one cannot reach the sidebar. It shows the sidebar when hidden, moves the keyboard to its session list (arrows move, Enter opens), and Escape or the same key gives the keyboard back. Cmd+Shift+J (Ctrl+Shift+J on Windows and Linux) was the one Cmd+Shift letter free in both sections on all three platforms and not a view's own key (Ghostty's write-screen-file binding never runs: libghostty-vt applies no keybinds).
+    HotkeyDefinition {
+        id: "focusSidebar",
+        title: "Focus Sidebar",
+        description: "Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back.",
+        default_key: "cmd+shift+j",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("focusSidebar")), ("kind", J::Str("terminalFocus"))]),
     },
 ];

@@ -428,6 +428,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::WebSocket,
         ),
         "/api/control/stop" | "/api/control/stopAll" => remote_blocked(path),
+        // The GPUI web build's settings (server/shared_settings_watch.rs): this computer's own clients.
+        "/api/readSharedSettings" => full_local(path),
         "/api/readAgentSettings"
         | "/api/updateAgentSettings"
         | "/api/ingestAgentHookEvent"
@@ -618,6 +620,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/promoteCoordinator"
         | "/api/acknowledgeCoordinatorThreads"
         | "/api/toggleCloseAfterDone"
+        // A Reply box's unsent words by session and row (session_reply_drafts.rs), read and kept
+        // on the computer that runs the session as its chat box draft is: ids and bounded text.
+        | "/api/sessionReplyDrafts"
         | "/api/openConversation"
         | "/api/restorePreviousSession"
         | "/api/sleepSession"
@@ -921,8 +926,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readVoiceAgent" | "/api/forgetVoiceAgentMemory" | "/api/setVoiceAgentSettings" => {
             remote_allowed(path)
         }
-        // A recorded turn for a call the client opened (`voice_agent/clip.rs`): any client that may call.
-        "/api/voiceAgentClip" => remote_allowed(path),
+        // A recorded or typed turn for a call the client opened (`voice_agent/clip.rs`): any client that may call.
+        "/api/voiceAgentClip" | "/api/voiceAgentText" => remote_allowed(path),
         "/api/setVoiceAgentKey" => full_local(path),
         /*
         CDXC:Secrets 2026-11-02 WHY:
@@ -1036,6 +1041,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         }
         // The hook-free activity comparison (`ghostex hookless-activity`), a local debugging read.
         "/api/readHooklessActivityComparison"
+        // First-run setup's agent sign-in check and browser sign-in (agent_sign_in.rs): it runs
+        // the agent's own login on this computer, so it is never reachable from another one.
+        | "/api/agentSignIn"
         /*
         CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompts can carry user-authored bodies, so their shared gxserver
@@ -1188,6 +1196,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         SEE-ALSO: server/src/push/registration.rs, packages/shared/gxserver-protocol-core.ts.
         */
         "/api/registerPushToken" => full_local(path),
+        // A paired phone hands its Live Activity tokens to the one computer that pushes its banner
+        // (live_activity/registration.rs).
+        "/api/registerLiveActivity" => full_local(path),
         /*
         CDXC:RemotePairing 2026-09-03:
         The only unauthenticated write endpoint. A phone registers its SSH key

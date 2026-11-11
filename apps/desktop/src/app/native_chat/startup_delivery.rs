@@ -1,7 +1,7 @@
 //! A prompt's delivery state. A user bubble still waiting for the agent's terminal shows a
 //! spinner, and one the agent queued behind its running turn shows a play button, both left of the
 //! bubble at its bottom. A failed send gets the daemon's own sentence under the bubble,
-//! with Retry and Remove under it, and a send gxserver has held a minute says why there. An inter-agent card keeps the older "Waiting for agent…" line.
+//! with Retry and Remove under it (and Edit for a message the chat itself could not send), and a send gxserver has held a minute says why there. An inter-agent card keeps the older "Waiting for agent…" line.
 //! Ported from React's `session-chat-startup-send-status.tsx`; it acts on the queue
 //! row the send became, so Retry and Remove are the queue's own operations.
 
@@ -121,6 +121,18 @@ impl NativeChatView {
                     id: "startup-delivery-retry".into(),
                     label: "Retry",
                     command: json!({"type":"retryQueue","promptId":prompt_id.clone()}),
+                });
+            }
+            // A message that was not sent and cannot be by waiting (the chat core's
+            // composer/delivery.rs): Edit moves its words back to the chat box, which nothing
+            // else does unasked.
+            if prompt_id.as_str().is_some_and(|id| {
+                id.starts_with(ghostex_gx_chat_core::composer::delivery::UNSENT_PROMPT_PREFIX)
+            }) {
+                actions.push(NoteAction {
+                    id: "startup-delivery-edit".into(),
+                    label: "Edit",
+                    command: json!({"type":"editUnsent","promptId":prompt_id.clone()}),
                 });
             }
             actions.push(NoteAction {

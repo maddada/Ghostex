@@ -38,6 +38,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
         let mut published_tasks = cached.tasks;
         let mut published_workflows = cached.workflows;
         let mut published_prompt = cached.prompt;
+        let mut published_agent_gone = cached.agent_gone;
         /*
         CDXC:SessionChat 2026-09-10 WHY:
         Starts empty so the first probe publishes the rows this send created:
@@ -87,6 +88,8 @@ pub(crate) fn schedule_session_chat_option_redetect(
                     published_workflows.as_ref(),
                 );
             let prompt_changed = detection.captured && detection.prompt != published_prompt;
+            let agent_gone_changed =
+                detection.captured && detection.agent_gone != published_agent_gone;
             let app_commands = crate::session_chat_app_command::session_chat_app_commands_identity(
                 &project_id,
                 &session_id,
@@ -101,6 +104,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
                 && !workflows_changed
                 && !prompt_changed
                 && !app_commands_changed
+                && !agent_gone_changed
             {
                 continue;
             }
@@ -126,6 +130,9 @@ pub(crate) fn schedule_session_chat_option_redetect(
             if prompt_changed {
                 published_prompt = detection.prompt;
             }
+            if agent_gone_changed {
+                published_agent_gone = detection.agent_gone;
+            }
             emit_session_chat_options_state_frame(
                 &followers,
                 &event_hub,
@@ -142,6 +149,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
                     tasks: published_tasks.as_ref(),
                     workflows: published_workflows.as_ref(),
                     probed: detection.attempted,
+                    agent_gone: published_agent_gone,
                 },
             );
         }

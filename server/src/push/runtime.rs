@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::{
     domain::DomainRepository,
@@ -16,19 +16,21 @@ use crate::{
 };
 
 use super::{
-    expo::{ExpoClient, ReceiptState, ReceiptsOutcome, SendOutcome},
+    expo::{ExpoClient, Failure, ReceiptState, ReceiptsOutcome, SendOutcome},
     limiter::prune_budgets,
     message::{
         alert_message, silent_message, AgentStartEvent, AlertEvent, AlertKind, ALERT_TTL_MS,
         SILENT_TTL_MS,
     },
-    store::{token_fingerprint, PendingReceipt, PushRegistrationStore, PushStoreData},
+    store::{token_fingerprint, AlertChoice, PendingReceipt, PushRegistrationStore, PushStoreData},
 };
 
 /// Alert jobs (one per event and phone) waiting to be sent, retried or fanned out.
 pub(crate) const ALERT_QUEUE_CAPACITY: usize = 64;
 /// The waits before the first and the second retry; there is no third.
 const RETRY_DELAYS_MS: [i64; 2] = [1_000, 2_000];
+/// A notice this soon after the last one to the same phone shows without the sound.
+const BURST_QUIET_MS: i64 = 30_000;
 pub(crate) const RECEIPT_DELAY_MS: i64 = 15 * 60_000;
 pub(crate) const RECEIPT_KEEP_MS: i64 = 24 * 3_600_000;
 const RECEIPT_BATCH: usize = 100;
@@ -103,6 +105,26 @@ impl Shared {
             duration_ms: None,
             error: None,
             details: Some(json!({ "code": code })),
+        });
+    }
+
+    /// A refusal from the push service: its code and its own words, as it gave them (never a token; the log's
+    /// sanitizer cuts any out again).
+    fn warn_failure(&self, event: &str, failure: &Failure) {
+        let mut details = serde_json::Map::new();
+        details.insert("pushErrorCode".into(), json!(failure.code));
+        if let Some(message) = &failure.message {
+            details.insert("pushErrorMessage".into(), json!(message));
+        }
+        let _ = self.logger.log(GxserverLogInput {
+            level: LogLevel::Warn,
+            event: event.to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(Value::Object(details)),
         });
     }
 }
@@ -341,7 +363,7 @@ fn fan_out(shared: &Shared, events: VecDeque<AlertEvent>, start: Option<AgentSta
         }
         let event = Arc::new(event);
         for registration in &data.registrations {
-            if event.kind.enabled(&registration.kinds) {
+            if event.kind.delivery(registration) != AlertChoice::Off {
                 jobs.push(AlertJob {
                     event: event.clone(),
                     machine_id: registration.machine_id.clone(),
@@ -417,7 +439,8 @@ fn take_due_silent(shared: &Shared) -> Option<SilentJob> {
 
 /// The phone's current token when the job still applies to it, after charging its budget.
 enum Admission {
-    Send(String),
+    /// The phone's token, its "Show session names" switch, and whether this one plays the sound.
+    Send((String, bool, bool)),
     Later(i64),
     Drop,
 }
@@ -429,12 +452,19 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
     }
     let admission = charge_budget(shared, &job.machine_id, &job.token_hash, |data| {
         let registration = data.registration(&job.machine_id)?;
-        if !job.event.kind.enabled(&registration.kinds) {
+        let delivery = job.event.kind.delivery(registration);
+        if delivery == AlertChoice::Off {
             return None;
         }
-        let token = registration.token.clone();
+        let chose_choices = registration.alerts.is_some();
+        let (token, session_names) = (registration.token.clone(), registration.session_names);
         let first = job.sends == 0;
         let budget = data.budgets.entry(job.machine_id.clone()).or_default();
+        // CDXC:Notifications 2026-11-11 DECISION: several notices close together play one sound: for a phone
+        // that sent its choices, a notice within 30 s of the last one to it shows without the sound.
+        let sound = delivery == AlertChoice::Sound
+            && !(chose_choices && budget.alerted_within(now, BURST_QUIET_MS));
+        let token = (token, session_names, sound);
         if first && !budget.session_free(&job.event.session_id, now) {
             return None;
         }
@@ -449,7 +479,7 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
         budget.record_alert(now, first.then_some(job.event.session_id.as_str()));
         Some(Admission::Send(token))
     });
-    let token = match admission {
+    let (token, session_names, sound) = match admission {
         Admission::Send(token) => token,
         Admission::Later(at) => {
             job.not_before = at;
@@ -460,8 +490,15 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
     };
     let ttl_secs = remaining_secs(job.expires_at, now);
     let has_question = alert_has_question(shared, &job.event);
-    let Some(message) = alert_message(&token, &job.machine_id, &job.event, has_question, ttl_secs)
-    else {
+    let Some(message) = alert_message(
+        &token,
+        &job.machine_id,
+        &job.event,
+        session_names,
+        sound,
+        has_question,
+        ttl_secs,
+    ) else {
         shared.warn("pushMessageTooLarge", "alert");
         return;
     };
@@ -507,7 +544,11 @@ fn send_silent(shared: &Shared, mut job: SilentJob, next_receipt_due: &mut Optio
         return;
     }
     let admission = charge_budget(shared, &job.machine_id, &job.token_hash, |data| {
-        let token = data.registration(&job.machine_id)?.token.clone();
+        let token = (
+            data.registration(&job.machine_id)?.token.clone(),
+            false,
+            false,
+        );
         let budget = data.budgets.entry(job.machine_id.clone()).or_default();
         if !budget.silent_slot_free(now) {
             return Some(Admission::Drop);
@@ -515,7 +556,7 @@ fn send_silent(shared: &Shared, mut job: SilentJob, next_receipt_due: &mut Optio
         budget.record_silent(now);
         Some(Admission::Send(token))
     });
-    let Admission::Send(token) = admission else {
+    let Admission::Send((token, _, _)) = admission else {
         return;
     };
     let ttl_secs = remaining_secs(job.expires_at, now);
@@ -616,19 +657,19 @@ fn after_send(
         }
         SendOutcome::Retry { after, code } => {
             let Some(delay) = RETRY_DELAYS_MS.get(sends - 1) else {
-                shared.warn("pushSendGaveUp", &code);
+                shared.warn_failure("pushSendGaveUp", &code);
                 return None;
             };
             let after_ms = after.map_or(0, |after| after.as_millis() as i64);
             let at = now + (*delay).max(after_ms);
             if at >= expires_at {
-                shared.warn("pushSendExpired", &code);
+                shared.warn_failure("pushSendExpired", &code);
                 return None;
             }
             Some(at)
         }
         SendOutcome::Failed(code) => {
-            shared.warn("pushSendFailed", &code);
+            shared.warn_failure("pushSendFailed", &code);
             None
         }
     }
@@ -691,7 +732,7 @@ fn settle_receipts(
                     false
                 }
                 Some(ReceiptState::Failed(code)) => {
-                    shared.warn("pushReceiptFailed", code);
+                    shared.warn_failure("pushReceiptFailed", code);
                     false
                 }
                 None => {
@@ -701,7 +742,7 @@ fn settle_receipts(
             }
         }),
         ReceiptsOutcome::Retry(code) => {
-            shared.warn("pushReceiptsUnavailable", &code);
+            shared.warn_failure("pushReceiptsUnavailable", &code);
             data.receipts.retain_mut(|receipt| {
                 if due_ids.contains(&receipt.id) {
                     receipt.due_at = now + RECEIPT_DELAY_MS;
@@ -710,7 +751,7 @@ fn settle_receipts(
             });
         }
         ReceiptsOutcome::Failed(code) => {
-            shared.warn("pushReceiptsFailed", &code);
+            shared.warn_failure("pushReceiptsFailed", &code);
             data.receipts
                 .retain(|receipt| !due_ids.contains(&receipt.id));
         }

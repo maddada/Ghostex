@@ -29,6 +29,23 @@ impl ProcessRow {
         }
     }
 
+    /// The process id, for the foreground read (foreground_job.rs).
+    pub(crate) fn pid(&self) -> i64 {
+        self.pid
+    }
+
+    /// The parent's process id, for the foreground read (foreground_job.rs; macOS walks the
+    /// kernel's own links instead).
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    pub(crate) fn ppid(&self) -> i64 {
+        self.ppid
+    }
+
+    /// The command line, for the foreground read (foreground_job.rs).
+    pub(crate) fn command(&self) -> &str {
+        &self.command
+    }
+
     #[cfg(all(test, target_os = "macos"))]
     pub(crate) fn pid_for_test(&self) -> i64 {
         self.pid

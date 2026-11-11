@@ -573,3 +573,106 @@ fn a_moved_calls_picture_stays_in_the_lines_strip() {
     assert_eq!(paths, ["/shots/after.png"]);
     assert_eq!(stats[0]["kind"], "images");
 }
+
+/// Agent work Default, after a reload: the task notification after a subagent's report is one of
+/// the report turn's calls and holds the rest of the response. Opening the turn reads that
+/// section, so the work after the notification shows; nothing else about the turn changes.
+#[test]
+fn default_reads_the_work_after_a_collapsed_task_notification() {
+    let deferred = |start: &str, end: &str| json!({"beforeOffset": 1, "startId": start, "endId": end, "messageCount": 4, "filePaths": []});
+    let mut prompt = user("u1", T0, "audit the chat");
+    prompt.deferred_work = Some(serde_json::from_value(deferred("u1", "c2")).unwrap());
+    let mut notice = notification("n1", T0 + 60_100, "aed516f06a84e683f");
+    notice.deferred_work = Some(serde_json::from_value(deferred("n1", "r3")).unwrap());
+    let rows = vec![
+        prompt,
+        report("a1", T0 + 60_000, "aed516f06a84e683f"),
+        notice,
+        assistant("r3", T0 + 65_000, "Both audits agree: two bugs."),
+    ];
+    let mut state = state_with(AgentWork::Default, rows);
+    let shut = items(&state);
+    assert_eq!(
+        outline(&shut),
+        ["user u1", "fold u1", "user a1", "fold a1"],
+        "the turns are as before"
+    );
+    let fold = |items: &[TranscriptItem], turn: &str| -> Value {
+        items
+            .iter()
+            .map(|item| serde_json::to_value(item).unwrap())
+            .find(|item| item["kind"] == "completed-work" && item["id"] == turn)
+            .expect("the turn's fold")
+    };
+    assert_eq!(
+        fold(&shut, "a1")["deferred"]["startId"],
+        "n1",
+        "opening the turn reads the notification's section"
+    );
+    // The walk brings back the rows after the notification.
+    let [c3, c3_result] = call("c3", T0 + 61_000, "cargo test");
+    state
+        .transcript_view
+        .deferred
+        .insert("a1".into(), shared(&[c3, c3_result]));
+    let open = items(&state);
+    let work: Vec<String> = fold(&open, "a1")["work"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|row| id(row).to_string())
+        .collect();
+    assert!(
+        work.iter().any(|row| row == "c3"),
+        "the work after the notification shows: {work:?}"
+    );
+    assert_eq!(fold(&open, "a1")["final"]["id"], "r3");
+}
+
+/// Default, after a reload: a background command that finished mid-response is one of the
+/// prompt's calls, and the prompt's turn reads its section and the notification's in one walk.
+#[test]
+fn default_reads_a_prompt_s_section_through_a_mid_response_notification() {
+    let deferred = |start: &str, end: &str, before: u64| json!({"beforeOffset": before, "startId": start, "endId": end, "messageCount": 2, "filePaths": []});
+    let mut prompt = user("u1", T0, "build it");
+    prompt.deferred_work = Some(serde_json::from_value(deferred("u1", "c1-result", 300)).unwrap());
+    let mut notice = notification("n1", T0 + 30_000, "bg1");
+    notice.deferred_work = Some(serde_json::from_value(deferred("n1", "c2-result", 900)).unwrap());
+    let rows = vec![prompt, notice, assistant("r3", T0 + 65_000, "Built.")];
+    let mut state = state_with(AgentWork::Default, rows.clone());
+    let shut = items(&state);
+    assert_eq!(
+        outline(&shut),
+        ["user u1", "fold u1"],
+        "{:?}",
+        outline(&shut)
+    );
+    let fold = serde_json::to_value(&shut[1]).unwrap();
+    assert_eq!(fold["deferred"]["startId"], "u1");
+    assert_eq!(fold["deferred"]["endId"], "c2-result");
+    assert_eq!(fold["deferred"]["beforeOffset"], 900);
+    // The one walk brings back both sections and the notification between them.
+    let [c1, c1_result] = call("c1", T0 + 1_000, "cargo build");
+    let [c2, c2_result] = call("c2", T0 + 31_000, "cargo test");
+    let loaded = shared(&[c1, c1_result, rows[1].clone(), c2, c2_result]);
+    state.transcript_view.deferred.insert("u1".into(), loaded);
+    let open = serde_json::to_value(&items(&state)[1]).unwrap();
+    let calls: Vec<String> = open["work"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|row| row["tools"].as_array().cloned().unwrap_or_default())
+        .map(|tool| {
+            tool["callId"]
+                .as_str()
+                .or(tool["id"].as_str())
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        calls.len(),
+        3,
+        "both calls and the notification, once each: {open:#}"
+    );
+}

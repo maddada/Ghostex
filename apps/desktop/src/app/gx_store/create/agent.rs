@@ -220,7 +220,10 @@ impl GhostexGpuiApp {
                             .and_then(Value::as_str)
                             .unwrap_or_default()
                     });
-                if matches!(row_status, None | Some("installed") | Some("cliMissing")) {
+                // An agent whose Connect dialog was answered Not now starts without asking again
+                // (CDXC:Onboarding 2026-11-11 in window/onboarding/agents.rs).
+                let declined = agent_hooks_declined(hook_agent_id);
+                if declined || matches!(row_status, None | Some("installed") | Some("cliMissing")) {
                     this.gx_store_launch_agent_from_sidebar(
                         &agent_id,
                         group_id.as_deref(),
@@ -268,13 +271,13 @@ impl GhostexGpuiApp {
         let agent_name = resolve_sidebar_agent(hud.as_deref(), &agent_id)
             .map(|agent| agent.name)
             .unwrap_or_else(|| agent_id.clone());
-        if message.get("installHooks").and_then(Value::as_bool) != Some(true) {
+        let install_hooks = message.get("installHooks").and_then(Value::as_bool) == Some(true);
+        remember_agent_hooks_answer(&hook_agent_id, install_hooks);
+        if !install_hooks {
             self.gx_store_create_toast(
                 "warning",
                 &format!("Install hooks for {agent_name}"),
-                Some(
-                    "Install and approve the hooks in order for Chat View to work correctly. Resuming and working/done indicators also require hooks.",
-                ),
+                Some(HOOKS_DECLINED_DETAIL),
                 cx,
             );
             self.gx_store_launch_agent_from_sidebar(
@@ -689,3 +692,46 @@ impl GhostexGpuiApp {
         .detach();
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+const HOOKS_DECLINED_DETAIL: &str = "Ghostex won't ask again when it starts. Install them in Settings > Agents for Chat View, resuming and the working and done indicators.";
+#[cfg(target_arch = "wasm32")]
+const HOOKS_DECLINED_DETAIL: &str = "Install and approve the hooks in order for Chat View to work correctly. Resuming and working/done indicators also require hooks.";
+
+/// Whether the Connect dialog for this agent was answered Not now on this computer. The web build
+/// (apps/gpui-web compiles this file) keeps no such memory and always asks.
+#[cfg(not(target_arch = "wasm32"))]
+fn agent_hooks_declined(hook_agent_id: &str) -> bool {
+    crate::app::helpers::load_gpui_first_run_onboarding_state()
+        .agent_hooks_declined
+        .iter()
+        .any(|id| id == hook_agent_id)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn agent_hooks_declined(_hook_agent_id: &str) -> bool {
+    false
+}
+
+/// Not now in the Connect dialog is remembered for that agent, and installing forgets it.
+#[cfg(not(target_arch = "wasm32"))]
+fn remember_agent_hooks_answer(hook_agent_id: &str, install_hooks: bool) {
+    use crate::app::helpers::{
+        load_gpui_first_run_onboarding_state, persist_gpui_first_run_onboarding_state,
+    };
+    let mut state = load_gpui_first_run_onboarding_state();
+    let had = state
+        .agent_hooks_declined
+        .iter()
+        .any(|id| id == hook_agent_id);
+    if install_hooks == had {
+        state.agent_hooks_declined.retain(|id| id != hook_agent_id);
+        if !install_hooks {
+            state.agent_hooks_declined.push(hook_agent_id.to_string());
+        }
+        persist_gpui_first_run_onboarding_state(&state);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn remember_agent_hooks_answer(_hook_agent_id: &str, _install_hooks: bool) {}

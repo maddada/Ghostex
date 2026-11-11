@@ -32,6 +32,7 @@ pub struct AssembleCache {
         crate::document::SharedValue,
     )>,
     model_menu: Option<crate::menus::picker::document::KeptModelMenu>,
+    quiet: Option<crate::transcript::quiet_view::KeptQuiet>,
 }
 
 /// [`assemble`], reusing what `cache` kept: the same document, built once per change of inputs.
@@ -45,8 +46,10 @@ pub fn assemble_with(
     transcript::document(state, context, &mut document);
     questions::document(state, context, &mut document);
     document.question_forms = crate::questions::forms::project_kept(state, &mut cache.forms);
+    // One walk of the chat for everything built from its turns (`work_cards::turns`).
+    let turns = crate::extras::work_cards::turns_for_work(state);
     let (work_cards, open_asks) =
-        crate::extras::work_cards::project_kept(state, context, &mut cache.work);
+        crate::extras::work_cards::project_kept(state, context, &mut cache.work, &turns);
     document.open_questions = crate::questions::open_questions::project_with(
         state,
         context,
@@ -54,12 +57,31 @@ pub fn assemble_with(
         &open_asks,
     );
     document.work_cards = ghostex_gx_protocol::Tri::Value(work_cards);
+    document.work_dock = ghostex_gx_protocol::Tri::Value(crate::extras::work_cards::dock_with(
+        state, context, &turns,
+    ));
     document.work_ask_tags = ghostex_gx_protocol::Tri::Value(work_ask_tags(state, cache));
     composer::document(state, context, &mut document);
     menus::document_with(state, context, &mut document, &mut cache.model_menu);
-    let board = crate::extras::coordinator_board::project_kept(state, context, &mut cache.board);
+    let board =
+        crate::extras::coordinator_board::project_kept(state, context, &mut cache.board, &turns);
     extras::document_with_board(state, context, &mut document, board);
     crate::read_aloud::document(state, context, &mut document);
+    // After the work item lines and relayed approvals, which the quiet lines read.
+    document.quiet_view = crate::transcript::quiet_view::document_kept(
+        state,
+        context,
+        document
+            .work_cards
+            .value()
+            .map(|cards| &**cards)
+            .unwrap_or(&serde_json::Value::Null),
+        document
+            .relayed_approvals
+            .value()
+            .unwrap_or(&serde_json::Value::Null),
+        &mut cache.quiet,
+    );
     document
 }
 

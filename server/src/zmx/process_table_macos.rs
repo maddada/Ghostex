@@ -66,6 +66,13 @@ pub(crate) fn process_tree_rows(root_pids: &[i64]) -> Vec<ProcessRow> {
     rows
 }
 
+/// The process group and the terminal's foreground process group of `pid` (`ps -o pgid,tpgid`),
+/// `None` when the kernel does not answer or the process has no terminal.
+pub(crate) fn process_group_and_foreground(pid: i64) -> Option<(i64, i64)> {
+    let info = bsd_info(i32::try_from(pid).ok()?)?;
+    (info.e_tpgid != 0).then(|| (i64::from(info.pbi_pgid), i64::from(info.e_tpgid)))
+}
+
 fn all_pids() -> Vec<i32> {
     let mut pids = vec![0 as libc::pid_t; 4096];
     loop {
@@ -200,6 +207,48 @@ impl ProcArgs {
 pub(crate) fn process_environment_value(pid: i64, name: &str) -> Option<String> {
     let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
     procargs_environment_value(ProcArgs::new().read_raw(pid)?, name)
+}
+
+/// When `pid` started (seconds, microseconds), from the kernel's process record; `None` once it is gone.
+pub(crate) fn process_start_time(pid: i64) -> Option<(u64, u64)> {
+    let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    bsd_info(pid).map(|info| (info.pbi_start_tvsec, info.pbi_start_tvusec))
+}
+
+/// The argv `pid` runs, joined by spaces as `ps -o command` prints it.
+pub(crate) fn process_command(pid: i64) -> Option<String> {
+    let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    ProcArgs::new().read(pid)
+}
+
+/// Every variable of the environment `pid` started with; `None` when it cannot be read.
+pub(crate) fn process_environment(pid: i64) -> Option<std::collections::HashMap<String, String>> {
+    let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    procargs_environment(ProcArgs::new().read_raw(pid)?)
+}
+
+fn procargs_environment(bytes: &[u8]) -> Option<std::collections::HashMap<String, String>> {
+    let argc = i32::from_ne_bytes(bytes.get(..4)?.try_into().ok()?);
+    let mut offset = 4;
+    offset += bytes.get(offset..)?.iter().position(|byte| *byte == 0)? + 1;
+    while bytes.get(offset) == Some(&0) {
+        offset += 1;
+    }
+    let mut strings = bytes.get(offset..)?.split(|byte| *byte == 0);
+    for _ in 0..argc.max(0) {
+        strings.next()?;
+    }
+    // The environment ends at the first empty string; what follows is the kernel's apple strings.
+    Some(
+        strings
+            .take_while(|entry| !entry.is_empty())
+            .filter_map(|entry| {
+                let entry = String::from_utf8_lossy(entry);
+                let (name, value) = entry.split_once('=')?;
+                Some((name.to_string(), value.to_string()))
+            })
+            .collect(),
+    )
 }
 
 fn procargs_environment_value(bytes: &[u8], name: &str) -> Option<String> {

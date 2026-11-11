@@ -311,6 +311,77 @@ pub fn project_query_match(
     Some(picked)
 }
 
+/// The most "Start <agent> in" rows the New thread picker's search shows.
+pub const NEW_THREAD_START_ROWS_MAX: usize = 5;
+
+/// One "Start <agent> in" row: a project the search found, on the machine it starts on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewThreadStartRow {
+    /// Its index in the choices it was found in.
+    pub choice: usize,
+    /// The machine chip it starts on: the one a typed word named, else the project's own pick.
+    pub machine: usize,
+    /// What the row says beside the name: the machine while the project has a choice of machines
+    /// or isn't on this computer, then what tells it from a same-named project.
+    pub place: Option<String>,
+}
+
+/// The New thread picker's "Start <agent> in" rows for what was typed: nothing while the search is
+/// empty, else the projects [`project_query_match`] finds, in list order, at most
+/// [`NEW_THREAD_START_ROWS_MAX`].
+///
+/// CDXC:AgentLauncher 2026-11-04 DECISION:
+/// User (Q1224, randomsand: use the picker's search bar to find the project and the computer, and give "what to run" a default so a search plus Enter starts a session): while something is typed, the agent list ends with "Start <agent> in", the projects the search finds (a computer's name in it picks that computer, `project_query_match`), each on the computer it starts on. The agent is the list's first, the one you used last; Enter on such a row starts it there at once. An agent the search finds still comes first, so typing an agent's name works as before, and the project row at the top still opens the full list.
+/// SEE-ALSO: apps/desktop/src/app/window/new_thread_picker_place.rs (draws the rows and launches them).
+pub fn new_thread_start_rows(
+    choices: &[UnifiedProjectChoice],
+    query: &str,
+) -> Vec<NewThreadStartRow> {
+    if query.trim().is_empty() {
+        return Vec::new();
+    }
+    choices
+        .iter()
+        .enumerate()
+        .filter_map(|(index, choice)| {
+            let machines: Vec<(&str, bool)> = choice
+                .machines
+                .iter()
+                .map(|machine| (machine.label.as_str(), machine.connected))
+                .collect();
+            let named =
+                project_query_match(&choice.label, choice.detail.as_deref(), &machines, query)?;
+            let machine = named.unwrap_or(choice.selected);
+            let machine_label = choice
+                .machines
+                .get(machine)
+                .filter(|_| {
+                    choice.machines.len() > 1
+                        || choice.machines.iter().any(|machine| {
+                            machine.machine_id != crate::sidebar_view::LOCAL_MACHINE_ID
+                        })
+                })
+                .map(|machine| machine.label.clone());
+            // Then what tells two same-named projects apart.
+            let place = match (machine_label, choice.detail.clone()) {
+                (Some(machine), Some(detail)) => Some(format!("{machine} · {detail}")),
+                (machine, detail) => machine.or(detail),
+            };
+            Some(NewThreadStartRow {
+                choice: index,
+                machine,
+                place,
+            })
+        })
+        .take(NEW_THREAD_START_ROWS_MAX)
+        .collect()
+}
+
+/// The heading over the "Start <agent> in" rows.
+pub fn new_thread_start_heading(agent_name: &str) -> String {
+    format!("Start {agent_name} in")
+}
+
 /// A left or right arrow on the machine chips: the next connected machine, stopping at the ends.
 pub fn move_project_choice_machine(choice: &UnifiedProjectChoice, forward: bool) -> usize {
     let connected = |index: &usize| {

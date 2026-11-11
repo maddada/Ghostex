@@ -1,11 +1,11 @@
-//! Panel 2, Agents: the detected and missing agent rows, the integration and Computer Use switches,
-//! the scan console / extension previews on the right and the phase tracker (panels/agents.tsx (deleted 2026-10-01),
+//! Panel 2, Agents: the detected and missing agent rows, the integration switch, the scan console /
+//! integration preview on the right and the phase tracker (panels/agents.tsx (deleted 2026-10-01),
 //! styles/agents.css).
 use super::agent_cli::InstallEvent;
 use super::interact;
 use super::model::{
-    ComputerUseState, PRIMARY_AGENTS, all_installed_have_hooks, catalog_agent_name,
-    default_agent_id, installed_agents,
+    PRIMARY_AGENTS, all_installed_have_hooks, catalog_agent_name, default_agent_id,
+    installed_agents,
 };
 use super::primitives::*;
 use super::scan_log::{ExtraTone, ScanExtra, ScanLog};
@@ -30,7 +30,6 @@ const CONNECTED_HOLD: Duration = Duration::from_millis(900);
 pub(crate) enum RightTab {
     Scan,
     Integration,
-    ComputerUse,
 }
 
 pub(crate) struct AgentsPanelState {
@@ -39,14 +38,12 @@ pub(crate) struct AgentsPanelState {
     pub(crate) guide_open: bool,
     pub(crate) guide_opened_at: Instant,
     connecting: bool,
-    computer_use_requested: bool,
     pub(crate) extras: Vec<ScanExtra>,
     hooks_before: HashMap<String, bool>,
     installed_before: Option<HashSet<String>>,
     connect_errors: Vec<String>,
     was_loading: bool,
     connected_since: Option<Instant>,
-    last_computer_use: ComputerUseState,
     pub(crate) scan_log: ScanLog,
     pub(crate) scan_log_mounted: Instant,
 }
@@ -59,14 +56,12 @@ impl AgentsPanelState {
             guide_open: false,
             guide_opened_at: now,
             connecting: false,
-            computer_use_requested: false,
             extras: Vec::new(),
             hooks_before: HashMap::new(),
             installed_before: None,
             connect_errors: Vec::new(),
             was_loading: false,
             connected_since: None,
-            last_computer_use: ComputerUseState::Off,
             scan_log: ScanLog::new(),
             scan_log_mounted: now,
         }
@@ -77,7 +72,7 @@ type Phase = &'static str;
 
 impl GpuiOnboardingWindow {
     fn agents_mounted(&self) -> bool {
-        self.panel == 2 && !self.flow.finished
+        self.panel == 2
     }
 
     fn add_extra(&mut self, id: String, text: String, tone: ExtraTone) {
@@ -112,9 +107,7 @@ impl GpuiOnboardingWindow {
             .map(|agent| (agent.agent_id.clone(), agent.hooks_installed))
             .collect();
         self.agents_panel.was_loading = self.agents_loading;
-        self.agents_panel.last_computer_use = self.computer_use_state();
         self.installed_before_effect(self.agents_loading, _cx);
-        self.computer_use_effect();
         self.scan_log_mount(now);
     }
 
@@ -249,42 +242,6 @@ impl GpuiOnboardingWindow {
         }
     }
 
-    pub(super) fn after_computer_use_changed(
-        &mut self,
-        before: ComputerUseState,
-        cx: &mut Context<Self>,
-    ) {
-        let _ = cx;
-        if !self.agents_mounted() || self.computer_use_state() == before {
-            return;
-        }
-        self.computer_use_effect();
-    }
-
-    fn computer_use_effect(&mut self) {
-        let state = self.computer_use_state();
-        self.agents_panel.last_computer_use = state;
-        if state != ComputerUseState::Off {
-            self.agents_panel.computer_use_requested = false;
-        }
-        match state {
-            ComputerUseState::Installing => self.add_extra(
-                "cu".into(),
-                "Computer Use: installing…".into(),
-                ExtraTone::Acc,
-            ),
-            ComputerUseState::Permissions => self.add_extra(
-                "cu".into(),
-                "Computer Use: waiting for your permission".into(),
-                ExtraTone::Wait,
-            ),
-            ComputerUseState::On => {
-                self.add_extra("cu".into(), "Computer Use: on".into(), ExtraTone::Ok)
-            }
-            ComputerUseState::Off => self.remove_extra("cu"),
-        }
-    }
-
     /// Every CLI install (panel rows and the Install guide) narrates itself here, then asks for a rescan.
     pub(super) fn on_install_event(&mut self, event: InstallEvent, cx: &mut Context<Self>) {
         if !self.agents_mounted() {
@@ -335,7 +292,7 @@ impl GpuiOnboardingWindow {
     }
 
     fn agents_connected(&self) -> bool {
-        self.flow.integration_on && all_installed_have_hooks(&self.agents)
+        all_installed_have_hooks(&self.agents)
     }
 
     pub(super) fn tick_agents(&mut self, now: Instant, cx: &mut Context<Self>) {
@@ -377,7 +334,7 @@ impl GpuiOnboardingWindow {
             .into_iter()
             .map(|agent| agent.agent_id.clone())
             .collect();
-        if !self.flow.integration_on || self.agents_connected() || installed.is_empty() {
+        if self.agents_connected() || installed.is_empty() {
             self.go(3, cx);
             return;
         }
@@ -398,32 +355,6 @@ impl GpuiOnboardingWindow {
         }
         self.send(OnboardingCommand::InstallAgentHooks(installed), cx);
         cx.notify();
-    }
-
-    fn toggle_computer_use(&mut self, cx: &mut Context<Self>) {
-        self.set_right_tab(RightTab::ComputerUse);
-        if self.computer_use_state() != ComputerUseState::Off
-            || self.agents_panel.computer_use_requested
-        {
-            cx.notify();
-            return;
-        }
-        self.agents_panel.computer_use_requested = true;
-        let before = self.computer_use_state();
-        self.computer_use_install_requested = true;
-        self.computer_use_install_deadline = Some(Instant::now() + Duration::from_secs(150));
-        let install_driver = self
-            .cli_status
-            .as_ref()
-            .and_then(|status| status.get("cuaDriverInstalled"))
-            .and_then(Value::as_bool)
-            != Some(true);
-        self.send(OnboardingCommand::InstallComputerUse { install_driver }, cx);
-        self.after_computer_use_changed(before, cx);
-        self.show_toast(
-            super::model::computer_use_copy(super::model::ComputerUseDesktop::current()).turned_on,
-            cx,
-        );
     }
 
     pub(super) fn render_agents(
@@ -458,10 +389,8 @@ impl GpuiOnboardingWindow {
         }
         let default_agent = default_agent_id(&self.settings, &self.agents);
         let connected = self.agents_connected();
-        let integration_on = self.flow.integration_on;
         let scanning = self.agents_loading;
         let connecting = self.agents_panel.connecting;
-        let computer_use_state = self.computer_use_state();
         let other_missing: Vec<_> = self
             .agents
             .iter()
@@ -510,7 +439,7 @@ impl GpuiOnboardingWindow {
             let selected = default_agent.as_deref() == Some(agent.agent_id.as_str());
             let (pill_tone, pill_text) = if scanning {
                 (DetTone::Wait, "Scanning…")
-            } else if integration_on && agent.hooks_installed {
+            } else if agent.hooks_installed {
                 (DetTone::On, "Connected")
             } else {
                 (DetTone::Detected, "Detected")
@@ -648,27 +577,8 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element(),
         );
-        let integration_toggle = self.control(
-            s,
-            toggle(
-                s,
-                "agents-integration-toggle",
-                integration_on,
-                self.thumb("integration", integration_on, now),
-                ToggleSize::Lg,
-                false,
-            ),
-            "agents-integration-toggle",
-            interact::Ring::new(17.0, 1.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| {
-                cx.stop_propagation();
-                this.flow.integration_on = !this.flow.integration_on;
-                this.set_right_tab(RightTab::Integration);
-                cx.notify();
-            },
-        );
+        // CDXC:Onboarding 2026-11-11 DECISION:
+        // User, on the first-run page (step 13, Connect Ghostex to the agent), picked "Install in setup; ask here only for agents added later". Setup connects every installed agent when the user goes on (no switch, no Skip for now), so the Connect dialog at an agent's start is left for an agent installed after setup, and its Not now is remembered for that agent (gx_store/create/agent.rs).
         let integration_row = switch_row(s, "agents-integration", 576.0, 72.0, (20.0, 30.0), 26.0, None)
                 .child(icon(s, "pulse", 22.0, 1.6, hex(0xd6dbe5)))
                 .child(
@@ -677,10 +587,12 @@ impl GpuiOnboardingWindow {
                         .min_w_0()
                         .child(nm(s, 17.0, 500.0).child("Ghostex integration"))
                         .child(ss(s, 12.5).child(
-                            "Adds a small Ghostex helper to each agent's own settings, so you see its live status and can resume it.",
+                            "Connect & continue adds a small Ghostex helper to each agent's own settings, so you see its live status and can resume it.",
                         )),
                 )
-                .child(integration_toggle);
+                .when(connected, |this| {
+                    this.child(detpill(s, "Connected", DetTone::On, DETPILL_DEFAULT))
+                });
         out.push(
             self.control(
                 s,
@@ -696,100 +608,16 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element(),
         );
-        let computer_use_on =
-            computer_use_state != ComputerUseState::Off || self.agents_panel.computer_use_requested;
-        let perm_pill = match computer_use_state {
-            ComputerUseState::Installing => Some(
-                perm_pill(s, false)
-                    .child(spinner(s, 12.0, 1.5, self.opened_at, now))
-                    .child(div().ml(s.px(6.0)).child("Installing…")),
-            ),
-            ComputerUseState::Permissions => Some(perm_pill(s, false).child("Needs OS permission")),
-            ComputerUseState::On => Some(perm_pill(s, true).child("On")),
-            ComputerUseState::Off if self.agents_panel.computer_use_requested => {
-                Some(perm_pill(s, false).child("Needs OS permission"))
-            }
-            ComputerUseState::Off => None,
-        };
-        let computer_use_toggle = self.control(
-            s,
-            toggle(
-                s,
-                "agents-computer-use-toggle",
-                computer_use_on,
-                self.thumb("computer-use", computer_use_on, now),
-                ToggleSize::Md,
-                false,
-            ),
-            "agents-computer-use-toggle",
-            interact::Ring::new(16.0, 1.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| {
-                cx.stop_propagation();
-                this.toggle_computer_use(cx);
-            },
-        );
-        let computer_use_row = switch_row(
-            s,
-            "agents-computer-use",
-            660.0,
-            72.0,
-            (18.0, 30.0),
-            18.0,
-            computer_use_on.then(|| rgba(110, 150, 255, 0.42)),
-        )
-        .child(icon(s, "monitor", 22.0, 1.6, hex(0xd6dbe5)))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(nm(s, 17.0, 500.0).child("Computer Use"))
-                .child(
-                    ss(s, 12.5)
-                        .child("Let agents use apps outside Ghostex, off until you allow it."),
-                ),
-        )
-        .children(perm_pill)
-        .child(computer_use_toggle);
-        out.push(
-            self.control(
-                s,
-                computer_use_row,
-                "agents-computer-use",
-                interact::Ring::new(14.0, 1.0),
-                interact::Keys::EnterSpace,
-                cx,
-                |this, _, cx| {
-                    this.set_right_tab(RightTab::ComputerUse);
-                    cx.notify();
-                },
-            )
-            .into_any_element(),
-        );
-        let next_label = if !integration_on || connected || installed.is_empty() {
+        let next_label = if connected || installed.is_empty() {
             "Next"
         } else if connecting {
             "Connecting…"
         } else {
             "Connect & continue"
         };
+        out.extend(self.render_sign_in_line(s, now, cx));
         out.push(
             foot_actions(s, 2)
-                .when(
-                    integration_on && !connected && !installed.is_empty(),
-                    |this| {
-                        this.child(self.control(
-                            s,
-                            ghost(s, "agents-skip", "Skip for now", 16.0, false),
-                            "agents-skip",
-                            interact::Ring::new(0.0, 0.0),
-                            interact::Keys::EnterSpace,
-                            cx,
-                            |this, _, cx| this.go(3, cx),
-                        ))
-                    },
-                )
                 .child({
                     let next = cta(
                         s,
@@ -848,7 +676,6 @@ impl GpuiOnboardingWindow {
                     [
                         (RightTab::Scan, "terminal", "Scan"),
                         (RightTab::Integration, "pulse", "Ghostex integration"),
-                        (RightTab::ComputerUse, "monitor", "Computer Use"),
                     ]
                     .into_iter()
                     .map(|(tab, icon_name, label)| {
@@ -883,7 +710,6 @@ impl GpuiOnboardingWindow {
                 out.push(self.render_scan_log(s, now, default_agent.as_deref(), connecting, cx));
             }
             RightTab::Integration => out.push(self.render_integration_panel(s, now)),
-            RightTab::ComputerUse => out.push(self.render_computer_use_panel(s, now, cx)),
         }
         // The tracker follows the scan console's own "Scanning…" / "Complete", so the two never
         // disagree while the console is still revealing lines.
@@ -929,7 +755,7 @@ impl GpuiOnboardingWindow {
         }
         out.push(track.into_any_element());
         if self.agents_panel.guide_open {
-            out.push(self.render_install_guide(s, now, true, cx));
+            out.push(self.render_install_guide(s, now, cx));
         }
         out
     }
@@ -1250,7 +1076,7 @@ pub(crate) fn switch_row(
         .cursor_pointer()
 }
 
-fn perm_pill(s: S, on: bool) -> Div {
+pub(crate) fn perm_pill(s: S, on: bool) -> Div {
     div()
         .flex()
         .flex_none()

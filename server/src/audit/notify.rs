@@ -320,6 +320,7 @@ fn notify_feed_and_phones(
                 notification_id: id,
                 agent_name: "Ghostex".to_string(),
                 project_name: title,
+                session_title: String::new(),
                 occurred_at_ms,
             });
             true

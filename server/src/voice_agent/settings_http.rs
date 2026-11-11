@@ -26,7 +26,7 @@ fn bad_request(endpoint_path: String, request_id: String, message: String) -> Ro
 
 /// `{provider?, voice?, speed?}`: `voice` is one of `provider`'s voices (the selected provider
 /// when omitted), `speed` one of 1, 1.2, 1.4, 1.6, 1.8, 2, `callMode` `regular` or
-/// `pushToTalk` (applies to the next call). Answers the saved values.
+/// `pushToTalk` (switches the running calls at once, too). Answers the saved values.
 pub(crate) async fn handle_set_voice_agent_settings_http(
     state: &AppState,
     endpoint_path: String,
@@ -114,14 +114,23 @@ pub(crate) async fn handle_set_voice_agent_settings_http(
         )
         .await
     {
-        Ok(_) => routed_json(
-            Some(endpoint_path),
-            StatusCode::OK,
-            rpc_success(
-                request_id,
-                json!({"provider": provider.id(), "saved": Value::Object(patch)}),
-            ),
-        ),
+        Ok(_) => {
+            // Every running call follows the new mode at once (`Conversation::set_call_mode`).
+            if let Some(mode) = patch.get(keys::CALL_MODE_SETTING).and_then(Value::as_str) {
+                let push_to_talk = mode == "pushToTalk";
+                for tx in super::registry::senders() {
+                    let _ = tx.send(super::conversation::Input::CallMode(push_to_talk));
+                }
+            }
+            routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({"provider": provider.id(), "saved": Value::Object(patch)}),
+                ),
+            )
+        }
         Err(error) => routed_json(
             Some(endpoint_path),
             StatusCode::SERVICE_UNAVAILABLE,

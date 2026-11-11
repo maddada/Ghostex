@@ -226,22 +226,14 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -o pipefail
-          install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" >"$HOME/.ssh/aur"
-          chmod 600 "$HOME/.ssh/aur"
-          # Pinned rather than ssh-keyscan'd: a blind keyscan trusts whatever
-          # answers on port 22 the first time. These are the aur.archlinux.org
-          # host keys published in archlinux/infrastructure docs/ssh-hostkeys.txt:
-          #   ECDSA   SHA256:uTa/0PndEgPZTf76e1DFqXKJEXKsn7m9ivhLQtzGOCI
-          #   ED25519 SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4
-          #   RSA     SHA256:5s5cIyReIfNNVGRFdDbe3hdYiI5OelHGpw2rOUud3Q8
-          cat >"$HOME/.ssh/aur_known_hosts" <<'EOF'
-          aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN
-          aur.archlinux.org ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBLMiLrP8pVi5BFX2i3vepSUnpedeiewE5XptnUnau+ZoeUOPkpoCgZZuYfpaIQfhhJJI5qgnjJmr4hyJbe/zxow=
-          aur.archlinux.org ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKF9vAFWdgm9Bi8uc+tYRBmXASBb5cB5iZsB7LOWWFeBrLp3r14w0/9S2vozjgqY5sJLDPONWoTTaVTbhe3vwO8CBKZTEt1AcWxuXNlRnk9FliR1/eNB9uz/7y1R0+c1Md+P98AJJSJWKN12nqIDIhjl2S1vOUvm7FNY43fU2knIhEbHybhwWeg+0wxpKwcAd/JeL5i92Uv03MYftOToUijd1pqyVFdJvQFhqD4v3M157jxS5FTOBrccAEjT+zYmFyD8WvKUa9vUclRddNllmBJdy4NyLB8SvVZULUPrP3QOlmzemeKracTlVOUG1wsDbxknF1BwSCU7CmU6UFP90kpWIyz66bP0bl67QAvlIc52Yix7pKJPbw85+zykvnfl2mdROsaT8p8R9nwCdFsBc9IiD0NhPEHcyHRwB8fokXTajk2QnGhL+zP5KnkmXnyQYOCUYo3EKMXIlVOVbPDgRYYT/XqvBuzq5S9rrU70KoI/S5lDnFfx/+lPLdtcnnEPk=
-          EOF
-          chmod 600 "$HOME/.ssh/aur_known_hosts"
-          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/aur_known_hosts -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+          # Installs the key (printing only its fingerprint), pins the aur.archlinux.org host keys and
+          # exports GIT_SSH_COMMAND; release-aur-dry-run.yml sources the same file.
+          if ! source tooling/release-gpui/aur-ssh-setup.sh 2>"$RUNNER_TEMP/aur-ssh.log"; then
+            reason="$(tr '\n' ' ' <"$RUNNER_TEMP/aur-ssh.log")"
+            echo "AUR ghostex-bin ${VERSION} was NOT updated: ${reason}" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=AUR ghostex-bin not updated::${reason}"
+            exit 1
+          fi
           # Prefer the checksum the producing job already recorded. When the
           # tarball product was reused rather than rebuilt there is no manifest
           # in this workspace, and the publisher falls back to the published
@@ -253,7 +245,11 @@ jobs:
             --version "${VERSION}" "${manifest_argument[@]}" --publish 2>&1 | tee "$RUNNER_TEMP/aur.log"; then
             echo "AUR ghostex-bin: $(tail -n 1 "$RUNNER_TEMP/aur.log")" >>"$GITHUB_STEP_SUMMARY"
           else
-            echo "AUR ghostex-bin ${VERSION} was NOT updated: $(tail -n 3 "$RUNNER_TEMP/aur.log" | tr '\n' ' ')" >>"$GITHUB_STEP_SUMMARY"
-            echo "::warning title=AUR ghostex-bin not updated::$(tail -n 3 "$RUNNER_TEMP/aur.log" | tr '\n' ' ')"
+            # Everything after the "Rendered" line is the publisher's error, AUR answer included
+            # (11.3.0's warning kept only its last 3 lines and lost "Permission denied (publickey)").
+            reason="$(sed -n '/^Rendered /,$p' "$RUNNER_TEMP/aur.log" | tail -n +2 | tr '\n' ' ')"
+            [ -n "${reason}" ] || reason="$(tail -n 3 "$RUNNER_TEMP/aur.log" | tr '\n' ' ')"
+            echo "AUR ghostex-bin ${VERSION} was NOT updated: ${reason}" >>"$GITHUB_STEP_SUMMARY"
+            echo "::warning title=AUR ghostex-bin not updated::${reason}"
             exit 1
           fi

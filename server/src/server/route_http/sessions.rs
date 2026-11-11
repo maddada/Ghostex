@@ -571,6 +571,20 @@ pub(super) async fn route_sessions_http(
         | "/api/setMainCoordinator"
         | "/api/checkAgentSessionWrite" => {
             let path = endpoint.path.clone();
+            // Which computer a check came from, said by gxserver, never by the caller: a thread on
+            // another computer is found by it (coordinators/thread_messages.rs, GitHub #554).
+            let mut body_json = body_json;
+            if path == "/api/checkAgentSessionWrite" {
+                if let Some(params) = body_json.get_mut("params").and_then(Value::as_object_mut) {
+                    params.remove(crate::coordinators::SENDER_SERVER_ID_PARAM);
+                    if let crate::security::Principal::Peer { server_id, .. } = &caller {
+                        params.insert(
+                            crate::coordinators::SENDER_SERVER_ID_PARAM.to_string(),
+                            Value::String(server_id.clone()),
+                        );
+                    }
+                }
+            }
             handle_domain_http(
                 &state,
                 endpoint.path,
@@ -658,14 +672,21 @@ pub(super) async fn route_sessions_http(
                 ),
             }
         }
-        "/api/promoteCoordinator" => handle_domain_http(
+        "/api/promoteCoordinator" => {
+            coordinator_runtime::handle_promote_coordinator_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
+        "/api/sessionReplyDrafts" => handle_domain_http(
             &state,
             endpoint.path,
             request_id,
             &body_json,
-            |repository, db, params, _| {
-                coordinator_runtime::promote_coordinator(&state, db, repository, params)
-            },
+            |_, db, params, _| crate::session_reply_drafts::handle(db, params),
         ),
         "/api/toggleCloseAfterDone" => handle_domain_http(
             &state,

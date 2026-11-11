@@ -254,6 +254,33 @@ impl GhostexGpuiApp {
                     cx.refresh_windows();
                 }
             }
+            // The new chat tips card's Got it and Hide tips (native_chat/new_chat_tips.rs). The page
+            // cannot save Settings, so they hold on this page until it reloads.
+            Some("setNewChatTipsRead") => {
+                if let Some(read_ids) = message["readIds"].as_array() {
+                    let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                        .object()
+                        .clone();
+                    settings.insert(
+                        crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_READ_SETTINGS_KEY
+                            .into(),
+                        serde_json::Value::Array(read_ids.clone()),
+                    );
+                    crate::shared_settings::install(settings);
+                    cx.refresh_windows();
+                }
+            }
+            Some("hideNewChatTips") => {
+                let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .clone();
+                settings.insert(
+                    crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_SETTINGS_KEY.into(),
+                    false.into(),
+                );
+                crate::shared_settings::install(settings);
+                cx.refresh_windows();
+            }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
             Some("setChatZoomPercent") => {
@@ -466,7 +493,15 @@ impl GhostexGpuiApp {
             }
             // The working card's Links pill: the page's links card, as the sidebar row opens it.
             Some("sessionLinks") => {
-                self.open_session_links_card(row.clone(), cx);
+                let anchor = &message["anchor"];
+                match (anchor["x"].as_f64(), anchor["y"].as_f64()) {
+                    (Some(x), Some(y)) => self.toggle_session_links_card_at(
+                        row.clone(),
+                        gpui::point(gpui::px(x as f32), gpui::px(y as f32)),
+                        cx,
+                    ),
+                    _ => self.open_session_links_card(row.clone(), cx),
+                }
                 return true;
             }
             Some("sleep") => {

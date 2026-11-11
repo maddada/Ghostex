@@ -134,6 +134,9 @@ pub(crate) struct NativeChatView {
     /// The snapshot's `finalIds` as a set, with the snapshot it was built from (message_actions.rs).
     pub(super) final_ids:
         std::cell::RefCell<Option<(std::sync::Weak<Value>, std::collections::HashSet<String>)>>,
+    /// How many rows the transcript list holds after the transcript's own for messages just
+    /// sent that the core has not drawn yet (send_watch.rs), before the status row.
+    pub(super) sent_rows_listed: usize,
     /// The chat box's pill strip (pills_strip.rs).
     pub(super) pills_strip: super::pills_strip::PillsStripCells,
     pub(super) save_markdown_window: super::save_markdown::SaveMarkdownWindowState,
@@ -155,9 +158,15 @@ pub(crate) struct NativeChatView {
     /// True while an opened quiet line's steps render (Agent work Reduced or Quiet,
     /// quiet_work.rs): each call draws as a quiet step instead of a tool row.
     pub(super) quiet_steps: bool,
+    /// Quiet View's lines of the current snapshot, read once per snapshot (quiet_view.rs).
+    pub(super) quiet_lines_cache:
+        std::cell::RefCell<Option<(usize, std::rc::Rc<super::quiet_view::QuietLines>)>>,
     /// The message under the pointer while Message spacing is Compact, whose footer row shows its
     /// buttons (message_spacing.rs).
     pub(super) hovered_message: Option<String>,
+    /// The message whose ⋯ menu was opened last: its ⋯ stays shown while that menu is up
+    /// (message_actions.rs).
+    pub(super) message_menu: Option<String>,
     /// Agent work Quiet: the work button and opened steps of the reply row being drawn, which
     /// that reply's hover row takes (hidden_work.rs).
     pub(super) hidden_work: Option<super::hidden_work::HiddenWork>,
@@ -281,6 +290,10 @@ pub(crate) struct NativeChatView {
         std::collections::HashMap<String, super::question_form::FormInput>,
     /// The modal is being drawn, so a form's boxes are looked up in `modal_form_inputs`.
     pub(super) form_in_modal: std::cell::Cell<bool>,
+    /// Dictations the core wrote into a form box's draft, by the box (modal's copy or not, and
+    /// its key), until that box's next draw shows them (`show_dictated` in dictation.rs).
+    pub(super) dictated_boxes:
+        std::collections::HashMap<(bool, String), super::dictation::Dictated>,
     /// The modal's window was asked for and not yet open, or the reader closed it and the core has
     /// not yet been told.
     pub(super) resource_modal_pending: bool,
@@ -330,6 +343,13 @@ pub(crate) struct NativeChatView {
     /// A send left this composer and has not settled; Enter does not wait for it (the core holds
     /// later sends behind it), so only summaries read it.
     pub(crate) pending_send: bool,
+    /// A send the chat core has not counted yet (send_watch.rs), and the last watch's number.
+    pub(super) send_watch: Option<super::send_watch::SendWatch>,
+    pub(super) send_watch_token: u64,
+    /// When the last send left the chat box, for the send log's step times (send_watch.rs).
+    pub(super) last_send_at: Option<web_time::Instant>,
+    /// The message the send gate holds, as it was when the hold began (send_watch.rs).
+    pub(super) held_log: Option<super::send_watch::HeldLog>,
     pub(crate) composer_ready: bool,
     pub(crate) expanded: FoldKeys,
     /// Scroll offsets of the capped boxes inside transcript rows (nested_scroll.rs).
@@ -354,6 +374,8 @@ pub(crate) struct NativeChatView {
     pub(super) code_expanded: HashSet<String>,
     /// The composer's dictation session, made the first time the reader presses Dictate.
     pub(crate) dictation: super::dictation::Dictation,
+    /// The microphone was pressed and the pointer has not left it since (`hover_dictation`).
+    pub(super) dictate_pressed: std::rc::Rc<std::cell::Cell<bool>>,
     pub(crate) list: gpui::ListState,
     /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
     pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
@@ -398,6 +420,8 @@ pub(crate) struct NativeChatView {
     notify_scheduled: bool,
     /// A redraw is booked for the API error card's countdown (api_error_card.rs).
     pub(super) api_error_tick: std::cell::Cell<bool>,
+    /// A redraw is booked for a running tool call's time so far (tool_card.rs, `live_time`).
+    pub(super) tool_clock_tick: std::cell::Cell<bool>,
     /// The transcript starts at the window's top edge under the floating work area header, so its
     /// first row reserves the header's height (`set_under_workarea_header`).
     pub(crate) under_workarea_header: bool,
@@ -519,6 +543,7 @@ impl NativeChatView {
             row_motion: Default::default(),
             indicator_overlay: Default::default(),
             final_ids: Default::default(),
+            sent_rows_listed: 0,
             pills_strip: Default::default(),
             context_editor_window: Default::default(),
             save_markdown_window: Default::default(),
@@ -532,7 +557,9 @@ impl NativeChatView {
             in_work_fold: false,
             hide_file_changes: false,
             quiet_steps: false,
+            quiet_lines_cache: Default::default(),
             hovered_message: None,
+            message_menu: None,
             hidden_work: None,
             disclosure_motion: Default::default(),
             transcript_focus_follow: Default::default(),
@@ -609,6 +636,7 @@ impl NativeChatView {
             files_links_menu_pending: false,
             modal_form_inputs: Default::default(),
             form_in_modal: Default::default(),
+            dictated_boxes: Default::default(),
             resource_modal_pending: false,
             resource_modal_closing: false,
             session_details: Default::default(),
@@ -628,6 +656,10 @@ impl NativeChatView {
             draft: String::new(),
             draft_revision: 0,
             pending_send: false,
+            send_watch: None,
+            send_watch_token: 0,
+            last_send_at: None,
+            held_log: None,
             composer_ready: false,
             expanded: FoldKeys::default(),
             nested_scrolls: Default::default(),
@@ -642,6 +674,7 @@ impl NativeChatView {
             code_wrap_default: false,
             code_expanded: HashSet::new(),
             dictation: None,
+            dictate_pressed: Default::default(),
             list,
             transcript_host: None,
             composer_host: None,
@@ -662,6 +695,7 @@ impl NativeChatView {
             last_notified: None,
             notify_scheduled: false,
             api_error_tick: std::cell::Cell::new(false),
+            tool_clock_tick: std::cell::Cell::new(false),
             under_workarea_header: false,
         }
     }
@@ -924,7 +958,11 @@ impl NativeChatView {
         let mut changed = false;
         for output in runtime.take_outputs() {
             match output {
-                ChatRuntimeOutput::Drained(output) => changed |= self.apply_output(output, cx),
+                ChatRuntimeOutput::Drained(output) => {
+                    changed |= self.apply_output(output, cx);
+                    // Whatever the frame carried, the host thread is alive (send_watch.rs).
+                    self.note_send_progress();
+                }
                 ChatRuntimeOutput::Error(error) => {
                     self.error = Some(error);
                     cx.notify();
@@ -1034,8 +1072,10 @@ impl NativeChatView {
                 .iter()
                 .any(|key| self.snapshot["sessionDetails"][key] != snapshot["sessionDetails"][key]);
             let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
+            self.note_held_send(&before);
             self.remeasure_on_look_change(&before);
             self.adopt_board_focus(&before, cx);
+            self.prune_kept_replies(&before, cx);
             drop_off_main_thread(before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);
@@ -1139,6 +1179,8 @@ impl NativeChatView {
                 }
                 // The page card's picture (`page_card.rs`), which the view keeps for itself.
                 Some("host") if request["method"] == "pageThumbnail" => self.receive_page_thumbnail(&request["params"], cx),
+                // A work item Reply that did not go opens again with its words (reply_popover.rs).
+                Some("host") if request["method"] == "workReplyFailed" => self.reopen_failed_reply(&request["params"], cx),
                 // The offline-computer card's check and Retry name the chat's machine for the app
                 // (remote_conn/chat_computers.rs).
                 Some("host") if matches!(request["method"].as_str(), Some("checkComputer" | "reconnectComputer")) => {
@@ -1162,6 +1204,7 @@ impl NativeChatView {
                         cx.emit(NativeChatEvent::Host(json!({"type": "toast", "level": level, "title": message})));
                     }
                 }
+                Some("dictationInserted") => self.dictation_inserted(&request["params"], cx),
                 Some("actionError") => { cx.notify(); }
                 Some("composer") => {
                     self.paste_tiles.inserted();
@@ -1207,6 +1250,10 @@ impl NativeChatView {
         params.insert("sessionId".into(), config.session_id.into());
         let params = Value::Object(params);
         let id = request["id"].clone();
+        // A message's own call to gxserver: when it left after Enter and how long it took go in
+        // the send log (send_watch.rs).
+        let delivery_call = matches!(method, "sendSessionChatMessage" | "queueSessionChatPrompt")
+            .then(|| (self.since_last_send_ms(), web_time::Instant::now()));
         let task = cx.background_executor().spawn(async move {
             if import_attachments {
                 return super::attachments::import_paths(&config.remote, &params)
@@ -1269,6 +1316,9 @@ impl NativeChatView {
                         "errorMessage": error["message"],
                     }),
                 );
+                if let Some((after_enter_ms, started)) = delivery_call {
+                    this.log_send_call(&diagnostic_method, after_enter_ms, started, &error);
+                }
                 if let Some(runtime) = &this.runtime {
                     runtime.call("resolve", vec![id, value, error]);
                 }

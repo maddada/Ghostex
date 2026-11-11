@@ -228,7 +228,7 @@ impl GhostexGpuiApp {
         }
         // CDXC:Drafts 2026-09-23 WHY: an initial prompt is still unsent until the durable startup
         // queue delivers it, so the new session is a draft while its input box starts.
-        // A coordinator is never a draft (gx_store/create/coordinator.rs): `/ghostex-orchestrator`
+        // A coordinator is never a draft (gx_store/create/coordinator.rs): `/ghostex-coordinator`
         // is queued on create, and a draft could switch agents before its first prompt.
         if !is_coordinator && (has_prompt || launch.first_user_input_draft.is_some()) {
             params.insert("draft".into(), json!(true));
@@ -331,7 +331,7 @@ impl GhostexGpuiApp {
                 });
                 // A promptless local create (Handoff / Export's follow-up) leaves the provider to
                 // the attach, as the old runtime did. A coordinator starts here for its queued
-                // `/ghostex-orchestrator` prompt, and a page has no attach.
+                // `/ghostex-coordinator` prompt, and a page has no attach.
                 if !prompt.trim().is_empty()
                     || rename_command.is_some()
                     || is_coordinator

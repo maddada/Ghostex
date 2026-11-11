@@ -52,8 +52,9 @@ pub(crate) fn popup(
             glass(s)
                 .id("onboarding-popup")
                 .w(s.px(width))
-                .py(s.px(20.0))
-                .px(s.px(22.0))
+                // The same 20pt on every side, so the header's X sits as far from the top as from
+                // the side (CDXC:SessionChat 2026-11-11 in visual_page_modal/band_geometry.rs).
+                .p(s.px(20.0))
                 .border_color(rgba(120, 150, 235, 0.25))
                 .bg(hex(0x0e1119))
                 .shadow(vec![
@@ -61,24 +62,26 @@ pub(crate) fn popup(
                     inset_shadow(white(0.045), 0.0, 1.0, 0.0, 0.0, s),
                 ])
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .mb(s.px(10.0))
-                        .child(tracked_text(
-                            s,
-                            title.to_string(),
-                            MANROPE,
-                            700.0,
-                            19.0,
-                            19.0 * LH_MANROPE,
-                            -0.01,
-                            hex(0xeef1f7),
-                        ))
-                        .child(close),
-                )
+                .child({
+                    let title = tracked_text(
+                        s,
+                        title.to_string(),
+                        MANROPE,
+                        700.0,
+                        19.0,
+                        19.0 * LH_MANROPE,
+                        -0.01,
+                        hex(0xeef1f7),
+                    );
+                    let head = div().flex().items_center().mb(s.px(10.0));
+                    // The X leads the header on macOS, the title after it (CDXC:AppModal
+                    // 2026-11-10 in window/round_close_button.rs).
+                    if super::super::round_close_button::close_buttons_on_left() {
+                        head.gap(s.px(10.0)).child(close).child(title)
+                    } else {
+                        head.justify_between().child(title).child(close)
+                    }
+                })
                 .children(body),
         )
         .into_any_element()
@@ -248,16 +251,16 @@ impl GpuiOnboardingWindow {
         .into_any_element()
     }
 
-    /// The Install guide. On the Agents panel (`queue`) it can be queued for after setup and each
-    /// row installs through gxserver; on the finished screen it only copies commands.
+    /// The Install guide on the Agents panel: each row installs through gxserver.
+    ///
+    /// CDXC:Onboarding 2026-11-11 WHY: its "Open after onboarding" button queued this list for the "You're set" screen, which setup no longer has (DECISION in get_started.rs); the user installs from the list here or later in Settings > Agents.
     pub(super) fn render_install_guide(
         &mut self,
         s: S,
         now: Instant,
-        queue: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let connection = queue && self.cli_available;
+        let connection = self.cli_available;
         let close = self.popup_close(s, cx);
         let installed: std::collections::HashSet<String> = self
             .agents
@@ -526,14 +529,7 @@ impl GpuiOnboardingWindow {
         let lead = if connection {
             "Ghostex runs any agent CLI installed on your computer. Install one here with its official command; it shows up in the list once the scan finds it.".to_string()
         } else {
-            format!(
-                "Ghostex runs any agent CLI already installed on your computer. Install one, then {}.",
-                if queue {
-                    "press Rescan"
-                } else {
-                    "rescan in Settings → Agents"
-                }
-            )
+            "Ghostex runs any agent CLI already installed on your computer. Install one, then press Rescan.".to_string()
         };
         let mut body = vec![
             modal_p(s).child(lead).into_any_element(),
@@ -584,79 +580,29 @@ impl GpuiOnboardingWindow {
                     OnboardingCommand::OpenExternalUrl(INSTALL_GUIDE_URL.to_string()),
                     cx,
                 );
-                if !queue {
-                    this.finished.follow_up = None;
-                    this.flow.install_queued = false;
-                    cx.notify();
-                }
             },
         );
         // The link's auto right margin takes the free space; Taffy would also apply
         // `justify-content: flex-end` on top of it and push the row past the card.
-        let actions = if queue {
-            modal_actions(s)
-                .justify_start()
-                .child(guide_link)
-                .child(self.control(
-                    s,
-                    ghost(s, "guide-close", "Close", 15.5, false),
-                    "guide-close",
-                    interact::Ring::new(0.0, 0.0),
-                    interact::Keys::EnterSpace,
-                    cx,
-                    |this, _, cx| {
-                        this.agents_panel.guide_open = false;
-                        this.cli_rows.clear_lazy();
-                        cx.notify();
-                    },
-                ))
-                .child(self.control(
-                    s,
-                    cta(
-                        s,
-                        "guide-later",
-                        "Open after onboarding",
-                        true,
-                        false,
-                        false,
-                        CtaSize::Small,
-                    ),
-                    "guide-later",
-                    interact::Ring::new(10.0, 1.0),
-                    interact::Keys::EnterSpace,
-                    cx,
-                    |this, _, cx| {
-                        this.flow.install_queued = true;
-                        this.agents_panel.guide_open = false;
-                        this.cli_rows.clear_lazy();
-                        this.show_toast("Install guide will open after setup", cx);
-                    },
-                ))
-        } else {
-            modal_actions(s)
-                .justify_start()
-                .child(guide_link)
-                .child(self.control(
-                    s,
-                    cta(s, "guide-done", "Done", true, false, false, CtaSize::Small),
-                    "guide-done",
-                    interact::Ring::new(10.0, 1.0),
-                    interact::Keys::EnterSpace,
-                    cx,
-                    |this, _, cx| {
-                        this.finished.follow_up = None;
-                        this.flow.install_queued = false;
-                        cx.notify();
-                    },
-                ))
-        };
+        let actions = modal_actions(s)
+            .justify_start()
+            .child(guide_link)
+            .child(self.control(
+                s,
+                cta(s, "guide-done", "Done", true, false, false, CtaSize::Small),
+                "guide-done",
+                interact::Ring::new(10.0, 1.0),
+                interact::Keys::EnterSpace,
+                cx,
+                |this, _, cx| {
+                    this.agents_panel.guide_open = false;
+                    this.cli_rows.clear_lazy();
+                    cx.notify();
+                },
+            ));
         body.push(actions.into_any_element());
         let this = cx.entity().downgrade();
-        let opened_at = if queue {
-            self.agents_panel.guide_opened_at
-        } else {
-            self.finished.follow_up_at
-        };
+        let opened_at = self.agents_panel.guide_opened_at;
         popup(
             s,
             "Install another agent",

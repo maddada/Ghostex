@@ -1,6 +1,11 @@
 const GITHUB_REPOSITORY = 'maddada/Ghostex';
 
-export const IOS_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
+/*
+ CDXC:Release 2026-11-11 DECISION:
+ User: "in the changelog and everywhere in the app put the link of the app store don't put link of test flight".
+ The iPhone app is public on the App Store, so every download block links there.
+*/
+export const IOS_APP_STORE_URL = 'https://apps.apple.com/app/id6771707394';
 
 /*
  CDXC:Release 2026-09-10 DECISION:
@@ -12,7 +17,7 @@ export const IOS_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
 export const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/ghostex-bin';
 
 export function renderIosAvailabilityNotes() {
-  return `iOS: TestFlight through [Discord](${IOS_DISCORD_URL}) (post in the iOS channel)`;
+  return `**iOS:** [App Store](${IOS_APP_STORE_URL})`;
 }
 
 function assertVersion(version) {

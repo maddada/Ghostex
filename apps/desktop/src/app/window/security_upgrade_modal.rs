@@ -894,7 +894,7 @@ impl GpuiSecurityUpgradeModalWindow {
                     19.0,
                     p.foreground,
                     format!(
-                        "On {}, open Settings \u{203a} Remote \u{203a} Connect a computer \u{203a} Copy the code.",
+                        "On {}, open Settings \u{203a} Remote \u{203a} Connect a Computer \u{203a} Copy the code.",
                         row.name
                     ),
                 )

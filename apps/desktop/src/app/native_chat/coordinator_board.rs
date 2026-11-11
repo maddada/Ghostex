@@ -214,6 +214,22 @@ fn hex_color(hex: &str) -> Option<gpui::Hsla> {
         .map(|color| rgb(color).into())
 }
 
+/// A card's answers with Reply after them when it offers both (work_actions.rs `reply_answer`):
+/// locked once one is given, showing the words once a reply was sent from here (`replied`).
+fn with_reply(row: &Value, answers: &[Value]) -> Vec<Value> {
+    let mut all = answers.to_vec();
+    let reply = &row["actions"]["reply"];
+    if !answers.is_empty() && reply.is_object() {
+        let locked = answers.iter().any(|answer| answer["locked"] == true);
+        all.push(NativeChatView::reply_answer(
+            reply,
+            &text(row, "replied"),
+            locked,
+        ));
+    }
+    all
+}
+
 /// An open card's height (unscaled), estimated from its words: its title and latest line wrap at
 /// the list's width, then its chips and its buttons.
 fn expanded_card_height(row: &Value) -> f32 {
@@ -227,7 +243,12 @@ fn expanded_card_height(row: &Value) -> f32 {
     } else {
         lines(&line) * 19.0 + 6.0
     };
-    20.0 + lines(&text(row, "title")) * 20.0 + body + 28.0 + 32.0
+    // A work ask's whole detail under its title (`board_card`).
+    let detail = match text(row, "body").as_str() {
+        "" => 0.0,
+        words => lines(words) * 19.0 + 6.0,
+    };
+    20.0 + lines(&text(row, "title")) * 20.0 + detail + body + 28.0 + 32.0
 }
 
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
@@ -327,15 +348,36 @@ pub(crate) struct CoordinatorBoardView {
     focus: Option<BoardFocus>,
     /// The card whose menu is open (a right-click, or its ⋯), and where.
     menu: Option<BoardCardMenu>,
+    /// Where a count on the dock's status line was clicked: the next focus opens the panel as its
+    /// floating card there, over the chat, even where it could dock (work_cards.rs).
+    pub(super) float_at: Option<gpui::Bounds<gpui::Pixels>>,
+    /// The dock's top edge at its last paint, `None` while it is not drawn: the work items list
+    /// its header's button opens sits above the dock instead of over it (work_cards.rs).
+    pub(super) dock_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
+    /// The dock's rows' width at its last paint (unscaled), 0 before the first: what decides
+    /// whether a row's answers fit beside its question (work_cards.rs `dock_row`).
+    pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
+    /// When each page row last asked its gxserver for its counts (work_cards.rs
+    /// `refresh_page_counts`), by page id.
+    pub(super) page_counts_asked:
+        std::cell::RefCell<std::collections::HashMap<String, web_time::Instant>>,
+    /// The dock row whose ⋯ menu was opened last, and that menu: the row's ⋯ stays shown over its
+    /// age while that menu is open, the pointer being on the menu and off the row (work_cards.rs
+    /// `row_age_menu`).
+    pub(super) dock_menu_row: Option<(String, gpui::EntityId)>,
+    /// Each opened card's answers line width at its last paint (unscaled), by card key: what
+    /// decides whether its answers fold into one dropdown (`board_card_buttons`).
+    answer_rooms: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
 }
 
-/// An open card menu: its card, the window point it opened at, whether it shows its Tags, and the
-/// window its board is in (the docked chat's, or the floating board's or the columns' own) with
-/// that window's size.
+/// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
+/// the card's Snooze lengths (its Snooze button), and the window its board is in (the docked
+/// chat's, or the floating board's or the columns' own) with that window's size.
 pub(crate) struct BoardCardMenu {
     key: String,
     at: gpui::Point<gpui::Pixels>,
     tags: bool,
+    snooze: bool,
     parent: gpui::AnyWindowHandle,
     viewport: gpui::Size<gpui::Pixels>,
 }
@@ -343,6 +385,8 @@ pub(crate) struct BoardCardMenu {
 /// The card menu's width and inset (unscaled); its rows are the sidebar menu's.
 const BOARD_MENU_WIDTH: f32 = 220.0;
 const BOARD_MENU_PADDING: f32 = 6.0;
+/// The Snooze lengths' width (unscaled): their words are short.
+const BOARD_SNOOZE_MENU_WIDTH: f32 = 160.0;
 use crate::app::native_sidebar::{SIDEBAR_MENU_ROW_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT};
 
 /// A card being dragged to another group, and the picture that follows the pointer.
@@ -449,8 +493,9 @@ impl NativeChatView {
         }
     }
 
-    /// The Board pill was clicked: in the list view the docked column comes or goes where there is
-    /// room, else the floating card opens or shuts; in the columns view the overlay does.
+    /// The dock header's work items button (work_cards.rs) was clicked: in the list view the
+    /// docked column comes or goes where there is room, else the floating card opens or shuts; in
+    /// the columns view the overlay does.
     pub(super) fn toggle_coordinator_board(
         &mut self,
         pill: gpui::Bounds<gpui::Pixels>,
@@ -1139,11 +1184,6 @@ impl NativeChatView {
         let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
         let expanded = row["expanded"] == true;
         let title = text(row, "title");
-        let tooltip = [title.as_str(), text(row, "detail").as_str()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
         let command = row["command"].clone();
         let toggle = row["toggle"].clone();
         let reference = text(row, "reference");
@@ -1220,9 +1260,9 @@ impl NativeChatView {
         let note = text(row, "note");
         if let Some(relayed) = &relayed {
             chips = chips.child(self.board_relay_buttons(relayed, CHIP_SIZE, p, cx));
-        } else if !answers.is_empty() {
+        } else if !answers.is_empty() && !expanded {
             // A Work panel ask names the work it belongs to before its answers (gx-chat-core
-            // work_panel.rs).
+            // work_panel.rs). Opened, its answers are the dock's buttons below (work_actions.rs).
             // Only where the answers keep their room: a narrow column shows them alone.
             let lead = text(row, "lead");
             if !lead.is_empty() && inner_width >= 260.0 {
@@ -1238,7 +1278,16 @@ impl NativeChatView {
                 );
             }
             // Beside a lead the answers keep their width; alone on a narrow card they give way.
-            let answers_pill = self.board_answers(&key, &answers, p, cx);
+            // Their room: the card's line less its age, and the lead's narrowest beside them.
+            let room = inner_width
+                - age_width
+                - CHIP_GAP
+                - if !lead.is_empty() && inner_width >= 260.0 {
+                    40.0 + CHIP_GAP
+                } else {
+                    0.0
+                };
+            let answers_pill = self.board_answers(&key, &with_reply(row, &answers), room, p, cx);
             chips = if !lead.is_empty() && inner_width >= 260.0 {
                 chips.child(div().flex_shrink_0().child(answers_pill))
             } else {
@@ -1255,12 +1304,6 @@ impl NativeChatView {
                         p.muted
                     } else {
                         p.card_muted
-                    })
-                    .when(!note.is_empty(), |this| {
-                        let note = note.clone();
-                        this.tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(note.clone()).build(window, cx)
-                        })
                     })
                     .child(if note.is_empty() {
                         "No links yet".to_string()
@@ -1378,18 +1421,63 @@ impl NativeChatView {
                             .when(!expanded, |title| title.truncate())
                             .text_size(px(TITLE_SIZE * s))
                             .text_color(p.foreground)
-                            .when(!expanded, |title| {
-                                title.tooltip(move |window, cx| {
-                                    gpui_component::tooltip::Tooltip::new(tooltip.clone())
-                                        .build(window, cx)
-                                })
-                            })
-                            .child(title.clone()),
+                            // No tooltip repeats the card's title and line: a click opens the
+                            // card to its whole text.
+                            //
+                            // CDXC:Coordinators 2026-11-11 DECISION:
+                            // User, of the large tooltip over a Work panel card: "dont show this
+                            // tooltip since clicking expands it". The chips', buttons' and marks'
+                            // own small tooltips stay.
+                            // A work ask's title links its references (`#562`) as the dock does.
+                            .map(|element| {
+                                if row["titleRuns"].is_array() {
+                                    element.child(self.ask_title(
+                                        &key,
+                                        &title,
+                                        &row["titleRuns"],
+                                        !expanded,
+                                        p.foreground,
+                                        TITLE_SIZE,
+                                        TITLE_SIZE * 1.45,
+                                        p,
+                                        cx,
+                                    ))
+                                } else if !text(row, "count").is_empty() {
+                                    // Its count follows the page's draft while the card is drawn.
+                                    if let Some(page_id) = key.strip_prefix("question:") {
+                                        self.refresh_page_counts(page_id, cx);
+                                    }
+                                    // A page's name, then how much it still asks (work_cards.rs
+                                    // `page_count`); the name gives way first.
+                                    element.child(
+                                        div()
+                                            .min_w_0()
+                                            .flex()
+                                            .gap(px(6.0 * s))
+                                            .child(div().min_w_0().truncate().child(title.clone()))
+                                            .child(
+                                                div()
+                                                    .flex_shrink_0()
+                                                    .whitespace_nowrap()
+                                                    .text_color(p.card_muted)
+                                                    .child(text(row, "count")),
+                                            ),
+                                    )
+                                } else {
+                                    element.child(title.clone())
+                                }
+                            }),
                     )
                     .children(agent_button)
                     .children(self.board_restore_button(row, p, cx)),
             );
         if expanded {
+            // A work ask's longer explanation under its short title, in the quieter colour, whole
+            // (work_cards.rs `ask_markdown`).
+            let body = text(row, "body");
+            if !body.is_empty() {
+                card = card.child(self.ask_markdown(&key, &body, p.card_muted, 13.0, 19.0, p, cx));
+            }
             // Its latest line (a thread's report or what it is on, an item's note), whole.
             let line = Some(text(row, "detail"))
                 .filter(|line| !line.is_empty())
@@ -1520,47 +1608,116 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
-        let button = |id: &str, label: String, icon: Option<String>| {
-            div()
-                .id(gpui::SharedString::from(format!("{id}:{key}")))
-                .role(gpui::Role::Button)
-                .aria_label(label.clone())
-                .flex_shrink_0()
-                .h(px(26.0 * s))
-                .px(px(10.0 * s))
-                .flex()
-                .items_center()
-                .gap(px(6.0 * s))
-                .rounded(px(7.0 * s))
-                .border(px(s))
-                .border_color(p.foreground.opacity(0.12))
-                .text_size(px(13.0 * s))
-                .text_color(p.foreground)
-                .chat_cursor_pointer()
-                .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                .when_some(icon, |this, icon| {
-                    this.child(svg().path(icon).size(px(13.0 * s)).text_color(p.foreground))
-                })
-                .child(label)
-        };
         let reference = text(row, "reference");
-        let mut line = div().flex().items_center().gap(px(6.0 * s)).min_w_0();
-        if !reference.is_empty() {
-            line = line.child(
-                button(
-                    "chat-board-card-mention",
-                    "Mention".to_string(),
-                    Some("titlebar/message-plus.svg".to_string()),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.close_board_card_menu(cx);
-                    this.insert_board_reference(&reference, cx);
-                })),
+        // An opened card offers what the dock's opened row does, drawn by the same code
+        // (work_actions.rs): its answers as the dock's filled buttons, then the actions every item
+        // repeats as icon buttons (Reply, Open, Show in chat, Dismiss, Snooze, Mention).
+        let answers: Vec<Value> = row["answers"].as_array().cloned().unwrap_or_default();
+        let answers = with_reply(row, &answers);
+        // Reply is a button among the answers when it shows there, not an icon below them.
+        let mut actions = row["actions"].clone();
+        if answers.iter().any(|answer| answer["reply"].is_object()) {
+            actions["reply"] = Value::Null;
+        }
+        let icons = self.work_action_icons(&key, &actions, &reference, true, p, cx);
+        let mut column = div().w_full().min_w_0().flex().flex_col().gap(px(6.0 * s));
+        if !answers.is_empty() {
+            // One line, never wrapped: past the card's width the answers fold into one dropdown
+            // beside Reply, as on the dock's rows (work_cards.rs `dock_row`), measured against
+            // the line's width at its last paint.
+            let (choices, replies): (Vec<Value>, Vec<Value>) = answers
+                .iter()
+                .cloned()
+                .partition(|answer| !answer["reply"].is_object());
+            let widths: Vec<f32> = choices
+                .iter()
+                .map(|answer| {
+                    super::work_cards::dock_button_width(
+                        &text(answer, "label"),
+                        false,
+                        answer["recommended"] == true || answer["picked"] == true,
+                        p,
+                        cx,
+                    )
+                })
+                .collect();
+            let reply_width: f32 = replies
+                .iter()
+                .map(|answer| {
+                    super::work_cards::dock_button_width(&text(answer, "label"), true, false, p, cx)
+                        + 6.0
+                })
+                .sum();
+            let need = super::work_cards::buttons_width(&widths) + reply_width;
+            let picked = answers.iter().any(|answer| answer["picked"] == true);
+            let fold = !choices.is_empty()
+                && !picked
+                && self
+                    .board
+                    .answer_rooms
+                    .borrow()
+                    .get(&key)
+                    .is_some_and(|room| need > *room);
+            let mut buttons = Vec::new();
+            if fold {
+                buttons.push(self.answers_dropdown(&key, &choices, false, p, cx));
+                buttons.extend(self.work_answer_buttons(
+                    &format!("{key}:reply"),
+                    &replies,
+                    false,
+                    p,
+                    cx,
+                ));
+            } else {
+                buttons = self.work_answer_buttons(&key, &answers, false, p, cx);
+            }
+            let rooms = self.board.answer_rooms.clone();
+            let room_key = key.clone();
+            let chat = cx.weak_entity();
+            column = column.child(
+                div()
+                    .relative()
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .children(buttons)
+                    .child(
+                        gpui::canvas(
+                            move |bounds, _, cx| {
+                                let room = bounds.size.width.as_f32() / s;
+                                let changed = rooms
+                                    .borrow()
+                                    .get(&room_key)
+                                    .is_none_or(|was| (was - room).abs() > 0.5);
+                                if changed {
+                                    rooms.borrow_mut().insert(room_key.clone(), room);
+                                    // The chat's render is cached: lay the card out again.
+                                    let chat = chat.clone();
+                                    cx.defer(move |cx| {
+                                        let _ = chat.update(cx, |_, cx| cx.notify());
+                                    });
+                                }
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .inset_0(),
+                    ),
             );
         }
-        line.child(div().flex_1())
-            .child(age_slot)
+        column
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .min_w_0()
+                    .children(icons)
+                    .child(div().flex_1())
+                    .child(age_slot),
+            )
             .into_any_element()
     }
 
@@ -1577,6 +1734,44 @@ impl NativeChatView {
             key: key.to_string(),
             at,
             tags: false,
+            snooze: false,
+            parent: window.window_handle(),
+            viewport: window.viewport_size(),
+        });
+        self.sync_board_card_menu_host(cx);
+        cx.notify();
+    }
+
+    /// Opens the card's menu as its Snooze lengths alone (the card's Snooze button) at `at`, or
+    /// closes it when that is what is open: the card menu's surface, so under window glass it is
+    /// the same frosted window, and its frame opens upward where it would pass the window's bottom.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// The user runs the app with window transparency and dislikes dark opaque fills on glass; the
+    /// Work panel's Snooze lengths were a small menu of their own in the opaque sidebar menu
+    /// colours, cut by the floating Work card's bottom edge. They are now a page of the card's
+    /// right-click menu, which already takes the frosted window under glass and flips up.
+    pub(super) fn toggle_board_card_snooze(
+        &mut self,
+        key: &str,
+        at: gpui::Point<gpui::Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .board
+            .menu
+            .as_ref()
+            .is_some_and(|menu| menu.key == key && menu.snooze)
+        {
+            self.close_board_card_menu(cx);
+            return;
+        }
+        self.board.menu = Some(BoardCardMenu {
+            key: key.to_string(),
+            at,
+            tags: false,
+            snooze: true,
             parent: window.window_handle(),
             viewport: window.viewport_size(),
         });
@@ -1626,7 +1821,9 @@ impl NativeChatView {
     fn board_card_menu_frame(&self, menu: &BoardCardMenu) -> Option<gpui::Bounds<gpui::Pixels>> {
         let row = self.board_menu_row(&menu.key)?;
         let s = ChatAppearance::current(&self.snapshot).scale;
-        let rows = if menu.tags {
+        let rows = if menu.snooze {
+            row["actions"]["snooze"].as_array().map_or(0, Vec::len) as f32 * SIDEBAR_MENU_ROW_HEIGHT
+        } else if menu.tags {
             let options = self
                 .board_value()
                 .and_then(|board| board["tagOptions"].as_array().map(Vec::len))
@@ -1636,8 +1833,13 @@ impl NativeChatView {
         } else {
             row["menu"].as_array().map_or(0, Vec::len) as f32 * SIDEBAR_MENU_ROW_HEIGHT
         };
+        let width = if menu.snooze {
+            BOARD_SNOOZE_MENU_WIDTH
+        } else {
+            BOARD_MENU_WIDTH
+        };
         let size = gpui::size(
-            px(BOARD_MENU_WIDTH * s),
+            px(width * s),
             px((rows + 2.0 * BOARD_MENU_PADDING) * s + 2.0),
         );
         let margin = px(8.0);
@@ -1826,7 +2028,13 @@ impl NativeChatView {
             .aria_label("Card actions")
             .font_family(crate::ui_fonts::UI_FONT)
             .when(frosted, |panel| panel.size_full())
-            .when(!frosted, |panel| panel.w(px(BOARD_MENU_WIDTH * s)))
+            .when(!frosted, |panel| {
+                panel.w(px(if menu.snooze {
+                    BOARD_SNOOZE_MENU_WIDTH
+                } else {
+                    BOARD_MENU_WIDTH
+                } * s))
+            })
             .flex()
             .flex_col()
             .p(px(BOARD_MENU_PADDING * s))
@@ -1844,7 +2052,34 @@ impl NativeChatView {
             .occlude()
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation());
-        if menu.tags {
+        if menu.snooze {
+            for (index, choice) in row["actions"]["snooze"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+            {
+                let command = choice["command"].clone();
+                let view = view.clone();
+                panel = panel.child(
+                    item(
+                        format!("chat-board-card-snooze:{index}"),
+                        text(&choice, "label"),
+                        None,
+                        false,
+                    )
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        let command = command.clone();
+                        view.update(cx, |this, cx| {
+                            this.close_board_card_menu(cx);
+                            this.invoke(command, cx);
+                        });
+                    }),
+                );
+            }
+        } else if menu.tags {
             let back = view.clone();
             panel = panel.child(
                 item(
@@ -2039,6 +2274,20 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A count on the dock's status line: the list floats over the chat at that group, the
+        // transcript staying as it is (the user's "when i click to see what's in progress let's
+        // show it floating, let's not expand it in the chat transcript").
+        if let Some(at) = self.board.float_at.take() {
+            if self.board.open {
+                self.board.open = false;
+            }
+            if !self.chat_menu_is_open(BOARD_TRIGGER) {
+                cx.defer_in(window, move |this, window, cx| {
+                    this.toggle_pill_menu(BOARD_MENU, at, window, cx);
+                });
+            }
+            return;
+        }
         if self.board_view() == COLUMNS_VIEW {
             if !self.chat_menu_is_open(BOARD_COLUMNS_TRIGGER) {
                 self.open_board_columns_after_dock(window, cx);
@@ -2055,7 +2304,7 @@ impl NativeChatView {
 
     /// Puts a card's reference in the chat box at the caret (or over the selection) and gives the
     /// box the keyboard, so the user can comment on it; a floating board closes out of the way.
-    fn insert_board_reference(&mut self, reference: &str, cx: &mut Context<Self>) {
+    pub(super) fn insert_board_reference(&mut self, reference: &str, cx: &mut Context<Self>) {
         let selection = self
             .input
             .as_ref()
@@ -2076,91 +2325,17 @@ impl NativeChatView {
         cx.notify();
     }
 
-    /// A card's answers as one segmented pill, one click each; the answer sent from here stays
-    /// marked, and the recommended one is in the foreground.
+    /// A closed card's answers: the dock's filled answer buttons at the card's size
+    /// (work_actions.rs `work_compact_answers`), so no outlined segmented pill is left anywhere.
     fn board_answers(
         &self,
         key: &str,
         answers: &[Value],
+        room: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let s = p.scale;
-        // It gives way on a narrow card: each answer ends in an ellipsis rather than the pill
-        // running past the card's edge ("nothing clipped").
-        let mut pill = div()
-            .flex_shrink(1.0)
-            .min_w_0()
-            .flex()
-            .items_center()
-            .h(px(22.0 * s))
-            .rounded(px(11.0 * s))
-            .border(px(s))
-            .border_color(p.foreground.opacity(0.14))
-            .overflow_hidden();
-        for (index, answer) in answers.iter().enumerate() {
-            let label = text(answer, "label");
-            let picked = answer["picked"] == true;
-            let recommended = answer["recommended"] == true;
-            // Answered: the pick stays marked and the others fade; none takes a click.
-            let locked = answer["locked"] == true;
-            let command = answer["command"].clone();
-            pill = pill.child(
-                div()
-                    .id(gpui::SharedString::from(format!(
-                        "chat-board-answer:{key}:{index}"
-                    )))
-                    .role(gpui::Role::Button)
-                    .aria_label(format!("Answer {label}"))
-                    .h_full()
-                    .px(px(10.0 * s))
-                    .flex_shrink(1.0)
-                    .min_w(px(36.0 * s))
-                    .flex()
-                    .items_center()
-                    .when(index > 0, |this| {
-                        this.border_l_1().border_color(p.foreground.opacity(0.14))
-                    })
-                    .text_size(px(CHIP_SIZE * s))
-                    .gap(px(4.0 * s))
-                    .text_color(if picked || (recommended && !locked) {
-                        p.foreground
-                    } else {
-                        p.card_muted
-                    })
-                    .when(picked, |this| this.bg(p.foreground.opacity(0.14)))
-                    .when(locked && !picked, |this| this.opacity(0.4))
-                    .when(picked, |this| {
-                        this.child(
-                            svg()
-                                .path("titlebar/check.svg")
-                                .size(px(11.0 * s))
-                                .text_color(p.foreground),
-                        )
-                    })
-                    .child(div().min_w_0().truncate().child(label.clone()))
-                    .when(!locked, |this| {
-                        this.chat_cursor_pointer()
-                            .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                            .when(recommended, |this| {
-                                this.tooltip(|window, cx| {
-                                    gpui_component::tooltip::Tooltip::new("Recommended")
-                                        .build(window, cx)
-                                })
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.invoke(command.clone(), cx);
-                            }))
-                    })
-                    // A locked answer still swallows the click, so the card behind it does not
-                    // take it as a click on the card.
-                    .when(locked, |this| {
-                        this.on_click(|_, _, cx| cx.stop_propagation())
-                    }),
-            );
-        }
-        pill.into_any_element()
+        self.work_compact_answers(key, answers, room, p, cx)
     }
 
     /// The docked board is on screen (its pill reads as pressed).
@@ -2399,7 +2574,18 @@ impl NativeChatView {
                 }))
                 .into_any_element()
         });
-        let meta = text(board, "meta");
+        // Only "Work": its groups count themselves below, so the header repeats no count. An
+        // empty panel still says so.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the header reading "Work  18 in progress" over the "In progress 18" group:
+        // "please remove this status here, no need". The dock's header and the Work pill keep
+        // their counts.
+        let note = if board["empty"] == true {
+            "Nothing open"
+        } else {
+            ""
+        };
         div()
             .flex_shrink_0()
             .h(px(HEADER_HEIGHT * s))
@@ -2427,11 +2613,7 @@ impl NativeChatView {
                     .min_w_0()
                     .truncate()
                     .text_color(p.card_muted)
-                    .child(if board["empty"] == true {
-                        "Nothing open".to_string()
-                    } else {
-                        meta
-                    }),
+                    .child(note),
             )
             .child(switch)
             .children(close)

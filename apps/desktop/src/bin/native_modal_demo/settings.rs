@@ -210,6 +210,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
                 }
+                if host_state == "collab"
+                    && let Some(result) = settings_sync::collab_stand_in(&path, &params)
+                {
+                    cx.defer(move |cx| reply(Ok(result), cx));
+                    return;
+                }
                 if settings_sync::owns(&host_state) {
                     let result = settings_sync::rpc(&path, &params);
                     cx.defer(move |cx| reply(result, cx));

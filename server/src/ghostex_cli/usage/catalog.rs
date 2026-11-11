@@ -226,11 +226,11 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "create-session [title] [--input text] [--start] [--project-id id] [--group-id id] [--cwd path]",
-            "Create a terminal session; --start materializes the live terminal immediately; --group-id (with --start) puts it in one of the project's session groups (ghostex session-groups lists them); --cwd starts it in another folder while it stays in the project",
+            "Create a terminal session (ghostex projects lists the project ids); --start materializes the live terminal immediately; --group-id (with --start) puts it in one of the project's session groups (ghostex session-groups lists them); --cwd starts it in another folder while it stays in the project",
         ),
         format_help_command(
-            "create-agent <agentId> --project-id id [--group-id id] [--model m] [--effort e] [--first-input-draft text] [--run-on location] [--defer-start] [--replace-empty-sessions] [--allow-hidden]",
-            "Create and start a configured agent session; --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI and Gemini take --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box",
+            "create-agent <agentId> --project-id id [--group-id id] [--model m] [--effort e] [--first-input-draft text] [--run-on location] [--account number|email] [--defer-start] [--replace-empty-sessions] [--allow-hidden]",
+            "Create and start a configured agent session (ghostex projects lists the project ids); --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI and Gemini take --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box; --account starts a Claude or Codex session on that saved account (one that needs signing in is refused)",
         ),
         format_help_command(
             "board start-work <bead-id> [--agent id [--allow-hidden]] [--model m] [--effort e] [--project-path path|--project-id id] [--json]",
@@ -275,6 +275,10 @@ pub fn usage() -> String {
         format_help_command(
             "click-button <agent|command> <id>",
             "Trigger a renderer sidebar button; use run-action for project and Global quick actions",
+        ),
+        format_help_command(
+            "projects [--all] [--json] [--computer name]",
+            "List the projects with their ids, the --project-id that create-session, create-agent and the other project verbs take; --all adds parked projects (Recent Projects); read-only",
         ),
         format_help_command(
             "switch-project (--project-id|--path|--name) <value>",
@@ -367,11 +371,11 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "run-action <commandId> --project-id id [--scope project|global]",
-            "Run a Terminal action in a session or return a Browser action URL; --scope global runs a Global Action in that project",
+            "Run a Terminal action in a session or return a Browser action URL (ghostex projects lists the project ids); --scope global runs a Global Action in that project",
         ),
         format_help_command(
             "run-in-terminal --project-id id [--session-id id|--cwd path] [--paste] [--json] (--command text | -- command...)",
-            "Run a command in the project's Commands panel terminal (a new terminal in the session's folder without one); --paste types it without pressing Enter",
+            "Run a command in the project's Commands panel terminal (a new terminal in the session's folder without one; ghostex projects lists the project ids); --paste types it without pressing Enter",
         ),
     ]
     .join("\n");

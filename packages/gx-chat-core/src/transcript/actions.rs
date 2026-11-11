@@ -208,6 +208,10 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             let level = view_level::parse(&text(action, "level"));
             set_view_level(state, level)
         }
+        ActionKind::SetQuietView => {
+            let on = param(action, "on").and_then(Value::as_bool);
+            crate::transcript::quiet_view::set(state, on)
+        }
         ActionKind::LoadWork => load_work(state, action),
         ActionKind::RewindOpen => {
             state.transcript_view.rewind = Some(RewindRequest {

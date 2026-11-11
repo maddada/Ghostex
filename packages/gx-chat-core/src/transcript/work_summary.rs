@@ -71,6 +71,30 @@ pub fn tool_spans<'a>(
     message: &ChatMessage,
     timelines: impl IntoIterator<Item = &'a [ChatRow]>,
 ) -> HashMap<String, (i64, i64)> {
+    tool_times(message, timelines)
+        .into_iter()
+        .filter_map(|(id, (called, answered))| Some((id, (called, answered?))))
+        .collect()
+}
+
+/// When each of `message`'s calls that has no result yet started, by call id, in epoch
+/// milliseconds: what a running call's line counts up from (`tool_card.rs`).
+pub fn tool_starts<'a>(
+    message: &ChatMessage,
+    timelines: impl IntoIterator<Item = &'a [ChatRow]>,
+) -> HashMap<String, i64> {
+    tool_times(message, timelines)
+        .into_iter()
+        .filter_map(|(id, (called, answered))| answered.is_none().then_some((id, called)))
+        .collect()
+}
+
+/// When each of `message`'s calls started and, once answered, ended: [`tool_spans`] and
+/// [`tool_starts`] read the same scan. A call with no known start is left out.
+fn tool_times<'a>(
+    message: &ChatMessage,
+    timelines: impl IntoIterator<Item = &'a [ChatRow]>,
+) -> HashMap<String, (i64, Option<i64>)> {
     let mut wanted: HashMap<&str, (Option<i64>, Option<i64>)> = HashMap::new();
     for block in &message.blocks {
         if let ChatBlock::ToolCall {
@@ -121,7 +145,7 @@ pub fn tool_spans<'a>(
         .into_iter()
         .filter_map(|(id, (called, answered))| {
             let called = called.or(message.timestamp)?;
-            Some((id.to_string(), (called, answered?)))
+            Some((id.to_string(), (called, answered)))
         })
         .collect()
 }

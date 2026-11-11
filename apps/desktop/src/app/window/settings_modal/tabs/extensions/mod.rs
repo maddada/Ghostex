@@ -19,6 +19,7 @@ mod delete_view;
 mod detail;
 mod filter_bar;
 mod folder_install;
+mod on_tab;
 pub(crate) mod page_tabs;
 mod remembered_form;
 mod scope_editor;
@@ -118,6 +119,9 @@ pub(crate) struct ExtensionsTab {
     preview_applied: bool,
     /// The Collab card's install, update and uninstall (collab_card.rs).
     pub(crate) collab_card: collab_card::CollabCardState,
+    /// The cards the On tab showed during this visit, so one switched off there stays listed
+    /// until the tab is left (on_tab.rs).
+    pub(crate) on_tab_kept: HashSet<String>,
 }
 
 impl SettingsPage for ExtensionsTab {
@@ -180,6 +184,7 @@ impl ExtensionsTab {
             masked_inputs: std::collections::HashMap::new(),
             preview_applied: false,
             collab_card: Default::default(),
+            on_tab_kept: HashSet::new(),
         };
         page.request_plugin_status_if_missing(cx);
         page.read_installed_clis(cx);
@@ -294,6 +299,7 @@ impl ExtensionsTab {
         }
         self.was_active = active;
         if !active {
+            self.forget_on_tab_cards();
             self.targeted_view = None;
             self.targeted_scope = None;
             return;
@@ -489,6 +495,9 @@ impl ExtensionsTab {
     }
 
     pub(crate) fn set_page_tab(&mut self, tab: page_tabs::PageTab, cx: &mut Context<Self>) {
+        if tab != self.page_tab(cx) {
+            self.forget_on_tab_cards();
+        }
         self.store
             .update(cx, |store, cx| store.set_extensions_tab(tab.id(), cx));
         cx.notify();
@@ -604,6 +613,10 @@ impl Render for ExtensionsTab {
                 |page: &mut Self, window, cx| page.clear_filter(window, cx),
                 cx,
             )));
+        }
+        if tab == page_tabs::PageTab::On && !searching {
+            let section = self.render_on_section(&p, window, cx);
+            blocks.push(PageBlock::section("on", section));
         }
         if built_in_shown && counts.built_in_visible {
             let section = self.render_built_in_section(&p, window, cx);

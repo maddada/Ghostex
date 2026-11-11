@@ -45,6 +45,11 @@ impl GhostexGpuiApp {
                     self.focus_last_terminal(window, cx);
                     return;
                 }
+                // gx_store/sidebar_keyboard.rs
+                if action_id == "focusSidebar" {
+                    self.toggle_sidebar_keyboard_focus(window, cx);
+                    return;
+                }
                 if gpui_focused_chat_hotkey_action_id(action_id) {
                     self.run_focused_chat_hotkey(action_id, window, cx);
                     return;

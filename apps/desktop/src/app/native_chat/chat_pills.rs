@@ -342,7 +342,7 @@ impl NativeChatView {
         self.open_question_pill_text()?;
         let s = p.scale;
         let label = text(open, "accessibilityLabel");
-        let count = open["count"].as_u64().unwrap_or(0);
+        let count = open["pillCount"].as_u64().unwrap_or(0);
         // The ? and, while questions wait, the pink dot and their count inside the pill, as every
         // pill flags (`inline_dots`).
         Some(
@@ -500,7 +500,10 @@ impl NativeChatView {
         } else {
             String::new()
         };
-        let dots = (!dots.is_empty()).then(|| inline_dots(&dots, p));
+        // The Work pill says its counts in words while it has its label ("Work · 4 need you · 7
+        // in progress", gx-chat-core `coordinator_board::pill`); the coloured counts stand in for
+        // them once a tight row drops the label.
+        let dots = (!dots.is_empty() && (collapsed || !board)).then(|| inline_dots(&dots, p));
         // A pill with no label (Blocked) is drawn like the ? pill: its icon and dot, its word in
         // the tooltip.
         let name = text(pill, "label");
@@ -649,7 +652,14 @@ impl NativeChatView {
         };
         // Upward from the chat box's top edge, lined up with the pill (`PillsStripCells::menu_anchor`
         // has the user's words).
-        let (trigger, side) = self.pills_strip.menu_anchor(pill);
+        let (mut trigger, side) = self.pills_strip.menu_anchor(pill);
+        // The work items list opens from the dock's header, so it stands above the dock rather
+        // than over the button that opened it.
+        if id == super::coordinator_board::BOARD_MENU
+            && let Some(top) = self.board.dock_top.get()
+        {
+            trigger.origin.y = top;
+        }
         self.menu_side = Some(side);
         self.show_chat_menu(
             vec![json!({"pillMenu": {"id": id, "height": height}})],

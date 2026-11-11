@@ -134,7 +134,7 @@ pub(crate) fn official_category(
 }
 
 /// `isOfficialExtensionEnabled`: the catalog's one rule (an inverted "hidden" key, or a
-/// `settingsKeyEnables` key such as Spaces').
+/// `settingsKeyEnables` key such as Cloud Boxes').
 pub(crate) fn is_official_enabled(values: &SettingsValues, extension: &OfficialExtension) -> bool {
     ghostex_settings_catalog::built_in_extensions::enabled_with(&extension.id, |key| {
         Some(values.bool(key))
@@ -170,7 +170,6 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "vercel" => "modals/settings/cloud.svg",
         "supabase" => "modals/settings/database.svg",
         "github-actions" | "kanban" | "quickActions" => icon::PLAYER_PLAY,
-        "spaces" => "modals/settings/stack-2.svg",
         "cloudBoxes" => "modals/settings/box.svg",
         "workspaces" => "modals/settings/briefcase.svg",
         "posthog" => "modals/settings/chart-bar.svg",
@@ -193,7 +192,6 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "openIn" => icon::FOLDER_OPEN,
         "resources" => "modals/settings/device-desktop.svg",
         "terminal" => "modals/settings/terminal-2.svg",
-        "tips" => icon::INFO_CIRCLE,
         // They drew the globe below until 2026-11-09 (User, Q2037: their own icons).
         "voiceAgent" => "titlebar/headset.svg",
         "readAloud" => "titlebar/volume.svg",

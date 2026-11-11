@@ -178,6 +178,34 @@ impl GhostexGpuiApp {
         if self.handle_session_details_host_action(session_id, action, &message, window, cx) {
             return;
         }
+        // The new chat tips card (native_chat/new_chat_tips.rs): Got it saves the read tips
+        // straight to the settings file, as the old Tips & Tricks panel did, since a Settings
+        // save keeps the file's own copy of that key; Hide tips turns Settings > Chat > Tips on
+        // new chats off.
+        if action == "setNewChatTipsRead" {
+            if let Some(read_ids) = message.get("readIds").and_then(serde_json::Value::as_array) {
+                gpui_write_new_chat_tips_read_ids(
+                    read_ids
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(str::to_string)
+                        .collect(),
+                );
+                cx.refresh_windows();
+            }
+            return;
+        }
+        if action == "hideNewChatTips" {
+            self.handle_gpui_app_modal_update_settings_patch_message(
+                &serde_json::json!({
+                    "patch": { "newChatTips": false },
+                    "source": "chat:newChatTips",
+                    "type": "updateSettingsPatch",
+                }),
+                cx,
+            );
+            return;
+        }
         // The coordinator board's view switch (native_chat/coordinator_board.rs): the Board pill
         // opens that view until it is switched again, on every chat and every computer.
         if action == "setCoordinatorBoardView" {

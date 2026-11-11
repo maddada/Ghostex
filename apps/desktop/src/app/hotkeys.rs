@@ -406,6 +406,8 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("sleepFocusedSessionSecondKey", "alt+shift+s"),
     ("unfocusTerminal", "cmd+shift+m"),
     ("focusLastTerminal", "cmd+shift+m"),
+    // The Focus Sidebar hotkey (#558, gx_store/sidebar_keyboard.rs).
+    ("focusSidebar", "cmd+shift+j"),
 ];
 
 #[cfg(target_os = "macos")]
@@ -845,6 +847,8 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
             // Last Terminal must bring it back from any surface.
             | "unfocusTerminal"
             | "focusLastTerminal"
+            // Focus Sidebar reaches the sidebar from any surface, and gives the keyboard back.
+            | "focusSidebar"
     ) {
         return true;
     }

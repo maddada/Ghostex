@@ -98,6 +98,16 @@ pub struct PanelsState {
     /// The coordinator board's groups the reader folded or unfolded against their default (Done and
     /// Ideas start folded), per chat (`extras::coordinator_board`).
     pub board_toggled: std::collections::BTreeSet<String>,
+    /// The finished-work cards the reader dismissed from the dock above the chat box, by card key
+    /// (`extras::work_cards::dock`).
+    pub work_dock_dismissed: std::collections::BTreeSet<String>,
+    /// Work asks snoozed here, by card key, until when (epoch ms): shown at once, before gxserver's
+    /// `snoozedUntil` comes back.
+    pub work_snoozed: std::collections::BTreeMap<String, i64>,
+    /// The dock above the chat box hidden by the reader (collapsed to its header on the computer):
+    /// the rows it held then. It stays hidden until the reader shows it again or a row that is not
+    /// among these arrives (`extras::work_cards::dock`).
+    pub work_dock_hidden: Option<std::collections::BTreeSet<String>>,
     /// The board's groups showing every row instead of the first few.
     pub board_expanded: std::collections::BTreeSet<String>,
     /// The board changes in flight (a row moved to Removed or restored), whose refusal is toasted.
@@ -105,8 +115,27 @@ pub struct PanelsState {
     /// The answer this client sent for each board card that asks something, by card key.
     pub board_answers: std::collections::BTreeMap<String, String>,
     /// Board answers being recorded with gxserver (op `answer`), by RPC id: the card's key, the
-    /// answer, and the message that goes once it is recorded.
-    pub board_answer_requests: std::collections::BTreeMap<u64, (String, String, String)>,
+    /// answer, the message that goes once it is recorded, and whether it is the user's own words
+    /// (a Reply).
+    pub board_answer_requests: std::collections::BTreeMap<u64, (String, String, String, bool)>,
+    /// Board answers' messages to the coordinator in flight, by RPC id: the card's key, the
+    /// answer, and whether it is a Reply.
+    pub board_answer_sends: std::collections::BTreeMap<u64, (String, String, bool)>,
+    /// Cards whose answer gxserver recorded but whose message did not go: another try sends the
+    /// message without recording it again.
+    pub board_answer_unsent: std::collections::BTreeSet<String>,
+    /// The parameters of each board answer call in flight (its record or its message), by RPC id,
+    /// so a call gxserver never answered goes again as it was (`coordinator_board::wait_out_answer`).
+    pub board_answer_calls: std::collections::BTreeMap<u64, serde_json::Value>,
+    /// Board answer calls gxserver never answered, waiting to go again: the card's key, the
+    /// answer, the message, whether it is a Reply, whether it is the message (else the record),
+    /// and the call's parameters.
+    pub board_answer_waiting: Vec<(String, String, String, bool, bool, serde_json::Value)>,
+    /// Each page's questions answered in the reader's draft and asked, `(answered, total)`, by page
+    /// id, as its gxserver last said (`extras::work_cards::load_page_counts`).
+    pub page_question_counts: std::collections::BTreeMap<String, (u64, u64)>,
+    /// The page count reads in flight, by request id.
+    pub page_count_requests: std::collections::BTreeMap<u64, String>,
     /// The row a board pill in the chat asked the board to show (`board:B4`), and how many times
     /// one was clicked, so the renderers open the board and scroll to it once per click.
     pub board_focus: Option<(String, u64)>,
@@ -143,10 +172,19 @@ impl Default for PanelsState {
             secret_request_errors: Default::default(),
             background_tasks_open: false,
             board_toggled: Default::default(),
+            work_dock_dismissed: Default::default(),
+            work_snoozed: Default::default(),
+            work_dock_hidden: None,
             board_expanded: Default::default(),
             board_change_requests: Default::default(),
             board_answers: Default::default(),
             board_answer_requests: Default::default(),
+            board_answer_sends: Default::default(),
+            board_answer_unsent: Default::default(),
+            board_answer_calls: Default::default(),
+            board_answer_waiting: Default::default(),
+            page_question_counts: Default::default(),
+            page_count_requests: Default::default(),
             board_focus: None,
             intro_hidden: false,
             intro_hide_request: None,
@@ -173,6 +211,22 @@ pub struct SearchState {
     pub matches: Vec<TranscriptMatch>,
     /// Which folds the renderer has open, so only what the reader can see is searched.
     pub folds: SearchFolds,
+    /// Older history the chat has not loaded yet (`messages.has_more`), set on every settle: the
+    /// counter's total is only what is loaded, so it carries a "+".
+    pub more_unloaded: bool,
+    /// A walk back through older history for the next match older than the loaded ones
+    /// (`extras/search.rs`), one page per settle.
+    pub seek: Option<SearchSeek>,
+}
+
+/// Find paging older history in until a match turns up older than the loaded ones.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SearchSeek {
+    /// Pages this walk has asked for.
+    pub pages: u32,
+    /// The selected match when "Previous" ran out of loaded matches; `None` when the loaded rows
+    /// hold no match at all. The walk ends when a match appears before it (or any, for `None`).
+    pub anchor: Option<String>,
 }
 
 /// The terminal tail reader's two independent reads: the hover verdict and the expanded sheet.

@@ -78,6 +78,7 @@ pub(crate) fn model(state: &str, light: bool) -> ShareModel {
     model.now_ms = NOW_MS;
     model.light = light;
     model.glass = true;
+    model.surface = Some(preview_menu_frame(light, true));
     if state == "lifetime-menu" {
         model.lifetime_menu_open = true;
         model.lifetime = Lifetime::UntilStopped;
@@ -171,7 +172,7 @@ impl Render for SharePopoverDemo {
                     .top(px(POPOVER_TOP))
                     .left(px(POPOVER_LEFT))
                     .w(px(SHARE_POPOVER_WIDTH))
-                    .rounded(px(10.0))
+                    .rounded(px(8.0))
                     .overflow_hidden()
                     .when_some(self.blurred.clone(), |this, path| {
                         this.child(
@@ -217,4 +218,25 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         },
         cx,
     );
+}
+
+/// The header dropdowns' frame as the app draws it on the default theme (`popup_menu_frame` in
+/// helpers/titlebar/chrome_colors.rs, which the preview cannot reach): the menu colour at the macOS
+/// glass coverage, the menus' hairline and 8px corners. Preview only.
+pub(super) fn preview_menu_frame(
+    light: bool,
+    glass: bool,
+) -> super::share_popover_view::PopupSurface {
+    let (menu, ink, alpha) = if light {
+        (0xfafafa_u32, 0x000000_u32, 0.75)
+    } else {
+        (0x171717_u32, 0xffffff_u32, 0.6)
+    };
+    let fill: gpui::Hsla = gpui::rgb(menu).into();
+    let border: gpui::Hsla = gpui::rgb(ink).into();
+    super::share_popover_view::PopupSurface {
+        fill: fill.opacity(if glass { alpha } else { 1.0 }),
+        border: border.opacity(if glass { 0.10 } else { 0.12 }),
+        radius: 8.0,
+    }
 }

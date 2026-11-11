@@ -205,6 +205,7 @@ fn macos_normal_bindings_keep_their_chords() {
         // New on 2026-10-27; one key in and out of the terminal.
         ("unfocusTerminal", "cmd-shift-m"),
         ("focusLastTerminal", "cmd-shift-m"),
+        ("focusSidebar", "cmd-shift-j"),
     ]);
     // Only the Terminal focused section has these.
     for id in TERMINAL_ONLY_HOTKEY_IDS {
@@ -377,6 +378,7 @@ fn windows_and_linux_normal_bindings_are_the_ones_the_app_always_had() {
         ("reloadBrowserPage", "ctrl-r"),
         ("sleepFocusedSessionSecondKey", "alt-shift-s"),
         ("focusLastTerminal", "ctrl-shift-m"),
+        ("focusSidebar", "ctrl-shift-j"),
     ]);
     for platform in WINDOWS_AND_LINUX {
         assert_eq!(normal_keystrokes(platform), expected, "{platform:?}");

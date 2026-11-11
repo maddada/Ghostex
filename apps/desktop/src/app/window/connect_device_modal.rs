@@ -1,6 +1,9 @@
-//! The "Connect a phone" window (sidebar menu > Connect a phone, Settings > Remote's Connect a phone
-//! and Connect a computer): it turns Easy Connect on by itself, shows the code, turns into the
-//! three words and Approve the moment a phone scans, and ends on "<phone> is connected".
+//! The "Connect a device" window (sidebar menu > Connect a Device, Settings > Remote's Connect a
+//! Device and Connect a Computer): it turns Easy Connect on by itself, shows the code, turns into
+//! the three words and Approve the moment a phone scans, and ends on "<phone> is connected".
+//!
+//! CDXC:RemotePairing 2026-11-11 DECISION:
+//! User, on the Connect a device page (Q2490 "C. Three ways down the side", and "do what's shown in the option I picked above" for the Phone and Computer choice, Tailscale, Copy the code and the Settings button): the window is one title, "Connect a device" whichever way is picked, over a list of three ways at the left (Phone "Scan a code", Computer "Paste a code", Tailscale "Your own network") with the picked way at the right, and a footer with a button to Settings > Remote at the left, called "Remote", and "Need the app? Android · iPhone" at the right. A phone's code sits at the top of its way with Copy the code right under it, then the computer's name, the waiting line and the steps. His note on the code: "keep in mind the qr needs to not actually show there cuz too small, i need to click on it to show larger so can be scanned", so the code in the list is small and a click on it (it says "Click to enlarge") fills the window with it at 432px; a click on the large code or Escape goes back, and a phone that scans still turns the window into "Is this your phone?". Tailscale is a way of its own here (ways.rs, tailscale_pane.rs): what it is for, the checklist Settings > Remote's Tailscale row shows, and a button to that row for the code. Supersedes, for the layout only, the 2026-11-10 decision below (the code at 432px in the window, Copy the code beside "Need the app?", and the quiet line that named Tailscale and another computer); what the window does is unchanged.
 //!
 //! CDXC:RemotePairing 2026-11-10 DECISION:
 //! User, on the pairing design page (Q2178 to Q2186, the suggested screen for steps 1, 2, 3, 7 and 8): one "Connect a phone" window that opens on the code replaces the Remote Setup dialog, the stop at Settings > Remote and the separate Show QR popup. The menu item opens it straight away and it turns Easy Connect on by itself (installing the helper and turning on SSH access first when they are missing, as Remote Setup's Connect did). Two plain steps that match the phone's button word for word, a line that shows it is waiting, the code at 432px (CDXC:RemotePairing 2026-10-27 in settings_modal/fields/qr.rs), "Need the app?" as one line and Copy the code. His note on step 1: "we need bit more there tho, tell the user we can use tailscale and we can connect a laptop to another laptop", so one quiet line under it says both, each leading to its place (Tailscale opens Settings > Remote's Tailscale, "another computer" turns this window into Connect a computer with its own two lines). When a phone scans, the same window becomes "Is this your phone?" with the three words as its biggest thing and Not my phone beside Approve; after Approve it says "<phone> is connected" with Connect another phone and Done. Approve follows the approvals rule (one plain click; Settings > Security's switch adds Touch ID or the password first, `owner_security::plain`).
@@ -18,15 +21,28 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::Duration;
 
-pub(crate) const CONNECT_DEVICE_MODAL_WIDTH: f32 = 520.0;
+#[path = "connect_device_modal/tailscale_pane.rs"]
+mod tailscale_pane;
+#[path = "connect_device_modal/ways.rs"]
+mod ways;
+
+pub(crate) use tailscale_pane::TailscalePane;
+pub(crate) use ways::ConnectWay;
+
+/// The window's one size: wide enough for the list of ways beside a way, and for the large code.
+/// The app's window list (`GpuiAppModalKind::default_window_size`) reads the same two numbers.
+pub(crate) const CONNECT_DEVICE_MODAL_WIDTH: f32 = 560.0;
 /// First-frame height only. The window is resized to the measured layout as soon as the first
 /// prepaint reports it.
-pub(crate) const CONNECT_DEVICE_MODAL_INITIAL_HEIGHT: f32 = 780.0;
+pub(crate) const CONNECT_DEVICE_MODAL_INITIAL_HEIGHT: f32 = 560.0;
 
-/// The code's side: 432px, so an Android scanner gets large modules (CDXC:RemotePairing
-/// 2026-10-27 in settings_modal/fields/qr.rs). The "Getting a code ready" square has the same size,
+/// The large code's side: 432px, so an Android scanner gets large modules (CDXC:RemotePairing
+/// 2026-10-27 in settings_modal/fields/qr.rs).
+const QR_LARGE_SIZE: f32 = 432.0;
+/// The code's side in the list of ways: a picture of the code to click, too small to scan
+/// (CDXC:RemotePairing 2026-11-11 DECISION above). The "Getting a code ready" square is as tall,
 /// so the window doesn't jump when the code arrives.
-const QR_SIZE: f32 = 432.0;
+const QR_SMALL_SIZE: f32 = 196.0;
 /// How often the window asks for the code and for a waiting phone: every second while it is open
 /// (the Show QR popup asked every four, so the phone showed its words first and the computer
 /// looked dead).
@@ -38,6 +54,11 @@ const ICON_CHECK: &str = "modals/settings/check.svg";
 const ICON_PHONE: &str = "modals/settings/device-mobile.svg";
 const ICON_COMPUTER: &str = "modals/settings/device-desktop.svg";
 const ICON_CONNECTED: &str = "modals/settings/circle-check-filled.svg";
+const ICON_HELPER: &str = "modals/settings/plug-connected.svg";
+const ICON_ALERT: &str = "modals/settings/alert-triangle.svg";
+const ICON_TAILSCALE: &str = "modals/settings/world.svg";
+const ICON_SETTINGS: &str = "modals/settings/settings.svg";
+const ICON_ENLARGE: &str = "modals/settings/arrows-maximize.svg";
 
 /// The short website link that redirects to the latest Android APK.
 pub(crate) const GHOSTEX_ANDROID_INSTALL_URL: &str = "https://ghostex.dev/android";
@@ -93,12 +114,15 @@ pub(crate) struct ConnectPoll {
     pub(crate) error: Option<String>,
 }
 
-/// What the window asks its host to do. The window removes its own window before `Close` and
-/// `OpenTailscale`.
+/// What the window asks its host to do. The window removes its own window before `Close`,
+/// `OpenRemote` and `OpenTailscale`.
 pub(crate) enum ConnectDeviceCommand {
     /// Install the helper if needed, turn SSH access and Easy Connect on; the host reports each
     /// step with `prepare_progress` and answers with `prepared`.
     Prepare,
+    /// Install the Easy Connect helper (the window's Install button); the host reports each step
+    /// with `helper_install_progress` and answers with `helper_installed` or `needs_helper`.
+    InstallHelper,
     /// Read the code and the waiting devices (opening the door for a new phone while this window
     /// shows); the host answers with `poll_answered`.
     Poll,
@@ -110,6 +134,12 @@ pub(crate) enum ConnectDeviceCommand {
     /// The code was copied: play the copy sound.
     Copied,
     OpenExternalUrl(String),
+    /// Read how Tailscale stands on this computer for the Tailscale way; the host answers with
+    /// `tailscale_answered`.
+    ReadTailscale,
+    /// Settings > Remote (the footer's Remote button).
+    OpenRemote,
+    /// Settings > Remote with its Tailscale row open.
     OpenTailscale,
     Close,
 }
@@ -121,7 +151,7 @@ pub(crate) struct ConnectDeviceConfig {
     pub(crate) kind: ConnectDeviceKind,
     /// This computer's name, until gxserver says it.
     pub(crate) computer_name: String,
-    /// `Settings.remoteTailscaleEnabled`: off leaves Tailscale out of the quiet line.
+    /// `Settings.remoteTailscaleEnabled`: off, the Tailscale way says so until it is read again.
     pub(crate) tailscale_enabled: bool,
     /// Approve asks for Touch ID or the password first (Settings > Security, or an older gxserver).
     pub(crate) require_presence: bool,
@@ -133,6 +163,11 @@ enum Stage {
     Preparing(Option<String>),
     /// Turning on failed; the message and Try again.
     Failed(String),
+    /// The Easy Connect helper isn't on this computer: what that means and Install (with why the
+    /// last install failed, when it did).
+    NeedsHelper(Option<String>),
+    /// The helper is installing; the line says which step.
+    InstallingHelper(Option<String>),
     /// The code (or "Getting a code ready…" until it arrives), and a waiting device when one asks.
     Ready,
     /// Approved: waiting for the device to finish pairing on its next ask.
@@ -146,9 +181,14 @@ enum Stage {
 pub(crate) struct GpuiConnectDeviceWindow {
     host: ConnectDeviceHost,
     palette: ModalPalette,
-    kind: ConnectDeviceKind,
+    /// Which of the three ways shows at the right of the list.
+    way: ConnectWay,
+    /// The phone's code fills the window, large enough to scan.
+    large_code: bool,
     computer_name: String,
-    tailscale_enabled: bool,
+    tailscale: TailscalePane,
+    /// Reads Tailscale again every few seconds while its way shows.
+    tailscale_refresh: Option<Task<()>>,
     require_presence: bool,
     stage: Stage,
     code: Option<ConnectCode>,
@@ -165,9 +205,10 @@ pub(crate) struct GpuiConnectDeviceWindow {
     copied: bool,
     copied_generation: u64,
     fit: ModalScrollFit,
-    /// Which screen the window was last sized for: a new one (the words, connected, the other
-    /// kind) is measured again, so the window fits each screen instead of the first.
-    fitted_screen: Option<(u8, ConnectDeviceKind)>,
+    /// Which screen the window was last sized for: a new one (the words, connected, another
+    /// way, the large code, the helper's screens) is measured again, so the window fits each
+    /// screen instead of the first.
+    fitted_screen: Option<(u8, ConnectWay)>,
     focus_handle: FocusHandle,
 }
 
@@ -183,9 +224,11 @@ impl GpuiConnectDeviceWindow {
         let this = Self {
             host,
             palette: config.palette,
-            kind: config.kind,
+            way: ConnectWay::of_kind(config.kind),
+            large_code: false,
             computer_name: config.computer_name,
-            tailscale_enabled: config.tailscale_enabled,
+            tailscale: TailscalePane::new(config.tailscale_enabled),
+            tailscale_refresh: None,
             require_presence: config.require_presence,
             stage: Stage::Preparing(None),
             code: None,
@@ -216,6 +259,33 @@ impl GpuiConnectDeviceWindow {
             self.stage = Stage::Preparing(Some(note));
             cx.notify();
         }
+    }
+
+    /*
+    CDXC:RemotePairing 2026-11-11 DECISION:
+    GitHub #559: the window opened on "Getting a code ready" and stayed there on a Mac without the Easy Connect helper, with "Reinstall Ghostex" in Settings, which cannot bring the helper back (the Mac app doesn't carry it, by the user's choice: "i dont want to bundle tailcat tho since it'll increase size of app"). The square the code appears in now says the helper isn't installed yet, with one Install button, each step of the install while it runs, a plain error with Try again when it fails, and what works meanwhile; the code appears in the same window once the helper is in.
+    */
+    /// The Easy Connect helper is missing (`error`: why the last install failed).
+    pub(crate) fn needs_helper(&mut self, error: Option<String>, cx: &mut Context<Self>) {
+        self.stage = Stage::NeedsHelper(error);
+        cx.notify();
+    }
+
+    /// A step of the helper's install ("Downloading the build tools… 40%").
+    pub(crate) fn helper_install_progress(&mut self, note: Option<String>, cx: &mut Context<Self>) {
+        if matches!(
+            self.stage,
+            Stage::InstallingHelper(_) | Stage::NeedsHelper(_) | Stage::Preparing(_)
+        ) {
+            self.stage = Stage::InstallingHelper(note);
+            cx.notify();
+        }
+    }
+
+    /// The helper is in: the rest of turning on runs (`prepare_progress`, then `prepared`).
+    pub(crate) fn helper_installed(&mut self, cx: &mut Context<Self>) {
+        self.stage = Stage::Preparing(Some("Turning on Easy Connect…".to_string()));
+        cx.notify();
     }
 
     /// Easy Connect is on (or couldn't be turned on): start asking for the code.
@@ -310,6 +380,12 @@ impl GpuiConnectDeviceWindow {
         (self.host)(ConnectDeviceCommand::Poll, cx);
     }
 
+    fn install_helper(&mut self, cx: &mut Context<Self>) {
+        self.stage = Stage::InstallingHelper(None);
+        cx.notify();
+        (self.host)(ConnectDeviceCommand::InstallHelper, cx);
+    }
+
     fn retry(&mut self, cx: &mut Context<Self>) {
         self.stage = Stage::Preparing(None);
         cx.notify();
@@ -340,9 +416,12 @@ impl GpuiConnectDeviceWindow {
         cx.notify();
     }
 
-    fn switch_kind(&mut self, kind: ConnectDeviceKind, cx: &mut Context<Self>) {
-        self.kind = kind;
-        cx.notify();
+    /// What the picked way connects; the Tailscale way has no code, and asks as a phone does.
+    fn kind(&self) -> ConnectDeviceKind {
+        match self.way {
+            ConnectWay::Computer => ConnectDeviceKind::Computer,
+            ConnectWay::Phone | ConnectWay::Tailscale => ConnectDeviceKind::Phone,
+        }
     }
 
     fn copy_code(&mut self, cx: &mut Context<Self>) {
@@ -378,6 +457,7 @@ impl GpuiConnectDeviceWindow {
         cx: &mut Context<Self>,
     ) {
         self.polling = None;
+        self.tailscale_refresh = None;
         window.remove_window();
         (self.host)(command, cx);
     }
@@ -388,7 +468,12 @@ impl GpuiConnectDeviceWindow {
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if event.keystroke.key.as_str() == "escape" {
-            self.close(window, cx);
+            // Escape leaves the large code first; the next one closes the window.
+            if self.shows_large_code() {
+                self.set_large_code(false, cx);
+            } else {
+                self.close(window, cx);
+            }
             cx.stop_propagation();
         }
     }
@@ -399,10 +484,7 @@ impl GpuiConnectDeviceWindow {
         match (&self.stage, &self.waiting) {
             (Stage::Connected(device), _) => format!("{} is connected", device.name),
             (Stage::Ready, Some(device)) => pairing_question(device.phone).to_string(),
-            _ => match self.kind {
-                ConnectDeviceKind::Phone => "Connect a phone".to_string(),
-                ConnectDeviceKind::Computer => "Connect a computer".to_string(),
-            },
+            _ => "Connect a device".to_string(),
         }
     }
 
@@ -487,12 +569,15 @@ impl GpuiConnectDeviceWindow {
     fn failed_content(&self, message: String, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         v_flex()
+            .w_full()
+            .min_w_0()
             .items_center()
             .gap(px(12.0))
-            .px(px(28.0))
+            .px(px(16.0))
             .text_center()
             .child(
                 div()
+                    .w_full()
                     .text_size(px(13.0))
                     .line_height(px(19.0))
                     .text_color(hsla(p.destructive))
@@ -511,19 +596,133 @@ impl GpuiConnectDeviceWindow {
             .into_any_element()
     }
 
-    /// The dashed square the code appears in (`height` tall): what is happening, or what went
-    /// wrong.
+    /// What works while the helper isn't installed.
+    fn meanwhile_line(&self) -> Div {
+        div()
+            .text_size(px(12.0))
+            .line_height(px(17.0))
+            .text_color(hsla(self.palette.muted))
+            .child(if self.tailscale.is_on() {
+                "Meanwhile, phones on Tailscale or on your own network can still connect."
+            } else {
+                "Meanwhile, phones on your own network can still connect."
+            })
+    }
+
+    /// The helper isn't installed: what it is, Install, and what works meanwhile; after a failed
+    /// install, why it failed and Try again.
+    fn helper_missing_content(&self, error: Option<String>, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let failed = error.is_some();
+        let (icon, icon_color, heading) = if failed {
+            (ICON_ALERT, p.destructive, "The helper didn't install")
+        } else {
+            (
+                ICON_HELPER,
+                p.foreground,
+                "The Easy Connect helper isn't installed yet",
+            )
+        };
+        let explanation: SharedString = match error {
+            Some(error) => error.into(),
+            None => "Your phone reaches this computer through it. Ghostex builds it here once: it downloads about 65 MB of build tools and takes a few minutes.".into(),
+        };
+        v_flex()
+            .w_full()
+            .items_center()
+            .gap(px(12.0))
+            .px(px(16.0))
+            .text_center()
+            .child(modal_icon(icon, 26.0, icon_color))
+            .child(
+                div()
+                    .w_full()
+                    .text_size(px(15.0))
+                    .line_height(px(21.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(hsla(p.foreground))
+                    .child(heading),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .text_size(px(13.0))
+                    .line_height(px(19.0))
+                    .text_color(hsla(if failed { p.destructive } else { p.muted }))
+                    .child(explanation),
+            )
+            .child(div().pt(px(4.0)).w(px(180.0)).child(modal_action_button(
+                &p,
+                "connect-device-install-helper",
+                if failed {
+                    "Try again"
+                } else {
+                    "Install the helper"
+                },
+                None,
+                ModalButtonTone::Primary,
+                false,
+                |this: &mut Self, _window, cx| this.install_helper(cx),
+                cx,
+            )))
+            .child(div().w_full().pt(px(4.0)).child(self.meanwhile_line()))
+            .into_any_element()
+    }
+
+    /// The helper installing: its step, and that closing the window doesn't stop it.
+    fn helper_installing_content(&self, note: Option<String>) -> AnyElement {
+        let p = self.palette;
+        v_flex()
+            .w_full()
+            .items_center()
+            .gap(px(10.0))
+            .px(px(16.0))
+            .text_center()
+            .child(
+                h_flex()
+                    .gap(px(8.0))
+                    .items_center()
+                    .child(modal_spinner(p.foreground))
+                    .child(
+                        div()
+                            .text_size(px(15.0))
+                            .line_height(px(21.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(p.foreground))
+                            .child("Installing the Easy Connect helper"),
+                    ),
+            )
+            .child(
+                self.muted(note.unwrap_or_else(|| "Starting…".to_string()))
+                    .w_full(),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .pt(px(6.0))
+                    .text_size(px(12.0))
+                    .line_height(px(17.0))
+                    .text_color(hsla(p.muted))
+                    .child("It keeps going if you close this window. The code appears here when it's done."),
+            )
+            .into_any_element()
+    }
+
+    /// The dashed square the code appears in (at least `height` tall, taller for the helper's
+    /// screens): what is happening, or what went wrong.
     fn code_placeholder(&self, height: f32, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let content = match &self.stage {
             Stage::Failed(message) => self.failed_content(message.clone(), cx),
+            Stage::NeedsHelper(error) => self.helper_missing_content(error.clone(), cx),
+            Stage::InstallingHelper(note) => self.helper_installing_content(note.clone()),
             Stage::Preparing(Some(note)) => self.spinner_line(note.clone()),
             _ => self.spinner_line("Getting a code ready…"),
         };
         div()
-            .w(px(QR_SIZE))
-            .max_w_full()
-            .h(px(height))
+            .w_full()
+            .min_h(px(height))
+            .py(px(16.0))
             .flex_shrink_0()
             .flex()
             .items_center()
@@ -543,244 +742,6 @@ impl GpuiConnectDeviceWindow {
             self.qr = Some((payload.clone(), QrGrid::encode(&payload)));
         }
         self.qr.as_ref().and_then(|(_, grid)| grid.clone())
-    }
-
-    /// The phone's code: the QR (or its square), the computer's name, and the waiting line.
-    fn phone_code(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let ready = self.stage == Stage::Ready && self.code.is_some();
-        let code = if ready {
-            let grid = self.qr_grid();
-            qr_code(grid.as_ref(), QR_SIZE)
-        } else {
-            self.code_placeholder(QR_SIZE, cx)
-        };
-        v_flex()
-            .w_full()
-            .items_center()
-            .gap(px(8.0))
-            .child(code)
-            .child(
-                div()
-                    .pt(px(4.0))
-                    .text_size(px(14.0))
-                    .line_height(px(20.0))
-                    .text_color(hsla(self.palette.foreground))
-                    .child(self.computer_name.clone()),
-            )
-            // The line's row is there before the code too, so the window measured on its first
-            // frame (while Easy Connect turns on) fits the code screen.
-            .child(div().h(px(20.0)).when(ready, |this| {
-                this.child(self.spinner_line("Waiting for your phone…"))
-            }))
-            .into_any_element()
-    }
-
-    /// The code another computer pastes: this computer, the code on one line, and the waiting line.
-    fn computer_code(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let p = self.palette;
-        let ready = self.stage == Stage::Ready && self.code.is_some();
-        if !ready {
-            return self.code_placeholder(140.0, cx);
-        }
-        let text = self
-            .code
-            .as_ref()
-            .map(|code| code.text.clone())
-            .unwrap_or_default();
-        v_flex()
-            .w_full()
-            .gap(px(10.0))
-            .child(
-                v_flex()
-                    .w_full()
-                    .gap(px(8.0))
-                    .p(px(14.0))
-                    .rounded(px(MODAL_RADIUS_CONTROL))
-                    .border_1()
-                    .border_color(hsla(p.hairline))
-                    .bg(hsla(p.panel))
-                    .child(
-                        h_flex()
-                            .gap(px(8.0))
-                            .items_center()
-                            .child(modal_icon(ICON_COMPUTER, 16.0, p.foreground))
-                            .child(self.computer_name.clone()),
-                    )
-                    .child(
-                        div()
-                            .w_full()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .font_family(MODAL_MONO_FONT)
-                            .text_size(px(12.0))
-                            .line_height(px(17.0))
-                            .text_color(hsla(p.muted))
-                            .child(text),
-                    ),
-            )
-            .child(self.spinner_line("Waiting for the other computer…"))
-            .into_any_element()
-    }
-
-    fn steps(&self) -> AnyElement {
-        let steps = match self.kind {
-            ConnectDeviceKind::Phone => vec![
-                self.step(1, vec![("Open Ghostex on your phone.", false)]),
-                self.step(
-                    2,
-                    vec![
-                        ("Tap ", false),
-                        ("Scan the code", true),
-                        (" and point it here.", false),
-                    ],
-                ),
-            ],
-            ConnectDeviceKind::Computer => vec![
-                self.step(1, vec![("Open Ghostex on the other computer.", false)]),
-                self.step(
-                    2,
-                    vec![
-                        ("In Settings > Remote, click ", false),
-                        ("Add a computer", true),
-                        (" and paste this code.", false),
-                    ],
-                ),
-            ],
-        };
-        v_flex()
-            .w_full()
-            .gap(px(8.0))
-            .children(steps)
-            .into_any_element()
-    }
-
-    /// Copy the code: the neutral button, as wide as its words, with Copied for a moment.
-    fn copy_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let ready = self.stage == Stage::Ready && self.code.is_some();
-        if !ready {
-            return None;
-        }
-        let p = self.palette;
-        let tone = match self.kind {
-            ConnectDeviceKind::Phone => ModalButtonTone::Neutral,
-            ConnectDeviceKind::Computer => ModalButtonTone::Primary,
-        };
-        let icon_color = if tone == ModalButtonTone::Primary {
-            p.primary_button_text()
-        } else {
-            p.foreground
-        };
-        Some(
-            div()
-                .w(px(150.0))
-                .flex_shrink_0()
-                .child(modal_action_button(
-                    &p,
-                    "connect-device-copy",
-                    if self.copied {
-                        "Copied"
-                    } else {
-                        "Copy the code"
-                    },
-                    Some(
-                        modal_icon(
-                            if self.copied { ICON_CHECK } else { ICON_COPY },
-                            14.0,
-                            icon_color,
-                        )
-                        .into_any_element(),
-                    ),
-                    tone,
-                    false,
-                    |this: &mut Self, _window, cx| this.copy_code(cx),
-                    cx,
-                ))
-                .into_any_element(),
-        )
-    }
-
-    /// "Need the app? Android · iPhone" beside Copy the code, over a hairline; then the quiet line
-    /// that says Tailscale works too and that another computer (or a phone) can connect.
-    fn footer(&self, cx: &mut Context<Self>) -> AnyElement {
-        let p = self.palette;
-        let left: AnyElement = match self.kind {
-            ConnectDeviceKind::Phone => h_flex()
-                .flex_wrap()
-                .text_size(px(13.0))
-                .line_height(px(19.0))
-                .text_color(hsla(p.muted))
-                .child("Need the app?\u{a0}")
-                .child(self.link(
-                    "connect-device-android",
-                    "Android",
-                    |this, _window, cx| this.open_url(GHOSTEX_ANDROID_INSTALL_URL, cx),
-                    cx,
-                ))
-                .child("\u{a0}·\u{a0}")
-                .child(self.link(
-                    "connect-device-iphone",
-                    "iPhone",
-                    |this, _window, cx| this.open_url(GHOSTEX_IPHONE_INSTALL_URL, cx),
-                    cx,
-                ))
-                .into_any_element(),
-            ConnectDeviceKind::Computer => self
-                .muted("The code works once, for five minutes.")
-                .into_any_element(),
-        };
-        let (other_label, other_kind) = match self.kind {
-            ConnectDeviceKind::Phone => ("another computer", ConnectDeviceKind::Computer),
-            ConnectDeviceKind::Computer => ("a phone", ConnectDeviceKind::Phone),
-        };
-        let mut also = h_flex()
-            .w_full()
-            .flex_wrap()
-            .text_size(px(12.0))
-            .line_height(px(17.0))
-            .text_color(hsla(p.muted))
-            .child("You can also\u{a0}");
-        if self.tailscale_enabled {
-            also = also
-                .child("use\u{a0}")
-                .child(self.link(
-                    "connect-device-tailscale",
-                    "Tailscale",
-                    |this, window, cx| {
-                        this.close_and_send(ConnectDeviceCommand::OpenTailscale, window, cx)
-                    },
-                    cx,
-                ))
-                .child(",\u{a0}or\u{a0}");
-        }
-        also = also
-            .child("connect\u{a0}")
-            .child(self.link(
-                "connect-device-other-kind",
-                other_label,
-                move |this, _window, cx| this.switch_kind(other_kind, cx),
-                cx,
-            ))
-            .child(".");
-        v_flex()
-            .w_full()
-            .gap(px(12.0))
-            .pt(px(14.0))
-            .border_t_1()
-            .border_color(hsla(p.hairline))
-            .child(
-                h_flex()
-                    .w_full()
-                    .min_h(px(MODAL_CONTROL_HEIGHT))
-                    .items_center()
-                    .justify_between()
-                    .gap(px(12.0))
-                    .child(div().flex_1().min_w_0().child(left))
-                    .children(self.copy_button(cx)),
-            )
-            .child(also)
-            .into_any_element()
     }
 
     /// "Is this your phone?": the device, its three words as the biggest thing, and the two answers.
@@ -882,7 +843,7 @@ impl GpuiConnectDeviceWindow {
                 modal_action_button(
                     &p,
                     "connect-device-another",
-                    match self.kind {
+                    match self.kind() {
                         ConnectDeviceKind::Phone => "Connect another phone",
                         ConnectDeviceKind::Computer => "Connect another computer",
                     },
@@ -905,55 +866,29 @@ impl GpuiConnectDeviceWindow {
             ]))
             .into_any_element()
     }
-
-    fn code_body(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let code = match self.kind {
-            ConnectDeviceKind::Phone => self.phone_code(cx),
-            ConnectDeviceKind::Computer => self.computer_code(cx),
-        };
-        v_flex()
-            .w_full()
-            .gap(px(16.0))
-            .child(code)
-            .child(self.steps())
-            .children(
-                self.poll_error
-                    .clone()
-                    .filter(|_| self.stage == Stage::Ready)
-                    .map(|error| modal_error(&self.palette, error)),
-            )
-            .child(self.footer(cx))
-            .into_any_element()
-    }
 }
 
 impl Render for GpuiConnectDeviceWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
-        let screen = match (&self.stage, &self.waiting) {
-            (Stage::Connected(_), _) => 3,
-            (Stage::Finishing { .. }, _) => 2,
-            (Stage::Ready, Some(_)) => 1,
-            // Connect a computer's code box is shorter than its "Getting a code ready" square.
-            (Stage::Ready, None)
-                if self.kind == ConnectDeviceKind::Computer && self.code.is_some() =>
-            {
-                4
-            }
-            _ => 0,
-        };
+        // A phone that scanned takes the window from the large code.
+        if !self.shows_code_screen() {
+            self.large_code = false;
+        }
+        let screen = self.screen();
         if self
             .fitted_screen
-            .is_some_and(|fitted| fitted != (screen, self.kind))
+            .is_some_and(|fitted| fitted != (screen, self.way))
         {
             self.fit = ModalScrollFit::new();
         }
-        self.fitted_screen = Some((screen, self.kind));
+        self.fitted_screen = Some((screen, self.way));
         let body = match (self.stage.clone(), self.waiting.clone()) {
             (Stage::Connected(_), _) => self.connected_body(cx),
             (Stage::Finishing { device, .. }, _) => self.finishing_body(&device),
             (Stage::Ready, Some(device)) => self.ask_body(&device, cx),
-            _ => self.code_body(cx),
+            _ if self.shows_large_code() => self.large_code_body(cx),
+            _ => self.ways_body(cx),
         };
         let header = div()
             .text_size(px(16.0))

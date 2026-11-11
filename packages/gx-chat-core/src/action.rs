@@ -86,6 +86,12 @@ action_kinds! {
     CoordinatorBoardChange => "coordinatorBoardChange",
     CoordinatorBoardAnswer => "coordinatorBoardAnswer",
     JumpToWorkCard => "jumpToWorkCard",
+    LoadPageQuestionCounts => "loadPageQuestionCounts",
+    DismissWorkDockCard => "dismissWorkDockCard",
+    SnoozeWorkAsk => "snoozeWorkAsk",
+    ShowInChat => "showInChat",
+    HideWorkDock => "hideWorkDock",
+    ShowWorkDock => "showWorkDock",
     InsertBoardReference => "insertBoardReference",
     HideCoordinatorIntro => "hideCoordinatorIntro",
     ToggleAutopilot => "toggleAutopilot",
@@ -139,6 +145,7 @@ action_kinds! {
     RestoreReturned => "restoreReturned",
     ApplyReturned => "applyReturned",
     RestoreSubmission => "restoreSubmission",
+    EditUnsent => "editUnsent",
 
     // Attachments.
     AttachmentsStarted => "attachmentsStarted",
@@ -184,6 +191,7 @@ action_kinds! {
     FormSend => "formSend",
     FormSkipAll => "formSkipAll",
     FormToggle => "formToggle",
+    InsertDictation => "insertDictation",
     InlineAnswer => "inlineAnswer",
     InlineAnswerChange => "inlineAnswerChange",
     InlineAnswerText => "inlineAnswerText",
@@ -191,6 +199,8 @@ action_kinds! {
     JumpToQuestion => "jumpToQuestion",
     QuestionForLater => "questionForLater",
     QuestionRemove => "questionRemove",
+    SnoozeQuestion => "snoozeQuestion",
+    CancelQuestion => "cancelQuestion",
     QuestionListFilter => "questionListFilter",
     OpenResource => "openResource",
     CloseResource => "closeResource",
@@ -280,6 +290,8 @@ action_kinds! {
     ToggleSummary => "toggleSummary",
     SetVerbose => "setVerbose",
     SetDetailLevel => "setDetailLevel",
+    // Quiet View (`transcript/quiet_view.rs`): `on` true or false, or null for the default.
+    SetQuietView => "setQuietView",
     Retry => "retry",
     // Retry on the card of a session whose computer is offline (`session/computer.rs`).
     ComputerRetry => "computerRetry",

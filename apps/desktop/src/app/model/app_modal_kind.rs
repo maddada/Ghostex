@@ -215,7 +215,7 @@ impl GpuiAppModalKind {
             Self::OpenTargets => "Ghostex Open Targets",
             Self::Onboarding => "Welcome to Ghostex",
             Self::RemoteGxserverInstall => "Ghostex Remote Setup",
-            Self::RemoteSetup => "Connect a phone",
+            Self::RemoteSetup => "Connect a device",
             Self::Worktree => "Ghostex Add Worktree",
             Self::DeleteWorktree => "Ghostex Delete Worktree",
             Self::RenameWorktree => "Ghostex Rename Worktree",
@@ -449,8 +449,8 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT),
             ),
             Self::RemoteSetup => size(
-                px(APP_MODAL_HOST_REMOTE_SETUP_WINDOW_WIDTH),
-                px(APP_MODAL_HOST_REMOTE_SETUP_WINDOW_HEIGHT),
+                px(crate::app::window::CONNECT_DEVICE_MODAL_WIDTH),
+                px(crate::app::window::CONNECT_DEVICE_MODAL_INITIAL_HEIGHT),
             ),
             // CDXC:Onboarding 2026-09-11 WHY:
             // The new onboarding renders a 1672x941 stage scaled to fit its window, so the frame keeps that aspect ratio at a size that still fits a 1440x900 screen with the menu bar and Dock.

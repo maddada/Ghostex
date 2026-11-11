@@ -58,17 +58,22 @@ impl GhostexGpuiApp {
             .to_string();
         let mut settings_object = settings_object.clone();
         // CDXC:Onboarding 2026-09-15 WHY:
-        // The native Tips popup saves read IDs directly, while React's normalized settings omit this key or carry an older copy.
+        // The new chat tips card saves read IDs directly (native_chat/new_chat_tips.rs), while React's normalized settings omit this key or carry an older copy.
         // Preserve the latest native value so a later sidebar or Settings save cannot make read tips unread again.
-        match previous_settings_object.get(GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY) {
+        match previous_settings_object
+            .get(crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_READ_SETTINGS_KEY)
+        {
             Some(read_ids) => {
                 settings_object.insert(
-                    GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY.to_string(),
+                    crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_READ_SETTINGS_KEY
+                        .to_string(),
                     read_ids.clone(),
                 );
             }
             None => {
-                settings_object.remove(GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY);
+                settings_object.remove(
+                    crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_READ_SETTINGS_KEY,
+                );
             }
         }
         // Only explicit remote-machine UI and sidebar ordering saves may replace the
@@ -234,6 +239,8 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
+        // A machine that is turned off or removed gives up its Easy Connect forwarder too.
+        gpui_stop_easy_connect_forwards_of_unsaved_machines(next_settings);
     }
 
     pub(crate) fn handle_gpui_save_remote_machine_password_message(

@@ -468,7 +468,13 @@ fn cloud_box_local_port(machine_id: &str, info: &CloudBoxConnectInfo) -> Result<
                 .ok_or_else(|| "The box has no tailcat address yet.".to_string())?;
             let port = u16::try_from(info.gxserver_port)
                 .map_err(|_| "The box's gxserver port is invalid.".to_string())?;
-            crate::app::helpers::gpui_start_easy_connect_forward(machine_id, address, port)
+            crate::app::helpers::gpui_start_easy_connect_forward(
+                machine_id,
+                address,
+                port,
+                // A box forwards its gxserver, which answers this without a token.
+                ghostex_paths::tailcat_forward::ForwardProbe::HttpGet("/api/health"),
+            )
         }
         other => Err(format!("Unknown box transport {other}.")),
     }

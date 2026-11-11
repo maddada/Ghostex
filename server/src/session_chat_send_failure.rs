@@ -747,33 +747,9 @@ async fn retire_rows_the_transcript_recorded(state: &AppState) {
             continue;
         };
         let (project_id, session_id) = (project_id.to_string(), session_id.to_string());
-        let check_state = state.clone();
-        let check_failure = failure.clone();
-        let (check_project, check_session) = (project_id.clone(), session_id.clone());
-        let recorded = tokio::task::spawn_blocking(move || {
-            let db = open_gxserver_database(&check_state.paths).ok()?;
-            let snapshot = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
-                &db,
-                &check_project,
-                &check_session,
-            );
-            let prompt = snapshot
-                .queue
-                .iter()
-                .find(|prompt| prompt.id == check_failure.prompt_id)?;
-            let since = chrono::DateTime::parse_from_rfc3339(&prompt.created_at)
-                .ok()?
-                .timestamp_millis();
-            let needles = crate::coordinators::delivery_needles(&prompt.text);
-            let session = DomainRepository::new(&db, check_state.metadata.server_id.as_str())
-                .get_session(&check_project, &check_session)
-                .ok()??;
-            crate::coordinators::transcript_records_message(&session, &needles, since, &mut None)
-        })
-        .await
-        .ok()
-        .flatten()
-            == Some(true);
+        let recorded =
+            transcript_recorded_row(state, &project_id, &session_id, &failure.prompt_id, false)
+                .await;
         if !recorded {
             continue;
         }
@@ -797,6 +773,92 @@ async fn retire_rows_the_transcript_recorded(state: &AppState) {
         );
         clear_send_failure(state, &project_id, &session_id);
     }
+}
+
+/// Whether the agent's transcript records the text of the queue row `prompt_id` since the row was
+/// made: the message reached the agent, whatever its row says. `only_failed` asks it of a row
+/// that says it failed alone (a row still waiting its turn has not been typed).
+async fn transcript_recorded_row(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+    only_failed: bool,
+) -> bool {
+    let check_state = state.clone();
+    let (project_id, session_id, prompt_id) = (
+        project_id.to_string(),
+        session_id.to_string(),
+        prompt_id.to_string(),
+    );
+    tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&check_state.paths).ok()?;
+        let snapshot = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
+            &db,
+            &project_id,
+            &session_id,
+        );
+        let prompt = snapshot
+            .queue
+            .iter()
+            .find(|prompt| prompt.id == prompt_id)
+            .filter(|prompt| !only_failed || prompt.state == "failed")?;
+        let since = chrono::DateTime::parse_from_rfc3339(&prompt.created_at)
+            .ok()?
+            .timestamp_millis();
+        let needles = crate::coordinators::delivery_needles(&prompt.text);
+        let session = DomainRepository::new(&db, check_state.metadata.server_id.as_str())
+            .get_session(&project_id, &session_id)
+            .ok()??;
+        crate::coordinators::transcript_records_message(&session, &needles, since, &mut None)
+    })
+    .await
+    .ok()
+    .flatten()
+        == Some(true)
+}
+
+/// Retry on a failed row whose message the agent's transcript already records: the row is
+/// retired instead of typed again, and `true` says so.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User (through the coordinator): "a notice must never claim a delivered message was not sent,
+/// and Retry there would double it". A failed row is retired once the transcript records its
+/// message (`retire_rows_the_transcript_recorded`), but that pass runs on a clock, and a Retry
+/// pressed before it typed the message a second time. Every Retry (the row's own, the card's, and
+/// Send now on a failed row) asks the transcript first.
+pub(crate) async fn retire_instead_of_retry(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+) -> bool {
+    if !transcript_recorded_row(state, project_id, session_id, prompt_id, true).await {
+        return false;
+    }
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    params.insert("promptId".to_string(), json!(prompt_id));
+    let _ = crate::session_chat_queue::handle_session_chat_queue_endpoint(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        "/api/removeSessionChatQueuedPrompt",
+        &params,
+    );
+    crate::session_chat_send_diagnostics::record_send_recovery(
+        state,
+        "sessionChatSendRetryAlreadyRecorded",
+        project_id,
+        session_id,
+        "Retry was pressed on a message the agent's transcript already records; its row was retired instead of sent again.",
+        &[],
+    );
+    clear_send_failure(state, project_id, session_id);
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state, project_id, session_id,
+    );
+    true
 }
 
 /// A button on the card (`answerSessionChatPrompt`'s `restartAgent` lane, which every client
@@ -830,6 +892,10 @@ pub(crate) async fn answer_card_action(
     };
     if action == ACTION_DISMISS {
         clear_send_failure(state, &project_id, &session_id);
+        return Some(Ok(()));
+    }
+    // The message got there after all: nothing to restart and nothing to send again.
+    if retire_instead_of_retry(state, &project_id, &session_id, &failure.prompt_id).await {
         return Some(Ok(()));
     }
     if action == ACTION_START_FRESH {

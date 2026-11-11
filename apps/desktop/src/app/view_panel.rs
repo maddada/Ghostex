@@ -54,7 +54,8 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:Workarea 2026-09-24 DECISION:
-    /// User: on the "Open a view" picker, "still allow me to use" Toggle Agents Panel, Expand side
+    /// User: on the "Open a view" picker, "still allow me to use" Toggle Agents Panel (a button the
+    /// user removed on 2026-11-10; Expand side panel does the same), Expand side
     /// panel and Expand side panel fully. Maximised counts while the panel is open, whether it holds
     /// a view or the picker; this supersedes the 2026-09-20 rule that the picker put the sessions
     /// column back. Closing the panel still does, rather than leaving the window with nothing in it.

@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Ghostex Coordinator'
+  short_description: 'The playbook a Ghostex coordinator session works by'
+  default_prompt: 'Use $ghostex-coordinator to work as this project''s Ghostex coordinator: talk to the user, hand real work to threads, and report back.'
+
+policy:
+  allow_implicit_invocation: false

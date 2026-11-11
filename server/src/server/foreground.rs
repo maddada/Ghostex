@@ -131,6 +131,49 @@ pub async fn run_gxserver_foreground(
             details: Some(json!({ "removed": removed_retired_skills })),
         });
     }
+    // A renamed bundled skill (`ghostex-orchestrator`, now `ghostex-coordinator`) moves to its new
+    // name before the refresh from the signed skill list runs (agent_skills_renamed.rs).
+    if let Some(moved) = crate::agent_skills_renamed::migrate_renamed_ghostex_agent_skills(&paths) {
+        let changed = ["installed", "linked", "removed", "failed"]
+            .iter()
+            .any(|key| moved[*key].as_array().is_some_and(|list| !list.is_empty()));
+        if changed {
+            let _ = logger.log(GxserverLogInput {
+                level: crate::logging::LogLevel::Warn,
+                event: "renamedAgentSkillsMoved".to_string(),
+                server_id: None,
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: None,
+                details: Some(moved),
+            });
+        }
+    }
+    // A coordinator's first message still waiting in its queue names the skill's new name too.
+    match crate::storage::open_gxserver_database(&paths)
+        .map_err(|error| error.to_string())
+        .and_then(|db| {
+            crate::coordinators::rename_queued_coordinator_skill_lines(&db)
+                .map_err(|error| error.to_string())
+        }) {
+        Ok(0) => {}
+        Ok(renamed) => {
+            let _ = logger.log(GxserverLogInput {
+                level: crate::logging::LogLevel::Info,
+                event: "queuedCoordinatorSkillLinesRenamed".to_string(),
+                server_id: None,
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: None,
+                details: Some(json!({ "renamed": renamed })),
+            });
+        }
+        Err(error) => {
+            eprintln!("gxserver: queued coordinator skill lines were not renamed: {error}")
+        }
+    }
     #[cfg(windows)]
     if let Some(details) = crate::platform::launch_context::launch_context_warning_details() {
         let _ = logger.log(GxserverLogInput {
@@ -213,6 +256,11 @@ pub async fn run_gxserver_foreground(
         presentation_event_sequence,
         push: Arc::new(crate::push::PushRuntime::start(
             paths.clone(),
+            logger.clone(),
+        )),
+        live_activity: Arc::new(crate::live_activity::LiveActivityRuntime::start(
+            paths.clone(),
+            metadata.server_id.clone(),
             logger.clone(),
         )),
         remote_pairing_runtime: RemotePairingRuntime::new(),
@@ -381,6 +429,7 @@ pub async fn run_gxserver_foreground(
     crate::chief::start_chief_sweep(state.clone());
     storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());
+    shared_settings_watch::start_shared_settings_watch(state.clone());
     crate::settings_sync::start_settings_sync(state.clone());
     crate::connected_computers::start_held_send_delivery(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
@@ -449,7 +498,12 @@ pub async fn run_gxserver_foreground(
     if let Ok(db) = open_gxserver_database(&paths) {
         let repository = DomainRepository::new(&db, metadata.server_id.as_str());
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
-        crate::zmx::end_unowned_zmx_session_daemons(&repository, &logger, &metadata.server_id);
+        crate::zmx::end_unowned_zmx_session_daemons(
+            &repository,
+            &logger,
+            &metadata.server_id,
+            &paths.auth_token_file,
+        );
     }
     // Read before any client connects: its first listing marks the daemons a shutdown ended as missing.
     let sessions_to_resume =

@@ -264,7 +264,7 @@ pub(crate) fn create_coordinator(parsed: &ParsedArgs) -> CliResult<Value> {
         result["roleError"] = json!(role_error);
         eprintln!(
             "Its coordinator skill or first message could not be set up ({role_error}). Send it: ghostex agents send {reference} \"{}\"",
-            crate::coordinators::orchestrator_skill_line(family.unwrap_or_default())
+            crate::coordinators::coordinator_skill_line(family.unwrap_or_default())
         );
     }
     Ok(result)
@@ -329,7 +329,7 @@ fn promote(parsed: &ParsedArgs) -> CliResult<()> {
         agents::text(&result, "title")
     );
     if result["playbookQueued"].as_bool() == Some(true) {
-        println!("The coordinator skill is installed and the message to read it is queued; it reaches the session once it is idle.");
+        println!("The coordinator skill is installed and the message to read it was sent now; a busy agent takes it at its next input boundary.");
     } else {
         println!(
             "Its coordinator skill or message could not be set up ({}). Send it with: ghostex agents send {reference} \"Run ghostex coordinator guide and follow it from now on.\"",
@@ -471,7 +471,7 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                     "family": family,
                     "models": models,
                     "defaultModel": default_model,
-                    "skillLine": crate::coordinators::orchestrator_skill_line(family),
+                    "skillLine": crate::coordinators::coordinator_skill_line(family),
                 }),
             ))
         })
@@ -581,6 +581,10 @@ pub(super) fn print_status(view: &Value, all: bool) {
     let network = agents::text(view, "networkNotice");
     if !network.is_empty() {
         println!("{network}");
+    }
+    let work = agents::text(view, "workNotice");
+    if !work.is_empty() {
+        println!("{work}");
     }
     println!(
         "Coordinator: {} ({})",

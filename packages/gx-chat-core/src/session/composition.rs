@@ -27,6 +27,9 @@ use crate::session::terminal::{
 };
 use crate::session::text::{collapse_whitespace, is_js_space, parse_command_envelope};
 use crate::state::ChatState;
+
+/// The id the drawn copy of a gate-held echo carries in its `startupDelivery` (`held_echo`).
+pub const HELD_BY_GATE_PREFIX: &str = "gate-held-";
 use crate::transcript::noise::is_compaction_record;
 
 /// `countSessionChatCompactionRecords`: how many compactions the authoritative transcript records.
@@ -81,6 +84,10 @@ pub fn surface_skill_invocation_user_turns(messages: &[ChatRow]) -> Vec<ChatRow>
 /// [`surface_skill_invocation_user_turns`] on a list the caller owns, rewritten in place rather
 /// than copied twice.
 pub fn surface_skill_invocation_user_turns_in(mut messages: Vec<ChatRow>) -> Vec<ChatRow> {
+    // A prompt a hook refused is the user's bubble too, with its card under it (hook_blocked.rs).
+    if crate::transcript::hook_blocked::has_hook_blocked_prompt(&messages) {
+        messages = crate::transcript::hook_blocked::split_hook_blocked_prompts(messages);
+    }
     for message in &mut messages {
         let plain_text = message
             .blocks
@@ -190,6 +197,10 @@ pub struct ComposeKey {
     pub queue: Option<Vec<serde_json::Value>>,
     pub app_commands: Vec<serde_json::Value>,
     pub shell: Option<serde_json::Value>,
+    /// The echo whose send has not gone yet and what it says (`composer::delivery::echo_note`).
+    pub held: Option<(String, ghostex_gx_protocol::StartupDelivery)>,
+    /// The rows of the messages that were not sent (`composer::delivery::unsent_rows`).
+    pub unsent: Vec<crate::state::PendingSend>,
 }
 
 /// Rebuilds `state.messages.boundaried` when the transcript or the markers changed, and keeps it
@@ -259,6 +270,8 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
         queue: (*state.session.queue_prompts).clone(),
         app_commands: state.session.app_commands.clone(),
         shell: state.pending.terminal_shell.clone(),
+        held: crate::composer::delivery::echo_note(state),
+        unsent: crate::composer::delivery::unsent_rows(state),
     };
     if state.messages.compose_key.as_ref() == Some(&key) {
         return;
@@ -334,6 +347,8 @@ fn compose_after(
         pending_with_startup_sends(&state.pending.sends, &queue, state.session.agent.as_deref());
     // Messages this computer holds while the session's computer is offline.
     startup_pending.extend(crate::session::computer::held_as_pending(state));
+    // Messages that were not sent, above the sends still on their way: they are older.
+    startup_pending.splice(0..0, crate::composer::delivery::unsent_rows(state));
     // The list an echo is matched against copies the transcript; with nothing pending there is
     // nothing to match.
     let visible = if startup_pending.is_empty() {
@@ -341,11 +356,28 @@ fn compose_after(
     } else {
         visible_pending_sends(&startup_pending, &pending_transcript(state, boundaried))
     };
-    let pending_messages = crate::transcript::local_command::with_live_shell_output(
+    let mut pending_messages = crate::transcript::local_command::with_live_shell_output(
         pending_sends_as_messages(&visible),
         state.pending.terminal_shell.as_ref(),
         boundaried,
     );
+    // A message that has not gone yet says so under its bubble: held by the send gate with why
+    // (CDXC:SessionChat 2026-11-11 on `hold_words` in composer/policy.rs), waiting to go again
+    // after a failure time can fix, or still out (composer/delivery.rs). Only the drawn row
+    // carries it, and it keeps its own `queued` mark: the echo is no queue row, so nothing that
+    // settles queue rows reads it.
+    if let Some((pending_id, delivery)) = crate::composer::delivery::echo_note(state) {
+        let id = format!(
+            "{}{pending_id}",
+            crate::session::constants::PENDING_ID_PREFIX
+        );
+        if let Some(row) = pending_messages
+            .iter_mut()
+            .find(|row| row.id == id && row.startup_delivery.is_none())
+        {
+            std::sync::Arc::make_mut(row).startup_delivery = Some(delivery);
+        }
+    }
     let key = TranscriptPartKey {
         boundaried: BoundariedKey::of(state),
         app_commands: state.session.app_commands.clone(),

@@ -437,6 +437,18 @@ pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_HEALTH_INTERVAL: Duration =
     Duration::from_secs(15);
 pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_RECONNECT_DELAY: Duration =
     Duration::from_millis(700);
+// A stream that ran this long was a working one: its end is not one of the ends in a row that
+// make the tunnel suspect (websocket_presentation.rs).
+pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_HEALTHY_AFTER: Duration =
+    Duration::from_secs(30);
+// How long the stream waits to try again when it keeps ending on a tunnel that answers.
+pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_RETRY_WHEN_HEALTHY: Duration =
+    Duration::from_secs(30);
+// How long after a wake's check that did not confirm a tunnel the second one starts
+// (tunnel_liveness.rs).
+pub(crate) const GPUI_REMOTE_GXSERVER_WAKE_RECHECK_DELAY: Duration = Duration::from_secs(2);
+// How often the app looks for a tunnel whose SSH exited, between the watchdog's health checks.
+pub(crate) const GPUI_REMOTE_GXSERVER_TUNNEL_EXIT_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 /*
  * CDXC:AddProject 2026-07-30:
  * Add-project timeouts. Registering a project right after a remote reconnect

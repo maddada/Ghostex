@@ -40,6 +40,7 @@ impl GhostexGpuiApp {
             | "requestMacOSNotificationPermission"
             | "playCompletionSoundPreview"
             | "testAgentTaskCompletion"
+            | "resetNewChatTips"
             | "applyRecommendedGhosttySettings"
             | "resetGhosttySettingsToDefault"
             | "openGhosttyConfigFile"

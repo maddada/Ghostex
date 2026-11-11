@@ -1,6 +1,9 @@
-//! The project selector of the Project section: an outline trigger showing the selected project
-//! (folder tile, name over path, chevron) and the searchable popover of every main project, aligned
-//! to the trigger's right edge 8px below it, with the caret in its search field.
+//! The Project dropdown that heads the project's panel: an outline trigger showing the selected
+//! project (its icon in a tile, name over path, chevron) and the searchable popover of every
+//! project, worktrees indented under the project they came from, aligned to the trigger's right
+//! edge 8px below it, with the caret in its search field. Each project shows its sidebar icon
+//! (`iconDataUrl`, decoded through the app's one bounded image cache, data_url_image.rs), else the
+//! sidebar's letter tile.
 //!
 //! CDXC:Projects 2026-06-14-17:29 SEE-ALSO: one selector with a searchable dropdown of project paths replaces the always-visible project list (packages/core-ui/settings-modal/tabs/projects.tsx (deleted 2026-10-01), `.projects-settings-selector-*` in styles/modals.css (deleted 2026-11-06)).
 use super::super::super::super::native_modal_kit::*;
@@ -87,6 +90,40 @@ fn project_copy(
         .into_any_element()
 }
 
+/// The size the sidebar draws a project icon at.
+const ICON_SIZE: f32 = 16.0;
+
+/// A project's sidebar icon, or the sidebar's letter tile when it has none
+/// (native_sidebar/project_header.rs `letter_tile`).
+fn project_icon(p: &SettingsPalette, name: &str, icon_data_url: Option<&str>) -> AnyElement {
+    if let Some(image) = icon_data_url.and_then(|url| crate::data_url_image::image(url, false)) {
+        return gpui::img(image)
+            .size(px(ICON_SIZE))
+            .flex_shrink_0()
+            .into_any_element();
+    }
+    div()
+        .size(px(ICON_SIZE))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(3.0))
+        .bg(hsla(css_fade(p.muted, 0.12)))
+        .text_color(hsla(p.muted))
+        .text_size(px(10.0))
+        .line_height(px(ICON_SIZE))
+        .font_weight(FontWeight::SEMIBOLD)
+        .child(
+            name.trim()
+                .chars()
+                .next()
+                .map(|letter| letter.to_uppercase().to_string())
+                .unwrap_or_else(|| "?".to_string()),
+        )
+        .into_any_element()
+}
+
 fn picker(tab: &mut ProjectsTab) -> &mut SearchableList {
     &mut tab.picker
 }
@@ -103,11 +140,12 @@ pub(super) fn project_picker(
     let list = picker(tab);
     list.sync_query(cx);
     let query = list.query(cx);
-    let values: Vec<String> = projects
-        .iter()
-        .map(|project| format!("{} {}", project.name, project.path))
-        .collect();
-    let results = filter_by_score(&values, &query);
+    // The rows, and their icons, are built only while the popover shows them.
+    let results = if list.open {
+        dropdown_rows(projects, &query)
+    } else {
+        Vec::new()
+    };
     let (open, highlight, focus, trigger_bounds) = (
         list.open,
         list.highlight,
@@ -137,10 +175,10 @@ pub(super) fn project_picker(
         .justify_center()
         .rounded(px(7.48))
         .bg(hsla(css_fade(card_active(p), 0.66)))
-        .child(settings_icon(
-            icon::FOLDER_OPEN,
-            16.0,
-            css_mix(p.muted, 0.72, p.foreground),
+        .child(project_icon(
+            p,
+            &selected.name,
+            selected.icon_data_url.as_deref(),
         ));
     let trigger = h_flex()
         .id("projects-selector-trigger")
@@ -179,34 +217,39 @@ pub(super) fn project_picker(
             FontWeight::NORMAL,
         ))
         .child(settings_icon(icon::CHEVRON_DOWN, 16.0, p.foreground).flex_shrink_0());
-    let option_icon = css_mix(p.muted, 0.78, p.foreground);
     let rows: Vec<AnyElement> = results
         .iter()
         .enumerate()
-        .map(|(position, index)| {
-            let project = &projects[*index];
+        .map(|(position, row)| {
+            let project = &projects[row.index];
             let project_id = project.project_id.clone();
+            let mut content = Vec::new();
+            if row.nested {
+                // With the row's 10px gap, a worktree sits 20px further in than its project.
+                content.push(div().w(px(10.0)).flex_shrink_0().into_any_element());
+            }
+            content.push(project_icon(
+                p,
+                &project.name,
+                project.icon_data_url.as_deref(),
+            ));
+            content.push(project_copy(
+                p,
+                &project.name,
+                &project.path,
+                13.0,
+                16.25,
+                FontWeight(650.0),
+            ));
             searchable_row(
                 p,
-                ("projects-selector-option", *index),
+                ("projects-selector-option", row.index),
                 47.8,
                 6.0,
                 10.0,
                 position == highlight,
                 project.project_id == selected.project_id,
-                vec![
-                    settings_icon(icon::FOLDER_OPEN, 16.0, option_icon)
-                        .flex_shrink_0()
-                        .into_any_element(),
-                    project_copy(
-                        p,
-                        &project.name,
-                        &project.path,
-                        13.0,
-                        16.25,
-                        FontWeight(650.0),
-                    ),
-                ],
+                content,
                 move |tab: &mut ProjectsTab, window, cx| {
                     tab.select_project(&project_id, window, cx);
                 },
@@ -253,7 +296,7 @@ pub(super) fn project_picker(
     );
     let key_ids: Vec<String> = results
         .iter()
-        .map(|index| projects[*index].project_id.clone())
+        .map(|row| projects[row.index].project_id.clone())
         .collect();
     div()
         .max_w_full()
@@ -292,4 +335,69 @@ pub(super) fn project_picker(
         .child(trigger)
         .when_some(popover, |this, popover| this.child(popover))
         .into_any_element()
+}
+
+/// One row of the dropdown: the project at `index`, indented when it is a worktree under its
+/// project.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct DropdownRow {
+    pub(super) index: usize,
+    pub(super) nested: bool,
+}
+
+/// The dropdown's rows. Without a query: the projects in sidebar order, each followed by its
+/// worktrees. With one: the projects whose name, path or worktrees match, best match first, each
+/// followed by its matching worktrees, so a worktree that matches shows under its project even
+/// when the project itself does not match. A worktree whose project is not listed stands alone.
+pub(super) fn dropdown_rows(projects: &[ProjectItem], query: &str) -> Vec<DropdownRow> {
+    let parent_of = |project: &ProjectItem| {
+        project
+            .worktree_parent_project_id
+            .as_ref()
+            .and_then(|parent| {
+                projects.iter().position(|candidate| {
+                    &candidate.project_id == parent
+                        && candidate.worktree_parent_project_id.is_none()
+                })
+            })
+    };
+    let parents: Vec<Option<usize>> = projects.iter().map(parent_of).collect();
+    let values: Vec<String> = projects
+        .iter()
+        .map(|project| format!("{} {}", project.name, project.path))
+        .collect();
+    // Each project's rank in the search (0 is best); every project matches an empty query.
+    let mut rank: Vec<Option<usize>> = vec![None; projects.len()];
+    for (position, index) in filter_by_score(&values, query).into_iter().enumerate() {
+        rank[index] = Some(position);
+    }
+    let mut groups: Vec<(usize, usize)> = (0..projects.len())
+        .filter(|index| parents[*index].is_none())
+        .filter_map(|top| {
+            let best = (0..projects.len())
+                .filter(|index| *index == top || parents[*index] == Some(top))
+                .filter_map(|index| rank[index])
+                .min()?;
+            Some((best, top))
+        })
+        .collect();
+    groups.sort_by_key(|(best, top)| (*best, *top));
+    let searching = !query.trim().is_empty();
+    let mut rows = Vec::new();
+    for (_, top) in groups {
+        rows.push(DropdownRow {
+            index: top,
+            nested: false,
+        });
+        rows.extend(
+            (0..projects.len())
+                .filter(|index| parents[*index] == Some(top))
+                .filter(|index| !searching || rank[*index].is_some())
+                .map(|index| DropdownRow {
+                    index,
+                    nested: true,
+                }),
+        );
+    }
+    rows
 }

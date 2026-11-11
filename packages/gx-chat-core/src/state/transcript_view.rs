@@ -201,6 +201,15 @@ pub struct TranscriptViewState {
     /// The host has sent its own chat look ([`crate::ChatSettings::chat_look`]), so a chat read's
     /// `chatLook` no longer applies (`transcript/chat_look.rs`).
     pub chat_look_from_host: bool,
+    /// The Quiet View settings the host sent (`transcript/quiet_view.rs`); `None` from a host that
+    /// draws no Quiet View (the phone), where it stays off.
+    pub quiet_view_settings: Option<crate::transcript::quiet_view::QuietViewSettings>,
+    /// This chat's own Quiet View choice from its View menu, or `None` to follow the default.
+    pub quiet_view_override: Option<bool>,
+    /// The Quiet View choice the write in flight will adopt once it lands.
+    pub pending_quiet_view_override: Option<Option<bool>>,
+    /// Quiet View is on for this chat now (`quiet_view::sync`).
+    pub quiet_view_on: bool,
 }
 
 /// One message's full projection, with the source it was built from.
@@ -272,6 +281,9 @@ pub struct ProjectionInputs {
     pub session_directory_revision: u64,
     /// `SessionState::agent_message_deliveries`: the statuses on sent agent message cards.
     pub agent_message_deliveries: Option<serde_json::Value>,
+    /// The bar above the chat box still shows the newest finished turn's "Worked for"
+    /// (`rows::worked_line_shown`), so that turn's own fold leaves its time out.
+    pub worked_line_shown: bool,
     /// The forms and pages whose answers are sending or queued, which turn their Q-tags answered
     /// (or skipped) before the transcript carries the answers.
     pub answers_on_the_way: Vec<String>,
@@ -328,6 +340,10 @@ impl Default for TranscriptViewState {
             detailed_default: false,
             chat_look: Default::default(),
             chat_look_from_host: false,
+            quiet_view_settings: None,
+            quiet_view_override: None,
+            pending_quiet_view_override: None,
+            quiet_view_on: false,
         }
     }
 }
@@ -365,7 +381,18 @@ impl TranscriptViewState {
     /// Whether Agent work is Quiet, which keeps the work out of the chat: the work draws in each reply's hover row, never before it
     /// (`transcript/grouped_work.rs` `hide_work`).
     pub fn hidden_work(&self) -> bool {
-        self.chat_look.agent_work == crate::transcript::chat_look::AgentWork::Quiet
+        self.effective_chat_look().agent_work == crate::transcript::chat_look::AgentWork::Quiet
+    }
+
+    /// The chat look as the chat draws it: under Quiet View, Agent work Quiet draws as Reduced,
+    /// since the quiet line already holds the work (`transcript/quiet_view.rs`).
+    pub fn effective_chat_look(&self) -> crate::transcript::chat_look::ChatLook {
+        use crate::transcript::chat_look::AgentWork;
+        let mut look = self.chat_look;
+        if self.quiet_view_on && look.agent_work == AgentWork::Quiet {
+            look.agent_work = AgentWork::Reduced;
+        }
+        look
     }
 
     /// Whether any row is still drawn as a plain-text placeholder, which is what keeps the 0 ms

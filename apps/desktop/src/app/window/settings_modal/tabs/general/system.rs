@@ -135,6 +135,22 @@ fn auto_sleep_section(
                 false,
                 cx,
             ));
+            // CDXC:Settings 2026-11-11 DECISION in model.rs (`RailTier`, Q2511): moved here from Sidebar & Sessions; it is a sleep timer for the project you left.
+            rows.extend(page.slider(
+                g,
+                s,
+                "projectSwitchKeepAliveMinutes",
+                "Keep the last project running for (minutes)",
+                "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.",
+                (
+                    g.number("MIN_PROJECT_SWITCH_KEEP_ALIVE_MINUTES"),
+                    g.number("MAX_PROJECT_SWITCH_KEEP_ALIVE_MINUTES"),
+                    1.0,
+                ),
+                false,
+                window,
+                cx,
+            ));
         }
     }
     if g.values.f64("autoSleepAgentIdleMinutes") > 0.0 {
@@ -554,6 +570,15 @@ pub(super) fn sleeping_sessions_section(
         "dimSleepingSessions",
         "Dim sleeping sessions",
         "Fade sleeping sessions in the sidebar so they stand apart from awake ones.",
+        false,
+        cx,
+    ));
+    rows.extend(page.toggle(
+        g,
+        "sleepingSessions",
+        "dimInactiveProjects",
+        "Dim inactive projects",
+        "Fade a project in the sidebar when all its sessions are asleep or closed, none is working and none waits on you, so projects you are not using stand apart. A project with no sessions counts as inactive.",
         false,
         cx,
     ));

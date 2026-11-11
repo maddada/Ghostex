@@ -118,16 +118,26 @@ pub(crate) async fn handle_remote_access_http(
                 .unwrap_or(false);
             let show_code = open_tunnel && may_show_pairing_code(&caller);
             tokio::task::spawn_blocking(move || {
-                if show_code {
-                    // The Show QR dialog is open: a new phone must get through the allow-list to pair.
+                // The Show QR dialog is open: a new phone must get past the allow-list to pair. It
+                // comes in through the door, whose address the QR then carries; the helpers paired
+                // devices are on are not touched (CDXC:RemotePairing 2026-11-10 in tailcat/door.rs).
+                let door = if show_code {
                     hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
-                }
+                    tailcat_runtime.wait_for_open_door(DOOR_READY_TIMEOUT)
+                } else {
+                    None
+                };
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 let identity = cached_remote_access_identity()?;
                 let ssh_port = ssh_port_for_pairing(&status.ports);
                 let mut result = serde_json::Map::new();
+                // Without a door (its helper could not start) the QR names a main helper as
+                // before, where the new phone's knock lets it in.
+                let qr_address = door
+                    .map(|door| door.address)
+                    .or_else(|| pairing_qr_address(&status));
                 if let (Some(qr_address), Some(text_address)) =
-                    (pairing_qr_address(&status), public_pairing_address(&status))
+                    (qr_address, public_pairing_address(&status))
                 {
                     let db = open_gxserver_database(&paths)?;
                     // A closed sheet doesn't drop the live code: the 11.0.1 notice shows the same
@@ -276,7 +286,9 @@ pub(crate) async fn handle_remote_access_http(
             }
             tokio::task::spawn_blocking(move || {
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
-                Ok(json!({ "addresses": easy_connect_addresses(&status) }))
+                let doors =
+                    crate::tailcat::known_door_addresses(&paths, status.relay.host.as_deref());
+                Ok(json!({ "addresses": easy_connect_addresses_with_doors(&status, doors) }))
             })
             .await
         }
@@ -346,7 +358,11 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                match register_device_link_key(&paths, &db, &tailcat_runtime, &device_id, &client_key)? {
+                // The asking device is connected through the helpers this restarts: answer first.
+                let registered = tailcat_runtime.answer_before_restart(&paths, || {
+                    register_device_link_key(&paths, &db, &tailcat_runtime, &device_id, &client_key)
+                })?;
+                match registered {
                     Ok(changed) => {
                         if changed {
                             crate::audit::record(
@@ -366,6 +382,9 @@ pub(crate) async fn handle_remote_access_http(
                         "clientKey must be a nodekey: public key.",
                     )),
                     Err(LinkKeyError::NotPaired) => Err(RemoteAccessHttpError::unknown_device(&device_id)),
+                    Err(LinkKeyError::HeldByAnotherDevice { name, paired }) => {
+                        Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired }.into())
+                    }
                 }
             })
             .await
@@ -513,10 +532,18 @@ pub(crate) async fn handle_remote_access_http(
                     (result.as_object_mut(), answer.approved)
                 {
                     object.extend(approved);
+                    // The approval may just have started the helpers again with the new key.
+                    tailcat_runtime.wait_for_main_addresses(MAIN_ADDRESSES_TIMEOUT);
                     let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                     object.insert(
                         "easyConnectAddresses".to_string(),
-                        json!(easy_connect_addresses(&status)),
+                        json!(easy_connect_addresses_with_doors(
+                            &status,
+                            crate::tailcat::known_door_addresses(
+                                &paths,
+                                status.relay.host.as_deref()
+                            ),
+                        )),
                     );
                 }
                 Ok(result)
@@ -647,6 +674,9 @@ fn pair_device_error_outcome(error: &PairDeviceError) -> crate::audit::Outcome {
             Outcome::Refused("The phone's Ghostex is too old to pair.".to_string())
         }
         PairDeviceError::ApprovalDeclined => Outcome::Denied,
+        PairDeviceError::KeyHeldByAnotherDevice { name, paired } => Outcome::Refused(format!(
+            "It named the Easy Connect key of the paired entry \"{name}\" (paired {paired})."
+        )),
         PairDeviceError::Internal(error) => Outcome::Failed(format!("{error:#}")),
     }
 }
@@ -669,6 +699,15 @@ fn log_new_pairing_code(secret_hash: &str, actor: crate::audit::Actor) {
         None,
     );
 }
+
+/// How long the first ask of a pairing window waits for the door's helper to publish its address
+/// (a second or two; every later ask finds it running).
+const DOOR_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How long an approved device's answer waits for helpers that are just starting to publish
+/// their addresses (a second or two). Long, because a phone that got no list would keep only the
+/// address it scanned, the door's, which stops answering when the pairing window closes.
+const MAIN_ADDRESSES_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// The Easy Connect half of `/api/remotePairingCode`: `payload` (the QR link) only when `code`
 /// carries a secret (the Show QR sheet), empty otherwise; `text` (Copy as text, and the code another
@@ -780,6 +819,11 @@ impl From<PairDeviceError> for RemoteAccessHttpError {
                 status: StatusCode::FORBIDDEN,
                 code: PAIR_DEVICE_APPROVAL_DECLINED_ERROR,
                 message: "The computer asked for administrator approval to add this phone's key, and the Windows prompt was declined. Scan the new code on the computer and choose Yes when Windows asks.".to_string(),
+            },
+            PairDeviceError::KeyHeldByAnotherDevice { name, paired } => Self {
+                status: StatusCode::CONFLICT,
+                code: PAIR_DEVICE_KEY_HELD_ERROR,
+                message: format!("The entry \"{name}\" (paired {paired}) under Paired devices on the computer already uses this device's Easy Connect key. If that entry is this device's earlier pairing, remove it on the computer, then show a new code and scan again."),
             },
             PairDeviceError::BadRequest(message) => Self::bad_request(message),
             PairDeviceError::Internal(error) => error.into(),

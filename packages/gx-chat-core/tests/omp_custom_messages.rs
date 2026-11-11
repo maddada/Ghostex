@@ -1117,8 +1117,9 @@ fn omp_wake_ups_keep_the_worked_line_and_previous_turn_on_the_prompts_run() {
     }
 }
 
-/// A Claude background task that ends after the reply opens a turn that keeps its own Worked line
-/// and "Previous turn" fold, as before OMP wake-ups opened turns.
+/// A Claude background task that ends after the reply opens a turn that keeps its own Worked line,
+/// as before OMP wake-ups opened turns. The clock is past the bar's minute, so its fold keeps its
+/// own time (`rows::worked_line_shown`).
 #[test]
 fn another_agents_wake_up_keeps_the_worked_line_on_its_own_turn() {
     let notification = "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command \"cargo test\" completed (exit code 0)</summary>\n</task-notification>";
@@ -1131,7 +1132,7 @@ fn another_agents_wake_up_keeps_the_worked_line_on_its_own_turn() {
     assert_eq!(
         worked_view(&mut chat_state("claude", &rows)),
         (
-            folds(&[("u1", "Worked for 1m"), ("n1", "Previous turn")]),
+            folds(&[("u1", "Worked for 1m"), ("n1", "Worked for 20s")]),
             Some("Worked for 20s".to_string())
         )
     );

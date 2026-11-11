@@ -393,9 +393,9 @@ async function verify(cleanupPaths) {
     }
     const hasAndroidDownload = groups.some((group) => group.title === 'Android');
     if (hasAndroidDownload && !releaseBody.includes(renderIosAvailabilityNotes())) {
-      throw new Error('Release notes are missing the iOS TestFlight Discord instructions.');
+      throw new Error('Release notes are missing the iOS App Store link.');
     }
-    return `${downloads.length} direct customer download links${hasAndroidDownload ? ' plus iOS TestFlight instructions' : ''}`;
+    return `${downloads.length} direct customer download links${hasAndroidDownload ? ' plus the iOS App Store link' : ''}`;
   });
 
   /*

@@ -1,4 +1,4 @@
-//! The orchestrator playbook in effect: the `ghostex-orchestrator` skill's body as Ghostex ships
+//! The orchestrator playbook in effect: the `ghostex-coordinator` skill's body as Ghostex ships
 //! it, followed by the user's playbook overrides (one text for every coordinator). `ghostex
 //! orchestrator guide` prints it, and `ghostex orchestrator status` says when it changed since the
 //! orchestrator last read it.
@@ -13,7 +13,7 @@
 //!
 //! CDXC:Coordinators 2026-10-19 DECISION:
 //! User: "ok i want to have a button to click on to set the orchestrator prompt and i want to be able to set a different orchestrator prompt for a specific project too (the orchestrator prompt that gets overriden for a project should apply for all it's worktrees too please)". Q310 "Edit the playbook itself": the editor shows the full playbook, changeable for all projects or for one project and its worktrees, and Reset to Default goes back to the playbook Ghostex ships (for a project, to the all-projects one). Q311 "Yes, existing ones too": orchestrators that already exist take an edited playbook at their next guide read. Q312 "Replace them with the playbook editor": the default standing instructions built first are gone; the same buttons (Settings > Chat, Settings > Projects, the New Orchestrator dialog) edit the playbook, and each orchestrator's own Goal & Instructions stay as they are. Also asked: Reset to Default needs a confirming second click and is disabled while the text matches its default, saving text equal to the default stores no edited copy, and an on/off switch turns an edited copy off without losing it.
-//! SEE-ALSO: server/src/coordinators/role.rs (`coordinator_guide`, the shipped playbook), server/src/ghostex_cli/coordinator/playbook.rs (the CLI verbs), apps/desktop/src/app/window/settings_modal/tabs/orchestrator_playbook.rs and apps/desktop/src/app/window/new_coordinator_modal.rs (the editors), skills/ghostex-orchestrator/SKILL.md (tells the orchestrator the guide wins over the skill file).
+//! SEE-ALSO: server/src/coordinators/role.rs (`coordinator_guide`, the shipped playbook), server/src/ghostex_cli/coordinator/playbook.rs (the CLI verbs), apps/desktop/src/app/window/settings_modal/tabs/orchestrator_playbook.rs and apps/desktop/src/app/window/new_coordinator_modal.rs (the editors), skills/ghostex-coordinator/SKILL.md (tells the orchestrator the guide wins over the skill file).
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
@@ -629,7 +629,7 @@ pub fn playbook_status_notice(
     let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
     Ok(match recorded(&reads, key) {
         Some(read) if read == version => None,
-        Some(_) => Some("Your playbook changed since you last read it (work items and their cards replace the board and your replies' status sections): run `ghostex coordinator guide` now and follow it from here on.".to_string()),
+        Some(_) => Some("Your playbook changed since you last read it: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
         None => Some("You have not read your playbook yet: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
     })
 }

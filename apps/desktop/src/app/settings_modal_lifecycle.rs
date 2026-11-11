@@ -298,6 +298,7 @@ impl GhostexGpuiApp {
             }
             SettingsModalCommand::Close => {
                 self.release_native_app_modal_window(kind, cx);
+                self.open_add_project_queued_after_settings(cx);
             }
             SettingsModalCommand::OpenAccounts => {
                 // Settings still open on another page switches to Accounts in place.

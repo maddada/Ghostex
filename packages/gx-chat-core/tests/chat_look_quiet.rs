@@ -574,3 +574,181 @@ fn the_status_bar_follows_the_folds_of_the_call_it_names() {
         "the words show once"
     );
 }
+
+/// Every answered question card a list draws: on rows, and on a grouped turn's tail (its own
+/// cards, its artifacts and its reply).
+fn every_answered_card(items: &[Value]) -> usize {
+    let count = |value: &Value| value.as_array().map_or(0, Vec::len);
+    items
+        .iter()
+        .map(|item| match item["kind"].as_str() {
+            Some("message") => count(&item["message"]["questions"]),
+            Some("completed-work") => {
+                count(&item["questions"])
+                    + count(&item["final"]["questions"])
+                    + item["artifacts"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|row| count(&row["questions"]))
+                        .sum::<usize>()
+            }
+            Some("grouped-work") => item["turns"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|turn| {
+                    count(&turn["questions"])
+                        + count(&turn["final"]["questions"])
+                        + turn["artifacts"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|row| count(&row["questions"]))
+                            .sum::<usize>()
+                })
+                .sum(),
+            _ => 0,
+        })
+        .sum()
+}
+
+/// The turn's Completed reaches the chat a moment before the reply the agent wrote after the
+/// answer: for that moment the list ends at the answer. The question's sentence is no reply and
+/// its answered card shows once, under Quiet and Reduced, before and after the reply lands.
+#[test]
+fn a_completed_turn_before_its_reply_shows_the_answered_card_once() {
+    for agent_work in ["quiet", "reduced"] {
+        let mut rows = turn();
+        rows.push(words("s1", T0 + 4_500, "Which color do you want?"));
+        rows.push(ask("q1", T0 + 5_000));
+        let mut state = quiet_chat(rows.clone());
+        look(&mut state, agent_work);
+        state.session.prompt = Some(question_prompt());
+        items(&mut state, T0 + 5_300);
+        // Answered; the agent replies and stops, and its Completed lands before the reply row.
+        state.session.prompt = None;
+        rows.push(answered("a1", T0 + 9_000, "q1"));
+        set_rows(&mut state, rows.clone());
+        state.session.server_working = false;
+        state.session.lifecycle = Some(TurnLifecycle {
+            state: TurnLifecycleState::Completed,
+            turn_id: "u1".into(),
+            timestamp: Some(T0 + 9_600),
+        });
+        let gap = items(&mut state, T0 + 9_700);
+        assert_eq!(every_answered_card(&gap), 1, "{agent_work}: {gap:#?}");
+        assert!(
+            !drawn_words(&gap)
+                .iter()
+                .any(|text| text.contains("Which color")),
+            "{agent_work}: the question's sentence is no reply: {gap:#?}"
+        );
+        rows.push(words("reply", T0 + 9_500, "Red it is."));
+        set_rows(&mut state, rows);
+        let done = items(&mut state, T0 + 10_000);
+        assert_eq!(every_answered_card(&done), 1, "{agent_work}: {done:#?}");
+        assert_eq!(
+            drawn_words(&done),
+            ["Red it is."],
+            "{agent_work}: {done:#?}"
+        );
+    }
+}
+
+/// A question asked in the same message as a picture: the picture keeps the row in view, so the
+/// row's own answered card is the only one, whether the row is the reply or the work.
+#[test]
+fn a_question_beside_a_picture_keeps_one_answered_card() {
+    for agent_work in ["quiet", "reduced", "default"] {
+        let mut rows = turn();
+        rows.push(row(
+            "pic",
+            "assistant",
+            T0 + 4_500,
+            json!([
+                { "type": "image-ref", "path": "/shots/after.png" },
+                { "type": "text", "text": "Here is the shot. Which color do you want?" },
+                { "type": "tool-call", "name": "AskUserQuestion", "callId": "q1",
+                  "input": { "questions": [{ "question": "Which color?", "header": "Color", "multiSelect": false,
+                    "options": [{ "label": "Red", "description": "r" }, { "label": "Blue", "description": "b" }] }] } },
+            ]),
+        ));
+        rows.push(answered("a1", T0 + 9_000, "q1"));
+        let mut state = quiet_chat(rows);
+        look(&mut state, agent_work);
+        state.session.server_working = false;
+        state.session.lifecycle = Some(TurnLifecycle {
+            state: TurnLifecycleState::Completed,
+            turn_id: "u1".into(),
+            timestamp: Some(T0 + 9_600),
+        });
+        let list = items(&mut state, T0 + 9_700);
+        assert_eq!(every_answered_card(&list), 1, "{agent_work}: {list:#?}");
+        // The reply lands: the picture's row is work kept in view, and still the card's only owner.
+        let mut rows: Vec<ChatMessage> = state.messages.list.iter().map(|row| (**row).clone()).collect();
+        rows.push(words("reply", T0 + 9_500, "Red it is."));
+        set_rows(&mut state, rows);
+        let list = items(&mut state, T0 + 10_000);
+        assert_eq!(
+            every_answered_card(&list),
+            1,
+            "{agent_work} replied: {list:#?}"
+        );
+    }
+}
+
+/// An agent killed mid-call with no exit notice: gxserver's `agentGone` on a state frame shows
+/// the words Quiet held back, as the notice does, while the working signal still says it works.
+#[test]
+fn the_words_quiet_held_back_show_once_gxserver_says_the_agent_is_gone() {
+    let mut rows = turn();
+    rows.push(words("w2", T0 + 5_000, "Now writing the file."));
+    rows.push(call(
+        "c3",
+        T0 + 5_100,
+        "Bash",
+        json!({ "command": "sleep 100" }),
+    ));
+    let mut state = quiet_chat(rows);
+    let held = items(&mut state, T0 + 5_200);
+    assert!(
+        !drawn_words(&held)
+            .iter()
+            .any(|text| text.contains("Now writing")),
+        "the words between calls are held: {held:#?}"
+    );
+    let frame = |gone: bool| -> ghostex_gx_protocol::ChatStateFrame {
+        let mut frame = json!({
+            "type": "sessionChatState", "projectId": "P1", "sessionId": "S1", "epoch": 1,
+            "seq": 2, "protocolVersion": 1, "serverId": "S", "status": "working", "working": true,
+        });
+        if gone {
+            frame["agentGone"] = json!(true);
+        }
+        serde_json::from_value(frame).expect("a state frame")
+    };
+    let context = ChatContext {
+        now_ms: (T0 + 20_000) as f64,
+        ..Default::default()
+    };
+    ghostex_gx_chat_core::session::apply::apply_state_frame(&mut state, &frame(true), &context);
+    let gone = items(&mut state, T0 + 20_000);
+    assert!(
+        drawn_words(&gone)
+            .iter()
+            .any(|text| text.contains("Now writing"))
+            || kinds(&gone).contains(&"grouped-work".to_string()),
+        "the work is in view once the agent is gone: {gone:#?}"
+    );
+    // The stale working flag no longer keeps the card on the dead call or Stop in the composer.
+    assert!(!ghostex_gx_chat_core::session::working::presents_working(
+        &state
+    ));
+    // A later frame without it (the agent was started again) holds the running words again.
+    ghostex_gx_chat_core::session::apply::apply_state_frame(&mut state, &frame(false), &context);
+    assert!(!state.session.agent_gone);
+    assert!(ghostex_gx_chat_core::session::working::working_signal(
+        &state
+    ));
+}

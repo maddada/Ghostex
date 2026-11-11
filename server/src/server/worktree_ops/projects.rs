@@ -244,11 +244,12 @@ pub(crate) fn register_project_worktree_path(
     Ok(project)
 }
 
+/// Prepares a worktree Ghostex just created or opened, and returns the warnings its caller may show (`[{ kind, message }]`, the worktree delete response's shape).
 pub(crate) async fn prepare_registered_worktree_project(
     state: &AppState,
     project: &Value,
     setup_project_id: Option<&str>,
-) -> std::result::Result<(), ProjectWorktreeOperationError> {
+) -> std::result::Result<Vec<Value>, ProjectWorktreeOperationError> {
     let project_id = value_text(project, "projectId")?;
     let projects = list_domain_projects(state)?;
     let hooks = run_project_worktree_action_by_project_id(
@@ -267,8 +268,9 @@ pub(crate) async fn prepare_registered_worktree_project(
         }
         .into());
     }
+    let warnings = beads_hooks_warnings(state, &hooks);
     let Some(setup_project_id) = setup_project_id else {
-        return Ok(());
+        return Ok(warnings);
     };
     let setup_project = projects
         .iter()
@@ -293,7 +295,7 @@ pub(crate) async fn prepare_registered_worktree_project(
     )
     .is_none()
     {
-        return Ok(());
+        return Ok(warnings);
     }
     let mut setup_params = Map::new();
     setup_params.insert(
@@ -317,7 +319,35 @@ pub(crate) async fn prepare_registered_worktree_project(
         }
         .into());
     }
-    Ok(())
+    Ok(warnings)
+}
+
+/// A Beads hooks answer that left Ghostex's old hooks setting in place becomes a warning; the log line carries only its token, never a path.
+fn beads_hooks_warnings(state: &AppState, hooks: &Value) -> Vec<Value> {
+    let result = hooks.get("stdout").and_then(Value::as_str).unwrap_or("");
+    let kind = if result == "needsBdHooksInstall" {
+        "beadsHooksNeeded"
+    } else if result == "kept: changed by hand" {
+        "beadsHooksLeftAsIs"
+    } else if result.starts_with("kept:") {
+        "beadsHooksUnchecked"
+    } else {
+        return Vec::new();
+    };
+    let _ = state.logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: "worktree.beadsHooksKept".to_string(),
+        server_id: Some(state.metadata.server_id.clone()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(json!({ "result": result })),
+    });
+    vec![json!({
+        "kind": kind,
+        "message": hooks.get("stderr").and_then(Value::as_str).unwrap_or(""),
+    })]
 }
 
 pub(crate) struct ProjectWorktreeMergePlan {

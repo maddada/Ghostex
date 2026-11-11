@@ -77,12 +77,30 @@ async fn post_envelope_with(
         .map_err(js_error)?
         .dyn_into()
         .map_err(js_error)?;
+    // CDXC:RemoteMachines 2026-11-11 WHY: the desktop's transport says when an answer was cut off
+    // or can't be read instead of showing a parse error ("gxserver returned invalid JSON.", which
+    // a user on a dropping link saw "all the time"); the page says the same instead of the
+    // browser's "TypeError: network error" or serde's "EOF while parsing a value".
     let text = JsFuture::from(response.text().map_err(js_error)?)
         .await
-        .map_err(js_error)?
+        .map_err(|_| {
+            // Only a read is safe to ask again (the desktop's `gxserver_request_is_safe_to_repeat`).
+            let read = url.rsplit("/api/").next().is_some_and(|name| {
+                ["read", "list", "get"]
+                    .iter()
+                    .any(|verb| name.starts_with(verb))
+            });
+            if read {
+                "Ghostex's answer was cut off: the connection dropped while it arrived. Try again."
+            } else {
+                "Ghostex's answer didn't arrive: the connection dropped, so what you asked may or may not have happened. Check, then try again if it didn't."
+            }
+            .to_string()
+        })?
         .as_string()
         .unwrap_or_default();
-    serde_json::from_str(&text).map_err(|error| error.to_string())
+    serde_json::from_str(&text)
+        .map_err(|_| "Ghostex's answer couldn't be read. Try again.".to_string())
 }
 
 async fn post_json(url: &str, token: Option<&str>, body: &Value) -> Result<Value, String> {

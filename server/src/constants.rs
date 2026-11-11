@@ -91,7 +91,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     /*
     CDXC:Coordinators 2026-11-02 WHY:
     A handed-off orchestrator keeps its staged handoff draft for its Chat box
-    instead of having it typed into its terminal while `/ghostex-orchestrator`
+    instead of having it typed into its terminal while `/ghostex-coordinator`
     starts (title_generation/first_input_draft.rs). An older remote daemon types
     it into the terminal on top of the skill line, so a client handing an
     orchestrator off to another computer checks this before it stages a draft
@@ -188,5 +188,6 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0072_paired_device_link_keys",
     "0073_paired_device_purpose_keys",
     "0074_coordinator_work_items",
-    "0075_sessions_session_id_index",
+    "0075_coordinator_thread_watch_stamps",
+    "0076_sessions_session_id_index",
 ];

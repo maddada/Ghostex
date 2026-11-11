@@ -22,8 +22,7 @@ hotkeys Every shortcut and its default binding
   **Voice** (headset) button that starts and ends a spoken conversation with the voice
   agent, the **Start**, **Open** and **Commit** buttons (Quick Actions, Open In and Git
   actions, each with a caret for its menu; Start and Open show only while the
-  Actions and Open In extensions are on, and Actions is off by default), a **⋯** menu holding Ask Ghostex,
-  Tips & Tricks, Resources, Dev servers, Extensions and Customize, and the command terminal
+  Actions and Open In extensions are on, and Actions is off by default), and the command terminal
   and view panel toggles. The header covers your sessions only: when a view panel
   is open, the panel's own tabs take the rest of that same row, so the tabs sit
   over the view and the header's buttons over your sessions. Narrow the Agents
@@ -31,18 +30,25 @@ hotkeys Every shortcut and its default binding
   name. There is no line under the header: your chat fades out beneath it. Drag
   the header, or the sidebar's Search row, to move the window.
 - **Sidebar** (left by default): projects, their sessions, tags and filters,
-  remote machines, and the More Options menu under the button at
-  the top right (Add Project, Sort & Filter, Sessions, Import Sessions, Search by
-  Prompt, Agents Hub, All Automations, Mobile & Remote, Join Discord, Send
-  Bug / Feedback, then
-  New Window, Check for Updates, Restart Ghostex, Quit Ghostex, and Quit Ghostex
-  & BG Service, which also stops the background service and every session). The
-  Notifications bell is in its top row. The bar at the bottom carries the
-  workspace button on the left (when Workspaces is on) and, on the right, the
-  Commands lightning button, a chart button that shows or hides your account
-  usage meters above it, and the Settings gear, which is where Settings and its
-  Hotkeys page open from. Search and Commands are icon buttons that keep their
-  names and shortcuts in their tooltips.
+  remote machines, and the More Options menu under the three-lines button at
+  the top right (Sort & Filter, Collapse All, Commands, Agents Hub, All Automations,
+  Connect a Device, Keep Awake, then the Tools, Help and Ghostex submenus and
+  Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
+  Ghostex, and Quit Ghostex & BG Service, which also stops the background
+  service and every session; Help holds Ask Ghostex, Join Discord and
+  Send Bug / Feedback; Tools holds Search by Prompt, Import
+  Sessions, Extensions, Dev servers and Resources). The
+  sidebar's top row holds Search, Add project, the Notifications bell and that
+  menu button. Under it, the New session button starts your last agent (the
+  chevron at its right end opens the New Thread picker). The bottom of the sidebar holds your
+  account usage meters, which are the last thing in it; point at them for the
+  small button that hides them. While they are hidden, the usage icon shows at
+  the bottom right when the pointer is at the bottom of the sidebar (point at
+  it to peek, click it to pin them). The workspace button (when Workspaces is on) sits on a
+  line of its own above the meters, at the left. There are no other buttons
+  down there: Commands and Settings are rows of the More Options menu, with
+  Cmd+Shift+P and Cmd+, as their hotkeys. Search is an icon button that keeps
+  its name and shortcut in its tooltip.
 - **Work area**: your sessions, and the views open beside them. The sessions are
   a grid of terminal panes and tabs; each pane can show the raw terminal or the
   Session Chat rendering of the same agent conversation. Opening Code, Browser,
@@ -60,12 +66,12 @@ hotkeys Every shortcut and its default binding
   back at the next launch.
 - **Quick Access** (Cmd+Shift+P): search every command, pane action, settings
   shortcut, and recent session. Cmd+P opens it on Recent Sessions.
-- **Settings** (Cmd+,): **Updates** first (with how many updates count), then six labelled groups:
-  **Working** (Chat, Sidebar & Sessions, Terminal, Files & Links), **Appearance** (Interface,
-  Notifications, Hotkeys), **Voice** (Dictation, Voice Agent), **Agents & accounts** (Agents,
-  Accounts, Autopilot, Secrets), **Connections** (Remote, Sync, Projects, Collab, Integrations) and
-  **Privacy & system** (Security, Power & Sleep, About); a group shows only while one of its pages
-  does. Then **Extensions** at the bottom (the built-in feature
+- **Settings** (Cmd+,): **Updates** first (with how many updates count) and **Interface** under it,
+  then five labelled groups: **Working** (Chat, Sidebar & Sessions, Terminal, Files & Links,
+  Projects), **Keyboard & voice** (Hotkeys, Dictation, Voice Agent), **Agents & accounts** (Agents,
+  Accounts, Autopilot, Secrets, Integrations), **Connections** (Remote, Sync, Collab) and
+  **System** (Notifications, Power & Sleep, Security, About); a group shows only while one of its
+  pages does. Then **Extensions** at the bottom (the built-in feature
   switches and the extensions you can install), with a chevron under it that folds the
   add-on pages (Workspaces, Cloud Boxes, Connectors, Actions, Open In, OS
   Integration and Debugging while each is shown), and one search box that finds rows on

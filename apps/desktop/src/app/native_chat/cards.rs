@@ -277,6 +277,31 @@ impl SingleLineCard {
             )
     }
 
+    /// A status mark as a badge (a work item's state on its update card, work_cards.rs
+    /// `work_turn_card`): the mark itself at the badge's size in its own colour, on a disc of the
+    /// card's fill, where `check_badge` sits.
+    pub(super) fn mark_badge(&self, glyph: &'static str, color: Hsla, p: &ChatAppearance) -> Div {
+        let s = p.scale;
+        let badge = &self.badge;
+        let ring = p.background.blend(p.input.opacity(self.fill_input_alpha));
+        div()
+            .absolute()
+            .right(px(badge.offset * s))
+            .bottom(px(badge.offset * s))
+            .size(px((badge.size + 2.0 * badge.ring) * s))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_full()
+            .bg(ring)
+            .child(
+                gpui::svg()
+                    .path(glyph)
+                    .size(px(badge.size * s))
+                    .text_color(color),
+            )
+    }
+
     /// The space between two one-line cards that follow each other: the transcript's row gap
     /// (Message spacing's, `ChatAppearance::row_gap`), so a stack of cards is spaced the same
     /// whether its cards are separate rows, parts of one finished turn or one stack (sent

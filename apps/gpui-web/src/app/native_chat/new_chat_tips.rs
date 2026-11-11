@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/new_chat_tips.rs

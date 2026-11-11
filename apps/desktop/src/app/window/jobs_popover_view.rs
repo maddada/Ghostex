@@ -17,6 +17,8 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 
+use super::share_popover_view::PopupSurface;
+
 /// The popover's width; its height follows its rows.
 pub(crate) const JOBS_POPOVER_WIDTH: f32 = 360.0;
 
@@ -61,8 +63,9 @@ pub(crate) struct JobsModel {
     pub(crate) light: bool,
     /// Window glass is on: the frost shows through the panel.
     pub(crate) glass: bool,
-    /// The panel's fill when the host has its own (the app's frosted popover fill).
-    pub(crate) surface: Option<Hsla>,
+    /// The panel's frame when the host gives it one: the app's dropdown menu surface, as the
+    /// Share popover takes it (CDXC:Collab 2026-11-11 in share_popover_view.rs).
+    pub(crate) surface: Option<PopupSurface>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -496,14 +499,19 @@ pub(crate) fn render_jobs_popover<V: 'static>(
     } else {
         "In progress"
     };
+    let surface = model.surface.unwrap_or(PopupSurface {
+        fill: p.surface(),
+        border: p.ink(0.12),
+        radius: 8.0,
+    });
     v_flex()
         .id("jobs-popover")
         .w(px(JOBS_POPOVER_WIDTH))
-        .rounded(px(10.0))
+        .rounded(px(surface.radius))
         .overflow_hidden()
-        .bg(model.surface.unwrap_or_else(|| p.surface()))
+        .bg(surface.fill)
         .border_1()
-        .border_color(p.ink(0.12))
+        .border_color(surface.border)
         .text_color(p.ink(0.92))
         .child(
             h_flex()

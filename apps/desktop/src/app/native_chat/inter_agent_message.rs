@@ -418,7 +418,7 @@ impl NativeChatView {
                 .flex_col()
                 .gap(px(4.0 * s))
                 .pb(px(8.0 * s))
-                .text_size(px(13.0 * s))
+                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                 .children(recipients.iter().enumerate().map(|(index, recipient)| {
                     let row_key = format!("{key}:recipient:{index}");
                     let session = &recipient["session"];

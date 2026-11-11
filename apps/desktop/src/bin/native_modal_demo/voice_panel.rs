@@ -7,7 +7,14 @@
 //! about: the confirm card for one session), `confirm-many` (the card for several), `resized`
 //! (the panel resized larger, its size held by the panel's own limits), `voices` (the voice list
 //! opened on Ursa, far down Grok's list), `scrolled` (the reader scrolled up: the Scroll to bottom
-//! pill). Pressing the hold button holds it.
+//! pill), `typed` (a muted call where the user typed a turn: the text box under the transcript,
+//! as `panel_input.rs` draws it, holding a draft), `mode-switched` (a push-to-talk call the gear
+//! menu just switched to Regular: the strip's notice), `memory` (a muted call before anything was
+//! said, with the Last conversation card: the card, "Go ahead, I'm listening." and the text box,
+//! as the panel's `empty_body` lays them out), `memory-long` (the same with a long summary) and
+//! `memory-small` (the same at the panel's smallest size), `voice-muted` (a Regular call with the
+//! agent's voice muted: the speaker toggle on) and `both-muted` (the microphone and the voice
+//! muted). Pressing the hold button holds it; clicking a mute toggle flips it.
 use super::rows;
 use super::voice_confirm_card as confirm_card;
 use super::voice_panel_controls::{self as controls, ControlColors, HoldLook, StripContent};
@@ -21,10 +28,12 @@ use gpui::{
 use gpui_component::{h_flex, v_flex};
 
 const ICON_MIC: &str = "titlebar/microphone.svg";
-const ICON_MIC_OFF: &str = "titlebar/microphone-off.svg";
 const ICON_HANG_UP: &str = "titlebar/phone-off.svg";
 const ICON_TOOL: &str = "titlebar/tool.svg";
 const ICON_CHECK: &str = "titlebar/check.svg";
+const ICON_HISTORY: &str = "titlebar/history.svg";
+const ICON_PLAY: &str = "titlebar/player-play.svg";
+const ICON_FRESH: &str = "titlebar/refresh.svg";
 
 /// Grok's voices, in the order gxserver lists them (`XAI_VOICES` in `server/src/voice_agent/provider.rs`).
 const GROK_VOICES: &[&str] = &[
@@ -32,6 +41,11 @@ const GROK_VOICES: &[&str] = &[
     "Cosmo", "Helios", "Helix", "Iris", "Kepler", "Liora", "Lumen", "Luna", "Lux", "Naksh",
     "Orion", "Perseus", "Rigel", "Sirius", "Ursa", "Zagan", "Zenith",
 ];
+
+/// A caption's words, selectable and copied with Cmd+C as in the panel (`panel_copy.rs`).
+fn caption(id: &'static str, text: &'static str) -> gpui_base::SelectableText {
+    gpui_base::SelectableText::new(id, text)
+}
 
 struct VoicePanelDemo {
     state: String,
@@ -41,6 +55,11 @@ struct VoicePanelDemo {
     voice_scroll: ScrollHandle,
     /// The transcript's scroll, scrolled up in the `scrolled` state.
     scroll: ScrollHandle,
+    /// The text box under the transcript, in the `typed` state.
+    text_box: Option<gpui::Entity<gpui_component::input::TextareaState>>,
+    /// The mute toggles were clicked an odd number of times: the state's mute is flipped.
+    mic_flipped: bool,
+    voice_flipped: bool,
 }
 
 impl VoicePanelDemo {
@@ -93,15 +112,20 @@ impl Render for VoicePanelDemo {
         let colors = self.colors();
         let state = self.state.as_str();
         let held = self.held || state == "holding";
-        let muted = state == "muted";
-        let regular = state == "regular";
+        let muted = (matches!(state, "muted" | "typed" | "both-muted")
+            || state.starts_with("memory"))
+            != self.mic_flipped;
+        let voice_muted = matches!(state, "voice-muted" | "both-muted") != self.voice_flipped;
+        let regular = matches!(state, "regular" | "mode-switched" | "voice-muted");
         let (dot, label): (Hsla, &str) = if held {
             (rgba(0x38bdf8ff).into(), "Hearing you")
         } else {
             match state {
                 "speaking" => (rgba(0xa78bfaff).into(), "Speaking"),
-                "muted" => (colors.muted, "Muted"),
-                "regular" => (rgba(0x4ade80ff).into(), "Listening"),
+                _ if muted => (colors.muted, "Muted"),
+                "regular" | "mode-switched" | "voice-muted" => {
+                    (rgba(0x4ade80ff).into(), "Listening")
+                }
                 _ => (rgba(0x4ade80ff).into(), "Hold to talk"),
             }
         };
@@ -128,12 +152,13 @@ impl Render for VoicePanelDemo {
             "speaking" => StripContent::StopTalking,
             "tap" => StripContent::Hint("Hold to talk, then let go to send".into()),
             "muted" => StripContent::Hint("Unmute to talk".into()),
+            "mode-switched" => StripContent::Hint("Microphone is open: regular mode".into()),
             _ => StripContent::Empty,
         };
         let mut lines: Vec<gpui::AnyElement> = vec![
             div()
                 .text_color(colors.muted)
-                .child("You: What is the Find port doing?")
+                .child(caption("you-1", "You: What is the Find port doing?"))
                 .into_any_element(),
             h_flex()
                 .gap(px(6.0))
@@ -144,7 +169,7 @@ impl Render for VoicePanelDemo {
                 .into_any_element(),
             div()
                 .text_color(colors.text)
-                .child("It finished: ranking passes and the phone screens are next. Want me to start them?")
+                .child(caption("agent-1", "It finished: ranking passes and the phone screens are next. Want me to start them?"))
                 .into_any_element(),
         ];
         if held {
@@ -159,13 +184,30 @@ impl Render for VoicePanelDemo {
             lines.push(
                 div()
                     .text_color(colors.muted)
-                    .child("You: Yes, start them.")
+                    .child(caption("you-2", "You: Yes, start them."))
                     .into_any_element(),
             );
             lines.push(
                 div()
                     .text_color(colors.text)
-                    .child("Done. I asked it to build the phone screens on the same matcher, and it is starting with the list view now.")
+                    .child(caption("agent-2", "Done. I asked it to build the phone screens on the same matcher, and it is starting with the list view now."))
+                    .into_any_element(),
+            );
+        }
+        if state == "typed" {
+            lines.push(
+                div()
+                    .text_color(colors.muted)
+                    .child(caption(
+                        "you-typed",
+                        "You: Which sessions are waiting on me?",
+                    ))
+                    .into_any_element(),
+            );
+            lines.push(
+                div()
+                    .text_color(colors.text)
+                    .child(caption("agent-typed", "Two are: the sidebar fix wants you to pick a row height, and the release thread is waiting on your approval."))
                     .into_any_element(),
             );
         }
@@ -258,6 +300,7 @@ impl Render for VoicePanelDemo {
             )
             .child(match state {
                 "voices" => self.voice_list(colors),
+                "memory" | "memory-long" | "memory-small" => memory_empty_body(state, colors),
                 _ => v_flex()
                     .relative()
                     .flex_1()
@@ -284,6 +327,26 @@ impl Render for VoicePanelDemo {
             .child(controls::status_strip(strip, colors, |_, _| {
                 eprintln!("stop talking")
             }))
+            .children(self.text_box.as_ref().map(|text_box| {
+                div().flex_shrink_0().px(px(12.0)).pb(px(8.0)).child(
+                    div()
+                        .rounded(px(8.0))
+                        .border_1()
+                        .border_color(colors.border)
+                        .bg(colors.raised)
+                        .px(px(8.0))
+                        .py(px(4.0))
+                        .text_size(px(12.5))
+                        .text_color(colors.text)
+                        .child(
+                            gpui_component::input::Textarea::new(text_box)
+                                .appearance(false)
+                                .bordered(false)
+                                .caret_color(colors.text)
+                                .text_size(px(12.5)),
+                        ),
+                )
+            }))
             .child(
                 h_flex()
                     .h(px(44.0))
@@ -293,12 +356,40 @@ impl Render for VoicePanelDemo {
                     .items_center()
                     .border_t_1()
                     .border_color(colors.border)
-                    .child(button(
-                        if muted { ICON_MIC_OFF } else { ICON_MIC },
-                        if muted { "Unmute" } else { "Mute" },
-                        colors.ink.opacity(0.07),
-                        colors.text,
-                    ))
+                    .child({
+                        let (icon, tooltip) = controls::mic_toggle(muted);
+                        let demo = cx.entity().downgrade();
+                        controls::toggle_button(
+                            "voice-panel-mute",
+                            icon,
+                            tooltip.into(),
+                            muted,
+                            colors,
+                            move |_, cx| {
+                                let _ = demo.update(cx, |this, cx| {
+                                    this.mic_flipped = !this.mic_flipped;
+                                    cx.notify();
+                                });
+                            },
+                        )
+                    })
+                    .child({
+                        let (icon, tooltip) = controls::voice_toggle(voice_muted);
+                        let demo = cx.entity().downgrade();
+                        controls::toggle_button(
+                            "voice-panel-mute-voice",
+                            icon,
+                            tooltip.into(),
+                            voice_muted,
+                            colors,
+                            move |_, cx| {
+                                let _ = demo.update(cx, |this, cx| {
+                                    this.voice_flipped = !this.voice_flipped;
+                                    cx.notify();
+                                });
+                            },
+                        )
+                    })
                     .child(hold)
                     .child(div().flex_1())
                     .child(button(
@@ -356,7 +447,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let light = super::env("GHOSTEX_NATIVE_MODAL_DEMO_THEME") == "light";
     // `resized`: a resize the panel holds to its limits, in a roomy main window.
-    let panel = if state == "resized" {
+    let panel = if state == "memory-small" {
+        layout::MIN_SIZE
+    } else if state == "resized" {
         layout::clamp_panel_size(size(px(560.0), px(600.0)), size(px(1400.0), px(900.0)))
     } else {
         layout::DEFAULT_SIZE
@@ -368,16 +461,34 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     if state == "scrolled" {
         scroll.set_offset(point(px(0.0), px(-20.0)));
     }
+    // A typed turn just arrived: the transcript follows its end, as the panel's does.
+    if state == "typed" {
+        scroll.scroll_to_bottom();
+    }
     let _ = super::open_modal_window(
         panel.width.as_f32(),
         panel.height.as_f32(),
-        move |_, cx| {
+        move |window, cx| {
+            let text_box = (state == "typed" || state.starts_with("memory")).then(|| {
+                cx.new(|cx| {
+                    let mut input = gpui_component::input::TextareaState::new(window, cx)
+                        .auto_grow(1, 5)
+                        .placeholder("Type to the voice agent…");
+                    if state == "typed" {
+                        input.set_value("And start the release notes", window, cx);
+                    }
+                    input
+                })
+            });
             cx.new(|_| VoicePanelDemo {
                 state,
                 held: false,
                 light,
                 voice_scroll,
                 scroll,
+                text_box,
+                mic_flipped: false,
+                voice_flipped: false,
             })
         },
         cx,
@@ -400,4 +511,98 @@ fn demo_card(state: &str) -> Option<rows::ConfirmCard> {
         _ => return None,
     };
     rows::confirm_card(&frame)
+}
+
+/// The panel's `empty_body` with the Last conversation card, drawn the same way (`panel.rs`).
+fn memory_empty_body(state: &str, colors: ControlColors) -> gpui::AnyElement {
+    let gist = if state == "memory-long" {
+        "User shared that a friend's company lost its codebase through a leaked token and then had an AWS ransom attack; we went through rotating every key, which sessions touch AWS, and what the release thread still needs before it can ship tonight."
+    } else {
+        "User shared friend's company lost codebase via token leak and had AWS ransom attack"
+    };
+    let card_button = |glyph: &'static str, label: &'static str| {
+        h_flex()
+            .h(px(28.0))
+            .px(px(9.0))
+            .gap(px(6.0))
+            .items_center()
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(colors.border)
+            .bg(colors.raised)
+            .text_size(px(12.0))
+            .text_color(colors.text)
+            .child(icon(glyph, 13.0, colors.text))
+            .child(label)
+    };
+    div()
+        .id("voice-panel-demo-empty-body")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .child(
+            v_flex()
+                .min_h_full()
+                .child(
+                    v_flex()
+                        .flex_shrink_0()
+                        .mx(px(12.0))
+                        .mt(px(10.0))
+                        .p(px(10.0))
+                        .gap(px(7.0))
+                        .rounded(px(10.0))
+                        .bg(colors.ink.opacity(0.05))
+                        .border_1()
+                        .border_color(colors.border)
+                        .child(
+                            h_flex()
+                                .gap(px(6.0))
+                                .items_center()
+                                .text_size(px(11.5))
+                                .text_color(colors.muted)
+                                .child(icon(ICON_HISTORY, 12.0, gpui::rgba(0xa78bfaff).into()))
+                                .child(
+                                    div()
+                                        .text_size(px(12.0))
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(colors.text)
+                                        .child("Last conversation"),
+                                )
+                                .child(div().flex_1().min_w_0().truncate().child("· 6 h ago")),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.0))
+                                .line_height(px(16.5))
+                                .text_color(colors.text.opacity(0.85))
+                                .child(gist),
+                        )
+                        .child(
+                            h_flex()
+                                .gap(px(6.0))
+                                .child(card_button(ICON_PLAY, "Continue"))
+                                .child(card_button(ICON_FRESH, "Start fresh")),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .items_center()
+                        .justify_center()
+                        .gap(px(6.0))
+                        .px(px(24.0))
+                        .py(px(10.0))
+                        .text_center()
+                        .child(icon(ICON_MIC, 24.0, colors.ink.opacity(0.35)))
+                        .child(
+                            div()
+                                .mt(px(4.0))
+                                .text_size(px(13.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(colors.ink.opacity(0.86))
+                                .child("Go ahead, I'm listening."),
+                        ),
+                ),
+        )
+        .into_any_element()
 }

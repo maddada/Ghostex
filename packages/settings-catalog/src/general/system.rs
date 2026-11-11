@@ -65,6 +65,12 @@ pub(crate) fn auto_sleep() -> Section {
                 "Keep views loaded",
                 "Keep the side panel views you open loaded when you switch projects or workspaces, without the three-view limit or the previous project's time limit. Auto Sleep and Sleep still apply. Uses more memory.",
             ),
+            // CDXC:Settings 2026-11-11 DECISION in apps/desktop settings_modal/model.rs (`RailTier`, Q2511): moved here from Sidebar & Sessions; it is a sleep timer for the project you left.
+            row(
+                "projectSwitchKeepAliveMinutes",
+                "Keep the last project running for",
+                "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.",
+            ),
             row(
                 "autoSleepAgentIdleMinutes",
                 "Agents sleep after",
@@ -163,6 +169,11 @@ pub(crate) fn sleeping_sessions() -> Section {
                 "dimSleepingSessions",
                 "Dim sleeping sessions",
                 "Fade sleeping sessions in the sidebar so they stand apart from awake ones.",
+            ),
+            row(
+                "dimInactiveProjects",
+                "Dim inactive projects",
+                "Fade a project in the sidebar when all its sessions are asleep or closed, none is working and none waits on you, so projects you are not using stand apart. A project with no sessions counts as inactive.",
             ),
             row(
                 "wakeSleepingSessionsOnSelect",

@@ -160,8 +160,10 @@ pub(crate) async fn create_project_worktree_for_project(
         &format!("{parent_name}-{}", target.name),
         "projectAdded",
     )?;
-    prepare_registered_worktree_project(state, &project, Some(&context.source_project_id)).await?;
-    Ok(json!({ "project": project }))
+    let warnings =
+        prepare_registered_worktree_project(state, &project, Some(&context.source_project_id))
+            .await?;
+    Ok(worktree_project_response(project, warnings))
 }
 
 pub(crate) async fn open_project_worktree_for_project(
@@ -192,8 +194,17 @@ pub(crate) async fn open_project_worktree_for_project(
         Some(false) => None,
         _ => Some(context.source_project_id.as_str()),
     };
-    prepare_registered_worktree_project(state, &project, setup_project_id).await?;
-    Ok(json!({ "project": project }))
+    let warnings = prepare_registered_worktree_project(state, &project, setup_project_id).await?;
+    Ok(worktree_project_response(project, warnings))
+}
+
+/// `warnings` is optional and additive: it is left out when there are none, so the response older clients read is unchanged.
+fn worktree_project_response(project: Value, warnings: Vec<Value>) -> Value {
+    if warnings.is_empty() {
+        json!({ "project": project })
+    } else {
+        json!({ "project": project, "warnings": warnings })
+    }
 }
 
 pub(crate) async fn merge_worktree_into_main_for_project(

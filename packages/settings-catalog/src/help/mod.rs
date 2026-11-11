@@ -134,27 +134,9 @@ fn agent_denied_key(key: &str) -> bool {
 const AGENT_DENIED_TABS: &[&str] = &["accounts", "remote"];
 
 /*
-CDXC:Security 2026-11-08 DECISION:
-User (#495 follow-up, Q1866 "settings only"): the keys that loosen security, which an agent could still write through `ghostex settings set` or `updateSettingsPatch`, are the owner's alone: agents are refused and pointed to the Settings page, and the owner changes them in Settings with no prompt. Checked against the whole agent-writable list on 8 Nov: full access for every agent, Workspaces (the team backend and Slack requests), keeping Cloud Box keys on phones, trusting every project folder, Connectors (agents reach the owner's connected accounts), the commands Ghostex itself runs (title generation, worktree setup, the custom editor), paste protection, and the Bot automations feed (whole agent reports). Settings that ask the owner already (GBots, Sync) keep asking.
-*/
-/*
 CDXC:Security 2026-11-10 DECISION:
-User (Q2140 = B): agents may change every setting again; gxserver's API and `ghostex settings set` write these (`api_may_write`). The committed Help (generated from this catalog, published from main to installed copies whose gxserver still refuses them) keeps marking them "not agent-writable" until the release that ships option B empties this list and regenerates the Help. This supersedes the Q1866 decision above.
+User (Q2140 = B): agents may change every setting again; gxserver's API and `ghostex settings set` write every agent-writable key and the Help marks them so. This supersedes the 2026-11-08 decision (Q1866 "settings only") that made the keys loosening security the owner's alone.
 */
-/// Keys only the owner changed, in Settings, before option B; Help still marks them until release.
-const USER_ONLY_KEYS: &[&str] = &[
-    "agentAcceptAllEnabled",
-    "workspacesHidden",
-    "cloudBoxesPhoneStartEnabled",
-    "trustProjectFoldersAutomatically",
-    "connectorsHidden",
-    "customSessionTitleGenerationCommand",
-    "globalWorktreeCommand",
-    "customDefaultEditorCommand",
-    "terminalClipboardPasteProtection",
-    "botAutomationsHidden",
-    "gbotsChiefAddsOnItsOwn",
-];
 
 fn number_range(key: &str) -> Option<NumberRange> {
     let range = |min: f64, max: f64| NumberRange {
@@ -260,10 +242,8 @@ fn catalog_entry(row: &SettingRow, location: &Location) -> CatalogEntry {
         value_type,
         ValueType::Boolean | ValueType::Number | ValueType::String | ValueType::Enum
     );
-    let agent_writable = primitive
-        && !AGENT_DENIED_TABS.contains(&location.tab.0)
-        && !agent_denied_key(row.key)
-        && !USER_ONLY_KEYS.contains(&row.key);
+    let agent_writable =
+        primitive && !AGENT_DENIED_TABS.contains(&location.tab.0) && !agent_denied_key(row.key);
     CatalogEntry {
         key: row.key.to_string(),
         title: row.title.clone(),
@@ -635,13 +615,23 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Security 2026-11-09 DECISION:
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &["approvalsRequirePresence", "stillAsks"];
+///
+/// CDXC:Sidebar 2026-11-10 DECISION:
+/// The coordinator, for the user: Dim inactive projects (Settings > Sidebar & Sessions > Sleeping Sessions) is held the same way; its Help text waits in the held help patch (release-11.3.1/help/dim-inactive-projects.patch).
+///
+/// CDXC:AppModal 2026-11-10 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so Close buttons on the right (Settings > Interface > Advanced, macOS) is held the same way; its hand-written paragraph waits in the held help patch (release-11.3.1/help/close-buttons-left.patch).
+///
+/// CDXC:Hotkeys 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the Focus Sidebar hotkey (#558) is held the same way; a hotkey id here leaves the hotkey out of `hotkeys.md` and `settings-catalog.json`, and its Help waits in the held help patch (release-11.3.1/help/focus-sidebar-hotkey.patch).
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the three Quiet View rows (Settings > Chat > Advanced) are held the same way; their Help waits in the held help patch (release-11.3.1/help/quiet-view.patch).
+pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
-/// `agentWritable`, or one of the keys Help still marks until option B's release
-/// (CDXC:Security 2026-11-10 at `USER_ONLY_KEYS`).
-pub fn api_may_write(key: &str, agent_writable: bool) -> bool {
-    agent_writable || USER_ONLY_KEYS.contains(&key)
+/// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).
+pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
+    agent_writable
 }
 
 /// Rows whose new wording is held out of the committed Help files until a release ships it: the
@@ -655,12 +645,21 @@ pub fn api_may_write(key: &str, agent_writable: bool) -> bool {
 ///
 /// CDXC:SessionChat 2026-11-10 DECISION:
 /// The coordinator, for the user (#535, merged as it came): Transcript width's new subtitle (a share of the window and only a maximum) waits in the held help patch with the rest of that change's Help.
-pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
-    "sessionChatTranscriptWidthPercent",
-    "Transcript width",
-    "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
-    true,
-)];
+///
+/// CDXC:RemotePairing 2026-11-11 DECISION:
+/// The coordinator, for the user ("rename it in the menu to Connect a Device"): Settings > Remote's
+/// Connect a phone button and the line that names it read Connect a Device (and its neighbour Connect a
+/// computer reads Connect a Computer); Help keeps the old words
+/// until the release (release-11.3.1/help/connect-a-device.patch).
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
+
+/// Hotkeys whose new description is held out of the committed Help files until a release ships
+/// it: the hotkey id, then the description the Help files keep meanwhile. The release that ships
+/// the change empties this list and regenerates.
+///
+/// CDXC:Hotkeys 2026-11-10 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so New Thread in Active Project's description, which now names Coordinator among the picker's rows, waits in the held help patch (release-11.3.1/help/sidebar-new-button.patch).
+pub const HELD_HOTKEY_WORDING: &[(&str, &str)] = &[];
 
 /// Rows that moved to another page, held at their old place in the committed Help files until a
 /// release ships the move: the key, the tab id and title, the section id and title, the title and
@@ -668,22 +667,27 @@ pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
 ///
 /// CDXC:Security 2026-11-10 DECISION:
 /// User (Q2173): the Security logs switch moves from Settings > Extensions > Experimental to Settings > Security; installed copies keep reading it where they have it until the release that ships the move empties this list and regenerates (security-b/release-steps.md).
-pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[(
-    "securityLogsEnabled",
-    ("extensions", "Extensions"),
-    ("official", "Experimental"),
-    "Security logs",
-    "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
-    "chatToolCallLines",
-)];
+///
+/// CDXC:Spaces 2026-11-10 DECISION:
+/// The coordinator, for the user: Spaces moved from Settings > Extensions to its own section on Sidebar & Sessions (spaces.rs); its switch and its two rows stay where installed copies have them until the release that ships the move (release-11.3.1/help/spaces-setting.patch).
+pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
+
+/// Settings UI rows (no settings key) that were removed, kept in the committed Help files until a
+/// release ships the removal, in [`HELD_ROW_PLACEMENT`]'s shape.
+///
+/// CDXC:Spaces 2026-11-10 DECISION: the Spaces card of Settings > Extensions (above).
+pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
-/// with [`HELD_ROW_WORDING`]'s rows as they read before, and [`HELD_ROW_PLACEMENT`]'s rows back
-/// where they were.
+/// with [`HELD_ROW_WORDING`]'s rows as they read before, [`HELD_ROW_PLACEMENT`]'s rows back
+/// where they were and [`HELD_REMOVED_ROWS`] put back.
 pub fn published_catalog() -> Catalog {
     let mut catalog = catalog();
     for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
-        HELD_ROW_PLACEMENT
+        HELD_REGROUP_PLACEMENT
+            .iter()
+            .chain(HELD_ROW_PLACEMENT)
+            .chain(HELD_PROJECTS_PLACEMENT)
     {
         let Some(at) = catalog.settings.iter().position(|entry| entry.key == *key) else {
             continue;
@@ -702,12 +706,55 @@ pub fn published_catalog() -> Catalog {
             .map_or(catalog.settings.len(), |found| found + 1);
         catalog.settings.insert(to, entry);
     }
+    for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
+        HELD_REMOVED_ROWS
+    {
+        let to = catalog
+            .settings
+            .iter()
+            .position(|entry| entry.key == *after)
+            .map_or(catalog.settings.len(), |found| found + 1);
+        catalog.settings.insert(
+            to,
+            CatalogEntry {
+                key: (*key).to_string(),
+                title: (*title).to_string(),
+                subtitle: (*subtitle).to_string(),
+                tab: (*tab).to_string(),
+                tab_title: (*tab_title).to_string(),
+                group: None,
+                group_title: None,
+                section: (*section).to_string(),
+                section_title: (*section_title).to_string(),
+                value_type: ValueType::Ui,
+                default: None,
+                options: Vec::new(),
+                range: None,
+                advanced: false,
+                agent_writable: false,
+                platform_defaults: Vec::new(),
+                availability: None,
+                runtime_options: None,
+            },
+        );
+    }
+    // A hotkey whose new description is held (`HELD_HOTKEY_WORDING`) keeps the one it had.
+    for hotkey in &mut catalog.hotkeys {
+        if let Some((_, description)) = HELD_HOTKEY_WORDING.iter().find(|(id, _)| *id == hotkey.id)
+        {
+            hotkey.description = description;
+        }
+    }
     catalog
         .settings
         .retain(|entry| !HELD_FROM_HELP_FILES.contains(&entry.key.as_str()));
+    catalog
+        .hotkeys
+        .retain(|hotkey| !HELD_FROM_HELP_FILES.contains(&hotkey.id));
     for entry in &mut catalog.settings {
         if let Some((_, title, subtitle, advanced)) = HELD_ROW_WORDING
             .iter()
+            .chain(HELD_REGROUP_WORDING)
             .find(|(key, ..)| *key == entry.key.as_str())
         {
             entry.title = (*title).to_string();
@@ -722,3 +769,27 @@ pub fn published_catalog() -> Catalog {
 pub fn published_catalog_json() -> String {
     format!("{}\n", published_catalog().to_json().to_pretty_string())
 }
+
+/// Rows PR #567 moved out of Settings > Projects > Project settings into the new Issues Workflow
+/// and Cloud box sections, held in Project settings in the committed Help files until a release
+/// ships the move, in [`HELD_ROW_PLACEMENT`]'s shape.
+///
+/// CDXC:Projects 2026-11-11 DECISION:
+/// The coordinator, for the user (GitHub page Q2524, "Merge, then fix on main"): Help must not change on main before the next release, so the Project Linear API key and the three Cloud box rows stay in Project settings for installed copies until the release that ships PR #567 empties this list and regenerates (release-11.3.1/help/projects-global-fold.patch).
+pub const HELD_PROJECTS_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
+
+/// Rows the 2026-11-11 Settings regroup moved to another page, held at their old place in the
+/// committed Help files until a release ships the move, in [`HELD_ROW_PLACEMENT`]'s shape.
+/// [`published_catalog`] puts these back before [`HELD_ROW_PLACEMENT`]'s rows, so Keep the last
+/// project running for lands after the two Space rows held on Sidebar & Sessions, where the
+/// committed files have it.
+///
+/// CDXC:Settings 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the settings Q2511 moved (Tell agents about Ghostex and Claude task list from Chat to Agents > Defaults, Close empty sessions when starting a new one from Chat to Sidebar & Sessions, Keep the last project running for from Sidebar & Sessions to Power & Sleep > Auto Sleep, the four Commands pane rows from Sidebar & Sessions to Terminal) stay where installed copies have them until the release that ships the move empties this list and regenerates (release-11.3.1/help/settings-regroup.patch). It is a list of its own, at the end of this file, so the held patches that empty [`HELD_ROW_PLACEMENT`] still apply.
+pub const HELD_REGROUP_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
+
+/// Rows whose wording names the old place of a setting [`HELD_REGROUP_PLACEMENT`] holds, kept as
+/// they read before in the committed Help files until the same release, in [`HELD_ROW_WORDING`]'s
+/// shape (CDXC:Settings 2026-11-11 above): the Session details panel's switch says where its
+/// Claude task list row is.
+pub const HELD_REGROUP_WORDING: &[(&str, &str, &str, bool)] = &[];

@@ -66,6 +66,9 @@ unsafe extern "C" {
         height: *mut f64,
     ) -> bool;
     fn GhostexGpuiCaptureFrontmostPid() -> i32;
+    fn GhostexGpuiScreensHaveSeparateSpaces() -> bool;
+    fn GhostexGpuiPrimaryMouseButtonDown() -> bool;
+    fn GhostexGpuiDetachChildWindow(native_view: *mut std::ffi::c_void);
     fn GhostexGpuiPointerScreenLocation(x: *mut f64, y: *mut f64) -> bool;
 }
 
@@ -164,6 +167,43 @@ pub(crate) fn window_frame(native: NativeWindow) -> Option<Bounds<Pixels>> {
         let _ = native;
         None
     }
+}
+
+/// Whether each display has its own Spaces, where a window that belongs to another (a child
+/// window) can only be shown on its owner's display. False where displays share one desktop.
+pub(crate) fn screens_have_separate_spaces() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        unsafe { GhostexGpuiScreensHaveSeparateSpaces() }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
+/// Whether the primary mouse button is held, so a window drag may still be going. False where it
+/// cannot be read.
+pub(crate) fn primary_mouse_button_down() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        unsafe { GhostexGpuiPrimaryMouseButtonDown() }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
+/// Takes a child window off the window it belongs to (macOS), so the owner coming to the front
+/// never shows it while it is hidden. Elsewhere a hidden window stays hidden on its own.
+pub(crate) fn detach_from_parent(native: NativeWindow) {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        GhostexGpuiDetachChildWindow(native as *mut std::ffi::c_void)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _ = native;
 }
 
 /// Gives a keyable window the keyboard again.

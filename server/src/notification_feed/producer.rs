@@ -185,6 +185,14 @@ fn record_attention_row(
         crate::push::announce_feed_row(state, &repository, session, &row);
     } else if let Some(id) = row.get("id").and_then(Value::as_str) {
         super::store::mark_notification_feed_row_read(&db, id)?;
+        // A thread's finished turn stays quiet here; a phone that chose Thread reports hears of it
+        // (CDXC:Notifications 2026-11-11 in push/message.rs).
+        if row.get("kind").and_then(Value::as_str) == Some("finished")
+            && crate::presentation::recorded_alert_role(&db, project_id, session_id)
+                == ghostex_gx_core::alert_rule::AlertRole::Thread
+        {
+            crate::push::announce_thread_report(state, &repository, session, &row);
+        }
     }
     Ok(true)
 }

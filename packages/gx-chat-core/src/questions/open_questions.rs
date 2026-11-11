@@ -43,6 +43,10 @@ pub struct OpenQuestions {
     /// How many forms and question pages are unanswered and not put off For later; the ? pill shows
     /// while this is above zero.
     pub count: u32,
+    /// What the ? pill counts and shows for: the unanswered questions the dock above the chat box
+    /// cannot show (older than the loaded rows), so a question is counted in one place only.
+    #[serde(default)]
+    pub pill_count: u32,
     /// The pill's text: "Previous question ↑".
     pub text: String,
     /// What a screen reader says for it.
@@ -750,8 +754,13 @@ pub fn project_with(
     let open = unanswered(state);
     // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded,
     // plus the coordinator's open asks.
-    let count =
-        (open.len() + indexed_waiting(state, &indexed_entries(state)).len() + asks.len()) as u32;
+    let older = indexed_waiting(state, &indexed_entries(state)).len();
+    let count = (open.len() + older + asks.len()) as u32;
+    // The unanswered forms and pages in the loaded rows and the coordinator's open asks wait in the
+    // dock above the chat box (`extras::work_cards::dock`): the ? pill shows and counts only what
+    // the dock cannot show, the questions older than the loaded rows, so nothing is counted in two
+    // places (the user's "This is a mess man ... wtf is this?", 2026-11-10).
+    let pill_count = older as u32;
     let filter = state.questions.open_questions.filter.as_str();
     /*
     CDXC:SessionChat 2026-11-04 WHY:
@@ -839,6 +848,7 @@ pub fn project_with(
     }
     OpenQuestions {
         count,
+        pill_count,
         text: "Previous question \u{2191}".to_string(),
         accessibility_label: match count {
             0 => "No unanswered questions".to_string(),
@@ -880,60 +890,125 @@ pub fn project_with(
 pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     let open: Vec<Asker> = unanswered(state).into_iter().cloned().collect();
     // A coordinator's open work item asks are stops too, in time order among the forms and pages:
-    // each lands on its card under its reply (`extras::work_cards`).
+    // each is shown in the Work panel, the chat staying where it is.
     let asks = crate::extras::work_cards::open_asks(state, context);
-    if !asks.is_empty() {
-        // Every stop, oldest first: (time, the row's message, the card or form to flash).
-        let mut stops: Vec<(i64, String, String, Option<Asker>)> = open
-            .iter()
-            .map(|asker| {
-                (
-                    asker.at.unwrap_or(i64::MIN),
-                    asker.message_id.clone(),
-                    asker.id.clone(),
-                    Some(asker.clone()),
-                )
-            })
-            .chain(
-                asks.iter()
-                    .map(|ask| (ask.at, ask.anchor.clone(), ask.key.clone(), None)),
-            )
-            .collect();
-        stops.sort_by_key(|stop| stop.0);
-        let last = state.questions.open_questions.last.as_deref();
-        let at = stops.iter().position(|stop| Some(stop.2.as_str()) == last);
-        let (_, message_id, target, asker) = stops[step(stops.len(), at)].clone();
-        if jump_to_row(state, context, &message_id, &target, None) {
-            return Vec::new();
-        }
-        if let Some(asker) = asker {
-            return crate::questions::resource_modal::go_to(state, context, &asker.id);
-        }
-        return Vec::new();
-    }
-    if open.is_empty() {
-        // The only questions waiting are older than the loaded rows (the pill counts them): "Go to
-        // chat" brings the newest of them in and scrolls to it, as the Resources modal's button does.
+    // Every stop, oldest first: (time, the form, page or ask, whether it is an ask).
+    let mut stops: Vec<(i64, String, bool)> = open
+        .iter()
+        .map(|asker| (asker.at.unwrap_or(i64::MIN), asker.id.clone(), false))
+        .chain(asks.iter().map(|ask| (ask.at, ask.key.clone(), true)))
+        .collect();
+    if stops.is_empty() {
+        // The only questions waiting are older than the loaded rows (the pill counts them): the
+        // newest of them opens in the popup, read back from the transcript.
         let entries = indexed_entries(state);
         let newest = indexed_waiting(state, &entries)
             .into_iter()
             .max_by_key(|entry| entry.at_ms.unwrap_or(i64::MIN))
             .map(|entry| entry.id.clone());
         return match newest {
-            Some(id) => crate::questions::resource_modal::go_to(state, context, &id),
+            Some(id) => show(state, context, &id),
             None => Vec::new(),
         };
     }
+    stops.sort_by_key(|stop| stop.0);
     let last = state.questions.open_questions.last.as_deref();
-    let at = open
-        .iter()
-        .position(|asker| Some(asker.id.as_str()) == last);
-    let selected = &open[step(open.len(), at)];
-    if jump_to(state, context, selected, None) {
-        return Vec::new();
+    let at = stops.iter().position(|stop| Some(stop.1.as_str()) == last);
+    let (_, target, is_ask) = stops[step(stops.len(), at)].clone();
+    state.questions.open_questions.last = Some(target.clone());
+    if is_ask {
+        return crate::extras::coordinator_board::focus_row(state, &target);
     }
-    // Its reply is loaded but has no row yet: bring in the window that holds it, by its place.
-    crate::questions::resource_modal::go_to(state, context, &selected.id)
+    show(state, context, &target)
+}
+
+/// Shows a form, chart or question page without moving the chat: a form or chart opens in the
+/// floating popup (`resource_modal.rs`), read back from the transcript when it is older than the
+/// loaded rows; a page opens as itself, where the reader's Open chat pages in setting says.
+///
+/// CDXC:SessionChat 2026-11-10 DECISION:
+/// User: "if i click on anything that needs me to see the question card don't scroll me up to it.
+/// no more scrolling up to stuff please show it to me in a popup instead please (we already
+/// implemented this). if it's an inline html just open that inline html. i shouldn't be scrolled up
+/// to different places in the chat anymore please. also same when i click on a inline html from the
+/// resources pill in the composer". The ? pill and its stepping, a Q-tag link, a row of the
+/// Resources list, the Work panel's and the dock's questions and the In progress list all come
+/// here; nothing scrolls the transcript to a question any more. Supersedes the jumps of the
+/// 2026-10-14 and 2026-11-05 decisions in this file.
+pub fn show(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
+    let _ = context;
+    if let Some(url) = page_url(state, id) {
+        return vec![Effect::Open(crate::effect::OpenTarget::Url {
+            url,
+            external: false,
+        })];
+    }
+    let effects = crate::questions::resource_modal::open(state, id);
+    if state
+        .questions
+        .resource_modal
+        .as_ref()
+        .is_some_and(|modal| modal.id == id)
+    {
+        return effects;
+    }
+    vec![Effect::Toast {
+        level: "info".to_string(),
+        message: "That question isn't in this chat any more.".to_string(),
+    }]
+}
+
+/// A question page's address, by its id: from the reply that holds it when it is loaded, else
+/// from the session's resource index (a thread's page read-only).
+fn page_url(state: &ChatState, id: &str) -> Option<String> {
+    let loaded = state
+        .transcript_view
+        .askers
+        .iter()
+        .find(|asker| {
+            asker.id == id
+                && matches!(
+                    asker.kind,
+                    crate::transcript::open_questions::AskerKind::Page
+                )
+        })
+        .map(|asker| asker.message_id.clone())
+        .or_else(|| {
+            state
+                .questions
+                .content
+                .items
+                .iter()
+                .find(|item| {
+                    item.id == id
+                        && item.kind == crate::transcript::question_forms::ContentKind::Page
+                })
+                .map(|item| item.message_id.clone())
+        });
+    if let Some(message_id) = loaded {
+        let message = state
+            .messages
+            .composed
+            .iter()
+            .find(|message| message.id == message_id)?;
+        let markdown = crate::transcript::prose::prose_markdown(&message.blocks);
+        return crate::transcript::question_forms::content_fences(&markdown)
+            .into_iter()
+            .filter(|fence| fence.kind == crate::transcript::question_forms::ContentKind::Page)
+            .filter_map(|fence| ghostex_gx_visual::page_reference(&fence.body))
+            .find(|page| page.page_id().map_or(page.url.as_str(), |page_id| page_id) == id)
+            .map(|page| page.url.clone());
+    }
+    let entry = indexed(state).into_iter().find(|entry| entry.id == id)?;
+    if entry.kind != "page" {
+        return None;
+    }
+    let url = entry.url?;
+    Some(if entry.thread.is_some() {
+        read_only_url(&url)
+    } else {
+        url
+    })
 }
 
 /// Which of `count` unanswered questions (oldest first) the pill goes to, given where the last
@@ -945,73 +1020,18 @@ fn step(count: usize, at: Option<usize>) -> usize {
     }
 }
 
-/// `jumpToQuestion {id}`: a row of the pill's list (a form or page, answered or not, or a chart).
+/// `jumpToQuestion {id}`: a row of the pill's list (a form or page, answered or not, or a chart),
+/// shown where it is without moving the chat (`show`).
 pub fn jump_to_id(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
-    if let Some(asker) = state
-        .transcript_view
-        .askers
-        .iter()
-        .find(|asker| asker.id == id)
-        .cloned()
-    {
-        if !jump_to(state, context, &asker, None) {
-            // Its reply is loaded but has no row yet: bring in the window that holds it.
-            return crate::questions::resource_modal::go_to(state, context, id);
-        }
-        return Vec::new();
-    }
-    let Some(item) = state
-        .questions
-        .content
-        .items
-        .iter()
-        .rev()
-        .find(|item| item.id == id)
-        .cloned()
-    else {
-        return open_indexed(state, context, id);
-    };
-    jump_to_row(state, context, &item.message_id, &item.id, None);
-    Vec::new()
+    state.questions.open_questions.last = Some(id.to_string());
+    show(state, context, id)
 }
 
 /// `openResource {id}`: a row of the list clicked. A form or chart opens in the floating modal and
 /// the chat stays where it is (`resource_modal.rs`); a page opens as it always did (an older one,
 /// or a thread's, by its address; a loaded one by scrolling to its card).
 pub fn open_resource(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
-    let effects = crate::questions::resource_modal::open(state, id);
-    if state
-        .questions
-        .resource_modal
-        .as_ref()
-        .is_some_and(|modal| modal.id == id)
-    {
-        return effects;
-    }
-    jump_to_id(state, context, id)
-}
-
-/// A jump to an item only the resource index holds: a page opens where the reader's Open chat
-/// pages in setting says (a thread's page read-only, so nothing the reader types in it is sent);
-/// a form or chart older than the loaded rows is brought in and scrolled to (`resource_modal::go_to`).
-fn open_indexed(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
-    let Some(entry) = indexed(state).into_iter().find(|entry| entry.id == id) else {
-        return Vec::new();
-    };
-    match (&entry.url, entry.kind.as_str()) {
-        (Some(url), "page") => {
-            let url = if entry.thread.is_some() {
-                read_only_url(url)
-            } else {
-                url.clone()
-            };
-            vec![Effect::Open(crate::effect::OpenTarget::Url {
-                url,
-                external: false,
-            })]
-        }
-        _ => crate::questions::resource_modal::go_to(state, context, id),
-    }
+    show(state, context, id)
 }
 
 /// The query that opens a published page read-only (server/src/visual_pages/serve.rs): its
@@ -1030,9 +1050,14 @@ fn read_only_url(url: &str) -> String {
 /// CDXC:SessionChat 2026-11-05 DECISION:
 /// User: "clicking Q1289 even tho the question is right there infront of me takes me up to the first time this q was asked ... shouldn't jump me up there". A tag pill on the question it names (`;here`, `HERE_SUFFIX`) never scrolls: the desktop and the phone open the Reply popover for that question instead, so the reader can answer in their own words. A tag pill elsewhere (a later message, the composer) goes to the newest reply that asks the tag: a one-click question asked again in the same words is one form, whose asker keeps the reply that first asked it, so the newest reply holding it is looked up here.
 pub fn jump_to_tag(state: &mut ChatState, context: &ChatContext, tag: &str) -> Vec<Effect> {
-    if let Some((message_id, form_id)) = newest_one_click_ask(state, tag) {
-        jump_to_row(state, context, &message_id, &form_id, Some(tag.to_string()));
-        return Vec::new();
+    // A tag a work item asks is shown in the Work panel (`show`'s decision: nothing scrolls).
+    if crate::extras::work_cards::card_tags(state).contains(&tag.to_uppercase()) {
+        if let Some(key) = crate::extras::work_cards::ask_key_of_tag(state, tag) {
+            return crate::extras::coordinator_board::focus_row(state, &key);
+        }
+    }
+    if let Some((_, form_id)) = newest_one_click_ask(state, tag) {
+        return show(state, context, &form_id);
     }
     let Some(asker) = tag_target(&state.transcript_view.askers, tag).cloned() else {
         return vec![Effect::Toast {
@@ -1040,14 +1065,7 @@ pub fn jump_to_tag(state: &mut ChatState, context: &ChatContext, tag: &str) -> V
             message: format!("{tag} isn't asked in the loaded part of this chat."),
         }];
     };
-    // The form's own spelling of the tag, which its drawn question carries.
-    let question = asker
-        .tags
-        .iter()
-        .find(|known| known.eq_ignore_ascii_case(tag))
-        .cloned();
-    jump_to(state, context, &asker, question);
-    Vec::new()
+    show(state, context, &asker.id)
 }
 
 /// The newest reply asking `tag` as a one-click question, with that question's form id, when it is
@@ -1082,15 +1100,6 @@ pub(crate) fn newest_one_click_ask_for_test(
     tag: &str,
 ) -> Option<(String, String)> {
     newest_one_click_ask(state, tag)
-}
-
-fn jump_to(
-    state: &mut ChatState,
-    context: &ChatContext,
-    asker: &Asker,
-    question: Option<String>,
-) -> bool {
-    jump_to_row(state, context, &asker.message_id, &asker.id, question)
 }
 
 /// Scrolls to the row holding `message_id` and flashes `target` there; false when no row holds it.
@@ -1160,6 +1169,7 @@ mod tests {
             skipped: Vec::new(),
             superseded: Vec::new(),
             inherited: false,
+            seen_only: false,
             said: Vec::new(),
             title: format!("About {id}"),
             at,
@@ -1299,12 +1309,16 @@ mod tests {
         *state.session.resource_index = vec![indexed("old", "form", "waiting", 1_000)].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 1);
         let effects = previous(&mut state, &ChatContext::default());
-        assert!(!effects.is_empty(), "the click loads the older window");
+        assert!(
+            !effects.is_empty(),
+            "the click reads the form back for the popup"
+        );
         assert!(state
             .questions
-            .resource_go
+            .resource_modal
             .as_ref()
-            .is_some_and(|go| go.read_issued));
+            .is_some_and(|modal| modal.id == "old" && modal.loading));
+        assert!(state.questions.resource_go.is_none(), "nothing scrolls");
     }
 
     #[test]
@@ -1341,8 +1355,10 @@ mod tests {
             Some("open"),
             "the next click lands there again"
         );
-        let jump = state.questions.open_questions.jump.as_ref().unwrap();
-        assert_eq!((jump.target.as_str(), jump.revision), ("open", 2));
+        assert!(
+            state.questions.open_questions.jump.is_none(),
+            "nothing scrolls"
+        );
     }
 
     #[test]
@@ -1926,19 +1942,24 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
-        assert!(matches!(
-            &open(&mut state, "placeless")[..],
-            [Effect::Toast { .. }]
-        ));
-        // The ? pill with only an older question waiting brings its window in.
+        // One the index cannot place opens in the popup, which says why it cannot be read.
+        open(&mut state, "placeless");
+        assert!(state
+            .questions
+            .resource_modal
+            .as_ref()
+            .is_some_and(|modal| modal.id == "placeless"));
+        crate::questions::resource_modal::close(&mut state);
+        // The ? pill with only an older question waiting opens it in the popup.
         assert_eq!(
             project(&state, &context).count,
             1,
             "the placeless one is not counted"
         );
         assert!(!previous(&mut state, &context).is_empty());
-        let go = state.questions.resource_go.as_ref().unwrap();
-        assert_eq!((go.id.as_str(), go.read_issued), ("old-form", true));
+        let modal = state.questions.resource_modal.as_ref().unwrap();
+        assert_eq!((modal.id.as_str(), modal.loading), ("old-form", true));
+        assert!(state.questions.resource_go.is_none(), "nothing scrolls");
     }
 
     /// A record of a reply the transcript gxserver reads no longer holds: it has no place.
@@ -2089,6 +2110,7 @@ mod paged_labels_tests {
                 skipped: Vec::new(),
                 superseded: Vec::new(),
                 inherited: false,
+                seen_only: false,
                 said: Vec::new(),
                 title: format!("Asked {n}"),
                 at: Some(now - n * 60_000),

@@ -378,17 +378,29 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
     if has_state_path {
         write_hook_state(Path::new(state_path), &state)?;
     }
-    if agent_key == "zcode" && event_name.eq_ignore_ascii_case("SessionStart") {
+    if event_name.eq_ignore_ascii_case("SessionStart") {
         if let Some(context) = coordinator_additional_context(&response) {
-            return Ok(Some(
-                serde_json::to_string(&json!({ "additionalContext": context })).map_err(
-                    |error| {
-                        DomainStateError::bad_request(format!(
-                            "Could not serialize the coordinator session context: {error}"
-                        ))
+            // ZCode reads a bare `additionalContext`; Claude and Codex read SessionStart's
+            // `hookSpecificOutput` (a coordinator's role after /clear, coordinators/role.rs
+            // `coordinator_role_again`).
+            let answer = match agent_key.as_str() {
+                "zcode" => Some(json!({ "additionalContext": context })),
+                "claude" | "codex" => Some(json!({
+                    "continue": true,
+                    "hookSpecificOutput": {
+                        "hookEventName": "SessionStart",
+                        "additionalContext": context,
                     },
-                )?,
-            ));
+                })),
+                _ => None,
+            };
+            if let Some(answer) = answer {
+                return Ok(Some(serde_json::to_string(&answer).map_err(|error| {
+                    DomainStateError::bad_request(format!(
+                        "Could not serialize the coordinator session context: {error}"
+                    ))
+                })?));
+            }
         }
     }
     Ok(None)
@@ -821,13 +833,18 @@ fn post_json_once(
 }
 
 /// The `additionalContext` gxserver answered with, when the response carries one. The hook prints
-/// it only for a ZCode SessionStart (a coordinator's guide pointer, the Marked handovers note), so every other event keeps the
-/// wrapper's canned response and every other agent sees an empty helper stdout.
+/// it only for a SessionStart of ZCode (a coordinator's guide pointer, the Marked handovers note),
+/// Claude or Codex (a coordinator's role after /clear), so every other event keeps the wrapper's
+/// canned response and every other agent sees an empty helper stdout.
 fn coordinator_additional_context(response: &str) -> Option<String> {
     let body = response.split_once("\r\n\r\n")?.1;
     let value = serde_json::from_str::<Value>(body.trim()).ok()?;
+    // CDXC:Coordinators 2026-11-11 WHY: gxserver answers `{ok, result: {…}}`, and this read only
+    // the top level, so no context ever reached an agent (ZCode's guide pointer included) until
+    // GitHub #570 tried to use it for Claude and Codex. The top level stays a fallback.
     value
-        .get("additionalContext")
+        .pointer("/result/additionalContext")
+        .or_else(|| value.get("additionalContext"))
         .and_then(Value::as_str)
         .filter(|context| !context.trim().is_empty())
         .map(str::to_string)

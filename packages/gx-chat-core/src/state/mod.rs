@@ -18,13 +18,15 @@ mod stamped;
 mod transcript_view;
 
 pub use crate::state::chat::{ChatState, CoreState, PublishAwait};
-pub use crate::state::composer::{ComposerState, FailedSend, Submission};
+pub use crate::state::composer::{
+    ComposerState, FailedSend, SendRetry, Submission, UnsentSend, TAKEN_SEND_IDS,
+};
 pub use crate::state::context::{ChatContext, FormattedTime, FormattedTimeStyle};
 pub use crate::state::extras::{
     ExtrasState, PanelsState, SaveMarkdownRequest, SaveMarkdownSheet, SaveMarkdownStage,
-    SaveMarkdownState, SearchState, SubagentGap, SubagentRequest, SubagentState, SubagentTarget,
-    TerminalTailState, WorkingWordState, LOADING_STAGE_BLANK, LOADING_STAGE_INDICATOR,
-    LOADING_STAGE_RETRY,
+    SaveMarkdownState, SearchSeek, SearchState, SubagentGap, SubagentRequest, SubagentState,
+    SubagentTarget, TerminalTailState, WorkingWordState, LOADING_STAGE_BLANK,
+    LOADING_STAGE_INDICATOR, LOADING_STAGE_RETRY,
 };
 pub use crate::state::menus::{DraftAgentSwitch, MenusState};
 pub use crate::state::messages::{

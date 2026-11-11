@@ -117,7 +117,8 @@ impl GhostexGpuiApp {
                 .sidebar_drag_source(dragged, cx)
 .sidebar_drop_target("collection", drop_id, None, cx)
                 .on_mouse_down(MouseButton::Right, move |event, window, cx| { cx.stop_propagation(); Self::show_native_sidebar_context_menu(&menu, menu_owner.get(), event.position, scale, window, cx); })
-                .on_click(cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({ "type": "collectionAction", "collectionId": id, "action": "toggle" }), cx); })))
+                .on_click(cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({ "type": "collectionAction", "collectionId": id, "action": "toggle" }), cx); }))
+                .map(|row| self.sidebar_focus_stop(row, format!("collection:{}", collection.collection_id), super::focus_order::SidebarStopPlace::List, appearance, cx)))
             .when(self.native_sidebar.disclosures.present(&format!("collection:{}", collection.collection_id), collection.collapsed), |column| {
                 let session_groups = super::session_group_tree::SessionGroupTree::new(snapshot);
                 let content = v_flex().w_full().pt(px(5.0 * scale)).pl(px(8.0 * scale))

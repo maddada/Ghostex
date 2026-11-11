@@ -76,6 +76,12 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::read_draft(state.clone(), path).await;
     }
 
+    // `GET /visual/<id>/image?path=…` is a picture the page's boxes refer to (images.rs `read`).
+    if method == Method::GET && crate::visual_pages::is_image_route(&path) {
+        let query = parts.uri.query().map(str::to_string);
+        return crate::visual_pages::read_page_image(state.clone(), path, query).await;
+    }
+
     if method == Method::GET && path.starts_with(crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX) {
         let host = parts
             .headers
@@ -132,11 +138,26 @@ pub(in crate::server) async fn route_http(
         CDXC:SessionLinks 2026-11-08 FIX:
         GitHub #497. Inside a session the CLI sends that session's own `gxs_` token, not the token file, so the relay's front gate turned every agent away once sessions had tokens ("Only this computer's own agents can reach its connected computers"), and a coordinator could not relay anything. The token file (agent level), a session's token and the owner's own session now pass, as the caller they are: the relay judges the calls that depend on it (connected_computers/thread_scope.rs).
         */
+        /*
+        CDXC:VoiceMode 2026-11-10 WHY:
+        The user's Android voice call from the Sessions list, on his PC, could not see or reach his Mac ("only this computer's sessions are readable"): the voice agent's tools act with the phone's own device token (`voice_agent/loopback.rs`), and this gate let only the token file, session tokens and the owner's session through, so every relayed read answered 401 and the failure hid the Mac from that call for 15 seconds. A paired phone is the owner's device and may do everything (CDXC:Security 2026-11-10 DECISION, option B), so its token passes as that device; the relay judges it like the owner's session (`thread_scope.rs`).
+        */
         let relay_caller = if is_authorized_headers(&parts.headers, &state.auth_token) {
             Some(Principal::LocalAgent)
         } else {
-            bearer_token(&parts.headers)
-                .and_then(|token| state.security.session_tokens.resolve(token))
+            bearer_token(&parts.headers).and_then(|token| {
+                state.security.session_tokens.resolve(token).or_else(|| {
+                    state
+                        .device_api_tokens
+                        .entry_for(token)
+                        .map(|entry| Principal::Device {
+                            device_id: entry.device_id.unwrap_or_else(|| {
+                                let hash = hash_device_api_token(token);
+                                format!("token:{}", &hash[..hash.len().min(12)])
+                            }),
+                        })
+                })
+            })
         };
         let Some(relay_caller) = relay_caller else {
             return routed_json(
@@ -391,7 +412,18 @@ pub(in crate::server) async fn route_http(
                     StatusCode::BAD_REQUEST,
                     rpc_error(
                         "badRequest",
-                        "Request body must be valid JSON.",
+                        "Ghostex couldn't read the request it was sent. Try again.",
+                        Some(request_id),
+                    ),
+                );
+            }
+            Err(ReadBodyError::Incomplete) => {
+                return routed_json(
+                    Some(endpoint.path),
+                    StatusCode::BAD_REQUEST,
+                    rpc_error(
+                        "incompleteRequest",
+                        "The request didn't arrive whole: the connection dropped while it was being sent. Try again.",
                         Some(request_id),
                     ),
                 );
@@ -475,6 +507,16 @@ pub(in crate::server) async fn route_http(
     }
     // Push registration needs to know which paired phone's own token (if any) authorized the
     // request, settled at the auth gate above.
+    if endpoint.path == crate::live_activity::REGISTER_LIVE_ACTIVITY_ENDPOINT {
+        return crate::live_activity::handle_register_live_activity_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            caller_token_hash,
+        )
+        .await;
+    }
     if endpoint.path == crate::push::REGISTER_PUSH_TOKEN_ENDPOINT {
         return crate::push::handle_register_push_token_http(
             &state,

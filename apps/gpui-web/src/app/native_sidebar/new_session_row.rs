@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_sidebar/new_session_row.rs

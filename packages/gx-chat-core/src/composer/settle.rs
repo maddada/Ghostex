@@ -354,6 +354,7 @@ fn adopt_boot_read(state: &mut ChatState, read: &ComposerBootRead) {
     state.transcript_view.summary_mode = read.summary_mode;
     state.transcript_view.verbose_override = read.verbose_override.as_bool();
     state.transcript_view.simple_override = read.simple_override.as_bool();
+    state.transcript_view.quiet_view_override = read.quiet_view.as_bool();
 }
 
 /// `requestSkills()`, which was `load()` in `packages/shared/session-chat-controller/skills.ts:36`.

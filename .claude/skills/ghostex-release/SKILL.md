@@ -275,14 +275,22 @@ everything in step 2, verifies the GPUI reference contract and the Ghostty Zig
 pin, runs `bun run release:test` (about 11 seconds), checks the repository
 secrets, and previews the change-aware plan (build, reuse or skip per product).
 A normal release (10.9.1) uses **no flags**: every platform is in scope,
-Sparkle is on, and Windows signing is `auto`: **off until SignPath imports the
-production certificate** (user decision 2026-10-19, "Turn signing off for now").
-`auto` signs only when the `SIGNPATH_API_TOKEN` secret exists and the repository
-variable `SIGNPATH_SIGNING_POLICY_SLUG` is `release-signing`; with the variable
-unset, the dispatch prints `Windows signing: disabled` and Windows ships
-unsigned. `gh variable set SIGNPATH_SIGNING_POLICY_SLUG -R maddada/Ghostex --body release-signing`
-turns it back on for every later release; `--windows-signing required`
-test-signs one dispatch, only on the user's instruction (`docs/code-signing.md`).
+Sparkle is on, and Windows signing is `auto`. **Windows releases are signed
+with the user's Certum certificate** (user decision 2026-11-10, "windows has
+to be signed release please!", from 11.3.0): `auto` signs with Certum whenever
+the `CERTUM_SIMPLYSIGN_EMAIL` and `CERTUM_SIMPLYSIGN_TOTP` secrets exist, and
+the dispatch must print exactly
+`Windows signing: enabled (Certum): the Certum SimplySign secrets are configured`.
+If it prints anything else (`Windows signing: disabled: <reason>`, or
+`enabled (SignPath)`), the Certum secrets are missing: stop, don't dispatch,
+and tell the user (`gh secret list -R maddada/Ghostex` shows the names;
+`docs/code-signing.md` says how to set them). A Windows job asked to sign
+never ships unsigned: without a signer the release's preflight and the job
+fail, a failed SimplySign login fails the job, and the job's last packaging
+step checks every program in the package and the installer.
+`--windows-signing off` ships Windows unsigned; use it only on the user's
+explicit instruction. (Without Certum, `auto` falls back to SignPath only when
+`SIGNPATH_SIGNING_POLICY_SLUG` is `release-signing`.)
 
 Scope flags, only on the user's instruction: `--skip-macos --skip-sparkle`,
 `--skip-linux` (both architectures), `--skip-linux-x64`, `--skip-linux-arm64`, `--skip-linux-appimage`, `--skip-linux-appimage-arm64`,
@@ -334,10 +342,27 @@ the release after 10.14.0; watch that one closely):
   job restores the pinned Zig from the Actions cache ("Restore the pinned Zig
   toolchain"; the first run after a change to `prepare-zig.ps1` misses and
   downloads it) and skips the VS Code source clone in its compile step. With
-  signing off, the build job runs the single "Stage and package the unsigned
-  installer" step and every SignPath step is skipped. A `--reuse-from-run` of
-  a run that was still signed rebuilds both Windows platforms, because the
-  signing mode is part of their fingerprint.
+  signing off or with Certum, the build job runs the single "Stage and package
+  the installer and update packages" step and every SignPath step is skipped;
+  Certum adds "Install SimplySign Desktop" and "Log in to SimplySign" right
+  before it and "Log out of SimplySign" at the end. In a healthy run the login
+  log says `Submitted the SimplySign login (attempt 1)` then
+  `SimplySign mounted CN=Open Source Developer Mohamad Yahia Youssef ...`
+  within seconds, and the package step ends with
+  `Checked 9 Windows files: every one is Valid, signed by E81BEDC9... and timestamped`.
+  **If "Log in to SimplySign" fails mid-release**: nothing ships unsigned for
+  that architecture. Read the step's `[before login]`, `[login window]` and
+  `[attempt N ...]` lines (which window had the focus, what SimplySign's
+  window said, whether its login window closed) and the
+  `certum-diagnostics-windows-<arch>` artifact, then re-run the failed job
+  once (`gh run rerun <run-id> -R maddada/Ghostex --failed`; each attempt
+  uses fresh codes) or recover with `--reuse-from-run` as in step 6. If it
+  fails the same way again, don't turn signing off: report the step and its
+  error to the user (an invalid-code or blocked-account message from
+  SimplySign needs the user and a new activation QR; `docs/code-signing.md`,
+  "If the SimplySign login fails during a release"). A
+  `--reuse-from-run` of a run with a different signing mode rebuilds both
+  Windows platforms, because the signing mode is part of their fingerprint.
 - Each Windows build job also reuses the libghostty-vt terminal library
   between releases ("Restore the libghostty-vt build output" before the
   compile, "Save the libghostty-vt build output" right after it on a miss; the
@@ -532,6 +557,20 @@ are live means their records are missing from `release-provenance-X.Y.Z.json`;
 report it, since the next release's planner cannot reuse those products.
 Optional, on a Mac after `brew update`, the full check with no skip flags:
 `bun run release:verify -- X.Y.Z --run-id <run-id>`.
+
+**Windows signatures (every release since 11.3.0).** For each architecture,
+download `ghostex-X.Y.Z-windows-<arch>.exe` and
+`Ghostex-X.Y.Z-win-<arch>-stable-full.nupkg` from the release, unzip
+`lib/app/Ghostex.exe` and `lib/app/resources/native/gxserver.exe` from the
+package, and verify those three files: on Windows `signtool verify /pa /v <file>`
+must end with `Successfully verified`, name `Open Source Developer Mohamad Yahia Youssef`
+(SHA1 hash `E81BEDC91DEA38C8BB2DA3651E161ADA280B6734`) under `Certum Trusted Network CA`,
+and say `The signature is timestamped`; on a Mac use `osslsigncode verify`
+as in `docs/code-signing.md` ("After a release: check the signatures"), which
+must print `Serial : 0436C352E3CB5E9769206A31B40CE463`,
+`Timestamp Server Signature verification: ok` and `Succeeded`. Put the
+result for both architectures in the report. An unsigned or invalid file is a
+release defect: report it at once.
 
 ### 9. Report to the user
 

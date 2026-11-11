@@ -7,11 +7,12 @@
 //! `muted-foreground` at 42%, stretched over the whole body, with the content
 //! starting a fixed distance to the right of it. Everything that opens onto
 //! more rows uses it, so a reader can see at a glance which rows belong to the
-//! heading they expanded: the turn's "Worked for Xs" log, a reasoning row's
+//! heading they expanded: a reasoning row's
 //! detail and tool run, an expanded tool's arguments and result, and the
 //! "+N previous tool calls" and "N tool calls" groups. Pressing the rail closes
 //! the disclosure it belongs to, as React's `.ghostex-chat-expansion-rail`
-//! button did.
+//! button did. A finished turn's "Worked for" log has no rail since 2026-11-10
+//! (completed_work_row.rs).
 
 use super::appearance::ChatAppearance;
 use super::state::NativeChatView;
@@ -31,9 +32,6 @@ pub(super) enum DisclosureRail {
     /// One tool row's own detail, indented past the tool rows around it.
     /// React's `.ghostex-chat-work-detail`.
     ToolDetail,
-    /// A finished turn's work log under its "Worked" summary, with the rows hung further off
-    /// the line (gx-chat-core `work_summary.rs`).
-    Work,
 }
 
 impl DisclosureRail {
@@ -45,7 +43,6 @@ impl DisclosureRail {
         match self {
             Self::Marker => 17.0,
             Self::ToolDetail => 29.5,
-            Self::Work => 23.0,
         }
     }
 }
@@ -128,6 +125,66 @@ pub(super) fn disclosure_body(
                 .flex_col()
                 .flex_1()
                 .min_w_0()
+                .gap(px(gap * s))
+                .children(children),
+        )
+        .into_any_element()
+}
+
+/// A quiet fold's rail: an opened Quiet View line's rows (quiet_view.rs) and an opened Reduced or
+/// Agent work Quiet line's steps (quiet_work.rs). The 1px line stays where it was drawn, `line_x`
+/// in from the row's left edge with the content starting at `content_x`; a click anywhere from the
+/// row's left edge up to the content shuts the fold `key` as its header does, with a pointer and a
+/// stronger line while hovered. `bottom` is space under the rows that the line runs down through.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User, of the thin line down an opened Quiet View fold: "make clicking on this line collapse". Every rail in the chat closes its fold when clicked, as the disclosure rails already did (`disclosure_body`): Quiet View's folds and Reduced and Agent work Quiet's opened steps now too, with a pointer and the line drawn stronger while hovered. The chat keeps the header where it is as the fold shuts (`anchor_disclosure_toggle`).
+///
+/// CDXC:SessionChat 2026-11-11 WHY: the target first was a 12px box centred on the line, with a 10px empty gap between it and the content; a checker's clicks just beside the line landed in that gap or on the card and did nothing or opened the card. The target now runs from the row's left edge to the content's edge, about 6px left and 16px right of the line, so no click near the line falls between the two.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn closing_rail(
+    p: &ChatAppearance,
+    key: String,
+    line_x: f32,
+    content_x: f32,
+    gap: f32,
+    bottom: f32,
+    children: impl IntoIterator<Item = AnyElement>,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    div()
+        .flex()
+        .min_w_0()
+        .child(
+            div()
+                .id(SharedString::from(format!("quiet-rail:{key}")))
+                .group(RAIL_GROUP)
+                .role(gpui::Role::Button)
+                .aria_label("Collapse")
+                .w(px(content_x * s))
+                .pl(px(line_x * s))
+                .flex_shrink_0()
+                .flex()
+                .chat_cursor_pointer()
+                .child(
+                    div()
+                        .w(px(RAIL_LINE_WIDTH * s))
+                        .bg(p.foreground.opacity(RAIL_LINE_OPACITY))
+                        .group_hover(RAIL_GROUP, |style| style.bg(p.foreground.opacity(0.35))),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.toggle_marker_disclosure(key.clone(), true, cx);
+                    cx.stop_propagation();
+                })),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_w_0()
+                .pb(px(bottom * s))
                 .gap(px(gap * s))
                 .children(children),
         )

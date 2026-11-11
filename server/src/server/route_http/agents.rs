@@ -77,6 +77,32 @@ pub(super) async fn route_agents_http(
         "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
             handle_agent_hook_http(&state, endpoint.path, request_id, &body_json)
         }
+        // First-run setup's sign-in check (agent_sign_in.rs): off the async runtime, since a
+        // CLI's status command can take seconds.
+        "/api/agentSignIn" => {
+            let params = match read_domain_rpc_params(&body_json) {
+                Ok(params) => params,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let worker_state = state.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::agent_sign_in::dispatch(&worker_state, &params)
+            })
+            .await
+            .unwrap_or_else(|error| {
+                Err(DomainStateError::corrupt_state(format!(
+                    "The sign-in check stopped unexpectedly: {error}"
+                )))
+            });
+            match result {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => domain_error_response(endpoint.path, request_id, error),
+            }
+        }
         "/api/readHooklessActivityComparison" => {
             let params = match read_domain_rpc_params(&body_json) {
                 Ok(params) => params,

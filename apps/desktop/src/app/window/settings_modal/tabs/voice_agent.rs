@@ -374,7 +374,9 @@ impl VoiceAgentTab {
                 "Saving a summary of the last conversation…".to_string()
             }
             (None, None) if self.memory.is_some() => "Nothing remembered yet.".to_string(),
-            (None, None) => String::new(),
+            // Not read yet: a line like Cloud Boxes' "Checking…" rather than an empty one, which
+            // left the wide row a blank band under its title.
+            (None, None) => "Checking…".to_string(),
         };
         let can_forget = remembered.is_some() || self.memory_pending;
         let failed = self.memory_error.is_some();

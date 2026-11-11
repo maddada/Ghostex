@@ -355,10 +355,99 @@ process.stdout.write(version);
 	[[ "$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")" == "$VERSION" ]]
 	[[ "$(plutil -extract CFBundleVersion raw "$INFO_PLIST")" == "$BUILD_NUMBER" ]]
 	[[ "$(plutil -extract SUFeedURL raw "$INFO_PLIST")" == "https://raw.githubusercontent.com/maddada/Ghostex/main/appcast.xml" ]]
+	[[ "$(plutil -extract SUEnableAutomaticChecks raw "$INFO_PLIST")" == "true" ]]
 	codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 	node --input-type=module -e \
 		'import { validateMacosAppBundle } from "./tooling/validate-macos-app-bundle.mjs"; await validateMacosAppBundle({ appName: "Ghostex", appPath: process.argv[1], arch: "arm64" });' \
 		"$APP_PATH"
+}
+
+# CDXC:Onboarding 2026-11-11 DECISION:
+# User, on the first-run page (step 1, install): the DMG window shows a drag-to-Applications picture,
+# "a nice looking picture matching ghostex.dev". The picture is tooling/release-gpui/dmg/background.tiff
+# (1x and 2x in one TIFF, from the first-run art thread's dmg-with-instruction PNGs; to change it, replace
+# that file with `tiffutil -cathidpicheck new.png new@2x.png -out a.tiff && tiffutil -lzw a.tiff -out
+# tooling/release-gpui/dmg/background.tiff`, 660 by 400 points). Finder reads the window size, icon places
+# and background from a .DS_Store that points into the mounted volume, so it is written on the read-write
+# image, mounted out of sight (-nobrowse), by dmg/layout.py with the two packages dmgbuild uses, vendored
+# unchanged in dmg/vendor/ (no network during the release).
+# CDXC:Release 2026-11-11 DECISION: the background is best effort (the coordinator, for tonight's release:
+# "the release must not fail on it"). Any failure (no python3, the vendored packages, the mount, the
+# layout script) prints one warning, removes what the attempt made (the staged .background, a mount, the
+# half-made image) and builds the plain image exactly as before the background existed; only a layout that
+# finished may change the image. A failure of the plain `hdiutil create` itself is the retry loop's, as before.
+DMG_LAYOUT_MOUNT=""
+
+release_gpui_dmg_layout_cleanup() {
+	local stage="$1" rw_image="$2"
+	if [[ -n "$DMG_LAYOUT_MOUNT" ]]; then
+		hdiutil detach -quiet "$DMG_LAYOUT_MOUNT" 2>/dev/null ||
+			hdiutil detach -quiet -force "$DMG_LAYOUT_MOUNT" 2>/dev/null || true
+		rmdir "$DMG_LAYOUT_MOUNT" 2>/dev/null || true
+		DMG_LAYOUT_MOUNT=""
+	fi
+	rm -rf "$stage/.background"
+	rm -f "$rw_image"
+}
+
+# The read-write image with the background and the window layout. Returns non-zero, with the reason in
+# DMG_LAYOUT_FAILURE, at the first step that fails; it runs inside an `if`, where `set -e` does not apply.
+release_gpui_dmg_rw_image_with_layout() {
+	local stage="$1" rw_image="$2"
+	DMG_LAYOUT_FAILURE=""
+	command -v python3 >/dev/null || {
+		DMG_LAYOUT_FAILURE="python3 is not on PATH"
+		return 1
+	}
+	[[ -f "$SCRIPT_DIR/dmg/background.tiff" && -f "$SCRIPT_DIR/dmg/layout.py" ]] || {
+		DMG_LAYOUT_FAILURE="dmg/background.tiff or dmg/layout.py is missing"
+		return 1
+	}
+	rm -rf "$stage/.background"
+	mkdir "$stage/.background" &&
+		cp "$SCRIPT_DIR/dmg/background.tiff" "$stage/.background/background.tiff" &&
+		chflags hidden "$stage/.background" || {
+		DMG_LAYOUT_FAILURE="the background could not be staged"
+		return 1
+	}
+	hdiutil create -volname Ghostex -srcfolder "$stage" -fs APFS -format UDRW "$rw_image" || {
+		DMG_LAYOUT_FAILURE="hdiutil create failed"
+		return 1
+	}
+	DMG_LAYOUT_MOUNT="$(mktemp -d "$STAGE_ROOT/mount-XXXXXX")" || {
+		DMG_LAYOUT_FAILURE="no mount folder"
+		return 1
+	}
+	hdiutil attach -quiet -nobrowse -noautoopen -noverify -mountpoint "$DMG_LAYOUT_MOUNT" "$rw_image" || {
+		DMG_LAYOUT_FAILURE="the read-write image did not mount"
+		return 1
+	}
+	# -B: no __pycache__ written into the checkout's dmg/vendor/.
+	python3 -I -B "$SCRIPT_DIR/dmg/layout.py" "$DMG_LAYOUT_MOUNT" || {
+		DMG_LAYOUT_FAILURE="dmg/layout.py failed"
+		return 1
+	}
+	sync
+	hdiutil detach -quiet "$DMG_LAYOUT_MOUNT" || {
+		DMG_LAYOUT_FAILURE="the read-write image did not unmount"
+		return 1
+	}
+	rmdir "$DMG_LAYOUT_MOUNT" 2>/dev/null || true
+	DMG_LAYOUT_MOUNT=""
+	rm -rf "$stage/.background"
+}
+
+# The read-write image the DMG is converted from: with the background when that works, otherwise the
+# plain one, made the way it was before the background existed.
+release_gpui_dmg_rw_image() {
+	local stage="$1" rw_image="$2"
+	if release_gpui_dmg_rw_image_with_layout "$stage" "$rw_image"; then
+		echo "DMG window background added."
+		return 0
+	fi
+	echo "warning: DMG window background skipped ($DMG_LAYOUT_FAILURE); building the DMG without it." >&2
+	release_gpui_dmg_layout_cleanup "$stage" "$rw_image"
+	hdiutil create -volname Ghostex -srcfolder "$stage" -fs APFS -format UDRW "$rw_image"
 }
 
 phase_dmg() {
@@ -371,7 +460,7 @@ phase_dmg() {
 	STAGE="$(mktemp -d "$STAGE_ROOT/stage-XXXXXX")"
 	# The read-write image sits next to the stage, never inside it, because the stage is the image's source folder.
 	RW_IMAGE="$STAGE.rw.dmg"
-	trap 'rm -rf "$STAGE" "$RW_IMAGE"' EXIT
+	trap 'release_gpui_dmg_layout_cleanup "$STAGE" "$RW_IMAGE"; rm -rf "$STAGE" "$RW_IMAGE"' EXIT
 	ditto "$APP_PATH" "$STAGE/Ghostex.app"
 	ln -s /Applications "$STAGE/Applications"
 	# CDXC:Release 2026-08-22:
@@ -385,7 +474,7 @@ phase_dmg() {
 	# CDXC:Release 2026-10-22 DECISION: the user chose 4 MiB LZMA chunks (`-imagekey udif-chunk-size=8192`) knowing it relies on an undocumented hdiutil key and still needs a mount test on macOS 13 and 14.
 	for attempt in 1 2 3; do
 		rm -f "$RW_IMAGE" "$DMG"
-		if hdiutil create -volname Ghostex -srcfolder "$STAGE" -fs APFS -format UDRW "$RW_IMAGE" &&
+		if release_gpui_dmg_rw_image "$STAGE" "$RW_IMAGE" &&
 			hdiutil convert "$RW_IMAGE" -format ULMO -imagekey udif-chunk-size=8192 -o "$DMG"; then
 			break
 		fi

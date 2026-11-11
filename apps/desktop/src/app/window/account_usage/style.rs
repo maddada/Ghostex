@@ -33,18 +33,20 @@ pub(super) struct Palette {
     /// Rows and buttons raised on a card.
     pub raised: Hsla,
     pub codex: bool,
+    pub provider: super::provider::UsageProvider,
 }
 
 impl Palette {
-    pub fn new(codex: bool) -> Self {
+    pub fn new(provider: super::provider::UsageProvider) -> Self {
         let ink = chrome_ink();
+        let codex = provider == super::provider::UsageProvider::Codex;
+        let (accent, accent_text): (Hsla, Hsla) = match provider.accent() {
+            Some((dark, light)) => (rgb(dark).into(), chrome_color(dark, light).into()),
+            None => (ink.opacity(0.70).into(), ink.opacity(0.78).into()),
+        };
         Self {
-            accent: rgb(if codex { 0x8cbbe8 } else { 0xd97757 }).into(),
-            accent_text: chrome_color(
-                if codex { 0x8cbbe8 } else { 0xd97757 },
-                if codex { 0x285b8c } else { 0x9c4328 },
-            )
-            .into(),
+            accent,
+            accent_text,
             muted: ink.opacity(0.62).into(),
             dim: ink.opacity(0.50).into(),
             ink: ink.opacity(0.94).into(),
@@ -56,6 +58,7 @@ impl Palette {
                 ink.opacity(0.055).into()
             },
             codex,
+            provider,
         }
     }
 

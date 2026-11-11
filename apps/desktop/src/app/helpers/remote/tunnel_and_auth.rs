@@ -525,6 +525,75 @@ pub(crate) fn gpui_save_remote_machine_password_to_keychain(
     GpuiRemoteSshPasswordKeychainResult::Unsupported
 }
 
+/// Saves `token` as `remote_machine_id`'s daemon token in secure system storage, off the calling
+/// thread (`token_keychain_save.rs`). What happens to the save is in the remote log: a wait that
+/// outlasts ten seconds (`tokenSaveWaiting`), a save that failed and when it is tried again
+/// (`tokenSaveFailed`), and the end of a save that waited or was retried (`tokenSaved`).
+pub(crate) fn gpui_save_remote_gxserver_token_soon(remote_machine_id: &str, token: &str) {
+    use super::token_keychain_save::{TokenSaveNote, TokenSaveOutcome, TokenSaver};
+    static SAVER: std::sync::OnceLock<std::sync::Arc<TokenSaver>> = std::sync::OnceLock::new();
+    SAVER
+        .get_or_init(|| {
+            TokenSaver::new(
+                Box::new(|remote_machine_id, token| {
+                    match gpui_save_remote_gxserver_token_to_keychain(remote_machine_id, token) {
+                        GpuiRemoteTokenKeychainResult::Success => TokenSaveOutcome::Saved,
+                        GpuiRemoteTokenKeychainResult::Unsupported
+                        | GpuiRemoteTokenKeychainResult::Failed => TokenSaveOutcome::Failed,
+                    }
+                }),
+                Box::new(|note| {
+                    let (event, details) = match note {
+                        TokenSaveNote::Waiting { machine_id, waited } => (
+                            "gpui.remoteGxserver.tokenSaveWaiting",
+                            serde_json::json!({
+                                "level": "warning",
+                                "machineId": machine_id,
+                                "waitedMs": waited.as_millis() as u64,
+                            }),
+                        ),
+                        TokenSaveNote::Saved {
+                            machine_id,
+                            took,
+                            tries,
+                        } => {
+                            // A save that went through at once is not worth a line.
+                            if tries == 1 && took < std::time::Duration::from_secs(10) {
+                                return;
+                            }
+                            (
+                                "gpui.remoteGxserver.tokenSaved",
+                                serde_json::json!({
+                                    "machineId": machine_id,
+                                    "tookMs": took.as_millis() as u64,
+                                    "tries": tries,
+                                }),
+                            )
+                        }
+                        TokenSaveNote::Failed {
+                            machine_id,
+                            tries,
+                            retry_in,
+                        } => (
+                            "gpui.remoteGxserver.tokenSaveFailed",
+                            serde_json::json!({
+                                "machineId": machine_id,
+                                "tries": tries,
+                                "retryInMs": retry_in.map(|wait| wait.as_millis() as u64),
+                            }),
+                        ),
+                    };
+                    support_logs::append_always(
+                        support_logs::GpuiSupportLog::RemoteGxserverInstall,
+                        event,
+                        details,
+                    );
+                }),
+            )
+        })
+        .save_soon(remote_machine_id, token);
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_save_remote_gxserver_token_to_keychain(
     remote_machine_id: &str,

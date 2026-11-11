@@ -93,15 +93,82 @@ pub fn handle_with_ids(
         ActionKind::UseCoordinatorIntroExample => {
             crate::extras::coordinator_intro::use_example(&action.params)
         }
-        // A row of the Moving list goes to that item's newest card (work_cards.rs).
+        // A row of the In progress list shows its line of work in the Work panel, the chat staying
+        // where it is (`open_questions::show`).
+        // A page row in the dock asks how many of the page's questions are answered.
+        ActionKind::LoadPageQuestionCounts => {
+            crate::extras::work_cards::load_page_counts(state, text(action, "pageId"))
+        }
         ActionKind::JumpToWorkCard => {
-            crate::questions::open_questions::jump_to_row(
+            crate::extras::coordinator_board::focus_row(state, text(action, "key"))
+        }
+        // A work ask snoozed from its card: out of the dock and the counts until its end
+        // (server/src/coordinators/work.rs `snooze`).
+        ActionKind::SnoozeWorkAsk => {
+            let request_id = next_request_id();
+            state.extras.panels.board_change_requests.insert(request_id);
+            let key = text(action, "key").to_string();
+            let hours = action.param("hours").and_then(Value::as_u64).unwrap_or(1);
+            let until = context.now_millis() + hours as i64 * 3_600_000;
+            state.extras.panels.work_snoozed.insert(key, until);
+            state.core.request_publish();
+            vec![crate::effect::Effect::SendRpc {
+                request_id,
+                method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+                params: Box::new(serde_json::json!({
+                    "projectId": state.identity.project_id,
+                    "sessionId": state.identity.session_id,
+                    "op": "snooze",
+                    "item": text(action, "item"),
+                    "ask": text(action, "ask"),
+                    "hours": hours,
+                })),
+            }]
+        }
+        // A dock row's "Show in chat": scrolls to the reply of the turn that asked or changed it,
+        // only because the reader pressed it (work_cards.rs `show_in_chat`).
+        ActionKind::ShowInChat => {
+            if crate::questions::open_questions::jump_to_row(
                 state,
                 context,
-                text(action, "anchorId"),
-                text(action, "key"),
+                text(action, "messageId"),
+                text(action, "target"),
                 None,
-            );
+            ) {
+                Vec::new()
+            } else {
+                vec![crate::effect::Effect::Toast {
+                    level: "info".to_string(),
+                    message: "That turn isn't loaded in this chat any more.".to_string(),
+                }]
+            }
+        }
+        // The dock hidden (the phone's x; the computer's header collapses it), and shown again
+        // (the phone's Work pill, the computer's header, or something new).
+        ActionKind::HideWorkDock => {
+            let keys = crate::extras::work_cards::dock(state, context)["rows"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|row| row["key"].as_str().unwrap_or_default().to_string())
+                .collect();
+            state.extras.panels.work_dock_hidden = Some(keys);
+            state.core.request_publish();
+            Vec::new()
+        }
+        ActionKind::ShowWorkDock => {
+            state.extras.panels.work_dock_hidden = None;
+            state.core.request_publish();
+            Vec::new()
+        }
+        // A finished-work card leaves the dock (work_cards.rs `dock`).
+        ActionKind::DismissWorkDockCard => {
+            state
+                .extras
+                .panels
+                .work_dock_dismissed
+                .insert(text(action, "key").to_string());
+            state.core.request_publish();
             Vec::new()
         }
         ActionKind::CoordinatorBoardAnswer => {
@@ -177,14 +244,8 @@ pub fn handle_with_ids(
             search::set_query(&mut state.extras.search, text(action, "query"));
             Vec::new()
         }
-        ActionKind::SearchNext => {
-            search::move_by(&mut state.extras.search, 1);
-            Vec::new()
-        }
-        ActionKind::SearchPrevious => {
-            search::move_by(&mut state.extras.search, -1);
-            Vec::new()
-        }
+        ActionKind::SearchNext => search::navigate(state, 1, context),
+        ActionKind::SearchPrevious => search::navigate(state, -1, context),
         ActionKind::SearchFolds => {
             search::set_folds(&mut state.extras.search, &action.params);
             Vec::new()

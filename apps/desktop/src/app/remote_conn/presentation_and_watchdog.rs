@@ -155,6 +155,10 @@ impl GhostexGpuiApp {
                         }
                         match message {
                             GpuiRemoteGxserverPresentationStreamMessage::Failed => {
+                                this.note_gpui_remote_link_ended(
+                                    remote_machine_id.as_str(),
+                                    GpuiRemoteLinkEnd::LiveStreamFailed,
+                                );
                                 this.dispatch_gpui_remote_machine_status(
                                     remote_machine_id.as_str(),
                                     GpuiRemoteGxserverConnectState::PresentationStreamFailed
@@ -175,6 +179,26 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn start_gpui_remote_gxserver_watchdog(&mut self, cx: &mut gpui::Context<Self>) {
+        /*
+        CDXC:RemoteMachines 2026-11-10 WHY:
+        A tunnel whose SSH exited was found only at the watchdog's next health check, up to 15 s later, during which the computer still read as connected while every request to it failed. An exited process costs nothing to notice, so it is looked for every 2 s and the reconnect starts then.
+        */
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(GPUI_REMOTE_GXSERVER_TUNNEL_EXIT_CHECK_INTERVAL)
+                    .await;
+                if this
+                    .update(cx, |this, cx| {
+                        this.drop_exited_gpui_remote_gxserver_tunnels(cx)
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
@@ -197,9 +221,9 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    pub(crate) fn validate_gpui_remote_gxserver_connections(
+    /// Drops every connection whose tunnel SSH exited, which starts its reconnect.
+    pub(crate) fn drop_exited_gpui_remote_gxserver_tunnels(
         &mut self,
-        wake_validation: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         let exited_machine_ids = self
@@ -216,6 +240,7 @@ impl GhostexGpuiApp {
             })
             .collect::<Vec<_>>();
         for machine_id in exited_machine_ids {
+            self.note_gpui_remote_link_ended(machine_id.as_str(), GpuiRemoteLinkEnd::TunnelExited);
             self.stop_gpui_remote_gxserver_connection(machine_id.as_str());
             self.dispatch_gpui_remote_machine_status_with_message(
                 machine_id.as_str(),
@@ -224,6 +249,14 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
+    }
+
+    pub(crate) fn validate_gpui_remote_gxserver_connections(
+        &mut self,
+        wake_validation: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.drop_exited_gpui_remote_gxserver_tunnels(cx);
 
         if !wake_validation && self.remote_gxserver_watchdog_probe_in_flight {
             return;
@@ -280,6 +313,7 @@ impl GhostexGpuiApp {
                     this.remote_gxserver_watchdog_probe_in_flight = false;
                 }
                 let mut failed_machine_ids = Vec::new();
+                let mut check_again_after_wake = false;
                 for (machine_id, generation, local_port, probe, answered_meanwhile) in results {
                     if !this.gpui_remote_gxserver_connect_generation_is_current(
                         machine_id.as_str(),
@@ -298,18 +332,43 @@ impl GhostexGpuiApp {
                     }
                     // Slow is still connected: the sidebar, the chat and the terminal (which has
                     // its own SSH) keep agreeing that the machine is there (GitHub #361). After
-                    // a wake any unconfirmed tunnel is replaced at once, as before.
-                    let verdict = connection.liveness.record(&probe, answered_meanwhile);
-                    let dropped = match verdict {
-                        GpuiRemoteTunnelVerdict::Live => false,
-                        GpuiRemoteTunnelVerdict::Slow => wake_validation,
-                        GpuiRemoteTunnelVerdict::Dropped => true,
+                    // a wake a tunnel gets a second check before it is replaced
+                    // (CDXC:RemoteMachines 2026-11-10 in tunnel_liveness.rs).
+                    let verdict = if wake_validation {
+                        connection
+                            .liveness
+                            .record_after_wake(&probe, answered_meanwhile)
+                    } else {
+                        connection.liveness.record(&probe, answered_meanwhile)
                     };
-                    if dropped {
-                        failed_machine_ids.push(machine_id);
+                    match verdict {
+                        GpuiRemoteTunnelVerdict::Live => {}
+                        GpuiRemoteTunnelVerdict::Slow => check_again_after_wake |= wake_validation,
+                        GpuiRemoteTunnelVerdict::Dropped => {
+                            let reason = if connection.liveness.dropped_after_wake() {
+                                GpuiRemoteLinkEnd::WakeUnconfirmed
+                            } else if matches!(probe, GpuiRemoteHealthProbe::NoAnswer) {
+                                GpuiRemoteLinkEnd::HealthUnanswered
+                            } else {
+                                GpuiRemoteLinkEnd::HealthRefused
+                            };
+                            failed_machine_ids.push((machine_id, reason));
+                        }
                     }
                 }
-                for machine_id in failed_machine_ids {
+                if check_again_after_wake {
+                    cx.spawn(async move |this, cx| {
+                        cx.background_executor()
+                            .timer(GPUI_REMOTE_GXSERVER_WAKE_RECHECK_DELAY)
+                            .await;
+                        let _ = this.update(cx, |this, cx| {
+                            this.validate_gpui_remote_gxserver_connections(true, cx);
+                        });
+                    })
+                    .detach();
+                }
+                for (machine_id, reason) in failed_machine_ids {
+                    this.note_gpui_remote_link_ended(machine_id.as_str(), reason);
                     this.stop_gpui_remote_gxserver_connection(machine_id.as_str());
                     this.dispatch_gpui_remote_machine_status_with_message(
                         machine_id.as_str(),
@@ -333,8 +392,8 @@ impl GhostexGpuiApp {
             connection.terminate();
             self.unregister_connected_computer(remote_machine_id, connection.local_port);
         }
-        // The Easy Connect forwarder shares the machine's connection lifetime.
-        gpui_stop_easy_connect_forward(remote_machine_id);
+        // The machine's Easy Connect forwarder stays: its terminals and the other windows'
+        // connections ride on it (CDXC:RemotePairing 2026-11-10 in easy_connect_forward.rs).
     }
 
     pub(crate) fn stop_all_gpui_remote_gxserver_connections(&mut self) {

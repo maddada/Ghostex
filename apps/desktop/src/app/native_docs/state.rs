@@ -493,7 +493,8 @@ pub(crate) struct NativeDocsState {
     pub(crate) pending_open: Option<String>,
     /// Remote files outside the project that a session's chat linked to, by their absolute path:
     /// the remote project (its scoped id) and the session whose chat named them. Their reads carry
-    /// that `sessionId`, which gxserver checks against the chat (`remote_files.rs`).
+    /// that `sessionId`, which gxserver checks against the chat (`remote_files.rs`). App-wide: it
+    /// moves with the state when Files switches project (`carry_app_wide_from`).
     pub(crate) remote_chat_files: std::collections::HashMap<String, (String, String)>,
     /// A published page asked for before Docs synced to the current project.
     pub(crate) pending_page: Option<super::published_page::DocsPendingPage>,
@@ -671,6 +672,14 @@ impl NativeDocsState {
         self.type_filter = std::mem::take(&mut from.type_filter);
         self.tree_scroll = from.tree_scroll.clone();
         self.pending_open = from.pending_open.take();
+        // CDXC:Docs 2026-11-11 WHY: a chat link that opens a remote file outside the project
+        // records its session here and then switches Files to that project, which swaps this state;
+        // left behind, the read went out without `sessionId`, the remote refused it and Files showed
+        // nothing (the user's Windows `C:\dev\.desk-runner\…\reply-email.txt`). Each entry names
+        // its project, so the grants are app-wide.
+        let mut remote_chat_files = std::mem::take(&mut from.remote_chat_files);
+        remote_chat_files.extend(std::mem::take(&mut self.remote_chat_files));
+        self.remote_chat_files = remote_chat_files;
         self.pending_page = from.pending_page.take();
         self.open_file_prompt = std::mem::take(&mut from.open_file_prompt);
         self.pending_origin = from.pending_origin.take();

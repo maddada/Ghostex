@@ -305,9 +305,13 @@ fn opens_active_stretch(message: &ChatMessage) -> bool {
 fn restarts_response(projection: &TranscriptProjection) -> bool {
     use crate::transcript::noise::suppressed_turn_label;
     let rendered = &projection.rendered;
+    let mid_response = crate::transcript::turns::mid_response_rows(&projection.normalized);
     (1..rendered.len()).any(|at| {
         let row = &rendered[at];
-        (row.role == ChatRole::User && !row.queued && suppressed_turn_label(row).is_none())
+        (row.role == ChatRole::User
+            && !row.queued
+            && suppressed_turn_label(row).is_none()
+            && !mid_response.contains(&row.id))
             || crate::transcript::turns::wakes_settled_agent(rendered, at)
     })
 }
@@ -329,9 +333,14 @@ fn asks_resend(rows: &[ChatRow]) -> bool {
 /// not), it has a byte offset (a row without one folds into a deferred turn before it), and it
 /// splits no `/btw` question from its answer and no two rows sharing an id.
 fn seams(rows: &[ChatRow], summary: bool, grouped: bool) -> Vec<usize> {
-    cuts(rows, |row| {
+    let mut seams = cuts(rows, |row| {
         opens_turn(row, summary, grouped) && row.byte_offset.is_some()
-    })
+    });
+    // A message that reached the agent mid-response belongs to the turn before it
+    // (`turns::mid_response_rows`), so a chunk never ends there.
+    let mid_response = crate::transcript::turns::mid_response_rows(rows);
+    seams.retain(|at| !mid_response.contains(&rows[*at].id));
+    seams
 }
 
 /// The rows of the running turn (sorted) an active chunk can end before, by the same rules

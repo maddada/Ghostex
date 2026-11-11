@@ -295,6 +295,14 @@ pub(crate) struct SetVoiceAgentSpeed {
     pub(crate) hundredths: u16,
 }
 
+/// A row of a voice panel line's right-click menu: puts `text` on the clipboard
+/// (voice_agent/panel_copy.rs).
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct CopyVoiceAgentText {
+    pub(crate) text: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct OpenBrowserPaneInExternalBrowser {
@@ -488,13 +496,6 @@ pub(crate) struct RunGpuiTitlebarGlobalAction {
     pub(crate) command_id: String,
 }
 
-/// One row of the titlebar's ⋯ menu, by its position in `GpuiTitlebarMoreMenuItem::ALL`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct OpenGpuiTitlebarMoreMenuItem {
-    pub(crate) item_index: u64,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarGitMenuAction {
@@ -512,18 +513,6 @@ pub(crate) struct OpenGpuiTitlebarGitCommitScreen;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarGitRemoteSync;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct RunGpuiTitlebarTipsHeaderAction {
-    pub(crate) action_index: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct RunGpuiTitlebarTip {
-    pub(crate) tip_index: u64,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]

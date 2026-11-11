@@ -140,12 +140,15 @@ fn parse_page(page: &Value) -> Result<PageRef, String> {
             )
         }
     };
+    // `"awaitsSeen": true`, written by `ghostex show` for a page that asks nothing.
+    let awaits_seen = page.get("awaitsSeen").and_then(Value::as_bool) == Some(true);
     Ok(PageRef {
         title: title.to_string(),
         url: url.to_string(),
         file,
         popup,
         questions,
+        awaits_seen,
     })
 }
 

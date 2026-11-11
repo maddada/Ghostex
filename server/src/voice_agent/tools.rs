@@ -42,7 +42,7 @@ fn all_definitions() -> Value {
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "project": {"type": "string", "description": "Optional: only sessions of this project (its name as the user says it)."}
+                    "project": {"type": "string", "description": "Optional: only sessions of this project (its name as the user says it). Words that name no project are looked up as a session or coordinator title instead, and the answer says which it was."}
                 }
             }
         },
@@ -635,9 +635,11 @@ fn named_session(
 /// How the answer starts when no session fits the user's words.
 pub(super) const NO_MATCH: &str = "No open session matches";
 
+/// CDXC:VoiceMode 2026-11-10 WHY: User: "When the user says something like "tell Big Chungus" about an issue, the assistant searched for a project named Big Chungus first, found nothing, and told the user "no Big Chungus sessions came up under that name", even though Big Chungus is a session title". The model guessed the kind and passed the title as `project`, and this tool answered "No project matches" after one kind of search. A `project` that names no project is now matched against session and coordinator titles too before anything is reported missing (the voice agent's own tool; the app's session and project search is unchanged), and the prompt tells the model to look across all kinds (prompt.rs).
 async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, String> {
     let (mut all, unavailable) = sessions::list_everywhere_async(state).await?;
     let project = arg_text(args, "project");
+    let mut matched_as: Option<Value> = None;
     if !project.is_empty() {
         let projects = sessions::list_projects_async(state).await?;
         match sessions::match_project(&projects, &project) {
@@ -652,7 +654,32 @@ async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, Str
                         .join(" or ")
                 ))
             }
-            Match::None => return Err(format!("No project matches \"{project}\".")),
+            // Not a project: the user's words may name a session or a coordinator ("tell Big
+            // Chungus"), so they are looked up as a title before anything is reported missing.
+            Match::None => match sessions::match_session(&all, &project) {
+                Match::One(found) => {
+                    all.retain(|session| {
+                        session.reference() == found.reference()
+                            || session.thread_of.as_ref().is_some_and(|parent| parent.reference == found.reference())
+                    });
+                    matched_as = Some(json!({"kind": "session", "note": format!("No project is called \"{project}\"; it is the session \"{}\".", found.title)}));
+                }
+                Match::Ambiguous(candidates) => {
+                    return Err(format!(
+                        "No project is called \"{project}\", but several sessions are: {}. Ask the user which one.",
+                        candidates
+                            .iter()
+                            .map(|session| format!("\"{}\" ({})", session.title, session.reference()))
+                            .collect::<Vec<_>>()
+                            .join(" or ")
+                    ))
+                }
+                Match::None => {
+                    return Err(format!(
+                        "Nothing open is called \"{project}\": no project and no session or coordinator title matches."
+                    ))
+                }
+            },
         }
     }
     let total = all.len();
@@ -668,6 +695,9 @@ async fn list_sessions(state: &Arc<AppState>, args: &Value) -> Result<Value, Str
         "sessions": all.iter().take(LIST_MAX).map(SessionInfo::to_tool_value).collect::<Vec<_>>(),
         "truncated": total > LIST_MAX,
     });
+    if let Some(matched_as) = matched_as {
+        result["matchedAs"] = matched_as;
+    }
     if !unavailable.is_empty() {
         result["unavailableComputers"] = json!(unavailable
             .iter()

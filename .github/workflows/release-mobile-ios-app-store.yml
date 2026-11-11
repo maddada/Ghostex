@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: check (read-only), prepare (write the listing, screenshots, build and review info) or submit (send to App Review)
+        description: check (read-only), prepare (write the listing, screenshots, build and review info), submit (send to App Review) or release (a submitted version goes out as soon as Apple approves)
         required: true
         default: check
         type: choice
@@ -15,8 +15,9 @@ on:
           - check
           - prepare
           - submit
+          - release
       version:
-        description: Mobile semver version, the same one uploaded to TestFlight (prepare and submit need it)
+        description: Mobile semver version, the same one uploaded to TestFlight (prepare, submit and release need it)
         required: false
         default: ''
         type: string
@@ -72,7 +73,7 @@ jobs:
           echo "GHOSTEX_ASC_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           echo "GHOSTEX_ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
           echo "GHOSTEX_ASC_ISSUER_ID=$ASC_ISSUER_ID" >> "$GITHUB_ENV"
-      - name: ${{ inputs.mode == 'check' && 'Show the App Store state' || inputs.mode == 'prepare' && 'Prepare the App Store version' || 'Submit the version to App Review' }}
+      - name: ${{ inputs.mode == 'check' && 'Show the App Store state' || inputs.mode == 'prepare' && 'Prepare the App Store version' || inputs.mode == 'release' && 'Release the version after approval' || 'Submit the version to App Review' }}
         env:
           MODE: ${{ inputs.mode }}
           VERSION: ${{ inputs.version }}

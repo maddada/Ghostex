@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn listed_skills_leave_out_the_orchestrator_playbook_and_repeat_none() {
         let names = listed_skill_names();
-        assert!(!names.contains(&"ghostex-orchestrator"));
+        assert!(!names.contains(&"ghostex-coordinator"));
         assert!(names.contains(&"ghostex-cli"));
         let mut unique = names.clone();
         unique.dedup();
@@ -317,7 +317,7 @@ mod tests {
         let params = json!({ "skillName": "../etc" });
         let error = skill_param(params.as_object().expect("params")).expect_err("refused");
         assert_eq!(error.code, "badRequest");
-        let params = json!({ "skillName": "ghostex-orchestrator" });
+        let params = json!({ "skillName": "ghostex-coordinator" });
         assert!(skill_param(params.as_object().expect("params")).is_err());
     }
 

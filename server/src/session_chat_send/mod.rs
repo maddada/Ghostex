@@ -71,6 +71,7 @@ mod paste_verification;
 mod queue;
 mod queued_prompt_escape;
 mod send_http;
+mod send_reopen;
 mod single_paste;
 mod steps;
 #[cfg(test)]
@@ -92,6 +93,7 @@ pub(crate) use paste_verification::*;
 pub use queue::*;
 pub use queued_prompt_escape::*;
 pub(crate) use send_http::*;
+pub(crate) use send_reopen::*;
 pub(crate) use single_paste::*;
 pub use steps::*;
 use worker::*;

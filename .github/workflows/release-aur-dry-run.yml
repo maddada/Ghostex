@@ -1,0 +1,75 @@
+name: AUR ghostex-bin dry run
+
+# CDXC:Release 2026-11-10 DECISION: User: prove the AUR release key works without publishing
+# anything. This runs the release's AUR step with the same key and SSH setup
+# (tooling/release-gpui/aur-ssh-setup.sh) but `publish-aur.mjs --dry-run`: it authenticates,
+# clones ghostex-bin over SSH, checks the AUR grants the key write access, and shows the diff a
+# publish would push, then stops. It never commits or pushes. Arch's own makepkg then checks the
+# rendered PKGBUILD: its .SRCINFO must match ours byte for byte and the release asset's checksum
+# must verify.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to render (MAJOR.MINOR.PATCH); empty means the latest release
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Resolve the release version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="${INPUT_VERSION}"
+          if [ -z "${version}" ]; then
+            version="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq '.tagName')"
+            version="${version#v}"
+          fi
+          echo "Dry run for ghostex-bin ${version}."
+          echo "version=${version}" >>"$GITHUB_OUTPUT"
+      - name: Authenticate to the AUR and dry-run the ghostex-bin push
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -o pipefail
+          if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
+            echo "AUR_SSH_PRIVATE_KEY is not configured." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          source tooling/release-gpui/aur-ssh-setup.sh
+          # list-repos is read-only on the AUR: it names the repositories the key's account maintains.
+          echo "AUR list-repos for this key:"
+          # shellcheck disable=SC2086
+          $GIT_SSH_COMMAND aur@aur.archlinux.org list-repos 2>&1 | tee "$RUNNER_TEMP/aur-repos.log" || true
+          node tooling/release-gpui/publish-aur.mjs --version "${VERSION}" --out "$RUNNER_TEMP/aur" --dry-run 2>&1 |
+            tee "$RUNNER_TEMP/aur.log"
+          {
+            echo "AUR ghostex-bin dry run: $(tail -n 1 "$RUNNER_TEMP/aur.log")"
+            echo
+            echo "Repositories this key's AUR account maintains: $(tr '\n' ' ' <"$RUNNER_TEMP/aur-repos.log")"
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Check the rendered package with Arch's makepkg
+        if: ${{ !cancelled() }}
+        run: |
+          test -f "$RUNNER_TEMP/aur/PKGBUILD"
+          docker run --rm -v "$RUNNER_TEMP/aur:/pkg:ro" archlinux:base-devel bash -euo pipefail -c '
+            useradd -m builder
+            cp -r /pkg /home/builder/pkg && chown -R builder /home/builder/pkg
+            cd /home/builder/pkg
+            su builder -c "makepkg --printsrcinfo" >makepkg.SRCINFO
+            diff -u .SRCINFO makepkg.SRCINFO && echo "makepkg --printsrcinfo matches the rendered .SRCINFO."
+            su builder -c "makepkg --verifysource --skippgpcheck"
+          '

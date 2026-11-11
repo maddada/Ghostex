@@ -154,6 +154,23 @@ pub struct BoardRow {
     /// it up ("iPhone push · Holds it up", work_panel.rs); "" elsewhere.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub lead: String,
+    /// A work item ask's longer explanation under its short title (`item ask --detail`), which
+    /// an opened card shows in the quieter colour; "" elsewhere.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub body: String,
+    /// A work item ask's title's links as word runs (`questions::form_links::word_runs`), null
+    /// when it has none.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub title_runs: Value,
+    /// The words a Reply gave a work item ask (none of its answers), which its Reply button
+    /// shows; "" when an answer was picked or none was given.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub replied: String,
+    /// How much a Ghostex page still asks, drawn after its title in the quieter colour
+    /// ("(14 questions)", "(10/16 answered)", "(not seen yet)"; work_cards.rs `page_count`); ""
+    /// for anything else.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub count: String,
     /// The card is open: it shows its whole line of work and its buttons (one card at a time).
     #[serde(default)]
     pub expanded: bool,
@@ -184,6 +201,10 @@ pub struct BoardRow {
     /// The card's menu, in order: Open, Mention in chat, Tags, Mark done, Remove (or Restore).
     #[serde(default)]
     pub menu: Vec<BoardMenuItem>,
+    /// What the opened card offers besides Mention, the same as the dock's opened row
+    /// (`work_cards::panel_actions`): `{reply, open, showInChat, dismiss, snooze}`, `null` for none.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub actions: Value,
 }
 
 /// One answer on a card that asks the user something.
@@ -341,6 +362,15 @@ pub fn link_tone(link: &Value) -> &'static str {
         ("pr", _, "pending") => "running",
         ("pr", _, _) | ("issue", "open", _) => "good",
         _ => "",
+    }
+}
+
+/// The key a row's answer is locked under: its own, or a work item's Done's (`answerKey`, shared
+/// with its dock row).
+fn answer_key(row: &Value) -> &str {
+    match text(row, "answerKey") {
+        "" => text(row, "key"),
+        key => key,
     }
 }
 
@@ -512,7 +542,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
                         // A work item's ask names its tag (work_panel.rs, as its chat card does).
                         "" => json!({
                             "type": "coordinatorBoardAnswer",
-                            "key": text(row, "key"),
+                            "key": answer_key(row),
                             "item": text(row, "ref"),
                             "label": label,
                             "text": format!("{}: {label}", text(row, "ref")),
@@ -556,6 +586,19 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         },
         answers,
         lead: String::new(),
+        body: text(row, "body").to_string(),
+        title_runs: row.get("titleRuns").cloned().unwrap_or(Value::Null),
+        count: String::new(),
+        replied: given
+            .filter(|given| {
+                !row["answers"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|answer| text(answer, "label") == *given)
+            })
+            .unwrap_or_default()
+            .to_string(),
         key: text(row, "key").to_string(),
         title: title.to_string(),
         detail: text(row, "detail").to_string(),
@@ -608,6 +651,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
             Value::Null
         },
         menu: Vec::new(),
+        actions: Value::Null,
     }
 }
 
@@ -842,12 +886,29 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         note: String::new(),
                         answers: Vec::new(),
                         lead: String::new(),
+                        body: String::new(),
+                        title_runs: Value::Null,
+                        replied: String::new(),
+                        count: if matches!(
+                            asker.kind,
+                            crate::transcript::open_questions::AskerKind::Page
+                        ) {
+                            crate::extras::work_cards::page_count(state, &asker)
+                        } else {
+                            String::new()
+                        },
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,
                         // A question's card opens its form, which is where it is answered.
                         expanded: false,
-                        toggle: Value::Null,
+                        // A click opens the card in place, as every card does (the user's "make it
+                        // be cohesive, so clicking doesn't sometimes expand and sometimes just
+                        // mentions"); Open and Reply are in it.
+                        toggle: json!({
+                            "type": "toggleCoordinatorBoardGroup",
+                            "group": format!("{CARD_KEY_PREFIX}question:{}", asker.id),
+                        }),
                         open: json!({"type": "jumpToQuestion", "id": asker.id}),
                         open_label: "Go to question".to_string(),
                         done: Value::Null,
@@ -855,6 +916,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         tag: String::new(),
                         set_tag: Value::Null,
                         menu: Vec::new(),
+                        actions: Value::Null,
                     },
                 )
             })
@@ -865,12 +927,26 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
 
 /// The board, or `None` on a chat that is not a coordinator or whose gxserver sends no board.
 pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<CoordinatorBoard> {
+    coordinator_board_with(
+        state,
+        context,
+        &crate::extras::work_cards::turns_for_work(state),
+    )
+}
+
+/// [`coordinator_board`], over the chat's turns the caller already read
+/// (`work_cards::turns_for_work`): every work row's Show in chat reads them.
+pub fn coordinator_board_with(
+    state: &ChatState,
+    context: &ChatContext,
+    turns: &[crate::extras::work_cards::Turn],
+) -> Option<CoordinatorBoard> {
     let threads = state.session.coordinator_threads.as_deref()?;
     // The work items, when gxserver sends them, laid out as the board was (work_panel.rs).
     let work_mode = threads.get("work").is_some_and(Value::is_object);
     let built;
     let board = if work_mode {
-        built = crate::extras::work_panel::work_board(&threads["work"]);
+        built = crate::extras::work_panel::work_board_at(&threads["work"], context.now_millis());
         &built
     } else {
         threads.get("board")?
@@ -899,12 +975,17 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
                     now_ms,
                     panels
                         .board_answers
-                        .get(text(row, "key"))
+                        .get(answer_key(row))
                         .map(String::as_str),
                 );
                 if text(row, "kind") == "item" {
                     let chips = question_chips(state, row);
                     out.tags.splice(0..0, chips);
+                }
+                // The opened card's actions, the dock's (Reply, Show in chat, Dismiss, Snooze).
+                if work_mode {
+                    out.actions =
+                        crate::extras::work_cards::panel_actions_with(state, context, row, turns);
                 }
                 // A work item's ask is answered or done, never dropped, moved or tagged by itself:
                 // those act on its item (work_panel.rs).
@@ -927,7 +1008,14 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .and_then(Value::as_u64)
             .map_or(rows.len(), |total| total as usize);
         if id == "needs" {
-            let questions = question_rows(state, now_ms);
+            let mut questions = question_rows(state, now_ms);
+            // Each with the dock's actions for its form or page (Reply, Open, Dismiss, Snooze).
+            for question in &mut questions {
+                if let Some(id) = question.key.strip_prefix("question:") {
+                    question.actions =
+                        crate::extras::work_cards::question_actions(state, context, id);
+                }
+            }
             asked = questions.len();
             total += questions.len();
             rows.splice(0..0, questions);
@@ -988,7 +1076,9 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     // The Work panel's header: "3 for you · 1 blocked · 2 in progress".
     if work_mode {
         if needs > 0 {
-            meta.push(format!("{needs} for you"));
+            // The pill's words ("1 needs you", "4 need you"), so the header and the pill read the
+            // same.
+            meta.push(needs_you(needs));
         }
         if blocked > 0 {
             meta.push(format!("{blocked} blocked"));
@@ -996,16 +1086,17 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         if moving > 0 {
             meta.push(format!("{moving} in progress"));
         }
+        let idle = count("idle");
+        if meta.is_empty() && idle > 0 {
+            meta.push(format!("{idle} not being worked on"));
+        }
         let later = count("later");
         if meta.is_empty() && later > 0 {
             meta.push(format!("{later} later"));
         }
     }
     if needs > 0 && !work_mode {
-        meta.push(format!(
-            "{needs} {}",
-            if needs == 1 { "needs you" } else { "need you" }
-        ));
+        meta.push(needs_you(needs));
     }
     if !work_mode {
         if blocked > 0 {
@@ -1029,15 +1120,16 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     // User, of "Board •1 •1 •5" in pink, red and amber: "also red for blocked need to be it's own
     // pill :))". The Blocked count leaves the Board pill for a Blocked pill beside it
     // (`blocked_pill`), which opens the board at Blocked.
-    let pill_counts = [
-        ("needs", needs.saturating_sub(asked)),
-        ("blocked", blocked),
-        ("moving", moving),
-    ]
-    .into_iter()
-    .filter(|(_, count)| *count > 0)
-    .map(|(id, count)| (id.to_string(), count))
-    .collect();
+    // Superseded 2026-11-10: the ? pill no longer counts what the dock above the chat box shows
+    // (`questions::open_questions` `pill_count`), so the pill's Needs you is the group's whole
+    // count, the same number the panel's header and groups show (the user's "the counts
+    // disagree").
+    let _ = asked;
+    let pill_counts = [("needs", needs), ("blocked", blocked), ("moving", moving)]
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .map(|(id, count)| (id.to_string(), count))
+        .collect();
     let empty = out
         .iter()
         .filter(|group| !matches!(group.id.as_str(), "ideas" | "removed"))
@@ -1085,11 +1177,14 @@ pub struct BoardInputs {
     resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
     later_question_ids: Stamped<Vec<String>>,
     removed_question_ids: Stamped<Vec<String>>,
+    /// Where the rows' Show in chat point (`work_cards::turns_mark`).
+    turns: (usize, String, String, Option<String>),
 }
 
 impl BoardInputs {
-    fn of(state: &ChatState) -> Self {
+    fn of(state: &ChatState, turns: &[crate::extras::work_cards::Turn]) -> Self {
         Self {
+            turns: crate::extras::work_cards::turns_mark(turns),
             threads: state.session.coordinator_threads.clone(),
             panels: state.extras.panels.clone(),
             askers: state.transcript_view.askers.clone(),
@@ -1101,8 +1196,9 @@ impl BoardInputs {
     }
 
     /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
-    fn matches(&mut self, state: &ChatState) -> bool {
-        self.threads.same_as(&state.session.coordinator_threads)
+    fn matches(&mut self, state: &ChatState, turns: &[crate::extras::work_cards::Turn]) -> bool {
+        self.turns == crate::extras::work_cards::turns_mark(turns)
+            && self.threads.same_as(&state.session.coordinator_threads)
             && self.panels.same_as(&state.extras.panels)
             && self.askers.same_as(&state.transcript_view.askers)
             && self.questions.matches(&state.questions)
@@ -1120,10 +1216,17 @@ impl BoardInputs {
 /// and the value.
 pub type KeptBoard = (BoardInputs, i64, Option<i64>, crate::document::SharedValue);
 
-/// When the first age on the board changes after `now_ms`: the next whole minute since any row's
-/// time (`age_label` reads only whole minutes), over every row the board can show.
+/// When the board next reads differently with nothing but the clock moving: the first age label on
+/// it to change (`age_label_changes_at`, over every row the board can show), or the first snooze
+/// to end, which moves its ask back under Needs you.
+///
+/// CDXC:SessionChat 2026-11-11 WHY:
+/// It was the next whole minute since ANY item's time. A coordinator with 231 items has one of
+/// those about every quarter of a second, so the kept board never stood and every event of the
+/// chat built the whole panel again (`work_cards.rs` `turns`). An age reads in minutes for an
+/// hour, then in hours, then in days, so most rows change hourly or daily.
 fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
-    let next = |at: i64| at + ((now_ms - at).max(0) / 60_000 + 1) * 60_000;
+    let next = |at: i64| crate::transcript::message_time::age_label_changes_at(now_ms, at);
     let board_rows = state
         .session
         .coordinator_threads
@@ -1159,7 +1262,11 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
     let questions = crate::questions::open_questions::unanswered(state)
         .into_iter()
         .filter_map(|asker| asker.at);
-    board_rows.chain(questions).map(next).min()
+    board_rows
+        .chain(questions)
+        .map(next)
+        .chain(crate::extras::work_cards::snoozes_end_at(state, now_ms))
+        .min()
 }
 
 /// [`project`], reused while its inputs are the ones `kept` was built from and no age on it moved.
@@ -1167,21 +1274,43 @@ pub fn project_kept(
     state: &ChatState,
     context: &ChatContext,
     kept: &mut Option<KeptBoard>,
+    turns: &[crate::extras::work_cards::Turn],
 ) -> crate::document::SharedValue {
     let now_ms = context.now_millis();
     if let Some((inputs, built_at, changes_at, board)) = kept.as_mut() {
-        if now_ms >= *built_at && changes_at.is_none_or(|at| now_ms < at) && inputs.matches(state) {
+        if now_ms >= *built_at
+            && changes_at.is_none_or(|at| now_ms < at)
+            && inputs.matches(state, turns)
+        {
             return board.clone();
         }
     }
-    let board = crate::document::SharedValue::from(project(state, context));
+    let board = crate::document::SharedValue::from(
+        coordinator_board_with(state, context, turns)
+            .and_then(|board| serde_json::to_value(board).ok())
+            .unwrap_or(Value::Null),
+    );
     *kept = Some((
-        BoardInputs::of(state),
+        BoardInputs::of(state, turns),
         now_ms,
         ages_change_at(state, now_ms),
         board.clone(),
     ));
     board
+}
+
+/// A Needs you count in words that agree with it: "1 needs you", "2 need you".
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User, of the dock header's "1 need you": it should say "needs you". Every place that writes
+/// this count (the Work pill, the Work panel's header, the dock's header and its "N more" line)
+/// agrees with its number. Supersedes "need you" for any number.
+pub fn needs_you(count: usize) -> String {
+    if count == 1 {
+        "1 needs you".to_string()
+    } else {
+        format!("{count} need you")
+    }
 }
 
 /// The document value, `null` when there is no board.
@@ -1207,11 +1336,32 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
         "" => "Board".to_string(),
         title => title.to_string(),
     };
+    // The counts in words while the strip has room ("Work · 4 need you · 7 in progress"); a tight
+    // strip drops the label and keeps the coloured counts (the renderers), the tooltip saying them.
+    let count_of = |id: &str| {
+        board["pillCounts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|pair| pair[0] == id)
+            .and_then(|pair| pair[1].as_u64())
+            .unwrap_or(0)
+    };
+    let mut words = vec![title.clone()];
+    let needs = count_of("needs");
+    if needs > 0 {
+        words.push(needs_you(needs as usize));
+    }
+    let moving = count_of("moving");
+    if moving > 0 {
+        words.push(format!("{moving} in progress"));
+    }
+    let label = words.join(" \u{b7} ");
     Some(ChatPill {
         switch: None,
         menu: Vec::new(),
         id: BOARD_PILL.to_string(),
-        label: title.clone(),
+        label,
         count: String::new(),
         waiting: String::new(),
         running: false,
@@ -1286,14 +1436,54 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
     })
 }
 
+/// The Work panel opens at the row `key` (an item's `work:12`, an ask's `work-ask:W3:Q12`): its
+/// group unfolds and shows every row, and the renderers open the panel and ring the row, the chat
+/// staying where it is (`open_questions::show`).
+pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect> {
+    let group = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .map(crate::extras::work_panel::work_board)
+        .and_then(|board| {
+            board["groups"].as_array()?.iter().find_map(|group| {
+                group["rows"]
+                    .as_array()?
+                    .iter()
+                    .any(|row| row["key"] == key)
+                    .then(|| text(group, "id").to_string())
+            })
+        });
+    let Some(group) = group else {
+        return vec![crate::effect::Effect::Toast {
+            level: "info".to_string(),
+            message: "That isn't on this chat's Work panel any more.".to_string(),
+        }];
+    };
+    let panels = &mut state.extras.panels;
+    if crate::extras::work_panel::folded_by_default(&group) != panels.board_toggled.contains(&group)
+    {
+        toggle(&mut panels.board_toggled, &group);
+    }
+    panels.board_expanded.insert(group);
+    let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
+    panels.board_focus = Some((key.to_string(), seq));
+    Vec::new()
+}
+
 /// `showCoordinatorBoardGroup {group}`: the board opens at `group` (the Blocked pill), unfolded
 /// and showing every row, scrolled to its first card.
 pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effect> {
-    let key = state
-        .session
-        .coordinator_threads
-        .as_deref()
-        .and_then(|threads| threads.get("board"))
+    // The Work panel's own groups when the chat has work items (`work_panel::work_board`), as the
+    // dock's status line counts them; else gxserver's board.
+    let threads = state.session.coordinator_threads.as_deref();
+    let built = threads
+        .and_then(|threads| threads.get("work"))
+        .map(crate::extras::work_panel::work_board);
+    let key = built
+        .as_ref()
+        .or_else(|| threads.and_then(|threads| threads.get("board")))
         .and_then(|board| board.get("groups"))
         .and_then(Value::as_array)
         .into_iter()
@@ -1308,8 +1498,14 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
     let Some(key) = key else {
         return Vec::new();
     };
+    let work_mode = built.is_some();
     let panels = &mut state.extras.panels;
-    if folded_by_default(group) != panels.board_toggled.contains(group) {
+    let folded = if work_mode {
+        crate::extras::work_panel::folded_by_default(group)
+    } else {
+        folded_by_default(group)
+    };
+    if folded != panels.board_toggled.contains(group) {
         toggle(&mut panels.board_toggled, group);
     }
     panels.board_expanded.insert(group.to_string());
@@ -1475,18 +1671,25 @@ pub fn answer(
     if text.is_empty() || item.is_empty() || state.extras.panels.board_answers.contains_key(key) {
         return None;
     }
+    let reply = field("op") == "reply";
     let panels = &mut state.extras.panels;
     panels
         .board_answers
         .insert(key.to_string(), label.to_string());
+    // Recorded already and only its message failed: this try sends the message alone.
+    if panels.board_answer_unsent.contains(key) {
+        return Some(answer_message(state, request_id, key, label, text, reply));
+    }
     panels.board_answer_requests.insert(
         request_id,
-        (key.to_string(), label.to_string(), text.to_string()),
+        (key.to_string(), label.to_string(), text.to_string(), reply),
     );
     let mut body = json!({
         "projectId": state.identity.project_id,
         "sessionId": state.identity.session_id,
-        "op": "answer",
+        // `cancel` withdraws a work ask for good (work.rs); its message goes the same way.
+        // `reply` records the user's own words (the dock's Reply).
+        "op": match field("op") { "cancel" => "cancel", "reply" => "reply", _ => "answer" },
         "item": item,
         "answer": label,
     });
@@ -1495,6 +1698,11 @@ pub fn answer(
     if !ask.is_empty() {
         body["ask"] = json!(ask);
     }
+    state
+        .extras
+        .panels
+        .board_answer_calls
+        .insert(request_id, body.clone());
     Some(crate::effect::Effect::SendRpc {
         request_id,
         method: crate::wire::ChatRpcMethod::CoordinatorBoard,
@@ -1502,52 +1710,229 @@ pub fn answer(
     })
 }
 
+/// The message that tells the coordinator a card's answer, once gxserver has recorded it.
+fn answer_message(
+    state: &mut ChatState,
+    request_id: u64,
+    key: &str,
+    label: &str,
+    text: &str,
+    reply: bool,
+) -> crate::effect::Effect {
+    let params = json!({
+        "text": text,
+        "sendRequestId": answer_send_id(&state.identity.session_id, key, label),
+    });
+    let panels = &mut state.extras.panels;
+    panels
+        .board_answer_sends
+        .insert(request_id, (key.to_string(), label.to_string(), reply));
+    panels.board_answer_calls.insert(request_id, params.clone());
+    crate::effect::Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
+        params: Box::new(params),
+    }
+}
+
+/// Fires when the board answers gxserver never answered go again.
+pub const BOARD_ANSWER_RETRY_TIMER: &str = "extras.boardAnswerRetry";
+
+/// A board answer's call (its record or its message) got no answer from Ghostex's service, or
+/// met it starting: the answer stays given, its card stays locked, and the same call goes again
+/// every two seconds until the service answers. `None` when `request_id` is not such a call or
+/// the outcome is an answer of gxserver's own, which [`settle_answer`] takes.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "you should self heal, don't show me this message, why do i need to press enter again
+/// when you can press it for me". An answer given in the dock or the Work panel (a pick, Done, a
+/// Reply) that met a restarting gxserver unlocked its card with an error toast, and a Reply
+/// opened its box again for the user to send a second time. Time fixes that, so the app waits it
+/// out, as a message from the chat box does (`composer/delivery.rs`). The record refuses a
+/// second answer and the message carries the card's own send id, so a call that did land is not
+/// applied twice.
+pub fn wait_out_answer(
+    state: &mut ChatState,
+    request_id: u64,
+    outcome: &crate::wire::RpcOutcome,
+    context: &ChatContext,
+) -> Option<Vec<crate::effect::Effect>> {
+    let crate::wire::RpcOutcome::Err { code, .. } = outcome else {
+        return None;
+    };
+    if !matches!(
+        code.as_deref(),
+        None | Some("unreachable") | Some("serverStarting")
+    ) {
+        return None;
+    }
+    let panels = &mut state.extras.panels;
+    let waiting = if let Some((key, label, reply)) = panels.board_answer_sends.remove(&request_id) {
+        (key, label, String::new(), reply, true)
+    } else {
+        let (key, label, text, reply) = panels.board_answer_requests.remove(&request_id)?;
+        (key, label, text, reply, false)
+    };
+    let params = panels
+        .board_answer_calls
+        .remove(&request_id)
+        .unwrap_or(Value::Null);
+    let (key, label, text, reply, message) = waiting;
+    panels
+        .board_answer_waiting
+        .push((key, label, text, reply, message, params));
+    state.core.timers.arm_once(
+        BOARD_ANSWER_RETRY_TIMER,
+        context.now_ms,
+        crate::session::constants::UNREACHABLE_RETRY_DELAY_MS as f64,
+    );
+    Some(Vec::new())
+}
+
+/// The retry clock fired: every waiting board answer call goes again as it was.
+pub fn resend_waiting_answers(
+    state: &mut ChatState,
+    mut next_request_id: impl FnMut() -> u64,
+) -> Vec<crate::effect::Effect> {
+    let waiting = std::mem::take(&mut state.extras.panels.board_answer_waiting);
+    let panels = &mut state.extras.panels;
+    waiting
+        .into_iter()
+        .map(|(key, label, text, reply, message, params)| {
+            let request_id = next_request_id();
+            panels.board_answer_calls.insert(request_id, params.clone());
+            let method = if message {
+                panels
+                    .board_answer_sends
+                    .insert(request_id, (key, label, reply));
+                crate::wire::ChatRpcMethod::SendSessionChatMessage
+            } else {
+                panels
+                    .board_answer_requests
+                    .insert(request_id, (key, label, text, reply));
+                crate::wire::ChatRpcMethod::CoordinatorBoard
+            };
+            crate::effect::Effect::SendRpc {
+                request_id,
+                method,
+                params: Box::new(params),
+            }
+        })
+        .collect()
+}
+
+/// The message's send id: the card and its answer, so the send ledger drops a repeat of the same
+/// answer. gxserver takes 1 to 128 characters, and a Reply's answer is the user's own words, so a
+/// longer one is the card and words hashed instead.
+///
+/// CDXC:Coordinators 2026-11-10 WHY:
+/// The user's typed Reply on a Work panel item failed with "sendRequestId must be a string of 1
+/// to 128 characters." and his text was gone: the id held the whole reply.
+fn answer_send_id(session: &str, key: &str, label: &str) -> String {
+    let plain = format!("board-answer-{session}-{key}-{label}");
+    if plain.chars().count() <= 128 {
+        return plain;
+    }
+    // FNV-1a, so the same answer has the same id on every client and run.
+    let hash = plain.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    });
+    let short: String = session.chars().take(40).collect();
+    format!("board-answer-{short}-{hash:016x}")
+}
+
+/// A Reply that did not go: the card unlocks, and the Reply box opens again with the words and
+/// why (desktop `workReplyFailed`), so nothing typed is lost.
+fn reply_failed(key: &str, label: &str, message: &str) -> crate::effect::Effect {
+    crate::effect::Effect::HostAction {
+        action: "workReplyFailed".to_string(),
+        params: Box::new(json!({ "key": key, "text": label, "message": message })),
+    }
+}
+
 /// Takes gxserver's answer to [`answer`]'s record: once recorded, the message goes; refused because
 /// the card was already answered, nothing goes and the card stays locked; refused otherwise, the
-/// card unlocks and says why. `None` when `request_id` is not such a record.
+/// card unlocks and says why. A Reply refused either way opens again with its words. `None` when
+/// `request_id` is not such a record.
 pub fn settle_answer(
     state: &mut ChatState,
     request_id: u64,
     answer: Result<&Value, String>,
     next_request_id: u64,
 ) -> Option<Vec<crate::effect::Effect>> {
-    let (key, label, text) = state
+    state.extras.panels.board_answer_calls.remove(&request_id);
+    if let Some((key, label, reply)) = state.extras.panels.board_answer_sends.remove(&request_id) {
+        return Some(settle_answer_message(state, &key, &label, reply, answer));
+    }
+    let (key, label, text, reply) = state
         .extras
         .panels
         .board_answer_requests
         .remove(&request_id)?;
     Some(match answer {
-        Ok(_) => {
-            state
-                .extras
-                .panels
-                .board_change_requests
-                .insert(next_request_id);
-            vec![crate::effect::Effect::SendRpc {
-                request_id: next_request_id,
-                method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
-                params: Box::new(json!({
-                    "text": text,
-                    "sendRequestId": format!(
-                        "board-answer-{}-{key}-{label}",
-                        state.identity.session_id
-                    ),
-                })),
-            }]
-        }
-        Err(message) if message.contains("already answered") => Vec::new(),
+        Ok(_) => vec![answer_message(
+            state,
+            next_request_id,
+            &key,
+            &label,
+            &text,
+            reply,
+        )],
+        Err(message) if message.contains("already answered") && !reply => Vec::new(),
         Err(message) => {
-            state.extras.panels.board_answers.remove(&key);
-            vec![crate::effect::Effect::Toast {
+            let message = if message.is_empty() {
+                "Couldn't send that answer.".to_string()
+            } else {
+                message
+            };
+            if !message.contains("already answered") {
+                state.extras.panels.board_answers.remove(&key);
+            }
+            let mut effects = vec![crate::effect::Effect::Toast {
                 level: "error".to_string(),
-                message: if message.is_empty() {
-                    "Couldn't send that answer.".to_string()
-                } else {
-                    message
-                },
-            }]
+                message: message.clone(),
+            }];
+            if reply {
+                effects.push(reply_failed(&key, &label, &message));
+            }
+            effects
         }
     })
+}
+
+/// Takes the answer to an answer's message: sent, nothing more; failed, the card unlocks and a try
+/// again sends the message alone (it is recorded), and a Reply opens again with its words.
+fn settle_answer_message(
+    state: &mut ChatState,
+    key: &str,
+    label: &str,
+    reply: bool,
+    answer: Result<&Value, String>,
+) -> Vec<crate::effect::Effect> {
+    let panels = &mut state.extras.panels;
+    match answer {
+        Ok(_) => {
+            panels.board_answer_unsent.remove(key);
+            Vec::new()
+        }
+        Err(message) => {
+            panels.board_answers.remove(key);
+            panels.board_answer_unsent.insert(key.to_string());
+            let message = if message.is_empty() {
+                "Couldn't send that answer.".to_string()
+            } else {
+                message
+            };
+            let mut effects = vec![crate::effect::Effect::Toast {
+                level: "error".to_string(),
+                message: message.clone(),
+            }];
+            if reply {
+                effects.push(reply_failed(key, label, &message));
+            }
+            effects
+        }
+    }
 }
 
 /// `toggleCoordinatorBoardGroup {group}`: folds or unfolds a group; `coordinatorBoardMore
@@ -1750,6 +2135,7 @@ mod tests {
             skipped: Vec::new(),
             superseded: Vec::new(),
             inherited: false,
+            seen_only: false,
             said: Vec::new(),
             title: format!("About {tag}?"),
             at: Some(at),
@@ -1823,6 +2209,94 @@ mod tests {
             10,
         );
         assert_eq!(refused, Some(Vec::new()));
+    }
+
+    /// An answer whose call gxserver never answered stays given and goes again by itself, record
+    /// and message alike, as the same call (CDXC:SessionChat 2026-11-11 on `wait_out_answer`).
+    #[test]
+    fn a_card_answer_ghostex_did_not_answer_goes_again_by_itself() {
+        let unanswered = crate::wire::RpcOutcome::Err {
+            code: None,
+            message: "Could not read gxserver response.".into(),
+            endpoint: None,
+        };
+        let click = json!({"key": "item:7", "item": "B7", "label": "Yes", "text": "B7: Yes"});
+        let mut state = ChatState::default();
+        state.identity.session_id = "Gcoord".into();
+        let Some(crate::effect::Effect::SendRpc { params: record, .. }) =
+            answer(&mut state, click.as_object().unwrap(), 1)
+        else {
+            panic!("the record goes")
+        };
+        // gxserver is restarting: no toast, the card stays locked, the record waits.
+        let waited = wait_out_answer(&mut state, 1, &unanswered, &context());
+        assert_eq!(waited, Some(Vec::new()), "nothing is shown");
+        assert_eq!(
+            state
+                .extras
+                .panels
+                .board_answers
+                .get("item:7")
+                .map(String::as_str),
+            Some("Yes"),
+            "the answer stays given"
+        );
+        assert!(state.core.timers.is_armed(BOARD_ANSWER_RETRY_TIMER));
+        let mut next = 10;
+        let again = resend_waiting_answers(&mut state, || {
+            next += 1;
+            next
+        });
+        let [crate::effect::Effect::SendRpc {
+            request_id,
+            method,
+            params,
+        }] = again.as_slice()
+        else {
+            panic!("the record goes again")
+        };
+        assert_eq!(*method, crate::wire::ChatRpcMethod::CoordinatorBoard);
+        assert_eq!(params, &record, "as the call it was");
+        // Recorded now: its message goes, and that too is waited out under the card's own id.
+        let sent = settle_answer(&mut state, *request_id, Ok(&json!({})), 20).unwrap();
+        let [crate::effect::Effect::SendRpc {
+            params: message, ..
+        }] = sent.as_slice()
+        else {
+            panic!("the message goes")
+        };
+        assert_eq!(
+            wait_out_answer(&mut state, 20, &unanswered, &context()),
+            Some(Vec::new())
+        );
+        let again = resend_waiting_answers(&mut state, || 30);
+        let [crate::effect::Effect::SendRpc { method, params, .. }] = again.as_slice() else {
+            panic!("the message goes again")
+        };
+        assert_eq!(*method, crate::wire::ChatRpcMethod::SendSessionChatMessage);
+        assert_eq!(params, message);
+        assert_eq!(params["sendRequestId"], "board-answer-Gcoord-item:7-Yes");
+        // It lands: nothing waits, nothing is in flight.
+        assert_eq!(
+            settle_answer(&mut state, 30, Ok(&json!({})), 40),
+            Some(Vec::new())
+        );
+        let panels = &state.extras.panels;
+        assert!(panels.board_answer_waiting.is_empty() && panels.board_answer_calls.is_empty());
+        // A refusal of gxserver's own is not waited out.
+        answer(
+            &mut state,
+            json!({"key": "item:8", "item": "B8", "label": "No", "text": "B8: No"})
+                .as_object()
+                .unwrap(),
+            50,
+        );
+        let refused = crate::wire::RpcOutcome::Err {
+            code: Some("invalidState".into()),
+            message: "B8 is closed.".into(),
+            endpoint: None,
+        };
+        assert_eq!(wait_out_answer(&mut state, 50, &refused, &context()), None);
     }
 
     /// Blocked has its own pill, only while anything is blocked; the Board pill keeps Needs you and
@@ -2056,5 +2530,165 @@ mod tests {
             coordinator_board(&state, &context()).unwrap().focus["seq"],
             2
         );
+    }
+
+    /// 11 Nov 2026 01:00:00 UTC.
+    const NOW: i64 = 1_794_358_800_000;
+
+    /// `at_ms` as gxserver writes a time, for a day of November 2026.
+    fn iso(at_ms: i64) -> String {
+        // 1 Nov 2026 00:00:00 UTC.
+        let since = at_ms - 1_793_491_200_000;
+        assert!(
+            (0..30 * 86_400_000).contains(&since),
+            "a time in November 2026"
+        );
+        let seconds = since / 1000;
+        format!(
+            "2026-11-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+            seconds / 86_400 + 1,
+            seconds % 86_400 / 3600,
+            seconds % 3600 / 60,
+            seconds % 60,
+            since % 1000
+        )
+    }
+
+    fn work_item(number: usize, aged_ms: i64, asks: Value) -> Value {
+        let at = iso(NOW - aged_ms);
+        json!({
+            "key": format!("work:{number}"), "ref": format!("W{number}"), "kind": "item",
+            "title": format!("Work item {number}"),
+            "status": if asks.as_array().is_some_and(|asks| !asks.is_empty()) { "needs" } else { "moving" },
+            "at": at, "now": "A thread is on it", "today": true, "asks": asks, "threads": [],
+            "waits": [], "steps": [],
+            "owner": { "kind": "coordinator", "label": "Coordinator" },
+            "history": [{ "kind": "add", "at": at, "text": "added" }],
+        })
+    }
+
+    fn work_state(items: Vec<Value>) -> ChatState {
+        let mut state = ChatState::default();
+        *state.session.coordinator_threads =
+            Some(json!({"threads": [], "total": 0, "work": { "items": items }}).into());
+        let message = |id: &str, role: &str, at: i64| -> crate::state::ChatRow {
+            std::sync::Arc::new(
+                serde_json::from_value(json!({
+                    "id": id, "role": role, "timestamp": at, "source": "transcript",
+                    "blocks": [{ "type": "text", "text": "words" }],
+                }))
+                .unwrap(),
+            )
+        };
+        state.messages.composed = vec![
+            message("u1", "user", NOW - 30 * 86_400_000),
+            message("a1", "assistant", NOW - 30 * 86_400_000 + 1_000),
+        ];
+        state
+    }
+
+    fn at(now_ms: i64) -> ChatContext {
+        ChatContext {
+            now_ms: now_ms as f64,
+            ..ChatContext::default()
+        }
+    }
+
+    /// The kept Work panel is the same value until a label on it changes: hours and days old, its
+    /// rows change by the hour, not with every minute of every row (CDXC:SessionChat 2026-11-11
+    /// on `ages_change_at`).
+    #[test]
+    fn a_kept_work_panel_stands_until_a_label_on_it_changes() {
+        let hour = 3_600_000;
+        let state = work_state(vec![
+            work_item(1, 3 * hour + 20 * 60_000, json!([])),
+            work_item(2, 50 * hour, json!([])),
+        ]);
+        let turns = crate::extras::work_cards::turns_for_work(&state);
+        let mut kept = None;
+        let built = project_kept(&state, &at(NOW), &mut kept, &turns);
+        assert!(built.is_object(), "a coordinator with work has a panel");
+        // Thirty nine minutes on: the first row still reads 3h, the second 2d.
+        for minutes in [1, 7, 39] {
+            let later = project_kept(&state, &at(NOW + minutes * 60_000), &mut kept, &turns);
+            assert!(
+                std::sync::Arc::ptr_eq(&built.0, &later.0),
+                "kept {minutes} minutes on"
+            );
+        }
+        // At 4h the first row's age changes, and the panel is built again.
+        let changed = project_kept(&state, &at(NOW + 40 * 60_000), &mut kept, &turns);
+        assert!(!std::sync::Arc::ptr_eq(&built.0, &changed.0));
+        assert_ne!(*built.0, *changed.0, "the age on it moved");
+
+        // A row younger than an hour changes with its minute, and only then.
+        let state = work_state(vec![work_item(1, 5 * 60_000 + 10_000, json!([]))]);
+        let mut kept = None;
+        let built = project_kept(&state, &at(NOW), &mut kept, &turns);
+        let same = project_kept(&state, &at(NOW + 49_000), &mut kept, &turns);
+        assert!(std::sync::Arc::ptr_eq(&built.0, &same.0));
+        let next = project_kept(&state, &at(NOW + 50_000), &mut kept, &turns);
+        assert!(!std::sync::Arc::ptr_eq(&built.0, &next.0));
+    }
+
+    /// A snooze ending brings its ask back under Needs you when it ends, however old its rows.
+    #[test]
+    fn a_kept_work_panel_ends_with_a_snooze() {
+        let until = iso(NOW + 90_000);
+        let asked = iso(NOW - 50 * 3_600_000);
+        let state = work_state(vec![work_item(
+            1,
+            50 * 3_600_000,
+            json!([{ "tag": "Q1", "open": true, "askedAt": asked, "title": "Which one?",
+                     "text": "Which one?", "snoozedUntil": until }]),
+        )]);
+        let turns = crate::extras::work_cards::turns_for_work(&state);
+        assert_eq!(ages_change_at(&state, NOW), Some(NOW + 90_000));
+        let mut kept = None;
+        let snoozed = project_kept(&state, &at(NOW), &mut kept, &turns);
+        let still = project_kept(&state, &at(NOW + 89_999), &mut kept, &turns);
+        assert!(std::sync::Arc::ptr_eq(&snoozed.0, &still.0));
+        let back = project_kept(&state, &at(NOW + 90_000), &mut kept, &turns);
+        assert_ne!(*snoozed.0, *back.0, "the ask is back under Needs you");
+    }
+
+    /// Every work row's actions are the ones it had when each row walked the chat itself.
+    #[test]
+    fn one_walk_of_the_chat_serves_every_work_row() {
+        let asked = iso(NOW - 60_000);
+        let state = work_state(vec![
+            work_item(1, 60_000, json!([])),
+            work_item(
+                2,
+                60_000,
+                json!([{ "tag": "Q2", "open": true, "askedAt": asked, "title": "Which one?",
+                         "text": "Which one?" }]),
+            ),
+            work_item(3, 120_000, json!([])),
+        ]);
+        let board = coordinator_board(&state, &at(NOW)).unwrap();
+        let built = crate::extras::work_panel::work_board_at(
+            &state.session.coordinator_threads.as_ref().unwrap()["work"],
+            NOW,
+        );
+        let mut rows = 0;
+        for group in built["groups"].as_array().unwrap() {
+            for row in group["rows"].as_array().into_iter().flatten() {
+                let own = crate::extras::work_cards::panel_actions(&state, &at(NOW), row);
+                let drawn = board
+                    .groups
+                    .iter()
+                    .flat_map(|group| group.rows.iter())
+                    .find(|drawn| drawn.key == row["key"].as_str().unwrap_or_default())
+                    .expect("the row is on the panel");
+                assert_eq!(drawn.actions, own, "{}", row["key"]);
+                assert_eq!(
+                    drawn.actions["showInChat"]["messageId"], "a1",
+                    "it points at the reply of its turn"
+                );
+                rows += 1;
+            }
+        }
+        assert_eq!(rows, 3, "two items, and the third as its ask");
     }
 }

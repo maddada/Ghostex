@@ -25,19 +25,6 @@
       "agentWritable": true
     },
     {
-      "key": "closeEmptySessionsOnNew",
-      "title": "Close empty sessions when starting a new one",
-      "subtitle": "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": false,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
       "key": "sessionChatCustomTranscriptWidthEnabled",
       "title": "Custom transcript width (set with Transcript width)",
       "subtitle": "On once Transcript width is dragged to a percentage; off keeps Auto, where the transcript matches the prompt composer's width.",
@@ -53,7 +40,7 @@
     {
       "key": "sessionChatTranscriptWidthPercent",
       "title": "Transcript width",
-      "subtitle": "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
+      "subtitle": "The widest the centered transcript gets. Auto matches the prompt composer; drag to set a percentage of the window instead. Side panels you open take the empty space beside it first, so the text only narrows once none is left. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -213,6 +200,45 @@
       "agentWritable": true
     },
     {
+      "key": "chatQuietViewCoordinators",
+      "title": "Coordinators open in Quiet View",
+      "subtitle": "A coordinator's chat shows your messages, its replies, pages and questions, and folds everything between two replies (reports from threads, messages it sent, tool calls) into one line you can click open. A chat's own choice in More actions > View comes first.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatQuietViewChats",
+      "title": "Other chats open in Quiet View",
+      "subtitle": "Every other chat opens in Quiet View too: the work between two replies folds into one line you can click open. A chat's own choice in More actions > View comes first.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatQuietViewExpandLast",
+      "title": "Expand the last turn in Quiet View",
+      "subtitle": "Show the work after the newest reply, or the turn that is running, open instead of as one line. It folds once a newer reply comes.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatDetailedView",
       "title": "Default to Detailed view",
       "subtitle": "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
@@ -262,6 +288,29 @@
       "type": "boolean",
       "default": false,
       "agentWritable": true
+    },
+    {
+      "key": "newChatTips",
+      "title": "Tips on new chats",
+      "subtitle": "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "newChatTipsReset",
+      "title": "Show tips again",
+      "subtitle": "Bring back every tip you marked Got it, so the new chat card shows them again.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "ui",
+      "agentWritable": false
     },
     {
       "key": "chatSendOnPick",
@@ -318,7 +367,7 @@
     {
       "key": "coordinatorBoardView",
       "title": "Coordinator board opens as",
-      "subtitle": "What the Board pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.",
+      "subtitle": "What the Work items button above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -335,18 +384,6 @@
           "value": "columns"
         }
       ],
-      "agentWritable": true
-    },
-    {
-      "key": "agentGhostexNote",
-      "title": "Tell agents about Ghostex",
-      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": true,
       "agentWritable": true
     },
     {
@@ -434,21 +471,9 @@
       "availability": "Only on Windows and Linux."
     },
     {
-      "key": "sessionDetailsClaudeTaskTools",
-      "title": "Claude task list",
-      "subtitle": "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it. Shown while the Session details panel extension is on.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": true,
-      "agentWritable": true
-    },
-    {
       "key": "markedHandovers",
       "title": "Marked handovers in every session",
-      "subtitle": "Coordinators and their threads start each part of the message they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have every other agent session do the same. Applies to sessions started or resumed after you change it.",
+      "subtitle": "A coordinator's threads start each part of the report they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have your coordinators and every other agent session do the same. A coordinator follows a change from the next message it gets, other sessions once they are started or resumed.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "markedHandovers",
@@ -516,7 +541,7 @@
     {
       "key": "orchestratorPlainReplies",
       "title": "Coordinators answer without markers",
-      "subtitle": "Not recommended. Coordinators answer normally, without marking the sections of their handovers. Their threads still mark the reports they send to the coordinator. Applies to coordinators started or resumed after you change it.",
+      "subtitle": "Not recommended. While Marked handovers is on, coordinators still answer in plain prose, without sections or markers. Their threads still mark the reports they send to the coordinator. A coordinator follows a change from the next message it gets.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "markedHandovers",
@@ -627,56 +652,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "sidebarSpaceSwitchBehavior",
-      "title": "When switching to a Space",
-      "subtitle": "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while the Spaces extension is on.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "enum",
-      "default": "restore",
-      "options": [
-        {
-          "label": "Restore the Space's projects",
-          "value": "restore"
-        },
-        {
-          "label": "Don't switch projects",
-          "value": "keep"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "sidebarSpaceFollowActiveSession",
-      "title": "Switch Space when opening a session from another Space",
-      "subtitle": "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while the Spaces extension is on.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "boolean",
-      "default": false,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "projectSwitchKeepAliveMinutes",
-      "title": "Keep the last project running for",
-      "subtitle": "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "number",
-      "default": 10,
-      "min": 0,
-      "max": 60,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -898,91 +873,6 @@
       "agentWritable": true
     },
     {
-      "key": "commandsPanelDefaultHeightPx",
-      "title": "Commands pane height on double-click",
-      "subtitle": "Height used when opening the command pane and when double-clicking its top resize rail.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "number",
-      "default": 125,
-      "min": 40,
-      "max": 600,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "commandsPanelSide",
-      "title": "Commands pane side",
-      "subtitle": "Dock the command pane below the workspace or to its right.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "enum",
-      "default": "bottom",
-      "options": [
-        {
-          "label": "Bottom",
-          "value": "bottom"
-        },
-        {
-          "label": "Right",
-          "value": "right"
-        }
-      ],
-      "agentWritable": true
-    },
-    {
-      "key": "commandsPanelAutoMinimize",
-      "title": "Auto-minimize Commands pane",
-      "subtitle": "Minimize the Commands pane this long after you move focus elsewhere and the pointer leaves it. Commands keep running. Off keeps the pane open.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "boolean",
-      "default": true,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "commandsPanelAutoMinimizeDelaySeconds",
-      "title": "Minimize after (set with Auto-minimize Commands pane)",
-      "subtitle": "How long the Commands pane stays open after focus and the pointer leave it.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "number",
-      "default": 60,
-      "options": [
-        {
-          "label": "15 seconds",
-          "value": "15"
-        },
-        {
-          "label": "30 seconds",
-          "value": "30"
-        },
-        {
-          "label": "1 minute",
-          "value": "60"
-        },
-        {
-          "label": "2 minutes",
-          "value": "120"
-        },
-        {
-          "label": "5 minutes",
-          "value": "300"
-        }
-      ],
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
       "key": "sidebarHideProjectsWithoutSessions",
       "title": "Hide projects without sessions",
       "subtitle": "Leave projects with no sessions out of the Project sidebar, whatever state a session is in; the open project always stays, and a Show all projects row at the end of the list brings them back. Also in the sidebar's Sort & Filter menu.",
@@ -1056,6 +946,19 @@
       "agentWritable": true
     },
     {
+      "key": "closeEmptySessionsOnNew",
+      "title": "Close empty sessions when starting a new one",
+      "subtitle": "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "enableSessionParking",
       "title": "Enable session parking",
       "subtitle": "Move deferred sessions into a collapsible Parked section at the bottom of the sidebar.",
@@ -1111,6 +1014,53 @@
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
       "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "sidebarSpacesEnabled",
+      "title": "Spaces",
+      "subtitle": "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping. Off by default; your saved Spaces are kept while it is off.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "spaces",
+      "sectionTitle": "Spaces",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "sidebarSpaceSwitchBehavior",
+      "title": "When switching to a Space",
+      "subtitle": "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while Spaces is on.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "spaces",
+      "sectionTitle": "Spaces",
+      "type": "enum",
+      "default": "restore",
+      "options": [
+        {
+          "label": "Restore the Space's projects",
+          "value": "restore"
+        },
+        {
+          "label": "Don't switch projects",
+          "value": "keep"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "sidebarSpaceFollowActiveSession",
+      "title": "Switch Space when opening a session from another Space",
+      "subtitle": "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while Spaces is on.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "spaces",
+      "sectionTitle": "Spaces",
       "type": "boolean",
       "default": false,
       "advanced": true,
@@ -1532,6 +1482,19 @@
       "agentWritable": true
     },
     {
+      "key": "dimInactiveProjects",
+      "title": "Dim inactive projects",
+      "subtitle": "Fade a project in the sidebar when all its sessions are asleep or closed, none is working and none waits on you, so projects you are not using stand apart. A project with no sessions counts as inactive.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sleepingSessions",
+      "sectionTitle": "Sleeping Sessions",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "wakeSleepingSessionsOnSelect",
       "title": "Wake sleeping sessions when selected",
       "subtitle": "Wake a sleeping session as soon as you select it. Turn off to open it with a Resume button instead, so switching sessions does not wake it by accident.",
@@ -1875,6 +1838,91 @@
       "agentWritable": true
     },
     {
+      "key": "commandsPanelDefaultHeightPx",
+      "title": "Commands pane height on double-click",
+      "subtitle": "Height used when opening the command pane and when double-clicking its top resize rail.",
+      "tab": "terminal",
+      "tabTitle": "Terminal",
+      "section": "terminal",
+      "sectionTitle": "Terminal",
+      "type": "number",
+      "default": 125,
+      "min": 40,
+      "max": 600,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "commandsPanelSide",
+      "title": "Commands pane side",
+      "subtitle": "Dock the command pane below the workspace or to its right.",
+      "tab": "terminal",
+      "tabTitle": "Terminal",
+      "section": "terminal",
+      "sectionTitle": "Terminal",
+      "type": "enum",
+      "default": "bottom",
+      "options": [
+        {
+          "label": "Bottom",
+          "value": "bottom"
+        },
+        {
+          "label": "Right",
+          "value": "right"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "commandsPanelAutoMinimize",
+      "title": "Auto-minimize Commands pane",
+      "subtitle": "Minimize the Commands pane this long after you move focus elsewhere and the pointer leaves it. Commands keep running. Off keeps the pane open.",
+      "tab": "terminal",
+      "tabTitle": "Terminal",
+      "section": "terminal",
+      "sectionTitle": "Terminal",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "commandsPanelAutoMinimizeDelaySeconds",
+      "title": "Minimize after (set with Auto-minimize Commands pane)",
+      "subtitle": "How long the Commands pane stays open after focus and the pointer leave it.",
+      "tab": "terminal",
+      "tabTitle": "Terminal",
+      "section": "terminal",
+      "sectionTitle": "Terminal",
+      "type": "number",
+      "default": 60,
+      "options": [
+        {
+          "label": "15 seconds",
+          "value": "15"
+        },
+        {
+          "label": "30 seconds",
+          "value": "30"
+        },
+        {
+          "label": "1 minute",
+          "value": "60"
+        },
+        {
+          "label": "2 minutes",
+          "value": "120"
+        },
+        {
+          "label": "5 minutes",
+          "value": "300"
+        }
+      ],
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "promptEditorBackend",
       "title": "Editor for ⌃G and $EDITOR prompts",
       "subtitle": "Choose which editor ⌃G uses when a terminal prompt asks for $EDITOR.",
@@ -2022,7 +2070,7 @@
       "type": "boolean",
       "default": true,
       "advanced": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "terminalPastePreviewableImages",
@@ -3278,6 +3326,21 @@
       "sectionTitle": "Auto Sleep",
       "type": "boolean",
       "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "projectSwitchKeepAliveMinutes",
+      "title": "Keep the last project running for",
+      "subtitle": "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead.",
+      "tab": "system",
+      "tabTitle": "Power & Sleep",
+      "section": "autoSleep",
+      "sectionTitle": "Auto Sleep",
+      "type": "number",
+      "default": 10,
+      "min": 0,
+      "max": 60,
       "advanced": true,
       "agentWritable": true
     },
@@ -8626,6 +8689,22 @@
       "availability": "Only on macOS."
     },
     {
+      "key": "closeButtonsOnRight",
+      "title": "Close buttons on the right",
+      "subtitle": "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true,
+      "availability": "Only on macOS."
+    },
+    {
       "key": "linuxDisplayScale",
       "title": "Display scale",
       "subtitle": "Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. Interface scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.",
@@ -9844,7 +9923,31 @@
       "sectionTitle": "Defaults",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
+    },
+    {
+      "key": "agentGhostexNote",
+      "title": "Tell agents about Ghostex",
+      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "config",
+      "sectionTitle": "Defaults",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "sessionDetailsClaudeTaskTools",
+      "title": "Claude task list",
+      "subtitle": "Turn on Claude's task list tools, so Claude can keep a checklist that the Session details panel shows. Recent Claude models only get them when Ghostex asks. Applies to Claude sessions started or woken after you change it. Shown while the Session details panel extension is on.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "config",
+      "sectionTitle": "Defaults",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
     },
     {
       "key": "agentAcceptAllEnabled",
@@ -9856,7 +9959,7 @@
       "sectionTitle": "Config",
       "type": "boolean",
       "default": false,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "defaultPromptAgentId",
@@ -9926,7 +10029,7 @@
       "sectionTitle": "Config",
       "type": "string",
       "default": "",
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "agentResumeHooks",
@@ -10076,14 +10179,14 @@
     {
       "key": "gbotsChiefAddsOnItsOwn",
       "title": "Chief of Staff may add GBots on its own",
-      "subtitle": "With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one. Only you can change this, not an agent.",
+      "subtitle": "With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "homeFolder",
       "sectionTitle": "Home folder",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "homeSecretFolders",
@@ -10457,7 +10560,7 @@
       "sectionTitle": "Stopping and deleting",
       "type": "boolean",
       "default": false,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "cloudBoxesBoxes",
@@ -10921,18 +11024,6 @@
       "agentWritable": true
     },
     {
-      "key": "tipsAndTricksTitlebarButtonHidden",
-      "title": "Hide Tips button",
-      "subtitle": "Stop offering the Tips & Tricks page, so it is missing from the header ⋯ menu and the view picker.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "viewOrder",
-      "sectionTitle": "Views",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "notificationsTitlebarButtonHidden",
       "title": "Hide Notifications bell",
       "subtitle": "Hide the Notifications bell from the sidebar's top row.",
@@ -10947,7 +11038,7 @@
     {
       "key": "helpTitlebarButtonHidden",
       "title": "Hide Help button",
-      "subtitle": "Stop offering the Ask Ghostex page, so it is missing from the header ⋯ menu and the view picker.",
+      "subtitle": "Stop offering the Ask Ghostex page, so it is missing from the sidebar's menu and the view picker.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -10959,7 +11050,7 @@
     {
       "key": "resourcesTitlebarButtonHidden",
       "title": "Hide Resources button",
-      "subtitle": "Stop offering the Resources page, so it is missing from the header ⋯ menu and the view picker.",
+      "subtitle": "Stop offering the Resources page, so it is missing from the sidebar's menu and the view picker.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -10971,7 +11062,7 @@
     {
       "key": "devServersTitlebarButtonHidden",
       "title": "Hide Dev Servers button",
-      "subtitle": "Hide Dev servers from the header ⋯ menu.",
+      "subtitle": "Hide Dev servers from the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -10983,7 +11074,7 @@
     {
       "key": "extensionsTitlebarButtonHidden",
       "title": "Hide Extensions button",
-      "subtitle": "Hide Extensions from the header ⋯ menu.",
+      "subtitle": "Hide Extensions from the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "viewOrder",
@@ -11225,17 +11316,6 @@
       "agentWritable": false
     },
     {
-      "key": "tips",
-      "title": "Tips & Tricks",
-      "subtitle": "A panel of short tips for getting more out of Ghostex, opened from the ⋯ menu.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Built-in",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
       "key": "notifications",
       "title": "Notifications",
       "subtitle": "A bell in the sidebar's top row that lists what your agents finished or need from you.",
@@ -11249,7 +11329,7 @@
     {
       "key": "help",
       "title": "Ghostex Help",
-      "subtitle": "A ⋯ menu entry with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
+      "subtitle": "An entry under Help in the sidebar's menu, with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11260,7 +11340,7 @@
     {
       "key": "devServers",
       "title": "Dev servers",
-      "subtitle": "A ⋯ menu panel listing development servers running on this computer. A new Browser tab shows the same list.",
+      "subtitle": "A panel listing development servers running on this computer, opened from Tools in the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11271,7 +11351,7 @@
     {
       "key": "resources",
       "title": "Resources",
-      "subtitle": "A ⋯ menu panel listing what Ghostex is running right now, with the CPU and memory each part is using.",
+      "subtitle": "A panel listing what Ghostex is running right now, with the CPU and memory each part is using, opened from Tools in the sidebar's menu.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11305,17 +11385,6 @@
       "key": "openIn",
       "title": "Open In",
       "subtitle": "Open the active project or a session's folder in your editor, terminal or file manager from the Open button and the Open In menus.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Built-in",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "spaces",
-      "title": "Spaces",
-      "subtitle": "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11381,7 +11450,7 @@
     {
       "key": "extensionsButton",
       "title": "Extensions",
-      "subtitle": "An entry in the work area header’s ⋯ menu that lists your installed extensions.",
+      "subtitle": "An entry under Tools in the sidebar's menu that lists your installed extensions.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11423,7 +11492,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "actionsHidden",
@@ -11441,18 +11510,6 @@
       "key": "openInTitlebarButtonHidden",
       "title": "Turn off Open In",
       "subtitle": "Turn off Open In everywhere: the Open button, the Open In page in Settings and the Open In menus. Your apps and custom commands are kept.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Built-in",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "sidebarSpacesEnabled",
-      "title": "Spaces",
-      "subtitle": "Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11483,7 +11540,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "readAloudHidden",
@@ -11500,7 +11557,7 @@
     {
       "key": "sessionDetailsPanelHidden",
       "title": "Turn off the Session details panel",
-      "subtitle": "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Chat. On by default.",
+      "subtitle": "Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Agents. On by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11555,7 +11612,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "osIntegrationHidden",
@@ -11572,7 +11629,7 @@
     {
       "key": "keepAwakeEnabled",
       "title": "Keep Awake",
-      "subtitle": "Turn Keep Awake on or off: Keep Awake in the ⋯ menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default.",
+      "subtitle": "Turn Keep Awake on or off: Keep Awake in the sidebar's menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11610,18 +11667,6 @@
       "key": "chatToolCallLines",
       "title": "Tool call lines",
       "subtitle": "Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. Settings > Chat > Agent work set to Reduced or Quiet replaces these lines. Experimental, off by default.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Experimental",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "securityLogsEnabled",
-      "title": "Security logs",
-      "subtitle": "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12004,7 +12049,7 @@
       "sectionTitle": "Default editor",
       "type": "string",
       "default": "",
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "setDefaultEditor",
@@ -12117,7 +12162,7 @@
       "sectionTitle": "Global Defaults",
       "type": "string",
       "default": "",
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "globalTicketKey",
@@ -12216,8 +12261,8 @@
       "subtitle": "A Linear key for this project only, used instead of its workspace's or the shared key. Issues Workflow shows Linear tickets once a key applies to the project.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "projectSettings",
-      "sectionTitle": "Project settings",
+      "section": "issuesWorkflow",
+      "sectionTitle": "Issues Workflow",
       "type": "ui",
       "agentWritable": false
     },
@@ -12227,8 +12272,8 @@
       "subtitle": "Which provider and machine size a new Cloud Box for this project starts on.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "projectSettings",
-      "sectionTitle": "Project settings",
+      "section": "projectCloudBox",
+      "sectionTitle": "Cloud box",
       "type": "ui",
       "agentWritable": false
     },
@@ -12238,8 +12283,8 @@
       "subtitle": "This project's saved snapshots: what a new Cloud Box starts from. Make one the Default (★), update the Default from a running box, or delete one.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "projectSettings",
-      "sectionTitle": "Project settings",
+      "section": "projectCloudBox",
+      "sectionTitle": "Cloud box",
       "type": "ui",
       "agentWritable": false
     },
@@ -12249,8 +12294,8 @@
       "subtitle": "Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "projectSettings",
-      "sectionTitle": "Project settings",
+      "section": "projectCloudBox",
+      "sectionTitle": "Cloud box",
       "type": "ui",
       "agentWritable": false
     },
@@ -12261,7 +12306,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "Current machine",
+      "sectionTitle": "This computer",
       "type": "ui",
       "agentWritable": false
     },
@@ -12272,18 +12317,18 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "Current machine",
+      "sectionTitle": "This computer",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "sshAccess",
       "title": "SSH access",
-      "subtitle": "Lets your phone and other computers sign in to this one; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.",
+      "subtitle": "Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "Current machine",
+      "sectionTitle": "This computer",
       "type": "ui",
       "agentWritable": false
     },
@@ -12302,62 +12347,40 @@
     {
       "key": "easyConnectEnabled",
       "title": "Easy Connect",
-      "subtitle": "Connect a phone or a remote machine. Install the Tailcat CLI helper with one click.",
+      "subtitle": "Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
+      "sectionTitle": "Phones and computers that can reach this machine",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "pairingCode",
-      "title": "Pairing code",
-      "subtitle": "Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password.",
+      "title": "Connect a Device",
+      "subtitle": "Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
+      "sectionTitle": "Phones and computers that can reach this machine",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "pairedDevices",
       "title": "Paired devices",
-      "subtitle": "Phones and computers paired with this computer; remove one to unpair it and revoke its access.",
+      "subtitle": "Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "pairedDevicesOnly",
-      "title": "Only paired devices can connect",
-      "subtitle": "Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing.",
-      "tab": "remote",
-      "tabTitle": "Remote",
-      "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "easyConnectRelay",
-      "title": "Relay",
-      "subtitle": "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run.",
-      "tab": "remote",
-      "tabTitle": "Remote",
-      "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
+      "sectionTitle": "Phones and computers that can reach this machine",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "tailscaleEnabled",
       "title": "Tailscale on or off",
-      "subtitle": "Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup.",
+      "subtitle": "Offer the Tailscale path; off leaves it out of the Connect a Device window.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "tailscale",
@@ -12401,12 +12424,12 @@
     },
     {
       "key": "addMachine",
-      "title": "Add a machine",
-      "subtitle": "Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections.",
+      "title": "Add a computer",
+      "subtitle": "Add a computer by SSH details or its code; saved computers appear as sidebar sections.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12417,7 +12440,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12428,7 +12451,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12439,7 +12462,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12450,7 +12473,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12461,7 +12484,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12472,7 +12495,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12483,7 +12506,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12494,7 +12517,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12505,7 +12528,18 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "easyConnectRelay",
+      "title": "Relay",
+      "subtitle": "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run.",
+      "tab": "remote",
+      "tabTitle": "Remote",
+      "section": "remoteAdvanced",
+      "sectionTitle": "Advanced",
       "type": "ui",
       "agentWritable": false
     },
@@ -12739,6 +12773,29 @@
       "agentWritable": false
     },
     {
+      "key": "approvalsRequirePresence",
+      "title": "Require Touch ID or your password to approve",
+      "subtitle": "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: your computer asks for Touch ID, Windows Hello or your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+      "tab": "security",
+      "tabTitle": "Security",
+      "section": "approvals",
+      "sectionTitle": "Approvals",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "stillAsks",
+      "title": "What still asks",
+      "subtitle": "What asks for an Approve on this computer: a phone or computer asking to pair, a Collab guest's message in Approve mode, and, when an agent asks, turning on Easy Connect, letting a device connect through it, sharing a chat or turning on Send mode. Everything else works without asking, and your own clicks never ask.",
+      "tab": "security",
+      "tabTitle": "Security",
+      "section": "stillAsks",
+      "sectionTitle": "What still asks",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "securityLogCheck",
       "title": "Security log check",
       "subtitle": "Whether the security log is intact. Each entry is chained to the one before it, so an entry that was changed or removed after it was written shows here.",
@@ -12759,6 +12816,18 @@
       "sectionTitle": "Security log",
       "type": "ui",
       "agentWritable": false
+    },
+    {
+      "key": "securityLogsEnabled",
+      "title": "Show the security log",
+      "subtitle": "Shows this computer's security log below: pairing phones and computers, Easy Connect changes, Collab shares, approvals and who asked for each. The log is kept and its alerts arrive whether this is on or off. Off by default.",
+      "tab": "security",
+      "tabTitle": "Security",
+      "section": "log",
+      "sectionTitle": "Security log",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
     },
     {
       "key": "workspaceName",
@@ -13727,7 +13796,7 @@
     {
       "id": "openNewThreadPalette",
       "title": "New Thread in Active Project",
-      "description": "Pick an agent, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
+      "description": "Pick an agent, Coordinator, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
       "defaultKey": "cmd+n",
       "retiredDefaultKeys": [
         "cmd+shift+t",
@@ -14735,6 +14804,13 @@
       "description": "Put the keyboard back in the terminal that had it last, bringing its session forward if it is not on screen.",
       "defaultKey": "cmd+shift+m",
       "noTerminalBinding": true
+    },
+    {
+      "id": "focusSidebar",
+      "title": "Focus Sidebar",
+      "description": "Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back.",
+      "defaultKey": "cmd+shift+j",
+      "terminalDefaultKey": "cmd+shift+j"
     }
   ]
 }

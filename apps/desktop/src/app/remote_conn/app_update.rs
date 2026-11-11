@@ -600,6 +600,60 @@ impl GhostexGpuiApp {
     }
 }
 
+impl GhostexGpuiApp {
+    /// Each remote computer's system as far as this app knows it (`"windows"`, `"macos"` or
+    /// `"linux"`), by machine id, for its icon in the sidebar (native_sidebar/machines.rs). A
+    /// connected computer says it through its connection (a Windows shell, WSL included, or the
+    /// editor platform its probe found); otherwise a computer saved with a WSL distribution is
+    /// Windows, and the rest say what their gxserver's update status reported once it was read. A
+    /// computer that has never answered is missing, and the sidebar shows the generic remote icon.
+    pub(crate) fn remote_machine_systems(&self) -> HashMap<String, &'static str> {
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        let mut systems: HashMap<String, &'static str> = remote_app_update_machine_ids()
+            .into_iter()
+            .filter_map(|id| {
+                let status = remote_app_update(&id)?.status?;
+                let system = match text(&status, "platform")? {
+                    "windows" => "windows",
+                    "macos" => "macos",
+                    "linux" => "linux",
+                    _ => return None,
+                };
+                Some((id, system))
+            })
+            .collect();
+        for machine in settings
+            .object()
+            .get("remoteMachines")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+        {
+            let wsl = text(machine, "wslDistribution").is_some_and(|name| !name.trim().is_empty());
+            if wsl && let Some(id) = gpui_remote_machine_id_from_value(machine) {
+                systems.insert(id, "windows");
+            }
+        }
+        for (id, connection) in &self.remote_gxserver_connections {
+            let system = match &connection.execution_target {
+                GpuiRemoteExecutionTarget::WindowsPowerShell
+                | GpuiRemoteExecutionTarget::WindowsWsl { .. } => Some("windows"),
+                GpuiRemoteExecutionTarget::PosixHost => {
+                    match connection.code_server_component_platform.as_deref() {
+                        Some(platform) if platform.starts_with("darwin-") => Some("macos"),
+                        Some(platform) if platform.starts_with("linux-") => Some("linux"),
+                        _ => None,
+                    }
+                }
+            };
+            if let Some(system) = system {
+                systems.insert(id.clone(), system);
+            }
+        }
+        systems
+    }
+}
+
 /// What a machine tab shows for its Ghostex update.
 pub(crate) struct RemoteAppUpdateBadge {
     pub(crate) busy: bool,

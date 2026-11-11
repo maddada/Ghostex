@@ -13,7 +13,7 @@ use crate::{
     session_chat_send::{
         handle_answer_session_chat_prompt_http, handle_handoff_session_chat_draft_http,
         handle_interrupt_session_chat_http, handle_replace_session_chat_draft_http,
-        handle_send_session_chat_message_http,
+        handle_send_session_chat_message_from,
     },
     session_chat_skills::handle_read_session_chat_skills_http,
     session_transcript_export::handle_export_session_transcript_http,
@@ -43,6 +43,15 @@ pub(super) async fn route_chat_http(
         }
         "/api/voiceAgentClip" => {
             crate::voice_agent::handle_voice_agent_clip_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
+        "/api/voiceAgentText" => {
+            crate::voice_agent::handle_voice_agent_text_http(
                 &state,
                 endpoint.path,
                 request_id,
@@ -142,8 +151,9 @@ pub(super) async fn route_chat_http(
             handle_read_session_chat_files_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/sendSessionChatMessage" => {
-            let mut response = handle_send_session_chat_message_http(
+            let mut response = handle_send_session_chat_message_from(
                 &state,
+                &caller,
                 endpoint.path,
                 request_id.clone(),
                 &body_json,

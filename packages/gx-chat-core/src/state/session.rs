@@ -72,6 +72,8 @@ pub struct SessionState {
     pub selected_options_generation: u64,
     /// The blocking or failed terminal state. Cleared on omission.
     pub terminal_notice: Option<Value>,
+    /// gxserver's `agentGone`: the agent left its terminal with no notice saying so.
+    pub agent_gone: bool,
     /// Live on-screen progress such as compaction. Cleared on omission.
     pub terminal_activity: Option<Value>,
     /// Subagents on the agent's screen. Cleared on omission, never gated on `working`.
@@ -87,6 +89,11 @@ pub struct SessionState {
     /// A coordinator's threads (`{ threads }`); present only for a coordinator.
     /// Unchanged on omission.
     pub coordinator_threads: crate::state::Stamped<Option<crate::document::SharedValue>>,
+    /// The thread list exactly as the socket last carried it: the base a `coordinatorThreadsPatch`
+    /// applies to (`session/thread_patch.rs`). Reads never touch it, so it matches what gxserver
+    /// remembers sending this socket even when a read set `coordinator_threads` meanwhile. Shared
+    /// with the frame it came in (`document::SharedValue`), so it is no copy of its own.
+    pub coordinator_threads_wire: Option<crate::document::SharedValue>,
     /// This session's side chats (`[{ projectId, sessionId, title, ... }]`); unchanged on omission.
     pub side_chats: Option<Value>,
     /// For a side chat, its main session (`{ sessionId, title }`); unchanged on omission.
@@ -178,6 +185,7 @@ impl Default for SessionState {
             selected_options: None,
             selected_options_generation: 0,
             terminal_notice: None,
+            agent_gone: false,
             terminal_activity: None,
             agent_fleet: None,
             agent_tasks: None,
@@ -185,6 +193,7 @@ impl Default for SessionState {
             app_commands: Vec::new(),
             returned_prompt: None,
             coordinator_threads: Default::default(),
+            coordinator_threads_wire: None,
             side_chats: None,
             side_chat_of: None,
             secret_requests: None,

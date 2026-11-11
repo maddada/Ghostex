@@ -17,12 +17,6 @@ pub(crate) mod sidebar {
     use crate::*;
     include!(concat!(env!("OUT_DIR"), "/sidebar.rs"));
 }
-#[allow(dead_code, unused_imports)]
-pub(crate) mod browser {
-    use crate::*;
-    use gpui::ImageFormat;
-    include!(concat!(env!("OUT_DIR"), "/browser.rs"));
-}
 
 #[allow(dead_code, unused_imports)]
 pub(crate) mod agents_hub {
@@ -42,8 +36,13 @@ pub(crate) mod ids {
 }
 pub(crate) mod web;
 
+/// The data URL decoders the desktop's `helpers/browser.rs` re-exports (data_url_image.rs).
+#[allow(unused_imports)]
+pub(crate) use crate::data_url_image::{
+    browser_favicon_data_url_metadata, browser_favicon_decode_base64,
+    browser_favicon_image_format_for_mime, browser_favicon_percent_decode,
+};
 pub(crate) use agents_hub::*;
-pub(crate) use browser::*;
 pub(crate) use chrome_palette::*;
 pub(crate) use clipboard_read::*;
 pub(crate) use ids::*;

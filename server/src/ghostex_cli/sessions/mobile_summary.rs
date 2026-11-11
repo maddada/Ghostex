@@ -716,8 +716,9 @@ fn to_mobile_custom_session_tags(tags_state: Option<&Value>) -> Option<Value> {
     }))
 }
 
-/// Exercise both CLI whitelists on the same presentation row the session inventory consumes.
-#[cfg(test)]
+/// One session as the phone's summary carries it: both CLI whitelists over the same presentation row the
+/// session inventory consumes. The tests use it, and the Live Activity sender builds the phone's banner
+/// from it (server/src/live_activity/runtime.rs), so the banner reads exactly what the phone reads.
 pub(crate) fn mobile_summary_for_session(
     session: &Value,
     project: &Value,

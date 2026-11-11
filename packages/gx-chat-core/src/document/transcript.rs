@@ -158,6 +158,9 @@ pub enum TranscriptItem {
         /// opened line instead of in its tail (`transcript/folded_cards.rs`).
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         cards_in_fold: bool,
+        /// The merged turns' numbers added up, as on `completed-work`. Never on the wire.
+        #[serde(skip)]
+        tally: Box<WorkTally>,
     },
     /// A kind this build does not know, kept verbatim so one new row cannot drop the list.
     #[serde(untagged)]
@@ -203,6 +206,11 @@ pub struct WorkTally {
     /// The messages between agents and the answers folded into it (`transcript/folded_cards.rs`).
     pub messages: usize,
     pub answers: usize,
+    /// The turns' sections still on the server, by their prompt's id (`startId`), each with the
+    /// tool calls gxserver counted in it (`deferredWork.toolCallCount`): a Quiet View line counts
+    /// those instead of the turns' own counts, which cannot see the held-back rows
+    /// (`transcript/quiet_view.rs`).
+    pub held: Vec<(String, usize)>,
 }
 
 // A host may hand the rows to another thread, so a row stays `Send + Sync`, and cloning one shares

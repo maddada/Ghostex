@@ -17,7 +17,7 @@ use crate::*;
 
 pub(crate) fn parse_gpui_gxserver_rpc_result(body: &str) -> Result<serde_json::Value, String> {
     let value = serde_json::from_str::<serde_json::Value>(body)
-        .map_err(|_| "gxserver returned an invalid RPC response.".to_string())?;
+        .map_err(|_| GXSERVER_UNREADABLE_ANSWER_MESSAGE.to_string())?;
     if value.get("ok").and_then(serde_json::Value::as_bool) != Some(true)
         || value.get("product").and_then(serde_json::Value::as_str) != Some(GPUI_GXSERVER_PRODUCT)
         || value
@@ -212,9 +212,9 @@ fn gxserver_post_typed_operation_once(
     );
     let write_error = stream.write_all(request.as_bytes()).err();
 
-    let mut response = String::new();
-    let read_error = stream.read_to_string(&mut response).err();
-    if !response.contains("\r\n\r\n") {
+    let mut response = Vec::new();
+    let read_error = stream.read_to_end(&mut response).err();
+    if !response.windows(4).any(|window| window == b"\r\n\r\n") {
         if let Some(error) = write_error {
             return Err(GxserverPostFailure::Dropped(format!(
                 "Could not send gxserver request: {error}"
@@ -234,15 +234,18 @@ fn gxserver_post_typed_operation_once(
             )));
         }
     }
-    let (headers, body) = response
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "gxserver returned an invalid HTTP response.".to_string())?;
-    let status_code = headers
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|status| status.parse::<u16>().ok())
-        .ok_or_else(|| "gxserver returned an invalid HTTP status.".to_string())?;
+    let (status_code, body) = match gxserver_http_answer(&response) {
+        GxserverHttpAnswer::Whole(status, body) => (status, body),
+        GxserverHttpAnswer::CutOff => {
+            return Err(GxserverPostFailure::Dropped(
+                gxserver_cut_off_message(gxserver_request_is_safe_to_repeat(path, params))
+                    .to_string(),
+            ));
+        }
+        GxserverHttpAnswer::Unreadable => {
+            return Err(GXSERVER_UNREADABLE_ANSWER_MESSAGE.to_string().into());
+        }
+    };
     // gxserver no longer knows the owner session (its state was reset): the next call uses the
     // token file and opens a new one.
     if status_code == 401 {
@@ -250,7 +253,7 @@ fn gxserver_post_typed_operation_once(
             crate::app::owner_security::forget_owner_token(token);
         }
     }
-    Ok((status_code, gxserver_http_response_body(headers, body)?))
+    Ok((status_code, body))
 }
 
 /// A read that ended because the other side went away, as opposed to one that timed out waiting.
@@ -615,6 +618,92 @@ pub(crate) fn read_gpui_gxserver_file_token() -> Result<String, String> {
         Ok(token)
     }
 }
+
+/// What a raw answer (every byte read until the stream ended) holds, measured against what its
+/// headers promised.
+pub(crate) enum GxserverHttpAnswer {
+    /// The status and the whole body.
+    Whole(u16, String),
+    /// The stream ended before the answer did: the connection dropped while it arrived.
+    CutOff,
+    /// It all arrived and is not an HTTP answer this app can read.
+    Unreadable,
+}
+
+/// CDXC:RemoteMachines 2026-11-11 WHY:
+/// A user who "can barely talk to the remote computer" saw "invalid JSON errors all the time". This
+/// transport reads until the stream ends and took whatever had arrived as the whole answer, so an
+/// answer cut off by a dropping link was parsed as JSON, failed, and showed "gxserver returned
+/// invalid JSON." for every cut. The declared `Content-Length` (or the chunked body's last chunk)
+/// now says whether the answer arrived whole; a cut one is reported as a dropped connection
+/// (`ide_open.rs` and `gxserver_post_typed_operation_once` say what that means for the request).
+pub(crate) fn gxserver_http_answer(response: &[u8]) -> GxserverHttpAnswer {
+    let Some(split) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
+        // gxserver writes its headers in one piece: headers without their end were cut off.
+        return GxserverHttpAnswer::CutOff;
+    };
+    let headers = String::from_utf8_lossy(&response[..split]);
+    let body = &response[split + 4..];
+    let Some(status) = headers
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|status| status.parse::<u16>().ok())
+    else {
+        return GxserverHttpAnswer::Unreadable;
+    };
+    let header = |wanted: &str| {
+        headers.lines().skip(1).find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.trim()
+                .eq_ignore_ascii_case(wanted)
+                .then(|| value.trim().to_string())
+        })
+    };
+    let chunked = header("transfer-encoding").is_some_and(|value| {
+        value
+            .split(',')
+            .any(|part| part.trim().eq_ignore_ascii_case("chunked"))
+    });
+    let bytes = if chunked {
+        let Ok(text) = std::str::from_utf8(body) else {
+            return GxserverHttpAnswer::Unreadable;
+        };
+        // gxserver's chunked bodies are well formed: one that does not decode ended early.
+        match gxserver_decode_chunked_http_body(text) {
+            Ok(decoded) => return GxserverHttpAnswer::Whole(status, decoded),
+            Err(_) => return GxserverHttpAnswer::CutOff,
+        }
+    } else if let Some(length) = header("content-length") {
+        let Ok(length) = length.parse::<usize>() else {
+            return GxserverHttpAnswer::Unreadable;
+        };
+        if body.len() < length {
+            return GxserverHttpAnswer::CutOff;
+        }
+        &body[..length]
+    } else {
+        body
+    };
+    match String::from_utf8(bytes.to_vec()) {
+        Ok(text) => GxserverHttpAnswer::Whole(status, text),
+        Err(_) => GxserverHttpAnswer::Unreadable,
+    }
+}
+
+/// What this app says when an answer from this computer's Ghostex did not arrive whole: a request
+/// that only reads can be asked again, anything else may have happened already.
+pub(crate) fn gxserver_cut_off_message(repeatable: bool) -> &'static str {
+    if repeatable {
+        "Ghostex's answer was cut off: the connection dropped while it arrived. Try again."
+    } else {
+        "Ghostex's answer didn't arrive: the connection dropped, so what you asked may or may not have happened. Check, then try again if it didn't."
+    }
+}
+
+/// What this app says about an answer that arrived whole and still can't be read.
+pub(crate) const GXSERVER_UNREADABLE_ANSWER_MESSAGE: &str =
+    "Ghostex's answer couldn't be read. Try again.";
 
 pub(crate) fn gxserver_http_response_body(headers: &str, body: &str) -> Result<String, String> {
     if !headers.lines().any(|line| {

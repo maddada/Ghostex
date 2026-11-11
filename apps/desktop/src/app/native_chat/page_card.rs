@@ -272,6 +272,13 @@ impl NativeChatView {
             None => "Ghostex page".to_string(),
         };
         let file = page.file.clone();
+        // A page that waited only to be looked at says Seen once marked so (CDXC:SessionChat
+        // 2026-11-11 DECISION in server/src/visual_pages/publish.rs).
+        let done_label = if page.awaits_seen && page.questions.is_none() {
+            "Seen"
+        } else {
+            "Answered"
+        };
         let gxv::PageRef { title, url, .. } = page;
         let bar_label = file.clone().unwrap_or_else(|| title.clone());
         let page_title = title.clone();
@@ -519,7 +526,7 @@ impl NativeChatView {
                                 .size(px(11.0 * s))
                                 .text_color(good),
                         )
-                        .child("Answered"),
+                        .child(done_label),
                 )
             })
             .child(

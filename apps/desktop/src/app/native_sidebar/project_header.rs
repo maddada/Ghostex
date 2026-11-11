@@ -28,6 +28,7 @@ impl GhostexGpuiApp {
         group: &NativeSidebarGroup,
         hud: &Value,
         appearance: &SidebarAppearance,
+        pinned: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let id = group.group_id.clone();
@@ -91,6 +92,14 @@ impl GhostexGpuiApp {
         // groups included, which fold away with it.
         let collapsed_active =
             group.collapsed && (group.is_active || group.holds_active_session_group);
+        // CDXC:Sidebar 2026-11-10 DECISION: Discord request (a user with many experimental projects): Advanced > Dim inactive projects fades the header of a project whose sessions are all asleep or closed, none working or waiting on the user, or that has none. Like a dimmed sleeping session, hovering the header brings it back to full strength so its buttons stay readable. The rule is gx-core `GroupSummary::inactive`; a session group, Main Hub and the project holding the focused session never dim.
+        let dim_inactive = !hovered
+            && home.is_none()
+            && !folder_icon
+            && !group.is_active
+            && !group.holds_active_session_group
+            && group.summary["inactive"].as_bool() == Some(true)
+            && hud["settings"]["dimInactiveProjects"].as_bool() == Some(true);
         let dragged = SidebarDrag {
             kind: "group",
             preview: super::drag::SidebarDragPreview::Row(super::row_drag::RowDragPreview {
@@ -284,6 +293,7 @@ impl GhostexGpuiApp {
                     })
                 },
             )
+            .when(dim_inactive, |row| row.opacity(0.5))
             .when(collapsed_active, |row| {
                 row.bg(appearance.selected)
                     .child(super::decorations::selected_outline(appearance))
@@ -432,6 +442,16 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.dispatch_native_sidebar_ui(json!({"type": "toggleGroup", "groupId": id}), cx);
             }))
+            // The header in the list is the stop; its pinned copy only mirrors it (sticky.rs).
+            .when(!pinned, |row| {
+                self.sidebar_focus_stop(
+                    row,
+                    super::focus_order::project_header_stop_key(&group.group_id),
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

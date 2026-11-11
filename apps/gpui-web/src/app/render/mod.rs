@@ -1,3 +1,4 @@
+pub(crate) mod terminal_content_layout;
 pub(crate) mod window_drag_region;
 /// The measurements and the icon of the desktop's terminal action bar; the bar itself is drawn here until the desktop's file can be compiled here.
 #[allow(dead_code)]

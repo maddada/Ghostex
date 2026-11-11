@@ -182,7 +182,7 @@ impl GhostexGpuiApp {
 
     /// The browser that shows the open page in the Files view's browser area: the page and
     /// nothing of the app, in the floating page window's own browser profile. A link the page
-    /// opens goes to the reader's browser, routed by the machine the page came from.
+    /// opens goes where a chat link opens (`open_visual_page_link`), routed by the machine the page came from.
     pub(crate) fn native_docs_create_page_surface(
         &mut self,
         surface_id: String,

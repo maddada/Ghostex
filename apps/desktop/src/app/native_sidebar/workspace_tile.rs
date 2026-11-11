@@ -27,8 +27,20 @@ const LETTER_PART_WIDTH: f32 = 27.0;
 const CHEVRON_PART_WIDTH: f32 = 15.0;
 
 impl GhostexGpuiApp {
-    /// The tile in the bottom bar, while this computer's section is shown and its daemon has
-    /// workspaces (gxserver publishes none while the Workspaces feature is off).
+    /// Whether the sidebar's bottom has the workspace button now
+    /// (`render_native_sidebar_footer_workspace_tile`).
+    pub(super) fn native_sidebar_footer_workspace_tile_shown(&self) -> bool {
+        self.native_sidebar
+            .snapshot
+            .as_ref()
+            .is_some_and(|snapshot| {
+                snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+            })
+            && self.gx_store_workspace_tile().is_some()
+    }
+
+    /// The tile at the sidebar's bottom left, while this computer's section is shown and its
+    /// daemon has workspaces (gxserver publishes none while the Workspaces feature is off).
     pub(super) fn render_native_sidebar_footer_workspace_tile(
         &self,
         appearance: &SidebarAppearance,
@@ -139,6 +151,14 @@ impl GhostexGpuiApp {
                     }
                 }),
             );
+        // The tile sits in the bottom bar, below the list.
+        let letter = self.sidebar_focus_stop(
+            letter,
+            "workspace-tile:switch",
+            super::focus_order::SidebarStopPlace::Fixed,
+            appearance,
+            cx,
+        );
         let chevron = div()
             .id("native-sidebar-workspace-menu")
             .role(gpui::Role::Button)
@@ -179,6 +199,13 @@ impl GhostexGpuiApp {
                     open_menu(app, event, window, cx);
                 }),
             );
+        let chevron = self.sidebar_focus_stop(
+            chevron,
+            "workspace-tile:menu",
+            super::focus_order::SidebarStopPlace::Fixed,
+            appearance,
+            cx,
+        );
         Some(
             div()
                 .id("native-sidebar-workspace-tile")

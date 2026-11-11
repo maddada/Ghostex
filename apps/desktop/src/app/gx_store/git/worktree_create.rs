@@ -151,10 +151,51 @@ impl GhostexGpuiApp {
                     projectless: false,
                 };
                 this.gx_store.git.trusted_worktrees = None;
+                let place = source.worktree_warning_place();
+                let identity = source.worktree_warning_identity();
+                this.git_show_worktree_warnings(&answer, &place, &identity, cx);
                 this.git_worktree_ready(&worktree, agent, request.prompt, open, &toast_id, cx);
             });
         })
         .detach();
+    }
+
+    /// Shows each warning a create or open worktree answer carries (`warnings: [{ kind, message }]`,
+    /// gxserver's Beads hooks repair in `server/src/server/worktree_ops/projects.rs`) as a notice
+    /// that waits for the user. The worktree is ready either way, and its own toast still follows.
+    /// gxserver's full text, with the repository path and the reason, is behind Copy details.
+    ///
+    /// `place` is the short name the notice shows. `identity` is the repository's stable identity
+    /// (its computer and full path): the notice queue drops a warning that repeats one raised in
+    /// the last few seconds (`gpui_app_toast_without_repeats`, window/toast.rs), and two
+    /// repositories can share a short name, so each notice's id carries a repeat scope hashed from
+    /// `identity` and its kind. Two repositories' warnings stay apart, and the same repository's
+    /// warning raised again is still a repeat.
+    pub(crate) fn git_show_worktree_warnings(
+        &mut self,
+        answer: &Value,
+        place: &str,
+        identity: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let warnings = answer.get("warnings").and_then(Value::as_array);
+        for warning in warnings.into_iter().flatten() {
+            let kind = warning.get("kind").and_then(Value::as_str).unwrap_or("");
+            let message = warning
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim();
+            let Some((title, description)) = worktree_warning_notice(kind, message, place) else {
+                continue;
+            };
+            let mut options = ToastOptions::persistent(&worktree_warning_toast_id(kind, identity))
+                .with_description(description);
+            if !message.is_empty() {
+                options = options.with_copy_text(message);
+            }
+            self.git_toast(GitToastLevel::Warning, title, options, cx);
+        }
     }
 
     /// The source project and the one call, or the refusal the dialog's toast shows.
@@ -332,5 +373,112 @@ impl GhostexGpuiApp {
             return;
         }
         self.git_focus_project(&worktree.key, cx);
+    }
+}
+
+/// The notice for one worktree warning: a short title, then what happened and what to do, naming
+/// `place`. An unknown kind from a newer gxserver gets a generic notice with its message behind
+/// Copy details; one with no message shows nothing.
+fn worktree_warning_notice(
+    kind: &str,
+    message: &str,
+    place: &str,
+) -> Option<(&'static str, String)> {
+    let notice = match kind {
+        "beadsHooksNeeded" => (
+            "Your git hooks are still off",
+            format!(
+                "An older Ghostex replaced the git hooks of {place} with its Beads hooks, and Beads still uses them there. To switch back, run git config --unset core.hooksPath, then bd hooks install, in that repository."
+            ),
+        ),
+        "beadsHooksUnchecked" => (
+            "Git hooks not checked",
+            format!(
+                "Ghostex could not check whether {place} still needs the Beads hooks an older Ghostex set up, so your own git hooks stay off there for now. Copy the details to see what failed, fix it, then open the worktree again."
+            ),
+        ),
+        "beadsHooksLeftAsIs" => (
+            "Git hooks setting left alone",
+            format!(
+                "The Beads hooks folder an older Ghostex set up in {place} was edited, so Ghostex did not change its git hooks setting. Check core.hooksPath there if your own hooks should run."
+            ),
+        ),
+        _ if !message.is_empty() => (
+            "Worktree created with a warning",
+            format!(
+                "Ghostex reported a problem with {place} while preparing the worktree. Copy the details to see what it said."
+            ),
+        ),
+        _ => return None,
+    };
+    Some(notice)
+}
+
+/// How a worktree warning names its repository: the project's name (or folder), and the
+/// computer's saved name when it is not this one.
+pub(crate) fn worktree_warning_place(
+    name: Option<&str>,
+    path: Option<&str>,
+    computer: Option<String>,
+) -> String {
+    let name = name
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            path.and_then(|path| std::path::Path::new(path).file_name())
+                .map(|name| name.to_string_lossy().to_string())
+        });
+    match (name, computer) {
+        (Some(name), Some(computer)) => format!("{name} on {computer}"),
+        (Some(name), None) => name,
+        (None, Some(computer)) => format!("a repository on {computer}"),
+        (None, None) => "this repository".to_string(),
+    }
+}
+
+/// A worktree warning's toast id: the repeat-scope prefix, then the kind and a hash of the
+/// repository's identity (so no path ends up in an id).
+fn worktree_warning_toast_id(kind: &str, identity: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    identity.hash(&mut hasher);
+    format!(
+        "{}worktree-warning:{kind}:{:016x}",
+        crate::app::window::toast::GPUI_APP_TOAST_REPEAT_SCOPE_PREFIX,
+        hasher.finish()
+    )
+}
+
+/// A repository's stable identity for worktree warnings: its computer, then its full path (or its
+/// project id when no path is known).
+pub(crate) fn worktree_warning_identity(
+    machine: &str,
+    path: Option<&str>,
+    project_id: &str,
+) -> String {
+    format!("{machine}\u{1f}{}", path.unwrap_or(project_id))
+}
+
+impl GitScope {
+    /// This project's stable identity for worktree warnings.
+    fn worktree_warning_identity(&self) -> String {
+        worktree_warning_identity(
+            self.machine_id().unwrap_or("local"),
+            self.path.as_deref(),
+            &self.key.project_id,
+        )
+    }
+
+    /// This project as a worktree warning names it.
+    fn worktree_warning_place(&self) -> String {
+        let computer = self
+            .is_remote()
+            .then(|| {
+                self.machine_name()
+                    .or_else(|| self.machine_id().map(str::to_string))
+            })
+            .flatten();
+        worktree_warning_place(Some(&self.title), self.path.as_deref(), computer)
     }
 }

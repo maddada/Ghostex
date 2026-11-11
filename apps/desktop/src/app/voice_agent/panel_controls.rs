@@ -122,6 +122,96 @@ pub(crate) fn hold_button(
         .into_any_element()
 }
 
+pub(crate) const ICON_MIC: &str = "titlebar/microphone.svg";
+pub(crate) const ICON_MIC_OFF: &str = "titlebar/microphone-off.svg";
+pub(crate) const ICON_VOICE: &str = "titlebar/volume.svg";
+pub(crate) const ICON_VOICE_OFF: &str = "titlebar/volume-off.svg";
+
+/// The microphone toggle's icon and tooltip: the icon shows the state, the tooltip what a click does.
+pub(crate) fn mic_toggle(muted: bool) -> (&'static str, &'static str) {
+    if muted {
+        (ICON_MIC_OFF, "Unmute microphone")
+    } else {
+        (ICON_MIC, "Mute microphone")
+    }
+}
+
+/// The agent's voice toggle's icon and tooltip.
+pub(crate) fn voice_toggle(voice_muted: bool) -> (&'static str, &'static str) {
+    if voice_muted {
+        (ICON_VOICE_OFF, "Unmute voice")
+    } else {
+        (ICON_VOICE, "Mute voice")
+    }
+}
+
+/// One of the panel's two mute toggles (the microphone and the agent's voice): 28px and icon only
+/// like the hold button, its icon and tooltip following the state. On (muted), it takes a soft red
+/// tint with a red icon, readable on window glass without a dark fill. `on_click` runs on the
+/// release over it, as the panel's other buttons do.
+pub(crate) fn toggle_button(
+    id: &'static str,
+    icon_path: &'static str,
+    tooltip: SharedString,
+    on: bool,
+    colors: ControlColors,
+    on_click: impl Fn(&mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let red: Hsla = rgba(0xef4444ff).into();
+    let (fill, hover, border, foreground) = if on {
+        (
+            red.opacity(0.16),
+            red.opacity(0.24),
+            red.opacity(0.5),
+            rgba(0xf87171ff).into(),
+        )
+    } else {
+        (
+            colors.raised,
+            colors.ink.opacity(0.13),
+            colors.border,
+            colors.text,
+        )
+    };
+    let on_click = std::rc::Rc::new(on_click);
+    let label = tooltip.clone();
+    div()
+        .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .size(px(28.0))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.0))
+        .border_1()
+        .border_color(border)
+        .bg(fill)
+        .cursor_default()
+        .hover(move |this| this.bg(hover))
+        .tooltip(move |window, cx| {
+            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+        })
+        .on_mouse_down(MouseButton::Left, |_: &MouseDownEvent, window, cx| {
+            window.prevent_default();
+            cx.stop_propagation();
+        })
+        .on_mouse_up(MouseButton::Left, {
+            let on_click = on_click.clone();
+            move |_: &MouseUpEvent, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+                on_click(window, cx);
+            }
+        })
+        .on_a11y_action(gpui::AccessibleAction::Click, move |_, window, cx| {
+            on_click(window, cx)
+        })
+        .child(icon(icon_path, 15.0, foreground))
+        .into_any_element()
+}
+
 /// The header's key hint: "Space" while Space would hold Talk, lit while it is held.
 pub(crate) fn keycap(text: &'static str, lit: bool, colors: ControlColors) -> AnyElement {
     let blue: Hsla = rgba(0x38bdf8ff).into();

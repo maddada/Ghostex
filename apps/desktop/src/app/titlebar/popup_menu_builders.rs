@@ -36,18 +36,19 @@ pub(crate) fn titlebar_popup_menu_with_scroll_behavior(
     max_height: f32,
     scrollable: bool,
 ) -> PopupMenu {
+    let frame = popup_menu_frame();
     let menu = menu
         .appearance(PopupMenuAppearance {
             shadow: false,
-            panel_radius: px(8.0),
+            panel_radius: px(frame.radius),
             item_radius: px(6.0),
             padding: px(6.0),
             item_padding_x: px(TITLEBAR_POPUP_MENU_ITEM_PADDING_X),
             item_height: px(TITLEBAR_POPUP_MENU_MIN_ITEM_HEIGHT),
             separator_margin: px(6.0),
-            background: popup_window_surface(titlebar_popup_menu_background()),
+            background: frame.fill,
             foreground: titlebar_popup_menu_foreground(),
-            border: titlebar_popup_menu_border_color(),
+            border: frame.border,
             hover: titlebar_popup_menu_hover_color(),
         })
         .min_w(px(width))

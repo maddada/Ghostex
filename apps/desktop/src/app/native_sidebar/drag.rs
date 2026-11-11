@@ -179,13 +179,15 @@ impl GhostexGpuiApp {
             return;
         }
         if target_kind == "section" {
-            // A heading of another project takes no section move from this row, but it is still
-            // that project: the drop hands the session over (gx-core `check_session_handoff`).
+            // A heading of another group takes no section move from this row, but it is still
+            // that group: the drop hands the session over to another project (gx-core
+            // `check_session_handoff`) or moves it into its own project's other group, a session
+            // group or the project's list (gx-core `heading_takes_row_into_group`).
             if source.kind == "session"
                 && let Some(group_id) = group_id
             {
                 self.set_native_sidebar_session_drop(
-                    Some(json!({"type": "moveSession", "sessionId": source.id, "groupId": group_id, "position": "before", "handoffOnly": true})),
+                    Some(json!({"type": "moveSession", "sessionId": source.id, "groupId": group_id, "position": "before", "handoffOnly": true, "headingSection": target_id})),
                     cx,
                 );
                 return;
@@ -245,6 +247,13 @@ impl GhostexGpuiApp {
         ) {
             self.resolve_native_sidebar_drop_landing(command, |app, command| {
                 app.with_native_sidebar_project_drop_landing(command)
+            })
+        } else if command["type"] == "moveToSpace" {
+            // The Space button lights up (`native_sidebar_space_drop_target`) only when the drop
+            // changes the project's Space; the release still files it at the front as before.
+            self.resolve_native_sidebar_drop_landing(command, |app, mut command| {
+                command["changesSpace"] = json!(app.gx_store_move_to_space_changes_space(&command));
+                Some(command)
             })
         } else {
             Some(command)
@@ -401,6 +410,18 @@ impl GhostexGpuiApp {
         }
         (before.is_none() && landing["afterSessionId"].as_str() == Some(session_id))
             .then_some("after")
+    }
+
+    /// Whether a project or folder drag would move into this Space, for its button's highlight.
+    pub(crate) fn native_sidebar_space_drop_target(&self, space_id: &str) -> bool {
+        self.native_sidebar
+            .drop_command
+            .as_ref()
+            .is_some_and(|command| {
+                command["type"] == "moveToSpace"
+                    && command["spaceId"] == space_id
+                    && command["changesSpace"] == true
+            })
     }
 
     /// Whether a session drag would move the row into this group from another one, for the

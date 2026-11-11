@@ -173,6 +173,9 @@ pub(crate) struct VoiceAgent {
     pub(crate) tool_label: Option<String>,
     pub(crate) rows: Vec<VoiceRow>,
     pub(crate) muted: bool,
+    /// The agent's speech is not played (the panel's speaker toggle). Captions, the microphone and
+    /// typed turns carry on. For this call only: every call starts with the agent heard.
+    pub(crate) voice_muted: bool,
     pub(crate) problem: Option<VoiceProblem>,
     /// `xai` or `openai`, once `ready` named it.
     pub(crate) provider: Option<String>,
@@ -187,8 +190,12 @@ pub(crate) struct VoiceAgent {
     pub(crate) voice_picker_open: bool,
     /// How fast the agent's audio plays (`voiceAgentSpeed`).
     pub(crate) speed: f32,
-    /// `voiceAgentCallMode` is `pushToTalk`: the next call is push-to-talk (the gear menu's tick).
+    /// `voiceAgentCallMode` is `pushToTalk` (the gear menu's tick): the running call switches to it
+    /// when `call_mode_live`, else the next call starts in it.
     pub(crate) push_to_talk_setting: bool,
+    /// gxserver switches a running call when the call mode is saved (`ready.callModeLive`); an
+    /// older one keeps the mode the call started with.
+    pub(crate) call_mode_live: bool,
     /// This call is push-to-talk (`ready` said so): the microphone streams only while Talk is held.
     pub(crate) push_to_talk: bool,
     /// Talk is held (gxserver was sent `talkStart`).
@@ -197,6 +204,9 @@ pub(crate) struct VoiceAgent {
     pub(crate) hold: Option<super::hold_to_talk::HoldSource>,
     /// Space would hold Talk now (the main window's keyboard is free), for the panel's keycap.
     pub(crate) space_free: bool,
+    /// Space would hold Talk in the voice panel: it has the keyboard and its text box does not
+    /// (`panel_input.rs`).
+    pub(crate) panel_space_free: bool,
     /// A short note in the strip above the panel's buttons, and the timer that clears it.
     pub(crate) hint: Option<String>,
     pub(super) hint_timer: Option<Task<()>>,
@@ -280,6 +290,13 @@ struct Playback {
     dropping: bool,
     /// Samples of the current reply handed to the speaker.
     relayed: u64,
+    /// The agent's voice is muted: its audio is not played.
+    silenced: bool,
+    /// Unmuted partway through a reply: the rest of it stays silent, speech resumes with the next.
+    skipping: bool,
+    /// Some of the current reply was not played, so how much was heard is not reported at an
+    /// interruption: gxserver's own playback clock, which paced the captions read instead, decides.
+    unheard: bool,
 }
 
 enum VoiceMessage {
@@ -368,6 +385,7 @@ impl GhostexGpuiApp {
         agent.hint = None;
         agent.hint_timer = None;
         agent.muted = false;
+        agent.voice_muted = false;
         agent.state = "connecting".to_string();
         agent.hang_up_timer = None;
         let endpoint = match endpoint {
@@ -473,6 +491,35 @@ impl GhostexGpuiApp {
             }
         }
         self.sync_voice_agent_panel(cx);
+    }
+
+    /// Mutes or unmutes the agent's speech, on this computer only: gxserver still relays the audio
+    /// (the captions and the reply's timing come with it) and the speaker drops it. Muting silences
+    /// what is queued at once; unmuting speaks from the next reply, so nothing skipped is replayed.
+    pub(crate) fn toggle_voice_agent_voice_mute(&mut self, cx: &mut gpui::Context<Self>) {
+        let voice_muted = !self.voice_agent.voice_muted;
+        self.voice_agent.voice_muted = voice_muted;
+        if let Some(link) = &self.voice_agent.link {
+            set_voice_muted(&link.shared, voice_muted);
+        }
+        self.sync_voice_agent_panel(cx);
+    }
+
+    /// A message typed in the panel's text box, sent into the live call as the user's turn: gxserver
+    /// shows it as the user's caption, cuts a reply being spoken and answers it like a spoken turn
+    /// (`server/src/voice_agent/socket.rs`, `text`). Mute is left as it is. False when no call is
+    /// live to take it.
+    pub(crate) fn send_voice_agent_text(&mut self, text: &str) -> bool {
+        let text = text.trim();
+        if text.is_empty() || self.voice_agent.phase != VoicePhase::Live {
+            return false;
+        }
+        let Some(link) = &self.voice_agent.link else {
+            return false;
+        };
+        link.socket
+            .send_json(&json!({ "type": "text", "text": text }));
+        true
     }
 
     /// "Stop talking": gxserver cancels the reply and answers `interrupted`.
@@ -658,6 +705,7 @@ impl GhostexGpuiApp {
                             .send_json(&json!({ "type": "mute", "muted": true }));
                     }
                 }
+                self.voice_agent.call_mode_live = event["callModeLive"].as_bool() == Some(true);
                 let push_to_talk = event["callMode"].as_str() == Some("pushToTalk");
                 self.voice_agent.push_to_talk = push_to_talk;
                 if let Some(link) = &self.voice_agent.link {
@@ -671,6 +719,10 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "callMode" => self.voice_agent_call_mode_switched(
+                event["callMode"].as_str() == Some("pushToTalk"),
+                cx,
+            ),
             "caption" => {
                 let role = if event["role"].as_str() == Some("user") {
                     VoiceRole::User
@@ -887,7 +939,8 @@ impl GhostexGpuiApp {
         self.save_voice_agent_setting(SPEED_SETTING, json!(speed_setting_value(speed)), cx);
     }
 
-    /// The gear menu: saves `voiceAgentCallMode`; gxserver reads it when the next call starts.
+    /// The gear menu: saves `voiceAgentCallMode`. A gxserver with `callModeLive` switches the
+    /// running call at once and answers `callMode`; an older one reads it when the next call starts.
     pub(crate) fn set_voice_agent_call_mode(
         &mut self,
         push_to_talk: bool,
@@ -899,6 +952,32 @@ impl GhostexGpuiApp {
             "regular"
         };
         self.save_voice_agent_setting(CALL_MODE_SETTING, json!(value), cx);
+    }
+
+    /// gxserver switched the running call's mode (`{"type":"callMode"}`, sent when
+    /// `voiceAgentCallMode` is saved): the hold button and microphone gate follow, a hold in
+    /// progress is gone (gxserver dropped it), and the strip says what changed.
+    ///
+    /// CDXC:VoiceMode 2026-11-10 DECISION: User: "fix the mode switching so selecting regular from push-to-talk reliably switches the conversation to regular mode. Also consider showing the user a notice when the mode is about to switch, so it's clear what's happening." Picking a mode in the gear menu switches the running call (gxserver, `Conversation::set_call_mode`), and the panel's strip says "Microphone is open: regular mode" or "Hold to speak is on". Against a gxserver without `callModeLive` the menu still says the mode applies to the next call. Supersedes the call keeping the mode it started with.
+    fn voice_agent_call_mode_switched(&mut self, push_to_talk: bool, cx: &mut gpui::Context<Self>) {
+        let agent = &mut self.voice_agent;
+        agent.push_to_talk = push_to_talk;
+        agent.hold = None;
+        agent.talking = false;
+        if let Some(link) = &agent.link {
+            link.shared
+                .push_to_talk
+                .store(push_to_talk, Ordering::SeqCst);
+            link.shared.talking.store(false, Ordering::SeqCst);
+        }
+        self.flash_voice_agent_hint(
+            if push_to_talk {
+                super::hold_to_talk::HINT_PUSH_TO_TALK_ON
+            } else {
+                super::hold_to_talk::HINT_REGULAR_ON
+            },
+            cx,
+        );
     }
 
     /// Tells gxserver a hold started (`down`) or ended (`hold_to_talk.rs` decides when). In a
@@ -970,7 +1049,8 @@ impl GhostexGpuiApp {
         let speed = voice_agent_speed_setting(settings);
         let push_to_talk = push_to_talk_setting(settings);
         let agent = &mut self.voice_agent;
-        // The call mode applies to the next call; only the gear menu's tick follows it now.
+        // The gear menu's tick follows the setting; the running call follows gxserver's `callMode`
+        // frame (or, from an older gxserver, keeps its mode until the next call).
         let mode_changed = push_to_talk != agent.push_to_talk_setting;
         agent.push_to_talk_setting = push_to_talk;
         let Some(link) = agent.link.as_ref() else {
@@ -1047,7 +1127,9 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
                 if let Ok(mut playback) = shared.playback.lock()
                     && !playback.dropping
                 {
-                    if let Some(audio) = &playback.audio {
+                    if playback.silenced || playback.skipping {
+                        playback.unheard = true;
+                    } else if let Some(audio) = &playback.audio {
                         audio.enqueue(&pcm);
                     }
                     playback.relayed += (pcm.len() / 2) as u64;
@@ -1060,6 +1142,8 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
                         if let Ok(mut playback) = shared.playback.lock() {
                             playback.dropping = false;
                             playback.relayed = 0;
+                            playback.skipping = false;
+                            playback.unheard = false;
                         }
                     }
                     Some("interrupted") => {
@@ -1071,8 +1155,10 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
                                 .unwrap_or(0);
                             playback.dropping = true;
                             // 24 samples per millisecond at 24 kHz.
-                            event["playedMs"] =
-                                json!(playback.relayed.saturating_sub(dropped) / 24);
+                            if !playback.unheard {
+                                event["playedMs"] =
+                                    json!(playback.relayed.saturating_sub(dropped) / 24);
+                            }
                         }
                     }
                     _ => {}
@@ -1083,6 +1169,23 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
         };
         let _ = shared.sender.unbounded_send(VoiceMessage::Socket(inbound));
     })
+}
+
+/// The speaker toggle on the playback the socket thread feeds.
+fn set_voice_muted(shared: &LinkShared, voice_muted: bool) {
+    if let Ok(mut playback) = shared.playback.lock() {
+        playback.silenced = voice_muted;
+        if voice_muted {
+            if let Some(audio) = &playback.audio
+                && audio.flush() > 0
+            {
+                playback.unheard = true;
+            }
+        } else {
+            // Whatever is left of the reply being relayed stays silent; `audioStart` ends this.
+            playback.skipping = true;
+        }
+    }
 }
 
 /// Silences the agent at once (Hang up, Stop talking).

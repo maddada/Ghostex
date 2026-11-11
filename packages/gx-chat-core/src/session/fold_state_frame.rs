@@ -28,6 +28,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
     // Prompt semantics: a carrier that can hold it and does not has CLEARED it.
     state.prompt = side.prompt.clone();
     state.terminal_notice = side.terminal_notice.clone();
+    state.agent_gone = side.agent_gone;
     state.terminal_activity = side.terminal_activity.clone();
     state.agent_fleet = side.agent_fleet.clone();
     state.agent_tasks = side.agent_tasks.clone();

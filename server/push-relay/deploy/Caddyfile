@@ -1,0 +1,9 @@
+# Ghostex's Live Activity push relay, on the share relay's name: add this handle block inside the
+# existing share.ghostex.dev site (server/share-relay/deploy/Caddyfile), above its reverse_proxy line.
+# Caddy holds the certificate; the relay listens on loopback only.
+	handle /live-activity/* {
+		request_body {
+			max_size 8KB
+		}
+		reverse_proxy 127.0.0.1:58810
+	}

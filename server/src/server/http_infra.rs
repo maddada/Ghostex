@@ -128,14 +128,21 @@ pub(crate) async fn read_json_body(
     body: Body,
     limit_bytes: usize,
 ) -> std::result::Result<Value, ReadBodyError> {
-    if let Some(length) = content_length(headers).filter(|length| *length > limit_bytes as u64) {
+    let declared = content_length(headers);
+    if let Some(length) = declared.filter(|length| *length > limit_bytes as u64) {
         return Err(ReadBodyError::TooLarge {
             size_bytes: Some(length),
         });
     }
-    let bytes = to_bytes(body, limit_bytes + 1)
-        .await
-        .map_err(|_| ReadBodyError::TooLarge { size_bytes: None })?;
+    let bytes = to_bytes(body, limit_bytes + 1).await.map_err(|error| {
+        // A declared length within the limit, or any error but the limit's, is a body that
+        // stopped before its end (the client's link dropped while it sent).
+        if declared.is_none() && hit_length_limit(&error) {
+            ReadBodyError::TooLarge { size_bytes: None }
+        } else {
+            ReadBodyError::Incomplete
+        }
+    })?;
     if bytes.len() > limit_bytes {
         return Err(ReadBodyError::TooLarge {
             size_bytes: Some(bytes.len() as u64),
@@ -150,9 +157,30 @@ pub(crate) async fn read_json_body(
     serde_json::from_str(text).map_err(|_| ReadBodyError::InvalidJson)
 }
 
+/*
+CDXC:VoiceMode 2026-11-11 WHY:
+A user on an iPhone with constant reconnects reported "transcribe still does not work. I get invalid JSON errors all the time." A dictation reaches gxserver in pieces of about 700 KB each; when the link drops while a piece is being sent, the body stops before its declared length. That used to be answered "Request body exceeds the 1048576 byte limit.", and the phone showed it as why the recording could not be sent. A cut body now says the request did not arrive whole, which is what happened and what the client can fix by sending again.
+*/
 pub(crate) enum ReadBodyError {
     InvalidJson,
-    TooLarge { size_bytes: Option<u64> },
+    TooLarge {
+        size_bytes: Option<u64>,
+    },
+    /// The body ended before its end: the connection dropped while the client sent it.
+    Incomplete,
+}
+
+/// Whether `to_bytes` stopped at its size limit (`http_body_util::LengthLimitError`, which
+/// gxserver can only name by what it says) rather than at a body that broke off.
+fn hit_length_limit(error: &axum::Error) -> bool {
+    let mut cause: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(current) = cause {
+        if current.to_string().contains("length limit exceeded") {
+            return true;
+        }
+        cause = current.source();
+    }
+    false
 }
 
 #[derive(Clone)]

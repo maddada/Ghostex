@@ -2,7 +2,9 @@
 //! or each project's group with its own shelves, or what an empty list says.
 
 use gpui::prelude::FluentBuilder;
-use gpui::{AnyElement, IntoElement, ParentElement, Styled, div, px};
+use gpui::{
+    AnyElement, IntoElement, ParentElement, StatefulInteractiveElement as _, Styled, div, px,
+};
 use gpui_component::v_flex;
 use serde_json::Value;
 
@@ -34,14 +36,35 @@ impl GhostexGpuiApp {
             } else {
                 "No sessions yet".to_string()
             };
-            div()
+            // CDXC:Onboarding 2026-11-11 WHY: the hands-on check of the new setup ended in this empty
+            // list with no way to add a project in sight. With no project at all it offers Add Project,
+            // as the Project sidebar's empty state does (native_sidebar/empty.rs).
+            let add_project = !unified.has_projects;
+            v_flex()
                 .w_full()
                 .py(px(26.0 * scale))
-                .flex()
-                .justify_center()
+                .items_center()
+                .gap(px(12.0 * scale))
                 .text_size(px(13.0 * scale))
                 .text_color(appearance.muted)
                 .child(copy)
+                .when(add_project, |column| {
+                    column.child(
+                        super::super::empty::empty_action_button(
+                            "native-unified-empty-add-project",
+                            "Add Project",
+                            Some("titlebar/plus.svg"),
+                            appearance,
+                        )
+                        .on_click(cx.listener(|app, _, _, cx| {
+                            cx.stop_propagation();
+                            app.dispatch_native_sidebar_ui(
+                                serde_json::json!({"type": "sidebarAction", "action": "addProject"}),
+                                cx,
+                            );
+                        })),
+                    )
+                })
         });
         let drafts = (!unified.drafts.is_empty()).then(|| UnifiedShelfView {
             shelf: ghostex_gx_core::unified_sidebar::UnifiedShelf::Drafts,

@@ -85,9 +85,10 @@ impl IntegrationsTab {
             .and_then(|plugins| plugins.iter().find(|plugin| plugin["id"] == "cef"))
             .cloned();
         match runtime {
+            // The neutral dot keeps the row on its neighbours' columns while the status loads.
             None => settings_list_item(
                 p,
-                None,
+                Some(ListItemStatus::Neutral),
                 Some(settings_icon(ICON_DEVICE_DESKTOP, 17.0, p.muted).into_any_element()),
                 TITLE,
                 Some(

@@ -85,7 +85,16 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
     } else if working {
         (Some("Working".to_string()), "word")
     } else {
-        (worked.clone(), "worked")
+        // A coordinator's finished turn says what it changed after its time, as one line
+        // ("Worked for 15s · Pairing page started · 1 ask"; extras/work_cards.rs `turn_summary`).
+        let worked =
+            worked.clone().map(
+                |worked| match crate::extras::work_cards::turn_summary(state) {
+                    Some(summary) => format!("{worked} \u{b7} {summary}"),
+                    None => worked,
+                },
+            );
+        (worked, "worked")
     };
     // One line: the renderers cut it with an ellipsis and show the whole text on hover.
     let label = label
@@ -127,28 +136,102 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         label_parts,
         in_transcript: state.transcript_view.chat_look.status_in_transcript
             && !state.transcript_view.items.is_empty(),
+        worked_at_ms: (phase == "worked")
+            .then(|| {
+                state
+                    .messages
+                    .composed
+                    .iter()
+                    .rev()
+                    .find_map(|message| message.timestamp)
+            })
+            .flatten(),
     }
 }
 
 /// Whether the transcript draws the running call's own words where the reader sees them: a tool
-/// call card's or Tool call lines' header always does, and the tool rows do when the running
-/// turn's calls start open (Detailed view, and the Summary view's running row). In Normal view the
-/// rows sit shut behind their sentence, so the card is where the words show. Agent work Reduced
+/// call card's or Tool call lines' header always does, and the tool rows do when the reader's folds
+/// leave the running call open ([`default_shows_running_call`]): they start open in Detailed view
+/// and on the Summary view's running row, and sit shut behind their sentence in Normal view, so
+/// there the card is where the words show until the reader opens the fold. Agent work Reduced
 /// turns the cards off and draws the running calls as one line that starts open only in Detailed,
 /// and Quiet leaves them out of the chat; both still draw a call waiting on an approval. Under
 /// Reduced the line, and the Summary view's "Active work" fold around it, are read as the reader
 /// left them ([`reduced_shows_running_call`]).
 ///
 /// CDXC:SessionChat 2026-11-09 DECISION:
-/// User, with Tool call cards on, of the card's live line and this card both reading "Type-check the phone and check Help on the rebased branch": "i still see the same text twice in the chat transcript man … we agreed to solve this". While the transcript shows the running call's words, this card shows the agent's own activity, else the working word and its clock, else "Working"; it names the call only when the transcript does not (a Normal-view row shut behind its sentence, or a call read off the screen that the transcript has not recorded yet). Later the same day the user approved that the check follows what the transcript actually draws under the chat look (`transcript/chat_look.rs`): under Agent work Quiet, and under Reduced while its line is shut, this card names the running call; the same words still never show twice. Supersedes this decision's earlier line that the chat look changes nothing here.
+/// User, with Tool call cards on, of the card's live line and this card both reading "Type-check the phone and check Help on the rebased branch": "i still see the same text twice in the chat transcript man … we agreed to solve this". While the transcript shows the running call's words, this card shows the agent's own activity, else the working word and its clock, else "Working"; it names the call only when the transcript does not (a Normal-view row shut behind its sentence, or a call read off the screen that the transcript has not recorded yet). Later the same day the user approved that the check follows what the transcript actually draws under the chat look (`transcript/chat_look.rs`): under Agent work Quiet, and under Reduced while its line is shut, this card names the running call; the same words still never show twice. Supersedes this decision's earlier line that the chat look changes nothing here. Then, of Agent work Default, the user asked that it follow the same check of the folds as they really are, with nothing else in Default's look changed: a sentence's calls opened by hand in Normal view, or closed by hand in Detailed, decide the same way.
 fn transcript_draws_running_call(state: &ChatState) -> bool {
-    use crate::transcript::view_level::{view_level, NORMAL};
     let view = &state.transcript_view;
     if view.grouped_work() {
         let waiting = crate::transcript::approval_wait::approval_wait(state).is_some();
         return waiting || (!view.hidden_work() && reduced_shows_running_call(state));
     }
-    view.tool_cards || view_level(view) != NORMAL
+    view.tool_cards || default_shows_running_call(state)
+}
+
+/// Agent work Default: whether the transcript shows the newest running call's row with the folds
+/// as the renderer reported them (`searchFolds`), read through the same walk Find uses
+/// ([`visible_segments`]): a sentence's calls open by default only in Detailed or while the
+/// running summary turn opens them (`toolsOpen`), and the Summary view's "Active work" fold
+/// around them. The defaults come from the core's own view level, as the renderers derive theirs.
+fn default_shows_running_call(state: &ChatState) -> bool {
+    use crate::document::TranscriptItem;
+    use crate::extras::transcript_search::visible_segments;
+    use crate::transcript::view_level::{view_level, DETAILED};
+    let view = &state.transcript_view;
+    let running = |row: &Value| -> Vec<usize> {
+        row["tools"]
+            .as_array()
+            .map(|tools| {
+                (0..tools.len())
+                    .filter(|index| tools[*index]["status"] == "running")
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    // The newest row running a call, and the item that draws it.
+    // Newest item first, stopping at the first one running a call (the list has no reverse iterator).
+    let mut newest_first = (0..view.items.len())
+        .rev()
+        .filter_map(|index| view.items.get(index));
+    let Some((item, row, calls)) = newest_first.find_map(|item| {
+        let rows: Vec<&Value> = match item {
+            TranscriptItem::Message { message } => vec![&**message],
+            // Newest first below: `work` holds the rows in the order they came, `cards` the
+            // copies drawn outside its fold.
+            TranscriptItem::Summary { work, cards, .. } => {
+                cards.iter().chain(work.iter()).map(|row| &**row).collect()
+            }
+            _ => Vec::new(),
+        };
+        rows.into_iter().rev().find_map(|row| {
+            let calls = running(row);
+            (!calls.is_empty()).then(|| {
+                (
+                    item,
+                    row["id"].as_str().unwrap_or_default().to_string(),
+                    calls,
+                )
+            })
+        })
+    }) else {
+        return false;
+    };
+    let Ok(item) = serde_json::to_value(item) else {
+        return false;
+    };
+    let detailed = view_level(view) == DETAILED;
+    let mut folds = state.extras.search.folds.clone();
+    folds.simple = !detailed;
+    folds.work_open = detailed;
+    folds.quiet_style = false;
+    folds.hidden = false;
+    let newest = calls.last().copied().unwrap_or_default();
+    let label = format!("tool:{row}:{newest}");
+    visible_segments(&item, &folds)
+        .iter()
+        .any(|segment| segment.label.as_deref() == Some(label.as_str()))
 }
 
 /// Agent work Reduced: whether the row running a call shows its calls with the folds as the
@@ -234,7 +317,10 @@ fn same_words(a: &str, b: &str) -> bool {
 fn running_call_label(state: &ChatState) -> Option<String> {
     let mut answered: Vec<&str> = Vec::new();
     for message in state.messages.list.iter().rev().take(400) {
-        let mut prompt = message.role == ChatRole::User;
+        // A background task's end reaches the chat as a user row (`<task-notification>`), but it
+        // is the agent's work: a call it lands beside is still running.
+        let mut prompt = message.role == ChatRole::User
+            && !crate::transcript::background_rows::is_background_task_row(message);
         for block in message.blocks.iter().rev() {
             match block {
                 ChatBlock::ToolResult {

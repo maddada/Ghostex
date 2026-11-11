@@ -145,7 +145,7 @@ impl GhostexGpuiApp {
             new_thread_picker_agents: None,
             agents_terminal_action_bar_account_page: None,
             remote_gxserver_connections: HashMap::new(),
-            // `?settings=` (lib.rs) stands in for the saved settings, so the HUD composes from it too;
+            // The page's settings (the computer's, with `?settings=` from lib.rs on top) feed the HUD too;
             // without this a setting the sidebar reads off the HUD (its zoom) never reached the page.
             sidebar_runtime_settings_snapshot: crate::cef::SidebarRuntimeSettingsSnapshot {
                 saved_settings_json: serde_json::to_string(
@@ -180,6 +180,12 @@ impl GhostexGpuiApp {
         false
     }
 
+    /// The page's menu has no rows for the app's panels (`MenuHost::menu_panels` is false), so
+    /// there is none to offer.
+    pub(crate) fn sidebar_menu_panel_offered(&self, _panel_id: &str) -> bool {
+        false
+    }
+
     pub(crate) fn render_sidebar_notification_bell(
         &self,
         _appearance: &SidebarAppearance,
@@ -189,15 +195,6 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn render_sidebar_collapse_button(
-        &self,
-        _in_sidebar: Option<&SidebarAppearance>,
-        _cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        div()
-    }
-
-    /// The Agents Panel toggle folds the panel behind an open view; the browser build opens no views.
-    pub(crate) fn render_workarea_header_agents_toggle(
         &self,
         _in_sidebar: Option<&SidebarAppearance>,
         _cx: &mut Context<Self>,

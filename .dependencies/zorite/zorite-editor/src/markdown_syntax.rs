@@ -89,9 +89,10 @@ pub struct SyntaxStyle {
     pub quote_bar: Hsla,
     /// Local change (Ghostex Docs): the fenced code card's 1px border; `None` draws none.
     pub code_border: Option<Hsla>,
-    /// Local change (Ghostex Docs): links open on Cmd-click (Ctrl-click off macOS) only, and a
-    /// plain click places the caret, like the Docs page.
-    pub links_need_modifier: bool,
+    /// Local change (Ghostex Docs): a plain click opens a link, except the link the caret is in
+    /// (its raw `[text](url)` showing), where it places the caret; Cmd-click (Ctrl-click off
+    /// macOS) opens either.
+    pub revealed_links_need_modifier: bool,
 }
 
 impl Style {
@@ -3270,7 +3271,7 @@ mod tests {
             heading: None,
             quote_bar: c,
             code_border: None,
-            links_need_modifier: false,
+            revealed_links_need_modifier: false,
         }
     }
 

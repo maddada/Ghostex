@@ -97,7 +97,7 @@ pub fn parse_computer_pairing_code(params: &Value) -> Result<ComputerPairingCode
         bail!("The Easy Connect code has no address or port.");
     }
     if code.secret.is_empty() {
-        bail!("This code can't pair a computer by itself. On the other computer, open Settings > Remote, click Connect a computer, then Copy the code, and paste that code here.");
+        bail!("This code can't pair a computer by itself. On the other computer, open Settings > Remote, click Connect a Computer, then Copy the code, and paste that code here.");
     }
     Ok(code)
 }

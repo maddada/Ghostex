@@ -10,7 +10,7 @@ use super::records::{
     COORDINATOR_GOAL_MAX_CHARS,
 };
 use super::role::{
-    coordinator_agent_families_text, coordinator_agent_family_supported, orchestrator_skill_line,
+    coordinator_agent_families_text, coordinator_agent_family_supported, coordinator_skill_line,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 
@@ -24,10 +24,10 @@ pub struct CoordinatorPromotion {
 }
 
 /// CDXC:Coordinators 2026-10-04 DECISION:
-/// User: "Make Coordinator" sits in the session context menu's Advanced submenu, "but I wanna be able to switch to coordinator without affecting the running thread at all". So promoting never restarts, reloads or interrupts the session: it stores the coordinator record (the crown, the thread tree, reports and `ghostex coordinator status` follow from it) and queues the message that hands over the role, which the queue delivers only once the agent is idle. Ghostex never resumes the session to apply the role.
+/// User: "Make Coordinator" sits in the session context menu's Advanced submenu, "but I wanna be able to switch to coordinator without affecting the running thread at all". So promoting never restarts, reloads or interrupts the session: it stores the coordinator record (the crown, the thread tree, reports and `ghostex coordinator status` follow from it) and hands over the role with a message. Ghostex never resumes the session to apply the role. (2026-11-10: that message is typed at once like a chat send instead of waiting in the queue; see `handle_promote_coordinator_http`.)
 /// CDXC:Coordinators 2026-10-17 DECISION:
-/// User: "we should install this orchestrator skill when user picks the orchstrator option so no need to inject things the other way". A promoted session gets its role like a created one: gxserver installs the `ghostex-orchestrator` skill for its agent and the queued message starts with the skill line. Its saved commands are no longer rewritten with a role flag (supersedes that part of the 2026-10-04 decision); the session is marked as taking its role from the skill.
-/// SEE-ALSO: server/src/server/coordinator_runtime.rs (`promote_coordinator`, which installs the skill and queues the message), server/src/coordinators/role.rs (the skill line), packages/gx-core/src/sidebar_menu/session.rs (the menu row).
+/// User: "we should install this orchestrator skill when user picks the orchstrator option so no need to inject things the other way". A promoted session gets its role like a created one: gxserver installs the `ghostex-coordinator` skill for its agent and the message starts with the skill line. Its saved commands are no longer rewritten with a role flag (supersedes that part of the 2026-10-04 decision); the session is marked as taking its role from the skill.
+/// SEE-ALSO: server/src/server/coordinator_runtime.rs (`handle_promote_coordinator_http`, which installs the skill and sends the message), server/src/coordinators/role.rs (the skill line), packages/gx-core/src/sidebar_menu/session.rs (the menu row).
 pub fn promote_session_to_coordinator(
     db: &Connection,
     server_id: &str,
@@ -154,7 +154,7 @@ fn refuse_ineligible(
 
 /// The chat message that hands a promoted session its role: the skill line, then what changed.
 pub fn playbook_message(family: &str, goal: &str) -> String {
-    let mut message = orchestrator_skill_line(family);
+    let mut message = coordinator_skill_line(family);
     message.push_str(
         "\n\nGhostex: this session is now a coordinator. You keep this conversation; from now on you work by that skill.",
     );

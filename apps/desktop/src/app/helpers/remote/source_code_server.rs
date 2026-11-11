@@ -481,6 +481,9 @@ pub(crate) fn run_remote_manage_files_bridge_request_for_project_snapshot(
                 | "addToSessionContext"
                 | "search"
                 | "sqlite"
+                // A picture outside the project that a chat linked to (`sessionId` carried below);
+                // gxserver reads it only for that chat (server/src/project_docs/chat_file.rs).
+                | "readResource"
         ) {
             return if action == "openWithSystemApp" {
                 Err("Files on a remote computer can't open in this computer's apps.".to_string())

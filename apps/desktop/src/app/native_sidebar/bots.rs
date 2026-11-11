@@ -3,7 +3,7 @@
 //!
 //! CDXC:Bots 2026-09-27 DECISION:
 //! User: the Bots entry is a Hermes-logo button.
-//! With Spaces on it is the last slot of the Space row, after a hairline, and can't be edited, deleted or dragged like a Space; with Spaces off it is a toggle in the sidebar's top row between the Agents Panel toggle and Search.
+//! With Spaces on it is the last slot of the Space row, after a hairline, and can't be edited, deleted or dragged like a Space; with Spaces off it is a toggle in the sidebar's top row between the Toggle sidebar button and Search.
 //! Only one of the two exists at a time, and neither exists while Bots is switched off in Settings > Extensions.
 //! While Bots is showing it draws a back arrow instead of the logo, so it reads as the way back to the projects; this supersedes the logo-only look of 2026-09-26.
 
@@ -18,12 +18,13 @@ use serde_json::json;
 
 use super::appearance::SidebarAppearance;
 use super::model::NativeSidebarGroup;
-use super::navigation::SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH;
+use super::navigation::{
+    SIDEBAR_TOP_ROW_BUTTON_HEIGHT, SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH, SIDEBAR_TOP_ROW_BUTTON_RADIUS,
+    SIDEBAR_TOP_ROW_BUTTON_WIDTH,
+};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// The top-row toggle's width, which the row's compaction math counts.
-pub(crate) const BOTS_TOGGLE_WIDTH: f32 = 30.0;
 /// The hairline and its gap before the Space-row slot, which the slot capacity counts.
 pub(crate) const BOTS_SPACE_SLOT_DIVIDER_WIDTH: f32 = 5.0;
 
@@ -74,7 +75,7 @@ impl GhostexGpuiApp {
                     cx,
                 )
                 .size(px(28.0 * scale))
-                .rounded(px(6.0 * scale))
+                .rounded(px(SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
                 .border_1()
                 .border_color(appearance.foreground.opacity(0.08))
                 .cursor_pointer()
@@ -105,11 +106,11 @@ impl GhostexGpuiApp {
             cx,
         )
         .when(cfg!(target_os = "windows"), |button| button.occlude())
-        .h(px(28.0 * scale))
-        .w(px(BOTS_TOGGLE_WIDTH * scale))
+        .h(px(SIDEBAR_TOP_ROW_BUTTON_HEIGHT * scale))
+        .w(px(SIDEBAR_TOP_ROW_BUTTON_WIDTH * scale))
         .flex_shrink(1.0)
         .min_w(px(SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH * scale))
-        .rounded(px(5.0 * scale))
+        .rounded(px(SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
         .cursor_default()
         .when(bots_mode, |button| button.bg(appearance.selected))
         .into_any_element()
@@ -158,6 +159,16 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.toggle_native_sidebar_bots_mode(cx);
             }))
+            // Both entries (the top row's and the Spaces row's) sit above the list.
+            .map(|button| {
+                self.sidebar_focus_stop(
+                    button,
+                    format!("bots:{id}"),
+                    super::focus_order::SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
             .managed_discrete_tooltip_with_placement(
                 ManagedTooltipPlacement::Right,
                 appearance.tooltip_delay,

@@ -302,7 +302,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         },
         light,
         glass: false,
-        surface: None,
+        surface: Some(super::share_popover_demo::preview_menu_frame(light, false)),
     };
     let slot: Rc<RefCell<Option<Entity<JobsDemo>>>> = Rc::new(RefCell::new(None));
     let out = slot.clone();

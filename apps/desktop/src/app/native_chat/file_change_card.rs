@@ -225,11 +225,13 @@ impl NativeChatView {
     }
 
     /// An edit row's diff inside a tool-call card (`tool_card.rs`), the same diff a file card's
-    /// row opens onto; `None` until the core has the lines.
+    /// row opens onto, with Review all for `review` (the card's edited files) in its footer, as the
+    /// file card's header has it; `None` until the core has the lines.
     pub(super) fn file_entry_diff(
         &mut self,
         key: &str,
         file: &Value,
+        review: Vec<String>,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -243,7 +245,7 @@ impl NativeChatView {
             return None;
         }
         let palette = Palette::of(p);
-        Some(self.file_change_diff(key, file, &detail, &palette, p, cx))
+        Some(self.file_change_diff(key, file, &detail, Some(review), &palette, p, cx))
     }
 
     /// The turn's writes, folded behind "N files changed" ("Edited N files" in simple mode) right
@@ -263,23 +265,17 @@ impl NativeChatView {
             files,
             files_label,
             simple_files_label,
-            deferred,
             ..
         } = item
         else {
             return None;
         };
-        // An older turn arrives collapsed with only the paths its unread work changed; the row
-        // stays and reads that work on open, as React's list did (`list.tsx`).
-        let unread = match turn_files_fold(item, turn_open) {
-            TurnFilesFold::Hidden => return None,
-            TurnFilesFold::Files => false,
-            TurnFilesFold::Unread => true,
-        };
+        if turn_files_fold(item, turn_open) == TurnFilesFold::Hidden {
+            return None;
+        }
         let key = format!("work-files:{id}");
         let expanded = self.is_expanded(&key, false);
         let motion = self.disclosure_frame(&key, expanded, cx);
-        let load = unread.then(|| json!({"type":"loadWork","id":id,"work":deferred}));
         let label = if p.simple {
             simple_files_label.clone()
         } else {
@@ -291,16 +287,10 @@ impl NativeChatView {
             .w_full()
             .min_w_0()
             .gap(px(8.0 * p.scale))
-            .child(self.disclosure(key.clone(), label, expanded, load, p, cx));
+            .child(self.disclosure(key.clone(), label, expanded, None, p, cx));
         if expanded || motion.is_some() {
-            let body = if unread {
-                self.deferred_work_notice(item, p, cx)
-            } else {
-                Some(self.file_change_card(&format!("work:{id}"), files_card, files, p, cx))
-            };
-            if let Some(body) = body {
-                group = group.child(self.disclosure_body_motion(&key, motion, 8.0 * p.scale, body));
-            }
+            let body = self.file_change_card(&format!("work:{id}"), files_card, files, p, cx);
+            group = group.child(self.disclosure_body_motion(&key, motion, 8.0 * p.scale, body));
         }
         Some(group.into_any_element())
     }
@@ -536,17 +526,20 @@ impl NativeChatView {
         if detail.is_null() {
             return row.into_any_element();
         }
-        let body = self.file_change_diff(&key, file, &detail, palette, p, cx);
+        let body = self.file_change_diff(&key, file, &detail, None, palette, p, cx);
         row = row.child(self.disclosure_body_motion(&key, motion, 0.0, body));
         row.into_any_element()
     }
 
     /// An open row's diff on its darker well, with the buttons under it.
+    /// `review`, when given, adds Review all for those paths to the footer.
+    #[allow(clippy::too_many_arguments)]
     fn file_change_diff(
         &mut self,
         key: &str,
         file: &Value,
         detail: &Value,
+        review: Option<Vec<String>>,
         palette: &Palette,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
@@ -752,6 +745,19 @@ impl NativeChatView {
                             json!({"type":"openMarkdownLink","href":open_path,"external":false}),
                             cx,
                         )
+                    })),
+                )
+            })
+            .when_some(review.filter(|paths| !paths.is_empty()), |this, paths| {
+                this.child(
+                    ghost(
+                        format!("file-review-all:{key}"),
+                        "titlebar/git-compare.svg",
+                        "Review all".to_string(),
+                    )
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        cx.stop_propagation();
+                        view.invoke(json!({"type":"reviewFileChanges","paths":paths}), cx);
                     })),
                 )
             });

@@ -74,16 +74,21 @@ box's own token file, peers and extensions open no socket. Test:
 "you") hold every capability. An agent's session token holds every one except the two that keep
 the door: `DecideApprovals` (list, approve and deny requests) and `OwnerSecrets` (answer a secret
 request, have gxserver read a secret provider reference, the phone's Cloud Box kit). Coordinators
-manage only their own threads (`ManageOwnThreads`; `ManageAnyThreads` is the token file's), which
-is how threads are organised, not a security rule. Peers hold only `RequestSensitiveAction` and
-keep `PEER_ALLOWED_ENDPOINTS`; guests, extensions and anonymous callers hold none and keep their
-own allow-lists.
+manage only their own threads (`ManageAnyThreads`, for any coordinator's threads, is yours and
+the token file's), which is how threads are organised, not a security rule. Peers hold only
+`RequestSensitiveAction` and keep `PEER_ALLOWED_ENDPOINTS`; guests, extensions and anonymous
+callers hold none and keep their own allow-lists.
 
 Refusals that stay because they keep the door: an agent's session token can't approve or deny,
 list requests, answer or read a secret, enroll an owner key, get a pairing code (it gets the
 connection details with an empty code), or ask to pair over SSH (`/api/pairOverSsh` takes only the
 token file); a request is never approved by the caller that asked (`ApprovalStore::approve_plain`).
 A GBot API chat takes input only from you (`api_chat_refused`): its text comes from outside Ghostex.
+A thread's approval card relayed to its coordinator's chat is answered only by you
+(`relayed_card_refusal`): gxserver refuses a relayed answer (`relayedFrom`) from anyone but your
+own computer and phones, and while the card waits, an approval answer to that thread and any typing
+or Enter into its terminal from an agent's session token, another computer's agents, extensions or
+guests. Escape and Ctrl-C still pass (they cancel; coordinators stop stuck threads that way).
 
 ### Chief's head role
 
@@ -96,8 +101,9 @@ record (`metadata.chiefSession`, written only when gxserver itself creates that 
 Change Agent therefore take the role away on the next request. `/api/chief` `open`, `newChat` and
 `setAgent` accept only the owner's devices and the token file.
 
-`Principal::may_manage_thread_of(coordinator_session_id)` is the check for "coordinators manage
-their own threads"; the gate refuses a session that links threads to, edits or promotes a
+"Coordinators manage their own threads" is checked by who the session is, not by its token's role
+(a session promoted to coordinator keeps the role it started with): `coordinator_refusal` in
+`server/src/server/security_gates.rs` refuses a session that links threads to, edits or promotes a
 coordinator other than itself.
 
 ## How a route declares what it needs
@@ -308,6 +314,22 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
 - `/api/remotePairingCode` gives a code (the one-time nonce) only to `Principal::Owner` with
   `openTunnel: true` (the desktop's Show QR sheet is open); everyone else gets the Easy Connect
   details with empty `payload`/`text` and no `secret`. A code lives 5 minutes and is single-use.
+- How a new device gets past Easy Connect's allow-list to ask at all (`server/src/tailcat/door.rs`):
+  while a code is shown or a device waits as Pending, a third Easy Connect helper (lane `door` in
+  `easyConnect.helper` log lines) runs open and the QR carries its address; the two helpers paired
+  devices are on are never opened and are not restarted for it. The text code names the first
+  helper, where a new key is let in when it knocks (that one helper starts again with it). An
+  approved key goes on the allow-list of both helpers at once (they start again once with it), and
+  the door stops when the window closes; a removed key still restarts the helpers at once. The
+  address list a paired device gets names the addresses of both doors a code can carry (the one
+  pinned to the relay and the one on the public relays) last, each flagged `door`, only so a
+  phone can tell at its next scan that the door is this computer's (the old phone app compares
+  the key inside an address); the doors themselves still answer only while a code is shown.
+- The relay check (`server/src/tailcat/relay_check.rs`) has a tailcat client key of its own beside
+  each helper's key (`relay-check.private.json`). It is on no allow-list and is never added to
+  one: gxserver says hello with it to this computer's own address, the helper logs the hello and
+  refuses the key, and that log line is all the check uses. While a pairing code is shown its
+  refused hello is not a knock.
 - `/api/pairDevice` (public) takes `deviceKey` (P-256, `ecdsaP256Sha256`) and optionally the
   phone's `approverKey`, consumes the code, and answers `{ status: "pending", pendingId, words }`.
   It creates a `pairingApproveDevice` approval request (target: the pending id; the detail names

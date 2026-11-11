@@ -2,8 +2,8 @@
   "height": 44,
   "radius": 10,
   "paddingX": 12,
-  "titleSize": 13.5,
-  "titleLineHeight": 18,
+  "titleSize": 14,
+  "titleLineHeight": 20,
   "titleWeight": 500,
   "borderAlpha": 0.06,
   "fillInputAlpha": 0.75,
@@ -32,7 +32,7 @@
     "glyphSize": 6,
     "fill": "#16a34a",
     "errorFill": "#dc2626",
-    "askFill": "#D2A024",
+    "askFill": "#F472B6",
     "askInk": "#161616"
   }
 }

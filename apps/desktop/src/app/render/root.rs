@@ -191,6 +191,8 @@ impl Render for GhostexGpuiApp {
         self.note_voice_agent_space_free(window, cx);
         self.sync_read_aloud_on_screen(window, cx);
         self.main_window_handle = Some(gpui::Window::window_handle(window));
+        // The Focus Sidebar hotkey's entry ends at once when its sidebar is no longer drawn.
+        self.check_native_sidebar_keyboard_entry(cx);
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);
         self.sync_main_window_glass(window, cx);
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);
@@ -387,7 +389,18 @@ impl Render for GhostexGpuiApp {
                 }
             }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                // While the Focus Sidebar hotkey's entry waits for its row, the keyboard is parked here but is the sidebar's: nothing is typed anywhere, and Escape gives it back (native_sidebar/keyboard.rs).
+                if this.native_sidebar.focus_stops.entry_pending() {
+                    if event.keystroke.key == "escape" {
+                        this.sidebar_keyboard_give_back(window, cx);
+                    }
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    return;
+                }
+                // A focused sidebar control takes Enter and Space as its click (native_sidebar/focus_order.rs); nothing here may also type them into a terminal or the chat.
                 if this.native_sidebar_input_owns_focus(window, cx)
+                    || this.native_sidebar_stop_focused(window)
                     || this.terminal_search_input_owns_keyboard_focus(window, cx)
                     || this.browser_find_input_owns_keyboard_focus(window, cx)
                 {
@@ -1103,6 +1116,9 @@ impl Render for GhostexGpuiApp {
                     this.set_voice_agent_speed(f32::from(action.hundredths) / 100.0, cx);
                 }),
             )
+            .on_action(cx.listener(|_, action: &CopyVoiceAgentText, _window, cx| {
+                gpui_copy_to_clipboard(ClipboardItem::new_string(action.text.clone()), cx);
+            }))
             .on_action(cx.listener(
                 |this, action: &SetBrowserDeviceView, _window, cx| {
                     this.set_browser_device_view_for_pane(

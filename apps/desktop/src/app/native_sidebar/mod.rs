@@ -14,12 +14,14 @@ mod disclosure;
 pub(crate) mod drag;
 mod drag_source;
 mod empty;
+pub(crate) mod focus_order;
 mod gbots_departments;
 pub(crate) mod gbots_rows;
 mod host;
 pub(crate) mod hover_actions;
 pub(crate) mod icons;
 pub(crate) mod images;
+pub(crate) mod keyboard;
 pub(crate) mod link_chips;
 pub(crate) mod links_list;
 mod machine_notice;
@@ -30,6 +32,7 @@ pub(crate) use menu_state::{SIDEBAR_MENU_ROW_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIG
 pub(crate) mod menus;
 pub(crate) mod model;
 pub(crate) mod navigation;
+mod new_session_row;
 #[cfg(target_os = "macos")]
 mod pointer;
 mod project_header;

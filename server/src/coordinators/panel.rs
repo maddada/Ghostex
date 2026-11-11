@@ -194,6 +194,8 @@ struct PanelInputs {
     items: Vec<super::work::WorkItem>,
     custom_tags: Value,
     intro_hidden: bool,
+    /// The coordinator's idle floor (turns.rs): a new turn moves items in or out of In progress.
+    idle_floor: chrono::DateTime<chrono::Utc>,
     built_at: std::time::Instant,
 }
 
@@ -690,12 +692,25 @@ pub fn refresh_coordinator_panels(
         .map(|mut rows| std::mem::take(&mut *rows))
         .unwrap_or_default();
     let mut next_rows: HashMap<SessionKey, CachedRow> = HashMap::new();
-    let mut built: Vec<(SessionKey, Vec<Value>, bool)> = Vec::new();
+    let mut built: Vec<(SessionKey, Vec<Value>, bool, chrono::DateTime<chrono::Utc>)> = Vec::new();
+    let mut turn_starts = super::turns::read_turn_starts(db);
     for coordinator in coordinators {
         let key = coordinator.key();
         if !session_exists(db, &key) {
             continue;
         }
+        // The coordinator's own turns, for which of its items it is on (turns.rs).
+        if let Some(started) = repository
+            .get_session(&key.0, &key.1)
+            .ok()
+            .flatten()
+            .and_then(|session| {
+                crate::presentation::session_effective_working_started_at(&session, &generated_at)
+            })
+        {
+            super::turns::note_turn_start(db, &mut turn_starts, &key, &started);
+        }
+        let idle_floor = super::turns::idle_floor(&turn_starts, &key, now);
         let mut panel_rows = Vec::new();
         for thread in threads
             .iter()
@@ -782,7 +797,7 @@ pub fn refresh_coordinator_panels(
                 .map(|thread| build_remote_row(thread, now)),
         );
         let has_remote = panel_rows.len() > local_rows;
-        built.push((key, panel_rows, has_remote));
+        built.push((key, panel_rows, has_remote, idle_floor));
     }
     if let Ok(mut rows) = rows().lock() {
         *rows = next_rows;
@@ -801,7 +816,7 @@ pub fn refresh_coordinator_panels(
     let mut next: HashMap<SessionKey, CachedPanel> = HashMap::new();
     // Panels built from the same inputs as last time: kept, and unchanged by definition.
     let mut kept: Vec<SessionKey> = Vec::new();
-    for (key, mut panel_rows, has_remote) in built {
+    for (key, mut panel_rows, has_remote, idle_floor) in built {
         let items = board_items.remove(&key).unwrap_or_default();
         if let Some(last) = inputs.remove(&key).filter(|last| {
             !has_remote
@@ -810,6 +825,7 @@ pub fn refresh_coordinator_panels(
                 && last.intro_hidden == intro_hidden
                 && last.custom_tags == custom_tags
                 && last.items == items
+                && last.idle_floor == idle_floor
                 && last.rows == panel_rows
         }) {
             next_inputs.insert(key.clone(), last);
@@ -821,7 +837,7 @@ pub fn refresh_coordinator_panels(
         let mut board =
             super::board::board_value(&panel_rows, &items, Some(super::board::SUMMARY_ROWS), now);
         super::board::add_tag_looks(&mut board, &custom_tags);
-        let mut work = super::work::work_value(&panel_rows, &items, false, now);
+        let mut work = super::work::work_value(&panel_rows, &items, false, now, Some(idle_floor));
         super::work::add_work_tag_looks(&mut work, &custom_tags);
         let panel = cached_panel(
             panel_rows,
@@ -839,6 +855,7 @@ pub fn refresh_coordinator_panels(
                 items,
                 custom_tags: custom_tags.clone(),
                 intro_hidden,
+                idle_floor,
                 built_at: std::time::Instant::now(),
             },
         );

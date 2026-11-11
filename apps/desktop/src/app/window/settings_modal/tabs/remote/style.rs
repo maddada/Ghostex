@@ -198,40 +198,9 @@ pub(super) fn spinner(
         .into_any_element()
 }
 
-/// The shadcn `Switch size='sm'` in the Settings skin: a 24x16 track, 12px thumb.
+/// The shadcn `Switch size='sm'` in the Settings skin: the small Settings switch.
 pub(super) fn small_switch(p: &SettingsPalette, checked: bool) -> AnyElement {
-    let thumb = if checked || p.light {
-        p.surface
-    } else {
-        p.foreground
-    };
-    div()
-        .flex_shrink_0()
-        .w(px(24.0))
-        .h(px(16.0))
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(if checked {
-            transparent()
-        } else {
-            hsla(p.hairline)
-        })
-        .bg(hsla(if checked {
-            p.foreground
-        } else {
-            p.raised_hover
-        }))
-        .flex()
-        .items_center()
-        .child(
-            div()
-                .size(px(12.0))
-                .ml(px(if checked { 10.0 } else { 1.0 }))
-                .rounded(px(4.0))
-                .bg(hsla(thumb))
-                .shadow_sm(),
-        )
-        .into_any_element()
+    super::super::super::fields::checkbox::settings_small_switch(p, checked, false)
 }
 
 /// One option of the raised `SegmentedControl`.
@@ -762,7 +731,9 @@ pub(super) fn dialog_overlay<V: 'static>(
                     .occlude()
                     .w(viewport.width)
                     .h(viewport.height)
-                    .bg(hsla(modal_rgba(0x000000, 0.65)))
+                    .bg(hsla(super::super::super::fields::nested_backdrop(
+                        window, 0.65,
+                    )))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -779,8 +750,17 @@ pub(super) fn dialog_overlay<V: 'static>(
     .into_any_element()
 }
 
+/// How much of the ink an open fold's header band takes, and the tint of the rows it holds.
+const FOLD_HEADER_BAND_ALPHA: f32 = 0.07;
+const FOLD_BODY_TINT_ALPHA: f32 = 0.022;
+/// How far the rows an open fold holds are set in from its header's text.
+const FOLD_BODY_INDENT: f32 = 16.0;
+
 /// One of the page's bottom rows (This computer, Tailscale, Advanced): its title, one line under it
-/// and a chevron; the whole row opens or closes what it holds in place.
+/// and a chevron; the whole row opens or closes what it holds in place ([`fold_group`]).
+///
+/// CDXC:Settings 2026-11-10 DECISION:
+/// User, of the opened This computer fold, whose header looked exactly like the Name, Short name and SSH access rows under it: "please make it clear which of these is a header and which are settings under that header here". A fold's title is semibold, and while it is open its header sits on its own quiet band of the ink (`FOLD_HEADER_BAND_ALPHA`); the rows it holds are set in by `FOLD_BODY_INDENT` on a fainter tint (`FOLD_BODY_TINT_ALPHA`), their hairlines starting at that indent, so they read as belonging to it. Ink washes only: no dark fills on glass and no coloured borders.
 pub(super) fn fold_row<V: 'static>(
     t: &RemoteTokens,
     id: &'static str,
@@ -804,6 +784,12 @@ pub(super) fn fold_row<V: 'static>(
         .gap(px(12.0))
         .items_center()
         .cursor_pointer()
+        .when(open, |this| {
+            this.bg(hsla(Rgba {
+                a: FOLD_HEADER_BAND_ALPHA,
+                ..t.foreground
+            }))
+        })
         .hover(move |this| this.bg(hsla(wash)))
         .on_press(cx, on_press)
         .child(
@@ -815,6 +801,7 @@ pub(super) fn fold_row<V: 'static>(
                     div()
                         .text_size(px(14.0))
                         .line_height(px(20.0))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(hsla(t.foreground))
                         .child(title),
                 )
@@ -829,6 +816,44 @@ pub(super) fn fold_row<V: 'static>(
             16.0,
             t.muted,
         ))
+        .into_any_element()
+}
+
+/// A fold of the page's bottom frame: its header ([`fold_row`]) and, while open, the rows it holds,
+/// set in on their own tint under a hairline, each after the first under a hairline that starts at
+/// the indent.
+pub(super) fn fold_group(
+    t: &RemoteTokens,
+    header: AnyElement,
+    body: Vec<AnyElement>,
+) -> AnyElement {
+    let divider = t.edge(0.70);
+    let body = (!body.is_empty()).then(|| {
+        v_flex()
+            .w_full()
+            .min_w_0()
+            .border_t_1()
+            .border_color(hsla(divider))
+            .bg(hsla(Rgba {
+                a: FOLD_BODY_TINT_ALPHA,
+                ..t.foreground
+            }))
+            .pl(px(FOLD_BODY_INDENT))
+            .children(body.into_iter().enumerate().map(|(index, row)| {
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .when(index > 0, |this| {
+                        this.border_t_1().border_color(hsla(divider))
+                    })
+                    .child(row)
+            }))
+    });
+    v_flex()
+        .w_full()
+        .min_w_0()
+        .child(header)
+        .children(body)
         .into_any_element()
 }
 

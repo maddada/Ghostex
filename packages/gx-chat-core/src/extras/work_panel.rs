@@ -24,7 +24,7 @@ use serde_json::{json, Map, Value};
 use crate::extras::work_cards::{owner_words, waits_line};
 
 /// The groups, in the order the panel lists them: the board's ids, the Work panel's titles.
-pub const WORK_GROUPS: [(&str, &str); 6] = [
+pub const WORK_GROUPS: [(&str, &str); 7] = [
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
     // CDXC:Coordinators 2026-11-10 DECISION:
@@ -32,6 +32,14 @@ pub const WORK_GROUPS: [(&str, &str); 6] = [
     // the board: "rename to in progress please"). Wherever the user reads it, the `moving` status is
     // "In progress"; the stored value stays `moving` and `--status` takes `moving` or `in-progress`.
     ("moving", "In progress"),
+    // CDXC:Coordinators 2026-11-11 DECISION:
+    // User: "the user should have accurate statuses in the work board/list always!" An item the
+    // coordinator calls In progress that nobody is on (no thread working, waiting on the user or
+    // owing work, and not changed by the coordinator in its current or last turn) is gxserver's
+    // `idle` (server/src/coordinators/turns.rs): listed here under In progress, folded, with its
+    // last line, and left out of every "in progress" count. A core from before reads `idle` as
+    // Later.
+    ("idle", "Not being worked on"),
     ("hold", "Waiting"),
     ("later", "Later"),
     ("done", "Finished today"),
@@ -39,7 +47,7 @@ pub const WORK_GROUPS: [(&str, &str); 6] = [
 
 /// Groups folded until the reader opens them.
 pub fn folded_by_default(group: &str) -> bool {
-    matches!(group, "hold" | "later" | "done")
+    matches!(group, "idle" | "hold" | "later" | "done")
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -52,14 +60,16 @@ fn group_of(status: &str) -> &'static str {
         "needs" => "needs",
         "blocked" => "blocked",
         "moving" => "moving",
+        "idle" => "idle",
         "waiting" => "hold",
         "finished" => "done",
         _ => "later",
     }
 }
 
-/// An item's own chips after the board's: who has the ball, its steps, what it asks of the user.
-fn item_chips(item: &Value, status: &str) -> Vec<Value> {
+/// An item's own chips after the board's: who has the ball, its steps, what it asks of the user
+/// (its open asks not snoozed at `now_ms`: a snoozed one waits in Later, so it is not "for you").
+fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
     let owner = owner_words(item);
     let waiting_says = status == "waiting" && !waits_line(item).is_empty();
@@ -84,7 +94,7 @@ fn item_chips(item: &Value, status: &str) -> Vec<Value> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|ask| ask["open"] == true)
+        .filter(|ask| ask["open"] == true && !snoozed_at(ask, now_ms))
         .count();
     if open > 0 {
         chips.push(
@@ -95,7 +105,7 @@ fn item_chips(item: &Value, status: &str) -> Vec<Value> {
 }
 
 /// An item's row, in the shape of a board item row.
-fn item_row(item: &Value, group: &str, status: &str) -> Value {
+fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
     let reference = text(item, "ref");
     let mut line = text(item, "now").to_string();
     if status == "waiting" {
@@ -115,6 +125,7 @@ fn item_row(item: &Value, group: &str, status: &str) -> Value {
         "note": if line.is_empty() {
             match status {
                 "later" => "Nobody is on it yet".to_string(),
+                "idle" => "Nobody is on it".to_string(),
                 "finished" => "Finished".to_string(),
                 _ => owner_words(item),
             }
@@ -122,7 +133,7 @@ fn item_row(item: &Value, group: &str, status: &str) -> Value {
             line.clone()
         },
         "at": text(item, "at"),
-        "workChips": item_chips(item, status),
+        "workChips": item_chips(item, status, now_ms),
     });
     for key in ["reason", "release", "link", "tag", "tagLook", "links", "pr"] {
         if let Some(value) = item.get(key).filter(|value| !value.is_null()) {
@@ -136,6 +147,16 @@ fn item_row(item: &Value, group: &str, status: &str) -> Value {
     }
     if item["untested"] == true {
         row["untested"] = json!(true);
+    }
+    // Under Needs you with no open question: Done, its one answer ("W7: Done"), given until the
+    // coordinator next changes the item (`saidDone`); `answerKey` locks it here and on its dock
+    // row alike (work_cards.rs `done_answer_key`).
+    if let Some(answer_key) = crate::extras::work_cards::done_answer_key(item) {
+        row["answers"] = json!([{ "label": "Done", "recommended": false }]);
+        row["answerKey"] = json!(answer_key);
+        if item["saidDone"] == true {
+            row["answered"] = json!("Done");
+        }
     }
     // A thread on it waiting on the user, or not moving: the board's chips that open it.
     if let Some(thread) = item["threads"]
@@ -174,7 +195,7 @@ fn item_row(item: &Value, group: &str, status: &str) -> Value {
 
 /// An open ask's row: what the user is asked, under the work it belongs to, with its answers (or
 /// Done for a task). Its key is its chat card's, so an answer given in either place locks both.
-fn ask_row(item: &Value, ask: &Value) -> Value {
+fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
     let reference = text(item, "ref");
     let tag = text(ask, "tag");
     let holds = ask["holds"] == true;
@@ -187,14 +208,27 @@ fn ask_row(item: &Value, ask: &Value) -> Value {
         detail.push_str(" \u{b7} Holds it up");
     }
     let steps = text(ask, "steps");
+    // Snoozed: under Later, quietly saying until when (work.rs `snooze`).
+    let snoozed = if snoozed_at(ask, now_ms) {
+        text(ask, "snoozedUntilLabel")
+    } else {
+        ""
+    };
+    if !snoozed.is_empty() {
+        detail = format!("{detail} \u{b7} Snoozed until {snoozed}");
+    }
     json!({
         "key": format!("work-ask:{reference}:{tag}"),
         "kind": "item",
         "ref": reference,
         "ask": tag,
         "askRow": true,
-        "group": if holds { "blocked" } else { "needs" },
+        "group": if !snoozed.is_empty() { "later" } else if holds { "blocked" } else { "needs" },
         "title": text(ask, "text"),
+        // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
+        "titleRuns": crate::questions::form_links::word_runs(text(ask, "text")),
+        // Its longer explanation under the short title (`item ask --detail`).
+        "body": text(ask, "detail"),
         "detail": detail,
         "note": if steps.is_empty() { detail.clone() } else { format!("{detail} \u{b7} Steps: {steps}") },
         "at": text(ask, "askedAt"),
@@ -251,6 +285,21 @@ fn thread_row(item: &Value, group: &str) -> Value {
 /// The work as a board: `{groups: [{id, total, rows}], items, tagOptions}`, the shape gxserver
 /// sends the board in.
 pub fn work_board(work: &Value) -> Value {
+    work_board_at(work, 0)
+}
+
+/// Whether an ask is still snoozed at `now_ms` (0 when the caller has no clock: snoozed while
+/// gxserver says so). A snooze that has ended brings the ask back to Needs you at once, as the
+/// dock does.
+fn snoozed_at(ask: &Value, now_ms: i64) -> bool {
+    ask.get("snoozedUntil").is_some_and(|until| {
+        crate::extras::work_cards::at_ms(until.as_str().unwrap_or_default())
+            .is_some_and(|until| until > now_ms)
+    })
+}
+
+/// [`work_board`] read at `now_ms`, so snoozes that have ended are back where they belong.
+pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
     let mut groups: Map<String, Value> = WORK_GROUPS
         .iter()
         .map(|(id, _)| (id.to_string(), json!([])))
@@ -282,12 +331,14 @@ pub fn work_board(work: &Value) -> Value {
             .collect();
         for ask in &open_asks {
             push(
-                if ask["holds"] == true {
+                if snoozed_at(ask, now_ms) {
+                    "later"
+                } else if ask["holds"] == true {
                     "blocked"
                 } else {
                     "needs"
                 },
-                ask_row(item, ask),
+                ask_row(item, ask, now_ms),
             );
         }
         // Finished before today: off the panel, though a task it left for the user stays.
@@ -303,7 +354,7 @@ pub fn work_board(work: &Value) -> Value {
                 .flatten()
                 .any(|thread| thread["state"] == "waiting" || thread["stuck"] == true);
         if !only_asking {
-            push(group, item_row(item, group, status));
+            push(group, item_row(item, group, status, now_ms));
         }
     }
     let groups: Vec<Value> = WORK_GROUPS

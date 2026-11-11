@@ -66,6 +66,7 @@ fn state_in(temp: &tempfile::TempDir, live: bool) -> Arc<AppState> {
         Arc::new(crate::push::runtime::SystemClock),
         crate::push::expo::ExpoClient::for_test_origin("http://127.0.0.1:9".to_string()),
     );
+    let live_activity = crate::server::tests::helpers::closed_live_activity(&paths, "S1");
     Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: if live {
@@ -102,6 +103,7 @@ fn state_in(temp: &tempfile::TempDir, live: bool) -> Arc<AppState> {
         },
         presentation_event_sequence,
         push: Arc::new(push),
+        live_activity,
         remote_pairing_runtime: crate::remote_access::RemotePairingRuntime::new(),
         repository_clone_jobs: crate::repository_clone::RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),

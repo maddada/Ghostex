@@ -1,7 +1,9 @@
 //! The voice panel: a small native child window, first under the work area header's top right,
 //! that shows the open conversation's state, live captions and tool lines, the voice (click it to
-//! pick another) and the speaking speed, with Mute, Stop talking and Hang up, and says why a
-//! conversation stopped.
+//! pick another) and the speaking speed, with Mute, Mute voice, Stop talking and Hang up, and says
+//! why a conversation stopped.
+//!
+//! CDXC:VoiceMode 2026-11-11 DECISION: User: "Please add an audio button to mute the speaking of the voice agent. It should sit next to the existing mute button. Also, make these two buttons show as just an icon with a tooltip for each, and use an icon that changes when the toggle state flips." The footer starts with two 28px icon-only toggles, the microphone (microphone / microphone-off, "Mute microphone" / "Unmute microphone") and the agent's voice (volume / volume-off, "Mute voice" / "Unmute voice"), then the hold button. Muted is a soft red tint with a red icon, never a dark fill on glass. The voice mute is the desktop's alone: the agent's audio still comes (captions, the reply's timing and the cut at an interruption follow gxserver's clock) and is not played; unmuting speaks from the next reply, nothing skipped is replayed. It lasts for the call, so a mute forgotten after one call never leaves the next one silent. The header's "Muted" stays the microphone's; the tinted toggle is the voice mute's only sign.
 //!
 //! CDXC:VoiceMode 2026-10-20 WHY: the conversation keeps going while the user moves between projects and chats, so the panel belongs to the main window, not to a chat or a view: it is an owned pop-up window attached as an AppKit child of the main window (the app toast window's pattern), which moves with the window, never takes focus, and overlaps nothing interactive of its own. A size change of the main window places it again.
 //! CDXC:VoiceMode 2026-10-20 DECISION: User: "the call screen should be movable and scrollable during voice mode." The panel's header is its drag handle: dragging it moves the panel's own window (`move_child_window`), kept inside the main window and remembered for the rest of the app's run, and the transcript scrolls with the wheel and trackpad. A window too small for the panel shrinks it, down to a floor.
@@ -39,10 +41,14 @@ use crate::*;
 mod confirm_card;
 #[path = "panel_controls.rs"]
 pub(crate) mod controls;
+#[path = "panel_copy.rs"]
+mod copy;
 // The card reads its frame's data as `super::rows`.
 use super::rows;
 #[path = "panel_focus_strip.rs"]
 mod focus_strip;
+#[path = "panel_input.rs"]
+mod input;
 #[path = "panel_layout.rs"]
 pub(crate) mod layout;
 
@@ -59,7 +65,6 @@ const DRAG_THRESHOLD: f32 = 3.0;
 const REPOSITION_DELAY: std::time::Duration = std::time::Duration::from_millis(160);
 
 const ICON_MIC: &str = "titlebar/microphone.svg";
-const ICON_MIC_OFF: &str = "titlebar/microphone-off.svg";
 const ICON_HANG_UP: &str = "titlebar/phone-off.svg";
 const ICON_TOOL: &str = "titlebar/tool.svg";
 const ICON_CHECK: &str = "titlebar/check.svg";
@@ -71,6 +76,7 @@ const ICON_CHEVRON: &str = "titlebar/chevron-down.svg";
 const ICON_HISTORY: &str = "titlebar/history.svg";
 const ICON_TRASH: &str = "titlebar/trash.svg";
 const ICON_FRESH: &str = "titlebar/refresh.svg";
+const ICON_PLAY: &str = "titlebar/player-play.svg";
 /// The remembered conversation's accent (the speaking violet).
 const MEMORY_ACCENT: u32 = 0xa78bfaff;
 
@@ -154,6 +160,7 @@ struct PanelSnapshot {
     tool_label: Option<String>,
     rows: Vec<VoiceRow>,
     muted: bool,
+    voice_muted: bool,
     /// A push-to-talk call, and whether Talk is held.
     push_to_talk: bool,
     talking: bool,
@@ -208,6 +215,13 @@ pub(crate) struct VoicePanelWindow {
     speed_trigger: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// Where the gear button last painted, for its menu.
     settings_trigger: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// Focused by a press on the transcript, so Cmd+C reaches the panel (`panel_copy.rs`).
+    focus: gpui::FocusHandle,
+    /// The text box under the transcript (`panel_input.rs`).
+    text_box: gpui::Entity<gpui_component::input::TextareaState>,
+    /// Whether the app was last told that Space would hold Talk in the panel.
+    space_free_noted: bool,
+    _subscriptions: Vec<gpui::Subscription>,
 }
 
 /// "1×", "1.2×", … "2×".
@@ -352,6 +366,7 @@ impl GhostexGpuiApp {
         if self.voice_agent.phase == VoicePhase::Idle {
             self.voice_agent.panel_reposition = None;
             self.voice_agent.panel_placed_for = None;
+            self.voice_agent.panel_space_free = false;
             if let Some(panel) = self.voice_agent.panel.take() {
                 let _ = panel.update(cx, |_, window, _| window.remove_window());
             }
@@ -399,7 +414,8 @@ impl GhostexGpuiApp {
                 panel_window.set_background_corner_radius(px(RESOURCE_PANEL_RADIUS));
                 apply_frosted_menu_blur(panel_window);
                 remove_gpui_app_toast_popup_window_chrome(panel_window, main_window_native_view);
-                cx.new(|_| {
+                cx.new(|cx| {
+                    let (text_box, subscriptions) = input::panel_text_box(panel_window, cx);
                     let scroll = ScrollHandle::new();
                     scroll.scroll_to_bottom();
                     VoicePanelWindow {
@@ -413,6 +429,10 @@ impl GhostexGpuiApp {
                         holding_talk: false,
                         speed_trigger: Default::default(),
                         settings_trigger: Default::default(),
+                        focus: cx.focus_handle(),
+                        text_box,
+                        space_free_noted: false,
+                        _subscriptions: subscriptions,
                     }
                 })
             })
@@ -512,7 +532,12 @@ impl GhostexGpuiApp {
                 mode(push_to_talk),
             );
         }
-        menu = menu.menu_with_disabled("Applies to your next call", true, mode(push_to_talk));
+        let applies = if self.voice_agent.call_mode_live && self.voice_agent.active() {
+            "Switches this call now"
+        } else {
+            "Applies to your next call"
+        };
+        menu = menu.menu_with_disabled(applies, true, mode(push_to_talk));
         let app = cx.entity();
         cx.defer(move |cx| {
             let _ = main.update(cx, |_, window, cx| {
@@ -613,6 +638,7 @@ impl GhostexGpuiApp {
             tool_label: agent.tool_label.clone(),
             rows: agent.rows.clone(),
             muted: agent.muted,
+            voice_muted: agent.voice_muted,
             push_to_talk: agent.push_to_talk,
             talking: agent.talking,
             hold_look: self.voice_agent_hold_look(),
@@ -707,6 +733,7 @@ fn move_voice_panel_window(
 #[derive(Clone)]
 enum PanelAction {
     Mute,
+    MuteVoice,
     StopTalking,
     HangUp,
     Close,
@@ -813,6 +840,7 @@ impl VoicePanelWindow {
                 PanelAction::ForgetMemory => app.forget_voice_agent_memory(cx),
                 PanelAction::ToggleMemoryDetails => app.toggle_voice_agent_memory_details(cx),
                 PanelAction::Mute => app.toggle_voice_agent_mute(cx),
+                PanelAction::MuteVoice => app.toggle_voice_agent_voice_mute(cx),
                 PanelAction::StopTalking => app.interrupt_voice_agent(cx),
                 PanelAction::HangUp => app.hang_up_voice_agent(cx),
                 PanelAction::Close => app.close_voice_agent_panel(cx),
@@ -1328,6 +1356,29 @@ impl VoicePanelWindow {
             .into_any_element()
     }
 
+    /// One of the two mute toggles (`panel_controls.rs`).
+    fn toggle_button(
+        &self,
+        id: &'static str,
+        (icon, tooltip): (&'static str, &'static str),
+        on: bool,
+        action: PanelAction,
+        colors: &PanelColors,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let panel = cx.entity().downgrade();
+        controls::toggle_button(
+            id,
+            icon,
+            SharedString::new_static(tooltip),
+            on,
+            colors.controls(),
+            move |_, cx| {
+                let _ = panel.update(cx, |this, cx| this.run(action.clone(), cx));
+            },
+        )
+    }
+
     /// The icon-only hold button beside Mute (`panel_controls.rs`); pressing it while the agent
     /// talks cuts the reply in a push-to-talk call.
     fn hold_button(
@@ -1445,7 +1496,7 @@ impl VoicePanelWindow {
         })
     }
 
-    fn row(row: &VoiceRow, colors: &PanelColors) -> AnyElement {
+    fn row(at: usize, row: &VoiceRow, colors: &PanelColors) -> AnyElement {
         match row {
             VoiceRow::Caption {
                 role,
@@ -1480,12 +1531,16 @@ impl VoicePanelWindow {
                             } else {
                                 colors.text
                             })
-                            .children(parts.into_iter().enumerate().map(|(at, part)| {
-                                div().child(if *cut && at == last {
-                                    format!("{part}…")
-                                } else {
-                                    part
-                                })
+                            .children(parts.into_iter().enumerate().map(|(part_at, part)| {
+                                div().child(Self::selectable_part(
+                                    at,
+                                    part_at,
+                                    if *cut && part_at == last {
+                                        format!("{part}…")
+                                    } else {
+                                        part
+                                    },
+                                ))
                             })),
                     )
                     .into_any_element()
@@ -1561,52 +1616,27 @@ impl VoicePanelWindow {
             .gap(px(14.0))
             .px(px(12.0))
             .py(px(10.0))
-            .children(snapshot.rows.iter().map(|row| match row {
+            .on_mouse_down(MouseButton::Left, {
+                let focus = self.focus.clone();
+                move |_, window, cx| Self::take_keyboard(&focus, window, cx)
+            })
+            .children(snapshot.rows.iter().enumerate().map(|(at, row)| match row {
                 VoiceRow::Confirm(card) => self.confirm_row(card, colors, cx),
-                row => Self::row(row, colors),
+                VoiceRow::Caption { text, .. } => {
+                    self.copyable_line(Self::row(at, row, colors), at, text.clone(), cx)
+                }
+                row => Self::row(at, row, colors),
             }));
         let empty = snapshot.rows.is_empty() && snapshot.problem.is_none();
         let memory = self.memory_block(snapshot, colors, cx);
+        if empty {
+            return self.empty_body(snapshot, memory, colors);
+        }
         v_flex()
             .flex_1()
             .min_h_0()
             .when_some(memory, |this, memory| this.child(memory))
-            // Laid out like the bell dropdown's "No notifications yet" (`render_notifications_empty_state`).
-            .when(empty, |this| {
-                this.child(
-                    v_flex()
-                        .flex_1()
-                        .items_center()
-                        .justify_center()
-                        .gap(px(6.0))
-                        .px(px(24.0))
-                        .text_center()
-                        .child(titlebar_svg_icon(
-                            ICON_MIC,
-                            32.0,
-                            colors.ink.opacity(0.35),
-                        ))
-                        .child(
-                            div()
-                                .mt(px(4.0))
-                                .text_size(px(13.0))
-                                .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_color(colors.ink.opacity(0.86))
-                                .child(match snapshot.phase {
-                                    VoicePhase::Live => "Go ahead, I'm listening.",
-                                    _ => "Starting the voice agent…",
-                                }),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(11.5))
-                                .line_height(px(16.0))
-                                .text_color(colors.ink.opacity(0.50))
-                                .child("Ask what your agents are doing, send one a prompt, answer a question, or start a new agent."),
-                        ),
-                )
-            })
-            .when(!empty, |this| {
+            .map(|this| {
                 let away = layout::shows_scroll_to_bottom(self.following, self.distance_to_end());
                 let panel = cx.entity().downgrade();
                 this.child(
@@ -1640,11 +1670,11 @@ impl VoicePanelWindow {
                         .bg(rgba(0xfbbf2418))
                         .border_1()
                         .border_color(rgba(0xfbbf2440))
-                        .child(
-                            div()
-                                .pt(px(1.0))
-                                .child(titlebar_svg_icon(ICON_ALERT, 14.0, rgba(0xfbbf24ff).into())),
-                        )
+                        .child(div().pt(px(1.0)).child(titlebar_svg_icon(
+                            ICON_ALERT,
+                            14.0,
+                            rgba(0xfbbf24ff).into(),
+                        )))
                         .child(
                             div()
                                 .flex_1()
@@ -1659,9 +1689,67 @@ impl VoicePanelWindow {
             .into_any_element()
     }
 
+    /// The body before anything was said: the Last conversation card (when there is one) and
+    /// "Go ahead, I'm listening." under it, centred in what is left above the text box.
+    ///
+    /// CDXC:VoiceMode 2026-11-11 WHY: User: "stuff is messed up man": with the Last conversation card up, the empty state did not fit, so the text box was drawn over its second hint line and the microphone was pressed against the card. With the card up the hint lines go (the card already says what to do next), and the whole area scrolls when even that does not fit (a long summary, the panel at its smallest), so it can never run under the text box.
+    fn empty_body(
+        &self,
+        snapshot: &PanelSnapshot,
+        memory: Option<AnyElement>,
+        colors: &PanelColors,
+    ) -> AnyElement {
+        let with_card = memory.is_some();
+        div()
+            .id("voice-panel-empty-body")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .child(
+                v_flex()
+                    .min_h_full()
+                    .when_some(memory, |this, memory| this.child(memory))
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .items_center()
+                            .justify_center()
+                            .gap(px(6.0))
+                            .px(px(24.0))
+                            .py(px(10.0))
+                            .text_center()
+                            .child(titlebar_svg_icon(
+                                ICON_MIC,
+                                if with_card { 24.0 } else { 32.0 },
+                                colors.ink.opacity(0.35),
+                            ))
+                            .child(
+                                div()
+                                    .mt(px(4.0))
+                                    .text_size(px(13.0))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(colors.ink.opacity(0.86))
+                                    .child(match snapshot.phase {
+                                        VoicePhase::Live => "Go ahead, I'm listening.",
+                                        _ => "Starting the voice agent…",
+                                    }),
+                            )
+                            .when(!with_card, |this| {
+                                this.child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .line_height(px(16.0))
+                                        .text_color(colors.ink.opacity(0.50))
+                                        .child("Ask what your agents are doing, send one a prompt, answer a question, or start a new agent."),
+                                )
+                            }),
+                    ),
+            )
+            .into_any_element()
+    }
+
     /// The remembered last conversation, above the transcript while the call is live: the
-    /// Continue / Start fresh card, the "Remembering" line (click it for the whole summary), or
-    /// "Forgot the last conversation."
+    /// Continue / Start fresh card or the "Remembering" line (click it for the whole summary).
     fn memory_block(
         &self,
         snapshot: &PanelSnapshot,
@@ -1716,16 +1804,7 @@ impl VoicePanelWindow {
                                         .when(!ago.is_empty(), |this| {
                                             this.child(format!("· {ago}"))
                                         }),
-                                )
-                                .child(self.button(
-                                    "voice-panel-memory-forget",
-                                    ICON_TRASH,
-                                    None,
-                                    PanelAction::ForgetMemory,
-                                    colors,
-                                    false,
-                                    cx,
-                                )),
+                                ),
                         )
                         .child(
                             div()
@@ -1739,7 +1818,7 @@ impl VoicePanelWindow {
                                 .gap(px(6.0))
                                 .child(self.button(
                                     "voice-panel-memory-continue",
-                                    ICON_HISTORY,
+                                    ICON_PLAY,
                                     Some("Continue"),
                                     PanelAction::ContinueMemory,
                                     colors,
@@ -1859,19 +1938,7 @@ impl VoicePanelWindow {
                         .into_any_element(),
                 )
             }
-            (VoiceMemoryState::Forgotten, _) => Some(
-                h_flex()
-                    .flex_shrink_0()
-                    .mx(px(12.0))
-                    .mt(px(10.0))
-                    .gap(px(6.0))
-                    .items_center()
-                    .text_size(px(11.5))
-                    .text_color(colors.muted)
-                    .child(titlebar_svg_icon(ICON_TRASH, 12.0, colors.muted))
-                    .child("Forgot the last conversation.")
-                    .into_any_element(),
-            ),
+            // Discarding stays silent: the card just goes away (user, 2026-11-11: "remove the forgot last conversation thing").
             _ => None,
         }
     }
@@ -1886,17 +1953,20 @@ impl VoicePanelWindow {
         let mut right: Vec<AnyElement> = Vec::new();
         match snapshot.phase {
             VoicePhase::Starting | VoicePhase::Live => {
-                left.push(self.button(
+                left.push(self.toggle_button(
                     "voice-panel-mute",
-                    if snapshot.muted {
-                        ICON_MIC_OFF
-                    } else {
-                        ICON_MIC
-                    },
-                    Some(if snapshot.muted { "Unmute" } else { "Mute" }),
+                    controls::mic_toggle(snapshot.muted),
+                    snapshot.muted,
                     PanelAction::Mute,
                     colors,
-                    false,
+                    cx,
+                ));
+                left.push(self.toggle_button(
+                    "voice-panel-mute-voice",
+                    controls::voice_toggle(snapshot.voice_muted),
+                    snapshot.voice_muted,
+                    PanelAction::MuteVoice,
+                    colors,
                     cx,
                 ));
                 left.push(self.hold_button(snapshot, colors, cx));
@@ -1978,12 +2048,24 @@ impl Render for VoicePanelWindow {
         // (CDXC:Theming 2026-10-15 on `apply_frosted_menu_blur`).
         #[cfg(target_os = "macos")]
         apply_frosted_menu_blur(window);
+        self.note_space_free(window, cx);
         let snapshot = &self.snapshot;
         let colors = PanelColors::resolve();
         v_flex()
             .id("voice-panel")
             .role(gpui::Role::Group)
             .aria_label(SharedString::new_static("Voice agent"))
+            .track_focus(&self.focus)
+            // Escape in the text box hands the keyboard back before the box can use it.
+            .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                this.text_box_escape(event, window, cx)
+            }))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                this.panel_key_down(event, window, cx)
+            }))
+            .on_key_up(
+                cx.listener(|this, event: &gpui::KeyUpEvent, _, cx| this.panel_key_up(event, cx)),
+            )
             .size_full()
             .overflow_hidden()
             .rounded(px(RESOURCE_PANEL_RADIUS))
@@ -1991,6 +2073,7 @@ impl Render for VoicePanelWindow {
             .border_color(colors.edge)
             .bg(colors.background)
             .font_family(crate::ui_fonts::UI_FONT)
+            .child(gpui_base::TextSelectionLayer)
             .child(self.header(snapshot, &colors, cx))
             .children(self.focus_strip(snapshot, &colors, cx))
             .child(self.body(snapshot, &colors, cx))
@@ -1998,6 +2081,9 @@ impl Render for VoicePanelWindow {
                 matches!(snapshot.phase, VoicePhase::Starting | VoicePhase::Live),
                 |this| this.child(self.status_strip(snapshot, &colors, cx)),
             )
+            .when(snapshot.phase == VoicePhase::Live, |this| {
+                this.child(self.text_box(&colors))
+            })
             .child(self.footer(snapshot, &colors, cx))
             .when(self.holding_talk, |this| {
                 this.child(self.talk_release_listener(cx))

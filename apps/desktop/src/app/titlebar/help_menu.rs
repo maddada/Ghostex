@@ -1,5 +1,5 @@
 // Ghostex Help: the "Ask Ghostex" sample-question popup menu reached from the
-// titlebar's ⋯ menu or the Ghostex Help hotkey, and the flow that turns a picked
+// sidebar menu's Help submenu or the Ghostex Help hotkey, and the flow that turns a picked
 // question into a Ghostex Help agent session.
 
 use futures::FutureExt as _;
@@ -214,21 +214,21 @@ pub(crate) fn build_gpui_titlebar_help_popup_menu(
 }
 
 impl GhostexGpuiApp {
-    /// Toggles the Help popup anchored to the last painted Help button bounds,
-    /// for both the button itself and the `openGhostexHelp` hotkey.
+    /// Toggles the Help popup, hung from the sidebar's menu button, for the
+    /// `openGhostexHelp` hotkey.
     pub(crate) fn show_gpui_titlebar_help_menu(
         &mut self,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         let open = !self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Help);
-        // Ask Ghostex is a row of the titlebar's ⋯ menu now, so the hotkey anchors
-        // its panel to that button.
-        let trigger_bounds = self.titlebar_more_button_bounds.get();
+        // Ask Ghostex is a row of the sidebar's menu (Help), so the hotkey hangs its panel where
+        // that row does (titlebar/menu_panels.rs).
+        let trigger_bounds = self.sidebar_menu_panel_trigger_bounds();
         self.set_gpui_titlebar_popup_open(
             GpuiTitlebarPopupKind::Help,
             open,
-            trigger_bounds,
+            Some(trigger_bounds),
             window,
             cx,
         );
@@ -347,6 +347,22 @@ impl GhostexGpuiApp {
             })
         });
         let sidebar_session_id = chief.sidebar_session_id.clone();
+        /*
+        CDXC:Chief 2026-11-10 DECISION:
+        User (a Discord report): with Chief already selected the Ask Ghostex row seemed to do nothing, so it looked broken. The row now says that Chief of Staff took the question in a notice, and puts the keyboard in Chief's chat box.
+        */
+        let (title, description) = if staged.is_some() {
+            (
+                "Ask Chief of Staff",
+                "It answers Ghostex questions here. Your question is in its chat box: press Enter to send it.",
+            )
+        } else {
+            (
+                "Ask Chief of Staff",
+                "It answers Ghostex questions here. Type your question in its chat box.",
+            )
+        };
+        self.dispatch_gpui_app_modal_toast("info", title, description, cx);
         cx.spawn(async move |this, cx| {
             if let Some(params) = staged {
                 let _ = crate::app::gx_store::gx_rpc(None, "/api/setSessionChatDraft", params).await;
@@ -357,6 +373,9 @@ impl GhostexGpuiApp {
                     cx,
                 );
                 let _ = this.react_to_native_sidebar_session_click(&sidebar_session_id, cx);
+                // With Chief already selected the click moves nothing, so ask for the keyboard
+                // explicitly; the handoff waits for the chat box to be on screen.
+                this.request_keyboard_handoff_for_shell_focus(cx);
             });
         })
         .detach();

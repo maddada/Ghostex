@@ -1,6 +1,5 @@
 //! Native GPUI Onboarding: the five-panel first-run flow (Welcome, Agents, Workspace, Mobile, Get
-//! started) and its "You're set" screen, the desktop twin of the React `OnboardingModal` in
-//! packages/core-ui/onboarding/.
+//! started), the desktop twin of the React `OnboardingModal` in packages/core-ui/onboarding/.
 //!
 //! CDXC:AppModal 2026-09-28 DECISION:
 //! User: migrate every React modal to GPUI with GPUI-Kit components, looking and working exactly as
@@ -12,8 +11,6 @@ mod agent_cli;
 mod agents;
 mod backdrop;
 mod extension;
-mod finished;
-mod folder_chooser;
 pub(crate) mod fonts;
 mod get_started;
 mod install_guide;
@@ -24,6 +21,7 @@ mod mobile;
 pub(crate) mod model;
 mod primitives;
 mod scan_log;
+mod sign_in;
 mod stage;
 mod text;
 mod welcome;
@@ -35,7 +33,6 @@ pub(crate) use model::{CatalogAgent, OnboardingSettings, ThemeSwatchPreset, Them
 
 use agent_cli::CliRows;
 use agents::AgentsPanelState;
-use finished::FinishedState;
 use get_started::GetStartedState;
 use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
@@ -60,12 +57,10 @@ use workspace::WorkspaceState;
 pub(crate) const ONBOARDING_MODAL_WIDTH: f32 = 1400.0;
 pub(crate) const ONBOARDING_MODAL_HEIGHT: f32 = 788.0;
 
-/// Panel shown when the window opens (1-5), or the "You're set" screen (the preview binary's states).
+/// Panel shown when the window opens (1-5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) enum InitialPanel {
     Panel(usize),
-    Finished,
 }
 
 /// What the app opens the onboarding with.
@@ -82,7 +77,6 @@ pub(crate) struct OnboardingConfig {
     /// gxserver's agent CLI jobs are reachable; without it missing agents offer the Install guide only.
     pub(crate) cli_available: bool,
     pub(crate) initial_panel: InitialPanel,
-    pub(crate) picked_folder: Option<String>,
     /// Open on the intro video page before Welcome (the automatic first run, once per install).
     pub(crate) intro_video: bool,
     /// Why this computer cannot show agent alerts, if it is known (Linux without notify-send,
@@ -97,7 +91,7 @@ pub(crate) enum FinishTarget {
     None,
     /// Settings, optionally on one of its pages (`theme`).
     Settings(Option<&'static str>),
-    /// The Connect a phone window ("Configure my phone after this flow").
+    /// The Connect a Device window ("Pair my phone after setup").
     RemoteSettings,
 }
 
@@ -123,21 +117,19 @@ pub(crate) enum OnboardingCommand {
     /// `uninstallBundledAgentSkill` for `browserUse`.
     UninstallBrowserSkill,
     OpenExternalUrl(String),
-    /// `pickFirstLaunchProjectFolder`.
-    PickProjectFolder,
-    /// `firstLaunchCreateProjectSession`.
-    FinishFirstLaunch {
-        request_id: String,
-        agent_id: String,
-        path: String,
-    },
-    /// `completeFirstLaunchSetup`, then open `FinishTarget`.
+    /// `completeFirstLaunchSetup`, then open `FinishTarget` (and Add Project when the app has no
+    /// project yet).
     Finish(FinishTarget),
     /// Close without a project: setup is not marked finished, so it comes back on the next launch
     /// while there is still no project, and Add Project opens so the app is never an empty shell.
     Leave,
     /// The user left the intro video page: it is not shown again.
     IntroVideoSeen,
+    /// `/api/agentSignIn` for the chosen agent: `status`, `start` (its own browser sign-in) or `cancel`.
+    AgentSignIn {
+        agent_id: String,
+        operation: &'static str,
+    },
     /// `/api/agentCliMaintenance` for one agent.
     AgentCli {
         request_id: u64,
@@ -251,7 +243,6 @@ pub(crate) struct GpuiOnboardingWindow {
     computer_use_install_requested: bool,
     computer_use_install_deadline: Option<Instant>,
     browser_skill_pending: Option<BrowserSkillPending>,
-    picked_folder: Option<String>,
     cli_rows: CliRows,
     next_request_id: u64,
     welcome: WelcomeState,
@@ -259,7 +250,6 @@ pub(crate) struct GpuiOnboardingWindow {
     workspace: WorkspaceState,
     mobile: MobileState,
     get_started: GetStartedState,
-    finished: FinishedState,
     /// `MoreMenu` open on the Workspace preview.
     menu_open: bool,
     workspace_menu_opened: Instant,
@@ -277,8 +267,8 @@ pub(crate) struct GpuiOnboardingWindow {
     guide_scroll: gpui::ScrollHandle,
     /// The intro video page, while it is the page shown (intro_video.rs).
     intro: Option<intro_video::IntroVideo>,
-    /// Get started's own folder chooser, open when the system folder dialog could not open.
-    folder_chooser: Option<folder_chooser::FolderChooser>,
+    /// The chosen agent's sign-in, read on the Agents panel (sign_in.rs).
+    sign_in: sign_in::SignInState,
 }
 
 impl GpuiOnboardingWindow {
@@ -304,10 +294,8 @@ impl GpuiOnboardingWindow {
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle, cx);
         let now = Instant::now();
-        let (panel, finished) = match config.initial_panel {
-            InitialPanel::Panel(panel) => (panel.clamp(1, PANEL_COUNT), false),
-            InitialPanel::Finished => (PANEL_COUNT, true),
-        };
+        let InitialPanel::Panel(panel) = config.initial_panel;
+        let panel = panel.clamp(1, PANEL_COUNT);
         let vignette = backdrop::render_vignette();
         let intro_video = config.intro_video;
         let mut this = Self {
@@ -322,10 +310,7 @@ impl GpuiOnboardingWindow {
             notification_problem: config.notification_problem,
             settings: config.settings,
             panel,
-            flow: FlowState {
-                finished,
-                ..FlowState::default()
-            },
+            flow: FlowState::default(),
             scene_started: now,
             opened_at: now,
             transitions: Transitions::default(),
@@ -338,7 +323,6 @@ impl GpuiOnboardingWindow {
             computer_use_install_requested: false,
             computer_use_install_deadline: None,
             browser_skill_pending: None,
-            picked_folder: config.picked_folder,
             cli_rows: CliRows::default(),
             next_request_id: 1,
             welcome: WelcomeState::new(now),
@@ -346,7 +330,6 @@ impl GpuiOnboardingWindow {
             workspace: WorkspaceState::new(now),
             mobile: MobileState::new(now),
             get_started: GetStartedState::default(),
-            finished: FinishedState::new(now),
             menu_open: false,
             workspace_menu_opened: now,
             workspace_menu_dismissed: None,
@@ -358,19 +341,22 @@ impl GpuiOnboardingWindow {
             focus: interact::FocusState::default(),
             guide_scroll: gpui::ScrollHandle::new(),
             intro: None,
-            folder_chooser: None,
+            sign_in: sign_in::SignInState::default(),
         };
         this.get_started.reset(&this.settings, this.system_light);
         // CDXC:Onboarding 2026-09-11 DECISION:
         // User: "if it's first run ever browser/docs is actually applied as default enabled; for regular current users if they revisit the onboarding by clicking on the setup button in the tips dropdown this shouldn't happen."
         if this.first_run {
-            let patch = model::views_patch(&[
+            let mut patch = model::views_patch(&[
                 (model::ViewKey::Browser, true),
                 (model::ViewKey::Docs, true),
                 (model::ViewKey::Code, false),
                 (model::ViewKey::Kanban, false),
                 (model::ViewKey::Automate, false),
             ]);
+            // CDXC:Onboarding 2026-11-11 DECISION:
+            // User, on the first-run page (step 8, Workspace): "keep this but make spaces enabled by default". A first run turns Spaces on, as it turns Browser and Files on; the setting's own default stays off, so nobody who already uses Ghostex finds Spaces turned on by an update.
+            patch.insert("sidebarSpacesEnabled".to_string(), Value::Bool(true));
             this.update_settings(patch, cx);
         }
         // The page only exposes a rescan, so detection and the CLI status are asked for on open.
@@ -402,12 +388,11 @@ impl GpuiOnboardingWindow {
         id
     }
 
-    /// `go(next)`: switch panel, leave the finished screen.
+    /// `go(next)`: switch panel.
     fn go(&mut self, next: usize, cx: &mut Context<Self>) {
         let next = next.clamp(1, PANEL_COUNT);
-        let changed = next != self.panel || self.flow.finished;
+        let changed = next != self.panel;
         self.panel = next;
-        self.flow.finished = false;
         if changed {
             self.scene_started = Instant::now();
             self.menu_open = false;
@@ -420,10 +405,6 @@ impl GpuiOnboardingWindow {
     /// Resets the local state of the panel that is now shown, the way React remounts it.
     fn mount_panel(&mut self, now: Instant, cx: &mut Context<Self>) {
         self.cli_rows.clear();
-        if self.flow.finished && self.panel == PANEL_COUNT {
-            self.finished = FinishedState::new(now);
-            return;
-        }
         match self.panel {
             1 => self.welcome = WelcomeState::new(now),
             2 => self.mount_agents_panel(now, cx),
@@ -479,7 +460,7 @@ impl GpuiOnboardingWindow {
         }
     }
 
-    /// `finishOnboarding`: record completion, close, and open Remote settings when the phone step was queued.
+    /// `finishOnboarding`: record completion, close, and open Connect a Device when the phone step was queued.
     fn finish(&mut self, target: FinishTarget, cx: &mut Context<Self>) {
         if self.closed {
             return;
@@ -536,18 +517,12 @@ impl GpuiOnboardingWindow {
 
     fn popup_open(&self) -> bool {
         self.agents_panel.guide_open
-            || self.finished.follow_up.is_some()
-            || self.folder_chooser.is_some()
     }
 
     fn close_popup(&mut self, cx: &mut Context<Self>) {
-        self.folder_chooser = None;
-        if self.panel == 2 && !self.flow.finished && self.agents_panel.guide_open {
+        if self.panel == 2 && self.agents_panel.guide_open {
             self.agents_panel.guide_open = false;
             self.cli_rows.clear_lazy();
-        }
-        if self.flow.finished && self.finished.follow_up.is_some() {
-            self.finished_popup_later(cx);
         }
         cx.notify();
     }
@@ -685,26 +660,6 @@ impl GpuiOnboardingWindow {
         cx.notify();
     }
 
-    /// `firstLaunchProjectFolderPicked`.
-    pub(crate) fn receive_picked_folder(&mut self, path: String, cx: &mut Context<Self>) {
-        let path = path.trim().to_string();
-        if !path.is_empty() {
-            self.picked_folder = Some(path);
-            cx.notify();
-        }
-    }
-
-    /// `firstLaunchCreateProjectSessionResult`.
-    pub(crate) fn receive_finish_result(
-        &mut self,
-        request_id: &str,
-        ok: bool,
-        error: Option<String>,
-        cx: &mut Context<Self>,
-    ) {
-        self.get_started_finish_result(request_id, ok, error, cx);
-    }
-
     /// Saved settings, echoed back after a write or changed elsewhere.
     pub(crate) fn receive_settings(
         &mut self,
@@ -713,13 +668,6 @@ impl GpuiOnboardingWindow {
     ) {
         if self.settings != settings {
             self.settings = settings;
-            cx.notify();
-        }
-    }
-
-    pub(crate) fn set_has_projects(&mut self, has_projects: bool, cx: &mut Context<Self>) {
-        if self.has_projects != has_projects {
-            self.has_projects = has_projects;
             cx.notify();
         }
     }
@@ -738,7 +686,7 @@ impl GpuiOnboardingWindow {
     // Time ------------------------------------------------------------------------------------
 
     /// Runs everything that waits on the clock: the scan log reveal, the "Connected" hold, the
-    /// agent CLI polls, the toast, and the finished screen's follow-ups.
+    /// agent CLI polls and the toast.
     fn tick(&mut self, now: Instant, cx: &mut Context<Self>) {
         if let Some(toast) = &self.toast
             && now.saturating_duration_since(toast.shown_at)
@@ -765,12 +713,10 @@ impl GpuiOnboardingWindow {
             self.after_computer_use_changed(before, cx);
         }
         self.tick_cli_rows(now, cx);
-        self.tick_get_started(now);
         self.tick_intro_video(cx);
-        if self.flow.finished {
-            self.tick_finished(now, cx);
-        } else if self.panel == 2 {
+        if self.panel == 2 {
             self.tick_agents(now, cx);
+            self.tick_sign_in(now, cx);
         }
     }
 
@@ -1253,11 +1199,8 @@ impl GpuiOnboardingWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let show_finished = self.flow.finished && self.panel == PANEL_COUNT;
         let children: Vec<AnyElement> = if self.intro_video_active() {
             self.render_intro_video(s, now, cx)
-        } else if show_finished {
-            self.render_finished(s, now, cx)
         } else {
             match self.panel {
                 1 => self.render_welcome(s, now, cx),
@@ -1332,7 +1275,6 @@ impl Render for GpuiOnboardingWindow {
         };
         self.focus.set_group(interact::TabGroup::Panel);
         let scene = self.render_scene(s, now, window, cx);
-        let folder_chooser = self.render_folder_chooser(s, now, window, cx);
         self.focus.set_group(interact::TabGroup::Dots);
         let dots = (!self.intro_video_active()).then(|| self.render_dots(s, now, cx));
         let toast = self.render_toast(s, now);
@@ -1386,7 +1328,6 @@ impl Render for GpuiOnboardingWindow {
                     .child(scene)
                     .children(dots)
                     .child(overlays)
-                    .children(folder_chooser)
                     .children(toast),
             )
     }
@@ -1402,6 +1343,11 @@ impl GpuiOnboardingWindow {
         cx.notify();
     }
 
+    pub(crate) fn preview_workspace_computer_use(&mut self, cx: &mut Context<Self>) {
+        self.ws_show_computer_use();
+        cx.notify();
+    }
+
     pub(crate) fn preview_open_install_guide(&mut self, cx: &mut Context<Self>) {
         self.agents_panel.guide_open = true;
         self.agents_panel.guide_opened_at = Instant::now();
@@ -1411,7 +1357,6 @@ impl GpuiOnboardingWindow {
     pub(crate) fn preview_right_tab(&mut self, tab: usize, cx: &mut Context<Self>) {
         self.agents_panel.right_tab = match tab {
             1 => agents::RightTab::Integration,
-            2 => agents::RightTab::ComputerUse,
             _ => agents::RightTab::Scan,
         };
         self.agents_panel.right_tab_since = Instant::now();
@@ -1420,7 +1365,7 @@ impl GpuiOnboardingWindow {
 
     pub(crate) fn preview_welcome_tab(&mut self, tab: usize, cx: &mut Context<Self>) {
         self.welcome.tab = match tab {
-            1 => welcome::WelcomeTab::Chat,
+            1 => welcome::WelcomeTab::Coordinators,
             2 => welcome::WelcomeTab::Mobile,
             _ => welcome::WelcomeTab::Together,
         };
@@ -1430,12 +1375,6 @@ impl GpuiOnboardingWindow {
 
     pub(crate) fn preview_workspace_tab(&mut self, view: Option<usize>, cx: &mut Context<Self>) {
         self.preview_workspace(view.map(|index| model::VIEW_KEYS[index]));
-        cx.notify();
-    }
-
-    pub(crate) fn preview_finished_guide(&mut self, cx: &mut Context<Self>) {
-        self.finished.follow_up = Some(finished::FollowUp::Guide);
-        self.finished.follow_up_at = Instant::now();
         cx.notify();
     }
 }

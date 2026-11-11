@@ -110,6 +110,11 @@ pub struct PageRef {
     /// nothing, and for blocks printed before `ghostex show` wrote the key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub questions: Option<Vec<String>>,
+    /// A page that asks nothing but waits until the reader marks it seen (`"awaitsSeen": true`,
+    /// written by `ghostex show` from 2026-11-11 on; server/src/visual_pages/publish.rs). Blocks
+    /// printed before never carry it, so those pages wait on nobody.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub awaits_seen: bool,
 }
 
 impl PageRef {

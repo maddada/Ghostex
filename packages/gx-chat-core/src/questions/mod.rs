@@ -10,6 +10,7 @@ pub mod async_answers;
 pub mod async_controller;
 pub mod content;
 pub mod dialog_rows;
+pub mod dictation;
 pub mod document;
 pub mod drafts;
 pub mod events;

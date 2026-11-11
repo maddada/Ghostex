@@ -625,7 +625,7 @@ fn empryo_cwd(
 /// The flags live in the session's saved base command, which resume, fork and account wrapping all rebuild from.
 /// Sven extended it to Empryo on 2026-10-06 (Empryo harness spec). Empryo's terminal app ignores launch flags, so the model goes into a session folder Ghostex seeds and launches with `--session`, and the effort is typed with `/effort` once Empryo is up; neither changes Empryo's default. A resume keeps the model (it reopens that tab), but Empryo 3.9.0-beta drops a tab's effort when it resumes it (seen 2026-10-06), so the effort lasts until the session restarts (session_chat_empryo_launch_selection.rs).
 /// Antigravity CLI joined on 2026-10-13 (user: port the launch flags after checking agy still accepts `--effort`): agy 1.2.14 takes `--model <id>` and `--effort low|medium|high|max` for that CLI session only.
-/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (skills/ghostex-orchestrator/SKILL.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) and Gemini 0.41.2 take a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
+/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (skills/ghostex-coordinator/SKILL.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) and Gemini 0.41.2 take a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
 /// SEE-ALSO: server/src/ghostex_cli/actions/create.rs (create-agent), server/src/ghostex_cli/board.rs and server/src/board_start_work.rs (board start-work).
 fn apply_requested_agent_model(
     project: &Value,
@@ -861,7 +861,7 @@ fn pin_remembered_agent_model(
     })
 }
 
-/// A new orchestrator gets its role from the `ghostex-orchestrator` skill and its first message
+/// A new orchestrator gets its role from the `ghostex-coordinator` skill and its first message
 /// (coordinators/role.rs), so its command stays as the launcher has it; an agent that cannot run
 /// that skill is refused before the session is made.
 fn refuse_unsupported_coordinator_agent(

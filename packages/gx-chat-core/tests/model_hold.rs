@@ -25,10 +25,12 @@ const REASON: &str = "No API key for openrouter.";
 const SENTENCE: &str =
     "The change to openrouter/qwen3.8-max high failed: No API key for openrouter.";
 
+// A test lineup must outrank the bundled catalog whatever date it carries (the later `updatedAt`
+// wins when a boot read meets the bundle), so a bundle update cannot override these fixtures.
 fn catalog() -> Value {
     json!({
         "schemaVersion": 1,
-        "updatedAt": "2026-10-30",
+        "updatedAt": "9999-12-31",
         "effortLabels": {},
         "agents": {
             "omp": {

@@ -296,15 +296,20 @@ pub(crate) struct NewCoordinatorPlaybookReply {
     window: AnyWindowHandle,
     /// Switching to Ghostex's playbook keeps the editor open; saving overrides goes back.
     stay: bool,
+    /// The pick of a copy the save was sent for (`playbook_generation`).
+    generation: u64,
 }
 
 impl NewCoordinatorPlaybookReply {
-    /// Hands the outcome (gxserver's new view, or why it refused) to the dialog.
+    /// Hands the outcome (gxserver's new view, or why it refused) to the dialog. A save sent
+    /// before another copy was picked changes nothing it shows now.
     pub(crate) fn finish(self, result: Result<Value, String>, cx: &mut App) {
-        let (view, stay) = (self.view, self.stay);
+        let (view, stay, generation) = (self.view, self.stay, self.generation);
         let _ = self.window.update(cx, |_root, window, cx| {
             view.update(cx, |dialog, cx| {
-                dialog.finish_playbook_change(result, stay, window, cx)
+                if dialog.playbook_generation() == generation {
+                    dialog.finish_playbook_change(result, stay, window, cx)
+                }
             })
         });
     }
@@ -471,6 +476,10 @@ impl GpuiNewCoordinatorModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let generation = self.playbook_generation();
+        let Some(group_id) = self.chosen_group_id().map(str::to_string) else {
+            return;
+        };
         let Some(editor) = self.editor.as_mut() else {
             return;
         };
@@ -483,10 +492,15 @@ impl GpuiNewCoordinatorModalWindow {
             view: cx.entity().downgrade(),
             window: window.window_handle(),
             stay: matches!(change, PlaybookChange::UseGhostex),
+            generation,
         };
         cx.notify();
         (self.host)(
-            NewCoordinatorModalCommand::SavePlaybook { change, reply },
+            NewCoordinatorModalCommand::SavePlaybook {
+                group_id,
+                change,
+                reply,
+            },
             cx,
         );
     }
