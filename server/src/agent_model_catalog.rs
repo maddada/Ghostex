@@ -92,10 +92,11 @@ fn state() -> &'static RwLock<CatalogState> {
             is_valid_catalog(&bundled),
             "bundled agent model catalog does not validate"
         );
-        let bundled = Arc::new(bundled);
+        let mut effective = bundled.clone();
+        order_claude_models(&mut effective);
         RwLock::new(CatalogState {
-            catalog: bundled.clone(),
-            effective: bundled,
+            catalog: Arc::new(bundled),
+            effective: Arc::new(effective),
             lineups: BTreeMap::new(),
             published: false,
             etag: None,
@@ -117,11 +118,13 @@ pub fn current() -> Arc<Value> {
 /// is the later of the file's and the newest lineup change, so clients, which keep the newer
 /// document, adopt a changed lineup.
 fn rebuild_effective(state: &mut CatalogState) {
+    let mut effective = (*state.catalog).clone();
+    order_claude_models(&mut effective);
     if state.lineups.is_empty() {
-        state.effective = state.catalog.clone();
+        state.effective = Arc::new(effective);
         return;
     }
-    let mut effective = (*state.catalog).clone();
+    // A lineup read from a CLI replaces its agent whole; Claude's comes from the file.
     if let Some(agents) = effective.get_mut("agents").and_then(Value::as_object_mut) {
         for (agent, lineup) in &state.lineups {
             agents.insert(agent.clone(), lineup.entry.clone());
@@ -137,6 +140,30 @@ fn rebuild_effective(state: &mut CatalogState) {
         effective["updatedAt"] = json!(newest);
     }
     state.effective = Arc::new(effective);
+}
+
+/// Claude's rows by family, Fable, Opus, Sonnet, Haiku, then newest version first, as the chat
+/// core orders them, so the New Coordinator forms and clients built before the core sorted read
+/// the same order.
+/// SEE-ALSO: packages/gx-chat-core/src/menus/catalog.rs (`order_claude_models`, the rule and the user's words).
+fn order_claude_models(catalog: &mut Value) {
+    use ghostex_gx_chat_core::menus::catalog as core;
+    let Some(models) = catalog
+        .pointer_mut(&format!("/agents/{}/models", core::CLAUDE_AGENT_ID))
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    core::order_claude_models(
+        models,
+        |model| {
+            model
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        },
+        |model| model.get("group").and_then(Value::as_str),
+    );
 }
 
 fn lineups_path(paths: &GxserverPaths) -> PathBuf {
