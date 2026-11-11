@@ -1241,7 +1241,7 @@ where they are while you open, change and close views.
   a session is done, a pink dot when an agent is waiting for an answer, and a
   red dot when an agent is stuck waiting for your approval, including rows
   hidden by a collapsed heading. A collapsed project, a collapsed collection, a
-  Space button and a computer tab show the same red for those sessions. Unanswered question
+  Space button and a computer's tile show the same red for those sessions. Unanswered question
   cards count as questions for every agent, alongside Ghostex forms and pages with questions.
   They use pink instead of blue; multiple dots appear when multiple states are
   present, including orange and pink when an agent keeps working after asking. Collapsed
@@ -1332,8 +1332,15 @@ where they are while you open, change and close views.
   passes it returns to its usual place, still asleep until you open it.
   Unsnooze brings it back early. Snooze needs no setting; it is always
   available.
-- Remote machines appear as their own sidebar tabs; a red cloud means the
-  machine could not connect, and its tab explains why.
+- With Separate by machine on, each computer is an icon tile at the start of
+  the row under New session, before the Spaces: this computer's monitor, then
+  each remote computer's Windows, Apple or Ubuntu mark (a cloud when Ghostex
+  doesn't know its system), with a spinner while it connects and its status
+  dots on the tile. The picked computer is filled like a picked Space. Hover a
+  tile for its name and state, with the reason when it couldn't connect;
+  right-click it for its menu, and click a computer that isn't connected to
+  connect it. When the row is too narrow, the computers fold into one button
+  that lists them.
 - Every computer has a short name of up to 2 characters, which the sidebar's
   computer pills show instead of the full name: the chips after a project's
   name, the computer badge on another computer's session and a Unified card's
@@ -1584,9 +1591,9 @@ when you open it.
   the destination for next time. A remembered destination opens showing where it
   goes; one that's gone, or is the project you're handing off from, goes back to
   this project. Picking another agent's model in the model picker always starts
-  from this project on that model's agent. Handing off an orchestrator starts the
-  new session as an orchestrator with the same Goal and Standing instructions when
-  the chosen agent supports orchestrators.
+  from this project on that model's agent. Handing off a coordinator starts the
+  new session as a coordinator with the same Goal and Standing instructions when
+  the chosen agent supports coordinators.
   Include also holds History. At first the file keeps the last 20 turns, a turn
   being your message and everything up to your next one, and the slider picks 1,
   2, 3, 5, 10, 20, 50 or 100 of them. The top of the file then lists what you
@@ -2138,7 +2145,9 @@ ends with a "Reply about this page" box and a Mark as seen button, and until you
 press it the page sits in the list above the chat box of things that need you
 ("Page, not seen yet") and counts in its "need you". Pressing it tells the agent
 you saw the page, with your reply if you wrote one, and the page's card then
-says Seen. Pages an agent showed before this came in don't wait. In the
+says Seen. Pages an agent showed before this came in don't wait. A page with
+questions shows "N of M answered" in a small pill at its bottom right (green
+once every question has an answer). In the
 floating window, clicking outside it, its Hide button beside the close button,
 a link in it that opens in the app's browser, or opening another page puts the
 page aside instead of closing it. A hidden page keeps running: a tab after the
@@ -2466,7 +2475,7 @@ Chat follows the app theme by default. In Settings > Interface > Advanced, set C
 
 The chat's size follows Interface scale in Settings > Interface (see Appearance and app): Scale sizes the chat together with the sidebar, Files and the terminal text, and with Scale areas separately on, Chat zoom (%) sizes it alone, including messages, controls, and the prompt composer, from 70% to 200% in 5% steps (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step whichever of the two applies, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
 
-To search a chat, press Cmd+F (Ctrl+F on Windows and Linux) with the chat focused, including while typing in the chat box. Only what you can see is searched: text inside a folded turn, tool group, thinking or collapsed card, or the hidden part of a long message behind Show more, is skipped until you open it. Every matching word is highlighted, the current one more strongly, and the counter shows which match you are on; Enter or the down arrow goes to the next match, Shift+Enter or the up arrow to the previous one, and the chat scrolls to it. Escape or the close button ends the search and returns you to the chat box. On the phone, Search Conversation in the session's menu opens the same search.
+To search a chat, press Cmd+F (Ctrl+F on Windows and Linux) with the chat focused, including while typing in the chat box. Only what you can see is searched: text inside a folded turn, tool group, thinking or collapsed card, or the hidden part of a long message behind Show more, is skipped until you open it. Every matching word is highlighted, the current one more strongly, and the counter shows which match you are on. The search starts at the newest match, the one nearest the bottom of the chat, and counts from there (1/42 is the newest; a + after the total means older messages aren't loaded yet): Shift+Enter or the up arrow goes to the previous, older match (loading older messages when it needs them), Enter or the down arrow back toward the newest, and the chat scrolls to it. Escape or the close button ends the search and returns you to the chat box. On the phone, Search Conversation in the session's menu opens the same search.
 
 Toggle chat and terminal for a session with one click on the pane header or
 the pane hotkey. Compatible agents can default to chat. On macOS and Linux,
@@ -2892,8 +2901,8 @@ Cursor, Gemini and Copilot accounts. The left side has one **Add account**
 button over each provider's accounts, each with a usage bar (or "Sign in
 needed" when a login stopped working: its Reconnect is on the right), and the
 Claude and Codex rules; click one
-to see it on the right: its usage bars with reset times (labelled 5h, 7d and
-Fable), Name, **Use this account** (Automatically: Ghostex may start sessions on
+to see it on the right: its usage bars with reset times (labelled 5 hours, 7
+days and Fable), Name, **Use this account** (Automatically: Ghostex may start sessions on
 it and move sessions to it at a limit; Only when I pick it: automatic switching
 skips it; Paused), Show usage in the sidebar, and under Advanced the Session
 badge (up to two letters or numbers on its session icons) and its Account
@@ -3641,7 +3650,7 @@ version of the Projects features in Cursor and Claude Code.
   that replaces the captain's hat when you hover the coordinator folds its threads away
   and back, and a folded coordinator keeps its number and colour. While its
   threads are folded, the coordinator's row shows their status dots (with its
-  own) overlapping in place of its time, like a computer tab's dots, so a thread
+  own) overlapping in place of its time, like a computer tile's dots, so a thread
   that is working, finished or asking something is never hidden (a thread
   waiting for your approval is the red dot, one waiting on you for anything
   else is the pink dot). Opening an
@@ -3704,8 +3713,8 @@ version of the Projects features in Cursor and Claude Code.
   thread matches; it shows the way to that thread only when the coordinator
   itself is left out by the pick, and otherwise the card stays as you folded it.
   Shelves and project groups you folded stay folded. Opening a thread from anywhere
-  unfolds its coordinator. Threads count as sessions in the computer tabs and
-  Quick Access, not in the list's shelf and project counts. On the phone, a
+  unfolds its coordinator. Threads count as sessions on the computer tiles and
+  in Quick Access, not in the list's shelf and project counts. On the phone, a
   thread on another computer nests under its coordinator when both the
   coordinator's computer and the thread's computer run 11.3.0 or later;
   otherwise the thread shows as its own card.
@@ -3761,16 +3770,23 @@ version of the Projects features in Cursor and Claude Code.
   Threads, steps and what it asks you belong to the item, and a wait on another
   item or question clears itself once that's done. A coordinator's reply is a
   couple of sentences of news, or marked sections with bullets while Marked
-  handovers in every session is on; under it one quiet line says what that turn
-  changed ("Pairing page started · 1 ask"), and for its latest turn that line is
-  part of the **Worked for** line ("Worked for 18s · Pairing page started · 1
-  ask"). Click the line to open the Work panel at that item.
+  handovers in every session is on. On the computer, each work item the turn
+  changed gets a small card under the reply, like a "Message from" card: "Work
+  item updated" (or added, finished, dropped, needs you, asked you, now
+  waiting), the item's title, the line that changed, the time and the item's
+  state; a turn that changed more than three is one "N work items changed" card
+  listing them. Click a card to open the Work panel at that item. On the phone
+  the same news is one quiet line under the reply ("Pairing page started · 1
+  ask"). For the latest turn, the **Worked for** line says it too ("Worked for
+  18s · Pairing page started · 1 ask").
 - **Above the chat box**: what needs you sits right on top of the chat box as
   one compact list, one row each: the question or task, its answer buttons (the
   recommended one has a small star) or **Done**, and how long ago it was asked;
   below them, blocked work and what the coordinator's latest turn finished (its
   × takes a finished row away). At most four rows show (three on the phone),
-  then **N more need you**, which opens the Work panel at Needs you; something
+  then **N more need you**: on the computer it opens the rest right there, under
+  the first rows, and **Show fewer** folds them back (a long list scrolls inside
+  the dock); on the phone it opens the Work panel at Needs you. Something
   waiting more than a day moves below newer ones. Click a row to open it in
   place: its full text, its links (thread, PR or issue, file), and **Reply** (your
   own words, in the same reply bubble as a message's Reply; they reach the
@@ -4555,7 +4571,10 @@ bar to put it anywhere in the window (it stays there until you quit Ghostex),
 and drag any of its edges or corners to make it bigger or smaller (Ghostex
 remembers the size). The captions keep scrolling to the newest line; scroll up
 to read back the conversation, and the down-arrow button at the bottom right
-takes you back to the newest line. Click the voice name ("Grok ·
+takes you back to the newest line. You can select and copy the captions, and
+type to the agent in the text box under them: Enter sends what you typed as
+your turn (it stops a reply being spoken, and Mute stays as it is), Shift+Enter
+starts a new line. Click the voice name ("Grok ·
 Eve") to pick another voice: the list opens on the voice you use now. Grok switches right away when it can, and GPT
 Realtime keeps a call's voice once it has spoken, so the new voice starts with
 your next conversation (the panel says which). The small speed button right of
@@ -4715,7 +4734,7 @@ sessions, so any client can control agents on any machine.
   network can still connect. Turning Easy Connect on any other way (its
   switch, `ghostex tailcat enable`) also starts the helper's install when it
   is missing, and Easy Connect starts on it once it is in. On the phone, the first screen lists the steps (get Ghostex
-  on the computer, click Connect a phone there, scan its code here) and Scan
+  on the computer, open Connect a Device there, scan its code here) and Scan
   the code opens the scanner: two steps, with the camera in the second (on an
   iPhone, Open the scanner there opens Apple's scanner; on Android the camera
   is right in the step, with a light button). It won't scan gives tips. If the
@@ -6257,7 +6276,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   limits, so the Fable limit is never hidden when it is running out; launcher
   and picker rows and the Accounts figures use the same two numbers. Each
   meter opens that login's live limits, reset times, and extra usage or rate
-  limit resets, with the Fable limit as a main bar for Claude. Right-click a
+  limit resets, with the Fable limit as a main bar for Claude. A Gemini, Cursor
+  or Copilot meter opens that provider's own popup: its name and logo, its
+  limits and plan, and a cell that opens the account in Settings. Right-click a
   usage meter for Extensions and Accounts. Click the same
   usage meter again to close its dropdown. Click another dropdown's
   button to close the current dropdown and open that one in a single click.
