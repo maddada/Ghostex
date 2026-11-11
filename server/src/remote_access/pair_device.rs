@@ -871,28 +871,9 @@ fn finish_pairing(
     } else {
         None
     };
-    // Checked again here: a device may have paired with that key while this one waited.
-    if let Some(client_key) = pending.tailcat_client_key.as_deref() {
-        if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
-            context.db,
-            client_key,
-            &pending.device_key.public_key,
-        )? {
-            return Err(key_held_by(&holder));
-        }
-    }
     let device_id = uuid::Uuid::new_v4().simple().to_string();
     let device_api_token = phone.then(mint_device_api_token);
     let token_expires_at = chrono::Utc::now() + DEVICE_API_TOKEN_TTL;
-    if let Some(key) = &key {
-        (context.append_key)(key, &device_id, &pending.name).map_err(|error| {
-            if error.is::<AdministratorApprovalDeclined>() {
-                PairDeviceError::ApprovalDeclined
-            } else {
-                PairDeviceError::Internal(error)
-            }
-        })?;
-    }
     let approver_key = pending.approver_key.clone().map(|mut key| {
         key.device_id = device_id.clone();
         key.added_at_ms = now_ms();
@@ -919,30 +900,81 @@ fn finish_pairing(
         legacy_key_line_removed: false,
     };
     let repository = RemotePairingRepository::new(context.db);
-    if let Err(error) = repository.insert_device(&record) {
-        if key.is_none() {
-            return Err(error.into());
-        }
-        // The key line grants access; never leave it behind without its row.
-        return Err(match (context.remove_key)(&device_id) {
-            Ok(_) => error.into(),
-            Err(rollback_error) => {
-                log_authorized_key_rollback_failure(context.logger, &device_id, &rollback_error);
-                anyhow::anyhow!(
-                    "{error:#}; additionally, the SSH key line ghostex-paired:{device_id} could not be removed from authorized_keys and must be deleted by hand: {rollback_error:#}"
-                )
-                .into()
+    /*
+    CDXC:RemotePairing 2026-11-11 SECURITY:
+    Review of 951cab347, finding 5: each pairing finishes on its own database connection, and nothing
+    held the key check, the new entry's insert and the choice of the entries it retires together, so
+    two approved pairings stating one key that finished at the same moment could both pass the check
+    and both be saved, neither retiring the other. The three now run in one IMMEDIATE transaction
+    (SQLite's write lock, taken at its start), so the second waits for the first and then finds its
+    entry; the same goes for link and purpose key registration (paired_devices.rs). Nothing slow runs
+    under the lock: the SSH key line is written after the commit (the entry is taken back if that
+    fails, and no token is live before `reload_device_api_tokens` below), and the earlier entries are
+    retired after it (their key lines, the push store, the allow-list).
+    */
+    let earlier = {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            context.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )
+        .map_err(anyhow::Error::from)?;
+        // Checked again here: a device may have paired with that key while this one waited.
+        if let Some(client_key) = pending.tailcat_client_key.as_deref() {
+            if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
+                context.db,
+                client_key,
+                &pending.device_key.public_key,
+            )? {
+                return Err(key_held_by(&holder));
             }
-        });
+        }
+        repository.insert_device(&record)?;
+        let earlier = super::paired_devices::earlier_pairings_of_same_device(
+            context.db,
+            &device_id,
+            pending.tailcat_client_key.as_deref(),
+            // Proven: `pairing_status` checked this key's signature before finishing the pairing.
+            &pending.device_key.public_key,
+        )?;
+        transaction.commit().map_err(anyhow::Error::from)?;
+        earlier
+    };
+    if let Some(key) = &key {
+        if let Err(error) = (context.append_key)(key, &device_id, &pending.name) {
+            // No key line, no entry.
+            let _ = repository.remove_device(&device_id);
+            return Err(if error.is::<AdministratorApprovalDeclined>() {
+                PairDeviceError::ApprovalDeclined
+            } else {
+                PairDeviceError::Internal(error)
+            });
+        }
+        // The key line grants access; never leave it behind without its entry.
+        if repository.find_device(&device_id)?.is_none() {
+            return Err(match (context.remove_key)(&device_id) {
+                Ok(_) => {
+                    anyhow::anyhow!("The new pairing was removed while it was being saved.").into()
+                }
+                Err(rollback_error) => {
+                    log_authorized_key_rollback_failure(
+                        context.logger,
+                        &device_id,
+                        &rollback_error,
+                    );
+                    anyhow::anyhow!(
+                        "The new pairing was removed while it was being saved, and the SSH key line ghostex-paired:{device_id} could not be removed from authorized_keys and must be deleted by hand: {rollback_error:#}"
+                    )
+                    .into()
+                }
+            });
+        }
     }
 
-    let replaced = super::paired_devices::replace_earlier_pairings_of_same_phone(
+    let replaced = super::paired_devices::retire_earlier_pairings(
         context.paths,
         context.db,
         &device_id,
-        pending.tailcat_client_key.as_deref(),
-        // Proven: `pairing_status` checked this key's signature before finishing the pairing.
-        &pending.device_key.public_key,
+        earlier,
         |id: &str| (context.remove_key)(id),
         |device, error| log_replaced_pairing_kept(context.logger, device, error),
     )?;

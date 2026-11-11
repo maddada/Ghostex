@@ -227,19 +227,51 @@ pub fn replace_earlier_pairings_of_same_phone(
     new_device_id: &str,
     tailcat_client_key: Option<&str>,
     device_public_key: &str,
-    mut remove_key_line: impl FnMut(&str) -> Result<bool>,
-    mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+    remove_key_line: impl FnMut(&str) -> Result<bool>,
+    on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+) -> Result<Vec<RemotePairedDeviceRecord>> {
+    let earlier =
+        earlier_pairings_of_same_device(db, new_device_id, tailcat_client_key, device_public_key)?;
+    retire_earlier_pairings(paths, db, new_device_id, earlier, remove_key_line, on_kept)
+}
+
+/// The entries `replace_earlier_pairings_of_same_phone` retires for the new entry `new_device_id`.
+/// `finish_pairing` reads them in the transaction that checks the key and inserts the new entry,
+/// and retires them after it (removing their key lines can be slow, or ask Windows for approval).
+pub(crate) fn earlier_pairings_of_same_device(
+    db: &Connection,
+    new_device_id: &str,
+    tailcat_client_key: Option<&str>,
+    device_public_key: &str,
 ) -> Result<Vec<RemotePairedDeviceRecord>> {
     let Some(client_key) = tailcat_client_key else {
         return Ok(Vec::new());
     };
+    Ok(RemotePairingRepository::new(db)
+        .list_devices()?
+        .into_iter()
+        .filter(|device| {
+            device.id != new_device_id
+                && device.tailcat_client_key.as_deref() == Some(client_key)
+                && is_earlier_pairing_of(device, device_public_key)
+        })
+        .collect())
+}
+
+/// Retires `earlier` (`earlier_pairings_of_same_device`) for the new entry `new_device_id`; an
+/// entry already gone is skipped.
+pub(crate) fn retire_earlier_pairings(
+    paths: &GxserverPaths,
+    db: &Connection,
+    new_device_id: &str,
+    earlier: Vec<RemotePairedDeviceRecord>,
+    mut remove_key_line: impl FnMut(&str) -> Result<bool>,
+    mut on_kept: impl FnMut(&RemotePairedDeviceRecord, &anyhow::Error),
+) -> Result<Vec<RemotePairedDeviceRecord>> {
     let repository = RemotePairingRepository::new(db);
     let mut replaced = Vec::new();
-    for device in repository.list_devices()? {
-        if device.id == new_device_id
-            || device.tailcat_client_key.as_deref() != Some(client_key)
-            || !is_earlier_pairing_of(&device, device_public_key)
-        {
+    for device in earlier {
+        if repository.find_device(&device.id)?.is_none() {
             continue;
         }
         let removed = if device.ssh_key_fingerprint.is_empty() {
@@ -473,6 +505,16 @@ pub fn register_device_link_key(
         return Ok(Err(LinkKeyError::BadKey));
     }
     let repository = RemotePairingRepository::new(db);
+    let listed = read_tailcat_status_payload(paths, db, tailcat_runtime)
+        .allowed_client_keys
+        .iter()
+        .any(|key| key == client_key);
+    // The holder check and the write run in one IMMEDIATE transaction, so a pairing or another
+    // registration finishing at the same moment cannot take the key in between (review of 951cab347,
+    // finding 5; CDXC:RemotePairing 2026-11-11 SECURITY in pair_device.rs `finish_pairing`). The
+    // allow-list changes, which restart tailcat's helpers, come after it.
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)?;
     let Some(device) = repository.find_device(device_id)? else {
         return Ok(Err(LinkKeyError::NotPaired));
     };
@@ -491,14 +533,11 @@ pub fn register_device_link_key(
         return Ok(Err(LinkKeyError::held_by(&holder)));
     }
     let previous = repository.device_link_key(device_id)?;
-    let listed = read_tailcat_status_payload(paths, db, tailcat_runtime)
-        .allowed_client_keys
-        .iter()
-        .any(|key| key == client_key);
     if previous.as_deref() == Some(client_key) && listed {
         return Ok(Ok(false));
     }
     repository.set_device_link_key(device_id, client_key)?;
+    transaction.commit()?;
     add_tailcat_client_key_when_allow_listed(paths, db, tailcat_runtime, client_key)?;
     if let Some(previous) = previous.filter(|previous| previous != client_key) {
         remove_tailcat_client_key(paths, db, tailcat_runtime, &previous, Some(&owner))?;
@@ -529,6 +568,10 @@ pub fn register_device_purpose_keys(
         return Ok(Err(LinkKeyError::BadKey));
     }
     let repository = RemotePairingRepository::new(db);
+    // As in `register_device_link_key`: the holder checks and the writes in one IMMEDIATE
+    // transaction, the allow-list after it.
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)?;
     let Some(device) = repository.find_device(device_id)? else {
         return Ok(Err(LinkKeyError::NotPaired));
     };
@@ -555,6 +598,7 @@ pub fn register_device_purpose_keys(
             replaced.push(previous);
         }
     }
+    transaction.commit()?;
     let current = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
     if purpose_keys_allow_list(db, current.clone(), &added, &replaced, &owner)? == current {
         return Ok(Ok(false));
