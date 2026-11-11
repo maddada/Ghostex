@@ -20,12 +20,13 @@ use super::discovery::{discover, Discovered, WorkspaceInfo};
 const ACTION_LOCK_WAIT: Duration = Duration::from_secs(120);
 
 /// The reads the Board repeats on every poll, all answered from one cache.
-const CACHED_READS: [&str; 6] = [
+const CACHED_READS: [&str; 7] = [
     "board",
     "list",
     "listAllLabels",
     "configGet",
     "configGetIssuePrefix",
+    "boardHiddenColumnsGet",
     "status",
 ];
 /// These three run the same `bd list --all -n 0 --json`, so one read fills all three.

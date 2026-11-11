@@ -219,6 +219,10 @@ impl GhostexGpuiApp {
                 if loaded.column_config != state.column_config {
                     state.column_config = loaded.column_config;
                 }
+                if loaded.hidden_columns != state.hidden_columns {
+                    state.hidden_columns = loaded.hidden_columns;
+                    board_changed = true;
+                }
                 let columns = build_board_columns(&state.column_config);
                 if columns_signature(&columns) != columns_signature(&state.columns) {
                     state.columns = columns;

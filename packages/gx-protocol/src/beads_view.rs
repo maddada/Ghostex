@@ -151,6 +151,10 @@ pub struct BeadsSyncInfo {
     pub last_result: Option<BeadsSyncResult>,
 }
 
+/// The Board's built-in lanes a project may hide (Todo, In Progress and Done always show), as
+/// `boardHiddenColumnsGet`/`Set` store them in the workspace's bd config.
+pub const HIDEABLE_BOARD_COLUMNS: [&str; 3] = ["backlog", "test", "review"];
+
 /// What a computer's gxserver can do for the Beads view. An older gxserver has no
 /// `/api/beadsView`, so the client treats "not found" as "none of these".
 pub mod capability {

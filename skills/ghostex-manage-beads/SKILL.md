@@ -79,6 +79,10 @@ board's own "Start work" button writes.
    bd close <id>
    ```
 
+   A project can hide Backlog, Test or Review on its Board
+   (`bd config get custom.ghostex.board_hidden_columns` lists them). Skip the
+   statuses it hides; a bead moved to one anyway makes that lane show again.
+
 3. After each meaningful turn, add a short human-readable comment:
 
    ```bash

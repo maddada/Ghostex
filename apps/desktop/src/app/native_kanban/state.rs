@@ -166,6 +166,9 @@ pub(crate) struct NativeKanbanState {
     /// The raw `status.custom` value, kept so column edits preserve bd's category suffixes.
     pub(crate) column_config: String,
     pub(crate) columns: Vec<BoardColumn>,
+    /// The built-in lanes the project hides (bd config, shared by every computer); `None` when
+    /// the project's gxserver predates the setting.
+    pub(crate) hidden_columns: Option<Vec<String>>,
     pub(crate) issues: Vec<BeadsIssue>,
     pub(crate) tickets: Vec<BoardTicket>,
     pub(crate) issues_signature: String,

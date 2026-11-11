@@ -442,6 +442,43 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// Writes which built-in lanes the project hides and reloads.
+    pub(crate) fn native_kanban_write_hidden_columns(
+        &mut self,
+        hidden: Vec<String>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(KanbanPanel::Columns(form)) = self.native_kanban.panel.as_mut() {
+            form.busy = true;
+            form.error = None;
+        }
+        let value = hidden.join(",");
+        self.native_kanban_spawn(
+            move |context| async move {
+                beads_call(
+                    &context,
+                    json!({ "action": "boardHiddenColumnsSet", "value": value }),
+                )
+                .await
+            },
+            move |this, result, cx| {
+                let error = result.err();
+                if let Some(KanbanPanel::Columns(form)) = this.native_kanban.panel.as_mut() {
+                    form.busy = false;
+                    form.error = error.clone();
+                }
+                if error.is_none() {
+                    this.native_kanban.hidden_columns = Some(hidden);
+                    this.native_kanban.invalidate_derived();
+                    this.native_kanban_refresh(KanbanRefreshMode::Manual, cx);
+                }
+                this.native_kanban_notify(cx);
+            },
+            cx,
+        );
+        self.native_kanban_notify(cx);
+    }
+
     /// Writes the board's `status.custom` value and reloads, the way the Columns dialog does.
     pub(crate) fn native_kanban_write_column_config(
         &mut self,

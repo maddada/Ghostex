@@ -84,6 +84,15 @@ pub(crate) fn build_board_columns(custom_status_config: &str) -> Vec<BoardColumn
     columns
 }
 
+/// Whether the Board draws a lane.
+///
+/// CDXC:ProjectBoard 2026-11-11 DECISION:
+/// User (issue #577, folded into the Beads view): Backlog, Test and Review each get a Show switch in the Board's Columns dialog; Todo, In Progress and Done always show. The choice is saved in the project's Beads workspace (bd config `custom.ghostex.board_hidden_columns`, next to `status.custom`), so every computer, clone and agent sees the same Board. A hidden lane that still holds beads keeps showing, so no bead vanishes, and hiding never takes the status out of `status.custom` (agents may still set it).
+pub(crate) fn board_lane_shown(key: &str, hidden: &[String], tickets: &[BoardTicket]) -> bool {
+    !hidden.iter().any(|name| name == key)
+        || tickets.iter().any(|ticket| ticket.board_status == key)
+}
+
 pub(crate) fn status_name_to_label(name: &str) -> String {
     name.split(|ch: char| ch.is_whitespace() || ch == '_' || ch == '-')
         .filter(|word| !word.is_empty())

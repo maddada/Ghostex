@@ -124,7 +124,7 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let p = self.native_kanban_palette(window);
-        let lane_count = self.native_kanban.columns.len();
+        let lane_count = self.native_kanban.derived().shown.len();
         let scroll = self.native_kanban.lanes_scroll.clone();
         let in_view = lanes_in_view(
             lane_count,

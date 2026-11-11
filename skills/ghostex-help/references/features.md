@@ -4071,7 +4071,12 @@ the sync status with **Pull** and **Push**, Refresh, and **New bead**.
   **Blocks**; pick one under Add, search by title or ID and click to link; the x
   removes a link, and a link that would make cards wait on each other in a loop
   is refused. When the lanes do not fit, the board scrolls sideways (swipe,
-  Shift+wheel, or drag the bar under the lanes).
+  Shift+wheel, or drag the bar under the lanes). **Columns** adds the project's
+  own lanes and has a **Show** switch for Backlog, Test and Review (Todo, In
+  Progress and Done always show). A hidden lane still appears while a bead is in
+  it, and the choice is saved in the project's Beads workspace, so every computer
+  and clone sees the same Board (`bd config set custom.ghostex.board_hidden_columns
+  test,review`; `bd config unset` shows them all again).
 - **Sync**: the header says when the beads last synced from this computer
   ("Synced 4 min ago"); click it for the remote and the last push and pull.
   **Pull** brings in changes from your other computers (`bd dolt pull`), **Push**

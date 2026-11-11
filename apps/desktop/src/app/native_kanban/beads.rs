@@ -28,6 +28,8 @@ fn project_beads_gxserver_action_for_board_action(action: &str) -> Result<&'stat
         "configGet" => Ok("configGet"),
         "configGetIssuePrefix" => Ok("configGetIssuePrefix"),
         "configSet" => Ok("configSet"),
+        "boardHiddenColumnsGet" => Ok("boardHiddenColumnsGet"),
+        "boardHiddenColumnsSet" => Ok("boardHiddenColumnsSet"),
         "create" => Ok("create"),
         "delete" => Ok("delete"),
         "depAdd" => Ok("depAdd"),
@@ -229,6 +231,28 @@ pub(crate) async fn read_workflow_statuses(
     ))
 }
 
+/// The built-in lanes this project hides (`boardHiddenColumnsGet`). `None` when the computer
+/// that owns the project runs a gxserver from before the setting: its Board shows every lane and
+/// the Columns dialog offers no Show switches.
+pub(crate) async fn read_hidden_columns(
+    context: &ProjectBoardBridgeRuntimeContext,
+) -> Result<Option<Vec<String>>, String> {
+    match beads_call(context, json!({ "action": "boardHiddenColumnsGet" })).await {
+        Ok(payload) => Ok(Some(
+            config_string(payload)
+                .split(',')
+                .map(str::trim)
+                .filter(|name| {
+                    ghostex_gx_protocol::beads_view::HIDEABLE_BOARD_COLUMNS.contains(name)
+                })
+                .map(str::to_string)
+                .collect(),
+        )),
+        Err(error) if error.contains("Unsupported Beads action") => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 /// `ensureWorkflowStatuses`.
 pub(crate) async fn ensure_workflow_statuses(
     context: &ProjectBoardBridgeRuntimeContext,
@@ -255,6 +279,7 @@ pub(crate) async fn list_issues(
 
 pub(crate) struct KanbanLoadResult {
     pub(crate) column_config: String,
+    pub(crate) hidden_columns: Option<Vec<String>>,
     pub(crate) issues: Vec<BeadsIssue>,
 }
 
@@ -271,6 +296,7 @@ pub(crate) async fn load_board(
     };
     Ok(KanbanLoadResult {
         column_config,
+        hidden_columns: read_hidden_columns(context).await?,
         issues: list_issues(context).await?,
     })
 }

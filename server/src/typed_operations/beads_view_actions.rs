@@ -10,7 +10,12 @@ use super::values::{
     nullish_value_to_string, ProcessCommand, TypedOperationError,
 };
 
-const BEADS_VIEW_ACTIONS: [&str; 8] = [
+/// The bd config key the Board's hidden built-in columns live in: in the workspace database, next
+/// to `status.custom`, so every computer, clone and agent sees the same Board. `custom.*` is bd's
+/// namespace for keys it does not own.
+const BOARD_HIDDEN_COLUMNS_KEY: &str = "custom.ghostex.board_hidden_columns";
+
+const BEADS_VIEW_ACTIONS: [&str; 10] = [
     "claim",
     "reopen",
     "defer",
@@ -19,6 +24,8 @@ const BEADS_VIEW_ACTIONS: [&str; 8] = [
     "humanDismiss",
     "doltPull",
     "doltPush",
+    "boardHiddenColumnsGet",
+    "boardHiddenColumnsSet",
 ];
 
 pub(crate) fn is_beads_view_action(action: &str) -> bool {
@@ -55,6 +62,31 @@ pub(crate) fn build_beads_view_command(
         "doltPull" => vec!["dolt".into(), "pull".into()],
         // CDXC:ProjectBoard 2026-11-11 WHY: without --no-adopt a push with no Dolt remote can quietly adopt the git origin as one; Ghostex never makes that choice for the user. `bd dolt pull` has no such flag (it rejects it).
         "doltPush" => vec!["dolt".into(), "push".into(), "--no-adopt".into()],
+        "boardHiddenColumnsGet" => vec![
+            "config".into(),
+            "get".into(),
+            BOARD_HIDDEN_COLUMNS_KEY.into(),
+            "--json".into(),
+        ],
+        "boardHiddenColumnsSet" => {
+            let hidden = normalize_board_hidden_columns(params.get("value"))?;
+            if hidden.is_empty() {
+                vec![
+                    "config".into(),
+                    "unset".into(),
+                    BOARD_HIDDEN_COLUMNS_KEY.into(),
+                    "--json".into(),
+                ]
+            } else {
+                vec![
+                    "config".into(),
+                    "set".into(),
+                    BOARD_HIDDEN_COLUMNS_KEY.into(),
+                    hidden.join(","),
+                    "--json".into(),
+                ]
+            }
+        }
         _ => {
             return Err(TypedOperationError::bad_request(format!(
                 "Unsupported Beads action: {action}"
@@ -62,6 +94,27 @@ pub(crate) fn build_beads_view_command(
         }
     };
     Ok(ProcessCommand::new(bd_executable_path, args, cwd))
+}
+
+/// The hidden columns, comma separated: only Backlog, Test and Review can be hidden; empty shows
+/// every lane again (the key is unset).
+fn normalize_board_hidden_columns(
+    input: Option<&Value>,
+) -> Result<Vec<String>, TypedOperationError> {
+    let mut hidden = Vec::<String>::new();
+    for name in optional_text(input).unwrap_or_default().split(',') {
+        let name = name.trim();
+        if name.is_empty() || hidden.iter().any(|existing| existing == name) {
+            continue;
+        }
+        if !ghostex_gx_protocol::beads_view::HIDEABLE_BOARD_COLUMNS.contains(&name) {
+            return Err(TypedOperationError::bad_request(format!(
+                "The Board can't hide the {name} column."
+            )));
+        }
+        hidden.push(name.to_string());
+    }
+    Ok(hidden)
 }
 
 fn optional_text(input: Option<&Value>) -> Option<String> {
