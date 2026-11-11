@@ -223,10 +223,10 @@ Ghostex offers to install Chromium the first time you open the browser or code e
 
 <p>
   <a href="https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Android-APK.svg?variant=secondary&logo=android&mode=dark" /><img src="https://shieldcn.dev/badge/Android-APK.svg?variant=secondary&logo=android&mode=light" alt="Android APK" /></picture></a>
-  <a href="https://discord.gg/df7b3G92CS"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/iOS-TestFlight.svg?variant=secondary&logo=apple&mode=dark" /><img src="https://shieldcn.dev/badge/iOS-TestFlight.svg?variant=secondary&logo=apple&mode=light" alt="iOS TestFlight" /></picture></a>
+  <a href="https://apps.apple.com/app/id6771707394"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/iOS-App_Store.svg?variant=secondary&logo=apple&mode=dark" /><img src="https://shieldcn.dev/badge/iOS-App_Store.svg?variant=secondary&logo=apple&mode=light" alt="iOS App Store" /></picture></a>
 </p>
 
-The iOS TestFlight runs through the [Discord](https://discord.gg/df7b3G92CS). Post in the iOS channel to get in.
+The iPhone app is on the [App Store](https://apps.apple.com/app/id6771707394).
 
 ## Comparison
 
@@ -253,7 +253,7 @@ The iOS TestFlight runs through the [Discord](https://discord.gg/df7b3G92CS). Po
 
 ## Community
 
-- **Discord:** [discord.gg/df7b3G92CS](https://discord.gg/df7b3G92CS) for help, TestFlight access, and feature talk.
+- **Discord:** [discord.gg/df7b3G92CS](https://discord.gg/df7b3G92CS) for help and feature talk.
 - **Issues:** [Report a bug or request a feature](https://github.com/maddada/Ghostex/issues).
 - **Contributing:** Ghostex moves fast and help is welcome on platform ports, agent integrations, docs, and polish. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 

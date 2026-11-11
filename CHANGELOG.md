@@ -95,7 +95,7 @@
 
 ### 📱 On the phone
 
-- **New phone apps:** the iPhone app (TestFlight, and the App Store after Apple's review) and this release's Android app bring everything below that needs a new app; phones on the older apps keep working with this release.
+- **New phone apps:** the iPhone app (on the [App Store](https://apps.apple.com/app/id6771707394) once Apple's review passes) and this release's Android app bring everything below that needs a new app; phones on the older apps keep working with this release.
 - **The Live Activity says when it was last updated:** past its time it shows "Updated 8:14 PM" in grey instead of a warning. New and optional: Settings > Live Activity > **Keep it updated while locked** (off by default) lets one of your computers keep it up to date through Ghostex's push service while the phone is locked; iOS can still delay those updates. With the new iPhone app and Ghostex 11.4.0 on the computer.
 - **Show session names (Settings > Live Activity):** the Live Activity, the widgets and pushes can lead each row with the session's name instead of the agent's, off by default (#544, #545), thanks to @suatkocar.
 - **iPhone push notifications arrive:** the iPhone gets its push token again, a registration a computer missed is tried again by itself, and a push never shows a custom agent's internal id.
@@ -481,7 +481,7 @@
 - **Each phone pairs with its own device key** kept in the Secure Enclave or Android Keystore: it waits as Pending with three words, and you approve it on the computer, or on a phone already paired, only when the words match. Removing a phone cuts it off at once.
 - **Computers pair the same way:** paste a Show QR code into Add a machine, check the three words on both screens and approve.
 - **Phones that sign in over Tailscale, your network or SSH pair once too**, with the same three matching words; until then answers, Stop and typing from that phone wait for your approval. Run in terminal on the phone uses the phone's own key.
-- **Pairing again needs the new phone app** (Android in this release, iPhone on TestFlight).
+- **Pairing again needs the new phone app** (Android in this release, iPhone on the [App Store](https://apps.apple.com/app/id6771707394)).
 
 ### 🤝 Ghostex Collab
 
