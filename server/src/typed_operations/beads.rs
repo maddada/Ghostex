@@ -646,8 +646,7 @@ async fn jsonl_tracked_by_repository(
     )
     .await?;
     if folder_common.exit_code != 0 {
-        // A redirected workspace outside any repository: git says so plainly.
-        if folder_common.stderr.contains("not a git repository") {
+        if git_found_no_repository_above(folder, &folder_common.stderr)? {
             return Ok(false);
         }
         return Err(folder_common.stderr.or_else("git rev-parse failed"));
@@ -675,6 +674,21 @@ async fn jsonl_tracked_by_repository(
         1 => Ok(false),
         _ => Err(listed.stderr.or_else("git ls-files failed")),
     }
+}
+
+/// True only for a folder outside any repository (a redirected workspace): git's discovery message, and no `.git` file or folder in the folder or any folder above it. A `.git` that git could not use (a stale `gitdir:` pointer prints "not a git repository: <path>") is broken repository metadata, not proof the file is outside this repository.
+fn git_found_no_repository_above(folder: &Path, stderr: &str) -> Result<bool, String> {
+    if !stderr.starts_with("fatal: not a git repository (or any") {
+        return Ok(false);
+    }
+    for ancestor in folder.ancestors() {
+        match fs::symlink_metadata(ancestor.join(".git")) {
+            Ok(_) => return Ok(false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("{}: {error}", ancestor.join(".git").display())),
+        }
+    }
+    Ok(true)
 }
 
 /// A git probe whose start failure or timeout is an error, never an answer.
