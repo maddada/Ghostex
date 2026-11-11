@@ -398,15 +398,7 @@ impl GpuiAddProjectModalWindow {
             && d.machine
                 .as_ref()
                 .is_some_and(|machine| machine.starts_at_drive_list);
-        // New project folder is offered on every machine: with no Default projects folder it
-        // suggests one (new_project.rs).
-        if matches_filter(
-            &self.query,
-            "New project folder",
-            &["new", "create", "subfolder", "folder", "project"],
-        ) {
-            rows.push(self.new_project_source_row(machine_id));
-        }
+        // CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 12, Add Project), picked "Local folder first, and explain the folder prompt": Local folder, what nearly everyone adds first, is the first row, then New project folder and the rest; the explanation is the macOS notice in render.rs (`folder_access_notice`).
         let mut local_terms = vec!["browse", "directory", "disk"];
         if starts_at_drive_list {
             local_terms.extend(["drive", "external", "usb", "home"]);
@@ -431,6 +423,15 @@ impl GpuiAddProjectModalWindow {
                     start: starts_at_drive_list.then(|| ADD_PROJECT_ROOT_BROWSE_PATH.to_string()),
                 },
             });
+        }
+        // New project folder is offered on every machine: with no Default projects folder it
+        // suggests one (new_project.rs).
+        if matches_filter(
+            &self.query,
+            "New project folder",
+            &["new", "create", "subfolder", "folder", "project"],
+        ) {
+            rows.push(self.new_project_source_row(machine_id));
         }
         if !starts_at_drive_list
             && matches_filter(
