@@ -23,17 +23,18 @@ mod tests;
 mod tree;
 
 pub use build::{
-    build_unified_sidebar, build_unified_sidebar_folded, build_unified_sidebar_scoped, came_back_ms, is_unified_draft,
-    repo_of_project, space_filter_key, unified_shelf, unified_space_of_project, unified_status,
-    UnifiedFilter, UnifiedFilterOption, UnifiedFilterOptions, UnifiedMachineInput, UnifiedRow,
-    UnifiedSettings, UnifiedShelf, UnifiedSidebarView, UnifiedStatus, UnifiedTreeLine,
+    build_unified_sidebar, build_unified_sidebar_folded, build_unified_sidebar_scoped,
+    came_back_ms, is_unified_draft, repo_of_project, space_filter_key, unified_shelf,
+    unified_space_of_project, unified_status, UnifiedFilter, UnifiedFilterOption,
+    UnifiedFilterOptions, UnifiedMachineInput, UnifiedRow, UnifiedSettings, UnifiedShelf,
+    UnifiedSidebarView, UnifiedStatus, UnifiedTreeLine,
 };
-pub use tree::{unified_coordinator_key, UnifiedCrew, UnifiedFolds};
 pub use choices::{
-    default_machine, filter_project_choices, move_project_choice_machine, project_query_match,
-    session_activity_ms, unified_new_session_target, unified_project_choices,
-    widen_filter_for_new_session, ActiveProject, ProjectChoiceInput, UnifiedChoiceMachine,
-    UnifiedChoiceMachineInput, UnifiedNewSessionTarget, UnifiedProjectChoice,
+    default_machine, filter_project_choices, move_project_choice_machine, new_thread_start_heading,
+    new_thread_start_rows, project_query_match, session_activity_ms, unified_new_session_target,
+    unified_project_choices, widen_filter_for_new_session, ActiveProject, NewThreadStartRow,
+    ProjectChoiceInput, UnifiedChoiceMachine, UnifiedChoiceMachineInput, UnifiedNewSessionTarget,
+    UnifiedProjectChoice, NEW_THREAD_START_ROWS_MAX,
 };
 pub use grouping::{group_unified_sidebar, move_unified_project, ordered_repo_keys, UnifiedGroup};
 pub use lanes::{unified_lane_inputs, unified_lane_menu_inputs};
@@ -44,8 +45,9 @@ pub use repo::{
     RepoIdentity,
 };
 pub use reveal::{
-    find_unified_row, open_unified_reveal, UnifiedFound, unified_shelf_key, unified_shelf_label,
-    unified_shelf_open, UnifiedRevealSpot,
+    find_unified_row, open_unified_reveal, unified_shelf_key, unified_shelf_label,
+    unified_shelf_open, UnifiedFound, UnifiedRevealSpot,
 };
 pub use saved::{UnifiedSavedState, RECENT_REPOS_MAX, UNIFIED_SAVED_STATE_KEY};
 pub use spaces::{unified_machine_spaces, unified_space_scope, UnifiedSpaceScope};
+pub use tree::{unified_coordinator_key, UnifiedCrew, UnifiedFolds};

@@ -72,8 +72,8 @@ impl Render for FloatingRevealWindow {
                     },
                 ))
                 .on_action(cx.listener(
-                    |app, action: &crate::app::hotkeys::RunConfiguredGhostexHotkey, _, cx| {
-                        app.run_floating_reveal_hotkey(action, cx)
+                    |app, action: &crate::app::hotkeys::RunConfiguredGhostexHotkey, window, cx| {
+                        app.run_floating_reveal_hotkey(action, window, cx)
                     },
                 ))
                 .child(
@@ -271,11 +271,20 @@ impl GhostexGpuiApp {
     /// root's keyboard-owner gate on purpose: that gate reads who owns the main window's keyboard
     /// (a Source view's editor keeps it while the panel is key) and would hand the chord to a
     /// page that never saw it.
+    ///
+    /// Focus Sidebar is the exception: it is answered here, in the panel's own window, because it
+    /// asks which window's sidebar has the keyboard and hands it back inside the panel
+    /// (gx_store/sidebar_keyboard.rs).
     fn run_floating_reveal_hotkey(
-        &self,
+        &mut self,
         action: &crate::app::hotkeys::RunConfiguredGhostexHotkey,
+        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        if action.action_id == "focusSidebar" {
+            self.toggle_sidebar_keyboard_focus(window, cx);
+            return;
+        }
         let Some(main) = self.main_window_handle else {
             return;
         };

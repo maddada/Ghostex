@@ -1500,6 +1500,12 @@ impl GpuiNewThreadPickerWindow {
                     .iter()
                     .filter(|row| matches!(row, PickerRow::Agent(_)))
                     .count();
+                // One search for every "Start <agent> in" row drawn below.
+                let start_places = if first_start_row(&rows).is_some() {
+                    self.start_row_places()
+                } else {
+                    Vec::new()
+                };
                 for (position, row) in rows.iter().enumerate() {
                     let selected = position == self.selected;
                     if agent_rows > 0 && position == agent_rows {
@@ -1510,7 +1516,12 @@ impl GpuiNewThreadPickerWindow {
                     }
                     children.push(match *row {
                         PickerRow::Agent(index) => self.render_agent_row(index, selected, cx),
-                        PickerRow::StartIn(index) => self.render_start_row(index, selected, cx),
+                        PickerRow::StartIn(index) => self.render_start_row(
+                            index,
+                            start_places.iter().find(|start| start.choice == index),
+                            selected,
+                            cx,
+                        ),
                         PickerRow::Coordinator => self.render_plain_row(
                             "new-thread-coordinator",
                             PickerRow::Coordinator,

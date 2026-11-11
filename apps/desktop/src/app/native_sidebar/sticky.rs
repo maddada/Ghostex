@@ -66,6 +66,16 @@ impl GhostexGpuiApp {
         Some((group, bounds, y))
     }
 
+    /// The group whose header is pinned at the top of the list, if one is.
+    pub(crate) fn native_sticky_project_group_id(
+        &self,
+        snapshot: &NativeSidebarSnapshot,
+        appearance: &SidebarAppearance,
+    ) -> Option<String> {
+        self.native_sticky_project_placement(snapshot, appearance)
+            .map(|(group, _, _)| group.group_id.clone())
+    }
+
     /// Where the list must stop painting under window glass: the pinned header is see-through
     /// there, so rows scrolling beneath it would show through its text.
     pub(crate) fn native_sticky_project_clip_top(
@@ -84,6 +94,7 @@ impl GhostexGpuiApp {
         &self,
         snapshot: &NativeSidebarSnapshot,
         appearance: &SidebarAppearance,
+        window: &gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         let height = px(30.0 * appearance.scale);
@@ -93,27 +104,29 @@ impl GhostexGpuiApp {
         // The recorded bounds are the header box's, which already include the chevron slot at its left edge (the box reaches left by a negative margin). The pinned wrapper starts at those bounds, pads its left by that same reach so the header's negative margin lands on the wrapper's edge instead of being clipped, and keeps the header's 3px right margin.
         let margin = px(3.0 * appearance.scale);
         let reach = px(super::project_header::PROJECT_HEADER_CHEVRON_INSET * appearance.scale);
-        Some(
-            deferred(
-                div()
-                    .absolute()
-                    .left(bounds.left() - root.left())
-                    .top(y - root.top())
-                    .w(bounds.size.width + margin)
-                    .pl(reach)
-                    .h(height)
-                    .overflow_hidden()
-                    // Under window glass the list stops at this header's bottom edge
-                    // (`native_sticky_project_clip_top`), so it needs no fill to hide rows.
-                    .bg(if appearance.glass {
-                        gpui::transparent_black()
-                    } else {
-                        crate::app::helpers::titlebar_background()
-                    })
-                    .child(self.render_native_project_header(group, &snapshot.hud, appearance, cx)),
-            )
-            .with_priority(5)
-            .into_any_element(),
-        )
+        let pinned = div()
+            .absolute()
+            .left(bounds.left() - root.left())
+            .top(y - root.top())
+            .w(bounds.size.width + margin)
+            .pl(reach)
+            .h(height)
+            .overflow_hidden()
+            // Under window glass the list stops at this header's bottom edge
+            // (`native_sticky_project_clip_top`), so it needs no fill to hide rows.
+            .bg(if appearance.glass {
+                gpui::transparent_black()
+            } else {
+                crate::app::helpers::titlebar_background()
+            })
+            .child(self.render_native_project_header(group, &snapshot.hud, appearance, true, cx));
+        let pinned = self.sidebar_focus_mirror(
+            pinned,
+            super::focus_order::project_header_stop_key(&group.group_id),
+            appearance,
+            window,
+            cx,
+        );
+        Some(deferred(pinned).with_priority(5).into_any_element())
     }
 }

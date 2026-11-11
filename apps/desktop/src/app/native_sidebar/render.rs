@@ -31,6 +31,8 @@ impl GhostexGpuiApp {
         let Some(snapshot) = self.native_sidebar.snapshot.clone() else {
             return div().size_full().into_any_element();
         };
+        self.native_sidebar.focus_stops.begin_frame();
+        let entry_handle = self.native_sidebar.focus_stops.entry_handle(cx);
         // The list keeps showing the outgoing Space while its exit fade runs; the selector row above it already shows the new one.
         let content = self
             .native_sidebar
@@ -95,6 +97,13 @@ impl GhostexGpuiApp {
         } else {
             None
         };
+        // The project header pinned at the top: focusing it reveals nothing, its pinned copy shows.
+        let pinned_header = if classic {
+            self.native_sticky_project_group_id(&content, &appearance)
+        } else {
+            None
+        };
+        let reveal_scale = appearance.scale;
         // Built once per frame for the Commands row's button and whichever strip can draw: the
         // pinned one and the peek are exclusive (`sidebar_usage_visible`).
         let usage_meters = self.account_usage_meters();
@@ -119,8 +128,19 @@ impl GhostexGpuiApp {
                         super::pointer::track_bounds(app.native_sidebar.bounds, window);
                     });
                 }
+                // After every part of the sidebar prepainted, the bottom bar's stops included.
+                bounds_view.update(cx, |app, cx| {
+                    app.reveal_focused_native_sidebar_stop(
+                        reveal_scale,
+                        pinned_header.as_deref(),
+                        window,
+                        cx,
+                    );
+                });
             })
             .id("native-sidebar-root")
+            // The arrow keys and Escape while one of the sidebar's controls has focus (keyboard.rs).
+            .on_key_down(cx.listener(Self::native_sidebar_keyboard_key_down))
             // CDXC:Accessibility 2026-09-22 DECISION:
             // User: "add full accessibility to the sidebar, the button at the bottom, and the chat view so that we can drive this UI using AI", for "an e2e tester or an engineer to debug issues", without going "overboard with it if it would affect performance". Every row, header, section and button carries a role, a label and its state words; gpui builds the tree only while an assistive client (a screen reader, cua-driver, the web build's DOM mirror) is connected, so an idle desktop pays nothing.
             .role(gpui::Role::Navigation)
@@ -444,7 +464,7 @@ impl GhostexGpuiApp {
             )
             .children(
                 classic
-                    .then(|| self.render_native_sticky_project(&content, &appearance, cx))
+                    .then(|| self.render_native_sticky_project(&content, &appearance, window, cx))
                     .flatten(),
             )
             .children(self.render_native_sidebar_usage_peek(
@@ -458,6 +478,10 @@ impl GhostexGpuiApp {
             .children(self.render_session_links_page_card(cx))
             // The Main Hub card, where a build draws it in the page (the desktop's is a window).
             .children(self.render_main_hub_page_card(cx))
+            // Where the Focus Sidebar hotkey's entry holds the keyboard while it waits for its row:
+            // no size, so no click ever focuses it. Last, so the children the bounds above count
+            // keep their places.
+            .child(div().absolute().size_0().track_focus(&entry_handle))
             .into_any_element()
     }
 }

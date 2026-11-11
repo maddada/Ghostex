@@ -36,13 +36,13 @@ enum SessionHoverChange {
 /// Each visible row gets a non-interactive hit-test probe, and the list resolves the hovered card from the frame's hit test after every paint and on every mouse move.
 pub(super) struct SessionHoverProbes {
     probes: Vec<(String, Hitbox)>,
-    sessions: Vec<Arc<NativeSidebarSession>>,
+    sessions: std::rc::Rc<[Arc<NativeSidebarSession>]>,
 }
 
 impl SessionHoverProbes {
     /// Inserted during prepaint, before the rows' own hitboxes, so the probes sit beneath the rows and block nothing.
     pub(super) fn insert(
-        sessions: Vec<Arc<NativeSidebarSession>>,
+        sessions: std::rc::Rc<[Arc<NativeSidebarSession>]>,
         rows: impl Iterator<Item = (usize, Bounds<Pixels>)>,
         window: &mut Window,
     ) -> Self {

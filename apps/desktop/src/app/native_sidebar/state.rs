@@ -63,17 +63,8 @@ pub(crate) struct NativeSidebarState {
     /// This frame's project header probes; `hovered_group` follows them.
     pub(crate) header_hover: super::project_hover::ProjectHeaderHoverProbes,
     pub(crate) hovered_session: Option<String>,
-    /// The Focus Sidebar hotkey's keyboard mode (gx_store/sidebar_keyboard.rs, desktop only): the
-    /// focus handle the session list takes the keyboard on, the row the arrows are on (drawn as
-    /// `hovered_session`), and where the keyboard goes back to.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) keyboard_focus: Option<gpui::FocusHandle>,
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) keyboard_cursor: Option<String>,
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) keyboard_return_terminal: bool,
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) keyboard_return_focus: Option<gpui::FocusHandle>,
+    /// Where the keyboard goes back to when it leaves the sidebar (keyboard.rs).
+    pub(crate) keyboard: super::keyboard::SidebarKeyboardState,
     /// The row whose floating links card is open (window/session_links_card.rs on the desktop,
     /// web_host/session_links.rs in the web build).
     pub(crate) links_card_session: Option<String>,
@@ -107,6 +98,8 @@ pub(crate) struct NativeSidebarState {
     pub(crate) session_card_bounds: std::collections::HashMap<String, gpui::Bounds<gpui::Pixels>>,
     /// Armed Delayed Send / Close After Done labels by sidebar session id, for every session rather than only the rows the snapshot shows (session_chat_armed_actions.rs).
     pub(crate) armed_actions: std::collections::HashMap<String, serde_json::Value>,
+    /// The keyboard focus order's stops (focus_order.rs).
+    pub(crate) focus_stops: super::focus_order::SidebarFocusStops,
 }
 
 impl NativeSidebarState {

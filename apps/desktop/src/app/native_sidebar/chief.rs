@@ -23,6 +23,7 @@ use super::appearance::SidebarAppearance;
 use super::chief_row_view::{
     ChiefFold, ChiefRowColors, chief_block, chief_header_row, chief_other_row, chief_row_shown,
 };
+use super::focus_order::SidebarStopPlace;
 use super::model::{NativeSidebarChief, NativeSidebarSnapshot};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
@@ -202,7 +203,16 @@ impl GhostexGpuiApp {
                         app.native_sidebar.chief_others_expanded =
                             !app.native_sidebar.chief_others_expanded;
                         cx.notify();
-                    })),
+                    }))
+                    .map(|fold| {
+                        self.sidebar_focus_stop(
+                            fold,
+                            "chief:fold",
+                            SidebarStopPlace::Fixed,
+                            appearance,
+                            cx,
+                        )
+                    }),
             )
         })
         .on_click(cx.listener(|app, _, window, cx| {
@@ -232,6 +242,8 @@ impl GhostexGpuiApp {
                 );
             }),
         );
+        // The Chief of Staff block sits above the list (selectors.rs, unified header), so it never scrolls.
+        let main = self.sidebar_focus_stop(main, "chief", SidebarStopPlace::Fixed, appearance, cx);
         let other_rows = others.into_iter().filter(|_| expanded).map(|chief| {
             let command = json!({
                 "type": "chief",
@@ -259,6 +271,15 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }))
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    format!("chief:{}", chief.machine_id),
+                    SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
         });
         Some(
             chief_block(scale)
@@ -395,6 +416,16 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }))
+                .map(|row| {
+                    // Main Hub's placeholder row sits in the list, under its project header (rows.rs).
+                    self.sidebar_focus_stop(
+                        row,
+                        "chief:pick-agent",
+                        SidebarStopPlace::List,
+                        appearance,
+                        cx,
+                    )
+                })
                 .into_any_element(),
         )
     }

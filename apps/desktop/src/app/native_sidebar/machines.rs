@@ -203,6 +203,7 @@ impl GhostexGpuiApp {
                 || machine.background_work_count > 0
                 || machine.question_count > 0
                 || machine.approval_count > 0);
+        let stop_key = format!("machine-tab:{id}");
         div()
             .id(format!("native-sidebar-machine-{id}"))
             .group(dot_group.clone())
@@ -304,6 +305,15 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 })
+            })
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    stop_key,
+                    super::focus_order::SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
             })
             .into_any_element()
     }
@@ -434,6 +444,16 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }))
+            // The menu opens on the click, so Enter and Space open it too.
+            .map(|button| {
+                self.sidebar_focus_stop(
+                    button,
+                    "machines",
+                    super::focus_order::SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

@@ -314,6 +314,8 @@ impl Render for GhostexGpuiApp {
         }
         self.web_sync_terminal_zmx_visibility(cx);
         self.web_report_chat_grid_claims(cx);
+        // An entry waiting in a sidebar that was just hidden ends at once (native_sidebar/keyboard.rs).
+        self.check_native_sidebar_keyboard_entry(cx);
         let sidebar = (!self.sidebar_collapsed).then(|| self.render_native_sidebar(window, cx));
         let status = self.gx_store.status.clone();
         let open = self.open_session.clone();

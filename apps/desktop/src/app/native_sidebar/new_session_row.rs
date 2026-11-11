@@ -141,6 +141,14 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.start_new_agent_session(cx);
             }));
+        // Stops of the sidebar's focus order; the row sits above the list in both sidebars.
+        let start = self.sidebar_focus_stop(
+            start,
+            "new-session:start",
+            super::focus_order::SidebarStopPlace::Fixed,
+            appearance,
+            cx,
+        );
         let choose_label = choose_tooltip();
         let choose = div()
             .id("native-sidebar-new-session-choose")
@@ -172,6 +180,13 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.open_unified_new_session(cx);
             }));
+        let choose = self.sidebar_focus_stop(
+            choose,
+            "new-session:choose",
+            super::focus_order::SidebarStopPlace::Fixed,
+            appearance,
+            cx,
+        );
         h_flex()
             .w_full()
             .flex_shrink_0()

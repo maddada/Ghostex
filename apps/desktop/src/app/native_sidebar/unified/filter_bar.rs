@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use super::model::UnifiedSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 use crate::app::native_sidebar::menus::MenuOwner;
 
 /// The gap between chips, before the zoom.
@@ -202,6 +203,9 @@ impl GhostexGpuiApp {
         let chip_elements = shown.iter().enumerate().map(|(position, &index)| {
             let chip = &chips[index];
             let remove = chip.remove.clone();
+            // Keyed by what the chip removes (its filter kind and option), so removing one never hands
+            // its focus to the chip that moves into its place.
+            let stop_key = chip.remove.to_string();
             let label = chip.label.clone();
             let tooltip = chip.label.clone();
             let tile = chip.repo_key.as_ref().map(|key| {
@@ -275,7 +279,16 @@ impl GhostexGpuiApp {
                     .on_click(cx.listener(move |app, _, _, cx| {
                         cx.stop_propagation();
                         app.dispatch_native_sidebar_ui(remove.clone(), cx);
-                    })),
+                    }))
+                    .map(|button| {
+                        self.sidebar_focus_stop(
+                            button,
+                            format!("unified-filter-remove:{stop_key}"),
+                            SidebarStopPlace::Fixed,
+                            appearance,
+                            cx,
+                        )
+                    }),
             )
             .when(pointer_inside, |chip| {
                 chip.managed_discrete_tooltip_with_placement(
@@ -290,8 +303,19 @@ impl GhostexGpuiApp {
                     },
                 )
             })
+            .map(|chip| {
+                self.sidebar_focus_stop(
+                    chip,
+                    format!("unified-filter-chip:{stop_key}"),
+                    SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
         });
+        // Drawn now: the chips' builder borrows the context the stops below need too.
+        let chip_elements: Vec<AnyElement> = chip_elements.collect();
         let count = (!hidden.is_empty()).then(|| {
             let tooltip = hidden.join(", ");
             open_on_click(
@@ -324,6 +348,15 @@ impl GhostexGpuiApp {
                     },
                 )
             })
+            .map(|count| {
+                self.sidebar_focus_stop(
+                    count,
+                    "unified-filter-count",
+                    SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
         });
         let all_sessions = chips.is_empty().then(|| {
             open_on_click(
@@ -344,6 +377,15 @@ impl GhostexGpuiApp {
             .overflow_hidden()
             .whitespace_nowrap()
             .child("All sessions")
+            .map(|all| {
+                self.sidebar_focus_stop(
+                    all,
+                    "unified-filter-all",
+                    SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
         });
         h_flex()
             .id("native-unified-filter-bar")
@@ -352,7 +394,7 @@ impl GhostexGpuiApp {
             .gap(px(gap))
             .overflow_hidden()
             .children(all_sessions)
-            .children(chip_elements.collect::<Vec<_>>())
+            .children(chip_elements)
             .children(count)
             .into_any_element()
     }

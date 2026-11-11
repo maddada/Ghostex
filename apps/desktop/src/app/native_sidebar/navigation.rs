@@ -402,6 +402,15 @@ impl GhostexGpuiApp {
                             cx,
                         );
                     }))
+                    .map(|button| {
+                        self.sidebar_focus_stop(
+                            button,
+                            format!("navigation:{label}"),
+                            super::focus_order::SidebarStopPlace::Fixed,
+                            appearance,
+                            cx,
+                        )
+                    })
                     .managed_discrete_tooltip_with_placement(
                         ManagedTooltipPlacement::Right,
                         tooltip_delay,
@@ -445,6 +454,15 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }))
+                        .map(|button| {
+                            self.sidebar_focus_stop(
+                                button,
+                                "navigation:add-project",
+                                super::focus_order::SidebarStopPlace::Fixed,
+                                appearance,
+                                cx,
+                            )
+                        })
                         .managed_discrete_tooltip_with_placement(
                             ManagedTooltipPlacement::Right,
                             tooltip_delay,
@@ -464,6 +482,7 @@ impl GhostexGpuiApp {
                 row.child(self.render_sidebar_notification_bell(appearance, cx))
             })
             .map(|row| {
+                let more_menu_now_keyboard = more_menu_now.clone();
                 let more_open = self
                     .native_sidebar
                     .menu
@@ -514,6 +533,37 @@ impl GhostexGpuiApp {
                                     cx,
                                 );
                             }
+                        })
+                        // The menu opens on the press; Enter and Space reach it as a click.
+                        .on_click({
+                            let bounds = self.native_sidebar.more_button_bounds.clone();
+                            let more_menu_now = more_menu_now_keyboard;
+                            move |event: &gpui::ClickEvent, window, cx| {
+                                if !event.is_keyboard() {
+                                    return;
+                                }
+                                cx.stop_propagation();
+                                let Some(trigger) = bounds.get() else {
+                                    return;
+                                };
+                                Self::toggle_native_sidebar_more_menu(
+                                    &more_menu_now,
+                                    trigger,
+                                    trigger.center(),
+                                    scale,
+                                    window,
+                                    cx,
+                                );
+                            }
+                        })
+                        .map(|button| {
+                            self.sidebar_focus_stop(
+                                button,
+                                "navigation:more",
+                                super::focus_order::SidebarStopPlace::Fixed,
+                                appearance,
+                                cx,
+                            )
                         }),
                 )
             })

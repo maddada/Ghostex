@@ -286,7 +286,7 @@ impl ChatAppearance {
                 lifted(0.025, 0.0)
             },
             card_row: lifted(0.015, 0.032),
-            ring: color(0x737373, 0x9f9fa9),
+            ring: focus_ring_color(light),
             prose: text.prose,
             code_text: text.prose,
             // CDXC:SessionChat 2026-09-13 DECISION: User: fix unreadable chat cards in light mode through the shared theme. Dark mode keeps #fcfcfc titles and actions (`foreground`) and #b4b8bf content (`card_muted`); light mode uses the light palette; sizes and weights stay the same; card actions are filled (CDXC:AppModal 2026-10-14 on `neutral_button_fills`).
@@ -396,3 +396,9 @@ pub(crate) trait ChatFilledButton:
 }
 
 impl ChatFilledButton for gpui::Stateful<gpui::Div> {}
+
+/// The chat composer's focus ring colour, which the sidebar's focus ring wears too
+/// (native_sidebar/focus_order.rs).
+pub(crate) fn focus_ring_color(light: bool) -> Hsla {
+    rgb(if light { 0x9f9fa9 } else { 0x737373 }).into()
+}

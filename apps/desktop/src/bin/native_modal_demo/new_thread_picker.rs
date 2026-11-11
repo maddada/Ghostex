@@ -8,6 +8,7 @@
 //! `noboxes` (agentbox installed, no box ready: the Settings link), `many`
 //! (sixteen agents, so the list scrolls). Every other state has no Run on row.
 use super::new_thread_picker::*;
+use ghostex_gx_core::unified_sidebar::{UnifiedChoiceMachine, UnifiedProjectChoice};
 use gpui::{App, AppContext as _, Bounds, Entity, WindowHandle, point, px, size};
 use gpui_component::Root;
 use std::cell::RefCell;
@@ -301,22 +302,21 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
 
 /// Three projects on three machines, one machine not connected, for the `places` states.
 fn demo_place(long: bool) -> NewThreadPickerPlace {
-    let machine = |id: &str, label: &str, connected: bool, project: &str| NewThreadPickerMachine {
+    let machine = |id: &str, label: &str, connected: bool, project: &str| UnifiedChoiceMachine {
         machine_id: id.to_string(),
         label: label.to_string(),
         connected,
         project_id: project.to_string(),
     };
-    let project =
-        |label: &str, recent: bool, has_sessions: bool, machines| NewThreadPickerProject {
-            repo_key: format!("github.com/o/{label}"),
-            label: label.to_string(),
-            has_sessions,
-            recent,
-            machines,
-            start_machine: 0,
-            detail: None,
-        };
+    let project = |label: &str, recent: bool, has_sessions: bool, machines| UnifiedProjectChoice {
+        repo_key: format!("github.com/o/{label}"),
+        label: label.to_string(),
+        has_sessions,
+        recent,
+        machines,
+        selected: 0,
+        detail: None,
+    };
     let mut projects = vec![
         project(
             "project-b",

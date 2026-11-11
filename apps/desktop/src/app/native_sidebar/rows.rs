@@ -98,7 +98,16 @@ impl GhostexGpuiApp {
                                         app.start_native_sidebar_empty_group_session(
                                             &id, is_bot, cx,
                                         );
-                                    })),
+                                    }))
+                                    .map(|row| {
+                                        self.sidebar_focus_stop(
+                                            row,
+                                            format!("empty-project:{}", group.group_id),
+                                            super::focus_order::SidebarStopPlace::List,
+                                            appearance,
+                                            cx,
+                                        )
+                                    }),
                             )
                         },
                     )
@@ -182,7 +191,7 @@ impl GhostexGpuiApp {
             })
             .w_full()
             .flex_shrink_0()
-            .child(self.render_native_project_header(group, hud, appearance, cx))
+            .child(self.render_native_project_header(group, hud, appearance, false, cx))
             .children(body);
         div()
             .relative()

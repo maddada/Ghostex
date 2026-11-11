@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use super::model::UnifiedSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 
 /// The header's side padding, its one button (the filter) and the gap before it, before the zoom:
 /// the top rows' shared edge and button size (native_sidebar/navigation.rs).
@@ -301,19 +302,19 @@ impl GhostexGpuiApp {
                         },
                     )
                 })
-                .on_click(cx.listener(
-                    move |_, event: &gpui::ClickEvent, window, cx| {
-                        cx.stop_propagation();
-                        Self::show_unified_filter_menu(
-                            &menu,
-                            owner.get(),
-                            event,
-                            scale,
-                            window,
-                            cx,
-                        );
-                    },
-                )),
+                .on_click(cx.listener(move |_, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    Self::show_unified_filter_menu(&menu, owner.get(), event, scale, window, cx);
+                }))
+                .map(|button| {
+                    self.sidebar_focus_stop(
+                        button,
+                        "unified-header:filter",
+                        SidebarStopPlace::Fixed,
+                        appearance,
+                        cx,
+                    )
+                }),
             )
             .into_any_element()
     }

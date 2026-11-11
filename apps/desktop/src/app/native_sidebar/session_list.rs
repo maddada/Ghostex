@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{AnyElement, Bounds, IntoElement, Styled, canvas, point, px, size};
@@ -47,7 +48,8 @@ impl GhostexGpuiApp {
         let group_id = group.group_id.clone();
         let appearance = appearance.clone();
         let scale = appearance.scale;
-        let card_heights: Vec<f32> = sessions
+        let sessions: Rc<[Arc<NativeSidebarSession>]> = sessions.into();
+        let card_heights: Rc<[f32]> = sessions
             .iter()
             .map(|session| {
                 session_card_height(session, self.native_session_has_second_line(session))
@@ -56,11 +58,12 @@ impl GhostexGpuiApp {
         // Each row's top in unscaled pixels, plus the list's total height as the last entry.
         let mut tops: Vec<f32> = Vec::with_capacity(sessions.len() + 1);
         let mut y = 0.0;
-        for height in &card_heights {
+        for height in card_heights.iter() {
             tops.push(y);
             y += height + SESSION_SPACING;
         }
         tops.push(y);
+        let tops: Rc<[f32]> = tops.into();
         let height = px(y * scale);
         let view = cx.entity();
         let hover_view = view.clone();
@@ -98,19 +101,50 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }
-                        if mask.size.width <= px(0.0) || mask.size.height <= px(0.0) {
-                            return Vec::new();
-                        }
-                        let mask_top = f32::from(mask.top() - bounds.top()) / scale;
-                        let mask_bottom = f32::from(mask.bottom() - bounds.top()) / scale;
-                        let row_tops = &tops[..sessions.len()];
-                        // The last row starting at or above the mask's top, and every row that starts
-                        // above its bottom.
-                        let first = row_tops
-                            .partition_point(|top| *top <= mask_top)
-                            .saturating_sub(1);
-                        let end = row_tops.partition_point(|top| *top < mask_bottom);
-                        (first..end)
+                        let built = if mask.size.width <= px(0.0) || mask.size.height <= px(0.0) {
+                            0..0
+                        } else {
+                            let mask_top = f32::from(mask.top() - bounds.top()) / scale;
+                            let mask_bottom = f32::from(mask.bottom() - bounds.top()) / scale;
+                            let row_tops = &tops[..sessions.len()];
+                            // The last row starting at or above the mask's top, and every row that
+                            // starts above its bottom.
+                            let first = row_tops
+                                .partition_point(|top| *top <= mask_top)
+                                .saturating_sub(1);
+                            let end = row_tops.partition_point(|top| *top < mask_bottom);
+                            first..end
+                        };
+                        // The rows left unbuilt are still in the sidebar's focus order: Tab, Shift+Tab
+                        // and the arrow keys scroll to them (focus_order.rs). The focused row is built
+                        // wherever it is, so it keeps its focus while it is scrolled out of view.
+                        let kept = app
+                            .native_sidebar
+                            .focus_stops
+                            .focused_session_row()
+                            .and_then(|id| {
+                                sessions
+                                    .iter()
+                                    .position(|session| *session.session_id == *id)
+                            })
+                            .filter(|index| !built.contains(index));
+                        app.native_sidebar.focus_stops.record_unbuilt_span(
+                            super::focus_order::UnbuiltSpan {
+                                origin: bounds.origin,
+                                width: bounds.size.width,
+                                scale,
+                                tops: tops.clone(),
+                                heights: card_heights.clone(),
+                                sessions: sessions.clone(),
+                                built: built.clone(),
+                                kept,
+                            },
+                        );
+                        // In list order, so the kept row's tab stop sits between its neighbours'.
+                        let mut indices: Vec<usize> = built.clone().chain(kept).collect();
+                        indices.sort_unstable();
+                        indices
+                            .into_iter()
                             .map(|index| {
                                 (
                                     index,

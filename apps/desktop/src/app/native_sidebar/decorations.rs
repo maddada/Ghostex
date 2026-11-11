@@ -16,30 +16,10 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let delayed = session
-            .details
-            .get("delayedSendDeadlineAt")
-            .and_then(Value::as_str)
-            .is_some()
-            || session
-                .details
-                .get("delayedSendRemainingLabel")
-                .and_then(Value::as_str)
-                .is_some();
-        let closing = session
-            .details
-            .get("closeAfterDone")
-            .and_then(Value::as_bool)
-            == Some(true)
-            || session
-                .details
-                .get("closeAfterDoneDeadlineAt")
-                .and_then(Value::as_str)
-                .is_some();
+        let (delayed, closing) = session_clock_marks(session);
         let id = session.session_id.clone();
         // CDXC:Coordinators 2026-10-06 DECISION: User: the fold chevron replaces the coordinator's crown while its card is hovered, with no chevron slot of its own. The crown's spot is the single fold hit area and the accessibility button, hovered or not; a pending delayed send or close-after-done keeps its own clock icon and click.
-        let fold =
-            super::threads::coordinator_fold_state(session).filter(|_| !(delayed || closing));
+        let fold = coordinator_fold_button(session);
         let icon = match fold {
             Some(collapsed) if hovered => {
                 super::threads::coordinator_fold_chevron(collapsed, appearance)
@@ -77,6 +57,16 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         app.dispatch_native_sidebar_ui(json!({"type": "toggleCoordinator", "sessionId": id}), cx);
                     }))
+                    // After the mouse-down above, so a press moves focus here before it stops.
+                    .map(|toggle| {
+                        self.sidebar_focus_stop(
+                            toggle,
+                            super::focus_order::coordinator_fold_stop_key(&session.session_id),
+                            super::focus_order::SidebarStopPlace::List,
+                            appearance,
+                            cx,
+                        )
+                    })
             })
             .when(delayed || closing, |identity| identity.cursor_pointer().on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
@@ -215,4 +205,36 @@ fn outline(appearance: &SidebarAppearance, outline: gpui::Hsla) -> AnyElement {
     .absolute()
     .inset_0()
     .into_any_element()
+}
+
+/// Whether a row shows a pending delayed send's clock and a close-after-done mark, which take the
+/// crown's spot and its click.
+fn session_clock_marks(session: &NativeSidebarSession) -> (bool, bool) {
+    let delayed = session
+        .details
+        .get("delayedSendDeadlineAt")
+        .and_then(Value::as_str)
+        .is_some()
+        || session
+            .details
+            .get("delayedSendRemainingLabel")
+            .and_then(Value::as_str)
+            .is_some();
+    let closing = session
+        .details
+        .get("closeAfterDone")
+        .and_then(Value::as_bool)
+        == Some(true)
+        || session
+            .details
+            .get("closeAfterDoneDeadlineAt")
+            .and_then(Value::as_str)
+            .is_some();
+    (delayed, closing)
+}
+
+/// A coordinator row's fold button, in the crown's spot: `Some(collapsed)` while it shows.
+pub(crate) fn coordinator_fold_button(session: &NativeSidebarSession) -> Option<bool> {
+    let (delayed, closing) = session_clock_marks(session);
+    super::threads::coordinator_fold_state(session).filter(|_| !(delayed || closing))
 }

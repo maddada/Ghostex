@@ -151,6 +151,14 @@ impl GhostexGpuiApp {
                     }
                 }),
             );
+        // The tile sits in the bottom bar, below the list.
+        let letter = self.sidebar_focus_stop(
+            letter,
+            "workspace-tile:switch",
+            super::focus_order::SidebarStopPlace::Fixed,
+            appearance,
+            cx,
+        );
         let chevron = div()
             .id("native-sidebar-workspace-menu")
             .role(gpui::Role::Button)
@@ -191,6 +199,13 @@ impl GhostexGpuiApp {
                     open_menu(app, event, window, cx);
                 }),
             );
+        let chevron = self.sidebar_focus_stop(
+            chevron,
+            "workspace-tile:menu",
+            super::focus_order::SidebarStopPlace::Fixed,
+            appearance,
+            cx,
+        );
         Some(
             div()
                 .id("native-sidebar-workspace-tile")
