@@ -215,13 +215,16 @@ fn open_corner_close_window(
     if cfg!(target_arch = "wasm32") {
         return None;
     }
-    let Ok((modal_bounds, owner, modal_native)) = modal.update(cx, |_, window, cx| {
-        (
-            window.bounds(),
-            PopupOwner::of(window, cx),
-            native_window_ref(window),
-        )
-    }) else {
+    let Ok((modal_bounds, display_bounds, owner, modal_native)) =
+        modal.update(cx, |_, window, cx| {
+            (
+                window.bounds(),
+                window.display(cx).map(|display| display.bounds()),
+                PopupOwner::of(window, cx),
+                native_window_ref(window),
+            )
+        })
+    else {
         return None;
     };
     let half = MODAL_CORNER_CLOSE_SIZE / 2.0;
@@ -230,6 +233,25 @@ fn open_corner_close_window(
     } else {
         modal_bounds.top_right()
     };
+    /*
+    CDXC:AppModal 2026-11-11 WHY:
+    GPUI on Windows opens a window whose centre is on no display at that display's default size, so an X centred on a corner past the screen's edge became one big round button over the whole modal ("Connect a Phone" on Windows, CDXC:AppModal 2026-11-11 on `gpui_native_modal_frame_on_screen`). The X's centre stays on the modal's display.
+    */
+    #[cfg(target_os = "windows")]
+    let corner = match display_bounds {
+        Some(display) => {
+            let within = |value: gpui::Pixels, low: gpui::Pixels, high: gpui::Pixels| {
+                px(f32::from(value).clamp(f32::from(low), f32::from(high) - 1.0))
+            };
+            point(
+                within(corner.x, display.left(), display.right()),
+                within(corner.y, display.top(), display.bottom()),
+            )
+        }
+        None => corner,
+    };
+    #[cfg(not(target_os = "windows"))]
+    let _ = display_bounds;
     let screen = Bounds::new(
         point(corner.x - px(half), corner.y - px(half)),
         size(px(MODAL_CORNER_CLOSE_SIZE), px(MODAL_CORNER_CLOSE_SIZE)),
