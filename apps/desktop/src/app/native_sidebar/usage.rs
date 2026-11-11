@@ -583,7 +583,8 @@ impl GhostexGpuiApp {
                         app.toggle_native_sidebar_usage_visible(cx);
                     }))
                     .managed_discrete_tooltip_with_placement(
-                        ManagedTooltipPlacement::AboveLeft,
+                        // Left of the handle, so it does not cover the meters peeking above it.
+                        ManagedTooltipPlacement::Left,
                         tooltip_delay,
                         |window, cx| {
                             super::tooltips::sidebar_style_tooltip(
