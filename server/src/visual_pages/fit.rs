@@ -67,7 +67,7 @@ function name(e){var s=e.tagName.toLowerCase(),c=typeof e.className==="string"?e
 function said(e){var t=(e.textContent||"").replace(/\s+/g," ").trim();return t.length>40?t.slice(0,39)+"…":t;}
 function entry(e){return{element:name(e),text:said(e)};}
 /* The kit's own parts already fit; only the page's own markup is fitted. */
-function kitOwned(e){return !!(e.closest&&e.closest("gx-question,.gx-send,.gx-theme-switch,#gx-tip,#gx-layout-notice,.gx-seg"));}
+function kitOwned(e){return !!(e.closest&&e.closest("gx-question,.gx-send,.gx-theme-switch,#gx-tip,#gx-layout-notice,.gx-seg,.gx-tally,.gx-tally-room"));}
 function undo(){
   Array.prototype.forEach.call(document.querySelectorAll("["+MARK+"]"),function(e){
     if(e.getAttribute(MARK)==="wrap"){var child=e.firstElementChild;if(child)e.replaceWith(child);else e.remove();return;}
