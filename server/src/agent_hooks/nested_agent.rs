@@ -180,6 +180,14 @@ impl ProcessTable {
         Some(exe.strip_suffix(".exe").unwrap_or(exe).to_string())
     }
 
+    /// Every process whose executable is `<stem>.exe`, ignoring case.
+    pub(super) fn pids_named<'a>(&'a self, stem: &'a str) -> impl Iterator<Item = u32> + 'a {
+        self.rows.iter().filter_map(move |(pid, (_, exe))| {
+            let exe = exe.to_ascii_lowercase();
+            (exe.strip_suffix(".exe").unwrap_or(&exe) == stem).then_some(*pid)
+        })
+    }
+
     /// Windows names a process by its real executable, so a script runtime never carries an
     /// agent's name.
     fn runs_script_runtime(&self, _pid: u32) -> bool {

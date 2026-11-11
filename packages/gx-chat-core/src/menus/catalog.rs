@@ -5,7 +5,8 @@
 //! complete, well-formed document of the supported schema version is rejected whole, and the last
 //! good catalog stays in effect.
 //!
-//! This module names no model. It only says what shape a catalog has and how its labels read.
+//! This module names no model, only Claude's model families, whose order every list keeps
+//! ([`order_claude_models`]). Otherwise it only says what shape a catalog has and how its labels read.
 
 use std::collections::BTreeMap;
 
@@ -228,7 +229,15 @@ pub fn parse_agent_model_catalog(input: &Value) -> Option<AgentModelCatalog> {
     }
     let mut agents = BTreeMap::new();
     for (agent_id, agent_input) in agents_input {
-        agents.insert(agent_id.clone(), parse_agent(agent_input)?);
+        let mut agent = parse_agent(agent_input)?;
+        if agent_id == CLAUDE_AGENT_ID {
+            order_claude_models(
+                &mut agent.models,
+                |model| &model.label,
+                |model| model.group.as_deref(),
+            );
+        }
+        agents.insert(agent_id.clone(), agent);
     }
     Some(AgentModelCatalog {
         schema_version: AGENT_MODEL_CATALOG_SCHEMA_VERSION,
@@ -279,6 +288,59 @@ fn parse_agent(input: &Value) -> Option<CatalogAgent> {
         groups,
         models,
     })
+}
+
+/// The catalog key of Claude Code's lineup.
+pub const CLAUDE_AGENT_ID: &str = "claude";
+/// Claude's model families, in the order every list of Claude's models shows them.
+pub const CLAUDE_FAMILY_ORDER: [&str; 4] = ["fable", "opus", "sonnet", "haiku"];
+
+/// CDXC:AgentModelCatalog 2026-11-11 DECISION:
+/// User: "on desktorp and mobile switch order so fable is always top then opus then sonnet then haiku". Claude's rows are ordered by family (Fable, Opus, Sonnet, Haiku, then any other in the catalog's order), then newest version first, so a future Fable or Opus keeps its family's place without an edit; the catalog's own order no longer decides. Ungrouped rows come first and each group (Legacy models) keeps its rows together after them, in the same order. Only Claude Code's lineup is sorted: other agents that offer Claude models keep their catalog order.
+/// SEE-ALSO: server/src/agent_model_catalog.rs (`rebuild_effective` sorts the document gxserver serves the same way), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's New Coordinator form, which reads gxserver's copy).
+pub fn order_claude_models<T>(
+    models: &mut Vec<T>,
+    label: impl Fn(&T) -> &str,
+    group: impl Fn(&T) -> Option<&str>,
+) {
+    let mut groups: Vec<String> = Vec::new();
+    let mut keyed: Vec<((usize, usize, std::cmp::Reverse<Vec<u32>>), T)> = std::mem::take(models)
+        .into_iter()
+        .map(|model| {
+            let slot = match group(&model) {
+                None => 0,
+                Some(id) => {
+                    1 + groups
+                        .iter()
+                        .position(|seen| seen == id)
+                        .unwrap_or_else(|| {
+                            groups.push(id.to_string());
+                            groups.len() - 1
+                        })
+                }
+            };
+            let (rank, version) = claude_family_and_version(label(&model));
+            ((slot, rank, std::cmp::Reverse(version)), model)
+        })
+        .collect();
+    keyed.sort_by(|left, right| left.0.cmp(&right.0));
+    models.extend(keyed.into_iter().map(|(_, model)| model));
+}
+
+/// A Claude model name's place in [`CLAUDE_FAMILY_ORDER`] (past its end for another family) and
+/// its version number (none for another family, so those keep the catalog's order).
+fn claude_family_and_version(label: &str) -> (usize, Vec<u32>) {
+    let words: Vec<String> = label.split([' ', '-']).map(str::to_lowercase).collect();
+    let Some(rank) = CLAUDE_FAMILY_ORDER
+        .iter()
+        .position(|family| words.iter().any(|word| word == family))
+    else {
+        return (CLAUDE_FAMILY_ORDER.len(), Vec::new());
+    };
+    let version = family_and_version(label)
+        .map(|(_, version)| version)
+        .unwrap_or_default();
+    (rank, version)
 }
 
 /// The `legacyRule` gxserver sets on a lineup it read from the agent's CLI.

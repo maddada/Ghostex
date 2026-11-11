@@ -68,16 +68,71 @@ pub(crate) fn launch_argv_identity_already_applied(
     process_id: i64,
     agent_session_id: &str,
 ) -> bool {
+    process_identity_already_applied(session, "launchArgvIdentity", process_id, agent_session_id)
+}
+
+pub(crate) fn record_applied_launch_argv_identity(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    process_id: i64,
+    agent_session_id: &str,
+) -> Result<(), DomainStateError> {
+    record_applied_process_identity(
+        repository,
+        "launchArgvIdentity",
+        project_id,
+        session_id,
+        process_id,
+        agent_session_id,
+    )
+}
+
+/// CDXC:SessionIdentity 2026-11-11 WHY:
+/// Between `/new` (or a resume) inside Codex's TUI and the new conversation's first write, Codex holds only the rollout it left open, so the live scan kept reporting the old conversation while Codex's terminal title already named the new one, and without the hook the stored id flipped between the two every few seconds (seen live on 0.167). As with an argv id (2026-09-21 above), the open rollout a process holds is applied once per process and conversation: repeating it is not news, and a newer observation (the title, a hook) that moved the session on wins. Opening or first writing another rollout is a new observation and applies at once.
+pub(crate) fn open_rollout_identity_already_applied(
+    session: &Value,
+    process_id: i64,
+    agent_session_id: &str,
+) -> bool {
+    process_identity_already_applied(session, "openRolloutIdentity", process_id, agent_session_id)
+}
+
+pub(crate) fn record_applied_open_rollout_identity(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    process_id: i64,
+    agent_session_id: &str,
+) -> Result<(), DomainStateError> {
+    record_applied_process_identity(
+        repository,
+        "openRolloutIdentity",
+        project_id,
+        session_id,
+        process_id,
+        agent_session_id,
+    )
+}
+
+fn process_identity_already_applied(
+    session: &Value,
+    field: &str,
+    process_id: i64,
+    agent_session_id: &str,
+) -> bool {
     session
-        .pointer("/runtimeSettings/launchArgvIdentity")
+        .get("runtimeSettings")
+        .and_then(|settings| settings.get(field))
         .is_some_and(|applied| {
             applied.get("processId").and_then(Value::as_i64) == Some(process_id)
                 && applied.get("agentSessionId").and_then(Value::as_str) == Some(agent_session_id)
         })
 }
 
-pub(crate) fn record_applied_launch_argv_identity(
+fn record_applied_process_identity(
     repository: &DomainRepository<'_>,
+    field: &str,
     project_id: &str,
     session_id: &str,
     process_id: i64,
@@ -90,7 +145,7 @@ pub(crate) fn record_applied_launch_argv_identity(
     let session = require_session(repository, &lifecycle)?;
     let mut runtime_settings = object_field(&session, "runtimeSettings");
     runtime_settings.insert(
-        "launchArgvIdentity".to_string(),
+        field.to_string(),
         json!({ "agentSessionId": agent_session_id, "processId": process_id }),
     );
     let mut update = lifecycle_update(&lifecycle);
@@ -500,6 +555,15 @@ pub(crate) fn ingest_terminal_title_event_with_home(
     */
     if let Some(agent_session_id) = captured_agent_session_id.clone() {
         runtime_settings.insert("agentSessionId".to_string(), json!(agent_session_id));
+        // CDXC:SessionIdentity 2026-11-11 WHY: the title names the conversation Codex moved to (`/new`, a resume) before that rollout exists, so the stored rollout of the one it left must go with the old id; kept, the chat and the observers read a conversation that no longer gets turns beside the new id (seen live on 0.167 without the hook). The live scan fills the new path once Codex writes it.
+        let stored_path_names_another = read_text_from_map(&runtime_settings, "agentSessionPath")
+            .is_some_and(|path| {
+                crate::zmx::codex_session_id_from_transcript_path(Path::new(&path)).as_deref()
+                    != Some(agent_session_id.as_str())
+            });
+        if stored_path_names_another {
+            runtime_settings.remove("agentSessionPath");
+        }
     }
     let mut decision_changed =
         captured_agent_session_id.is_some() || repaired_working_directory_title;

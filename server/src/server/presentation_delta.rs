@@ -459,6 +459,11 @@ pub(crate) async fn run_zmx_title_observer(
                         continue;
                     }
                     if let Some(title) = parse_zmx_title_line(&line) {
+                        crate::hookless_activity::observe_opencode_terminal_title(
+                            &project_id,
+                            &session_id,
+                            &title,
+                        );
                         let should_probe_identity =
                             ingest_zmx_title_observation(&state, &project_id, &session_id, &title);
                         if should_probe_identity {

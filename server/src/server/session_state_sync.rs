@@ -362,6 +362,32 @@ pub(crate) fn sync_live_zmx_process_identities(
             agent_session_id = None;
             agent_session_path = None;
         }
+        // An open rollout this process was already seen holding, which the session has since
+        // moved off (a title or hook named the conversation Codex moved to before writing it),
+        // is not news (CDXC:SessionIdentity 2026-11-11 in agents/session_state_ingest.rs).
+        let open_rollout_identity = (identity.agent_id.as_deref() == Some("codex")
+            && identity.agent_session_path.is_some()
+            && agent_session_path == identity.agent_session_path)
+            .then(|| identity.process_id.zip(agent_session_id.clone()))
+            .flatten();
+        let open_rollout_identity_is_new =
+            open_rollout_identity
+                .as_ref()
+                .is_some_and(|(process_id, rollout_agent_session_id)| {
+                    !crate::agents::open_rollout_identity_already_applied(
+                        &current,
+                        *process_id,
+                        rollout_agent_session_id,
+                    )
+                });
+        if open_rollout_identity.is_some()
+            && !open_rollout_identity_is_new
+            && agent_session_id.as_deref()
+                != read_runtime_text(&current, "agentSessionId").as_deref()
+        {
+            agent_session_id = None;
+            agent_session_path = None;
+        }
         let launch_argv_identity = (identity.agent_session_path.is_none()
             && hook_identity.is_none())
         .then(|| identity.process_id.zip(agent_session_id.clone()))
@@ -418,6 +444,17 @@ pub(crate) fn sync_live_zmx_process_identities(
             agent_session_id,
             agent_session_path,
         )?;
+        if let Some((process_id, rollout_agent_session_id)) =
+            open_rollout_identity.filter(|_| open_rollout_identity_is_new)
+        {
+            crate::agents::record_applied_open_rollout_identity(
+                repository,
+                &candidate_project_id,
+                &candidate_session_id,
+                process_id,
+                &rollout_agent_session_id,
+            )?;
+        }
         if let Some((process_id, argv_agent_session_id)) =
             launch_argv_identity.filter(|_| launch_argv_identity_is_new)
         {

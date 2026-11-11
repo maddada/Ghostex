@@ -123,6 +123,31 @@ pub(crate) fn claude_record_process_running(pid: u32, proc_start: Option<&str>) 
     })
 }
 
+/// Every running `claude.exe` with its command line and when it started (ms since the epoch),
+/// for the `claude attach` clients the hook-free observer follows (hookless_activity/attach.rs).
+#[cfg(windows)]
+pub(crate) fn claude_processes() -> Vec<(u32, i64, String)> {
+    let table = super::nested_agent::ProcessTable::read();
+    table
+        .pids_named("claude")
+        .filter_map(|pid| {
+            let process = Process::open(pid)?;
+            Some((
+                pid,
+                filetime_to_epoch_ms(process.created()?),
+                process.command_line()?,
+            ))
+        })
+        .collect()
+}
+
+/// A FILETIME count (100 ns steps since 1601) in ms since the Unix epoch.
+#[cfg(windows)]
+fn filetime_to_epoch_ms(filetime: u64) -> i64 {
+    const UNIX_EPOCH_AS_FILETIME_MS: i64 = 11_644_473_600_000;
+    (filetime / 10_000) as i64 - UNIX_EPOCH_AS_FILETIME_MS
+}
+
 #[cfg(windows)]
 struct Process(windows_sys::Win32::Foundation::HANDLE);
 

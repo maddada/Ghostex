@@ -215,7 +215,8 @@ pub(crate) fn create_agent_session_params_for_project(
             .clone()
             .or_else(|| default_agent_command("opencode").map(str::to_string))
             .unwrap_or_else(|| "opencode".to_string());
-        super::opencode_session_id::mint_opencode_session_id(&base)
+        let directory = read_text(params, "cwd").or_else(|| read_text_value(project, "path"));
+        super::opencode_session_id::mint_opencode_session_id(&base, directory.as_deref())
     })
     .flatten();
     if let Some(id) = opencode_session_id.as_deref() {

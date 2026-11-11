@@ -47,4 +47,6 @@ pub(crate) use peer_start::install_for_peer_agent_start;
 pub(crate) use resolution::read_claude_hook_surface_records;
 pub(crate) use resolution::read_codex_hook_session_identities;
 pub use statusline::run_statusline_hook;
+#[cfg(windows)]
+pub(crate) use wmx_pane::claude_processes;
 pub(crate) use zcode::zcode_settings_files;

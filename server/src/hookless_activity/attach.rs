@@ -152,33 +152,82 @@ fn list_attach_clients() -> Vec<Client> {
         .collect()
 }
 
-#[cfg(not(unix))]
+/// Every running `claude attach <id|name>` on native Windows: each `claude.exe`'s command line,
+/// read the way the wmx pane walk reads its host's (agent_hooks/wmx_pane.rs).
+#[cfg(windows)]
+fn list_attach_clients() -> Vec<Client> {
+    crate::agent_hooks::claude_processes()
+        .into_iter()
+        .filter_map(|(pid, started_at, command_line)| {
+            parse_command_line(pid, started_at, &command_line)
+        })
+        .collect()
+}
+
+#[cfg(not(any(unix, windows)))]
 fn list_attach_clients() -> Vec<Client> {
     Vec::new()
 }
 
 /// `<pid> <elapsed> <command…>` as `ps -o pid=,etime=,command=` prints it.
+#[cfg_attr(not(any(unix, test)), allow(dead_code))]
 fn parse_ps_line(line: &str, now: i64) -> Option<Client> {
     let mut words = line.split_whitespace();
     let pid = words.next()?.parse::<u32>().ok()?;
     let elapsed = elapsed_ms(words.next()?)?;
     let program = words.next()?;
-    if Path::new(program).file_name()?.to_str()? != "claude" || words.next()? != "attach" {
+    if Path::new(program).file_name()?.to_str()? != "claude" {
         return None;
     }
-    // A name with spaces arrives as several words; flags are not part of it.
-    let target = words
-        .filter(|word| !word.starts_with('-'))
-        .collect::<Vec<_>>()
-        .join(" ");
-    (!target.is_empty()).then(|| Client {
+    let target = attach_target(words)?;
+    Some(Client {
         pid,
         target,
         started_at: now - elapsed,
     })
 }
 
+/// A Windows command line, `"C:\…\claude.exe" attach <id|name>` (the program quoted or not, any
+/// case of `.exe`).
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn parse_command_line(pid: u32, started_at: i64, command_line: &str) -> Option<Client> {
+    let line = command_line.trim_start();
+    let (program, arguments) = match line.strip_prefix('"') {
+        Some(quoted) => quoted.split_once('"')?,
+        None => line.split_once(char::is_whitespace)?,
+    };
+    let program = program.rsplit(['\\', '/']).next()?.to_ascii_lowercase();
+    if program.strip_suffix(".exe").unwrap_or(&program) != "claude" {
+        return None;
+    }
+    let target = attach_target(arguments.split_whitespace())?;
+    Some(Client {
+        pid,
+        target,
+        started_at,
+    })
+}
+
+/// The `<id|name>` of `claude [flags…] attach <id|name>`: a name with spaces arrives as several
+/// words; flags are not part of it.
+///
+/// CDXC:AgentHooks 2026-11-11 WHY:
+/// A Ghostex pane's `claude attach f4a34329` ran as `claude.exe --dangerously-skip-permissions attach f4a34329` on Windows on 2026-11-11, so flags may stand before the subcommand.
+fn attach_target<'a>(mut words: impl Iterator<Item = &'a str>) -> Option<String> {
+    if words.find(|word| !word.starts_with('-'))? != "attach" {
+        return None;
+    }
+    // A quoted name keeps its spaces; the quotes on a Windows command line are not the name's.
+    let target = words
+        .map(|word| word.trim_matches('"'))
+        .filter(|word| !word.is_empty() && !word.starts_with('-'))
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!target.is_empty()).then_some(target)
+}
+
 /// `[[dd-]hh:]mm:ss` in milliseconds.
+#[cfg_attr(not(any(unix, test)), allow(dead_code))]
 fn elapsed_ms(etime: &str) -> Option<i64> {
     let (days, clock) = match etime.split_once('-') {
         Some((days, clock)) => (days.parse::<i64>().ok()?, clock),

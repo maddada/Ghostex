@@ -82,6 +82,73 @@ fn terminal_title_capture_preserves_decision_reason_when_identity_title_is_trust
     );
 }
 
+/// After `/new` Codex's title names the new conversation before its rollout exists: the stored
+/// rollout of the old one goes with the old id, and a rollout of the named one stays.
+#[test]
+fn a_captured_codex_id_drops_the_rollout_of_another_conversation() {
+    let (_temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "test-server");
+    let project = repository
+        .create_project(
+            json!({ "name": "Codex New", "path": std::env::temp_dir() })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("create project");
+    let project_id = project["projectId"]
+        .as_str()
+        .expect("project id")
+        .to_string();
+    let old = "01a1cad7-aea0-7a60-8e25-fac7d7f2ac40";
+    let new = "01a1cad8-1187-7f80-9c06-8236a85f6550";
+    let rollout = |id: &str| {
+        format!("/home/person/.codex/sessions/2026/11/11/rollout-2026-11-11T17-41-35-{id}.jsonl")
+    };
+    let capture = |stored_path: String, title_id: &str| {
+        let session = repository
+            .create_session(
+                json!({
+                    "agentId": "codex",
+                    "kind": "agent",
+                    "projectId": project_id,
+                    "runtimeSettings": {
+                        "agentName": "codex",
+                        "agentSessionId": old,
+                        "agentSessionPath": stored_path,
+                        "titleSource": "user"
+                    },
+                    "title": "Codex New"
+                })
+                .as_object()
+                .expect("session params"),
+                false,
+            )
+            .expect("create session");
+        let lifecycle = LifecycleParams {
+            project_id: project_id.clone(),
+            session_id: session["sessionId"]
+                .as_str()
+                .expect("session id")
+                .to_string(),
+        };
+        let result = ingest_terminal_title_event(
+            &repository,
+            &lifecycle,
+            json!({ "agentName": "codex", "rawTitle": title_id, "sessionPersistenceProvider": "zmx" })
+                .as_object()
+                .expect("terminal title params"),
+        )
+        .expect("terminal title result");
+        result.result["session"]["runtimeSettings"].clone()
+    };
+    let moved = capture(rollout(old), new);
+    assert_eq!(moved["agentSessionId"], json!(new));
+    assert!(moved.get("agentSessionPath").is_none());
+    // A stored rollout that already names the captured conversation is kept.
+    let kept = capture(rollout(new), new);
+    assert_eq!(kept["agentSessionPath"], json!(rollout(new)));
+}
+
 #[test]
 fn terminal_title_applies_zmx_title_with_previous_source_reason_without_agent_promotion() {
     let (_temp, db) = open_test_database();

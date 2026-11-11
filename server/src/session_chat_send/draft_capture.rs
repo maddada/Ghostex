@@ -307,13 +307,42 @@ async fn run_terminal_draft_capture(
         }
         opened.is_ok()
     };
+    /*
+    CDXC:Drafts 2026-11-11 WHY:
+    The user wants Ghostex to stop installing OpenCode's plugin, which cleared the TUI's prompt with `prompt.clear` after the editor handed the draft over. OpenCode 2.2.7 keeps its prompt when the editor returns an empty file (`if (!content) return`), but a lone newline normalizes to an empty prompt (`normalizePromptContent`), so where the plugin did not open the editor, the editor hands back a newline and OpenCode clears its own prompt. Ctrl+C was not used: on an empty prompt it exits OpenCode.
+    */
+    if prompt_editor_input == SESSION_CHAT_OPENCODE_PROMPT_EDITOR_INPUT && !opened_by_plugin {
+        let _ = fs::write(
+            &marker_path,
+            format!("handoff:{request_id}\nempty:newline\n"),
+        );
+    }
     let delivered = if opened_by_plugin {
         Ok(())
     } else if prompt_editor_input == SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT {
         grok_draft::open_editor(project_id, session_id, zmx_name, cancellation).await
     } else {
         let zmx_name_owned = zmx_name.to_string();
-        let prompt_editor_input = prompt_editor_input.to_string();
+        // OpenCode's editor key is whatever its cli.json binds (session_chat_opencode/config.rs).
+        let prompt_editor_input =
+            if prompt_editor_input == SESSION_CHAT_OPENCODE_PROMPT_EDITOR_INPUT {
+                let config_dir = crate::agent_hooks::config::resolve_config_directory(
+                    &crate::resume_lookup::home_dir(),
+                    true,
+                    "OPENCODE_CONFIG_DIR",
+                    ".config/opencode",
+                    None,
+                );
+                match crate::session_chat_opencode::prompt_editor_keys(&config_dir) {
+                    Ok(keys) => keys,
+                    Err(error) => {
+                        let _ = fs::remove_file(&marker_path);
+                        return Err(error.message);
+                    }
+                }
+            } else {
+                prompt_editor_input.to_string()
+            };
         tokio::task::spawn_blocking(move || {
             crate::zmx::session_chat_zmx_write(&zmx_name_owned, &prompt_editor_input)
         })

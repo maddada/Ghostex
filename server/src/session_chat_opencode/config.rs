@@ -99,3 +99,73 @@ pub(crate) fn save_default_model(model: Value) -> Result<(), DomainStateError> {
     };
     patch_config(&path, "model", &model)
 }
+
+/// The bytes that open the TUI's prompt editor, read from OpenCode 2's own keybinds in `cli.json`
+/// (`keybinds."prompt.editor"`, default `<leader>e`, and `keybinds.leader`, default `ctrl+x`).
+///
+/// CDXC:Drafts 2026-11-11 WHY:
+/// Without Ghostex's plugin, the chat opens OpenCode's prompt editor by typing the TUI's own key, so a user who rebinds it in cli.json would get a key that does something else (OpenCode 1's `editor_open: ctrl+g` meant "first message" in OpenCode 2). The first alternative that is a terminal byte sequence (`ctrl+<letter>`, `alt+<key>`, a single key, `<leader>` before any of those) is typed; an editor bound to nothing is refused instead of typing the default.
+pub(crate) fn prompt_editor_keys(config_dir: &Path) -> Result<String, DomainStateError> {
+    let config = fs::read_to_string(config_dir.join("cli.json"))
+        .ok()
+        .and_then(|text| read_config(&text).ok())
+        .unwrap_or(Value::Null);
+    let keybinds = &config["keybinds"];
+    let leader = binding_keys(&keybinds["leader"], None).or_else(|| key_bytes("ctrl+x"));
+    let editor = match &keybinds["prompt.editor"] {
+        Value::Null => binding_keys(&Value::String("<leader>e".into()), leader.as_deref()),
+        value => binding_keys(value, leader.as_deref()),
+    };
+    editor.ok_or_else(|| {
+        error("OpenCode's prompt editor has no key Ghostex can type (keybinds.\"prompt.editor\" in OpenCode's cli.json). Open it in the terminal.")
+    })
+}
+
+/// The first alternative of a keybind value (`"a,b"`, `["a", "b"]`, `"none"`, `false`) that is
+/// a byte sequence.
+fn binding_keys(value: &Value, leader: Option<&str>) -> Option<String> {
+    let alternatives: Vec<&str> = match value {
+        Value::String(text) => text.split(',').collect(),
+        Value::Array(items) => items.iter().filter_map(Value::as_str).collect(),
+        _ => Vec::new(),
+    };
+    alternatives.into_iter().find_map(|alternative| {
+        let alternative = alternative.trim();
+        if alternative.is_empty() || alternative == "none" {
+            return None;
+        }
+        let (prefix, rest) = match alternative.strip_prefix("<leader>") {
+            Some(rest) => (Some(leader?), rest.trim()),
+            None => (None, alternative),
+        };
+        let mut keys = prefix.unwrap_or_default().to_string();
+        for stroke in rest.split_whitespace() {
+            keys.push_str(&key_bytes(stroke)?);
+        }
+        (!keys.is_empty()).then_some(keys)
+    })
+}
+
+/// One key as the bytes a terminal sends for it.
+fn key_bytes(stroke: &str) -> Option<String> {
+    let lower = stroke.to_ascii_lowercase();
+    if let Some(key) = lower.strip_prefix("ctrl+") {
+        let [letter] = key.as_bytes() else {
+            return None;
+        };
+        return letter
+            .is_ascii_lowercase()
+            .then(|| char::from(letter & 0x1f).to_string());
+    }
+    if let Some(key) = lower
+        .strip_prefix("alt+")
+        .or_else(|| lower.strip_prefix("meta+"))
+    {
+        return (key.chars().count() == 1).then(|| format!("\u{1b}{key}"));
+    }
+    let mut chars = stroke.chars();
+    match (chars.next(), chars.next()) {
+        (Some(key), None) if !key.is_control() => Some(key.to_string()),
+        _ => None,
+    }
+}

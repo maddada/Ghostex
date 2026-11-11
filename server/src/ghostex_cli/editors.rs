@@ -355,6 +355,9 @@ fn stash_prompt_content_via_gxserver(
 /// prompt-editor invocation must not be silently swallowed by it.
 const PROMPT_STASH_REQUEST_FRESHNESS: Duration = Duration::from_secs(15);
 const PROMPT_HANDOFF_MARKER_PREFIX: &str = "handoff:";
+/// A marker line asking for the moved prompt to be handed back as a lone newline instead of an
+/// empty file (session_chat_send/draft_capture.rs, OpenCode without its plugin).
+const PROMPT_HANDOFF_EMPTY_AS_NEWLINE: &str = "empty:newline";
 
 fn valid_prompt_handoff_request_id(value: &str) -> bool {
     !value.is_empty()
@@ -433,7 +436,13 @@ fn consume_prompt_stash_request(
         .and_then(|modified| modified.elapsed().ok())
         .is_some_and(|age| age <= PROMPT_STASH_REQUEST_FRESHNESS);
     let marker = std::fs::read_to_string(&marker_path).unwrap_or_default();
+    let empty_as_newline = marker
+        .lines()
+        .any(|line| line.trim() == PROMPT_HANDOFF_EMPTY_AS_NEWLINE);
     let handoff_request_id = marker
+        .lines()
+        .next()
+        .unwrap_or_default()
         .trim()
         .strip_prefix(PROMPT_HANDOFF_MARKER_PREFIX)
         .filter(|value| valid_prompt_handoff_request_id(value))
@@ -459,7 +468,10 @@ fn consume_prompt_stash_request(
         Ok(result) => {
             // Clear the composer only after the stash is durable; on failure
             // the file (and therefore the composer) stays untouched.
-            let _ = std::fs::write(resolved_file_path, b"");
+            let _ = std::fs::write(
+                resolved_file_path,
+                if empty_as_newline { &b"\n"[..] } else { b"" },
+            );
             if let Some(request_id) = handoff_request_id.as_deref() {
                 write_prompt_handoff_response(
                     request_id,
