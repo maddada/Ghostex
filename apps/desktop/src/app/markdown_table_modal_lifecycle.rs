@@ -112,6 +112,41 @@ impl GhostexGpuiApp {
         )
     }
 
+    /// An app modal's opening frame, `frame` (centred on the main window), shrunk and moved as
+    /// little as needed to lie inside the visible part of its display, a margin from each edge.
+    ///
+    /// CDXC:AppModal 2026-11-11 WHY:
+    /// On Windows "Connect a Phone" could not be used (Discord report, 11.3.0, Windows 11): the window opened 780px tall, centred on the main window, so on a 1280x720 screen (1080p at 150%) its top sat above the screen. Its title was out of reach, and the corner close button's window, centred on that corner, had its centre on no display, which GPUI on Windows answers by opening the window at the display's default size: one big round X over the whole dialog. Large panels were already shrunk to fit (`gpui_native_modal_size_on_screen`); every other modal opened at its full size wherever the main window's centre put it.
+    pub(crate) fn gpui_native_modal_frame_on_screen(
+        &self,
+        frame: gpui::Bounds<gpui::Pixels>,
+        cx: &gpui::App,
+    ) -> gpui::Bounds<gpui::Pixels> {
+        let Some(visible) = self.main_window_popup_owner().visible_frame(frame, cx) else {
+            return frame;
+        };
+        let margin = MODAL_SCROLL_FIT_SCREEN_MARGIN;
+        let (left, top) = (
+            f32::from(visible.left()) + margin,
+            f32::from(visible.top()) + margin,
+        );
+        let (right, bottom) = (
+            f32::from(visible.right()) - margin,
+            f32::from(visible.bottom()) - margin,
+        );
+        if right <= left || bottom <= top {
+            return frame;
+        }
+        let width = f32::from(frame.size.width).min(right - left);
+        let height = f32::from(frame.size.height).min(bottom - top);
+        let x = f32::from(frame.origin.x).clamp(left, right - width);
+        let y = f32::from(frame.origin.y).clamp(top, bottom - height);
+        gpui::Bounds::new(
+            gpui::point(gpui::px(x), gpui::px(y)),
+            gpui::size(gpui::px(width), gpui::px(height)),
+        )
+    }
+
     /// The size the floating previews open at: the page window (`ghostex show`), the Mermaid
     /// diagram viewer and the Markdown table viewer, kept on the main window's screen.
     ///

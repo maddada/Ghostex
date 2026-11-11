@@ -113,7 +113,10 @@ impl GhostexGpuiApp {
             let opening = frame::opening_frame(main, window_size, &frame::Screens::now(main, cx));
             gpui::Bounds::new(opening.origin - shift, opening.size)
         } else {
-            gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size)
+            self.gpui_native_modal_frame_on_screen(
+                gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size),
+                cx,
+            )
         };
         let options = WindowOptions {
             kind: crate::app::window::popup_frame::child_window_kind(),
