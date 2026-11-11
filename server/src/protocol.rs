@@ -598,6 +598,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/promoteCoordinator"
         | "/api/acknowledgeCoordinatorThreads"
         | "/api/toggleCloseAfterDone"
+        // A Reply box's unsent words by session and row (session_reply_drafts.rs), read and kept
+        // on the computer that runs the session as its chat box draft is: ids and bounded text.
+        | "/api/sessionReplyDrafts"
         | "/api/openConversation"
         | "/api/restorePreviousSession"
         | "/api/sleepSession"

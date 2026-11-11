@@ -18,6 +18,7 @@ use gpui::{
 };
 use gpui_component::Root;
 use gpui_component::input::{InputEvent, Textarea, TextareaState};
+use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -38,19 +39,34 @@ pub(in crate::app::native_chat) struct ReplyPopoverState {
     /// The last popover's command and the window it opened from, so a work item Reply whose send
     /// failed opens again where it was (`reopen_failed_reply`).
     last: Option<(gpui::AnyWindowHandle, serde_json::Value)>,
+    /// This session's drafts were asked of gxserver (`load_kept_replies`).
+    loaded: bool,
+    /// Drafts came from gxserver: once the board is in, those of work items it no longer shows go.
+    check_loaded: bool,
+    /// Rows edited since their last save, saved `SAVE_AFTER` after the last edit.
+    unsaved: HashSet<String>,
+    save_generation: u64,
+    /// Saves and drops waiting, sent one at a time so a late save cannot bring back a draft that
+    /// was just sent (`pump_kept_replies`).
+    queue: std::collections::VecDeque<serde_json::Value>,
+    sending: bool,
 }
 
+/// How long after the last edit a draft is saved: one write per pause, not per keystroke.
+const SAVE_AFTER: Duration = Duration::from_millis(400);
+
 /// What was typed in a question's or work item's Reply box and not sent, by the chat's session and
-/// the row (`kept_reply_key`), for as long as the app runs. Written on every edit, so no way the
-/// box closes (a click away, Escape, another row's Reply, the pane or session going away) loses it.
+/// the row (`kept_reply_key`). Written on every edit, so no way the box closes (a click away,
+/// Escape, another row's Reply, the pane or session going away) loses it, and saved to the
+/// session's gxserver soon after (`note_reply_edit`, server/src/session_reply_drafts.rs), so a
+/// quit, restart, rebuild or crash does not either: a chat reads its session's back when it opens.
 ///
 /// CDXC:Coordinators 2026-11-11 DECISION:
 /// User: "for these kinds of boxes where i reply PLEASE keep in memory what i wrote there so we
 /// restore it when i click away by mistake. i lost what i entered there many times". Reply on the
 /// same row opens with the words and the caret after them; Send answer or Add to prompt clears
-/// them, and a row that holds some says "Draft" on its Reply. The chat box's own draft is kept
-/// by gxserver (`saveDraft`); these stay in the app's memory, since keeping them there too would
-/// need a gxserver record of its own.
+/// them, and a row that holds some says "Draft" on its Reply. Then, of drafts kept only in memory:
+/// "not good enough fam. pls fix." gxserver keeps them, as it keeps the chat box's draft.
 static KEPT_REPLIES: std::sync::LazyLock<std::sync::Mutex<HashMap<String, KeptReply>>> =
     std::sync::LazyLock::new(Default::default);
 
@@ -72,11 +88,20 @@ fn kept_replies() -> std::sync::MutexGuard<'static, HashMap<String, KeptReply>> 
 /// (`work-ask:W7:Q12`, or the item's own key when it asks no question), else the one-click
 /// question's form and tag. `None` for a reply to a quoted selection.
 fn kept_reply_row(reply: &serde_json::Value) -> Option<String> {
+    let tag = reply["tag"].as_str().unwrap_or_default();
+    // A work item's: by its reference and ask, which outlive its card key (an item's own Reply's
+    // key carries the time it last changed).
+    if let Some(item) = reply["item"].as_str().filter(|item| !item.is_empty()) {
+        return Some(if tag.is_empty() {
+            format!("work-item:{item}")
+        } else {
+            format!("work-ask:{item}:{tag}")
+        });
+    }
     let key = reply["key"].as_str().unwrap_or_default();
     if !key.is_empty() {
         return Some(key.to_owned());
     }
-    let tag = reply["tag"].as_str().unwrap_or_default();
     (!tag.is_empty()).then(|| {
         format!(
             "question:{}:{tag}",
@@ -165,7 +190,7 @@ struct ReplyPopover {
     rekeys: u32,
     /// Where its words are kept until sent (`KEPT_REPLIES`), and whether its row was open on the
     /// dock or the board when it opened; `None` for a quoted selection.
-    kept: Option<(String, bool)>,
+    kept: Option<(String, String, bool)>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -212,10 +237,11 @@ impl NativeChatView {
             for field in ["workDock", "coordinatorBoard"] {
                 open_reply_rows(&self.snapshot[field], &mut open);
             }
-            (self.kept_reply_key(&row), open.contains(&row))
+            let seen = open.contains(&row);
+            (self.kept_reply_key(&row), row, seen)
         });
         let mut typed = command["text"].as_str().unwrap_or_default().to_owned();
-        if let Some((key, seen)) = &kept {
+        if let Some((key, row, seen)) = &kept {
             if typed.is_empty() {
                 typed = kept_replies()
                     .get(key)
@@ -223,6 +249,7 @@ impl NativeChatView {
                     .unwrap_or_default();
             } else {
                 keep_reply(key, &typed, *seen);
+                self.note_reply_edit(row.clone(), cx);
             }
         }
         let error = command["error"].as_str().unwrap_or_default().to_owned();
@@ -383,33 +410,189 @@ impl NativeChatView {
     }
 
     /// A new snapshot: a draft whose row was open on the dock or the board and is on neither now
-    /// goes, the ask being answered, dismissed or withdrawn.
-    pub(super) fn prune_kept_replies(&self, before: &serde_json::Value) {
+    /// goes, the ask being answered, dismissed or withdrawn. The first one asks gxserver for the
+    /// session's drafts (`load_kept_replies`); once those are in and so is the board, a work item's
+    /// draft whose row it no longer shows goes too (answered or dropped while the app was shut).
+    pub(super) fn prune_kept_replies(
+        &mut self,
+        before: &serde_json::Value,
+        cx: &mut Context<Self>,
+    ) {
+        self.load_kept_replies(cx);
         let scope = self.kept_reply_key("");
-        let mut kept = kept_replies();
-        if !kept.keys().any(|key| key.starts_with(&scope)) {
-            return;
-        }
+        let check_loaded =
+            self.reply_popover.check_loaded && self.snapshot["coordinatorBoard"].is_object();
         let fields = ["workDock", "coordinatorBoard"];
-        if fields
-            .iter()
-            .all(|field| before[*field] == self.snapshot[*field])
+        let mut dropped = Vec::new();
         {
+            let mut kept = kept_replies();
+            if !kept.keys().any(|key| key.starts_with(&scope)) {
+                self.reply_popover.check_loaded &= !check_loaded;
+                return;
+            }
+            if !check_loaded
+                && fields
+                    .iter()
+                    .all(|field| before[*field] == self.snapshot[*field])
+            {
+                return;
+            }
+            let mut rows = HashSet::new();
+            for field in fields {
+                open_reply_rows(&self.snapshot[field], &mut rows);
+            }
+            kept.retain(|key, draft| {
+                let Some(row) = key.strip_prefix(&scope) else {
+                    return true;
+                };
+                let open = rows.contains(row);
+                draft.seen |= open;
+                let gone = !open && (draft.seen || check_loaded && row.starts_with("work-"));
+                if gone {
+                    dropped.push(row.to_owned());
+                }
+                !gone
+            });
+        }
+        self.reply_popover.check_loaded &= !check_loaded;
+        if !dropped.is_empty() {
+            self.forget_kept_replies(dropped, cx);
+        }
+    }
+
+    /// Asks the session's gxserver for its drafts, once, and keeps them beside any typed since.
+    fn load_kept_replies(&mut self, cx: &mut Context<Self>) {
+        if self.reply_popover.loaded || self.config.session_id.is_empty() {
             return;
         }
-        let mut rows = HashSet::new();
-        for field in fields {
-            open_reply_rows(&self.snapshot[field], &mut rows);
-        }
-        kept.retain(|key, draft| {
-            let Some(row) = key.strip_prefix(&scope) else {
-                return true;
+        self.reply_popover.loaded = true;
+        self.reply_drafts_call(json!({ "op": "list" }), cx, |chat, answer, cx| {
+            let Some(drafts) = answer
+                .as_ref()
+                .and_then(|answer| answer["drafts"].as_object())
+            else {
+                return;
             };
-            if rows.contains(row) {
-                draft.seen = true;
+            let scope = chat.kept_reply_key("");
+            {
+                let mut kept = kept_replies();
+                for (row, text) in drafts {
+                    if let Some(text) = text.as_str().filter(|text| !text.trim().is_empty()) {
+                        kept.entry(format!("{scope}{row}"))
+                            .or_insert_with(|| KeptReply {
+                                text: text.to_owned(),
+                                seen: false,
+                            });
+                    }
+                }
             }
-            !draft.seen || rows.contains(row)
+            chat.reply_popover.check_loaded = true;
+            chat.prune_kept_replies(&serde_json::Value::Null, cx);
+            cx.notify();
         });
+    }
+
+    /// A Reply box's words changed on `row`: saved `SAVE_AFTER` after the last edit.
+    fn note_reply_edit(&mut self, row: String, cx: &mut Context<Self>) {
+        self.reply_popover.unsaved.insert(row);
+        self.reply_popover.save_generation += 1;
+        let generation = self.reply_popover.save_generation;
+        cx.spawn(async move |chat, cx| {
+            cx.background_executor().timer(SAVE_AFTER).await;
+            let _ = chat.update(cx, |chat, cx| {
+                if chat.reply_popover.save_generation == generation {
+                    chat.save_kept_replies(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Saves every row edited since its last save, as it stands now (an emptied one is dropped).
+    fn save_kept_replies(&mut self, cx: &mut Context<Self>) {
+        let rows: Vec<String> = self.reply_popover.unsaved.drain().collect();
+        let texts: Vec<(String, String)> = {
+            let kept = kept_replies();
+            rows.into_iter()
+                .map(|row| {
+                    let text = kept
+                        .get(&self.kept_reply_key(&row))
+                        .map(|draft| draft.text.clone())
+                        .unwrap_or_default();
+                    (row, text)
+                })
+                .collect()
+        };
+        for (row, text) in texts {
+            self.reply_popover
+                .queue
+                .push_back(json!({ "op": "set", "row": row, "text": text }));
+        }
+        self.pump_kept_replies(cx);
+    }
+
+    /// Drops these rows' drafts, here and on gxserver: sent, or their question is gone.
+    fn forget_kept_replies(&mut self, rows: Vec<String>, cx: &mut Context<Self>) {
+        {
+            let mut kept = kept_replies();
+            for row in &rows {
+                kept.remove(&self.kept_reply_key(row));
+            }
+        }
+        for row in &rows {
+            self.reply_popover.unsaved.remove(row);
+        }
+        self.reply_popover
+            .queue
+            .push_back(json!({ "op": "drop", "rows": rows }));
+        self.pump_kept_replies(cx);
+    }
+
+    /// Sends the next waiting save or drop once the one before it has answered.
+    fn pump_kept_replies(&mut self, cx: &mut Context<Self>) {
+        if self.reply_popover.sending {
+            return;
+        }
+        let Some(params) = self.reply_popover.queue.pop_front() else {
+            return;
+        };
+        self.reply_popover.sending = true;
+        self.reply_drafts_call(params, cx, |chat, _, cx| {
+            chat.reply_popover.sending = false;
+            chat.pump_kept_replies(cx);
+        });
+    }
+
+    /// One `/api/sessionReplyDrafts` call to the session's gxserver (a Cloud Box's own when it is
+    /// up; a stopped box is not woken for it), then `then` with its answer (`None` when it failed).
+    fn reply_drafts_call(
+        &self,
+        mut params: serde_json::Value,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, Option<serde_json::Value>, &mut Context<Self>) + 'static,
+    ) {
+        let config = self.config.clone();
+        params["projectId"] = json!(config.project_id);
+        params["sessionId"] = json!(config.session_id);
+        let task =
+            cx.background_executor().spawn(async move {
+                let remote =
+                    match crate::app::gx_store::cloud_box_send_target(&config.machine_id, false)
+                        .await
+                    {
+                        Ok(Some(target)) => Some(target),
+                        Ok(None) => config.remote,
+                        Err(_) => return None,
+                    };
+                super::rpc::request(remote, "/api/sessionReplyDrafts", &params)
+                    .await
+                    .ok()
+            });
+        cx.spawn(async move |chat, cx| {
+            let answer = task.await;
+            let _ = chat.update(cx, |chat, cx| then(chat, answer, cx));
+        })
+        .detach();
     }
 
     /// The popover's window, which counts as one of the chat's own child windows.
@@ -554,7 +737,7 @@ impl ReplyPopover {
         question: Option<QuestionReply>,
         typed: String,
         error: String,
-        kept: Option<(String, bool)>,
+        kept: Option<(String, String, bool)>,
         appearance: ChatAppearance,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -601,8 +784,12 @@ impl ReplyPopover {
         let keep = cx.subscribe(
             &input,
             |popover: &mut Self, input, event: &InputEvent, cx| {
-                if let (InputEvent::Change, Some((key, seen))) = (event, &popover.kept) {
+                if let (InputEvent::Change, Some((key, row, seen))) = (event, &popover.kept) {
                     keep_reply(key, &input.read(cx).value(), *seen);
+                    let row = row.clone();
+                    let _ = popover
+                        .chat
+                        .update(cx, |chat, cx| chat.note_reply_edit(row, cx));
                 }
             },
         );
@@ -699,11 +886,17 @@ impl ReplyPopover {
         let reply = self.input.read(cx).value().to_string();
         // Sent or added to the prompt: the draft has done its job. A send that fails opens the
         // card again with the words (`reopen_failed_reply`), which keeps them again.
-        if action.is_some()
-            && !reply.trim().is_empty()
-            && let Some((key, _)) = &self.kept
-        {
-            kept_replies().remove(key);
+        if let Some((_, row, _)) = &self.kept {
+            let row = row.clone();
+            let sent = action.is_some() && !reply.trim().is_empty();
+            let _ = self.chat.update(cx, |chat, cx| {
+                if sent {
+                    chat.forget_kept_replies(vec![row], cx);
+                } else {
+                    // Closed without sending: saved now rather than after the pause.
+                    chat.save_kept_replies(cx);
+                }
+            });
         }
         let quote = self.quote.clone();
         let question = self.question.clone();

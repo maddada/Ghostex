@@ -24,6 +24,7 @@ pub(crate) mod chief;
 pub(crate) mod claude_cloud;
 pub mod cli;
 pub mod close_after_done;
+pub mod session_reply_drafts;
 pub(crate) mod cloud_boxes;
 pub(crate) mod cloud_runner;
 pub(crate) mod codex_rollout_archive;
