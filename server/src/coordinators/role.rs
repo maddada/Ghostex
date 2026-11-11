@@ -199,6 +199,46 @@ pub fn rename_queued_coordinator_skill_lines(db: &rusqlite::Connection) -> rusql
     Ok(changed)
 }
 
+/// What a coordinator is handed again when its agent starts a conversation that no longer holds its
+/// first message: after `/clear` (Claude, Codex), a compaction, or a fresh start of the session.
+/// `None` for a start that keeps it (a resume, a fork) and for a fresh start whose first message
+/// is still waiting in its queue (a coordinator just created or promoted).
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// GitHub #570 (aiasV): a Claude coordinator stopped starting threads after `/clear`, because its role came only from its first message ("Read and adhere to this skill: …", the 2026-10-17 decision above) and nothing handed it back. The user chose to fix it now: gxserver knows a session is a coordinator from its own records (the `coordinators` row, which no `/clear` touches), and the agent's SessionStart hook, which Claude and Codex fire with `source` clear, compact, startup, resume or fork, answers a coordinator's clear, compact and fresh startup with this text as hook context: the skill line in the agent's spelling and the guide pointer. It reaches the agent before its next message, once per new conversation, and adds nothing on a resume or fork, whose context still has the first message. It is hook context, not a chat message, so no client draws it. Agents whose hooks cannot add context (Cursor, Grok, Copilot, Pi, OpenCode, Antigravity) are not covered by this.
+/// SEE-ALSO: server/src/agents/activity.rs (`coordinator_session_start_context`), server/src/agent_hooks/notify_runtime.rs (prints it in the agent's own SessionStart shape).
+pub fn coordinator_role_again(
+    db: &rusqlite::Connection,
+    key: &super::records::SessionKey,
+    family: &str,
+    source: &str,
+) -> Option<String> {
+    let why = match source {
+        "clear" => "Your conversation was cleared",
+        "compact" => "Your conversation was compacted",
+        "startup" => {
+            // A coordinator's first message still on its way says all of this itself.
+            let prefix = ghostex_gx_chat_core::composer::skill_invocation::SKILL_LINE_PREFIX;
+            let waiting = db
+                .query_row(
+                    "SELECT 1 FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2 AND substr(text, 1, length(?3)) = ?3 LIMIT 1",
+                    rusqlite::params![key.0, key.1, prefix],
+                    |_| Ok(()),
+                )
+                .is_ok();
+            if waiting {
+                return None;
+            }
+            "This session started a new conversation"
+        }
+        _ => return None,
+    };
+    Some(format!(
+        "{why}, but this session is still this project's Ghostex coordinator: the user talks only to you, and you hand real work to thread sessions. {}\n\nBefore your next reply, run `ghostex coordinator guide` and follow it for the rest of the session, then `ghostex coordinator status` for your goal, standing instructions, threads and work items. Your threads keep reporting to this session.",
+        coordinator_skill_line(family)
+    ))
+}
+
 /// The line every new orchestrator's first message starts with (`/ghostex-coordinator` for Claude
 /// Code and Copilot, `$ghostex-coordinator` for every other agent); the dialogs show the same
 /// line from the same function.

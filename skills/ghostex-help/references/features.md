@@ -3529,7 +3529,8 @@ version of the Projects features in Cursor and Claude Code.
   /ghostex-coordinator" (`$ghostex-coordinator` on agents other than Claude
   Code and Copilot), shown locked in the dialog: Ghostex installs the
   ghostex-coordinator skill for that agent, and the skill is the coordinator's
-  playbook. Then it opens in chat, where you write your first request. The name
+  playbook. A Claude or Codex coordinator keeps its role after `/clear` or a
+  compaction: Ghostex hands it that line again before its next message. Then it opens in chat, where you write your first request. The name
   is what its sidebar row shows, and the coordinator keeps it: unlike other
   sessions it is not renamed from your first message (Rename in the sidebar
   still changes it; left blank, it is named once from its first conversation).

@@ -88,7 +88,10 @@ WHAT A COORDINATOR IS
   never has to poll. Its role is the ghostex-coordinator skill: Ghostex installs it for the
   coordinator's agent, and its first message always starts with "Read and
   adhere to this skill: /ghostex-coordinator" ($ghostex-coordinator for agents
-  other than Claude Code and Copilot). `ghostex coordinator guide` prints the
+  other than Claude Code and Copilot). After a /clear, a compaction or a fresh
+  start of a Claude or Codex coordinator, Ghostex hands it that line and the
+  guide pointer again before its next message (resuming adds nothing, since
+  the conversation still has them). `ghostex coordinator guide` prints the
   playbook in effect for the coordinator's project (see COORDINATOR
   PLAYBOOK) with the reply format the user chose for coordinators and the
   user's playbook overrides.

@@ -525,6 +525,24 @@ fn coordinator_session_start_context(
     );
     let is_session_start = read_text(params, "eventName")
         .is_some_and(|event| event.eq_ignore_ascii_case("SessionStart"));
+    // A Claude or Codex coordinator whose new conversation lost its first message gets its role
+    // again (coordinators/role.rs `coordinator_role_again`, GitHub #570).
+    if matches!(agent.as_str(), "claude" | "codex") && is_session_start {
+        let key = (lifecycle.project_id.clone(), lifecycle.session_id.clone());
+        let skill_coordinator = crate::coordinators::coordinator_role_is_skill(session)
+            && crate::coordinators::read_coordinator(repository.connection(), &key.0, &key.1)?
+                .is_some();
+        if !skill_coordinator {
+            return Ok(None);
+        }
+        let source = read_text(params, "hookSource").unwrap_or_default();
+        return Ok(crate::coordinators::coordinator_role_again(
+            repository.connection(),
+            &key,
+            &agent,
+            &source,
+        ));
+    }
     if !(agent == "zcode" && is_session_start) {
         return Ok(None);
     }
