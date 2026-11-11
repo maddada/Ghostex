@@ -666,6 +666,7 @@ impl NativeChatView {
         let cap_id = id.clone();
         let header_expanded = expanded_blocks.clone();
         let scale = p.scale;
+        let content = self.issue_linked(content);
         self.chat_links(
             TextView::markdown(id, content)
                 .parse_synchronously(true)
@@ -708,7 +709,33 @@ impl NativeChatView {
         .into_any_element()
     }
 
-    /// A chat Markdown view's links: `#123` to the project's GitHub issues, the reference pills of
+    /// `content` with its `#123` references pointing at the project's GitHub issues, or as plain
+    /// text when it has no GitHub `origin` (gx-chat-core `transcript/issue_links.rs`, the rule the
+    /// phone draws by too). The core marks them in the Markdown it projects; text it never
+    /// marked (a work item's ask) gets the same links here. Remembered by text, because a reply
+    /// with a reference would otherwise be parsed again on every frame.
+    fn issue_linked(&self, content: String) -> String {
+        use ghostex_gx_chat_core::transcript::issue_links::resolve_issue_links;
+        if !content.contains('#') {
+            return content;
+        }
+        let base = self.issue_link_base.as_deref();
+        let mut memo = self.issue_link_memo.borrow_mut();
+        if memo.0.as_deref() != base {
+            *memo = (base.map(str::to_string), Default::default());
+        }
+        if let Some(linked) = memo.1.get(&content) {
+            return linked.clone();
+        }
+        let linked = resolve_issue_links(&content, base).into_owned();
+        if memo.1.len() >= 512 {
+            memo.1.clear();
+        }
+        memo.1.insert(content, linked.clone());
+        linked
+    }
+
+    /// A chat Markdown view's links: `#123` to the project's GitHub issues (`issue_linked`), the reference pills of
     /// `references` (a message's `markdownReferences`), and a click that opens a link the way the
     /// transcript does (`openMarkdownLink`, or the link menu on a right press).
     pub(super) fn chat_links(
@@ -723,8 +750,7 @@ impl NativeChatView {
         let references =
             super::markdown_links::presentations(references, &self.snapshot["coordinatorBoard"], p);
         let command_appearance = p.clone();
-        view.when_some(self.issue_link_base.clone(), |view, base| view.issue_links(base))
-            .link_presentation(move |href, label| {
+        view.link_presentation(move |href, label| {
                 references
                     .get(&(href.to_owned(), label.to_owned()))
                     .cloned()

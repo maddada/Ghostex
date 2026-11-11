@@ -1310,7 +1310,15 @@ pub fn native_markdown_with_mentions(
         || markdown.contains('|')
         || has_image_evidence(markdown)
         || (!bare_paths && markdown.contains(crate::transcript::inline_answers::ANSWER_SCHEME));
-    if !paths_wanted && !blocks_wanted && !windows_links_wanted && !windows_paths_wanted {
+    // A `#123` in prose becomes its issue link (`issue_links.rs`), after the file references
+    // (whose links it then leaves alone) and before the block marks (whose JSON it must not touch).
+    let issues_wanted = markdown.contains('#');
+    if !paths_wanted
+        && !blocks_wanted
+        && !windows_links_wanted
+        && !windows_paths_wanted
+        && !issues_wanted
+    {
         return markdown.to_string();
     }
     let linked = if paths_wanted {
@@ -1326,6 +1334,11 @@ pub fn native_markdown_with_mentions(
     };
     let linked = if windows_paths_wanted {
         literal_windows_prose_paths(&linked)
+    } else {
+        linked
+    };
+    let linked = if issues_wanted {
+        crate::transcript::issue_links::mark_issue_references(&linked).into_owned()
     } else {
         linked
     };

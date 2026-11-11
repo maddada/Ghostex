@@ -70,6 +70,11 @@ pub struct Document {
     /// got no answer (`session/computer.rs`): "Windows PC is offline · last seen 2h ago" and Retry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub computer_notice: Option<crate::session::computer::ComputerNotice>,
+    /// The project's GitHub issues address (`https://github.com/<owner>/<repo>/issues/`), which a
+    /// `ghostex-issue:<n>` link in the Markdown points at with its number appended; absent for a
+    /// project without a GitHub remote, whose links draw as plain `#<n>` (`transcript/issue_links.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_link_base: Option<String>,
     pub agent: Tri<String>,
     pub agent_session_id: Tri<String>,
     /// A draft session's agent choices. Family e.

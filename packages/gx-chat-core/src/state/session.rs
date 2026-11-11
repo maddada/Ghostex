@@ -120,6 +120,9 @@ pub struct SessionState {
     /// The computer the session runs on and what this computer holds for it
     /// (`session/computer.rs`).
     pub computer: crate::session::computer::ComputerState,
+    /// Where the transcript's `#123` links go: the project's GitHub issues address, from its
+    /// `origin` (`Event::ProjectOriginChanged`, `transcript/issue_links.rs`).
+    pub issue_link_base: Option<String>,
     /// Live work as the chat channel itself reports it.
     pub server_working: bool,
     /// The session activity gxserver presents, which is what the sidebar spinner reads.
@@ -204,6 +207,7 @@ impl Default for SessionState {
             screen_probed: false,
             cloud_box_asleep: false,
             computer: Default::default(),
+            issue_link_base: None,
             server_working: false,
             session_activity_working: false,
             external_working: false,

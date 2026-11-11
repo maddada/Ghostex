@@ -299,7 +299,7 @@ fn session_pill_link(reference: &Value, appearance: &ChatAppearance, missing: bo
 
 impl NativeChatView {
     /// CDXC:SessionChat 2026-10-09 DECISION:
-    /// User: "for the #123 thing please make those show as links at all times when mentioned and clicking on them should open that pr (when not 6 or 8 chars for the #1234 text (in the gpui chat view", then "for #123 if there's a letter in it then it's def a color so show the color thing if you can for that if u get me". A `#` and digits in prose (whole token, not in code, not a six- or eight-digit hex colour, which keeps its swatch; a token with a letter a-f at 3, 4, 6 or 8 hex digits is a colour too and never a link) links to `https://github.com/<owner>/<repo>/issues/<n>` of the project's `origin`, which GitHub redirects to the pull request when it is one; a project without a GitHub origin keeps it plain text. The detection is `issue_references` in gpui-component's text code.
+    /// User: "for the #123 thing please make those show as links at all times when mentioned and clicking on them should open that pr (when not 6 or 8 chars for the #1234 text (in the gpui chat view", then "for #123 if there's a letter in it then it's def a color so show the color thing if you can for that if u get me". A `#` and digits in prose (whole token, not in code, not a six- or eight-digit hex colour, which keeps its swatch; a token with a letter a-f at 3, 4, 6 or 8 hex digits is a colour too and never a link) links to `https://github.com/<owner>/<repo>/issues/<n>` of the project's `origin`, which GitHub redirects to the pull request when it is one; a project without a GitHub origin keeps it plain text. The rule (which `#numbers` link, and the address from the `origin`) is gx-chat-core's `transcript/issue_links.rs` since 2026-11-11, shared with the phone; this view applies it in `rich_markdown.rs` (`text_view_look`).
     ///
     /// The origin comes from the sidebar store's project row (gxserver's cached `gitRemoteOriginUrl`), read in a deferred call because the app entity may be mid-update while the chat renders.
     pub(super) fn refresh_issue_links(&self, cx: &mut gpui::Context<Self>) {
@@ -326,7 +326,7 @@ impl NativeChatView {
                 .presentation()
                 .project(&key)
                 .and_then(|project| project.git_remote_origin_url.value())
-                .and_then(|origin| github_issues_url(origin))
+                .and_then(|origin| ghostex_gx_chat_core::transcript::issue_links::github_issues_url(origin))
                 .map(gpui::SharedString::from);
             let _ = chat.update(cx, |chat, cx| {
                 if chat.issue_link_base != base {
@@ -336,31 +336,4 @@ impl NativeChatView {
             });
         });
     }
-}
-
-/// `https://github.com/<owner>/<repo>/issues/` for a GitHub `origin` written as
-/// `git@github.com:owner/repo.git`, `ssh://git@github.com/owner/repo.git` or
-/// `https://github.com/owner/repo(.git)`; `None` for any other host.
-fn github_issues_url(origin: &str) -> Option<String> {
-    let origin = origin.trim();
-    let path = match origin.strip_prefix("git@github.com:") {
-        Some(path) => path,
-        None => {
-            let (_, rest) = origin.split_once("://")?;
-            let (authority, path) = rest.split_once('/')?;
-            let host = authority.rsplit('@').next()?.split(':').next()?;
-            if !host.eq_ignore_ascii_case("github.com")
-                && !host.eq_ignore_ascii_case("www.github.com")
-            {
-                return None;
-            }
-            path
-        }
-    };
-    let path = path.split(['?', '#']).next()?;
-    let mut segments = path.split('/').filter(|segment| !segment.is_empty());
-    let owner = segments.next()?;
-    let repository = segments.next()?;
-    let repository = repository.strip_suffix(".git").unwrap_or(repository);
-    (!repository.is_empty()).then(|| format!("https://github.com/{owner}/{repository}/issues/"))
 }

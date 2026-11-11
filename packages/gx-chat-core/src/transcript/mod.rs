@@ -28,6 +28,7 @@ pub mod hook_blocked;
 pub mod image_markers;
 pub mod images;
 pub mod inline_answers;
+pub mod issue_links;
 pub mod items;
 pub mod json_text;
 pub mod jsstr;
