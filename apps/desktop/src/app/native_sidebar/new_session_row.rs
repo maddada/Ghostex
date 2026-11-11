@@ -140,12 +140,16 @@ impl GhostexGpuiApp {
                     .child(LABEL),
             )
             .children(shortcut.map(|key| {
-                let muted = appearance.muted;
+                /*
+                CDXC:Sidebar 2026-11-11 WHY:
+                The hint shows through its opacity, not its text colour: GPUI shapes text, colour included, while it lays the frame out, before this frame's group hover is known, so a group-hover text colour never reached it and the hint stayed hidden on hover. Opacity is applied when the frame is painted, where the group hover is known, as it is for the half's hover fill.
+                */
                 div()
                     .flex_shrink_0()
                     .text_size(px(11.5 * scale))
-                    .text_color(if focused { muted } else { muted.opacity(0.0) })
-                    .group_hover(START_GROUP, move |key| key.text_color(muted))
+                    .text_color(appearance.muted)
+                    .opacity(if focused { 1.0 } else { 0.0 })
+                    .group_hover(START_GROUP, |key| key.opacity(1.0))
                     .child(key)
             }))
             .when(tooltips, |half| {
