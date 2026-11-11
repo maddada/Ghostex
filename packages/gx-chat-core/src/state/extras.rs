@@ -202,6 +202,22 @@ pub struct SearchState {
     pub matches: Vec<TranscriptMatch>,
     /// Which folds the renderer has open, so only what the reader can see is searched.
     pub folds: SearchFolds,
+    /// Older history the chat has not loaded yet (`messages.has_more`), set on every settle: the
+    /// counter's total is only what is loaded, so it carries a "+".
+    pub more_unloaded: bool,
+    /// A walk back through older history for the next match older than the loaded ones
+    /// (`extras/search.rs`), one page per settle.
+    pub seek: Option<SearchSeek>,
+}
+
+/// Find paging older history in until a match turns up older than the loaded ones.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SearchSeek {
+    /// Pages this walk has asked for.
+    pub pages: u32,
+    /// The selected match when "Previous" ran out of loaded matches; `None` when the loaded rows
+    /// hold no match at all. The walk ends when a match appears before it (or any, for `None`).
+    pub anchor: Option<String>,
 }
 
 /// The terminal tail reader's two independent reads: the hover verdict and the expanded sheet.

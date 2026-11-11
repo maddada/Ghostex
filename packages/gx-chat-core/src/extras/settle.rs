@@ -237,7 +237,9 @@ fn settle_with_ids(
             }
         }
     }
+    state.extras.search.more_unloaded = state.messages.has_more;
     search::settle(&mut state.extras.search, &items);
+    effects.extend(search::advance_seek(state, context));
     settle_activity_clock(state, context);
     arm_timers(state, context);
     effects
