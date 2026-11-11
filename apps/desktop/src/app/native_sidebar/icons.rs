@@ -17,6 +17,17 @@ pub(crate) fn session_icon(
     render_session_icon(session, hud, appearance, buttons_shown, hovered, false)
 }
 
+/// The session's agent logo alone, whatever its row's icon spot shows instead (a coordinator's
+/// hat, a clock, a tag): a Unified coordinator card draws its hat at the card's start and this in
+/// its agent slot (CDXC:Sidebar 2026-11-11 in unified/cards.rs).
+pub(crate) fn session_agent_logo(
+    session: &NativeSidebarSession,
+    hud: &Value,
+    appearance: &SidebarAppearance,
+) -> AnyElement {
+    render_agent_logo(session, hud, appearance, false, false, false)
+}
+
 pub(crate) fn session_drag_icon(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
@@ -110,6 +121,40 @@ fn render_session_icon(
         )
         .into_any_element();
     }
+    let opacity = icon_opacity(
+        session,
+        settings,
+        appearance,
+        buttons_shown,
+        hovered,
+        dragging,
+    );
+    if super::threads::is_coordinator(session) {
+        return div()
+            .size(px(15.0 * scale))
+            .flex()
+            .items_center()
+            .justify_center()
+            .opacity(opacity)
+            .child(super::threads::coordinator_icon(
+                appearance,
+                session.is_chief,
+            ))
+            .into_any_element();
+    }
+    render_agent_logo(session, hud, appearance, buttons_shown, hovered, dragging)
+}
+
+/// How strongly a row's icon shows: hidden until hover when the setting says so, then by focus,
+/// visibility, hover and sleep.
+fn icon_opacity(
+    session: &NativeSidebarSession,
+    settings: &Value,
+    appearance: &SidebarAppearance,
+    buttons_shown: bool,
+    hovered: bool,
+    dragging: bool,
+) -> f32 {
     let hidden = settings
         .get(if session.is_browser() {
             "hideBrowserFaviconUntilHover"
@@ -137,19 +182,26 @@ fn render_session_icon(
     if dragging {
         opacity = 1.0;
     }
-    if super::threads::is_coordinator(session) {
-        return div()
-            .size(px(15.0 * scale))
-            .flex()
-            .items_center()
-            .justify_center()
-            .opacity(opacity)
-            .child(super::threads::coordinator_icon(
-                appearance,
-                session.is_chief,
-            ))
-            .into_any_element();
-    }
+    opacity
+}
+
+fn render_agent_logo(
+    session: &NativeSidebarSession,
+    hud: &Value,
+    appearance: &SidebarAppearance,
+    buttons_shown: bool,
+    hovered: bool,
+    dragging: bool,
+) -> AnyElement {
+    let scale = appearance.scale;
+    let opacity = icon_opacity(
+        session,
+        &hud["settings"],
+        appearance,
+        buttons_shown,
+        hovered,
+        dragging,
+    );
     let image = session
         .favicon_data_url
         .as_deref()

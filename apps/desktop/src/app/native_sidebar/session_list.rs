@@ -151,9 +151,11 @@ impl GhostexGpuiApp {
                                     app.render_native_sidebar_session(
                                         group,
                                         &sessions[index],
-                                        index
-                                            .checked_sub(1)
-                                            .map_or(SESSION_HEIGHT, |above| card_heights[above]),
+                                        super::threads::TreeAnchor::below_row(
+                                            index.checked_sub(1).map_or(SESSION_HEIGHT, |above| {
+                                                card_heights[above]
+                                            }),
+                                        ),
                                         &snapshot.hud,
                                         &appearance,
                                         cx,

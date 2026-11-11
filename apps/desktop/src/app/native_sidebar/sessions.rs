@@ -23,9 +23,9 @@ impl GhostexGpuiApp {
         &self,
         group: &NativeSidebarGroup,
         session: &std::sync::Arc<NativeSidebarSession>,
-        // The unscaled height of the card above this one in the same list, which a thread's tree
-        // line rises to.
-        above_height: f32,
+        // Where the icon sits that a thread's tree line rises to (the row above's, or a Unified
+        // card's hat).
+        anchor: super::threads::TreeAnchor,
         hud: &Value,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
@@ -107,6 +107,7 @@ impl GhostexGpuiApp {
             && !buttons_shown
             && hud["settings"]["dimSleepingSessions"].as_bool() == Some(true);
         let icon = super::icons::session_icon(session, hud, appearance, buttons_shown, hovered);
+        let clock_fold = super::threads::unified_clock_owns_fold(session);
         let double_click_rename = hud["settings"]["renameSessionOnDoubleClick"].as_bool()
             == Some(true)
             && !session.is_browser();
@@ -261,7 +262,7 @@ impl GhostexGpuiApp {
                 .when(!highlighted, |row| row.hover(|row| row.bg(appearance.session_hover)))
                 .when(highlighted, |row| row.child(super::decorations::session_outline(appearance)))
                 .when_some(question_fill, |row, fill| row.bg(fill).hover(move |row| row.bg(fill)))
-                .children(super::threads::thread_tree_lines(session, card_height, above_height, appearance))
+                .children(super::threads::thread_tree_lines(session, card_height, anchor, appearance))
                 .children(self.render_native_session_decorations(session, appearance, cx))
                 .when_some(self.native_sidebar.reveal_flash.as_ref().filter(|(id, _)| id == &session.session_id).map(|(_, start)| *start), |row, start| row.child(super::scroll::reveal_flash(start, scale)))
                 // Line 1 is the whole card of every row without work links, and the absolute
@@ -271,7 +272,9 @@ impl GhostexGpuiApp {
                 .child(div().id(format!("native-session-title-{session_id}")).flex_1().min_w_0().h_full().flex().items_center().child(title_with_rename_shake(div().min_w_0().truncate().child(session.title().to_owned()), &session_id, session.rename_failed_at.as_deref(), scale)).when(session_tooltips && self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx))))
                 // CDXC:Sidebar 2026-10-29 DECISION: User: "please swap the order of these 2 things (the threads one for orchestrator with the link tag)". The links badge comes before a coordinator's workers badge; the phone's SessionRow.tsx follows.
                 .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
-                .when(!buttons_shown, |row| row.children(super::threads::coordinator_badge(session, appearance)))
+                .when(!buttons_shown && !clock_fold, |row| row.children(super::threads::coordinator_badge(session, appearance)))
+                // A Unified coordinator whose hat a clock owns folds from its count, idle or hovered too.
+                .when(clock_fold, |row| row.children(self.render_unified_crew_count(session, appearance, cx)))
                 .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::main_coordinator_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::worktree_badge(session, appearance)))

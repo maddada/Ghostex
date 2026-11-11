@@ -51,8 +51,10 @@ pub(crate) mod spaces;
 pub(crate) mod tags;
 pub(crate) mod text;
 mod threads;
+#[cfg(test)]
+pub(crate) use threads::MAX_DEPTH as MAX_THREAD_DEPTH;
 pub(crate) use threads::{
-    is_recent_thread, recent_thread_deadline_ms, MAX_DEPTH as MAX_THREAD_DEPTH,
+    is_recent_thread, lay_out_tree, recent_thread_deadline_ms, TreeChildren, TreeSpot, TreeStep,
 };
 pub(crate) mod view;
 mod work;
@@ -63,7 +65,6 @@ pub use armed_actions::{
     armed_actions_by_session, ArmedAction, ARMED_ACTION_CLOSE_AFTER_DONE, ARMED_ACTION_DELAYED_SEND,
 };
 pub use assemble::{collection_groups, owner_project_group_id, toggle_all_project_ids};
-pub use projects::project_sidebar_icon_data_url;
 pub use chief::{ChiefRowView, HomeHeaderView};
 pub use close_successor::{
     close_project_group_is_active, close_project_successor_candidates,
@@ -107,6 +108,7 @@ pub use machine_tab_layout::{
 pub use model::{SidebarUpdateWork, SidebarViewModel};
 pub use ordering::session_is_snoozed;
 pub use project_drop_landing::{ProjectDropLanding, ProjectDropRow};
+pub use projects::project_sidebar_icon_data_url;
 pub use reveal::{reveal_plan, space_for_focused_row, FocusedRowSpace, SidebarRevealPlan};
 pub use session_slot::{rendered_session_ids, session_slot_plan, SessionSlotPlan};
 pub use slot_hotkey::{project_slot_plan, ProjectSlotPlan};

@@ -1,9 +1,9 @@
 //! A coordinator's threads under its card: which sessions nest under which, in what order, which
 //! of them an unfolded card lists, and what a folded card says about the ones it hides.
 //!
-//! CDXC:Sidebar 2026-11-09 DECISION:
-//! Maintainer, on issue #528: "Yes please, send it! Let's nest the threads under the coordinator's card, folded by default for everyone, with the crew count as the fold toggle. No setting needed." This supersedes the 2026-11-04 decision that left a coordinator's workers out of the Unified list (reached only from the chat's Workers list and the Project sidebar). A worker is known by the link the Project sidebar nests it by (`coordinator_parent`); a worker on another computer carries none on its own computer's row, so the copy its coordinator's computer borrows (`is_borrowed_thread`) is the one drawn, with its own computer's project, Space and branch, and its own computer's copy is dropped. Scope runs first: only sessions in the active Space and not hidden are nested, and a worker whose coordinator is not in that list is its own card. Every coordinator at any depth folds on its own, folded until its crew count is clicked, and the unfolded ones are saved per client (`UnifiedSavedState::unfolded_coordinators`). Sebastian's answers on the plan: an unfolded coordinator lists its threads as the Project sidebar does, the ones busy, needing you, focused, visible or active in the last two hours, busy first, and the rest wait behind one "N older threads" row (saved per coordinator); a parked or snoozed thread is its own card on its shelf; a card whose thread needs you (approval, a question, waiting on you, stuck or failed) leaves the Moving shelf and sorts by when that thread came back. A folded card keeps the Project sidebar's overlapping dots for everything it hides (CDXC:Coordinators 2026-10-24 in sidebar_view/view.rs). Nested threads count toward no shelf, total or project header; the computer tabs, Quick Access and Running Agents count sessions as before. A search or a filter that matches a thread keeps its coordinator's card and shows the path to the thread even while folded; a filter that keeps the coordinator itself leaves its fold alone, and outer shelves and project groups stay as the user left them.
-//! SEE-ALSO: sidebar_view/threads.rs `nest_threads` (the Project sidebar's tree, the two-hour rule), apps/mobile/app/src/contract/unified/tree.ts (the phone's port), apps/desktop/src/app/native_sidebar/unified/threads.rs (the drawing).
+//! CDXC:Sidebar 2026-11-11 DECISION:
+//! Sebastian, after the 11.4.0 Unified sidebar's crew count proved hard to find as the toggle: the Unified sidebar reuses the Project sidebar's coordinator component, "the hat at the card's start folds, the count is just a number", and of counting a coordinator's finished threads: "No, not ever, leave it out". So a card's threads are drawn with the Project sidebar's own rows and tree (`lay_out_tree` in sidebar_view/threads.rs, the row in apps/desktop/src/app/native_sidebar/sessions.rs), the hat (the fold chevron on hover) is the toggle, and the count always shows as information, never counting resolved threads (it is the fold toggle only while a pending clock owns the hat, CDXC:Coordinators 2026-11-11 in native_sidebar/threads.rs). This supersedes the "crew count as the fold toggle" part of the maintainer's 2026-11-09 decision on issue #528 ("Yes please, send it! Let's nest the threads under the coordinator's card, folded by default for everyone, with the crew count as the fold toggle. No setting needed."); the rest of it stands. It superseded the 2026-11-04 decision that left a coordinator's workers out of the Unified list (reached only from the chat's Workers list and the Project sidebar). A worker is known by the link the Project sidebar nests it by (`coordinator_parent`); a worker on another computer carries none on its own computer's row, so the copy its coordinator's computer borrows (`is_borrowed_thread`) is the one drawn, with its own computer's project, Space and branch, and its own computer's copy is dropped. Scope runs first: only sessions in the active Space and not hidden are nested, and a worker whose coordinator is not in that list is its own card. Every coordinator at any depth folds on its own, folded until its hat is clicked, and the unfolded ones are saved per client (`UnifiedSavedState::unfolded_coordinators`). Sebastian's answers on the plan: an unfolded coordinator lists its threads as the Project sidebar does, the ones busy, needing you, focused, visible or active in the last two hours, busy first, and the rest wait behind one "N older threads" row (saved per coordinator); a parked or snoozed thread is its own card on its shelf; a card whose thread needs you (approval, a question, waiting on you, stuck or failed) leaves the Moving shelf and sorts by when that thread came back. A folded card keeps the Project sidebar's overlapping dots for everything it hides (CDXC:Coordinators 2026-10-24 in sidebar_view/view.rs). Nested threads count toward no shelf, total or project header; the computer tabs, Quick Access and Running Agents count sessions as before. A search or a filter that matches a thread keeps its coordinator's card and shows the path to the thread even while folded; a filter that keeps the coordinator itself leaves its fold alone, and outer shelves and project groups stay as the user left them.
+//! SEE-ALSO: sidebar_view/threads.rs `nest_threads` (the Project sidebar's tree, the two-hour rule), apps/mobile/app/src/contract/unified/tree.ts (the phone's port), apps/desktop/src/app/native_sidebar/unified/threads.rs (the drawing), apps/mobile/app/src/components/sessions/unified/ (the phone's).
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -64,12 +64,31 @@ pub struct UnifiedCrew {
     /// on its own fold, not only on the way to a match, and has older threads.
     pub older_row: bool,
     /// The crew count: approvals, else threads waiting on you, else working ones, else every
-    /// thread, grey.
+    /// listed thread, grey.
     pub badge: CoordinatorBadge,
+    /// Its direct threads by state, with approvals at any depth (what `badge` is made from).
+    pub threads: ThreadTally,
     /// While it is not open: the dots of every session under it, with its own.
     pub folded_status: FoldedStatus,
     /// The focused session is under it and not drawn, so this row carries the active highlight.
     pub contains_active: bool,
+}
+
+impl UnifiedCrew {
+    /// The `RowNesting` a Project sidebar coordinator row carries for the same crew, so the
+    /// Unified sidebar draws its fold control, count and folded dots with the Project row's code.
+    pub fn nesting(&self) -> RowNesting {
+        RowNesting {
+            thread_count: self.total,
+            threads: self.threads,
+            collapsed: !self.open,
+            older_threads: if self.older_row { self.older } else { 0 },
+            older_threads_shown: self.older_shown,
+            contains_active_session: self.contains_active,
+            folded_status: self.folded_status,
+            ..RowNesting::default()
+        }
+    }
 }
 
 /// A session that needs the user: approval, stuck, a question, waiting on them, or failed.
@@ -331,6 +350,7 @@ fn lay_out(
             ..RowNesting::default()
         }
         .coordinator_badge(),
+        threads: tally,
         folded_status,
         contains_active: false,
     });

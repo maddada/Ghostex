@@ -6,7 +6,8 @@ use crate::keys::{MachineId, ProjectKey, SessionKey};
 use crate::sidebar_view::ordering::session_is_snoozed;
 use crate::sidebar_view::spaces::space_claims_project;
 use crate::sidebar_view::{
-    GroupView, SessionRow, SessionView, SidebarView, SpacesState, LOCAL_MACHINE_ID, OTHER_SPACE_ID,
+    GroupView, RowNesting, SessionRow, SessionView, SidebarView, SpacesState, LOCAL_MACHINE_ID,
+    OTHER_SPACE_ID,
 };
 
 use super::repo::{
@@ -235,13 +236,68 @@ pub struct UnifiedRow {
 }
 
 impl UnifiedRow {
-    /// The threads drawn under it now, in order, each with its depth below this row (1 for its
-    /// own threads); a row whose older threads wait behind their row is followed by
-    /// [`UnifiedTreeLine::Older`].
+    /// The threads drawn under it now, in order, each with its place in the tree as the Project
+    /// sidebar lays it out (`lay_out_tree`); a row whose older threads wait behind their row is
+    /// followed by [`UnifiedTreeLine::Older`].
     pub fn drawn_lines(&self) -> Vec<UnifiedTreeLine<'_>> {
+        use crate::sidebar_view::{lay_out_tree, TreeChildren, TreeSpot, TreeStep};
+        fn threads_of(row: &UnifiedRow) -> TreeChildren<&UnifiedRow> {
+            let open = row.crew.as_ref().is_some_and(|crew| crew.open);
+            let list: Vec<&UnifiedRow> = if open {
+                row.threads.iter().filter(|child| child.shown).collect()
+            } else {
+                Vec::new()
+            };
+            TreeChildren {
+                drawn: list.len(),
+                list,
+                open,
+            }
+        }
         let mut lines = Vec::new();
-        drawn_lines_into(self, 1, &mut lines);
+        lay_out_tree(
+            self,
+            TreeSpot::default(),
+            &threads_of,
+            &mut |step| match step {
+                TreeStep::Row(row, spot) if !std::ptr::eq(row, self) => {
+                    lines.push(UnifiedTreeLine::Thread {
+                        row,
+                        nesting: row.nesting_at(spot),
+                    });
+                }
+                TreeStep::Done(row, spot)
+                    if row.crew.as_ref().is_some_and(|crew| crew.older_row) =>
+                {
+                    lines.push(UnifiedTreeLine::Older {
+                        coordinator: row,
+                        nesting: row.nesting_at(spot),
+                    });
+                }
+                _ => {}
+            },
+        );
         lines
+    }
+
+    /// The `RowNesting` a Project sidebar row in this place carries: its tree place and, for a row
+    /// with threads, its crew.
+    fn nesting_at(&self, spot: crate::sidebar_view::TreeSpot) -> RowNesting {
+        let mut nesting = self
+            .crew
+            .as_ref()
+            .map(super::tree::UnifiedCrew::nesting)
+            .unwrap_or_default();
+        nesting.depth = spot.depth;
+        nesting.last_child = spot.depth > 0 && spot.last;
+        nesting.passing_lines = spot.passing_lines;
+        nesting.lines_below = spot.lines_below;
+        nesting
+    }
+
+    /// The card's own `RowNesting` (a top-level row): what its fold control and crew count read.
+    pub fn card_nesting(&self) -> RowNesting {
+        self.nesting_at(crate::sidebar_view::TreeSpot::default())
     }
 
     /// The row and every row under it, depth first.
@@ -255,35 +311,17 @@ impl UnifiedRow {
 /// One line under a card.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnifiedTreeLine<'a> {
+    /// A thread, with the `RowNesting` the Project sidebar's row draws its tree line and fold from.
     Thread {
         row: &'a UnifiedRow,
-        depth: u8,
+        nesting: RowNesting,
     },
-    /// The "N older threads" (or "Hide older threads") row at the end of `coordinator`'s threads.
+    /// The "N older threads" (or "Hide older threads") row at the end of `coordinator`'s threads;
+    /// `nesting` is the coordinator's own, whose `passing_lines_below` the row draws.
     Older {
         coordinator: &'a UnifiedRow,
-        depth: u8,
+        nesting: RowNesting,
     },
-}
-
-fn drawn_lines_into<'a>(row: &'a UnifiedRow, depth: u8, lines: &mut Vec<UnifiedTreeLine<'a>>) {
-    let Some(crew) = row.crew.as_ref().filter(|crew| crew.open) else {
-        return;
-    };
-    for child in row.threads.iter().filter(|child| child.shown) {
-        // Drawn no deeper than the Project sidebar's tree; the tree itself goes on.
-        lines.push(UnifiedTreeLine::Thread {
-            row: child,
-            depth: depth.min(crate::sidebar_view::MAX_THREAD_DEPTH),
-        });
-        drawn_lines_into(child, depth.saturating_add(1), lines);
-    }
-    if crew.older_row {
-        lines.push(UnifiedTreeLine::Older {
-            coordinator: row,
-            depth: depth.min(crate::sidebar_view::MAX_THREAD_DEPTH),
-        });
-    }
 }
 
 /// One choice of the filter menu.

@@ -57,13 +57,31 @@ fn tree_line_x(level: f32) -> f32 {
 
 /// The tree lines beside a thread row. Its own: from the top of the row down to the icon (the last
 /// thread) or through the row (a thread with siblings below it), then across to the icon. And the
-/// lines of the outer levels that run on past it. `card_height` is this row's card and
-/// `above_height` the card above it, both unscaled: a work-mode card is taller, but its icon still
-/// sits centred in its first `SESSION_HEIGHT`.
+/// lines of the outer levels that run on past it. `card_height` is this row's card, unscaled, and
+/// `anchor` where the icon its line hangs under sits.
+/// Where a thread row's tree line starts: the distance, unscaled, from the centre of the icon it
+/// hangs under down to the row's top. Under a sidebar row that is [`TreeAnchor::below_row`]; the
+/// first thread under a Unified card hangs under the card's hat instead (unified/threads.rs).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TreeAnchor {
+    pub(crate) icon_to_top: f32,
+}
+
+impl TreeAnchor {
+    /// Under a session row of `height` (unscaled) drawn right above: a work-mode card is taller,
+    /// but its icon still sits centred in its first `SESSION_HEIGHT`.
+    pub(crate) fn below_row(height: f32) -> Self {
+        Self {
+            icon_to_top: height + super::session_list::SESSION_SPACING
+                - super::session_list::SESSION_HEIGHT / 2.0,
+        }
+    }
+}
+
 pub(crate) fn thread_tree_lines(
     session: &NativeSidebarSession,
     card_height: f32,
-    above_height: f32,
+    anchor: TreeAnchor,
     appearance: &SidebarAppearance,
 ) -> impl Iterator<Item = AnyElement> {
     let depth = thread_depth(session);
@@ -87,9 +105,8 @@ pub(crate) fn thread_tree_lines(
         let color = tree_line_color();
         let height = card_height * scale;
         let mid = super::session_list::SESSION_HEIGHT * scale / 2.0;
-        // The line starts right under the icon of the row above, centred in that row's first line.
-        let rise = (above_height * scale - mid - 7.5 * scale)
-            + super::session_list::SESSION_SPACING * scale;
+        // The line starts right under the icon of the row above.
+        let rise = (anchor.icon_to_top - 7.5) * scale;
         div()
             .absolute()
             .top(px(-rise))
@@ -235,8 +252,8 @@ pub(super) const BADGE_TEXT_SIZE: f32 = 13.55;
 /// CDXC:Coordinators 2026-10-29 DECISION:
 /// User, of an idle coordinator's lone crew icon: "remove this icon when no workers are active pls". The Project sidebar's coordinator row shows the badge only while a thread under it waits for approval, waits on the user or works; an idle coordinator (gx-core's `Idle` tone) draws none there. The phone's SessionRow.tsx follows.
 ///
-/// CDXC:Coordinators 2026-11-09 WHY:
-/// On a Unified card with threads the crew count is the fold toggle (the user's 2026-11-09 decision on #528 in gx-core `unified_sidebar/tree.rs`), so it always shows there, grey while idle, with the number of its threads (`unified/threads.rs`; the phone's Unified card follows); the decision above holds for the Project sidebar.
+/// CDXC:Coordinators 2026-11-11 WHY:
+/// A Unified card's threads are folded by default and the hat folds them (the user's 2026-11-11 decision in gx-core `unified_sidebar/tree.rs`), so its crew count always shows there, grey while idle, as the one sign of what a folded card holds; it is information, not a toggle, except while a pending delayed send or close-after-done owns the hat (CDXC:Coordinators 2026-10-06 in decorations.rs), when the count is the fold toggle so the card stays unfoldable (`render_unified_crew_count`; the phone draws its chevron beside the clock and needs no such case). This supersedes the 2026-11-09 WHY that made the count the toggle. The decision above holds for the Project sidebar and for a Unified thread row without a clock.
 pub(crate) fn coordinator_badge(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
@@ -425,13 +442,17 @@ pub(crate) fn worktree_badge(
 const OLDER_THREADS_ROW_HEIGHT: f32 = 24.0;
 
 /// An expanded coordinator whose older threads wait behind its "N older threads" row.
-struct OlderThreadsRow {
-    coordinator: String,
-    depth: f32,
-    count: u64,
-    shown: bool,
+#[derive(Clone, Debug)]
+pub(crate) struct OlderThreadsRow {
+    pub(crate) coordinator: String,
+    /// On a Unified sidebar coordinator: the key its older threads are listed under (gx-core
+    /// `unified_coordinator_key`), which the row's click toggles instead of the Project list's.
+    pub(crate) unified_key: Option<String>,
+    pub(crate) depth: f32,
+    pub(crate) count: u64,
+    pub(crate) shown: bool,
     /// The tree lines that run past the row, toward the coordinator's next sibling or an ancestor's.
-    passing_lines: u64,
+    pub(crate) passing_lines: u64,
 }
 
 fn older_threads_row(session: &NativeSidebarSession) -> Option<OlderThreadsRow> {
@@ -442,6 +463,7 @@ fn older_threads_row(session: &NativeSidebarSession) -> Option<OlderThreadsRow> 
     }
     Some(OlderThreadsRow {
         coordinator: session.session_id.clone(),
+        unified_key: None,
         depth: thread_depth(session),
         count,
         shown: threads.get("olderShown").and_then(Value::as_bool) == Some(true),
@@ -510,7 +532,7 @@ impl GhostexGpuiApp {
     }
 
     /// The quiet row that lists a coordinator's older threads, or tucks them away again.
-    fn render_older_threads_row(
+    pub(crate) fn render_older_threads_row(
         &self,
         row: OlderThreadsRow,
         appearance: &SidebarAppearance,
@@ -523,6 +545,7 @@ impl GhostexGpuiApp {
             (false, count) => format!("{count} older threads"),
         };
         let coordinator = row.coordinator.clone();
+        let unified_key = row.unified_key.clone();
         div()
             .id(gpui::SharedString::from(format!(
                 "native-sidebar-older-threads-{}",
@@ -553,10 +576,13 @@ impl GhostexGpuiApp {
             .child(label)
             .on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
-                app.dispatch_native_sidebar_ui(
-                    json!({"type": "toggleCoordinatorOlder", "sessionId": coordinator}),
-                    cx,
-                );
+                match &unified_key {
+                    Some(key) => app.gx_store_toggle_unified_coordinator(key, true, cx),
+                    None => app.dispatch_native_sidebar_ui(
+                        json!({"type": "toggleCoordinatorOlder", "sessionId": coordinator}),
+                        cx,
+                    ),
+                }
             }))
             .map(|older| {
                 self.sidebar_focus_stop(
@@ -614,6 +640,25 @@ pub(crate) fn coordinator_holds_active(session: &NativeSidebarSession) -> bool {
         .and_then(|threads| threads.get("containsActive"))
         .and_then(Value::as_bool)
         == Some(true)
+}
+
+/// On a Unified sidebar row with threads: the key its fold control toggles (gx-core
+/// `unified_coordinator_key`, written by gx_store/unified_sidebar.rs).
+pub(crate) fn unified_fold_key(session: &NativeSidebarSession) -> Option<&str> {
+    session
+        .details
+        .get("coordinatorThreads")?
+        .get("unifiedKey")?
+        .as_str()
+}
+
+/// A Unified row with threads whose hat a pending delayed send or close-after-done owns
+/// (`coordinator_fold_button` shows no chevron then): its crew count is the fold toggle instead.
+pub(crate) fn unified_clock_owns_fold(session: &NativeSidebarSession) -> bool {
+    let (delayed, closing) = super::decorations::session_clock_marks(session);
+    (delayed || closing)
+        && unified_fold_key(session).is_some()
+        && coordinator_fold_state(session).is_some()
 }
 
 /// The hollow circle a collapsed section heading draws when the focused session is inside it; a
