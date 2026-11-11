@@ -545,15 +545,17 @@ impl AccountUsagePanel {
             return;
         }
         // Runs after the window move the fit queued, then shows on the frame drawn at that size.
-        self.reveal = Some(cx.spawn_in(window, async move |this, cx| {
-            let _ = this.update_in(cx, |panel, window, cx| {
+        // The popup is found by the app's own handle to it, never by a window this callback was
+        // handed: the user's trace showed the main window faded instead (CDXC:AgentProviders
+        // 2026-11-11 in GpuiAppToastWindowChrome.m).
+        let _ = window;
+        self.reveal = Some(cx.spawn(async move |this, cx| {
+            let _ = this.update(cx, |panel, cx| {
                 panel.revealed = true;
                 cx.notify();
-                window.on_next_frame(|window, cx| {
-                    crate::app::window::popup_frame::reveal_popup_window(
-                        window,
-                        cx.reduce_motion(),
-                    );
+                let id = panel.id;
+                let _ = panel.main_app.update(cx, |app, cx| {
+                    app.reveal_account_usage_popup(id, cx);
                 });
             });
         }));

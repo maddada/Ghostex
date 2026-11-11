@@ -308,14 +308,18 @@ void GhostexGpuiTraceMainWindow(void *nativeView, const char *path, double secon
   }
 }
 
-void GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
+// CDXC:AgentProviders 2026-11-11 WHY:
+// The user's trace of a usage meter click showed the main window's own alpha drop to 0 and climb
+// back over 150ms: this fade was handed the main window. The app's main window is never faded
+// (a pop-up or chat menu window never becomes main); it is refused (0) so the caller can log it.
+int GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
   @autoreleasepool {
     if (nativeView == NULL) {
-      return;
+      return 0;
     }
     NSWindow *window = ((__bridge NSView *)nativeView).window;
-    if (window == nil) {
-      return;
+    if (window == nil || window == NSApp.mainWindow || window.isMainWindow) {
+      return 0;
     }
     window.alphaValue = 0.0;
     [NSAnimationContext
@@ -326,6 +330,7 @@ void GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
           window.animator.alphaValue = 1.0;
         }
         completionHandler:nil];
+    return 1;
   }
 }
 
