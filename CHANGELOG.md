@@ -4,6 +4,7 @@
 
 ### 🩹 Fixes and polish
 
+- **Settings no longer repeats a page's name as its first heading:** Chat, Terminal, Debugging, Autopilot, Collab and Open In start their settings right under the page's line instead of under a second "Chat", "Terminal" and so on, and each Extensions tab no longer repeats its own name above its list.
 - **A Ghostex page opens at its full size:** opening a page, in its popup over the chat or in the Files view, no longer shows it shrunk into the top-left corner for a moment before it jumps to its real size. The page now appears only once it has its real size.
 - **Claude's models are listed Fable, Opus, Sonnet, Haiku:** the model picker in the chat, on the computer and the phone, and the New Coordinator form now list Claude's models by family, Fable first, then Opus, Sonnet and Haiku, newest version first, and Legacy models keep the same order. A new Fable or Opus version takes its family's place on its own. The default model is still Opus 5.5.
 - **Connect a Device can be used on every Windows screen:** on a small or scaled screen (1080p at 150%, for example), or with Ghostex near a screen edge, the window could open partly off the screen and show one big round close button over everything. Every Ghostex dialog now opens fully on the screen, and its close button stays its normal size.

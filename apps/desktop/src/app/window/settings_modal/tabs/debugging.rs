@@ -109,7 +109,7 @@ impl Render for DebuggingTab {
             ));
         }
         let mut blocks = Vec::new();
-        if let Some(section) = settings_section(&p, "Debugging", None, None, rows) {
+        if let Some(section) = settings_section(&p, "", None, None, rows) {
             let mut block = PageBlock::section("controls", section);
             block.margin_top += PAGE_TOP_PADDING;
             blocks.push(block);

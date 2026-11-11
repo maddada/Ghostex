@@ -729,14 +729,10 @@ fn terminal_section(
     }
     // Custom shaders is the Terminal shaders switch in Settings > Extensions > Experimental
     // (CDXC:Extensions 2026-11-09 in the settings catalog).
-    settings_section(
-        &p,
-        g.section_title("terminal", "Terminal"),
-        None,
-        None,
-        rows,
-    )
-    .map(|section| PageBlock::section("terminal", section))
+    // No heading, here or in the Advanced fold: it would repeat the page title (CDXC:Settings
+    // 2026-11-11 at fields/row.rs `settings_section`).
+    settings_section(&p, "", None, None, rows)
+        .map(|section| PageBlock::section("terminal", section))
 }
 
 fn behavior_section(

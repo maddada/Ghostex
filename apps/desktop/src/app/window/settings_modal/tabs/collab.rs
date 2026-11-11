@@ -338,7 +338,7 @@ impl CollabTab {
             control,
             cx,
         ));
-        settings_section(p, "Ghostex Collab", None, None, rows)
+        settings_section(p, "", None, None, rows)
     }
 
     fn new_shares_section(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Option<Div> {

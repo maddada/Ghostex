@@ -623,7 +623,7 @@ impl Render for OpenTargetsTab {
                 })
                 .collect();
             blocks.extend(
-                settings_section(&p, "Open In", None, None, rows)
+                settings_section(&p, "", None, None, rows)
                     .map(|section| PageBlock::section("openIn", section)),
             );
         }

@@ -297,7 +297,7 @@ impl AutopilotTab {
                 cx,
             ));
         }
-        settings_section(p, "Autopilot", None, None, rows)
+        settings_section(p, "", None, None, rows)
     }
 
     fn set_project(&mut self, project_id: &str, on: bool, cx: &mut Context<Self>) {

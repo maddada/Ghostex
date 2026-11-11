@@ -276,8 +276,9 @@ fn chat_section(
     rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.", false, cx));
     rows.extend(orchestrator_playbook_row(page, g, s, cx));
     rows.extend(read_aloud_rows(page, g, s, window, cx));
-    settings_section(&g.p, g.section_title("chat", "Chat"), None, None, rows)
-        .map(|section| PageBlock::section("chat", section))
+    // No heading, here or in the Advanced fold: it would repeat the page title (CDXC:Settings
+    // 2026-11-11 at fields/row.rs `settings_section`).
+    settings_section(&g.p, "", None, None, rows).map(|section| PageBlock::section("chat", section))
 }
 
 /// Read aloud's Voice and Speed, or on Linux the note that this computer has no voice. The catalog

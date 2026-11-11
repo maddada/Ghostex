@@ -581,7 +581,11 @@ pub(crate) fn card_inset(content: impl IntoElement) -> AnyElement {
 /// User: every Settings page and section shares one style, the grouped-list prototype: a plain group heading above a raised card, one setting per row with its label on the left and its control on the right, rows separated by hairlines, no floating title pill and no visible subtitle text.
 /// `SettingsSection`: a plain heading (16px, optional 13px description and right-side actions)
 /// above a raised card whose children divide with hairlines. `None` when every row is hidden,
-/// the `:has(> .settings-list-card:empty)` rule.
+/// the `:has(> .settings-list-card:empty)` rule. An empty `title` draws no title line, and with
+/// no description or actions either, no heading at all: the card sits where the heading was.
+///
+/// CDXC:Settings 2026-11-11 DECISION:
+/// User, of Settings > Chat showing "Chat" as the page title and again as its first group's heading: "fix this duplication. check all settings pages for same". A page's first or only group that would carry the page's own name (Chat, Terminal, Debugging, Autopilot, Collab, Open In), and an Extensions tab's group named after the tab, passes an empty title. Its catalog section keeps its title, so the Settings search still matches it and the Help still lists it.
 pub(crate) fn settings_section(
     p: &SettingsPalette,
     title: impl Into<SharedString>,
@@ -599,27 +603,26 @@ pub(crate) fn settings_section(
             .when(index > 0, |this| this.border_t_1().border_color(hairline))
             .child(row)
     });
+    let title: SharedString = title.into();
+    let heading = (!title.is_empty() || description.is_some() || actions.is_some())
+        .then(|| settings_section_heading(p, title, description, actions));
     Some(
-        v_flex()
-            .w_full()
-            .gap(px(12.0))
-            .child(settings_section_heading(p, title, description, actions))
-            .child(
-                v_flex()
-                    .w_full()
-                    .rounded(px(MODAL_RADIUS_SECTION))
-                    .border_1()
-                    .border_color(hairline)
-                    .bg(hsla(p.raised))
-                    .overflow_hidden()
-                    .children(rows),
-            ),
+        v_flex().w_full().gap(px(12.0)).children(heading).child(
+            v_flex()
+                .w_full()
+                .rounded(px(MODAL_RADIUS_SECTION))
+                .border_1()
+                .border_color(hairline)
+                .bg(hsla(p.raised))
+                .overflow_hidden()
+                .children(rows),
+        ),
     )
 }
 
 /// The heading of a `SettingsSection`: the 16px title, its optional 13px description and the
 /// right-side actions. Sections that are not a raised card of rows (the theme presets' sideways
-/// row) put their own content under it.
+/// row) put their own content under it. An empty `title` draws only the description and actions.
 pub(crate) fn settings_section_heading(
     p: &SettingsPalette,
     title: impl Into<SharedString>,
@@ -627,7 +630,11 @@ pub(crate) fn settings_section_heading(
     actions: Option<AnyElement>,
 ) -> Div {
     let title: SharedString = title.into();
-    let title_key = title.to_string();
+    // The links' element ids: the title, or the description itself when there is no title.
+    let link_key = match (&title, &description) {
+        (title, Some(description)) if title.is_empty() => description.to_string(),
+        (title, _) => title.to_string(),
+    };
     h_flex()
         .w_full()
         .items_end()
@@ -639,21 +646,23 @@ pub(crate) fn settings_section_heading(
                 .flex_1()
                 .min_w_0()
                 .gap(px(4.0))
-                .child(
-                    div()
-                        .text_size(px(16.0))
-                        .line_height(px(20.8))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(hsla(p.foreground))
-                        .child(title),
-                )
+                .when(!title.is_empty(), |heading| {
+                    heading.child(
+                        div()
+                            .text_size(px(16.0))
+                            .line_height(px(20.8))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(p.foreground))
+                            .child(title),
+                    )
+                })
                 .children(description.map(|description| {
                     div()
                         .text_size(px(13.0))
                         .line_height(px(18.85))
                         .text_color(hsla(p.muted))
                         // A path in the text opens in Files (CDXC:PathLinks 2026-11-08).
-                        .child(linkified_text(&title_key, &description))
+                        .child(linkified_text(&link_key, &description))
                 })),
         )
         .children(actions.map(|actions| {

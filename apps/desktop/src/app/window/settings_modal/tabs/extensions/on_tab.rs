@@ -191,7 +191,7 @@ impl ExtensionsTab {
         };
         plain_section(
             p,
-            "On",
+            "",
             div()
                 .child("Everything you have turned on, from every tab. Something you turn off here stays until you leave the tab.")
                 .into_any_element(),

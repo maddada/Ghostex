@@ -24,6 +24,7 @@ use super::data::{
     official_switch_value, official_view_scope_key, scope_projects_and_spaces, titlebar_view_order,
     view_order_items, view_scope, view_scope_description,
 };
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, ClickEvent, Context, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
@@ -35,7 +36,9 @@ use serde_json::{Value, json};
 const GHOSTEX_EXTENSIONS_REPO_URL: &str = "https://github.com/maddada/ghostex-extensions";
 
 /// `SettingsSection plain` with `descriptionClassName='pb-2'`: the heading (and header actions)
-/// over content laid straight on the page.
+/// over content laid straight on the page. An empty `title` keeps only the description and actions:
+/// a tab's own section, which the tab above it already names (CDXC:Settings 2026-11-11 at
+/// fields/row.rs `settings_section`).
 pub(crate) fn plain_section(
     p: &SettingsPalette,
     title: impl Into<SharedString>,
@@ -43,6 +46,7 @@ pub(crate) fn plain_section(
     actions: Option<AnyElement>,
     body: AnyElement,
 ) -> AnyElement {
+    let title: SharedString = title.into();
     v_flex()
         .w_full()
         .gap(px(12.0))
@@ -57,14 +61,16 @@ pub(crate) fn plain_section(
                     v_flex()
                         .min_w_0()
                         .gap(px(4.0))
-                        .child(
-                            div()
-                                .text_size(px(16.0))
-                                .line_height(px(20.8))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(hsla(p.foreground))
-                                .child(title.into()),
-                        )
+                        .when(!title.is_empty(), |heading| {
+                            heading.child(
+                                div()
+                                    .text_size(px(16.0))
+                                    .line_height(px(20.8))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(hsla(p.foreground))
+                                    .child(title),
+                            )
+                        })
                         .child(
                             div()
                                 .pb(px(8.0))
@@ -141,9 +147,15 @@ impl ExtensionsTab {
             cx,
         );
         let row = settings_list_item(p, None, None, "View order", None, Some(button));
+        // On the Views tab the tab names it; a search lists every tab's sections, so it says Views.
+        let title = if self.store.read(cx).is_searching() {
+            "Views"
+        } else {
+            ""
+        };
         settings_section(
             p,
-            "Views",
+            title,
             Some("Choose the order of built-in, extension, and custom views.".into()),
             None,
             vec![row],
@@ -280,14 +292,14 @@ impl ExtensionsTab {
                     "Views Ghostex ships: project websites, code and files, and planning.",
                 ),
                 super::page_tabs::PageTab::PanelsMenus => (
-                    "Panels & menus",
+                    "",
                     "Buttons in the work area header and entries in the sidebar's menu.",
                 ),
-                super::page_tabs::PageTab::Experimental => (
-                    "Experimental",
-                    "Early features. Each one is off until you turn it on.",
-                ),
-                _ => ("Built-in", "Parts of Ghostex you can switch off."),
+                super::page_tabs::PageTab::Experimental => {
+                    ("", "Early features. Each one is off until you turn it on.")
+                }
+                // The tab above names a tab's only section, so it has no title of its own.
+                _ => ("", "Parts of Ghostex you can switch off."),
             }
         };
         plain_section(
@@ -507,12 +519,12 @@ impl ExtensionsTab {
             let description = div()
                 .child("Extensions you installed, and Collab, which Ghostex downloads when you turn it on.")
                 .into_any_element();
-            return plain_section(p, "Installed", description, Some(from_folder), body);
+            return plain_section(p, "", description, Some(from_folder), body);
         }
         let title = if self.store.read(cx).is_searching() {
             "Installed and Community"
         } else {
-            "Community"
+            ""
         };
         plain_section(p, title, description, None, body)
     }
