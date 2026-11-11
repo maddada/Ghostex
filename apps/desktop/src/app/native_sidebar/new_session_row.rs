@@ -7,7 +7,7 @@
 //! CDXC:Sidebar 2026-11-11 DECISION:
 //! User: "i dont like new project shown like button without bg there fam add it to the top row instead please to the right of search". Add project left this row for the top row, right of Search (native_sidebar/navigation.rs), so the row holds only the New session button and its arrow, the row's full width, 28 high like every row at the top. This supersedes Add project sitting beside the button.
 //! CDXC:Sidebar 2026-11-11 DECISION:
-//! User: "dont show chevron down icon here, instead should be another icon that indicates we will show a menu of agents ... also please dont show the hotkey for new session unless i hover over it", then "also make icon for new session just + icon". The button leads with a plain plus, the arrow half shows the robot (it opens the agent picker), and the shortcut shows only while the pointer is over the button or it has the keyboard, keeping its room at rest so nothing moves. This supersedes the pencil-on-a-square, the chevron and the always-shown shortcut of 2026-11-10.
+//! User: "dont show chevron down icon here, instead should be another icon that indicates we will show a menu of agents ... also please dont show the hotkey for new session unless i hover over it", then "also make icon for new session just + icon". The button leads with a plain plus, the arrow half shows a chevron pointing right (the user's pick, "chevron right", over a robot, sparkles or people icon) for the agent picker it opens, and the shortcut shows only while the pointer is over the button or it has the keyboard, keeping its room at rest so nothing moves. This supersedes the pencil-on-a-square, the chevron pointing down and the always-shown shortcut of 2026-11-10.
 //! SEE-ALSO: native_sidebar/render.rs and selectors.rs (where the row goes), native_sidebar/unified/header.rs (the header it took the pencil and Add project from), apps/gpui-web/src/app/web_host/new_thread_picker.rs (the web build's `start_new_agent_session`).
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -38,10 +38,8 @@ const LABEL: &str = "New session";
 /// The start half's focus stop and its hover group, which shows the shortcut.
 const START_STOP: &str = "new-session:start";
 const START_GROUP: &str = "native-sidebar-new-session-start";
-/// The arrow half's icon: the robot the app already draws for agents (the Help menu's agent
-/// question, GBots), so it reads as "pick an agent" and not as Add project's folder or the
-/// menu's lines beside it.
-const CHOOSE_ICON: &str = "titlebar/robot.svg";
+/// The arrow half's icon: the sidebar's plain chevron, pointing to the list it opens.
+const CHOOSE_ICON: &str = "titlebar/chevron-right.svg";
 
 /// The width the label half gets in a sidebar `sidebar_width` wide, at `scale`.
 fn label_half_width(sidebar_width: f32, scale: f32) -> f32 {
@@ -186,7 +184,7 @@ impl GhostexGpuiApp {
             .hover(|half| half.bg(appearance.hover))
             .child(titlebar_svg_icon(
                 CHOOSE_ICON,
-                15.0 * scale,
+                13.0 * scale,
                 appearance.chrome_icon,
             ))
             .when(tooltips, |half| {
