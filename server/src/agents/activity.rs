@@ -643,6 +643,19 @@ pub(crate) fn next_session_chat_prompt_setting(
         .or_else(|| params.get("tool_use_id"))
         .and_then(Value::as_str);
     let tool_input = params.get("toolInput").or_else(|| params.get("tool_input"));
+    // OpenCode's hook-free observer sends the card it built from OpenCode's own approval or form
+    // (`null` once none is open), since no hook payload names one (hookless_activity/opencode.rs).
+    if params
+        .get(crate::hookless_activity::OBSERVER_MARK)
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        match params.get(crate::hookless_activity::OBSERVED_PROMPT) {
+            Some(Value::String(prompt)) => return Some(prompt.clone()),
+            Some(Value::Null) => return None,
+            _ => {}
+        }
+    }
     let stored = previous.and_then(crate::session_chat::parse_stored_session_chat_prompt);
     if let Some(prompt) =
         crate::session_chat::derive_session_chat_prompt(tool_name, tool_input, event_name)

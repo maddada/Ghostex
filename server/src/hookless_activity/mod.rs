@@ -17,7 +17,7 @@ mod task;
 
 pub(crate) use drive::{claude_hook_superseded, OBSERVER_MARK};
 pub(crate) use hook::observe_hook_event;
-pub(crate) use opencode::observe_stream_event as observe_opencode_stream_event;
+pub(crate) use opencode::{observe_stream_event as observe_opencode_stream_event, OBSERVED_PROMPT};
 #[cfg(test)]
 pub(crate) use process_starts::ClaudeStartSource;
 pub(crate) use process_starts::{

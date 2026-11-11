@@ -152,6 +152,12 @@ fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool)
     } else {
         drive::set_tracked([].iter());
     }
+    if codex_drive {
+        // No hook reports the conversation here: follow the rollout Codex holds open.
+        observers
+            .codex
+            .find_open_rollouts(&state.paths.home_dir, &observers.sessions);
+    }
     let codex_events = if codex_on {
         observers.codex.poll(&observers.sessions)
     } else {
