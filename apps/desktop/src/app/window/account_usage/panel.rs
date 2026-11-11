@@ -62,19 +62,13 @@ impl AccountUsagePanel {
         account: Value,
         cx: &mut gpui::Context<Self>,
     ) -> Self {
-        let codex = text(&account, "provider") == "codex";
-        let logo = if codex {
-            crate::app::titlebar::account_usage::account_logo_svg(true)
-                .replace("#ffffff", "#8cbbe8")
-        } else {
-            crate::app::titlebar::account_usage::account_logo_svg(false).to_string()
-        };
+        let provider = super::provider::UsageProvider::of(&account);
         let tick = Self::start_tick(cx);
         Self {
             main_app,
             id,
             account: popup_account(&account),
-            palette: Palette::new(codex),
+            palette: Palette::new(provider),
             models_open: false,
             resets_open: false,
             revealed: false,
@@ -95,10 +89,7 @@ impl AccountUsagePanel {
             focus: cx.focus_handle(),
             scroll: ScrollHandle::new(),
             reported_height: Rc::new(Cell::new(0.0)),
-            logo: Arc::new(gpui::Image::from_bytes(
-                gpui::ImageFormat::Svg,
-                logo.into_bytes(),
-            )),
+            logo: provider.logo(),
             now: now(),
             tick,
         }
@@ -325,19 +316,9 @@ impl AccountUsagePanel {
     /// cells the panel's bottom buttons used to be, divided by the header's hairlines.
     fn render_header(&self) -> AnyElement {
         let p = self.palette;
-        let provider = if p.codex { "Codex" } else { "Claude" };
+        let provider = p.provider.name();
         let indicator = badge(&self.account);
-        let links = if p.codex {
-            [
-                "https://status.openai.com",
-                "https://chatgpt.com/codex/settings/usage",
-            ]
-        } else {
-            [
-                "https://status.anthropic.com",
-                "https://claude.ai/settings/usage",
-            ]
-        };
+        let links = p.provider.links();
         resource_header()
             .child(
                 h_flex()
@@ -382,7 +363,7 @@ impl AccountUsagePanel {
                     ("account-usage-dashboard", "Dashboard"),
                 ]
                 .into_iter()
-                .zip(links)
+                .zip(links.into_iter().flatten())
                 .enumerate()
                 .map(|(index, ((id, title), url))| {
                     // Notifications' header action cell, with its arrow after the label.
@@ -596,7 +577,7 @@ impl Render for AccountUsagePanel {
     /// User wants text in the usage dropdowns to be non-selectable.
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         // The theme and window glass can change while the panel is open.
-        self.palette = Palette::new(self.palette.codex);
+        self.palette = Palette::new(self.palette.provider);
         self.viewport =
             window.viewport_size().height.as_f32() - TITLEBAR_POPUP_READING_HEADER_HEIGHT - 2.0;
         // While the resets list folds, its clock sets the window's height each frame. A closed
@@ -633,7 +614,9 @@ impl Render for AccountUsagePanel {
             .child(self.render_account_label())
             .child(self.render_limits(cx))
             .children(notice)
-            .child(self.render_history())
+            .when(!self.palette.provider.usage_only(), |body| {
+                body.child(self.render_history())
+            })
             // CDXC:AgentProviders 2026-10-30 DECISION:
             // User: the panel's height fits its content, up to what fits on screen, then it
             // scrolls: no empty gap under Codex, no cut-off buttons on Claude. The body reports
@@ -796,6 +779,7 @@ pub(crate) fn estimated_height(account: &Value) -> f32 {
     use super::limits::*;
     let account = popup_account(account);
     let codex = text(&account, "provider") == "codex";
+    let provider = super::provider::UsageProvider::of(&account);
     let windows = array(&account, "usage");
     let scoped = windows.iter().any(|w| !text(w, "model").is_empty());
     let bars = 2 + usize::from(!codex && scoped);
@@ -805,6 +789,30 @@ pub(crate) fn estimated_height(account: &Value) -> f32 {
         .count()
         .saturating_sub(bars);
     let card_chrome = CARD_PADDING_Y * 2.0 + 2.0;
+    if provider.usage_only() {
+        // One row per window, then the plan and details rows; no history section.
+        let bars = windows.len().max(1) as f32;
+        let rows =
+            usize::from(!text(&account, "plan").is_empty()) + array(&account, "details").len();
+        let mut limits =
+            bars * (LIMIT_LINE + LIMIT_BAR_GAP + LIMIT_BAR_HEIGHT) + (bars - 1.0) * LIMIT_GAP;
+        if rows > 0 {
+            limits += 1.0 + SEPARATOR_MARGIN * 2.0 + rows as f32 * KV_ROW_HEIGHT;
+        }
+        let notice = account_notice(&account, now()).is_some();
+        return TITLEBAR_POPUP_READING_HEADER_HEIGHT
+            + 2.0
+            + BODY_PADDING_TOP
+            + BODY_PADDING
+            + SECTION_LABEL_HEIGHT
+            + card_chrome
+            + limits
+            + if notice {
+                NOTICE_GAP + 14.0 + 2.0 + NOTICE_LINE
+            } else {
+                0.0
+            };
+    }
     let mut limits = bars as f32 * (LIMIT_LINE + LIMIT_BAR_GAP + LIMIT_BAR_HEIGHT)
         + (bars - 1) as f32 * LIMIT_GAP;
     if shown_others > 0 {

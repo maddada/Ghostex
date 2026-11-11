@@ -8,6 +8,9 @@ impl AccountUsagePanel {
     /// SEE-ALSO: packages/shared/account-usage-windows.ts (deleted 2026-10-01) and apps/desktop/src/app/titlebar/account_usage.rs select the two tightest headline limits.
     pub(super) fn render_limits(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let p = self.palette;
+        if p.provider.usage_only() {
+            return self.render_usage_only_limits();
+        }
         let windows = array(&self.account, "usage");
         let main: Vec<_> = windows
             .iter()
@@ -162,6 +165,56 @@ impl AccountUsagePanel {
             if self.resets_fold.present() {
                 card = card.child(self.render_resets_fold(cx));
             }
+        }
+        card.into_any_element()
+    }
+
+    /// A Gemini, Cursor or Copilot account's card: a row for each window gxserver lists, then its
+    /// plan and the details it reported (CDXC:AgentProviders 2026-11-11 in provider.rs).
+    fn render_usage_only_limits(&self) -> AnyElement {
+        let p = self.palette;
+        let windows = array(&self.account, "usage");
+        let mut bars = v_flex().w_full().gap(px(LIMIT_GAP));
+        if windows.is_empty() {
+            bars = bars.child(self.render_bar(None, "Usage".into(), 13.0));
+        }
+        for window in windows {
+            bars = bars.child(self.render_bar(
+                Some(window),
+                super::provider::window_limit_label(window),
+                13.0,
+            ));
+        }
+        let mut rows: Vec<(String, String)> = Vec::new();
+        if let Some(plan) = self.account["plan"]
+            .as_str()
+            .filter(|plan| !plan.is_empty())
+        {
+            rows.push(("Plan".into(), plan.to_string()));
+        }
+        for detail in array(&self.account, "details") {
+            rows.push((
+                text(detail, "label").to_string(),
+                text(detail, "value").to_string(),
+            ));
+        }
+        let mut card = p.card().child(bars);
+        if !rows.is_empty() {
+            card = card.child(separator(p));
+        }
+        for (title, value) in rows {
+            card = card.child(
+                h_flex()
+                    .w_full()
+                    .min_h(px(KV_ROW_HEIGHT))
+                    .items_center()
+                    .justify_between()
+                    .gap(px(8.0))
+                    .text_size(px(12.5))
+                    .text_color(p.muted)
+                    .child(title)
+                    .child(label(value, 12.5, chrome_ink().opacity(0.80).into())),
+            );
         }
         card.into_any_element()
     }
