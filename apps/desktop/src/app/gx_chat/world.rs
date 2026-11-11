@@ -197,7 +197,7 @@ pub(super) struct World {
     /// When the timer pass last compared the chats' settings with Settings.
     settings_checked_at: Option<Instant>,
     /// The session list revision each chat was last handed (`session_directory.rs`).
-    directory_sent: std::collections::HashMap<String, u64>,
+    directory_sent: std::collections::HashMap<String, DirectorySent>,
     /// The computers revision each chat was last handed (`computers.rs`).
     computer_sent: std::collections::HashMap<String, u64>,
     /// Read aloud's app-wide facts and the one speaker (`read_aloud.rs`).
@@ -206,6 +206,18 @@ pub(super) struct World {
     /// line (`worker.rs`). The runner clears it before each turn.
     pub(super) slowest_drive: Option<(String, Duration)>,
 }
+
+/// The session list a chat was last handed: its revision, the revision of its names, and when.
+#[derive(Clone, Copy)]
+struct DirectorySent {
+    revision: u64,
+    names_revision: u64,
+    at: Instant,
+}
+
+/// How often a chat is handed a session list in which only live fields moved (a session's
+/// activity or recency, which the composer's `+` picker shows). A name that changed goes at once.
+const LIVE_DIRECTORY_EVERY: Duration = Duration::from_secs(2);
 
 /// When the host must wake with no command: the core's timers and the draft retry ladder.
 pub(super) fn next_wake(world: &World) -> Option<Instant> {
@@ -630,15 +642,34 @@ fn settings_pass(world: &mut World) {
 /// from the UI thread, and a chat with a view is driven often enough (its frames, its paint's
 /// queries, its stall watchdog) to pick a rename up within a moment.
 fn directory_pass(world: &mut World) {
-    let (revision, sessions) = super::session_directory::current();
+    let (revision, names_revision, sessions) = super::session_directory::current_named();
     if revision == 0 {
         return;
     }
+    // CDXC:SessionChat 2026-11-11 WHY:
+    // User: "why is the chat engine busy, it used to be so fast". The list moves with every
+    // session's activity, many times a second while several agents work, and every move was a
+    // turn of every retained chat, each of which builds a document. Only the `+` picker reads
+    // those live fields, so a chat is handed them at most every `LIVE_DIRECTORY_EVERY`, and only
+    // while one of its views is on screen; a name, which the transcript reads, still goes at once
+    // to every chat.
+    let now = Instant::now();
     let stale: Vec<String> = world
         .store
         .keys()
         .into_iter()
-        .filter(|key| world.directory_sent.get(key) != Some(&revision))
+        .filter(|key| match world.directory_sent.get(key) {
+            None => true,
+            Some(sent) if sent.names_revision != names_revision => true,
+            Some(sent) => {
+                sent.revision != revision
+                    && now.saturating_duration_since(sent.at) >= LIVE_DIRECTORY_EVERY
+                    && world
+                        .views
+                        .get(key)
+                        .is_some_and(|views| views.iter().any(|view| !view.sink.paused))
+            }
+        })
         .filter(|key| {
             world
                 .store
@@ -647,7 +678,14 @@ fn directory_pass(world: &mut World) {
         })
         .collect();
     for key in stale {
-        world.directory_sent.insert(key.clone(), revision);
+        world.directory_sent.insert(
+            key.clone(),
+            DirectorySent {
+                revision,
+                names_revision,
+                at: now,
+            },
+        );
         world.driving = Some(key.clone());
         let event = Event::SessionDirectoryChanged {
             sessions: (*sessions).clone(),
