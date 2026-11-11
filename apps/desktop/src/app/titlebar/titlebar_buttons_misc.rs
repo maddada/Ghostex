@@ -180,6 +180,7 @@ impl GhostexGpuiApp {
             .gap(px(7.0))
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .px(px(14.0))
+            .rounded(px(TITLEBAR_BUTTON_RADIUS))
             .text_size(px(13.55))
             .font_weight(FontWeight::NORMAL)
             .line_height(px(TITLEBAR_CONTROL_HEIGHT))

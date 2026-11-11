@@ -357,56 +357,93 @@ impl AccountUsagePanel {
                         )
                     }),
             )
-            .children(
-                [
-                    ("account-usage-status", "Status"),
-                    ("account-usage-dashboard", "Dashboard"),
-                ]
-                .into_iter()
-                .zip(links.into_iter().flatten())
-                .enumerate()
-                .map(|(index, ((id, title), url))| {
-                    // Notifications' header action cell, with its arrow after the label.
-                    h_flex()
-                        .id(id)
-                        .tab_index(0)
-                        .when(index == 1, |this| {
-                            this.rounded_tr(px(RESOURCE_PANEL_RADIUS - 1.0))
-                        })
-                        .h_full()
-                        .flex_shrink_0()
-                        .px(px(11.0))
-                        .items_center()
-                        .gap(px(4.0))
-                        .border_l_1()
-                        .border_color(chrome_ink().opacity(0.12))
-                        .whitespace_nowrap()
-                        .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
-                        .text_color(chrome_ink().opacity(0.78))
-                        .cursor_pointer()
-                        .hover(|this| {
-                            this.bg(chrome_ink().opacity(0.14))
-                                .text_color(chrome_ink().opacity(0.94))
-                        })
-                        .focus_visible(|this| this.bg(chrome_ink().opacity(0.14)))
-                        .on_click(move |_, _, _| {
-                            let _ = gpui_open_external_http_url(url);
-                        })
-                        .on_key_down(move |event, _, cx| {
-                            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                                cx.stop_propagation();
-                                let _ = gpui_open_external_http_url(url);
-                            }
-                        })
-                        .child(title)
-                        .child(titlebar_svg_icon(
+            .children(self.header_cells(links))
+            .into_any_element()
+    }
+
+    /// The header's action cells: Status and Dashboard where the provider has them, and for a
+    /// usage-only account a Settings cell that opens it in Settings > Accounts.
+    ///
+    /// CDXC:AgentProviders 2026-11-11 DECISION:
+    /// User: "clicking on gemini shows the settings dialog. pls fix make it show a new pop up but should have the 4 sliders in settings there and few details. same for cursor". A usage-only meter opens this popup, with a small way into the account's Settings.
+    fn header_cells(&self, links: Option<[&'static str; 2]>) -> Vec<AnyElement> {
+        type Run = std::rc::Rc<dyn Fn(&mut App)>;
+        let mut cells: Vec<(&'static str, &'static str, bool, Run)> = Vec::new();
+        for ((id, title), url) in [
+            ("account-usage-status", "Status"),
+            ("account-usage-dashboard", "Dashboard"),
+        ]
+        .into_iter()
+        .zip(links.into_iter().flatten())
+        {
+            let run: Run = std::rc::Rc::new(move |_| {
+                let _ = gpui_open_external_http_url(url);
+            });
+            cells.push((id, title, true, run));
+        }
+        if self.palette.provider.usage_only() {
+            let (id, app, account) = (
+                self.id,
+                self.main_app.clone(),
+                text(&self.account, "id").to_string(),
+            );
+            let run: Run = std::rc::Rc::new(move |cx: &mut App| {
+                let (app, account) = (app.clone(), account.clone());
+                cx.defer(move |cx| {
+                    let _ = app.update(cx, |app, cx| {
+                        app.open_accounts_from_usage_popup(id, Some(account), cx);
+                    });
+                });
+            });
+            cells.push(("account-usage-settings", "Settings", false, run));
+        }
+        let count = cells.len();
+        cells
+            .into_iter()
+            .enumerate()
+            .map(|(index, (id, title, external, run))| {
+                let key_run = run.clone();
+                // Notifications' header action cell, with its arrow after the label.
+                h_flex()
+                    .id(id)
+                    .tab_index(0)
+                    .when(index + 1 == count, |this| {
+                        this.rounded_tr(px(RESOURCE_PANEL_RADIUS - 1.0))
+                    })
+                    .h_full()
+                    .flex_shrink_0()
+                    .px(px(11.0))
+                    .items_center()
+                    .gap(px(4.0))
+                    .border_l_1()
+                    .border_color(chrome_ink().opacity(0.12))
+                    .whitespace_nowrap()
+                    .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
+                    .text_color(chrome_ink().opacity(0.78))
+                    .cursor_pointer()
+                    .hover(|this| {
+                        this.bg(chrome_ink().opacity(0.14))
+                            .text_color(chrome_ink().opacity(0.94))
+                    })
+                    .focus_visible(|this| this.bg(chrome_ink().opacity(0.14)))
+                    .on_click(move |_, _, cx| run(cx))
+                    .on_key_down(move |event, _, cx| {
+                        if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                            cx.stop_propagation();
+                            key_run(cx);
+                        }
+                    })
+                    .child(title)
+                    .when(external, |this| {
+                        this.child(titlebar_svg_icon(
                             "titlebar/arrow-up-right.svg",
                             TITLEBAR_POPUP_READING_HEADER_BUTTON_ICON_SIZE - 3.0,
                             chrome_ink().opacity(0.78).into(),
                         ))
-                }),
-            )
-            .into_any_element()
+                    })
+                    .into_any_element()
+            })
+            .collect()
     }
 
     /// The account's section label: "THIS ACCOUNT", its email when the badge doesn't already

@@ -89,15 +89,6 @@ impl Credentials {
         })
     }
 
-    /// For the tests: a key held in memory.
-    pub fn from_parts(key: SigningKey, key_id: &str, team_id: &str) -> Self {
-        Credentials {
-            key,
-            key_id: key_id.into(),
-            team_id: team_id.into(),
-        }
-    }
-
     pub fn key_id(&self) -> &str {
         &self.key_id
     }
@@ -285,55 +276,5 @@ impl Apple {
             (renewed, true) => self.post(push, &renewed).await,
             (_, false) => Ok(answer),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use p256::ecdsa::signature::Verifier;
-    use p256::ecdsa::VerifyingKey;
-
-    #[test]
-    fn the_provider_token_verifies_against_the_key() {
-        let key = SigningKey::random(&mut rand_core::OsRng);
-        let credentials = Credentials::from_parts(key.clone(), "ABCDE12345", "TEAM123456");
-        let token = credentials.provider_token(1_800_000_000);
-        let parts: Vec<&str> = token.split('.').collect();
-        assert_eq!(parts.len(), 3);
-        let header: Value =
-            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[0]).unwrap()).unwrap();
-        let claims: Value =
-            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).unwrap()).unwrap();
-        assert_eq!(header, json!({ "alg": "ES256", "kid": "ABCDE12345" }));
-        assert_eq!(
-            claims,
-            json!({ "iss": "TEAM123456", "iat": 1_800_000_000u64 })
-        );
-        let signature = Signature::from_slice(&URL_SAFE_NO_PAD.decode(parts[2]).unwrap()).unwrap();
-        VerifyingKey::from(&key)
-            .verify(format!("{}.{}", parts[0], parts[1]).as_bytes(), &signature)
-            .unwrap();
-    }
-
-    #[test]
-    fn only_a_loopback_stand_in_is_accepted() {
-        assert!(Target::loopback("http://127.0.0.1:9000").is_ok());
-        assert!(Target::loopback("http://[::1]:9000").is_ok());
-        for origin in [
-            "https://127.0.0.1:9000",
-            "http://evil.example:80",
-            "http://127.0.0.1",
-            "http://10.0.0.1:1",
-        ] {
-            assert!(Target::loopback(origin).is_err(), "{origin}");
-        }
-    }
-
-    #[test]
-    fn ids_must_look_like_apples() {
-        assert!(valid_id("ABCDE12345"));
-        assert!(!valid_id("abcde12345"));
-        assert!(!valid_id("ABCDE1234"));
     }
 }

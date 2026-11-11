@@ -25,9 +25,14 @@ use std::time::Duration;
 pub(super) const QUIET_TEXT_GAP: f32 = 2.0;
 /// The hover group of one quiet line, which lights its icons and shows its chevron.
 const QUIET_GROUP: &str = "native-chat-quiet-line";
-/// The lines' type: 12.5px on a 20px line.
-pub(super) const TEXT_SIZE: f32 = 12.5;
-pub(super) const LINE_HEIGHT: f32 = 20.0;
+/// The lines' type: the chat's message size, on a 22px line.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "please make sure everything shown here has the same font size as regular user/agent chat messages not different font". The quiet lines, tool call group headers and rows, the one-line cards ("Worked for", "Message from", tool cards) and notices use the message size (`PROSE_SIZE`, scaled with the chat's zoom) and the chat's own font; secondary text is quieter through its tone. Only metadata at a line's end stays smaller: a message's time, a call's duration and time, a count pill or badge, a failed count. Code keeps its monospace at the inline code size (0.9 of the message size). Supersedes the 2026-11-07 12.5px lines, which were the builder's pick.
+pub(super) const TEXT_SIZE: f32 = super::chat_text_look::PROSE_SIZE;
+pub(super) const LINE_HEIGHT: f32 = 22.0;
+/// A step's argument in the chat's monospace, at the inline code size.
+const CODE_SIZE: f32 = super::chat_text_look::PROSE_SIZE * 0.9;
 /// The space between a line's icons and its text.
 pub(super) const ICON_GAP: f32 = 6.0;
 /// How much of the muted text colour a line shows at rest; hovered, it shows all of it.
@@ -328,24 +333,30 @@ impl NativeChatView {
         cx.notify();
     }
 
-    /// An opened line's steps: a 1px rail at a tenth of the foreground, the rows 16px in from it.
-    pub(super) fn quiet_steps(&self, rows: Vec<AnyElement>, p: &ChatAppearance) -> AnyElement {
+    /// An opened line's steps: a 1px rail at a tenth of the foreground, the rows 16px in from it;
+    /// a click on the rail shuts the line `key` (disclosure_body.rs `closing_rail`).
+    pub(super) fn quiet_steps(
+        &self,
+        key: &str,
+        rows: Vec<AnyElement>,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         div()
             .pt(px(2.0 * s))
             .pb(px(2.0 * s))
             .min_w_0()
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .min_w_0()
-                    .ml(px(6.0 * s))
-                    .pl(px(16.0 * s))
-                    .border_l(px(s))
-                    .border_color(p.foreground.opacity(0.1))
-                    .children(rows),
-            )
+            .child(super::disclosure_body::closing_rail(
+                p,
+                key.to_string(),
+                6.0,
+                23.0,
+                0.0,
+                0.0,
+                rows,
+                cx,
+            ))
             .into_any_element()
     }
 
@@ -413,7 +424,7 @@ impl NativeChatView {
                     .min_w_0()
                     .truncate()
                     .font_family(super::fonts::CHAT_MONO)
-                    .text_size(px(12.0 * s))
+                    .text_size(px(CODE_SIZE * s))
                     .child(self.find_label(&format!("tool-preview:{message_id}:{index}"), preview)),
             )
             .when(has_detail, |row| {
@@ -616,7 +627,7 @@ impl NativeChatView {
                 );
             }
             if !steps.is_empty() {
-                row = row.child(self.quiet_steps(steps, p));
+                row = row.child(self.quiet_steps(&key, steps, p, cx));
             }
         } else if let Some(strip) = self.read_picture_strip(
             &format!("{key}:read"),

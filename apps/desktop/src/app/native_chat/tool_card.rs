@@ -357,7 +357,7 @@ impl NativeChatView {
             div()
                 .min_w_0()
                 .truncate()
-                .text_size(px(13.5 * s))
+                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                 .with_throttled_animation(
                     SharedString::from(format!("{key}:live")),
                     SHIMMER,
@@ -370,7 +370,7 @@ impl NativeChatView {
             let plain = div()
                 .min_w_0()
                 .truncate()
-                .text_size(px(13.5 * s))
+                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                 .text_color(p.muted)
                 .child(title.clone());
             if animate {
@@ -550,7 +550,7 @@ impl NativeChatView {
             div()
                 .min_w_0()
                 .truncate()
-                .text_size(px(13.5 * s))
+                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                 .with_throttled_animation(
                     SharedString::from(format!("{key}:shimmer")),
                     SHIMMER,
@@ -563,7 +563,7 @@ impl NativeChatView {
             div()
                 .min_w_0()
                 .truncate()
-                .text_size(px(13.5 * s))
+                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                 .text_color(label_color)
                 .child(label.clone())
                 .into_any_element()
@@ -683,7 +683,7 @@ impl NativeChatView {
                             div()
                                 .min_w_0()
                                 .truncate()
-                                .text_size(px(12.0 * s))
+                                .text_size(px(super::chat_text_look::PROSE_SIZE * s))
                                 .text_color(p.muted)
                                 .child(reason.clone()),
                         )

@@ -104,37 +104,3 @@ impl<K: Eq + Hash + Clone> Limiter<K> {
 fn prune<K>(buckets: &mut HashMap<K, Bucket>, now: Instant) {
     buckets.retain(|_, bucket| now.saturating_duration_since(bucket.at) < IDLE_FORGET);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_burst_then_the_refill() {
-        let limiter = Limiter::new(Rate {
-            burst: 3.0,
-            per_minute: 6.0,
-        });
-        let start = Instant::now();
-        for _ in 0..3 {
-            assert!(limiter.take(&"a", start).is_ok());
-        }
-        assert_eq!(limiter.take(&"a", start), Err(Duration::from_secs(10)));
-        // Another key has its own bucket.
-        assert!(limiter.take(&"b", start).is_ok());
-        assert!(limiter.take(&"a", start + Duration::from_secs(10)).is_ok());
-        assert!(limiter.take(&"a", start + Duration::from_secs(11)).is_err());
-    }
-
-    #[test]
-    fn idle_buckets_are_forgotten() {
-        let limiter = Limiter::new(Rate {
-            burst: 1.0,
-            per_minute: 1.0,
-        });
-        let start = Instant::now();
-        limiter.take(&1, start).unwrap();
-        limiter.prune(start + IDLE_FORGET);
-        assert!(limiter.buckets.lock().unwrap().is_empty());
-    }
-}

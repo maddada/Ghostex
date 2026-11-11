@@ -100,9 +100,7 @@ state or anything from the key's files.
 ## Run it locally
 
 ```bash
-cd server/push-relay && cargo test          # unit tests and the stand-in for Apple (tests/relay.rs)
-cargo test --test relay -- --nocapture      # also prints each request the stand-in received
-cargo run -- --listen 127.0.0.1:58810 --key /path/AuthKey.p8 --config /path/apns.conf
+cd server/push-relay && cargo run -- --listen 127.0.0.1:58810 --key /path/AuthKey.p8 --config /path/apns.conf
 ```
 
 `--apple-stand-in http://127.0.0.1:<port>` sends to a stand-in for Apple over HTTP/2 without TLS

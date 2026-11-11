@@ -77,20 +77,14 @@ pub(super) struct QuietPlace {
 }
 
 /// The rail an opened line's rows sit on, as an opened Reduced line's steps do (quiet_work.rs).
-fn rail(rows: Vec<AnyElement>, bottom: f32, p: &ChatAppearance) -> AnyElement {
-    let s = p.scale;
-    div()
-        .flex()
-        .flex_col()
-        .min_w_0()
-        .ml(px(6.0 * s))
-        .pl(px(16.0 * s))
-        .pb(px(bottom * s))
-        .gap(px(8.0 * s))
-        .border_l(px(s))
-        .border_color(p.foreground.opacity(0.1))
-        .children(rows)
-        .into_any_element()
+fn rail(
+    key: &str,
+    rows: Vec<AnyElement>,
+    bottom: f32,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    super::disclosure_body::closing_rail(p, key.to_string(), 6.0, 23.0, 8.0, bottom, rows, cx)
 }
 
 /// `item` without what of it stays in view after its line.
@@ -317,7 +311,7 @@ impl NativeChatView {
                         0.0
                     };
                     let gap = if index == line.start { 4.0 } else { 0.0 };
-                    parts.push((rail(nested, bottom, p), gap));
+                    parts.push((rail(&line.key, nested, bottom, p, cx), gap));
                 }
                 if let Some(tail) = tail {
                     let kept = kept_parts(item, tail);
@@ -397,7 +391,7 @@ impl NativeChatView {
             if open {
                 let cards = self.quiet_cards(line);
                 if let Some(stack) = self.work_card_stack(&cards, p, cx) {
-                    parts.push((rail(vec![stack], 0.0, p), 4.0));
+                    parts.push((rail(&line.key, vec![stack], 0.0, p, cx), 4.0));
                 }
             }
         }
