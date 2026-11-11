@@ -437,9 +437,9 @@ impl NativeChatView {
             .collect()
     }
 
-    /// The quiet line itself: an icon (the turning loader while the turn runs, the messages icon on
-    /// a line reports came in on, else the clock and the green check), its counts, its time, and
-    /// the chevron that shows on hover or while it is open.
+    /// The quiet line itself: an icon (the messages icon on a line reports came in on, else the
+    /// clock) and the green check (the turning loader while the turn runs), its counts, its time,
+    /// and the chevron that shows on hover or while it is open.
     fn quiet_view_line(
         &self,
         line: &QuietStretch,
@@ -447,13 +447,19 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
-        let icons = if line.running {
-            vec![loader(&line.key, p, cx.reduce_motion())]
-        } else if !line.time.is_empty() {
-            vec![line_icon("titlebar/messages.svg", 13.0, p)]
+        // Every quiet line starts with the same two marks, a 13px icon then the 12px tick (the
+        // turning loader while the turn runs), so their words line up one under another.
+        let lead = if !line.time.is_empty() {
+            "titlebar/messages.svg"
         } else {
-            vec![line_icon("titlebar/clock.svg", 13.0, p), check(p)]
+            "titlebar/clock.svg"
         };
+        let mark = if line.running {
+            loader(&line.key, p, cx.reduce_motion())
+        } else {
+            check(p)
+        };
+        let icons = vec![line_icon(lead, 13.0, p), mark];
         let mut segments: Vec<QuietSegment> = vec![(line.text.clone(), None)];
         if !line.time.is_empty() {
             segments.push((format!("\u{2002}{}", line.time), None));
@@ -481,7 +487,7 @@ impl NativeChatView {
     }
 
     /// An answers card drawn shut as its own line (gx-chat-core `transcript/quiet_view.rs`
-    /// `QuietAnswers` has the user's words): the answered check, "You answered “…”" and its count,
+    /// `QuietAnswers` has the user's words): the question card's icon, the answered check, "You answered “…”" and its count,
     /// and the chevron; opened, the card follows it.
     pub(super) fn quiet_answers_line(
         &self,
@@ -501,7 +507,11 @@ impl NativeChatView {
         self.quiet_line(
             card.key.clone(),
             spoken,
-            vec![check(p)],
+            // The question card's own icon, then the tick, as every quiet line starts.
+            vec![
+                line_icon("titlebar/chat-card-checklist.svg", 13.0, p),
+                check(p),
+            ],
             styled_segments(segments),
             open,
             true,
