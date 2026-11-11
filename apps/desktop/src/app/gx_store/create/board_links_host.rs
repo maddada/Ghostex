@@ -381,6 +381,9 @@ async fn start_worktree_work(
             .map(project_id)
             .filter(|id| !id.is_empty())
             .ok_or("gxserver did not register the new checkout as a worktree project.")?;
+        let _ = this.update(cx, |this, cx| {
+            this.git_show_worktree_warnings(&response, cx)
+        });
         let session = create_agent_record(
             this,
             cx,

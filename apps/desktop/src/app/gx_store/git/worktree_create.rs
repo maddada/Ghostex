@@ -151,10 +151,40 @@ impl GhostexGpuiApp {
                     projectless: false,
                 };
                 this.gx_store.git.trusted_worktrees = None;
+                this.git_show_worktree_warnings(&answer, cx);
                 this.git_worktree_ready(&worktree, agent, request.prompt, open, &toast_id, cx);
             });
         })
         .detach();
+    }
+
+    /// Shows each warning a create or open worktree answer carries (`warnings: [{ kind, message }]`,
+    /// gxserver's Beads hooks repair in `server/src/server/worktree_ops/projects.rs`) as a notice
+    /// that waits for the user. The worktree is ready either way, and its own toast still follows.
+    /// gxserver's full text, with the repository path and the reason, is behind Copy details.
+    pub(crate) fn git_show_worktree_warnings(
+        &mut self,
+        answer: &Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let warnings = answer.get("warnings").and_then(Value::as_array);
+        for warning in warnings.into_iter().flatten() {
+            let kind = warning.get("kind").and_then(Value::as_str).unwrap_or("");
+            let message = warning
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim();
+            let Some((title, description)) = worktree_warning_notice(kind, message) else {
+                continue;
+            };
+            let mut options = ToastOptions::persistent(&new_toast_id("worktree-warning"))
+                .with_description(description);
+            if !message.is_empty() {
+                options = options.with_copy_text(message);
+            }
+            self.git_toast(GitToastLevel::Warning, title, options, cx);
+        }
     }
 
     /// The source project and the one call, or the refusal the dialog's toast shows.
@@ -332,5 +362,26 @@ impl GhostexGpuiApp {
             return;
         }
         self.git_focus_project(&worktree.key, cx);
+    }
+}
+
+/// The notice for one worktree warning: a short title, then what happened and what to do. An
+/// unknown kind from a newer gxserver shows its own message; one with no message shows nothing.
+fn worktree_warning_notice(kind: &str, message: &str) -> Option<(&'static str, String)> {
+    match kind {
+        "beadsHooksNeeded" => Some((
+            "Your git hooks are still off",
+            "An older Ghostex replaced this repository's git hooks with its Beads hooks, and Beads still uses them here. To switch back, run git config --unset core.hooksPath, then bd hooks install, in the repository.".to_string(),
+        )),
+        "beadsHooksUnchecked" => Some((
+            "Git hooks not checked",
+            "Ghostex could not check whether this repository still needs the Beads hooks an older Ghostex set up, so your own git hooks stay off for now. Copy the details to see what failed, fix it, then open the worktree again.".to_string(),
+        )),
+        "beadsHooksLeftAsIs" => Some((
+            "Git hooks setting left alone",
+            "The Beads hooks folder an older Ghostex set up was edited, so Ghostex did not change this repository's git hooks setting. Check core.hooksPath in the repository if your own hooks should run.".to_string(),
+        )),
+        _ if !message.is_empty() => Some(("Worktree created with a warning", message.to_string())),
+        _ => None,
     }
 }
