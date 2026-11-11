@@ -30,15 +30,19 @@ pub(crate) fn extension_icon_color(p: &SettingsPalette) -> gpui::Rgba {
     }
 }
 
-/// The columns of `.extension-card-grid` for a grid `width` wide (its container queries).
-///
-/// Two tiles to a row (CDXC:Extensions 2026-11-09 in `grid_card`), one in a narrow column.
+/// The columns of `.extension-card-grid` for a grid `width` wide (its container queries): two
+/// cards to a row, one in a narrow column. Settings > Updates' cards use it; the Extensions page
+/// lists its cards one to a row ([`EXTENSION_LIST_COLUMNS`]).
 pub(crate) fn grid_columns(width: f32) -> usize {
     if width <= 420.0 { 1 } else { 2 }
 }
 
 /// The width of the page column the grids fill: the page column, or less in a narrow window
 /// (the Settings body's 16px padding and gap around the 192px rail, and the page's 20px gutters).
+/// The Extensions page's cards (Built-in, Installed, Store, Sharing and the user's own views)
+/// stand one to a row (CDXC:Extensions 2026-11-11 in `grid_card`).
+pub(crate) const EXTENSION_LIST_COLUMNS: usize = 1;
+
 pub(crate) fn page_column_width(window: &Window) -> f32 {
     let viewport = f32::from(window.viewport_size().width);
     let area = viewport - 16.0 * 3.0 - super::super::super::rail::RAIL_WIDTH;
@@ -263,6 +267,8 @@ fn keep_press<E: gpui::InteractiveElement>(element: E, guard: bool) -> E {
 /// page of its own (an installed extension, a Community entry) opens that page when clicked
 /// anywhere but its switch, its buttons and its (i), with the pointer cursor over it; Back returns
 /// to the same tab and scroll. The hover Details button it replaces is gone.
+/// CDXC:Extensions 2026-11-11 DECISION:
+/// User, of the Built-in tiles two to a row: "also i dont like the 2 in a row look", with "it's super hard to tell which are disabled and which enabled" (for 11.4.0). Every card list on the Extensions page now has one card to a row (`EXTENSION_LIST_COLUMNS`), so the description gets the page's width and wraps to a second line before it is cut. A card that is off draws its title in the muted grey and its icon fainter, so on and off read at a glance with the switch. Supersedes "two to a row" in the first 2026-11-09 decision above; the rest of that tile stands.
 pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
     let group: SharedString = format!("extension-card-{}", spec.id).into();
     let opens = spec.open.is_some();
@@ -296,7 +302,7 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
         div()
             .min_w_0()
             .overflow_hidden()
-            .whitespace_nowrap()
+            .line_clamp(2)
             .text_ellipsis()
             .text_size(px(12.5))
             .line_height(px(17.0))
@@ -316,7 +322,7 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 .text_ellipsis()
                 .text_size(px(14.0))
                 .line_height(px(20.0))
-                .text_color(hsla(p.foreground))
+                .text_color(hsla(if enabled { p.foreground } else { p.muted }))
                 .child(spec.title),
         )
         .children(spec.badge.map(|badge| {
@@ -407,7 +413,7 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                     div()
                         .flex_shrink_0()
                         .flex()
-                        .when(!enabled, |this| this.opacity(0.55))
+                        .when(!enabled, |this| this.opacity(0.4))
                         .child(spec.icon),
                 )
                 .child(

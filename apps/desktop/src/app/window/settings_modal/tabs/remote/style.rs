@@ -198,40 +198,9 @@ pub(super) fn spinner(
         .into_any_element()
 }
 
-/// The shadcn `Switch size='sm'` in the Settings skin: a 24x16 track, 12px thumb.
+/// The shadcn `Switch size='sm'` in the Settings skin: the small Settings switch.
 pub(super) fn small_switch(p: &SettingsPalette, checked: bool) -> AnyElement {
-    let thumb = if checked || p.light {
-        p.surface
-    } else {
-        p.foreground
-    };
-    div()
-        .flex_shrink_0()
-        .w(px(24.0))
-        .h(px(16.0))
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(if checked {
-            transparent()
-        } else {
-            hsla(p.hairline)
-        })
-        .bg(hsla(if checked {
-            p.foreground
-        } else {
-            p.raised_hover
-        }))
-        .flex()
-        .items_center()
-        .child(
-            div()
-                .size(px(12.0))
-                .ml(px(if checked { 10.0 } else { 1.0 }))
-                .rounded(px(4.0))
-                .bg(hsla(thumb))
-                .shadow_sm(),
-        )
-        .into_any_element()
+    super::super::super::fields::checkbox::settings_small_switch(p, checked, false)
 }
 
 /// One option of the raised `SegmentedControl`.

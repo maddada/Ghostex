@@ -14,8 +14,8 @@ use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{SettingsValues, post_store_message};
 use super::ExtensionsTab;
 use super::cards::{
-    GridCardSpec, GridCell, add_view_card, card_grid, card_group, card_option_row, card_status,
-    empty_state, extension_icon_tile, grid_card, grid_columns, page_column_width, tabler_tile,
+    EXTENSION_LIST_COLUMNS, GridCardSpec, GridCell, add_view_card, card_grid, card_group,
+    card_option_row, card_status, empty_state, extension_icon_tile, grid_card, tabler_tile,
 };
 use super::data::{
     InstalledExtension, OfficialExtension, custom_views, extension_view_scope_key, filter_store,
@@ -205,7 +205,7 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let columns = grid_columns(page_column_width(window));
+        let columns = EXTENSION_LIST_COLUMNS;
         let values = self.store.read(cx).values();
         let status = self
             .store
@@ -553,7 +553,7 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let columns = grid_columns(page_column_width(window));
+        let columns = EXTENSION_LIST_COLUMNS;
         let filter = self.page_filter(cx);
         let (mut installed_matches, mut store_matches) = filter_store(
             &filter,
@@ -828,7 +828,7 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let columns = grid_columns(page_column_width(window));
+        let columns = EXTENSION_LIST_COLUMNS;
         let filter = self.page_filter(cx);
         let filter_active = filter.is_active();
         let visible: Vec<super::data::CustomView> = self

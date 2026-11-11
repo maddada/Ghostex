@@ -463,9 +463,9 @@ struct Colors {
     hover: Hsla,
     track: Hsla,
     fill: Hsla,
-    switch_on: Hsla,
     switch_off: Hsla,
     thumb: Hsla,
+    light: bool,
     /// The panel's labelled buttons (CDXC:AppModal 2026-10-14 on `neutral_button_fills`).
     button: ChatButtonFills,
     segment_track: Hsla,
@@ -502,13 +502,13 @@ impl Colors {
             } else {
                 rgb(0xb9b9b9).into()
             },
-            switch_on: rgb(if light { 0x262626 } else { 0xe5e5e5 }).into(),
             switch_off: if light {
                 gpui::Hsla::from(rgb(0x000000)).opacity(0.144)
             } else {
                 gpui::Hsla::from(rgb(0xffffff)).opacity(0.135)
             },
             thumb: background,
+            light,
             button: appearance.neutral_button_fills(),
             segment_track: rail.track.into(),
             segment_text: rail.text.into(),
@@ -850,31 +850,19 @@ impl ChatOptionMenuPanel {
     }
 
     fn switch(&self, checked: bool, colors: &Colors, s: f32) -> AnyElement {
-        div()
-            .flex_shrink_0()
-            .w(px(32.0 * s))
-            .h(px(20.0 * s))
-            .rounded(px(6.0 * s))
-            .border_2()
-            .border_color(if checked {
-                colors.switch_on
-            } else {
-                gpui::transparent_black()
-            })
-            .bg(if checked {
-                colors.switch_on
-            } else {
-                colors.switch_off
-            })
-            .child(
-                div()
-                    .size(px(16.0 * s))
-                    .ml(px(if checked { 12.0 } else { 0.0 } * s))
-                    .rounded(px(4.0 * s))
-                    .bg(colors.thumb)
-                    .shadow_sm(),
-            )
-            .into_any_element()
+        use crate::app::window::native_modal_kit::{SwitchOff, SwitchShape, draw_switch};
+        draw_switch(
+            SwitchShape::REGULAR.scaled(s),
+            SwitchOff {
+                track: colors.switch_off.into(),
+                edge: None,
+                thumb: colors.thumb.into(),
+            },
+            colors.light,
+            checked,
+            false,
+        )
+        .into_any_element()
     }
 
     fn render_block(

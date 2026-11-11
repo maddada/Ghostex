@@ -72,43 +72,14 @@ pub(crate) fn settings_small_switch(
     checked: bool,
     disabled: bool,
 ) -> AnyElement {
-    let thumb = if checked {
-        SWITCH_ON_THUMB
-    } else if !p.light {
-        p.foreground
-    } else if p.glass {
-        p.modal.solid_surface
-    } else {
-        p.surface
-    };
-    div()
-        .flex_shrink_0()
-        .w(px(24.0))
-        .h(px(16.0))
-        .rounded(px(6.0))
-        .border_1()
-        .border_color(if checked {
-            transparent()
-        } else {
-            hsla(p.hairline)
-        })
-        .bg(hsla(if checked {
-            switch_on_track(p.foreground, p.light)
-        } else {
-            p.raised_hover
-        }))
-        .when(disabled, |this| this.opacity(0.5))
-        .flex()
-        .items_center()
-        .child(
-            div()
-                .size(px(12.0))
-                .ml(px(if checked { 8.0 } else { 0.0 }))
-                .rounded(px(4.0))
-                .bg(hsla(thumb))
-                .shadow_sm(),
-        )
-        .into_any_element()
+    draw_switch(
+        SwitchShape::SMALL,
+        super::controls::settings_switch_off(p),
+        p.light,
+        checked,
+        disabled,
+    )
+    .into_any_element()
 }
 
 /// A clickable small switch with an optional reason tooltip while disabled, named for the
