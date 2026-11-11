@@ -66,6 +66,28 @@ impl ExtensionsTab {
         first: bool,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let card = self.render_collab_card(p, filter, cx)?;
+        Some(card_group(
+            p,
+            "Sharing".to_string(),
+            Some(1),
+            first,
+            card_grid(vec![GridCell { card, wide: None }], None, columns),
+        ))
+    }
+
+    /// Whether Collab is installed (what the On tab counts as on).
+    pub(crate) fn collab_installed(&self, cx: &gpui::App) -> bool {
+        self.store.read(cx).collab_component()["installed"] == true
+    }
+
+    /// The Collab card, or `None` when the filter hides it.
+    pub(crate) fn render_collab_card(
+        &mut self,
+        p: &SettingsPalette,
+        filter: &ExtensionFilter,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         if !collab_matches(filter) {
             return None;
         }
@@ -235,13 +257,7 @@ impl ExtensionsTab {
                 open: None,
             },
         );
-        Some(card_group(
-            p,
-            "Sharing".to_string(),
-            Some(1),
-            first,
-            card_grid(vec![GridCell { card, wide: None }], None, columns),
-        ))
+        Some(card)
     }
 
     /// Reads the component again: every 2 seconds while something is under way, else every 15.

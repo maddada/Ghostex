@@ -1,4 +1,4 @@
-//! The Extensions page's tab strip (Built-in, Views, Panels & menus, Installed, Community,
+//! The Extensions page's tab strip (On, Built-in, Views, Panels & menus, Installed, Community,
 //! Experimental) with each tab's count, and the page's counts. The text filter is the Settings
 //! search above it. The strip sits above the page's scroll area, so the cards scroll under it.
 //!
@@ -199,6 +199,7 @@ impl ExtensionsTab {
         PageTab::ALL
             .iter()
             .map(|tab| match tab {
+                PageTab::On => self.on_count(cx),
                 PageTab::Views => built_in(*tab) + custom,
                 PageTab::Installed => installed + collab,
                 PageTab::Community => community,

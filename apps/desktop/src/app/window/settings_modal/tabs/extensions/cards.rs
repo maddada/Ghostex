@@ -123,6 +123,23 @@ pub(crate) fn card_group(
     first: bool,
     grid: AnyElement,
 ) -> AnyElement {
+    card_group_with_note(
+        p,
+        label,
+        count.map(|count| SharedString::from(count.to_string())),
+        first,
+        grid,
+    )
+}
+
+/// [`card_group`] with any short note after the label (the On tab's "7 on").
+pub(crate) fn card_group_with_note(
+    p: &SettingsPalette,
+    label: impl Into<SharedString>,
+    note: Option<SharedString>,
+    first: bool,
+    grid: AnyElement,
+) -> AnyElement {
     v_flex()
         .w_full()
         .when(!first, |this| this.mt(px(16.0)))
@@ -136,11 +153,9 @@ pub(crate) fn card_group(
                 .line_height(px(18.57))
                 .text_color(hsla(p.muted))
                 .child(label.into())
-                .children(count.map(|count| {
-                    div()
-                        .text_color(hsla(css_fade(p.muted, 0.7)))
-                        .child(count.to_string())
-                })),
+                .children(
+                    note.map(|note| div().text_color(hsla(css_fade(p.muted, 0.7))).child(note)),
+                ),
         )
         .child(grid)
         .into_any_element()
