@@ -132,6 +132,8 @@ impl GhostexGpuiApp {
                 });
             })
             .id("native-sidebar-root")
+            // The arrow keys and Escape while one of the sidebar's controls has focus (keyboard.rs).
+            .on_key_down(cx.listener(Self::native_sidebar_keyboard_key_down))
             // CDXC:Accessibility 2026-09-22 DECISION:
             // User: "add full accessibility to the sidebar, the button at the bottom, and the chat view so that we can drive this UI using AI", for "an e2e tester or an engineer to debug issues", without going "overboard with it if it would affect performance". Every row, header, section and button carries a role, a label and its state words; gpui builds the tree only while an assistive client (a screen reader, cua-driver, the web build's DOM mirror) is connected, so an idle desktop pays nothing.
             .role(gpui::Role::Navigation)

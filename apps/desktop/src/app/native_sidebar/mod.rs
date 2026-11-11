@@ -21,6 +21,7 @@ mod host;
 pub(crate) mod hover_actions;
 pub(crate) mod icons;
 pub(crate) mod images;
+pub(crate) mod keyboard;
 pub(crate) mod link_chips;
 pub(crate) mod links_list;
 mod machine_notice;

@@ -1,153 +1,151 @@
-//! The Focus Sidebar hotkey: the keyboard moves to the sidebar's session list, the arrow keys
-//! move a cursor over its rows and Enter opens one, and Escape or the same hotkey gives the
-//! keyboard back to where it was.
+//! The Focus Sidebar hotkey: the keyboard moves to the sidebar, onto the active session's row, and
+//! Escape or the same hotkey gives it back to where it was. Also the desktop's answers to the
+//! sidebar keyboard's host questions (native_sidebar/keyboard.rs).
 //!
 //! CDXC:Hotkeys 2026-11-11 WHY:
-//! A terminal consumes Tab, so a keyboard user in one could not reach the sidebar (GitHub #558; the user's decision is on `focusSidebar` in packages/settings-catalog/src/hotkey_definitions.rs). The rows are the ones the list draws, in the order the session slot hotkeys count them (gx-core `rendered_session_ids`), the cursor is drawn as the row's hover (`hovered_session`, which every sidebar layout fills), and Enter is a row click with its reveal (`gx_store_focus_and_reveal_slot_row`), so it opens a session exactly as cmd+1 to cmd+9 do. The keyboard leaves a terminal the way Unfocus Terminal takes it (`unfocus_terminal`) and comes back the way Focus Last Terminal returns it, and anything else gets its own focus handle back.
+//! A terminal consumes Tab, so a keyboard user in one could not reach the sidebar (GitHub #558; the user's decision is on `focusSidebar` in packages/settings-catalog/src/hotkey_definitions.rs). The hotkey lands on a real focus stop of the sidebar (native_sidebar/focus_order.rs), so the arrow keys, Tab, Enter and Escape that follow are the sidebar's one keyboard model and the ring shows where it is; the rows are the ones drawn, in drawn order, in either sidebar. The sidebar is drawn in one window at a time (the main window, or the floating panel while the sidebar is collapsed), and the hotkey works in that one. The keyboard leaves a terminal the way Unfocus Terminal takes it (`unfocus_terminal`) and comes back the way Focus Last Terminal returns it, and anything else gets its own focus handle back.
 
-use gpui::Window;
+use gpui::{AnyWindowHandle, Window};
 
 use crate::GhostexGpuiApp;
+use crate::app::native_sidebar::keyboard::SidebarKeyboardReturn;
 
 impl GhostexGpuiApp {
-    /// The handle the session list takes the keyboard on, made on first use.
-    pub(crate) fn sidebar_keyboard_focus_handle(
-        &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) -> gpui::FocusHandle {
-        self.native_sidebar
-            .keyboard_focus
-            .get_or_insert_with(|| cx.focus_handle())
-            .clone()
+    /// The window the sidebar is drawn in: the floating panel while it shows the sidebar, else
+    /// the main window.
+    fn sidebar_keyboard_window(&self) -> Option<AnyWindowHandle> {
+        self.floating_reveal
+            .panel
+            .as_ref()
+            .filter(|panel| panel.content.sidebar)
+            .map(|panel| panel.window.into())
+            .or(self.main_window_handle)
     }
 
-    /// Whether the session list has the keyboard now.
-    fn sidebar_keyboard_active(&self, window: &Window) -> bool {
-        self.native_sidebar.keyboard_cursor.is_some()
-            && self
-                .native_sidebar
-                .keyboard_focus
-                .as_ref()
-                .is_some_and(|handle| handle.is_focused(window))
-    }
-
-    /// The Focus Sidebar hotkey: in, or back out when the list already has the keyboard.
+    /// The Focus Sidebar hotkey, pressed in `window`: in, or back out when the sidebar already
+    /// has the keyboard.
     pub(crate) fn toggle_sidebar_keyboard_focus(
         &mut self,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.sidebar_keyboard_active(window) {
-            self.leave_sidebar_keyboard(true, window, cx);
+        let here = window.window_handle();
+        // The sidebar has the keyboard: one of its controls has focus here, the entry still waits
+        // for its row, or the sidebar is in the other window and its last frame ended focused.
+        let active = self.native_sidebar.focus_stops.entry_pending()
+            || self.native_sidebar_stop_focused(window)
+            || self.native_sidebar_focused_window().is_some_and(|focused| {
+                focused != here && Some(focused) == self.sidebar_keyboard_window()
+            });
+        if active {
+            self.sidebar_keyboard_give_back(window, cx);
             return;
         }
-        if self.sidebar_collapsed {
+        let panel_shows_sidebar = self
+            .floating_reveal
+            .panel
+            .as_ref()
+            .is_some_and(|panel| panel.content.sidebar);
+        if self.sidebar_collapsed && !panel_shows_sidebar {
             self.toggle_sidebar_from_user(cx);
         }
-        let rows = self.sidebar_keyboard_rows();
-        if rows.is_empty() {
+        let Some(owner) = self.sidebar_keyboard_window() else {
             return;
-        }
-        let handle = self.sidebar_keyboard_focus_handle(cx);
-        let from_terminal = self.unfocus_terminal(window, cx);
-        self.native_sidebar.keyboard_return_terminal = from_terminal;
-        self.native_sidebar.keyboard_return_focus = if from_terminal {
-            None
+        };
+        let from_terminal =
+            Some(here) == self.main_window_handle && self.unfocus_terminal(window, cx);
+        let record = if from_terminal {
+            Some(SidebarKeyboardReturn::Terminal)
         } else {
-            window.focused(cx).filter(|focused| *focused != handle)
+            window
+                .focused(cx)
+                .filter(|focused| {
+                    *focused != self.root_action_focus_handle
+                        && !self.native_sidebar.focus_stops.is_stop(focused)
+                })
+                .map(|handle| SidebarKeyboardReturn::Focus {
+                    handle,
+                    window: here,
+                })
         };
-        let cursor = rows
-            .iter()
-            .find(|row| self.gx_store_sidebar_row_focus(row, false, false, false).0)
-            .unwrap_or(&rows[0])
-            .clone();
-        window.focus(&handle, cx);
-        self.move_sidebar_keyboard_cursor(cursor);
+        self.native_sidebar.keyboard.set_return(record);
+        // The focus the entry waits from: read now when the sidebar is in this window (after
+        // `unfocus_terminal` parked it), else in the sidebar's window once it draws.
+        let origin = (owner == here).then(|| window.focused(cx));
+        self.start_native_sidebar_keyboard_entry(owner, origin);
         cx.notify();
-    }
-
-    /// The keys the session list takes while it has the keyboard.
-    pub(crate) fn sidebar_keyboard_key_down(
-        app: &mut Self,
-        event: &gpui::KeyDownEvent,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(cursor) = app.native_sidebar.keyboard_cursor.clone() else {
-            return;
-        };
-        let modifiers = &event.keystroke.modifiers;
-        if modifiers.platform || modifiers.control || modifiers.alt {
-            return;
+        if owner == here {
+            window.refresh();
+        } else {
+            cx.defer(move |cx| {
+                let _ = owner.update(cx, |_, window, _| {
+                    window.activate_window();
+                    window.refresh();
+                });
+            });
         }
-        let rows = app.sidebar_keyboard_rows();
-        let at = rows.iter().position(|row| *row == cursor);
-        let next = match event.keystroke.key.as_str() {
-            "escape" => {
-                app.leave_sidebar_keyboard(true, window, cx);
-                None
-            }
-            "enter" => {
-                if at.is_some() {
-                    app.leave_sidebar_keyboard(false, window, cx);
-                    app.gx_store_focus_and_reveal_slot_row(&cursor, true, cx);
-                    app.focus_default_surface_for_active_mode(cx);
-                }
-                None
-            }
-            "down" => Some(at.map_or(0, |at| (at + 1).min(rows.len().saturating_sub(1)))),
-            "up" => Some(at.map_or(0, |at| at.saturating_sub(1))),
-            "home" => Some(0),
-            "end" => Some(rows.len().saturating_sub(1)),
-            _ => return,
-        };
-        if let Some(row) = next.and_then(|index| rows.get(index)).cloned() {
-            app.move_sidebar_keyboard_cursor(row);
-        }
-        window.prevent_default();
-        cx.stop_propagation();
-        cx.notify();
     }
 
-    /// The rows the arrows walk: every row the list draws, in its order.
-    fn sidebar_keyboard_rows(&self) -> Vec<String> {
-        if !self.gx_store_sidebar_list_ready() {
-            return Vec::new();
-        }
-        ghostex_gx_core::rendered_session_ids(self.gx_store.sidebar_list.view())
-            .cloned()
-            .collect()
-    }
-
-    fn move_sidebar_keyboard_cursor(&mut self, row: String) {
-        self.native_sidebar.hovered_session = Some(row.clone());
-        self.gx_store_reveal_walk_row(&row);
-        self.native_sidebar.keyboard_cursor = Some(row);
-    }
-
-    /// Ends the keyboard mode; `give_back` returns the keyboard to where it was.
-    fn leave_sidebar_keyboard(
+    /// The surface of the focused pane: where the keyboard goes when nothing else was recorded,
+    /// and where Enter on a session row sends it.
+    pub(crate) fn sidebar_keyboard_active_surface(
         &mut self,
-        give_back: bool,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if let Some(cursor) = self.native_sidebar.keyboard_cursor.take()
-            && self.native_sidebar.hovered_session.as_deref() == Some(cursor.as_str())
+        if Some(window.window_handle()) == self.main_window_handle {
+            self.focus_default_surface_for_active_mode(cx);
+            return;
+        }
+        // The sidebar was in the floating panel: the panel's sessions column when it shows one,
+        // else the main window's surface.
+        if self
+            .floating_reveal
+            .panel
+            .as_ref()
+            .is_some_and(|panel| panel.content.agents_column)
         {
-            self.native_sidebar.hovered_session = None;
-        }
-        let terminal = std::mem::take(&mut self.native_sidebar.keyboard_return_terminal);
-        let focus = self.native_sidebar.keyboard_return_focus.take();
-        if !give_back {
+            self.schedule_floating_reveal_focus(cx);
             return;
         }
-        if terminal && self.focus_last_terminal(window, cx) {
-            return;
+        self.focus_default_surface_for_active_mode(cx);
+        if let Some(main) = self.main_window_handle {
+            cx.defer(move |cx| {
+                let _ = main.update(cx, |_, window, _| window.activate_window());
+            });
         }
-        match focus {
-            Some(focus) => window.focus(&focus, cx),
-            None => window.focus(&self.root_action_focus_handle, cx),
+    }
+
+    /// The terminal the hotkey took the keyboard from, as Focus Last Terminal returns it. False
+    /// when it has closed since.
+    pub(crate) fn sidebar_keyboard_restore_terminal(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if Some(window.window_handle()) == self.main_window_handle {
+            return self.focus_last_terminal(window, cx);
         }
+        let Some(main) = self.main_window_handle else {
+            return false;
+        };
+        let app = cx.entity();
+        cx.defer(move |cx| {
+            let _ = main.update(cx, |_, window, cx| {
+                window.activate_window();
+                app.update(cx, |app, cx| {
+                    if !app.focus_last_terminal(window, cx) {
+                        app.focus_default_surface_for_active_mode(cx);
+                    }
+                });
+            });
+        });
+        true
+    }
+
+    /// Whether `session_id`'s row is the one the sidebar draws as focused.
+    pub(crate) fn sidebar_keyboard_row_is_active(&self, session_id: &str) -> bool {
+        self.gx_store_sidebar_row_focus(session_id, false, false, false)
+            .0
     }
 }
