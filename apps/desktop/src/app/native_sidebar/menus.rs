@@ -436,6 +436,21 @@ impl GhostexGpuiApp {
         });
     }
 
+    /// Where a submenu may open beside its menu, in the menu's window `window`
+    /// (`SidebarMenuPlacement::Beside` says why): the whole window while each panel is drawn in a
+    /// frosted host window of its own and in the web page, otherwise the sidebar alone.
+    fn native_sidebar_submenu_room(&self, window: &Window) -> Bounds<Pixels> {
+        use crate::app::window::frosted_host::frosted_hosting_active;
+        if frosted_hosting_active() || cfg!(target_family = "wasm") {
+            Bounds {
+                origin: Point::default(),
+                size: window.viewport_size(),
+            }
+        } else {
+            self.native_sidebar.bounds
+        }
+    }
+
     pub(crate) fn dismiss_native_sidebar_menu(&mut self, cx: &mut gpui::Context<Self>) {
         if let Some(menu) = self.native_sidebar.menu.take() {
             cx.defer(move |cx| {
@@ -640,9 +655,12 @@ impl GhostexGpuiApp {
             });
             return;
         }
+        let sidebar = self.native_sidebar.bounds;
+        let submenu_room = self.native_sidebar_submenu_room(window);
         let Some(menu) = self.native_sidebar.menu.as_mut() else {
             return;
         };
+        let scale = menu.scale;
         let child_open = menu.panels.len() > panel_index + 1;
         let Some(panel) = menu.panels.get_mut(panel_index) else {
             return;
@@ -678,14 +696,32 @@ impl GhostexGpuiApp {
             } else {
                 panel.selected = Some(item_index);
                 panel.child_item = Some(item_index);
+                // A submenu that opens beside its menu (the sidebar menu's Tools, Help, Ghostex and
+                // Keep Awake) hangs from this panel's side, level with the row.
+                let placement = if item["presentation"] == "beside" {
+                    SidebarMenuPlacement::Beside {
+                        parent: panel.bounds(sidebar, scale, panel_index > 0),
+                        row: row_bounds,
+                        room: submenu_room,
+                        gap: px(SIDEBAR_MENU_OWNER_GAP * scale),
+                    }
+                } else {
+                    SidebarMenuPlacement::Pointer
+                };
                 truncate_panels(menu, panel_index + 1);
-                menu.panels.push(SidebarMenuPanel::new(
-                    children.clone(),
-                    Point::new(
-                        row_bounds.left(),
-                        row_bounds.bottom() + px(4.0 * menu.scale),
-                    ),
-                ));
+                let mut child = SidebarMenuPanel {
+                    placement,
+                    ..SidebarMenuPanel::new(
+                        children.clone(),
+                        Point::new(row_bounds.left(), row_bounds.bottom() + px(4.0 * scale)),
+                    )
+                };
+                // Opened with the keyboard (Right, Enter or Space), the cursor moves into it, on
+                // its first row; Left comes back out.
+                if !toggle {
+                    child.select_first_row();
+                }
+                menu.panels.push(child);
             }
         } else if let Some(command) = item.get("command") {
             if command["type"] == "sessionAccounts" && command["action"] == "load" {
@@ -758,6 +794,21 @@ impl GhostexGpuiApp {
                     {
                         return;
                     }
+                    app.dismiss_native_sidebar_menu_by_press(event.position, window, cx);
+                }),
+            )
+            // A submenu beside its menu makes this frame an L: a press in the corner neither panel
+            // covers is a press outside the menu. The panels take their own presses, so only those
+            // reach here.
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|app, event: &gpui::MouseDownEvent, window, cx| {
+                    app.dismiss_native_sidebar_menu_by_press(event.position, window, cx);
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|app, event: &gpui::MouseDownEvent, window, cx| {
                     app.dismiss_native_sidebar_menu_by_press(event.position, window, cx);
                 }),
             )
@@ -1522,7 +1573,6 @@ impl GhostexGpuiApp {
     }
 }
 
-/// Whether the row `item_index` of panel `panel_index` has a menu of its own open beside it.
 /// Takes out the separators that rows left out of a menu leave behind: one at either end, and the
 /// second of two in a row.
 fn trim_menu_separators(rows: &mut Vec<Value>) {
@@ -1538,6 +1588,7 @@ fn trim_menu_separators(rows: &mut Vec<Value>) {
     }
 }
 
+/// Whether the row `item_index` of panel `panel_index` has a menu of its own open beside it.
 fn menus_open_beside(panels: &[SidebarMenuPanel], panel_index: usize, item_index: usize) -> bool {
     panels.len() > panel_index + 1
         && panels[panel_index].child_item == Some(item_index)
