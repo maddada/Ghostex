@@ -4921,12 +4921,15 @@ sessions, so any client can control agents on any machine.
   open the VS Code view on that computer once (or update Ghostex there) and retry.
   Folder links in remote chats also browse the remote folder in VS Code.
   A file link in a remote chat opens in Files for any file in the project, not
-  only the Docs folders. A link to a text file outside the project (an agent's
-  log or scratch file in a temporary folder, say) opens in Files too, read-only,
-  when that session's own chat links to it: logs, code, config and JSON up to
-  2 MB. A binary or larger file says so; open it in the VS Code view instead.
-  Both computers need this Ghostex version. On the phone a chat's file link
-  already opens text files anywhere on the computer in the file viewer.
+  only the Docs folders. A link to a text file or a picture outside the project
+  (an agent's log, a draft or a diagram in another folder, say) opens in Files
+  too, read-only, when that session's own chat links to it: text up to 2 MB,
+  pictures up to 12 MB, on Mac, Linux and Windows computers alike. Another
+  binary or larger file says so; open it in the VS Code view instead. When a
+  link can't open, Ghostex says why: the file is gone, the computer is offline,
+  or it runs an older Ghostex (update Ghostex there). On the phone a chat's
+  file link already opens text files and pictures anywhere on the computer in
+  the file viewer.
   A remote project's Open Folder (its right-click menu, Quick Access) opens the
   project in the Files view. Open In with VS Code, VS Code Insiders, VSCodium,
   Cursor, Windsurf, Trae or Antigravity opens the remote folder over Remote-SSH,

@@ -164,14 +164,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(target) = self.gpui_remote_gxserver_request_target(&key.remote_machine_id) else {
+            let computer = gpui_remote_machine_name_from_settings(&key.remote_machine_id)
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| "The session's computer".to_string());
             self.report_session_chat_file_open_failure(
-                "That remote computer is not connected.",
+                &format!("{computer} is offline or not connected. Reconnect it, then try again."),
                 cx,
             );
             return;
         };
-        let windows = gpui_is_windows_remote_path(project_path.unwrap_or_default());
-        let mut path = if path.to_ascii_lowercase().starts_with("file://") {
+        let path = if path.to_ascii_lowercase().starts_with("file://") {
             let url_path = &path[7..];
             let url_path = if url_path.starts_with('/') {
                 Some(url_path)
@@ -198,33 +200,15 @@ impl GhostexGpuiApp {
         } else {
             path.to_string()
         };
-        let mut root = project_path.unwrap_or_default().to_string();
-        if windows {
-            path = path.replace('\\', "/");
-            root = root.replace('\\', "/");
-            if path.starts_with('/') && gpui_terminal_link_is_windows_drive_path(&path[1..]) {
-                path.remove(0);
-            }
-        }
-        let prefix = format!("{}/", root.trim_end_matches('/'));
-        let relative = if path.starts_with(&prefix)
-            || (windows
-                && path
-                    .get(..prefix.len())
-                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case(&prefix)))
-        {
-            path[prefix.len()..].to_string()
-        } else {
-            path
-        };
+        let (relative, outside) =
+            gpui_remote_chat_file_place(&path, project_path.unwrap_or_default());
         /*
         CDXC:Docs 2026-11-07 WHY: issue #462. The check asked about the Docs folders alone, while
         the Files view it opens covers the whole project, so any project file outside them failed
         too. It now asks with the Files view's project scope, and a path outside the project (an
         agent's log in `/private/tmp/…`) goes with this chat's session: gxserver opens it, read-only,
-        only when this chat links to it, and only as plain text (server/src/project_docs/chat_file.rs).
+        only when this chat links to it, and only as plain text or a picture (server/src/project_docs/chat_file.rs).
         */
-        let outside = gpui_remote_chat_file_is_outside(&relative, windows);
         let mut params = serde_json::json!({
             "projectId": key.project_id,
             "action": "stat",
@@ -235,43 +219,133 @@ impl GhostexGpuiApp {
         if outside {
             params["sessionId"] = serde_json::json!(key.session_id);
         }
+        let computer = gpui_remote_machine_name_from_settings(&key.remote_machine_id)
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or_else(|| "The session's computer".to_string());
+        let picture = matches!(
+            crate::app::native_docs::state::DocsMediaKind::for_path(&relative),
+            Some(crate::app::native_docs::state::DocsMediaKind::Image)
+        );
+        // CDXC:Docs 2026-11-11 WHY: the remote check reads the chat's whole Files and links list,
+        // a few seconds on a long chat, and nothing showed meanwhile, so a click looked like it did
+        // nothing. The opening toast shows at once, and the failure replaces it with the reason.
+        self.report_session_chat_file_opening("Files view", Path::new(&path), cx);
         let key = key.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background.spawn(async move {
-                gpui_remote_gxserver_rpc_result(&target, "/api/runProjectDocsAction", &params, Duration::from_secs(15))
-            }).await;
+            let result = background
+                .spawn(async move {
+                    gpui_remote_gxserver_rpc_result(
+                        &target,
+                        "/api/runProjectDocsAction",
+                        &params,
+                        Duration::from_secs(30),
+                    )
+                })
+                .await;
             let _ = this.update_in(cx, |this, window, cx| {
                 let active = gpui_remote_scoped_project_id(&key.remote_machine_id, &key.project_id);
-                if this.active_sidebar_project_id().as_deref() != Some(active.as_str()) { return; }
+                if this.active_sidebar_project_id().as_deref() != Some(active.as_str()) {
+                    this.remove_gpui_app_toast(GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID, cx);
+                    return;
+                }
                 match result {
                     Ok(value) if value.get("error").is_none() && value.get("file").is_some() => {
                         if outside {
-                            this.native_docs.remote_chat_files.insert(
-                                relative.clone(),
-                                (active.clone(), key.session_id.clone()),
-                            );
+                            this.native_docs
+                                .remote_chat_files
+                                .insert(relative.clone(), (active.clone(), key.session_id.clone()));
                         }
                         this.pending_docs_file_open = Some(relative);
                         this.switch_workarea_from_hotkey(TitlebarMode::Manage, window, cx);
                         this.mark_project_editor_mode_awake(TitlebarMode::Manage, cx);
                         this.focus_project_editor_surface(TitlebarMode::Manage, window, cx);
-                        if !this.deliver_pending_docs_file_open(cx) { this.schedule_pending_docs_file_open_delivery(cx); }
+                        if !this.deliver_pending_docs_file_open(cx) {
+                            this.schedule_pending_docs_file_open_delivery(cx);
+                        }
                     }
-                    // gxserver's own reason (not linked by this chat, not text, too large) when
-                    // it gave one; an older gxserver without chat-linked files gives the old one.
-                    Ok(value) if value.get("error").and_then(serde_json::Value::as_str).is_some_and(|error| !error.is_empty() && error != "Paths must be project-relative.") => {
-                        let error = value["error"].as_str().unwrap_or_default().to_string();
-                        this.report_session_chat_file_open_failure(&error, cx);
+                    outcome => {
+                        this.remove_gpui_app_toast(GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID, cx);
+                        let reason =
+                            gpui_remote_chat_file_failure(outcome, outside, picture, &computer);
+                        this.report_session_chat_file_open_failure(&reason, cx);
                     }
-                    _ => this.report_session_chat_file_open_failure(if outside {
-                        "This remote file is outside the project and the remote computer's Ghostex can't open it in Files yet. Use Open in VS Code for it."
-                    } else {
-                        "This remote file is unavailable. Use Open in VS Code for it."
-                    }, cx),
                 }
             });
-        }).detach();
+        })
+        .detach();
+    }
+}
+
+/// Where a chat link's path sits on a remote computer: the path the Files request carries
+/// (project-relative inside the project, absolute with forward slashes outside it) and whether it
+/// is outside. A Windows computer is known by its project folder or by the link itself (a drive or
+/// UNC path), since this computer's own path rules read `C:\…` as a relative name.
+pub(crate) fn gpui_remote_chat_file_place(path: &str, project_path: &str) -> (String, bool) {
+    let mut path = path.to_string();
+    let mut root = project_path.to_string();
+    let link_is_windows = {
+        let bare = path.strip_prefix('/').unwrap_or(&path);
+        gpui_terminal_link_is_windows_drive_path(bare) || path.starts_with("\\\\")
+    };
+    let windows = gpui_is_windows_remote_path(&root) || link_is_windows;
+    if windows {
+        path = path.replace('\\', "/");
+        root = root.replace('\\', "/");
+        if path.starts_with('/') && gpui_terminal_link_is_windows_drive_path(&path[1..]) {
+            path.remove(0);
+        }
+    }
+    let prefix = format!("{}/", root.trim_end_matches('/'));
+    let relative = if !root.is_empty()
+        && (path.starts_with(&prefix)
+            || (windows
+                && path
+                    .get(..prefix.len())
+                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case(&prefix))))
+    {
+        path[prefix.len()..].to_string()
+    } else {
+        path
+    };
+    let outside = gpui_remote_chat_file_is_outside(&relative, windows);
+    (relative, outside)
+}
+
+/// The plain reason a remote chat file did not open: the computer could not be reached, it runs a
+/// Ghostex too old for the file, or gxserver's own reason (gone, not linked by this chat, too large).
+fn gpui_remote_chat_file_failure(
+    outcome: Result<serde_json::Value, String>,
+    outside: bool,
+    picture: bool,
+    computer: &str,
+) -> String {
+    let older = format!(
+        "{computer} runs an older Ghostex that can't show this file in Files. Update Ghostex on {computer}, then try again."
+    );
+    match outcome {
+        Ok(value) => match value.get("error").and_then(serde_json::Value::as_str) {
+            // Before chat-linked files (11.3.0), an absolute path was refused as any Files path.
+            Some("Paths must be project-relative.") if outside => older,
+            // 11.3.0 opened chat-linked text only and called a picture "not plain text".
+            Some(error)
+                if picture && outside && error.starts_with("This file is not plain text") =>
+            {
+                older
+            }
+            Some(error) if !error.trim().is_empty() => error.to_string(),
+            _ => "That file is not on the session computer any more.".to_string(),
+        },
+        // gxserver answered, but refused the request as a whole.
+        Err(error)
+            if error.starts_with("Remote gxserver request failed")
+                || error.starts_with("gxserver returned") =>
+        {
+            format!("{computer} couldn't open this file in Files.")
+        }
+        Err(_) => {
+            format!("Couldn't reach {computer}. Check that it is on and connected, then try again.")
+        }
     }
 }
 
@@ -419,5 +493,54 @@ if (metadata.isDirectory()) {{
         Ok(())
     } else {
         Err("The remote Code editor could not open that file. Check that the path exists on the session computer.".into())
+    }
+}
+
+/// Windows cannot be run here, so the placement of a Windows computer's chat links is pinned by
+/// hand: the user's `C:\dev\.desk-runner\…` links from a session in `C:\dev\mastro_ed`.
+#[cfg(test)]
+mod tests {
+    use super::gpui_remote_chat_file_place;
+
+    #[test]
+    fn windows_chat_links_are_placed_on_any_computer() {
+        let project = r"C:\dev\mastro_ed";
+        assert_eq!(
+            gpui_remote_chat_file_place(
+                r"C:\dev\.desk-runner\d1111\university-reply\reply-email.txt",
+                project
+            ),
+            (
+                "C:/dev/.desk-runner/d1111/university-reply/reply-email.txt".to_string(),
+                true
+            )
+        );
+        // A `file:///C:/…` link, inside the project, in another case.
+        assert_eq!(
+            gpui_remote_chat_file_place("/c:/Dev/Mastro_Ed/docs/plan.md", project),
+            ("docs/plan.md".to_string(), false)
+        );
+        assert_eq!(
+            gpui_remote_chat_file_place(r"\\nas\share\shot.png", project),
+            ("//nas/share/shot.png".to_string(), true)
+        );
+        // Known as Windows by the link alone, when the project folder is not.
+        assert_eq!(
+            gpui_remote_chat_file_place(r"D:\scratch\out.log", ""),
+            ("D:/scratch/out.log".to_string(), true)
+        );
+        assert_eq!(
+            gpui_remote_chat_file_place("src/main.rs", project),
+            ("src/main.rs".to_string(), false)
+        );
+        // A POSIX computer keeps its paths.
+        assert_eq!(
+            gpui_remote_chat_file_place("/tmp/claude/dev.log", "/home/me/app"),
+            ("/tmp/claude/dev.log".to_string(), true)
+        );
+        assert_eq!(
+            gpui_remote_chat_file_place("/home/me/app/README.md", "/home/me/app"),
+            ("README.md".to_string(), false)
+        );
     }
 }
