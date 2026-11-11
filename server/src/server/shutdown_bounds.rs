@@ -56,8 +56,12 @@ pub(super) fn stop_session_watchers_on_shutdown(state: &Arc<AppState>) {
         stop_all_zmx_title_observers(&state);
         stop_all_session_chat_followers(&state);
         let push = state.push.clone();
-        let _ =
-            tokio::task::spawn_blocking(move || push.stop(crate::push::expo::HTTP_TIMEOUT)).await;
+        let live_activity = state.live_activity.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            live_activity.stop(crate::live_activity::relay::HTTP_TIMEOUT);
+            push.stop(crate::push::expo::HTTP_TIMEOUT)
+        })
+        .await;
     });
 }
 

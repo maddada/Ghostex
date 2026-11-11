@@ -215,6 +215,11 @@ pub async fn run_gxserver_foreground(
             paths.clone(),
             logger.clone(),
         )),
+        live_activity: Arc::new(crate::live_activity::LiveActivityRuntime::start(
+            paths.clone(),
+            metadata.server_id.clone(),
+            logger.clone(),
+        )),
         remote_pairing_runtime: RemotePairingRuntime::new(),
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
