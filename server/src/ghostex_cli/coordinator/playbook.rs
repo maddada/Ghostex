@@ -50,7 +50,12 @@ fn target_project(
 /// `status` can say when it changes; `--changes` prints only what changed since its last read
 /// when gxserver still has that text (coordinators/guide_changes.rs), and the full guide otherwise.
 pub(super) fn guide(parsed: &ParsedArgs) -> CliResult<()> {
-    let (project_id, flags, caller) = target_project(parsed, true)?;
+    let (project_id, mut flags, mut caller) = target_project(parsed, true)?;
+    if caller.is_none() && flags.string_value("server").is_none() {
+        if let Some((own_flags, own)) = project_id.as_deref().and_then(caller_in_project) {
+            (flags, caller) = (own_flags, Some(own));
+        }
+    }
     let mut params = json!({ "changes": parsed.flags.truthy("changes") });
     if let Some(project_id) = &project_id {
         params["projectId"] = json!(project_id);
@@ -61,6 +66,19 @@ pub(super) fn guide(parsed: &ParsedArgs) -> CliResult<()> {
     let result = call_gxserver_rpc("/api/readCoordinatorGuide", &params, &flags)?;
     print!("{}", agents::text(&result, "guide"));
     Ok(())
+}
+
+/// The calling agent session and the flags that reach its machine, when it runs in `project_id`:
+/// a coordinator that names its own project with `--project-id` still reads its guide as itself,
+/// so `--changes` diffs against its last read and the read is recorded.
+fn caller_in_project(project_id: &str) -> Option<(Flags, Value)> {
+    let caller = agents::identity::agent_caller().ok().flatten()?;
+    if agents::text(&caller, "projectId") != project_id {
+        return None;
+    }
+    let flags =
+        agents::inventory_flags(&Flags::default(), agents::text(&caller, "globalRef")).ok()?;
+    Some((flags, caller))
 }
 
 /// The old full copies a view lists (`oldCopies`), one line each.
