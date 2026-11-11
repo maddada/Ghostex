@@ -992,14 +992,28 @@ impl Render for SessionLinksList {
                 // The dropdown hangs above the Links pill, so it keeps its bottom edge and its
                 // top moves (`fit_session_links_popup`); the card beside the sidebar hangs from
                 // its row and keeps its top, which is what `Window::resize` does.
-                let anchored = self.host == SessionLinksListHost::Dropdown
-                    && self
-                        .main_app
-                        .update(cx, |app, cx| app.fit_session_links_popup(fitted, cx))
-                        .unwrap_or(false);
-                if !anchored {
-                    window.resize(gpui::size(window.bounds().size.width, px(fitted)));
-                }
+                //
+                // CDXC:SessionLinks 2026-11-11 WHY: The app entity is never updated from a draw.
+                // The first draw of the dropdown happens while the app is still opening it, and
+                // updating the app then quit it ("cannot update GhostexGpuiApp while it is
+                // already being updated"). The refit runs once the current update is over, from
+                // the app's own deferred queue and not `Window::defer`: that keeps this window
+                // leased while it runs, and the refit has to move this very window. A list that
+                // already has its window's height moves nothing.
+                let main_app = self.main_app.clone();
+                let handle = window.window_handle();
+                let dropdown = self.host == SessionLinksListHost::Dropdown;
+                cx.defer(move |cx| {
+                    let anchored = dropdown
+                        && main_app
+                            .update(cx, |app, cx| app.fit_session_links_popup(fitted, cx))
+                            .unwrap_or(false);
+                    if !anchored {
+                        let _ = handle.update(cx, |_, window, _| {
+                            window.resize(gpui::size(window.bounds().size.width, px(fitted)))
+                        });
+                    }
+                });
             }
         }
         #[cfg(target_arch = "wasm32")]
