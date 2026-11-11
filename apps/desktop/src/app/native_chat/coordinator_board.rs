@@ -2574,7 +2574,18 @@ impl NativeChatView {
                 }))
                 .into_any_element()
         });
-        let meta = text(board, "meta");
+        // Only "Work": its groups count themselves below, so the header repeats no count. An
+        // empty panel still says so.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the header reading "Work  18 in progress" over the "In progress 18" group:
+        // "please remove this status here, no need". The dock's header and the Work pill keep
+        // their counts.
+        let note = if board["empty"] == true {
+            "Nothing open"
+        } else {
+            ""
+        };
         div()
             .flex_shrink_0()
             .h(px(HEADER_HEIGHT * s))
@@ -2602,11 +2613,7 @@ impl NativeChatView {
                     .min_w_0()
                     .truncate()
                     .text_color(p.card_muted)
-                    .child(if board["empty"] == true {
-                        "Nothing open".to_string()
-                    } else {
-                        meta
-                    }),
+                    .child(note),
             )
             .child(switch)
             .children(close)
