@@ -52,6 +52,13 @@ impl GhostexGpuiApp {
                 }
                 true
             }
+            // Hide account usage, from a right-click on the pinned meters (native_sidebar/usage.rs).
+            Some(crate::app::native_sidebar::usage::HIDE_SIDEBAR_USAGE_MESSAGE_TYPE) => {
+                if self.sidebar_usage_visible {
+                    self.toggle_native_sidebar_usage_visible(cx);
+                }
+                true
+            }
             Some(ghostex_gx_core::APP_LIFECYCLE_MESSAGE_TYPE) => {
                 if let Some(action) = message.get("action").and_then(Value::as_str) {
                     self.run_app_lifecycle_action(action, cx);

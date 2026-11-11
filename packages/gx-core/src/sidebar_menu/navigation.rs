@@ -22,6 +22,10 @@ use super::item::MenuItem;
 /// The Unified sidebar's Collapse All row, which folds its project groups.
 pub const UNIFIED_TOGGLE_GROUPS_ACTION: &str = "toggleUnifiedGroups";
 
+/// The menu's Commands row, which opens Quick Access on its Commands tab; the host adds the
+/// hotkey's current binding as the row's hint.
+pub const COMMANDS_ACTION: &str = "commands";
+
 /// The menu's Add Project row, which the host leaves out while the top row shows its Add project
 /// button.
 pub const ADD_PROJECT_ACTION: &str = "addProject";
@@ -214,8 +218,8 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     }
     /*
     CDXC:Sidebar 2026-11-11 DECISION:
-    User (main menu page, Q2500 B, Q2501 C, Q2502 and its notes): the sidebar's menu and the three dots above the chat are one menu, "the shortest: three doors at the end". Sort & Filter and Collapse All come first; then Agents Hub, All Automations, Connect a Device and Keep Awake; then three submenus: Tools (Search by Prompt, Import Sessions, and the Extensions, Dev servers and Resources panels the three dots held), Help (Ask Ghostex, Tips & Tricks, Join Discord, Send Bug / Feedback) and Ghostex (New Window, Check for Updates, Restart and the two Quits, where the host is the desktop app); and last, alone in its own group, Settings ("also let's move settings to a new item by itself bottom of menu"). Sessions leaves (the Search button beside the menu opens the same window), Import Sessions stays, and Add Project is the first row only while the top row is too narrow for its button, which the host decides when the menu opens. Customize has no row: the gear at the sidebar's bottom and the Extensions panel's "Browse extensions…" open the same page. The Ghostex row wears the app's mark in one colour ("the ghostex icon but as svg", the phone's status bar shape).
-    This supersedes the 2026-09-21 rule that the menu has no Settings entry (the gear stays too), the 2026-09-30 rule that the app rows end the menu flat below Join Discord (they are the Ghostex submenu; Windows and Linux, which have no menu bar, find them there), and the 2026-10-16 rule that Send Bug / Feedback is the top-level row under Join Discord (both are in Help, in that order). About and the Hide rows stay in the macOS menu bar only.
+    User (main menu page, Q2500 B, Q2501 C, Q2502 and its notes): the sidebar's menu and the three dots above the chat are one menu, "the shortest: three doors at the end". Sort & Filter and Collapse All come first; then Agents Hub, All Automations, Connect a Device and Keep Awake; then three submenus: Tools (Search by Prompt, Import Sessions, and the Extensions, Dev servers and Resources panels the three dots held), Help (Ask Ghostex, Tips & Tricks, Join Discord, Send Bug / Feedback) and Ghostex (New Window, Check for Updates, Restart and the two Quits, where the host is the desktop app); and last, alone in its own group, Settings ("also let's move settings to a new item by itself bottom of menu"). Sessions leaves (the Search button beside the menu opens the same window), Import Sessions stays, and Add Project is the first row only while the top row is too narrow for its button, which the host decides when the menu opens. Customize has no row: Settings and the Extensions panel's "Browse extensions…" open the same page. The Ghostex row wears the app's mark in one colour ("the ghostex icon but as svg", the phone's status bar shape).
+    This supersedes the 2026-09-21 rule that the menu has no Settings entry (the gear left the sidebar's bottom the same day: CDXC:Sidebar 2026-11-11 DECISION in apps/desktop/src/app/native_sidebar/usage.rs), the 2026-09-30 rule that the app rows end the menu flat below Join Discord (they are the Ghostex submenu; Windows and Linux, which have no menu bar, find them there), and the 2026-10-16 rule that Send Bug / Feedback is the top-level row under Join Discord (both are in Help, in that order). About and the Hide rows stay in the macOS menu bar only.
     Tools, Help and Ghostex open beside the menu, to its right, as the page drew them (confirmed for Q2503), so an open submenu covers nothing; Keep Awake opens the same way, so every submenu of this menu behaves alike, and Sort & Filter stays a page inside the menu. Where the host has no room beside the menu on either side, the submenu opens under its row as the sidebar's other submenus do (apps/desktop/src/app/native_sidebar/menu_state.rs `SidebarMenuPlacement::Beside`).
     SEE-ALSO: packages/gx-core/src/app_lifecycle.rs (the app rows, shared with Quick Access's Commands tab), apps/desktop/src/app/titlebar/menu_panels.rs (the panels, and which of them a project is offered), apps/desktop/src/app/native_sidebar/menus.rs `native_sidebar_more_menu_now` (what the host takes out when the menu opens).
     */
@@ -273,6 +277,8 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     if !more.is_empty() {
         more.push(MenuItem::separator());
     }
+    // CDXC:Sidebar 2026-11-11 DECISION: User (sidebar bottom page, Q2530 A and Q2531): the row of buttons under the usage meters goes away, and Commands, its lightning button, becomes a row of this menu, above Agents Hub, with its hotkey as the hint. Settings, the gear of that row, is already this menu's last row.
+    more.push(intent("Commands", "bolt", COMMANDS_ACTION));
     more.push(intent("Agents Hub", "users-group", "agentsHub"));
     more.push(MenuItem::row(
         "All Automations",

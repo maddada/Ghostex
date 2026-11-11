@@ -174,13 +174,24 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:Sidebar 2026-11-11 DECISION:
     /// User (main menu page, Q2502): Add Project leaves the menu, since its button sits in the top row beside the menu, and comes back as the menu's first row while the sidebar is too narrow for that button (`add_project_in_row` is the top row's own answer, `top_row_fit`). The rows of Tools and Help that open one of the app's panels are listed only while that panel is offered (its Settings switch, and for Dev servers and Extensions the project's scope: titlebar/menu_panels.rs), as they were in the three-dots menu; the menu itself is built without those switches, so they are asked here, when it opens.
+    /// The Commands row carries its hotkey (`commands_shortcut`, as the settings have it now) as
+    /// its hint.
     pub(crate) fn native_sidebar_more_menu_now(
         &self,
         items: &Value,
         add_project_in_row: bool,
+        commands_shortcut: Option<&str>,
     ) -> Value {
         let mut items = items.clone();
         if let Some(rows) = items.as_array_mut() {
+            if let Some(shortcut) = commands_shortcut.filter(|shortcut| !shortcut.is_empty())
+                && let Some(row) = rows.iter_mut().find(|row| {
+                    row["command"]["type"] == "sidebarAction"
+                        && row["command"]["action"] == ghostex_gx_core::COMMANDS_ACTION
+                })
+            {
+                row["suffix"] = Value::from(shortcut);
+            }
             let offered = |row: &Value| {
                 let message = &row["command"]["message"];
                 message["type"] != ghostex_gx_core::MENU_PANEL_MESSAGE_TYPE

@@ -186,7 +186,7 @@ impl GhostexGpuiApp {
             .text_size(px(super::appearance::SIDEBAR_TEXT_SIZE * appearance.scale))
             .font_family(crate::ui_fonts::UI_FONT)
             .font_weight(FontWeight::LIGHT)
-            .child(self.render_native_sidebar_navigation(&appearance, false, usage_meter_count, cx))
+            .child(self.render_native_sidebar_navigation(&appearance, cx))
             .child(match unified_header {
                 Some(header) => header,
                 None => self.render_native_sidebar_selectors(&snapshot, &appearance, window, cx),
@@ -388,28 +388,17 @@ impl GhostexGpuiApp {
                     ),
             )
             /*
-            The usage strip and the Commands row are one footer child on purpose:
-            `on_children_prepainted` above measures the sidebar from its fourth
-            child, so a strip that appears only when accounts exist must not shift
-            that index.
+            The bottom (the workspace button's line, the usage strip or its handle) is one footer
+            child on purpose, and always there: `on_children_prepainted` above measures the
+            sidebar from its fourth child, so parts that come and go must not shift that index.
             */
-            .child(
-                v_flex()
-                    .w_full()
-                    .flex_shrink_0()
-                    .children(self.render_native_sidebar_usage(
-                        &appearance,
-                        pinned_usage_meters,
-                        window,
-                        cx,
-                    ))
-                    .child(self.render_native_sidebar_navigation(
-                        &appearance,
-                        true,
-                        usage_meter_count,
-                        cx,
-                    )),
-            )
+            .child(self.render_native_sidebar_bottom(
+                &appearance,
+                pinned_usage_meters,
+                usage_meter_count,
+                window,
+                cx,
+            ))
             .child(
                 gpui::canvas(
                     |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
