@@ -3,11 +3,15 @@
 //!
 //! CDXC:AgentHooks 2026-11-01 WHY:
 //! Codex (0.165) appends each turn's `event_msg` `task_started` and `task_complete`, an interrupt's `turn_aborted`, every tool call (`response_item` `function_call`, `custom_tool_call`, `local_shell_call`, `web_search_call`) and its output, and `compacted`. It writes nothing while an approval waits on the user (seen live on 2026-11-01: the rollout's last line stayed the asking `exec` call until the answer), so attention is invisible here; code mode's `wait` tool fires no hook and is skipped. Ghostex's Codex sessions run the TUI without Codex's shared app-server (the `ghostex-codex-wrapper`), so the daemon's thread status cannot be matched to them.
+//!
+//! CDXC:AgentHooks 2026-11-11 DECISION:
+//! User, on no longer installing hooks for Claude, Codex and OpenCode and tracking them from what each agent exposes itself: picked "Claude, then OpenCode and Codex", knowing Codex may not be possible. Codex's approval wait does have a hook-free source, just not in any file: since 0.164 the TUI reports its state on every draw as OSC 7501 (`state=blocked:app=codex:kind=permission|question|auth` while an approval, question or sign-in waits, `working`, `idle` after a turn), written unconditionally to any terminal that is not an old VTE (codex-rs tui/src/terminal_program_status.rs). zmx records it per session and gxserver's Combined program status (program_status/) already turns `blocked` into attention for every session, hook or not, so this observer does not look for approvals. The rollout stays the source of turns and tools: Codex keeps approval and elicitation events out of it on purpose (rollout/src/policy.rs lists `ExecApprovalRequest`, `RequestPermissions`, `ElicitationRequest` as transient), its OTEL `codex.tool_decision` only fires after the answer, and its `notify` program only on a finished turn. Where the hook is missing nothing reports the conversation, so the rollout is the one Codex's process holds open (the zmx process scan, `find_open_rollouts`), which also follows a resume or `/new` inside the TUI; the hook's id and path are the fallback.
+//! SEE-ALSO: server/src/program_status/ingest.rs (`apply_program_status`), server/src/zmx/provider.rs (`codex_process_session_identity_from_paths`), server/src/session_chat_codex_blocking.rs (the screen reader for the same prompts).
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{json, Value};
 
@@ -40,7 +44,17 @@ struct Tail {
 pub(super) struct CodexObserver {
     tails: HashMap<(String, String), Tail>,
     lookups: HashMap<String, Option<PathBuf>>,
+    /// The root rollout each session's Codex process holds open, with its conversation id, read
+    /// off the process (`find_open_rollouts`); preferred over the ids the hook reported.
+    open_rollouts: HashMap<(String, String), (String, PathBuf)>,
+    open_rollouts_read_at: Option<Instant>,
+    /// Each open file's conversation id if it is a root rollout (`None`: not one, such as a
+    /// subagent's): a rollout's first line never changes, so it is read once.
+    root_rollouts: HashMap<PathBuf, Option<String>>,
 }
+
+/// How often the open rollouts are read again: the process scan is cached for about as long.
+const OPEN_ROLLOUTS_REFRESH: Duration = Duration::from_secs(2);
 
 /// The hook event a rollout line stands for. `quiet_calls` holds the call ids of tools Codex
 /// fires no hook for, so their outputs are skipped too.
@@ -88,6 +102,45 @@ fn line_event(
 }
 
 impl CodexObserver {
+    /// Reads the rollout each Codex session's process holds open (the zmx process scan, cached),
+    /// so a session whose hook never reported its conversation is still followed, and an in-TUI
+    /// resume or `/new` moves the tail to the new rollout.
+    pub(super) fn find_open_rollouts(&mut self, home_dir: &std::path::Path, sessions: &[Value]) {
+        if self
+            .open_rollouts_read_at
+            .is_some_and(|at| at.elapsed() < OPEN_ROLLOUTS_REFRESH)
+        {
+            return;
+        }
+        self.open_rollouts_read_at = Some(Instant::now());
+        let mut names = Vec::new();
+        let mut keys = HashMap::new();
+        for session in sessions {
+            if read_session_text(session, "agentId").as_deref() != Some("codex") {
+                continue;
+            }
+            let (Some(project_id), Some(session_id), Some(name)) = (
+                read_session_text(session, "projectId"),
+                read_session_text(session, "sessionId"),
+                read_session_text(session, "zmxName"),
+            ) else {
+                continue;
+            };
+            keys.insert(name.clone(), (project_id, session_id));
+            names.push(name);
+        }
+        let Ok(identities) =
+            crate::zmx::read_cached_zmx_session_process_identities(&names, home_dir)
+        else {
+            // A failed scan keeps what the last one found.
+            return;
+        };
+        self.open_rollouts = open_rollouts_from(&keys, &identities, &mut self.root_rollouts);
+        if self.root_rollouts.len() > 1024 {
+            self.root_rollouts.clear();
+        }
+    }
+
     pub(super) fn poll(&mut self, sessions: &[Value]) -> Vec<ActivityEvent> {
         let mut events = Vec::new();
         let mut active = Vec::new();
@@ -101,18 +154,31 @@ impl CodexObserver {
             ) else {
                 continue;
             };
-            let thread = read_runtime_text(session, "agentSessionId");
-            let path = read_runtime_text(session, "agentSessionPath")
-                .map(PathBuf::from)
-                .filter(|path| path.is_file())
-                .or_else(|| {
-                    let thread = thread.as_deref()?;
-                    self.lookups
-                        .entry(thread.to_string())
-                        .or_insert_with(|| crate::agent_transcripts::find_codex_transcript(thread))
-                        .clone()
-                });
             let key = (project_id.clone(), session_id.clone());
+            let open = self
+                .open_rollouts
+                .get(&key)
+                .filter(|(_, path)| path.is_file())
+                .cloned();
+            let (thread, path) = match open {
+                Some((thread, path)) => (Some(thread), Some(path)),
+                None => {
+                    let thread = read_runtime_text(session, "agentSessionId");
+                    let path = read_runtime_text(session, "agentSessionPath")
+                        .map(PathBuf::from)
+                        .filter(|path| path.is_file())
+                        .or_else(|| {
+                            let thread = thread.as_deref()?;
+                            self.lookups
+                                .entry(thread.to_string())
+                                .or_insert_with(|| {
+                                    crate::agent_transcripts::find_codex_transcript(thread)
+                                })
+                                .clone()
+                        });
+                    (thread, path)
+                }
+            };
             active.push(key.clone());
             let Some(path) = path else {
                 continue;
@@ -217,6 +283,69 @@ impl CodexObserver {
     }
 }
 
+/// The open root rollout of each session the process scan found Codex in, by session.
+///
+/// CDXC:AgentHooks 2026-11-11 WHY:
+/// After `/new` (or a resume) inside the TUI, Codex 0.167 keeps the previous conversation's rollout open beside the new one (seen live with lsof), so the process scan, which needs exactly one open root rollout, names none, and without the hook the row's id and path went on naming the old conversation; the observer tailed a file nothing wrote to and missed every later turn. Of the root rollouts the process holds open, the one written last is the conversation the TUI is on: a new or resumed one is written when it opens, the one left behind no more.
+fn open_rollouts_from(
+    keys: &HashMap<String, (String, String)>,
+    identities: &HashMap<String, crate::zmx::ZmxProcessIdentity>,
+    root_rollouts: &mut HashMap<PathBuf, Option<String>>,
+) -> HashMap<(String, String), (String, PathBuf)> {
+    let mut found = HashMap::new();
+    for (name, identity) in identities {
+        if identity.agent_id.as_deref() != Some("codex") {
+            continue;
+        }
+        let Some(key) = keys.get(name) else {
+            continue;
+        };
+        let newest = identity
+            .open_file_paths
+            .iter()
+            .flat_map(|paths| paths.iter())
+            .filter_map(|path| {
+                let id = match root_rollouts.get(path) {
+                    Some(known) => known.clone()?,
+                    None => {
+                        // Not cached while its first line is still unwritten.
+                        let known = root_rollout_id(path)?;
+                        root_rollouts.insert(path.clone(), known.clone());
+                        known?
+                    }
+                };
+                let written = std::fs::metadata(path)
+                    .and_then(|meta| meta.modified())
+                    .ok()?;
+                Some((written, id, path.clone()))
+            })
+            .max_by_key(|(written, _, _)| *written)
+            .map(|(_, id, path)| (id, path));
+        // No open file list (Windows' helper failed, or too many files): the scan's own answer.
+        let chosen = newest.or_else(|| {
+            Some((
+                identity.agent_session_id.clone()?,
+                PathBuf::from(identity.agent_session_path.as_deref()?),
+            ))
+        });
+        if let Some(chosen) = chosen {
+            found.insert(key.clone(), chosen);
+        }
+    }
+    found
+}
+
+/// Whether an open file is a Codex root rollout, with its conversation id: under `sessions/`,
+/// its first line a `session_meta` naming the id in its file name, and not a subagent's.
+/// `None` while that first line cannot be read yet.
+fn root_rollout_id(path: &std::path::Path) -> Option<Option<String>> {
+    let Some(id) = crate::zmx::codex_session_id_from_transcript_path(path) else {
+        return Some(None);
+    };
+    let meta = crate::session_chat_successor::read_codex_session_meta(path)?;
+    Some((!meta.is_subagent && meta.session_id == id).then_some(id))
+}
+
 fn read_from(path: &PathBuf, offset: u64, length: u64) -> Option<String> {
     let mut file = std::fs::File::open(path).ok()?;
     let start = offset.max(length.saturating_sub(MAX_READ));
@@ -224,4 +353,117 @@ fn read_from(path: &PathBuf, offset: u64, length: u64) -> Option<String> {
     let mut bytes = Vec::new();
     file.take(length - start).read_to_end(&mut bytes).ok()?;
     Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const OLD: &str = "01a1cace-53ec-7371-9636-22aead416642";
+    const NEW: &str = "01a1cacf-0d60-7e40-9490-0655946213eb";
+    const CHILD: &str = "01a1cad0-1111-7222-8333-444455556666";
+
+    fn rollout(dir: &std::path::Path, id: &str, meta: Value, lines: &str) -> PathBuf {
+        let path = dir.join(format!("rollout-2026-11-11T17-31-21-{id}.jsonl"));
+        let head = json!({ "type": "session_meta", "payload": meta });
+        std::fs::write(&path, format!("{head}\n{lines}")).expect("rollout");
+        path
+    }
+
+    fn codex(paths: Vec<PathBuf>) -> crate::zmx::ZmxProcessIdentity {
+        crate::zmx::ZmxProcessIdentity {
+            agent_id: Some("codex".to_string()),
+            open_file_paths: Some(paths.into()),
+            ..Default::default()
+        }
+    }
+
+    fn keys() -> HashMap<String, (String, String)> {
+        HashMap::from([("S1-P1-G1".to_string(), ("P1".to_string(), "G1".to_string()))])
+    }
+
+    /// After `/new` Codex holds the old and the new rollout open (and a subagent's, if one ran):
+    /// the newest root rollout is the conversation, and it wins over the stale bound path.
+    #[test]
+    fn the_newest_root_rollout_codex_holds_open_is_followed() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let dir = temp.path().join("sessions").join("2026").join("11").join("11");
+        std::fs::create_dir_all(&dir).expect("dir");
+        let old = rollout(&dir, OLD, json!({ "id": OLD }), "");
+        let started = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\"}}\n";
+        std::thread::sleep(Duration::from_millis(20));
+        let new = rollout(&dir, NEW, json!({ "id": NEW }), started);
+        std::thread::sleep(Duration::from_millis(20));
+        let child = rollout(
+            &dir,
+            CHILD,
+            json!({ "id": CHILD, "source": { "subagent": { "thread_spawn": { "parent_thread_id": NEW } } } }),
+            started,
+        );
+        let identities = HashMap::from([(
+            "S1-P1-G1".to_string(),
+            codex(vec![old.clone(), child, temp.path().join("other.log"), new.clone()]),
+        )]);
+        let mut cache = HashMap::new();
+        let mut observer = CodexObserver {
+            open_rollouts: open_rollouts_from(&keys(), &identities, &mut cache),
+            ..Default::default()
+        };
+        assert_eq!(
+            observer.open_rollouts.get(&("P1".to_string(), "G1".to_string())),
+            Some(&(NEW.to_string(), new))
+        );
+        let session = json!({
+            "agentId": "codex",
+            "projectId": "P1",
+            "sessionId": "G1",
+            "runtimeSettings": { "agentSessionId": OLD, "agentSessionPath": old },
+        });
+        let events = observer.poll(&[session]);
+        let names: Vec<_> = events.iter().map(|event| event.event_name.as_str()).collect();
+        assert_eq!(names, ["SessionStart", "UserPromptSubmit"]);
+        assert!(events
+            .iter()
+            .all(|event| event.agent_session_id.as_deref() == Some(NEW)));
+    }
+
+    /// A rollout whose first line is not written yet is looked at again on the next scan.
+    #[test]
+    fn a_rollout_without_its_first_line_is_read_again() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let dir = temp.path().join("sessions");
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join(format!("rollout-2026-11-11T17-31-21-{NEW}.jsonl"));
+        std::fs::write(&path, "").expect("empty");
+        let identities = HashMap::from([("S1-P1-G1".to_string(), codex(vec![path.clone()]))]);
+        let mut cache = HashMap::new();
+        assert!(open_rollouts_from(&keys(), &identities, &mut cache).is_empty());
+        std::fs::write(&path, format!("{}\n", json!({ "type": "session_meta", "payload": { "id": NEW } })))
+            .expect("meta");
+        assert_eq!(
+            open_rollouts_from(&keys(), &identities, &mut cache).len(),
+            1
+        );
+    }
+
+    /// Another agent's process, or a Codex with no open rollout and no answer of its own,
+    /// names nothing.
+    #[test]
+    fn only_a_codex_process_with_a_root_rollout_counts() {
+        let mut keys = keys();
+        keys.insert("S1-P1-G2".to_string(), ("P1".to_string(), "G2".to_string()));
+        let identities = HashMap::from([
+            ("S1-P1-G1".to_string(), codex(Vec::new())),
+            (
+                "S1-P1-G2".to_string(),
+                crate::zmx::ZmxProcessIdentity {
+                    agent_id: Some("claude".to_string()),
+                    agent_session_id: Some("c".to_string()),
+                    agent_session_path: Some("/x.jsonl".to_string()),
+                    ..Default::default()
+                },
+            ),
+        ]);
+        assert!(open_rollouts_from(&keys, &identities, &mut HashMap::new()).is_empty());
+    }
 }
