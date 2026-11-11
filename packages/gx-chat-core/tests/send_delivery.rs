@@ -516,3 +516,54 @@ fn the_row_drawn_at_enter_is_the_row_the_core_draws() {
         assert_eq!(message["startupDelivery"]["state"], "sending");
     }
 }
+
+/// A message sent while a dialog on the agent's terminal holds its input, with that dialog's card
+/// not on screen (answered a moment ago): it is held, says so on its row, and goes by itself the
+/// moment the dialog is gone. The silent hold of 11 Nov 03:36 (CDXC:SessionChat 2026-11-11 in
+/// `composer/policy.rs` on `hold_words`).
+#[test]
+fn a_held_message_says_why_on_its_row_and_goes_when_the_hold_ends() {
+    let mut host = Host::new();
+    host.core.state_mut().session.terminal_notice = Some(json!({
+        "kind": "terminalDialog", "severity": "info", "title": "Pick one", "source": "screen",
+        "detectedAt": "2026-11-11T01:00:00.000Z",
+        "choices": [{ "index": 0, "label": "Yes" }, { "index": 1, "label": "No" }],
+    }));
+    host.drive(Event::Tick);
+    // Its card was answered: no longer drawn, though the agent's screen still shows the dialog.
+    let key = host.core.state().questions.active_notice_key.clone();
+    assert!(key.is_some(), "the core knows the notice");
+    host.core.state_mut().questions.answered_notice_key = key;
+
+    host.send("hello", "id-1");
+    assert!(host.out.is_empty(), "held: nothing goes to gxserver");
+    assert!(
+        host.handed_back().is_empty(),
+        "and nothing goes back to the chat box"
+    );
+    let rows = host.rows();
+    assert_eq!(rows.len(), 1, "it shows at once");
+    assert_eq!(rows[0].1["state"], "waiting");
+    let why = rows[0].1["waitReason"].as_str().unwrap().to_string();
+    assert!(why.contains("dialog"), "{why}");
+    let document = serde_json::to_value(host.core.document()).unwrap();
+    assert_eq!(
+        document["sendHeld"],
+        why.as_str(),
+        "the host's log says what holds it"
+    );
+    // It stays held however long the dialog stays.
+    host.wait(120_000.0);
+    assert!(host.out.is_empty());
+
+    // The dialog leaves the agent's screen: the message goes with the very next event.
+    host.core.state_mut().session.terminal_notice = None;
+    host.drive(Event::Tick);
+    assert_eq!(host.out.len(), 1, "released");
+    assert_eq!(host.ids(), ["id-1"]);
+    let document = serde_json::to_value(host.core.document()).unwrap();
+    assert!(document["sendHeld"].is_null());
+    host.ok();
+    assert!(host.rows()[0].1.is_null());
+    assert_eq!(host.delivered.len(), 1, "once");
+}
