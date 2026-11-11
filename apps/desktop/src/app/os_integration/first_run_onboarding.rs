@@ -186,7 +186,11 @@ impl GhostexGpuiApp {
             }
             let _ = this.update(cx, |this, cx| {
                 // CDXC:Onboarding 2026-09-28 WHY: the onboarding is a native window now (window/onboarding/), so first run no longer starts or downloads the CEF runtime to show it; this supersedes the CDXC:CefRuntime 2026-09-19 wait for CEF here.
-                if show_os_integration_toast {
+                /*
+                CDXC:Onboarding 2026-11-11 DECISION:
+                User, on the first-run page (step 5, the intro video with a toast over it): "remove the toast. keep the vid. use can skip watching the vid if he wants". When setup opens, the OS Integration toast is not shown (it is still marked seen, so it never lands on a later launch either); a computer that already finished setup and never saw it still gets it.
+                */
+                if show_os_integration_toast && first_launch_setup_sidebar_state.is_none() {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
                             copy_text: None,
@@ -205,6 +209,8 @@ impl GhostexGpuiApp {
                         },
                         cx,
                     );
+                }
+                if show_os_integration_toast {
                     this.persist_gpui_first_run_onboarding_marker(
                         GpuiFirstRunOnboardingMarker::OsIntegrationOnboardingSeen,
                         cx,

@@ -1,4 +1,4 @@
-//! Panel 1, Welcome: the three feature tabs and their live demos (panels/welcome.tsx (deleted 2026-10-01),
+//! Panel 1, Welcome: the three feature tabs and their demos (panels/welcome.tsx (deleted 2026-10-01),
 //! previews/welcome-demos.tsx (deleted 2026-10-01), styles/welcome.css).
 use super::GpuiOnboardingWindow;
 use super::fonts::PLEX_MONO;
@@ -7,16 +7,15 @@ use super::primitives::*;
 use super::stage::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Bounds, Context, Div, FontWeight, InteractiveElement as _, IntoElement,
-    ParentElement as _, Styled as _, canvas, div, linear_color_stop, linear_gradient, point, px,
-    size,
+    AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
+    Styled as _, StyledImage as _, div, linear_color_stop, linear_gradient,
 };
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WelcomeTab {
     Together,
-    Chat,
+    Coordinators,
     Mobile,
 }
 
@@ -42,11 +41,13 @@ const TABS: [(WelcomeTab, &str, &str, &str); 3] = [
         "Agents that work together",
         "One agent can launch and hand work to another.",
     ),
+    // CDXC:Onboarding 2026-11-11 DECISION:
+    // User, on the first-run page (step 6, Welcome): "the terminal one NO ONE cares about so let's change it to something else about coordinators because that's the coolest feature of ghostex. see README.md for details about coordinators. i want also nice graphic same style about this". The Chat + terminal tab is now Coordinators, with the captain's hat and the coordinators picture (assets/onboarding/welcome-coordinators.webp, from the first-run art thread).
     (
-        WelcomeTab::Chat,
-        "chat",
-        "Chat + terminal",
-        "Read it as a chat, the real CLI runs underneath.",
+        WelcomeTab::Coordinators,
+        COORDINATOR_ICON,
+        "Coordinators",
+        "One session plans the work, hands it to threads and reports back.",
     ),
     (
         WelcomeTab::Mobile,
@@ -55,6 +56,9 @@ const TABS: [(WelcomeTab, &str, &str, &str); 3] = [
         "Always-on sessions, pick up anywhere.",
     ),
 ];
+
+/// The tab icon that is the app's coordinator mark (the captain's hat) instead of a line icon.
+const COORDINATOR_ICON: &str = "coordinator";
 
 /// `<FootActions panel>`: the panel's forward action on the footer row, right-aligned to the copy column.
 /// CDXC:Onboarding 2026-09-12 DECISION:
@@ -193,97 +197,11 @@ const SUB_LOG: [LogLine; 3] = [
     (5, "ok", "6 of 6 pass"),
 ];
 
-/// A transcript row: what the terminal shows, and the chat bubble it becomes when there is one.
-type TranscriptLine = (
-    (&'static str, &'static str),
-    Option<(&'static str, &'static str)>,
-);
-
-const TRANSCRIPT: [TranscriptLine; 6] = [
-    (("cmd", "$ claude"), None),
-    (
-        ("me", "> Fix the flaky refresh test"),
-        Some(("me", "Fix the flaky refresh test")),
-    ),
-    (
-        ("tool", "● Read src/auth/refresh.ts"),
-        Some(("tool", "Read refresh.ts")),
-    ),
-    (
-        ("tool", "● Update src/auth/refresh.ts  +12 −4"),
-        Some(("tool", "Edited refresh.ts · +12 −4")),
-    ),
-    (
-        ("tool", "● Bash bun test  17 passed"),
-        Some(("tool", "Ran the tests · 17 passed")),
-    ),
-    (
-        ("out", "Fixed: the refresh now waits for the lock."),
-        Some((
-            "bot",
-            "Fixed. The refresh now waits for the lock, and all 17 tests pass.",
-        )),
-    ),
-];
-
 const MONITOR_SESSIONS: [(&str, &str); 3] = [
     ("claude", "refactor-auth"),
     ("codex", "port-legacy-tests"),
     ("cursor", "tokens-to-css-vars"),
 ];
-
-/// `wirePath`: a vertical-horizontal-vertical connector with rounded corners, as polyline points.
-fn wire_points(x1: f32, y1: f32, x2: f32, y2: f32) -> Vec<(f32, f32)> {
-    let mid_y = (y1 + y2) / 2.0;
-    let dx = (x2 - x1).signum();
-    let dy = (y2 - y1).signum();
-    let r = 16.0f32.min((x2 - x1).abs() / 2.0).min((mid_y - y1).abs());
-    let mut points = vec![(x1, y1), (x1, mid_y - dy * r)];
-    let quad = |p0: (f32, f32), c: (f32, f32), p1: (f32, f32), points: &mut Vec<(f32, f32)>| {
-        for step in 1..=8 {
-            let t = step as f32 / 8.0;
-            let mt = 1.0 - t;
-            points.push((
-                mt * mt * p0.0 + 2.0 * mt * t * c.0 + t * t * p1.0,
-                mt * mt * p0.1 + 2.0 * mt * t * c.1 + t * t * p1.1,
-            ));
-        }
-    };
-    quad(
-        (x1, mid_y - dy * r),
-        (x1, mid_y),
-        (x1 + dx * r, mid_y),
-        &mut points,
-    );
-    points.push((x2 - dx * r, mid_y));
-    quad(
-        (x2 - dx * r, mid_y),
-        (x2, mid_y),
-        (x2, mid_y + dy * r),
-        &mut points,
-    );
-    points.push((x2, y2));
-    points
-}
-
-/// A point `t` (0..1) of the way along a polyline, at constant speed (SVG `animateMotion` is paced).
-fn along(points: &[(f32, f32)], t: f32) -> (f32, f32) {
-    let lengths: Vec<f32> = points
-        .windows(2)
-        .map(|pair| ((pair[1].0 - pair[0].0).powi(2) + (pair[1].1 - pair[0].1).powi(2)).sqrt())
-        .collect();
-    let total: f32 = lengths.iter().sum();
-    let mut remaining = t.clamp(0.0, 1.0) * total;
-    for (index, length) in lengths.iter().enumerate() {
-        if remaining <= *length && *length > 0.0 {
-            let k = remaining / length;
-            let (a, b) = (points[index], points[index + 1]);
-            return (a.0 + (b.0 - a.0) * k, a.1 + (b.1 - a.1) * k);
-        }
-        remaining -= length;
-    }
-    *points.last().unwrap_or(&(0.0, 0.0))
-}
 
 impl GpuiOnboardingWindow {
     pub(super) fn render_welcome(
@@ -374,13 +292,17 @@ impl GpuiOnboardingWindow {
                             }
                         })
                         .shadow(vec![inset_shadow(ring, 0.0, 0.0, 0.0, 1.0, s)])
-                        .child(ibox(s, 44.0, 11.0).child(icon(
-                            s,
-                            icon_name,
-                            20.0,
-                            1.6,
-                            hex(0xdfe4ee),
-                        )))
+                        .child(
+                            ibox(s, 44.0, 11.0).child(if *icon_name == COORDINATOR_ICON {
+                                gpui::svg()
+                                    .path("titlebar/coordinator-captain-hat.svg")
+                                    .size(s.px(24.0))
+                                    .text_color(hex(0xdfe4ee))
+                                    .into_any_element()
+                            } else {
+                                icon(s, icon_name, 20.0, 1.6, hex(0xdfe4ee)).into_any_element()
+                            }),
+                        )
                         .child(
                             div()
                                 .flex_1()
@@ -430,7 +352,7 @@ impl GpuiOnboardingWindow {
         let mounted = self.welcome.tab_since;
         match tab {
             WelcomeTab::Together => out.extend(self.agents_together_demo(s, mounted, now)),
-            WelcomeTab::Chat => out.extend(self.chat_terminal_demo(s, mounted, now)),
+            WelcomeTab::Coordinators => out.push(coordinators_picture(s, mounted, now)),
             WelcomeTab::Mobile => out.extend(self.desktop_mobile_demo(s, mounted, now)),
         }
         out
@@ -629,243 +551,6 @@ impl GpuiOnboardingWindow {
             mounted,
             now,
         ));
-        out
-    }
-
-    fn chat_terminal_demo(&self, s: S, mounted: Instant, now: Instant) -> Vec<AnyElement> {
-        let cycle = cycle(mounted, now, TRANSCRIPT.len(), 1150, 3);
-        let frame = cycle.frame;
-        let elapsed = now.saturating_duration_since(mounted).as_secs_f32();
-        let wires = [
-            (
-                wire_points(1215.0, 196.0, 1000.0, 250.0),
-                (1000.0, 250.0),
-                0.0f32,
-            ),
-            (
-                wire_points(1215.0, 196.0, 1430.0, 250.0),
-                (1430.0, 250.0),
-                0.5f32,
-            ),
-        ];
-        let scale = s.0;
-        let wire_canvas = canvas(
-            |_, _, _| {},
-            move |bounds, _, window, _| {
-                let at = |(x, y): (f32, f32)| {
-                    point(
-                        bounds.origin.x + px(x * scale),
-                        bounds.origin.y + px(y * scale),
-                    )
-                };
-                for (points, end, delay) in &wires {
-                    for (width, color) in [
-                        (6.0, rgba(80, 130, 255, 0.5 * 0.45)),
-                        (1.5, rgba(150, 182, 255, 1.0)),
-                    ] {
-                        let mut path = gpui::PathBuilder::stroke(px(width * scale));
-                        path.move_to(at(points[0]));
-                        for point in &points[1..] {
-                            path.line_to(at(*point));
-                        }
-                        if let Ok(path) = path.build() {
-                            window.paint_path(path, color);
-                        }
-                    }
-                    let dot = |center: (f32, f32),
-                               radius: f32,
-                               color: gpui::Hsla,
-                               glow: gpui::Hsla,
-                               window: &mut gpui::Window| {
-                        let c = at(center);
-                        for (extra, glow_alpha) in [(3.0, 0.25), (1.5, 0.45)] {
-                            let r = (radius + extra) * scale;
-                            window.paint_quad(
-                                gpui::fill(
-                                    Bounds::new(
-                                        point(c.x - px(r), c.y - px(r)),
-                                        size(px(r * 2.0), px(r * 2.0)),
-                                    ),
-                                    glow.opacity(glow_alpha),
-                                )
-                                .corner_radii(px(r)),
-                            );
-                        }
-                        let r = radius * scale;
-                        window.paint_quad(
-                            gpui::fill(
-                                Bounds::new(
-                                    point(c.x - px(r), c.y - px(r)),
-                                    size(px(r * 2.0), px(r * 2.0)),
-                                ),
-                                color,
-                            )
-                            .corner_radii(px(r)),
-                        );
-                    };
-                    dot(*end, 3.4, hex(0x5b85ff), hex(0x4a78ff), window);
-                    for (radius, begin) in [(3.2, *delay), (2.6, 0.57)] {
-                        let local = elapsed - begin;
-                        if local < 0.0 {
-                            continue;
-                        }
-                        let t = (local / 1.15).fract();
-                        dot(
-                            along(points, t),
-                            radius,
-                            hex(0xcddaff),
-                            hex(0x7a9dff),
-                            window,
-                        );
-                    }
-                }
-            },
-        )
-        .absolute()
-        .left_0()
-        .top_0()
-        .w(s.px(STAGE_WIDTH))
-        .h(s.px(STAGE_HEIGHT));
-        let mut out = vec![wire_canvas.into_any_element()];
-        out.push(
-            abs(s, 1095.0, 158.0, Some(240.0), Some(38.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(s.px(9.0))
-                .rounded(s.px(19.0))
-                .bg(rgba(14, 18, 30, 0.95))
-                .border_1()
-                .border_color(rgba(100, 140, 255, 0.4))
-                .shadow(vec![shadow(
-                    rgba(60, 100, 255, 0.2),
-                    0.0,
-                    0.0,
-                    22.0,
-                    0.0,
-                    s,
-                )])
-                .child(run_dot(s))
-                .child(mono(s, 12.5, 500.0, hex(0xdfe4ee)).child("refactor-auth · one session"))
-                .into_any_element(),
-        );
-        let caret_on = blink(self.opened_at, now);
-        let terminal_lines =
-            TRANSCRIPT[..=frame]
-                .iter()
-                .enumerate()
-                .map(|(index, ((class, text), _))| {
-                    let appeared = cycle.frame_at(index, 1150).max(mounted);
-                    let t = entrance(appeared, now, 250);
-                    let color = match *class {
-                        "cmd" => hex(0xeef1f7),
-                        "me" => hex(0xaec2ff),
-                        "tool" => hex(0x9aa3b3),
-                        "out" => hex(0x3be3a2),
-                        _ => hex(0xc9d0dc),
-                    };
-                    mono(s, 12.5, 400.0, color)
-                        .relative()
-                        .left(s.px(-4.0 * (1.0 - t)))
-                        .opacity(t)
-                        .whitespace_nowrap()
-                        .child(text.to_string())
-                        .into_any_element()
-                });
-        out.push(
-            demo_pane(s, 810.0, 250.0, "terminal", "Terminal")
-                .child(
-                    pane_body(s).bg(black(0.22)).children(terminal_lines).child(
-                        div()
-                            .w(s.px(8.0))
-                            .h(s.px(14.0))
-                            .flex_none()
-                            .bg(hex(0xaab2c1))
-                            .opacity(if caret_on { 1.0 } else { 0.0 }),
-                    ),
-                )
-                .into_any_element(),
-        );
-        let chat_lines = TRANSCRIPT[..=frame]
-            .iter()
-            .enumerate()
-            .filter_map(|(index, (_, line))| line.map(|line| (index, line)))
-            .map(|(index, (class, text))| {
-                let appeared = cycle.frame_at(index, 1150).max(mounted);
-                let t = entrance(appeared, now, 300);
-                let fresh = index == frame;
-                let base = div()
-                    .relative()
-                    .left(s.px(-4.0 * (1.0 - t)))
-                    .opacity(t)
-                    .font_family(super::fonts::dm_sans());
-                match class {
-                    "me" => base
-                        .self_end()
-                        .max_w(relative(0.84))
-                        .text_size(s.px(13.0))
-                        .line_height(s.px(13.0 * 1.45))
-                        .bg(rgba(60, 90, 200, 0.25))
-                        .border_1()
-                        .border_color(rgba(100, 140, 255, 0.3))
-                        .py(s.px(8.0))
-                        .px(s.px(12.0))
-                        .rounded(s.px(12.0))
-                        .when(fresh, |this| {
-                            this.shadow(vec![shadow(
-                                rgba(120, 160, 255, 0.9 * glow_once(appeared, now)),
-                                0.0,
-                                0.0,
-                                7.0,
-                                0.0,
-                                s,
-                            )])
-                        })
-                        .child(text.to_string())
-                        .into_any_element(),
-                    "tool" => base
-                        .self_start()
-                        .flex()
-                        .items_center()
-                        .gap(s.px(7.0))
-                        .text_size(s.px(12.0))
-                        .line_height(s.px(12.0 * 1.45))
-                        .text_color(hex(0xaab2c1))
-                        .py(s.px(5.0))
-                        .px(s.px(10.0))
-                        .rounded(s.px(8.0))
-                        .bg(white(0.04))
-                        .border_1()
-                        .border_color(white(0.07))
-                        .child(icon(s, "check", 13.0, 2.2, hex(0x3be3a2)))
-                        .child(text.to_string())
-                        .into_any_element(),
-                    _ => base
-                        .max_w(relative(0.94))
-                        .text_size(s.px(13.0))
-                        .line_height(s.px(13.0 * 1.45))
-                        .text_color(hex(0xe8ecf4))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(s.px(6.0))
-                                .mb(s.px(4.0))
-                                .text_size(s.px(11.0))
-                                .line_height(s.px(11.0 * 1.45))
-                                .text_color(hex(0x8e97a8))
-                                .child(agent_logo(s, &self.catalog, "claude", 13.0))
-                                .child("Claude Code"),
-                        )
-                        .child(text.to_string())
-                        .into_any_element(),
-                }
-            });
-        out.push(
-            demo_pane(s, 1240.0, 250.0, "chat", "Chat view")
-                .child(pane_body(s).children(chat_lines))
-                .into_any_element(),
-        );
         out
     }
 
@@ -1257,14 +942,18 @@ impl GpuiOnboardingWindow {
     }
 }
 
-/// `.run` dot: 7px green with a glow.
-pub(crate) fn run_dot(s: S) -> Div {
-    div()
-        .size(s.px(7.0))
-        .flex_none()
-        .rounded_full()
-        .bg(hex(0x3be3a2))
-        .shadow(vec![shadow(hex(0x3be3a2), 0.0, 0.0, 6.0, 0.0, s)])
+/// The Coordinators tab's picture: you, the coordinator, its threads and a result coming back,
+/// 810x440 on the stage where the two demo panes of the old Chat + terminal tab stood.
+fn coordinators_picture(s: S, mounted: Instant, now: Instant) -> AnyElement {
+    let fade = progress(mounted, now, Duration::from_millis(350), Ease::Ease);
+    abs(s, 810.0, 250.0, Some(810.0), Some(440.0))
+        .opacity(fade)
+        .child(
+            gpui::img("onboarding/welcome-coordinators.webp")
+                .size_full()
+                .object_fit(gpui::ObjectFit::Contain),
+        )
+        .into_any_element()
 }
 
 /// `.dcard` surface.
@@ -1279,59 +968,6 @@ fn glass_card(s: S) -> Div {
         .border_1()
         .border_color(rgba(88, 124, 235, 0.26))
         .shadow(vec![inset_shadow(white(0.05), 0.0, 1.0, 0.0, 0.0, s)])
-}
-
-/// `.dpane` with its header.
-fn demo_pane(s: S, left: f32, top: f32, icon_name: &str, title: &str) -> Div {
-    div()
-        .absolute()
-        .left(s.px(left))
-        .top(s.px(top))
-        .w(s.px(380.0))
-        .h(s.px(440.0))
-        .flex()
-        .flex_col()
-        .rounded(s.px(14.0))
-        .bg(linear_gradient(
-            180.0,
-            linear_color_stop(rgba(12, 16, 31, 0.9), 0.0),
-            linear_color_stop(rgba(7, 9, 18, 0.92), 1.0),
-        ))
-        .border_1()
-        .border_color(rgba(90, 125, 235, 0.34))
-        .shadow(vec![
-            inset_shadow(white(0.05), 0.0, 1.0, 0.0, 0.0, s),
-            shadow(rgba(40, 80, 220, 0.12), 0.0, 0.0, 34.0, 0.0, s),
-        ])
-        .overflow_hidden()
-        .child(
-            div()
-                .flex()
-                .flex_none()
-                .items_center()
-                .gap(s.px(10.0))
-                .h(s.px(46.0))
-                .px(s.px(18.0))
-                .border_b_1()
-                .border_color(white(0.06))
-                .font_family(super::fonts::dm_sans())
-                .text_size(s.px(14.0))
-                .font_weight(FontWeight(500.0))
-                .text_color(hex(0xe8ecf4))
-                .child(icon(s, icon_name, 16.0, 1.6, hex(0x6d93ff)))
-                .child(title.to_string()),
-        )
-}
-
-fn pane_body(s: S) -> Div {
-    div()
-        .flex_1()
-        .py(s.px(16.0))
-        .px(s.px(18.0))
-        .flex()
-        .flex_col()
-        .gap(s.px(10.0))
-        .overflow_hidden()
 }
 
 /// `.dcap`: the uppercase caption under a demo device.

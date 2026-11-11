@@ -54,16 +54,6 @@ impl ViewKey {
             ViewKey::Automate => 4,
         }
     }
-
-    pub(crate) fn title(self) -> &'static str {
-        match self {
-            ViewKey::Browser => "Browser",
-            ViewKey::Docs => "Files",
-            ViewKey::Code => "VS Code",
-            ViewKey::Kanban => "Kanban",
-            ViewKey::Automate => "Automate",
-        }
-    }
 }
 
 /// One agent the host's detection reported (`OnboardingDetectedAgent`).
@@ -193,9 +183,9 @@ pub(crate) struct OnboardingSettings {
     pub(crate) view_hidden: [bool; 5],
     /// Spaces (`sidebarSpacesEnabled`, off by default): Settings > Sidebar & Sessions > Spaces writes the same key.
     pub(crate) spaces_on: bool,
+    /// The Unified sidebar (`sidebarView` = `unified`); Settings > Sidebar writes the same key.
+    pub(crate) unified_sidebar: bool,
     pub(crate) notify: bool,
-    /// Floating Capture (`ghostexCaptureEnabled`).
-    pub(crate) floating_capture: bool,
     pub(crate) preferred_interface: String,
     pub(crate) default_prompt_agent_id: String,
     /// Agent approvals (`agentAcceptAllEnabled`): true is Skip permissions.
@@ -338,8 +328,8 @@ impl OnboardingSettings {
         Self {
             view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
             spaces_on: read_bool(object, "sidebarSpacesEnabled", false),
+            unified_sidebar: text("sidebarView") == Some("unified"),
             notify: read_bool(object, "showMacOSAttentionNotifications", true),
-            floating_capture: read_bool(object, "ghostexCaptureEnabled", false),
             preferred_interface: match text("preferredAgentInterface") {
                 Some("terminal") => "terminal".to_string(),
                 _ => "chat".to_string(),
@@ -393,6 +383,9 @@ impl OnboardingSettings {
         if let Some(value) = patch.get("sidebarSpacesEnabled").and_then(Value::as_bool) {
             self.spaces_on = value;
         }
+        if let Some(value) = patch.get("sidebarView").and_then(Value::as_str) {
+            self.unified_sidebar = value == "unified";
+        }
         let text = |key: &str| patch.get(key).and_then(Value::as_str).map(str::to_string);
         let number = |key: &str| patch.get(key).and_then(Value::as_f64);
         if let Some(value) = patch
@@ -400,9 +393,6 @@ impl OnboardingSettings {
             .and_then(Value::as_bool)
         {
             self.notify = value;
-        }
-        if let Some(value) = patch.get("ghostexCaptureEnabled").and_then(Value::as_bool) {
-            self.floating_capture = value;
         }
         if let Some(value) = text("preferredAgentInterface") {
             self.preferred_interface = value;
@@ -466,17 +456,9 @@ pub(crate) struct FlowState {
     pub(crate) integration_on: bool,
     /// Set once "Connect & continue" asked the host to install the agent helper.
     pub(crate) hooks_requested: bool,
-    /// "Open after onboarding" in the Install guide popup.
-    pub(crate) install_queued: bool,
-    /// Agent id or `terminal` for the first session; unset until the user picks one.
-    pub(crate) start_with: Option<String>,
     /// CDXC:Onboarding 2026-09-11 WHY:
-    /// "Pair this computer" used to open Settings -> Remote at once, which replaces the onboarding window and ends the flow before the Get started panel. The click now only queues the phone step and `finish` opens Remote settings right before closing.
+    /// "Pair this computer" used to open Settings -> Remote at once, which replaces the onboarding window and ends the flow before the Get started panel. The click now only queues the phone step and `finish` opens the Connect a Device window right before closing.
     pub(crate) phone_queued: bool,
-    /// The folder handed to the first-launch create; shown on the finished screen.
-    pub(crate) finished_path: Option<String>,
-    /// Shows the "You're set" screen in place of the last panel; any page change clears it.
-    pub(crate) finished: bool,
 }
 
 impl Default for FlowState {
@@ -484,11 +466,7 @@ impl Default for FlowState {
         Self {
             integration_on: true,
             hooks_requested: false,
-            install_queued: false,
-            start_with: None,
             phone_queued: false,
-            finished_path: None,
-            finished: false,
         }
     }
 }
@@ -508,18 +486,6 @@ pub(crate) fn default_agent_id(
         return Some(configured.clone());
     }
     installed.first().map(|agent| agent.agent_id.clone())
-}
-
-pub(crate) fn agent_display_name(agents: &[DetectedAgent], agent_id: Option<&str>) -> String {
-    match agent_id {
-        None => "No agent".to_string(),
-        Some("terminal") => "Terminal".to_string(),
-        Some(agent_id) => agents
-            .iter()
-            .find(|agent| agent.agent_id == agent_id)
-            .map(|agent| agent.name.clone())
-            .unwrap_or_else(|| agent_id.to_string()),
-    }
 }
 
 pub(crate) fn all_installed_have_hooks(agents: &[DetectedAgent]) -> bool {
@@ -861,8 +827,6 @@ pub(crate) struct ComputerUseCopy {
     pub(crate) grants: [ComputerUseGrant; 2],
     /// The toast after the switch is turned on.
     pub(crate) turned_on: &'static str,
-    /// The "You're set" summary while a grant is still pending.
-    pub(crate) pending_summary: &'static str,
 }
 
 pub(crate) fn computer_use_copy(desktop: ComputerUseDesktop) -> ComputerUseCopy {
@@ -884,8 +848,7 @@ pub(crate) fn computer_use_copy(desktop: ComputerUseDesktop) -> ComputerUseCopy 
                     opens: Some(ComputerUseGrantSetting::ScreenRecording),
                 },
             ],
-            turned_on: "Computer Use is installing. macOS will ask for Accessibility and Screen Recording.",
-            pending_summary: "On · macOS will ask for permission",
+            turned_on: "Fast Computer & Browser use is installing. macOS will ask for Accessibility and Screen Recording.",
         },
         ComputerUseDesktop::Windows => ComputerUseCopy {
             label: "Windows asks for nothing",
@@ -904,8 +867,7 @@ pub(crate) fn computer_use_copy(desktop: ComputerUseDesktop) -> ComputerUseCopy 
                     opens: None,
                 },
             ],
-            turned_on: "Computer Use is installing. Windows asks for no permission.",
-            pending_summary: "On",
+            turned_on: "Fast Computer & Browser use is installing. Windows asks for no permission.",
         },
         ComputerUseDesktop::LinuxX11 => ComputerUseCopy {
             label: "X11 asks for nothing",
@@ -924,8 +886,7 @@ pub(crate) fn computer_use_copy(desktop: ComputerUseDesktop) -> ComputerUseCopy 
                     opens: None,
                 },
             ],
-            turned_on: "Computer Use is installing. X11 asks for no permission.",
-            pending_summary: "On",
+            turned_on: "Fast Computer & Browser use is installing. X11 asks for no permission.",
         },
         // CDXC:ComputerUse 2026-10-28 WHY: Hyprland and Sway hand the screen to cua-driver's native
         // Wayland backend without a prompt (screencopy, checked on Omarchy's Hyprland); GNOME and
@@ -947,8 +908,7 @@ pub(crate) fn computer_use_copy(desktop: ComputerUseDesktop) -> ComputerUseCopy 
                     opens: None,
                 },
             ],
-            turned_on: "Computer Use is installing. GNOME and KDE ask to share the screen the first time an agent looks; Hyprland and Sway don't ask.",
-            pending_summary: "On · GNOME and KDE ask to share the screen",
+            turned_on: "Fast Computer & Browser use is installing. GNOME and KDE ask to share the screen the first time an agent looks; Hyprland and Sway don't ask.",
         },
     }
 }
@@ -1012,7 +972,7 @@ mod tests {
         ] {
             let copy = computer_use_copy(desktop);
             assert!(copy.grants.iter().all(|grant| grant.opens.is_none()));
-            for text in [copy.label, copy.turned_on, copy.pending_summary] {
+            for text in [copy.label, copy.turned_on] {
                 assert!(
                     !text.contains("Accessibility") && !text.contains("Screen Recording"),
                     "{text}"

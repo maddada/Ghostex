@@ -341,7 +341,6 @@ pub(crate) fn other_agents_strip(
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ToggleSize {
     Lg,
-    Md,
     Sm,
 }
 
@@ -389,7 +388,6 @@ pub(crate) fn toggle(
     );
     let (width, height, knob, top, left_off, left_on) = match toggle_size {
         ToggleSize::Lg => (60.0, 34.0, 24.0, 4.0, 4.0, 30.0),
-        ToggleSize::Md => (54.0, 32.0, 22.0, 4.0, 4.0, 26.0),
         ToggleSize::Sm => (32.0, 19.0, 12.0, 2.5, 3.0, 16.0),
     };
     let left = left_off + (left_on - left_off) * thumb;
@@ -435,8 +433,6 @@ pub(crate) enum CtaSize {
     Foot,
     /// `.cta.sm`: 38px tall, 16px sides, 14px type.
     Small,
-    /// The finished screen's "Start working": 48px tall, 22px sides.
-    Large,
 }
 
 pub(crate) fn cta(
@@ -451,7 +447,6 @@ pub(crate) fn cta(
     let (height, side, font) = match cta_size {
         CtaSize::Foot => (46.0, 22.0, 15.5),
         CtaSize::Small => (38.0, 16.0, 14.0),
-        CtaSize::Large => (48.0, 22.0, 15.5),
     };
     let id: SharedString = id.into();
     // `transition: filter 0.2s, border-color 0.2s, background 0.2s`; the arrow's `transform 0.2s`.
@@ -666,23 +661,6 @@ pub(crate) fn glass(s: S) -> Div {
         .border_color(rgba(150, 165, 205, 0.12))
         .rounded(s.px(14.0))
         .shadow(vec![inset_shadow(white(0.045), 0.0, 1.0, 0.0, 0.0, s)])
-}
-
-/// `.glass-n`: the blue-rimmed card surface.
-pub(crate) fn glass_n(s: S) -> Div {
-    div()
-        .bg(linear_gradient(
-            180.0,
-            linear_color_stop(rgba(13, 19, 38, 0.84), 0.0),
-            linear_color_stop(rgba(7, 10, 21, 0.86), 1.0),
-        ))
-        .border_1()
-        .border_color(rgba(88, 124, 235, 0.3))
-        .rounded(s.px(14.0))
-        .shadow(vec![
-            inset_shadow(white(0.05), 0.0, 1.0, 0.0, 0.0, s),
-            shadow(rgba(40, 80, 220, 0.1), 0.0, 0.0, 26.0, 0.0, s),
-        ])
 }
 
 /// `.ibox`: the icon tile.

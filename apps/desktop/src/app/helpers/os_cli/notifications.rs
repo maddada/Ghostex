@@ -311,8 +311,7 @@ pub(crate) fn gpui_request_macos_notification_permission()
     GpuiMacOSNotificationAuthorizationStatus::Unsupported
 }
 
-/// Why this computer cannot show Ghostex's agent alerts, for the onboarding's "Ping me when an
-/// agent needs me" row; `None` when nothing is known to be wrong.
+/// Why this computer cannot show Ghostex's agent alerts, for the onboarding's Mobile panel; `None` when nothing is known to be wrong.
 ///
 /// CDXC:Notifications 2026-10-28 WHY:
 /// The onboarding turned alerts on with no check outside macOS. Linux shows them through

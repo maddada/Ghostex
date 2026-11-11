@@ -355,7 +355,6 @@ impl GhostexGpuiApp {
             kind if kind.is_settings_modal_entry() => {
                 self.receive_native_settings_modal_payload(message, cx)
             }
-            GpuiAppModalKind::Onboarding => self.receive_gpui_onboarding_modal_message(message, cx),
             // NATIVE-MODAL-MESSAGE-ARMS: one arm per modal kind that receives host messages.
             _ => {
                 let _ = cx;

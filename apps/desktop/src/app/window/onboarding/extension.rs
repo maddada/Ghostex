@@ -35,7 +35,7 @@ const INTEGRATION_TERMS: [(&str, &str); 4] = [
         "Settings → Agents, one agent or all at once.",
     ),
 ];
-const COMPUTER_USE_LEAD: &str = "This hands over the whole machine: supported agents can see your screen and drive apps outside Ghostex.";
+const COMPUTER_USE_LEAD: &str = "This hands over the whole machine: supported agents can see your screen and drive apps and browser pages outside Ghostex, fast, through a small helper app.";
 const COMPUTER_USE_TERMS: [(&str, &str); 3] = [
     (
         "What's added",
@@ -43,7 +43,7 @@ const COMPUTER_USE_TERMS: [(&str, &str); 3] = [
     ),
     (
         "What agents can do",
-        "Click, type and read other apps when a task needs it.",
+        "Click, type and read other apps and web pages when a task needs it.",
     ),
     ("To turn it off", "Settings → Integrations, any time."),
 ];
@@ -72,7 +72,13 @@ const CALENDAR_DAYS: [(&str, &[&str]); 3] = [
 ];
 
 /// `<ExtensionPanel>`: the lead line, a preview and the terms grid.
-fn extension_panel(s: S, lead: &str, terms: &[(&str, &str)], preview: AnyElement) -> AnyElement {
+fn extension_panel(
+    s: S,
+    left: f32,
+    lead: &str,
+    terms: &[(&str, &str)],
+    preview: AnyElement,
+) -> AnyElement {
     let mut grid_rows = Vec::new();
     for pair in terms.chunks(2) {
         grid_rows.push(
@@ -107,7 +113,7 @@ fn extension_panel(s: S, lead: &str, terms: &[(&str, &str)], preview: AnyElement
     }
     glass(s)
         .absolute()
-        .left(s.px(885.0))
+        .left(s.px(left))
         .top(s.px(174.0))
         .w(s.px(700.0))
         .h(s.px(586.0))
@@ -350,17 +356,19 @@ impl GpuiOnboardingWindow {
             )
             .child(files)
             .into_any_element();
-        extension_panel(s, INTEGRATION_LEAD, &INTEGRATION_TERMS, preview)
+        extension_panel(s, 885.0, INTEGRATION_LEAD, &INTEGRATION_TERMS, preview)
     }
 
+    /// The Fast Computer & Browser use preview, `left` on the stage, its demo clock from `mounted`.
     pub(super) fn render_computer_use_panel(
         &self,
         s: S,
+        left: f32,
+        mounted: Instant,
         now: Instant,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let state = self.computer_use_state();
-        let mounted = self.agents_panel.right_tab_since;
         let cycle = cycle(mounted, now, CURSOR_PATH.len(), 1100, 2);
         let frame = cycle.frame;
         let asking = state == ComputerUseState::Permissions;
@@ -715,7 +723,7 @@ impl GpuiOnboardingWindow {
                     .child(div().w_full().flex().gap(s.px(12.0)).children(grants)),
             )
             .into_any_element();
-        extension_panel(s, COMPUTER_USE_LEAD, &COMPUTER_USE_TERMS, preview)
+        extension_panel(s, left, COMPUTER_USE_LEAD, &COMPUTER_USE_TERMS, preview)
     }
 }
 

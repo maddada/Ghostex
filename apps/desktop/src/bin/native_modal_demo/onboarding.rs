@@ -1,21 +1,19 @@
 //! Preview host for the native Onboarding, mirroring packages/core-ui/onboarding/onboarding-modal.stories.tsx (deleted 2026-10-01).
 //! States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`), each the story of the same name: `welcome` (default),
-//! `welcome-chat`, `welcome-mobile`, `agents`, `agents-scanning`, `agents-already-connected`,
+//! `welcome-coordinators`, `welcome-mobile`, `agents`, `agents-scanning`, `agents-already-connected`,
 //! `agents-none-installed`, `agents-install-available`, `agents-install-partial`,
-//! `agents-installing`, `agents-install-failed`, `computer-use-installing`,
-//! `computer-use-permissions`, `computer-use-on`, `computer-use-on-tab`, `agents-integration`, `agents-guide`,
+//! `agents-installing`, `agents-install-failed`, `agents-integration`, `agents-guide`,
 //! `workspace`, `workspace-no-browser-skill`, `workspace-agents`, `workspace-docs`,
-//! `workspace-code`, `workspace-kanban`, `workspace-automate`, `mobile`, `mobile-no-notify-send`, `get-started`,
-//! `get-started-no-folder`, `get-started-no-folder-with-projects`, `get-started-folder-chooser`
-//! (Get started's own folder chooser, what Linux shows without a portal file chooser; set
-//! `GHOSTEX_ONBOARDING_DEMO_NO_PICKER=1` to get it from "Choose folder" in any state), `finished`, `finished-guide`,
+//! `workspace-code`, `workspace-kanban`, `workspace-automate`, the Workspace panel's Fast Computer &
+//! Browser use preview `computer-use` (off), `computer-use-installing`, `computer-use-permissions`,
+//! `computer-use-on`, `mobile`, `mobile-no-notify-send`, `get-started`, `get-started-with-projects`,
 //! and the first-run intro video page: `intro-video` (the still with a play button),
 //! `intro-video-play` (presses Play after 1s: the real player in the system web view),
 //! `intro-video-offline`, `intro-video-no-web-view` (what Linux shows), `intro-video-continue`
 //! (presses Continue after 6s).
 //! The host simulates the app: detection answers at once (after 1.4s on a rescan), the helper
-//! install connects after 0.9s, CLI installs finish a few seconds after they start, Computer Use
-//! asks for permission after 1.8s, and closing the flow quits the demo. `GHOSTEX_ONBOARDING_DEMO_SIZE=WxH`
+//! install connects after 0.9s, CLI installs finish a few seconds after they start, Fast Computer &
+//! Browser use asks for permission after 1.8s, and closing the flow quits the demo. `GHOSTEX_ONBOARDING_DEMO_SIZE=WxH`
 //! opens the window at another size.
 use super::onboarding::model::{COLOURFULNESS_LAST_POSITION, colourfulness_points};
 use super::onboarding::*;
@@ -204,26 +202,6 @@ fn with_view(
     let _ = window.update(cx, |_, _, cx| view.update(cx, |view, cx| update(view, cx)));
 }
 
-/// What the app does when the system folder dialog cannot open.
-fn open_demo_folder_chooser(host: &Rc<RefCell<DemoHost>>, cx: &mut App) {
-    let (window, view) = {
-        let host = host.borrow();
-        (host.window, host.view.clone())
-    };
-    let (Some(window), Some(view)) = (window, view) else {
-        return;
-    };
-    let _ = window.update(cx, |_, window, cx| {
-        view.update(cx, |view, cx| {
-            view.open_folder_chooser(
-                "This computer has no system folder picker (Ghostex uses the desktop portal's file chooser, xdg-desktop-portal), so choose the folder here.".to_string(),
-                window,
-                cx,
-            )
-        })
-    });
-}
-
 fn later(cx: &mut App, delay: Duration, run: impl FnOnce(&mut App) + 'static) {
     cx.spawn(async move |cx| {
         cx.background_executor().timer(delay).await;
@@ -257,7 +235,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         computer_use,
         browser_skill,
         has_projects,
-        picked,
         loading,
     ): (
         InitialPanel,
@@ -267,11 +244,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         &str,
         bool,
         bool,
-        Option<&str>,
         bool,
     ) = {
         let three: &[&str] = &["claude", "codex", "cursor"];
-        let folder = Some("~/Projects/my-app");
         match state {
             "agents" | "agents-guide" | "agents-integration" => (
                 InitialPanel::Panel(2),
@@ -281,7 +256,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "agents-scanning" => (
@@ -292,7 +266,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 true,
             ),
             "agents-already-connected" => (
@@ -303,7 +276,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "agents-none-installed" => (
@@ -314,7 +286,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "agents-install-available" => (
@@ -325,7 +296,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "agents-install-partial" => (
@@ -336,7 +306,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "agents-installing" => (
@@ -347,7 +316,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "agents-install-failed" => (
@@ -358,44 +326,40 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "computer-use-installing" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 three,
                 false,
                 "none",
                 "installing",
                 true,
                 false,
-                folder,
                 false,
             ),
             "computer-use-permissions" => (
-                InitialPanel::Panel(2),
+                InitialPanel::Panel(3),
                 three,
                 false,
                 "none",
                 "permissions",
                 true,
                 false,
-                folder,
                 false,
             ),
-            "computer-use-on" | "computer-use-on-tab" => (
-                InitialPanel::Panel(2),
+            "computer-use-on" => (
+                InitialPanel::Panel(3),
                 three,
                 false,
                 "none",
                 "on",
                 true,
                 false,
-                folder,
                 false,
             ),
             "workspace" | "workspace-agents" | "workspace-docs" | "workspace-code"
-            | "workspace-kanban" | "workspace-automate" => (
+            | "workspace-kanban" | "workspace-automate" | "computer-use" => (
                 InitialPanel::Panel(3),
                 three,
                 false,
@@ -403,7 +367,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "workspace-no-browser-skill" => (
@@ -414,7 +377,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 false,
                 false,
-                folder,
                 false,
             ),
             "mobile" | "mobile-no-notify-send" => (
@@ -425,7 +387,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
             "get-started" => (
@@ -436,21 +397,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
-            "get-started-no-folder" | "get-started-folder-chooser" => (
-                InitialPanel::Panel(5),
-                three,
-                false,
-                "none",
-                "off",
-                true,
-                false,
-                None,
-                false,
-            ),
-            "get-started-no-folder-with-projects" => (
+            "get-started-with-projects" => (
                 InitialPanel::Panel(5),
                 three,
                 false,
@@ -458,21 +407,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 true,
-                None,
                 false,
             ),
-            "finished" | "finished-guide" => (
-                InitialPanel::Finished,
-                three,
-                true,
-                "none",
-                "off",
-                true,
-                false,
-                folder,
-                false,
-            ),
-            _ => (
+                        _ => (
                 InitialPanel::Panel(1),
                 three,
                 false,
@@ -480,7 +417,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 "off",
                 true,
                 false,
-                folder,
                 false,
             ),
         }
@@ -655,30 +591,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             }
             OnboardingCommand::OpenExternalUrl(url) => eprintln!("open {url}"),
             OnboardingCommand::IntroVideoSeen => eprintln!("introVideoSeen"),
-            OnboardingCommand::PickProjectFolder
-                if std::env::var_os("GHOSTEX_ONBOARDING_DEMO_NO_PICKER").is_some() =>
-            {
-                cx.defer(move |cx| open_demo_folder_chooser(&host, cx));
-            }
-            OnboardingCommand::PickProjectFolder => {
-                cx.defer(move |cx| {
-                    with_view(&host, cx, |view, cx| {
-                        view.receive_picked_folder("~/Projects/my-app".to_string(), cx)
-                    })
-                });
-            }
-            OnboardingCommand::FinishFirstLaunch {
-                request_id,
-                agent_id,
-                path,
-            } => {
-                eprintln!("firstLaunchCreateProjectSession {agent_id} {path}");
-                later(cx, Duration::from_millis(900), move |cx| {
-                    with_view(&host, cx, move |view, cx| {
-                        view.receive_finish_result(&request_id, true, None, cx)
-                    });
-                });
-            }
             OnboardingCommand::Finish(target) => {
                 eprintln!("finish -> {target:?}");
                 cx.quit();
@@ -798,7 +710,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             .is_ok_and(|theme| theme.trim() == "light"),
         cli_available: cli != "none",
         initial_panel,
-        picked_folder: picked.map(str::to_string),
         intro_video: state.starts_with("intro-video"),
         notification_problem: (state == "mobile-no-notify-send").then(|| {
             "This computer can't show alerts yet: install libnotify (the notify-send command)."
@@ -829,14 +740,17 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let host = host_for_window;
     match state {
         "computer-use-installing" => with_view(&host, cx, |view, cx| {
-            view.preview_computer_use_installing(cx)
+            view.preview_computer_use_installing(cx);
+            view.preview_workspace_computer_use(cx)
         }),
+        "computer-use" | "computer-use-permissions" | "computer-use-on" => {
+            with_view(&host, cx, |view, cx| {
+                view.preview_workspace_computer_use(cx)
+            })
+        }
         "agents-guide" => with_view(&host, cx, |view, cx| view.preview_open_install_guide(cx)),
         "agents-integration" => with_view(&host, cx, |view, cx| view.preview_right_tab(1, cx)),
-        "computer-use-permissions" | "computer-use-on-tab" => {
-            with_view(&host, cx, |view, cx| view.preview_right_tab(2, cx))
-        }
-        "welcome-chat" => with_view(&host, cx, |view, cx| view.preview_welcome_tab(1, cx)),
+        "welcome-coordinators" => with_view(&host, cx, |view, cx| view.preview_welcome_tab(1, cx)),
         "welcome-mobile" => with_view(&host, cx, |view, cx| view.preview_welcome_tab(2, cx)),
         "workspace-agents" => with_view(&host, cx, |view, cx| view.preview_workspace_tab(None, cx)),
         "workspace-docs" => with_view(&host, cx, |view, cx| {
@@ -851,8 +765,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "workspace-automate" => with_view(&host, cx, |view, cx| {
             view.preview_workspace_tab(Some(4), cx)
         }),
-        "finished-guide" => with_view(&host, cx, |view, cx| view.preview_finished_guide(cx)),
-        "get-started-folder-chooser" => open_demo_folder_chooser(&host, cx),
         "intro-video-offline" => {
             with_view(&host, cx, |view, cx| view.preview_intro_video_offline(cx))
         }
