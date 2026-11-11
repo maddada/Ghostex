@@ -63,6 +63,7 @@ pub use armed_actions::{
     armed_actions_by_session, ArmedAction, ARMED_ACTION_CLOSE_AFTER_DONE, ARMED_ACTION_DELAYED_SEND,
 };
 pub use assemble::{collection_groups, owner_project_group_id, toggle_all_project_ids};
+pub use projects::project_sidebar_icon_data_url;
 pub use chief::{ChiefRowView, HomeHeaderView};
 pub use close_successor::{
     close_project_group_is_active, close_project_successor_candidates,

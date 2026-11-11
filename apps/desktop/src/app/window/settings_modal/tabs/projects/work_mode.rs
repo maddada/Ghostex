@@ -1,5 +1,5 @@
-//! The selected project's Issues Workflow row on the Projects page: this project's own Linear API
-//! key (`/api/setLinearApiKey` with `projectId`), with a status line saying which key the project
+//! The selected project's Issues Workflow section on the Projects page: this project's own Linear
+//! API key (`/api/setLinearApiKey` with `projectId`), with a status line saying which key the project
 //! uses now (`/api/readWorkModeStatus` says which keys exist, never their values;
 //! `/api/readWorkspaces` names the workspace whose key it falls back to). Every project shows it:
 //! Issues Workflow has no per-project switch and does not need Workspaces (CDXC:WorkMode
@@ -247,7 +247,8 @@ impl ProjectsTab {
         }
     }
 
-    /// This project's Linear key, with the status line under it.
+    /// This project's Linear key, with the status line under it: the rows of its Issues Workflow
+    /// section.
     pub(super) fn work_mode_rows(
         &mut self,
         p: &SettingsPalette,

@@ -24,6 +24,8 @@ actions quit the demo.
 #![allow(dead_code)]
 #[path = "../assets.rs"]
 mod assets;
+#[path = "../data_url_image.rs"]
+mod data_url_image;
 #[path = "../app/window/export_transcript_modal.rs"]
 mod export_transcript_modal;
 #[path = "../fold_motion.rs"]
@@ -321,9 +323,65 @@ fn open_modal_window<V: Render>(
     let view = slot.borrow_mut().take().expect("the demo view");
     if !snapshot.is_empty() {
         snapshot_after_wait(window, snapshot, cx);
+    } else if background {
+        keep_drawing(window, cx);
     }
     (window, view)
 }
+
+/// A preview opened without focus belongs to an app macOS never activates, so its window is never
+/// reported visible and gpui never starts its display link: it draws the frames AppKit asks for
+/// while showing it, then nothing, and whatever lands later (an image gpui decodes in the
+/// background, a reply the preview fakes) stays off screen. Asking AppKit to display the view
+/// draws a frame through the same path, so the preview asks a few times a second.
+fn keep_drawing(window: WindowHandle<Root>, cx: &mut App) {
+    cx.spawn(async move |cx| {
+        loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(250))
+                .await;
+            let drawn = cx.update_window(window.into(), |_, window, _| {
+                request_view_display(window);
+            });
+            if drawn.is_err() {
+                break;
+            }
+        }
+    })
+    .detach();
+}
+
+#[cfg(target_os = "macos")]
+fn request_view_display(window: &gpui::Window) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use std::ffi::{c_char, c_void};
+    unsafe extern "C" {
+        fn sel_registerName(name: *const c_char) -> *const c_void;
+        fn objc_msgSend();
+    }
+    // gpui's own `Window::window_handle` is a different handle.
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return;
+    };
+    // SAFETY: `ns_view` is the live NSView of this gpui window, read on the main thread, and
+    // `setNeedsDisplay:` takes one BOOL.
+    unsafe {
+        let send: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
+            std::mem::transmute(objc_msgSend as *const ());
+        send(
+            handle.ns_view.as_ptr(),
+            sel_registerName(c"setNeedsDisplay:".as_ptr()),
+            true,
+        );
+    }
+}
+
+/// Other platforms keep drawing an unfocused window.
+#[cfg(not(target_os = "macos"))]
+fn request_view_display(_window: &gpui::Window) {}
 
 #[cfg(feature = "modal-demo-snapshot")]
 fn snapshot_after_wait(window: WindowHandle<Root>, path: String, cx: &mut App) {
@@ -412,7 +470,11 @@ fn snapshot_after_wait(window: WindowHandle<Root>, path: String, cx: &mut App) {
                 .timer(std::time::Duration::from_millis(1000))
                 .await;
         }
-        let _ = window.update(cx, |_, window, _| window.refresh());
+        // The window is off every screen, so macOS gives it no frames: draw the last one here.
+        let _ = cx.update_window(window.into(), |_, window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
         cx.background_executor()
             .timer(std::time::Duration::from_millis(300))
             .await;

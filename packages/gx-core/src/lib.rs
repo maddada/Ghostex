@@ -285,6 +285,7 @@ pub use crate::sidebar_view::{
 };
 pub use crate::sidebar_view::{tag_choice, tag_choices, TagChoice};
 pub use crate::sidebar_view::{ChiefRowView, HomeHeaderView};
+pub use crate::sidebar_view::project_sidebar_icon_data_url;
 pub use crate::workspace_groups::{
     owns_group_command, plan_group_command, CustomTagsPush, CustomTagsPushEffect, GroupCommandPlan,
 };
