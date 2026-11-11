@@ -13,7 +13,7 @@
 //!
 //! CDXC:Coordinators 2026-10-19 DECISION:
 //! User: "ok i want to have a button to click on to set the orchestrator prompt and i want to be able to set a different orchestrator prompt for a specific project too (the orchestrator prompt that gets overriden for a project should apply for all it's worktrees too please)". Q310 "Edit the playbook itself": the editor shows the full playbook, changeable for all projects or for one project and its worktrees, and Reset to Default goes back to the playbook Ghostex ships (for a project, to the all-projects one). Q311 "Yes, existing ones too": orchestrators that already exist take an edited playbook at their next guide read. Q312 "Replace them with the playbook editor": the default standing instructions built first are gone; the same buttons (Settings > Chat, Settings > Projects, the New Orchestrator dialog) edit the playbook, and each orchestrator's own Goal & Instructions stay as they are. Also asked: Reset to Default needs a confirming second click and is disabled while the text matches its default, saving text equal to the default stores no edited copy, and an on/off switch turns an edited copy off without losing it.
-//! SEE-ALSO: server/src/coordinators/role.rs (`coordinator_guide`, the shipped playbook), server/src/ghostex_cli/coordinator/playbook.rs (the CLI verbs), apps/desktop/src/app/window/settings_modal/tabs/orchestrator_playbook.rs and apps/desktop/src/app/window/new_coordinator_modal.rs (the editors), server/src/coordinators/playbook.md (tells the orchestrator the guide wins over the skill file).
+//! SEE-ALSO: server/src/coordinators/role.rs (`coordinator_guide`, the shipped playbook), server/src/ghostex_cli/coordinator/playbook.rs (the CLI verbs), apps/desktop/src/app/window/settings_modal/tabs/orchestrator_playbook.rs and apps/desktop/src/app/window/new_coordinator_modal.rs (the editors), skills/ghostex-coordinator/SKILL.md (the pointer that sends the orchestrator to the guide), server/src/coordinators/playbook.md (the playbook the guide prints).
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
@@ -208,7 +208,6 @@ impl Playbooks {
     }
 }
 
-/// The playbook Ghostex ships: the skill's body.
 /// The edited copies as settings sync carries them, `{text, enabled}`: the all-projects one and
 /// each project's, by project id.
 pub fn synced_playbooks(
@@ -289,6 +288,7 @@ pub fn playbook_overrides(db: &Connection) -> Result<String, DomainStateError> {
     Ok(Playbooks::read(db)?.overrides_text())
 }
 
+/// The playbook Ghostex ships (role.rs `COORDINATOR_PLAYBOOK_MD`).
 pub fn shipped_playbook() -> String {
     coordinator_playbook().trim().to_string()
 }
