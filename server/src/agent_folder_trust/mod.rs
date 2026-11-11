@@ -5,4 +5,4 @@ mod files;
 mod launch;
 mod stores;
 
-pub(crate) use launch::trust_session_folder_before_launch;
+pub(crate) use launch::{added_project_folder_trusted, trust_session_folder_before_launch};
