@@ -5,6 +5,7 @@
 mod agent_drive;
 mod attach;
 mod claude;
+mod claude_turns;
 mod codex;
 mod comparison;
 mod drive;

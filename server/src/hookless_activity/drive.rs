@@ -344,9 +344,21 @@ impl ClaudeDriver {
         }
         // What the notify hook sends as `firstUserMessage` (the prompt of a UserPromptSubmit),
         // read back from the transcript; a first turn whose prompt is not written yet when it
-        // starts is named when it ends.
+        // starts is named when it ends. A prompt folded into a running turn, or a turn read from
+        // the transcript after the next one started, names its own prompt (claude_turns.rs).
         if !event.baseline && matches!(event_name.as_str(), "UserPromptSubmit" | "Stop") {
-            if let Some(prompt) = transcript.and_then(newest_user_prompt) {
+            let named = payload
+                .get("prompt")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|prompt| is_actual_user_prompt(prompt))
+                .map(str::to_string);
+            let prompt = if payload.contains_key("prompt") {
+                named
+            } else {
+                transcript.and_then(newest_user_prompt)
+            };
+            if let Some(prompt) = prompt {
                 params.insert("firstUserMessage".to_string(), json!(prompt));
             }
         }

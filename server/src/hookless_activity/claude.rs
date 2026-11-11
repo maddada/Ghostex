@@ -12,6 +12,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{json, Value};
 
+use super::claude_turns::{TurnCursor, TurnMark, CLOCK_SLACK_MS};
 use super::comparison::ActivityEvent;
 
 pub(crate) const OBSERVABLE_EVENTS: &[&str] = &[
@@ -32,6 +33,8 @@ const FRESH_START: Duration = Duration::from_secs(20);
 const IDLE_REMINDER_MS: i64 = 60_000;
 /// A finished turn waits this long for its transcript lines before the last one is read.
 const TURN_END_SETTLE: Duration = Duration::from_millis(400);
+/// How often a followed pane whose transcript is not on disk yet looks for it again.
+const TRANSCRIPT_LOOKUP_MS: i64 = 5_000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PaneState {
@@ -72,6 +75,9 @@ pub(super) struct ClaudeObserver {
     turn_ends: Vec<TurnEnd>,
     /// When each pane idle after a turn gets Claude's idle reminder (ms since the epoch).
     reminders: HashMap<(String, String), i64>,
+    /// Where each followed pane's transcript was last read, for the turns the record skips
+    /// (claude_turns.rs).
+    cursors: HashMap<(String, String), TurnCursor>,
 }
 
 pub(super) fn session_dirs(home: &Path) -> Vec<PathBuf> {
@@ -269,7 +275,15 @@ impl ClaudeObserver {
                 .or_insert(rank);
         }
 
+        // Turn ends settled since the last pass come before this pass's news, so a turn's Stop is
+        // never sent after the UserPromptSubmit of the turn that follows it.
         let mut events = Vec::new();
+        let now = Instant::now();
+        let (due, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.turn_ends)
+            .into_iter()
+            .partition(|end| end.due <= now);
+        self.turn_ends = waiting;
+        events.extend(due.into_iter().map(settle_turn_end));
         let mut live_panes = HashSet::new();
         let mut live_pids = HashSet::new();
         for LiveRecord { config_dir, record } in live {
@@ -409,6 +423,15 @@ impl ClaudeObserver {
                 "busy" if previous.status == "waiting" => {
                     events.push(make("SessionBusy").activity_only())
                 }
+                // A queued prompt starting its turn was submitted when it was sent (claude_turns.rs).
+                "busy"
+                    if self
+                        .cursors
+                        .get(&pane)
+                        .is_some_and(TurnCursor::submitted_prompt_next) =>
+                {
+                    events.push(make("SessionBusy").activity_only())
+                }
                 "busy" => events.push(make("UserPromptSubmit")),
                 "waiting" => {
                     if let Some(name) = waiting_event(next.waiting_for.as_deref()) {
@@ -418,10 +441,26 @@ impl ClaudeObserver {
                 "idle" => {
                     let from_turn = previous.status == "busy"
                         || waiting_event(previous.waiting_for.as_deref()).is_some();
-                    if from_turn {
-                        let since = shown["statusUpdatedAt"]
-                            .as_i64()
-                            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+                    let since = shown["statusUpdatedAt"]
+                        .as_i64()
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+                    // The idle between a turn and its quick restart, read late: the transcript
+                    // already sent that turn's Stop and the next prompt, so the pane stays busy.
+                    let cursor = self.cursors.get_mut(&pane);
+                    let already_sent = cursor.as_ref().is_some_and(|cursor| {
+                        cursor
+                            .restart_sent_ms
+                            .is_some_and(|sent| since <= sent + CLOCK_SLACK_MS)
+                    });
+                    if from_turn && already_sent {
+                        if let Some(state) = self.panes.get_mut(&pane) {
+                            state.status = previous.status.clone();
+                            state.waiting_for = previous.waiting_for.clone();
+                        }
+                    } else if from_turn {
+                        if let Some(cursor) = cursor {
+                            cursor.record_idle_ms = Some(since);
+                        }
                         self.reminders
                             .insert(pane.clone(), since + IDLE_REMINDER_MS);
                         self.turn_ends.push(TurnEnd {
@@ -435,6 +474,11 @@ impl ClaudeObserver {
                 }
                 _ => {}
             }
+        }
+        let mut followed: Vec<_> = live_panes.iter().cloned().collect();
+        followed.sort();
+        for pane in &followed {
+            self.read_turns(pane, &mut events);
         }
         let now_ms = chrono::Utc::now().timestamp_millis();
         let due: Vec<_> = self
@@ -477,16 +521,99 @@ impl ClaudeObserver {
             ));
         }
         self.owners.retain(|pid, _| live_pids.contains(pid));
-
-        let now = Instant::now();
-        let (due, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.turn_ends)
-            .into_iter()
-            .partition(|end| end.due <= now);
-        self.turn_ends = waiting;
-        for end in due {
-            events.push(settle_turn_end(end));
-        }
+        self.cursors.retain(|pane, _| live_panes.contains(pane));
         events
+    }
+
+    /// Sends what the transcripts of the followed panes gained since the last pass and the
+    /// records did not show: a turn that ended and restarted between two passes, and prompts
+    /// folded into a running turn (CDXC:AgentHooks 2026-11-11 in claude_turns.rs).
+    fn read_turns(&mut self, pane: &(String, String), events: &mut Vec<ActivityEvent>) {
+        let Some(state) = self.panes.get(pane) else {
+            return;
+        };
+        let Some(conversation) = state.conversation.clone() else {
+            self.cursors.remove(pane);
+            return;
+        };
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let lookup = |state: &PaneState| {
+            transcript_path(&state.config_dir, state.cwd.as_deref(), &conversation)
+        };
+        let cursor = match self.cursors.get_mut(pane) {
+            Some(cursor) if cursor.conversation == conversation => cursor,
+            _ => {
+                let cursor = TurnCursor::new(&conversation, lookup(state), now_ms);
+                self.cursors.insert(pane.clone(), cursor);
+                self.cursors.get_mut(pane).expect("inserted")
+            }
+        };
+        if cursor.path.is_none() {
+            // Only the expected folder each pass; the search of every project folder now and then.
+            let expected = state
+                .cwd
+                .as_deref()
+                .map(|cwd| expected_transcript_path(&state.config_dir, cwd, &conversation))
+                .filter(|path| path.is_file());
+            let found = match expected {
+                Some(path) => Some(path),
+                None if cursor.next_lookup_ms <= now_ms => {
+                    cursor.next_lookup_ms = now_ms + TRANSCRIPT_LOOKUP_MS;
+                    lookup(state)
+                }
+                None => None,
+            };
+            match found {
+                Some(path) => cursor.found(path),
+                None => return,
+            }
+        }
+        let path = cursor.path.clone();
+        let make = |name: &str, prompt: Option<&String>| {
+            let mut event =
+                ActivityEvent::new(&pane.0, &pane.1, "claude", name, Some(conversation.clone()));
+            if let Some(prompt) = prompt {
+                event = event.with("prompt", json!(prompt));
+            }
+            event.transcript = path.clone();
+            event
+        };
+        let mut found = Vec::new();
+        for mark in cursor.read_new(state.status == "idle") {
+            match mark {
+                TurnMark::QueuedPrompt { prompt } => {
+                    found.push(make("UserPromptSubmit", Some(&prompt)))
+                }
+                TurnMark::Restart {
+                    end,
+                    ended_turn_started_ms,
+                    ended_turn_prompt,
+                    prompt,
+                    prompt_ms,
+                    prompt_submitted,
+                } => {
+                    let record_saw_idle = cursor.record_idle_ms.is_some_and(|idle| {
+                        idle > ended_turn_started_ms && idle <= prompt_ms + CLOCK_SLACK_MS
+                    });
+                    if record_saw_idle || state.status == "idle" {
+                        continue;
+                    }
+                    found.push(
+                        make(end, ended_turn_prompt.as_ref())
+                            .with("shellsRunning", json!(false))
+                            .with("quickRestart", json!(true)),
+                    );
+                    // A queued prompt was submitted when it was sent; its turn only shows work.
+                    found.push(if prompt_submitted {
+                        make("SessionBusy", None).activity_only()
+                    } else {
+                        make("UserPromptSubmit", prompt.as_ref())
+                    });
+                    cursor.restart_sent_ms = Some(prompt_ms);
+                }
+            }
+        }
+        events.extend(found);
     }
 }
 
@@ -962,6 +1089,223 @@ mod tests {
             names(&events),
             vec![("UserPromptSubmit".to_string(), Some(conversation), None)]
         );
+    }
+
+    fn append(path: &Path, rows: &[Value]) {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new().append(true).open(path).unwrap();
+        for row in rows {
+            writeln!(file, "{row}").unwrap();
+        }
+    }
+
+    fn iso(ms: i64) -> String {
+        chrono::DateTime::from_timestamp_millis(ms)
+            .unwrap()
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    }
+
+    fn prompt_row(text: &str, ms: i64) -> Value {
+        json!({"type": "user", "timestamp": iso(ms), "message": {"content": text}})
+    }
+
+    fn turn_end_row(ms: i64) -> Value {
+        json!({"type": "system", "subtype": "turn_duration", "timestamp": iso(ms)})
+    }
+
+    fn status_at(mut live: LiveRecord, ms: i64) -> LiveRecord {
+        live.record["statusUpdatedAt"] = json!(ms);
+        live
+    }
+
+    fn prompts(events: &[ActivityEvent]) -> Vec<(String, Option<String>)> {
+        events
+            .iter()
+            .map(|event| {
+                (
+                    event.event_name.clone(),
+                    event
+                        .payload
+                        .get("prompt")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                )
+            })
+            .collect()
+    }
+
+    /// CDXC:AgentHooks 2026-11-11 (claude_turns.rs): a queued prompt restarts the turn 37 to 74
+    /// ms after it ended, between two reads of the record, which stays busy.
+    #[test]
+    fn a_turn_restarted_between_two_passes_sends_its_stop_once() {
+        let fixture = Fixture::new("quick-restart");
+        let conversation = id();
+        let path = fixture.write_transcript(".claude", &conversation);
+        let busy = || fixture.record(".claude", 100, &conversation, "busy");
+        let idle = || fixture.record(".claude", 100, &conversation, "idle");
+        let mut observer = ClaudeObserver::default();
+        step(&mut observer, &[idle()]);
+        let t = chrono::Utc::now().timestamp_millis();
+        append(&path, &[prompt_row("first", t)]);
+        let events = step(&mut observer, &[status_at(busy(), t)]);
+        assert_eq!(names(&events)[0].0, "UserPromptSubmit");
+        assert_eq!(events.len(), 1, "the record's prompt is not sent twice");
+        append(
+            &path,
+            &[
+                json!({"type": "assistant", "timestamp": iso(t + 1_000), "message": {"content": [{"type": "text", "text": "done"}]}}),
+                turn_end_row(t + 1_001),
+                prompt_row("queued", t + 1_050),
+            ],
+        );
+        let events = step(&mut observer, &[status_at(busy(), t + 1_050)]);
+        assert_eq!(
+            prompts(&events),
+            vec![
+                ("Stop".to_string(), Some("first".to_string())),
+                ("UserPromptSubmit".to_string(), Some("queued".to_string())),
+            ]
+        );
+        assert_eq!(events[0].transcript.as_deref(), Some(path.as_path()));
+        assert_eq!(
+            events[0].agent_session_id.as_deref(),
+            Some(conversation.as_str())
+        );
+        // The record's idle between the two turns, read late, is that same turn end.
+        let events = step(&mut observer, &[status_at(idle(), t + 1_010)]);
+        assert!(events.is_empty(), "{:?}", names(&events));
+        let events = step(&mut observer, &[status_at(busy(), t + 1_050)]);
+        assert!(events.is_empty(), "{:?}", names(&events));
+        // The second turn ends with the record showing it: one Stop from the record, and the
+        // transcript's turn end and next prompt add nothing.
+        append(&path, &[turn_end_row(t + 5_000)]);
+        let events = step(&mut observer, &[status_at(idle(), t + 5_000)]);
+        assert!(
+            events.is_empty(),
+            "the turn end waits for its transcript lines"
+        );
+        std::thread::sleep(TURN_END_SETTLE + Duration::from_millis(50));
+        append(&path, &[prompt_row("third", t + 6_000)]);
+        let events = step(&mut observer, &[status_at(busy(), t + 6_000)]);
+        assert_eq!(
+            names(&events)
+                .into_iter()
+                .map(|(name, ..)| name)
+                .collect::<Vec<_>>(),
+            vec!["Stop".to_string(), "UserPromptSubmit".to_string()]
+        );
+    }
+
+    fn queue_row(operation: &str, content: Option<&str>) -> Value {
+        json!({"type": "queue-operation", "operation": operation, "content": content})
+    }
+
+    fn event_names(events: &[ActivityEvent]) -> Vec<(String, bool)> {
+        events
+            .iter()
+            .map(|event| (event.event_name.clone(), event.event_signal))
+            .collect()
+    }
+
+    #[test]
+    fn a_prompt_sent_while_claude_works_is_submitted_once() {
+        let fixture = Fixture::new("mid-turn");
+        let conversation = id();
+        let path = fixture.write_transcript(".claude", &conversation);
+        let busy = || fixture.record(".claude", 100, &conversation, "busy");
+        let mut observer = ClaudeObserver::default();
+        step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "idle")],
+        );
+        let t = chrono::Utc::now().timestamp_millis();
+        append(&path, &[prompt_row("work", t)]);
+        assert_eq!(step(&mut observer, &[busy()]).len(), 1);
+        append(&path, &[queue_row("enqueue", Some("also this"))]);
+        let events = step(&mut observer, &[busy()]);
+        assert_eq!(
+            prompts(&events),
+            vec![(
+                "UserPromptSubmit".to_string(),
+                Some("also this".to_string())
+            )]
+        );
+        // Folded into the running turn later: nothing more.
+        append(
+            &path,
+            &[
+                queue_row("remove", Some("also this")),
+                json!({"type": "user", "timestamp": iso(t + 900), "message": {"content": [{"type": "tool_result", "tool_use_id": "a"}]}}),
+                json!({"type": "attachment", "timestamp": iso(t + 800), "attachment": {"type": "queued_command", "commandMode": "prompt", "prompt": "also this"}}),
+            ],
+        );
+        assert!(step(&mut observer, &[busy()]).is_empty());
+    }
+
+    /// The live sequence of 2026-11-11 (claude_turns.rs): a prompt queued during a text-only turn
+    /// is submitted when sent and restarts the turn 16 ms after it ends.
+    #[test]
+    fn a_queued_prompt_is_submitted_once_whether_or_not_the_record_shows_the_gap() {
+        for record_sees_the_gap in [false, true] {
+            let fixture = Fixture::new("queued");
+            let conversation = id();
+            let path = fixture.write_transcript(".claude", &conversation);
+            let busy = || fixture.record(".claude", 100, &conversation, "busy");
+            let idle = || fixture.record(".claude", 100, &conversation, "idle");
+            let mut observer = ClaudeObserver::default();
+            step(&mut observer, &[idle()]);
+            let t = chrono::Utc::now().timestamp_millis();
+            append(&path, &[prompt_row("story", t)]);
+            let mut sent = step(&mut observer, &[status_at(busy(), t)]);
+            append(&path, &[queue_row("enqueue", Some("now QUEUED"))]);
+            sent.extend(step(&mut observer, &[status_at(busy(), t)]));
+            append(
+                &path,
+                &[queue_row("dequeue", None), turn_end_row(t + 1_000)],
+            );
+            if record_sees_the_gap {
+                sent.extend(step(&mut observer, &[status_at(idle(), t + 1_000)]));
+                std::thread::sleep(TURN_END_SETTLE + Duration::from_millis(50));
+            }
+            append(&path, &[prompt_row("now QUEUED", t + 1_016)]);
+            sent.extend(step(&mut observer, &[status_at(busy(), t + 1_016)]));
+            sent.extend(step(&mut observer, &[status_at(busy(), t + 1_016)]));
+            assert_eq!(
+                event_names(&sent),
+                vec![
+                    ("UserPromptSubmit".to_string(), true),
+                    ("UserPromptSubmit".to_string(), true),
+                    ("Stop".to_string(), true),
+                    ("SessionBusy".to_string(), false),
+                ],
+                "record sees the gap: {record_sees_the_gap}"
+            );
+        }
+    }
+
+    /// A pane first seen mid-conversation reads only what its transcript gains from then on.
+    #[test]
+    fn the_transcript_already_on_disk_is_not_news() {
+        let fixture = Fixture::new("baseline-tail");
+        let conversation = id();
+        let path = fixture.write_transcript(".claude", &conversation);
+        let t = chrono::Utc::now().timestamp_millis();
+        append(
+            &path,
+            &[turn_end_row(t - 10_000), prompt_row("old", t - 9_000)],
+        );
+        let mut observer = ClaudeObserver::default();
+        let busy = fixture.record(".claude", 100, &conversation, "busy");
+        let events = step(&mut observer, &[busy.clone_record()]);
+        // Only the record's start and turn; the old rows send no Stop and name no prompt.
+        assert_eq!(
+            prompts(&events),
+            vec![
+                ("SessionStart".to_string(), None),
+                ("UserPromptSubmit".to_string(), None)
+            ]
+        );
+        assert!(step(&mut observer, &[busy]).is_empty());
     }
 
     impl LiveRecord {
