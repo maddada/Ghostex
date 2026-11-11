@@ -44,6 +44,15 @@ use super::{
     },
 };
 
+/// Whether a computer may start a Live Activity by push (with the phone's push-to-start token).
+///
+/// CDXC:Notifications 2026-11-11 FIX: Off. An independent review found that a banner started by push never gets
+/// an update token the phone could hand back (the app learns it only while it runs, and a background run has no
+/// link to register it), so it said "working" until it went stale, and every next working stint started another,
+/// each with an alert. Until the phone can register the token of an activity it did not start, a computer only
+/// updates and ends an activity the app itself started. The phone stops sending the push-to-start token too.
+const SEND_PUSH_TO_START: bool = false;
+
 /// A gap this much longer than a tick between two wakes of the worker means the computer slept.
 const SLEEP_GAP_MS: i64 = 5 * 60_000;
 
@@ -68,6 +77,10 @@ pub(crate) struct Timings {
     pub(crate) remote_poll_ms: i64,
     /// How long a connected computer that stopped answering keeps its last rows on the banner.
     pub(crate) remote_keep_ms: i64,
+    /// A phone's registration counts this long: the phone registers again well within it while it keeps this
+    /// computer as its banner computer, so a computer the phone moved away from while it could not reach it
+    /// stops pushing on its own.
+    pub(crate) confirmation_ttl_ms: i64,
 }
 
 impl Default for Timings {
@@ -83,6 +96,7 @@ impl Default for Timings {
             failure_backoff_ms: 60_000,
             remote_poll_ms: 10_000,
             remote_keep_ms: 2 * 60_000,
+            confirmation_ttl_ms: 60 * 60_000,
         }
     }
 }
@@ -102,6 +116,9 @@ struct PhoneState {
     /// A working stint began while the phone had no activity: a start is owed (until it is sent, the agents
     /// stop, or the token is gone).
     start_wanted: bool,
+    /// This computer sent this activity a working or waiting agent since it got the token. Until then it sends
+    /// no idle content and never ends the activity, so it cannot blank or end a banner it is not showing.
+    pushed_active: bool,
 }
 
 #[derive(Default)]
@@ -128,7 +145,8 @@ struct Shared {
     /// The phones (by computer id) that registered with this gxserver since it started or last slept: only
     /// they get pushes. A computer that restarted or slept may no longer be the phone's banner computer, so it
     /// waits for the phone to confirm it (`registration.rs`) instead of pushing over the one picked meanwhile.
-    confirmed: Mutex<HashSet<String>>,
+    /// When each phone last confirmed (ms); a confirmation older than `confirmation_ttl_ms` no longer counts.
+    confirmed: Mutex<HashMap<String, i64>>,
 }
 
 /// The computers connected to this one: the registry in gxserver; a test passes its own.
@@ -197,7 +215,7 @@ impl LiveActivityRuntime {
             logger,
             remote_reads: Mutex::new(Vec::new()),
             connected,
-            confirmed: Mutex::new(HashSet::new()),
+            confirmed: Mutex::new(HashMap::new()),
         });
         let (done_tx, done_rx) = mpsc::channel();
         let worker_shared = shared.clone();
@@ -235,7 +253,7 @@ impl LiveActivityRuntime {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
             if registered {
-                confirmed.insert(machine_id.to_string());
+                confirmed.insert(machine_id.to_string(), self.shared.clock.now_ms());
             } else {
                 confirmed.remove(machine_id);
             }
@@ -243,13 +261,16 @@ impl LiveActivityRuntime {
         self.poke();
     }
 
-    /// Whether the phone `machine_id` confirmed its registration since this gxserver started or last slept.
+    /// Whether the phone `machine_id` confirmed its registration since this gxserver started or last slept, within
+    /// the last `confirmation_ttl_ms`.
     pub(crate) fn is_confirmed(&self, machine_id: &str) -> bool {
+        let now = self.shared.clock.now_ms();
         self.shared
             .confirmed
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .contains(machine_id)
+            .get(machine_id)
+            .is_some_and(|at| now - at < self.shared.timings.confirmation_ttl_ms)
     }
 
     /// Stops the worker; waits up to `wait` for the request in flight.
@@ -363,14 +384,21 @@ fn registered_phones(shared: &Shared) -> Option<Vec<(LiveActivityPhone, bool)>> 
             return None;
         }
     };
+    let now = shared.clock.now_ms();
     let confirmed = shared
         .confirmed
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .clone();
+    // An expired confirmation stops the pushes and ends nothing: the phone may have moved to another computer
+    // while it could not reach this one.
     let phones: Vec<LiveActivityPhone> = phones
         .into_iter()
-        .filter(|phone| confirmed.contains(&phone.machine_id))
+        .filter(|phone| {
+            confirmed
+                .get(&phone.machine_id)
+                .is_some_and(|at| now - at < shared.timings.confirmation_ttl_ms)
+        })
         .collect();
     if phones.is_empty() {
         return Some(Vec::new());
@@ -749,7 +777,11 @@ fn phone_pass(
         state.activity_fingerprint = None;
         state.sent_shape = None;
         state.idle_since = None;
-        // No activity: a start when a working stint begins, if the phone gave a push-to-start token.
+        // No activity: a start when a working stint begins, if the phone gave a push-to-start token (off for now,
+        // SEND_PUSH_TO_START).
+        if !SEND_PUSH_TO_START {
+            return None;
+        }
         let start_token = phone.push_to_start_token.as_deref()?;
         if !active {
             state.start_wanted = false;
@@ -801,10 +833,12 @@ fn phone_pass(
             ..PhoneState::default()
         };
     }
-    // The phone confirmed this computer as its one banner computer (registration.rs), so it owns the banner:
-    // it shows what this computer and the computers connected to it have, idle included, and ends it.
+    // The phone confirmed this computer as its one banner computer (registration.rs). Once it has put a working or
+    // waiting agent on the activity it owns it: idle content included, and the end. Before that it leaves it alone.
     if active {
         state.idle_since = None;
+    } else if !state.pushed_active {
+        return None;
     } else {
         let since = *state.idle_since.get_or_insert(now);
         if now - since >= timings.end_after_ms {
@@ -845,6 +879,7 @@ fn phone_pass(
         state.sent_shape = Some(shape);
         // From the answer, not the decision: a slow request must not bring the next one closer.
         state.sent_at = shared.clock.now_ms();
+        state.pushed_active |= active;
     }
     settle(
         shared,
