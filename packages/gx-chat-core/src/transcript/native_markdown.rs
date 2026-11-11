@@ -1342,6 +1342,13 @@ pub fn native_markdown_with_mentions(
     } else {
         linked
     };
+    // A hex colour in prose, or a code span that names one, carries its swatch's mark
+    // (`hex_colors.rs`); after the issue links, which it leaves alone, and before the block marks.
+    let linked = if issues_wanted {
+        crate::transcript::hex_colors::mark_hex_colors(&linked).into_owned()
+    } else {
+        linked
+    };
     if blocks_wanted {
         mark_blocks(&linked, !bare_paths)
     } else {

@@ -714,7 +714,12 @@ impl NativeChatView {
     /// phone draws by too). The core marks them in the Markdown it projects; text it never
     /// marked (a work item's ask) gets the same links here. Remembered by text, because a reply
     /// with a reference would otherwise be parsed again on every frame.
+    ///
+    /// The core's hex colour marks (`transcript/hex_colors.rs`, which the phone draws its swatches
+    /// from) go back to the text they wrapped: this view's text code finds the colours itself and
+    /// draws their swatches as it did before the rule moved into the core.
     fn issue_linked(&self, content: String) -> String {
+        use ghostex_gx_chat_core::transcript::hex_colors::unmark_hex_colors;
         use ghostex_gx_chat_core::transcript::issue_links::resolve_issue_links;
         if !content.contains('#') {
             return content;
@@ -727,7 +732,7 @@ impl NativeChatView {
         if let Some(linked) = memo.1.get(&content) {
             return linked.clone();
         }
-        let linked = resolve_issue_links(&content, base).into_owned();
+        let linked = resolve_issue_links(&unmark_hex_colors(&content), base).into_owned();
         if memo.1.len() >= 512 {
             memo.1.clear();
         }

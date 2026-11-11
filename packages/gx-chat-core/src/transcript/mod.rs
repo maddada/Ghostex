@@ -24,6 +24,7 @@ pub mod folded_cards;
 pub mod foreign;
 pub mod gbot_cards;
 pub mod grouped_work;
+pub mod hex_colors;
 pub mod hook_blocked;
 pub mod image_markers;
 pub mod images;
