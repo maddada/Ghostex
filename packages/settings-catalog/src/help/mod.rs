@@ -777,40 +777,7 @@ pub fn published_catalog_json() -> String {
 ///
 /// CDXC:Projects 2026-11-11 DECISION:
 /// The coordinator, for the user (GitHub page Q2524, "Merge, then fix on main"): Help must not change on main before the next release, so the Project Linear API key and the three Cloud box rows stay in Project settings for installed copies until the release that ships PR #567 empties this list and regenerates (release-11.3.1/help/projects-global-fold.patch).
-pub const HELD_PROJECTS_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[
-    (
-        "projectLinearApiKey",
-        ("projects", "Projects"),
-        ("projectSettings", "Project settings"),
-        "Project Linear API key",
-        "A Linear key for this project only, used instead of its workspace's or the shared key. Issues Workflow shows Linear tickets once a key applies to the project.",
-        "docsDirectory",
-    ),
-    (
-        "projectCloudBoxDefaults",
-        ("projects", "Projects"),
-        ("projectSettings", "Project settings"),
-        "Cloud box provider and size",
-        "Which provider and machine size a new Cloud Box for this project starts on.",
-        "projectLinearApiKey",
-    ),
-    (
-        "projectCloudBoxSnapshots",
-        ("projects", "Projects"),
-        ("projectSettings", "Project settings"),
-        "Cloud box snapshots",
-        "This project's saved snapshots: what a new Cloud Box starts from. Make one the Default (★), update the Default from a running box, or delete one.",
-        "projectCloudBoxDefaults",
-    ),
-    (
-        "projectCloudBoxSecrets",
-        ("projects", "Projects"),
-        ("projectSettings", "Project settings"),
-        "Send to the box",
-        "Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.",
-        "projectCloudBoxSnapshots",
-    ),
-];
+pub const HELD_PROJECTS_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
 
 /// Rows the 2026-11-11 Settings regroup moved to another page, held at their old place in the
 /// committed Help files until a release ships the move, in [`HELD_ROW_PLACEMENT`]'s shape.

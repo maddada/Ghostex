@@ -322,6 +322,13 @@ view from the strip.
   through the sessions and Enter opens one, and Escape or the same key gives the
   keyboard back to where it was. While the VS Code view itself has keyboard focus, Cmd+N and
   Cmd+Shift+O go to VS Code instead (New File, Go to Symbol).
+  In the sidebar, Tab and Shift+Tab move through its buttons, headers,
+  filters and session rows in the order they are drawn, and the one with the
+  keyboard shows a ring: Enter or Space clicks it, Up and Down move between
+  session rows, Home and End jump to the first and last row, and Escape gives
+  the keyboard back. Tab from an empty chat box moves on to the sidebar's
+  Search. Buttons that show only while you point at a row, and right-click
+  menus, can't be reached this way yet.
   Closing a session that is busy (an agent in the middle of a turn, waiting on
   your answer to a question or approval, or still running background work) or
   a coordinator asks first, naming what closes; an idle session closes at once.
@@ -835,8 +842,8 @@ the one with its folder's name. The phone's project list follows the same
 switch.
 To put a project on a computer that doesn't have it yet, right-click it and
 pick Clone on… and the computer: Ghostex clones its git remote into that
-computer's usual projects folder (Settings > Projects > Default projects folder
-on this computer, the home folder on another one), using `<name>-2` and so on
+computer's usual projects folder (Settings > Projects > Global settings > Default
+projects folder on this computer, the home folder on another one), using `<name>-2` and so on
 when the folder name is taken, shows the clone in the header's jobs button, and
 adds the project there. Computers that aren't connected are listed greyed, and
 a project with no git remote can't be cloned this way.
@@ -1076,7 +1083,7 @@ Space and Group start where you are: the Space open in the sidebar and the
 project group of the selected project. A project put in a group joins that
 group's Spaces. Start remembers what you picked last. If the name is already a
 project there, Create opens that project instead.
-The folder is made in Settings > Projects > Default projects folder
+The folder is made in Settings > Projects > Global settings > Default projects folder
 (`defaultProjectsFolder`, for example `~/dev`). With that setting blank, Add
 Project suggests the folder that holds the selected project's folder (else
 `~/dev`), lets you pick any other, and saves the folder your first new project
@@ -4837,7 +4844,11 @@ sessions, so any client can control agents on any machine.
   Each phone pairs with its own device key, kept in its Secure Enclave or
   Android Keystore, and gets an access token tied to that key, so removing it
   cuts that phone off at once: its sign-in key, its token and its right to
-  approve go together. Phones paired before Ghostex 11.1.0 no longer connect
+  approve go together. Pairing a phone again replaces only that same phone's
+  earlier pairing (proven by its device key), and an Easy Connect key belongs to
+  one device: a pairing that names a key another paired device holds is refused,
+  and the message names that device and the day it paired, so you remove the
+  right one. Phones paired before Ghostex 11.1.0 no longer connect
   and are listed as "pair it again": scan a new code from the phone, or remove
   them. Only paired devices can connect, always: a removed phone can't even
   reach the computer through Easy Connect, and a new phone gets in only while
@@ -5656,7 +5667,12 @@ no agent is working or waiting, or when you turn it off; while iOS keeps the app
 suspended, it ends the next time Ghostex runs. If a computer needs a newer
 Ghostex, the settings page names it and no Live Activity starts until it is
 updated. Updates arrive while the app is open, and can also arrive when iOS
-wakes it for a push; background updates are not guaranteed. Older content says
+wakes it for a push; background updates are not guaranteed. **Keep it updated
+while locked** (new in 11.4.0, off by default, under Show Live Activity) lets
+one of your computers keep the Live Activity up to date through Ghostex's push
+service while the phone is locked, for itself and the computers connected to
+it; it needs Ghostex 11.4.0 on that computer, and iOS can still delay or limit
+those updates. Off, it updates only while Ghostex is open, as before. Older content says
 **Updated** and its time in grey, with the rows dimmed and their times stopped,
 rather than claiming to be live.
 
@@ -5924,7 +5940,8 @@ get it (on by default). With **Title sessions by their branch** on (same page, o
 by default), a session on a branch other than main is titled by that branch,
 without your name and the ticket ID, until you rename it. Linear status needs a
 Linear API key: set one per workspace in Settings > Workspaces, or for one
-project under **Linear API key** in Settings > Projects (the line under it says
+project in Settings > Projects: pick it in the **Project** dropdown, then set
+**Issues Workflow > Linear API key** (the line under it says
 whether the project uses its own key, its workspace's or the shared one, and
 Remove goes back to the workspace's). Or run `ghostex issues linear-key`
 and paste it (that sets the Personal workspace's key, which a workspace without
@@ -6177,8 +6194,10 @@ team's Convex admins can technically read stored keys. Ghostex also fills in you
 Linear user from your workspace's Linear key, so tickets created from your Slack
 requests are assigned to you.
 
-Related settings: Settings > Projects > Global Defaults (worktree command,
-docs directory), Settings > Projects > Linear API key, `hideProjectHeaderDiffStats`,
+Related settings: Settings > Projects > Global settings (a fold at the top of the
+page, closed by default with a summary of what is set) > Global Defaults (worktree
+command, docs directory), Settings > Projects > Issues Workflow > Linear API key (for
+the project picked in the page's Project dropdown), `hideProjectHeaderDiffStats`,
 `showProjectEditorDiffFileCount`,
 `showUntrackedProjectDiffWhenNoTrackedChanges`. Issues Workflow:
 `titleSessionsByBranch`, `offerCleanupWhenPrMerges`, `ghostex issues
@@ -6205,15 +6224,21 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   one of them from elsewhere (a link, a menu, a turned-off message) opens
   them too. While they are folded over the page you are on, the chevron row is
   highlighted.
-- Settings > Extensions is in tabs: **Built-in** (parts of Ghostex you can
+- Settings > Extensions is in tabs: **On** (everything that is on, from every
+  other tab, grouped under the tab it belongs to with how many are on there;
+  something limited to some projects or Spaces says so on its row, and
+  something you turn off there stays listed, switched off, until you leave the
+  tab, so a slip is one click to undo), **Built-in** (parts of Ghostex you can
   switch off), **Views** (project websites, code and files, planning, the view
   order with Arrange views, and your own views), **Panels & menus** (header
   buttons and ⋯ menu entries), **Installed** (extensions you installed, Install
   from folder…, and Collab), **Community** (the audited third-party extensions
   you can install) and **Experimental**. Each tab shows its count, and Settings
-  reopens on the tab you had open. Every extension is a small tile, two to a
-  row: its icon, its name and one line of what it does (hover the tile and point
-  at the (i) beside the name to read all of it). The search box at the top of
+  reopens on the tab you had open. Every extension is a card of its own row:
+  every card the same height, with its icon, its name and one line of what it
+  does, cut short with "…" when it is longer (point at that line, or at the (i)
+  that appears beside the name, to read all of it); a card that is off shows
+  its name and icon greyed out. The search box at the top of
   Settings searches every tab at once: while you type, the page lists the matches
   of every tab and each tab shows how many it has. Each tile's switch turns it on
   or off, and its actions (Edit, Remove, Reinstall) appear when you hover it.
