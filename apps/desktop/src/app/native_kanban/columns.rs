@@ -100,17 +100,12 @@ impl GhostexGpuiApp {
                             ) {
                                 return;
                             }
-                            let mut hidden = this
+                            let visible = this
                                 .native_kanban
                                 .hidden_columns
-                                .clone()
-                                .unwrap_or_default();
-                            if hidden.contains(&key) {
-                                hidden.retain(|name| *name != key);
-                            } else {
-                                hidden.push(key.clone());
-                            }
-                            this.native_kanban_write_hidden_columns(hidden, cx);
+                                .as_ref()
+                                .is_some_and(|hidden| hidden.contains(&key));
+                            this.native_kanban_set_column_shown(key.clone(), visible, cx);
                         }),
                     )
                     .into_any_element()

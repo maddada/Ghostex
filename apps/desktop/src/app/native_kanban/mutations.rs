@@ -442,25 +442,25 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// Writes which built-in lanes the project hides and reloads.
-    pub(crate) fn native_kanban_write_hidden_columns(
+    /// Shows or hides one built-in lane and reloads. Only the change is sent: gxserver merges it
+    /// into the workspace's current value, so another computer's choice since the last read stays.
+    pub(crate) fn native_kanban_set_column_shown(
         &mut self,
-        hidden: Vec<String>,
+        column: String,
+        visible: bool,
         cx: &mut Context<Self>,
     ) {
         if let Some(KanbanPanel::Columns(form)) = self.native_kanban.panel.as_mut() {
             form.busy = true;
             form.error = None;
         }
-        let value = hidden.join(",");
+        let request = json!({
+            "action": "boardHiddenColumnsSet",
+            "column": column.clone(),
+            "visible": visible,
+        });
         self.native_kanban_spawn(
-            move |context| async move {
-                beads_call(
-                    &context,
-                    json!({ "action": "boardHiddenColumnsSet", "value": value }),
-                )
-                .await
-            },
+            move |context| async move { beads_call(&context, request).await },
             move |this, result, cx| {
                 let error = result.err();
                 if let Some(KanbanPanel::Columns(form)) = this.native_kanban.panel.as_mut() {
@@ -468,7 +468,12 @@ impl GhostexGpuiApp {
                     form.error = error.clone();
                 }
                 if error.is_none() {
-                    this.native_kanban.hidden_columns = Some(hidden);
+                    // Shown at once; the reload below brings the merged value.
+                    let hidden = this.native_kanban.hidden_columns.get_or_insert_default();
+                    hidden.retain(|name| *name != column);
+                    if !visible {
+                        hidden.push(column);
+                    }
                     this.native_kanban.invalidate_derived();
                     // Only reads: a Manual refresh would reconcile `status.custom` and the prefix,
                     // and showing or hiding a lane must never change the workflow's statuses.

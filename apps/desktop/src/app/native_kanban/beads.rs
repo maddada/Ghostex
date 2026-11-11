@@ -83,7 +83,11 @@ fn run_beads_action_params(
     if let Some(project_id) = context.project_id.as_ref() {
         params.insert("projectId".into(), json!(project_id));
     }
+    if let Some(visible) = request.get("visible").and_then(Value::as_bool) {
+        params.insert("visible".into(), json!(visible));
+    }
     for key in [
+        "column",
         "comment",
         "dependsOnId",
         "depType",

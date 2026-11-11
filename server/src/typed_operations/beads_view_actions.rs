@@ -68,8 +68,21 @@ pub(crate) fn build_beads_view_command(
             BOARD_HIDDEN_COLUMNS_KEY.into(),
             "--json".into(),
         ],
-        "boardHiddenColumnsSet" => {
-            let hidden = normalize_board_hidden_columns(params.get("value"))?;
+        // Internal: the write `run_board_hidden_columns_set` makes once it has merged the change
+        // into the current value. Not a client action (`normalize_beads_action` refuses it).
+        "boardHiddenColumnsWrite" => {
+            let hidden = params
+                .get("hidden")
+                .and_then(Value::as_array)
+                .map(|names| {
+                    names
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(|name| normalize_hideable_board_column(Some(name)))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+                .transpose()?
+                .unwrap_or_default();
             if hidden.is_empty() {
                 vec![
                     "config".into(),
@@ -96,25 +109,56 @@ pub(crate) fn build_beads_view_command(
     Ok(ProcessCommand::new(bd_executable_path, args, cwd))
 }
 
-/// The hidden columns, comma separated: only Backlog, Test and Review can be hidden; empty shows
-/// every lane again (the key is unset).
-fn normalize_board_hidden_columns(
-    input: Option<&Value>,
-) -> Result<Vec<String>, TypedOperationError> {
-    let mut hidden = Vec::<String>::new();
-    for name in optional_text(input).unwrap_or_default().split(',') {
-        let name = name.trim();
-        if name.is_empty() || hidden.iter().any(|existing| existing == name) {
-            continue;
-        }
-        if !ghostex_gx_protocol::beads_view::HIDEABLE_BOARD_COLUMNS.contains(&name) {
-            return Err(TypedOperationError::bad_request(format!(
-                "The Board can't hide the {name} column."
-            )));
-        }
-        hidden.push(name.to_string());
+/// Only Backlog, Test and Review can be hidden.
+fn normalize_hideable_board_column(name: Option<&str>) -> Result<String, TypedOperationError> {
+    let name = name.map(str::trim).unwrap_or_default();
+    if ghostex_gx_protocol::beads_view::HIDEABLE_BOARD_COLUMNS.contains(&name) {
+        Ok(name.to_string())
+    } else {
+        Err(TypedOperationError::bad_request(format!(
+            "The Board can't hide the {name} column."
+        )))
     }
-    Ok(hidden)
+}
+
+/// `boardHiddenColumnsSet`: shows or hides one column (`column`, `visible`).
+///
+/// CDXC:ProjectBoard 2026-11-11 WHY: a client that sent its whole hidden list overwrote what another computer or clone had hidden since it last read. The client sends only the column it changed, and gxserver reads the current value and writes the merged one; inside a workspace both bd calls run under the workspace's lock (`run_beads_action_in_workspace` calls this through `run_beads_action_direct`), so two changes never lose each other.
+pub(crate) async fn run_board_hidden_columns_set(
+    params: &Map<String, Value>,
+    context: &super::TypedOperationContext,
+) -> Result<Value, TypedOperationError> {
+    let column = normalize_hideable_board_column(params.get("column").and_then(Value::as_str))?;
+    let visible = params
+        .get("visible")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| TypedOperationError::bad_request("visible must be true or false."))?;
+    let read = super::beads_action_command("boardHiddenColumnsGet", &Map::new(), context)?;
+    let output = super::run_process_command(&read, context).await?;
+    if output.exit_code != 0 || output.error.is_some() {
+        return super::finish_beads_action("boardHiddenColumnsSet", &read, output);
+    }
+    let current = serde_json::from_str::<Value>(output.stdout.trim()).unwrap_or(Value::Null);
+    let current = current.get("data").unwrap_or(&current);
+    let mut hidden = current
+        .get("value")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|name| ghostex_gx_protocol::beads_view::HIDEABLE_BOARD_COLUMNS.contains(name))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    hidden.dedup();
+    hidden.retain(|name| *name != column);
+    if !visible {
+        hidden.push(column);
+    }
+    let mut write_params = Map::new();
+    write_params.insert("hidden".to_string(), Value::from(hidden));
+    let write = super::beads_action_command("boardHiddenColumnsWrite", &write_params, context)?;
+    let output = super::run_process_command(&write, context).await?;
+    super::finish_beads_action("boardHiddenColumnsSet", &write, output)
 }
 
 fn optional_text(input: Option<&Value>) -> Option<String> {

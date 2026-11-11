@@ -4076,7 +4076,8 @@ the sync status with **Pull** and **Push**, Refresh, and **New bead**.
   Progress and Done always show). A hidden lane still appears while a bead is in
   it, and the choice is saved in the project's Beads workspace, so every computer
   and clone sees the same Board (`bd config set custom.ghostex.board_hidden_columns
-  test,review`; `bd config unset` shows them all again).
+  test,review`; `bd config unset custom.ghostex.board_hidden_columns` shows them
+  all again).
 - **Sync**: the header says when the beads last synced from this computer
   ("Synced 4 min ago"); click it for the remote and the last push and pull.
   **Pull** brings in changes from your other computers (`bd dolt pull`), **Push**

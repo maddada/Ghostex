@@ -46,6 +46,9 @@ pub(crate) async fn run_beads_action_direct(
     params: &Map<String, Value>,
     context: &TypedOperationContext,
 ) -> Result<Value, TypedOperationError> {
+    if action == "boardHiddenColumnsSet" {
+        return super::beads_view_actions::run_board_hidden_columns_set(params, context).await;
+    }
     if action == "storageExists" {
         let exists = match require_system_bd() {
             Ok(bd) => matches!(
