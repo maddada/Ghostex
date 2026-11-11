@@ -159,8 +159,13 @@ pub(crate) struct NativeChatView {
     /// quiet_work.rs): each call draws as a quiet step instead of a tool row.
     pub(super) quiet_steps: bool,
     /// Quiet View's lines of the current snapshot, read once per snapshot (quiet_view.rs).
-    pub(super) quiet_lines_cache:
-        std::cell::RefCell<Option<(usize, std::rc::Rc<super::quiet_view::QuietLines>)>>,
+    /// Held weakly, so a later snapshot can never take the address of the one the lines are of.
+    pub(super) quiet_lines_cache: std::cell::RefCell<
+        Option<(
+            std::sync::Weak<Value>,
+            std::rc::Rc<super::quiet_view::QuietLines>,
+        )>,
+    >,
     /// The message under the pointer while Message spacing is Compact, whose footer row shows its
     /// buttons (message_spacing.rs).
     pub(super) hovered_message: Option<String>,

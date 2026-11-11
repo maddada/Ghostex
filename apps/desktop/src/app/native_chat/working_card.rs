@@ -718,6 +718,19 @@ fn compaction_sweep(track: gpui::Div, primary: gpui::Hsla) -> AnyElement {
 }
 
 impl NativeChatView {
+    /// Before the composer draws: no lifted spark or track until the line that has them draws, and
+    /// no rounded box until the capsule records one.
+    ///
+    /// CDXC:SessionChat 2026-11-11 WHY:
+    /// Since main's coordinator dock (merged 2026-11-11), the working line also rides on the dock's header bar (`working_line_in_bar`, work_cards.rs), where nothing rounded clips it: only that bar's status column clips it, square. The lifted spark kept the capsule's rounded box from the last time the capsule drew, so in a dock it would have been placed against a box that was no longer there. The box is forgotten here and only the capsule records it again (`render_working_card`), so in the bar the spark is clipped as it is in place.
+    pub(super) fn reset_working_lifts(&self) {
+        self.indicator_overlay
+            .set(indicator_overlay::WORKING_LEAD, None);
+        self.indicator_overlay
+            .set(indicator_overlay::WORKING_TRACK, None);
+        self.working_card.capsule_lead.forget_box();
+    }
+
     /// The capsule's lead, or, when the pane draws it (indicator_overlay.rs), an empty box of its
     /// size that records where it is.
     fn capsule_lead(

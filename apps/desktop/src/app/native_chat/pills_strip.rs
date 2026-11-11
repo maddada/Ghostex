@@ -294,7 +294,8 @@ impl NativeChatView {
 
     /// How wide `label` is in a pill (unscaled), which dropping it frees.
     fn pill_label_width(&self, label: &str, p: &ChatAppearance, cx: &gpui::App) -> f32 {
-        super::fonts::label_width(label, &p.font, 13.0 * p.scale, cx) / p.scale
+        super::fonts::label_width(label, &p.font, gpui::FontWeight::NORMAL, 13.0 * p.scale, cx)
+            / p.scale
     }
 
     /// The view status chip at the strip's left: a click goes back to Normal view, and it shows an X

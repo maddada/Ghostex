@@ -196,6 +196,12 @@ impl LiftedPlace {
         .into_any_element()
     }
 
+    /// Forgets the rounded box, for a draw where the place is not inside one: only a box that
+    /// records itself this frame clips the lifted indicator.
+    pub(super) fn forget_box(&self) {
+        self.rounded_box.set(None);
+    }
+
     /// The element that records the fully rounded box's padding edge: put it, absolute and
     /// filling, inside that box.
     pub(super) fn box_recorder(&self) -> AnyElement {

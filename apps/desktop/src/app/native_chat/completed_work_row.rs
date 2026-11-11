@@ -673,5 +673,6 @@ impl NativeChatView {
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 fn text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
-    super::fonts::label_width(label, &p.font, size * p.scale, cx) / p.scale
+    super::fonts::label_width(label, &p.font, gpui::FontWeight::NORMAL, size * p.scale, cx)
+        / p.scale
 }

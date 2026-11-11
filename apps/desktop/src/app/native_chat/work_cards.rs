@@ -106,22 +106,7 @@ const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 pub(super) fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
-    if label.is_empty() {
-        return 0.0;
-    }
-    let system = gpui::WindowTextSystem::new(cx.text_system().clone());
-    let run = gpui::TextRun {
-        len: label.len(),
-        font: gpui::Font {
-            weight: gpui::FontWeight::MEDIUM,
-            ..gpui::font(p.font.clone())
-        },
-        ..Default::default()
-    };
-    system
-        .shape_line(label.to_owned().into(), px(size * p.scale), &[run], None)
-        .width
-        .as_f32()
+    super::fonts::label_width(label, &p.font, gpui::FontWeight::MEDIUM, size * p.scale, cx)
         / p.scale
 }
 

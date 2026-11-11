@@ -257,15 +257,19 @@ fn kept_parts(item: &TranscriptItem, tail: &QuietTail) -> Vec<KeptTurn> {
 impl NativeChatView {
     /// The current snapshot's lines, read once per snapshot.
     fn quiet_lines(&self) -> Rc<QuietLines> {
-        let snapshot = std::sync::Arc::as_ptr(&self.snapshot) as usize;
+        // CDXC:SessionChat 2026-11-11 WHY: keyed by the snapshot it was read from, held weakly
+        // (as message_actions.rs `is_final_reply`): a bare address can be taken by a later
+        // snapshot once the old one is freed (off the main thread since 2026-11-10, state.rs
+        // `drop_off_main_thread`), and would then hand back the old snapshot's lines.
+        let current = std::sync::Arc::as_ptr(&self.snapshot);
         let mut cache = self.quiet_lines_cache.borrow_mut();
-        if let Some((at, lines)) = cache.as_ref()
-            && *at == snapshot
+        if let Some((built_from, lines)) = cache.as_ref()
+            && built_from.as_ptr() == current
         {
             return Rc::clone(lines);
         }
         let lines = Rc::new(QuietLines::of(&self.snapshot));
-        *cache = Some((snapshot, Rc::clone(&lines)));
+        *cache = Some((std::sync::Arc::downgrade(&self.snapshot), Rc::clone(&lines)));
         lines
     }
 
