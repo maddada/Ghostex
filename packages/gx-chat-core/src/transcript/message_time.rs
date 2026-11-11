@@ -121,6 +121,20 @@ pub fn age_label(now_ms: i64, at_ms: i64) -> String {
     }
 }
 
+/// When [`age_label`] of `at_ms` next reads differently, seen from `now_ms`: the next minute for
+/// the first hour, then the next hour, the "yesterday" day, and the next day after that. What a
+/// kept list of ages waits for, instead of building itself again every minute of every row.
+pub fn age_label_changes_at(now_ms: i64, at_ms: i64) -> i64 {
+    let minutes = (now_ms - at_ms).max(0) / 60_000;
+    let next = match minutes {
+        0..=59 => minutes + 1,
+        60..=1439 => (minutes / 60 + 1) * 60,
+        1440..=2879 => 2880,
+        _ => (minutes / 1440 + 1) * 1440,
+    };
+    at_ms + next * 60_000
+}
+
 /// CDXC:SessionChat 2026-09-19 WHY:
 /// The label under a message is a day-aware timestamp: today `5:48 AM`, yesterday
 /// `yesterday at 5:48 AM`, older `26/07 5:48 AM`, with the year once it differs; the hover title is
@@ -160,7 +174,42 @@ pub fn message_time(timestamp: Option<i64>, context: &ChatContext) -> Value {
 
 #[cfg(test)]
 mod age_tests {
-    use super::age_label;
+    use super::{age_label, age_label_changes_at};
+
+    /// The label holds until the moment given and reads differently from it on, at every age.
+    #[test]
+    fn the_age_changes_exactly_when_it_is_said_to() {
+        let at = 1_000_000_000_000;
+        let minute = 60_000;
+        for elapsed in [
+            -5_000,
+            0,
+            59_999,
+            minute,
+            59 * minute + 59_999,
+            60 * minute,
+            61 * minute,
+            23 * 60 * minute + 30 * minute,
+            24 * 60 * minute,
+            47 * 60 * minute,
+            48 * 60 * minute,
+            10 * 24 * 60 * minute + 7,
+        ] {
+            let now = at + elapsed;
+            let changes = age_label_changes_at(now, at);
+            assert!(changes > now, "after {elapsed} ms the next change is ahead");
+            assert_eq!(
+                age_label(changes - 1, at),
+                age_label(now, at),
+                "after {elapsed} ms the label holds until then"
+            );
+            assert_ne!(
+                age_label(changes, at),
+                age_label(now, at),
+                "after {elapsed} ms the label changes then"
+            );
+        }
+    }
 
     #[test]
     fn the_age_reads_now_minutes_hours_yesterday_then_days() {

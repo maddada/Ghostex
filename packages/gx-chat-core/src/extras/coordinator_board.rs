@@ -927,6 +927,20 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
 
 /// The board, or `None` on a chat that is not a coordinator or whose gxserver sends no board.
 pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<CoordinatorBoard> {
+    coordinator_board_with(
+        state,
+        context,
+        &crate::extras::work_cards::turns_for_work(state),
+    )
+}
+
+/// [`coordinator_board`], over the chat's turns the caller already read
+/// (`work_cards::turns_for_work`): every work row's Show in chat reads them.
+pub fn coordinator_board_with(
+    state: &ChatState,
+    context: &ChatContext,
+    turns: &[crate::extras::work_cards::Turn],
+) -> Option<CoordinatorBoard> {
     let threads = state.session.coordinator_threads.as_ref()?;
     // The work items, when gxserver sends them, laid out as the board was (work_panel.rs).
     let work_mode = threads.get("work").is_some_and(Value::is_object);
@@ -970,7 +984,8 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
                 }
                 // The opened card's actions, the dock's (Reply, Show in chat, Dismiss, Snooze).
                 if work_mode {
-                    out.actions = crate::extras::work_cards::panel_actions(state, context, row);
+                    out.actions =
+                        crate::extras::work_cards::panel_actions_with(state, context, row, turns);
                 }
                 // A work item's ask is answered or done, never dropped, moved or tagged by itself:
                 // those act on its item (work_panel.rs).
@@ -1158,11 +1173,14 @@ pub struct BoardInputs {
     resource_index: crate::questions::resource_index::ResourceIndex,
     later_question_ids: Vec<String>,
     removed_question_ids: Vec<String>,
+    /// Where the rows' Show in chat point (`work_cards::turns_mark`).
+    turns: (usize, String, String, Option<String>),
 }
 
 impl BoardInputs {
-    fn of(state: &ChatState) -> Self {
+    fn of(state: &ChatState, turns: &[crate::extras::work_cards::Turn]) -> Self {
         Self {
+            turns: crate::extras::work_cards::turns_mark(turns),
             threads: state.session.coordinator_threads.clone(),
             panels: state.extras.panels.clone(),
             askers: state.transcript_view.askers.clone(),
@@ -1173,8 +1191,9 @@ impl BoardInputs {
         }
     }
 
-    fn matches(&self, state: &ChatState) -> bool {
-        self.threads == state.session.coordinator_threads
+    fn matches(&self, state: &ChatState, turns: &[crate::extras::work_cards::Turn]) -> bool {
+        self.turns == crate::extras::work_cards::turns_mark(turns)
+            && self.threads == state.session.coordinator_threads
             && self.panels == state.extras.panels
             && self.askers == state.transcript_view.askers
             && self.questions.matches(&state.questions)
@@ -1188,10 +1207,17 @@ impl BoardInputs {
 /// and the value.
 pub type KeptBoard = (BoardInputs, i64, Option<i64>, crate::document::SharedValue);
 
-/// When the first age on the board changes after `now_ms`: the next whole minute since any row's
-/// time (`age_label` reads only whole minutes), over every row the board can show.
+/// When the board next reads differently with nothing but the clock moving: the first age label on
+/// it to change (`age_label_changes_at`, over every row the board can show), or the first snooze
+/// to end, which moves its ask back under Needs you.
+///
+/// CDXC:SessionChat 2026-11-11 WHY:
+/// It was the next whole minute since ANY item's time. A coordinator with 231 items has one of
+/// those about every quarter of a second, so the kept board never stood and every event of the
+/// chat built the whole panel again (`work_cards.rs` `turns`). An age reads in minutes for an
+/// hour, then in hours, then in days, so most rows change hourly or daily.
 fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
-    let next = |at: i64| at + ((now_ms - at).max(0) / 60_000 + 1) * 60_000;
+    let next = |at: i64| crate::transcript::message_time::age_label_changes_at(now_ms, at);
     let board_rows = state
         .session
         .coordinator_threads
@@ -1227,7 +1253,11 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
     let questions = crate::questions::open_questions::unanswered(state)
         .into_iter()
         .filter_map(|asker| asker.at);
-    board_rows.chain(questions).map(next).min()
+    board_rows
+        .chain(questions)
+        .map(next)
+        .chain(crate::extras::work_cards::snoozes_end_at(state, now_ms))
+        .min()
 }
 
 /// [`project`], reused while its inputs are the ones `kept` was built from and no age on it moved.
@@ -1235,16 +1265,24 @@ pub fn project_kept(
     state: &ChatState,
     context: &ChatContext,
     kept: &mut Option<KeptBoard>,
+    turns: &[crate::extras::work_cards::Turn],
 ) -> crate::document::SharedValue {
     let now_ms = context.now_millis();
     if let Some((inputs, built_at, changes_at, board)) = kept.as_ref() {
-        if now_ms >= *built_at && changes_at.is_none_or(|at| now_ms < at) && inputs.matches(state) {
+        if now_ms >= *built_at
+            && changes_at.is_none_or(|at| now_ms < at)
+            && inputs.matches(state, turns)
+        {
             return board.clone();
         }
     }
-    let board = crate::document::SharedValue::from(project(state, context));
+    let board = crate::document::SharedValue::from(
+        coordinator_board_with(state, context, turns)
+            .and_then(|board| serde_json::to_value(board).ok())
+            .unwrap_or(Value::Null),
+    );
     *kept = Some((
-        BoardInputs::of(state),
+        BoardInputs::of(state, turns),
         now_ms,
         ages_change_at(state, now_ms),
         board.clone(),
@@ -2302,5 +2340,163 @@ mod tests {
             coordinator_board(&state, &context()).unwrap().focus["seq"],
             2
         );
+    }
+
+    /// 11 Nov 2026 01:00:00 UTC.
+    const NOW: i64 = 1_794_358_800_000;
+
+    /// `at_ms` as gxserver writes a time, for a day of November 2026.
+    fn iso(at_ms: i64) -> String {
+        // 1 Nov 2026 00:00:00 UTC.
+        let since = at_ms - 1_793_491_200_000;
+        assert!(
+            (0..30 * 86_400_000).contains(&since),
+            "a time in November 2026"
+        );
+        let seconds = since / 1000;
+        format!(
+            "2026-11-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+            seconds / 86_400 + 1,
+            seconds % 86_400 / 3600,
+            seconds % 3600 / 60,
+            seconds % 60,
+            since % 1000
+        )
+    }
+
+    fn work_item(number: usize, aged_ms: i64, asks: Value) -> Value {
+        let at = iso(NOW - aged_ms);
+        json!({
+            "key": format!("work:{number}"), "ref": format!("W{number}"), "kind": "item",
+            "title": format!("Work item {number}"),
+            "status": if asks.as_array().is_some_and(|asks| !asks.is_empty()) { "needs" } else { "moving" },
+            "at": at, "now": "A thread is on it", "today": true, "asks": asks, "threads": [],
+            "waits": [], "steps": [],
+            "owner": { "kind": "coordinator", "label": "Coordinator" },
+            "history": [{ "kind": "add", "at": at, "text": "added" }],
+        })
+    }
+
+    fn work_state(items: Vec<Value>) -> ChatState {
+        let mut state = ChatState::default();
+        state.session.coordinator_threads =
+            Some(json!({"threads": [], "total": 0, "work": { "items": items }}));
+        let message = |id: &str, role: &str, at: i64| -> ghostex_gx_protocol::ChatMessage {
+            serde_json::from_value(json!({
+                "id": id, "role": role, "timestamp": at, "source": "transcript",
+                "blocks": [{ "type": "text", "text": "words" }],
+            }))
+            .unwrap()
+        };
+        state.messages.composed = vec![
+            message("u1", "user", NOW - 30 * 86_400_000),
+            message("a1", "assistant", NOW - 30 * 86_400_000 + 1_000),
+        ];
+        state
+    }
+
+    fn at(now_ms: i64) -> ChatContext {
+        ChatContext {
+            now_ms: now_ms as f64,
+            ..ChatContext::default()
+        }
+    }
+
+    /// The kept Work panel is the same value until a label on it changes: hours and days old, its
+    /// rows change by the hour, not with every minute of every row (CDXC:SessionChat 2026-11-11
+    /// on `ages_change_at`).
+    #[test]
+    fn a_kept_work_panel_stands_until_a_label_on_it_changes() {
+        let hour = 3_600_000;
+        let state = work_state(vec![
+            work_item(1, 3 * hour + 20 * 60_000, json!([])),
+            work_item(2, 50 * hour, json!([])),
+        ]);
+        let turns = crate::extras::work_cards::turns_for_work(&state);
+        let mut kept = None;
+        let built = project_kept(&state, &at(NOW), &mut kept, &turns);
+        assert!(built.is_object(), "a coordinator with work has a panel");
+        // Thirty nine minutes on: the first row still reads 3h, the second 2d.
+        for minutes in [1, 7, 39] {
+            let later = project_kept(&state, &at(NOW + minutes * 60_000), &mut kept, &turns);
+            assert!(
+                std::sync::Arc::ptr_eq(&built.0, &later.0),
+                "kept {minutes} minutes on"
+            );
+        }
+        // At 4h the first row's age changes, and the panel is built again.
+        let changed = project_kept(&state, &at(NOW + 40 * 60_000), &mut kept, &turns);
+        assert!(!std::sync::Arc::ptr_eq(&built.0, &changed.0));
+        assert_ne!(*built.0, *changed.0, "the age on it moved");
+
+        // A row younger than an hour changes with its minute, and only then.
+        let state = work_state(vec![work_item(1, 5 * 60_000 + 10_000, json!([]))]);
+        let mut kept = None;
+        let built = project_kept(&state, &at(NOW), &mut kept, &turns);
+        let same = project_kept(&state, &at(NOW + 49_000), &mut kept, &turns);
+        assert!(std::sync::Arc::ptr_eq(&built.0, &same.0));
+        let next = project_kept(&state, &at(NOW + 50_000), &mut kept, &turns);
+        assert!(!std::sync::Arc::ptr_eq(&built.0, &next.0));
+    }
+
+    /// A snooze ending brings its ask back under Needs you when it ends, however old its rows.
+    #[test]
+    fn a_kept_work_panel_ends_with_a_snooze() {
+        let until = iso(NOW + 90_000);
+        let asked = iso(NOW - 50 * 3_600_000);
+        let state = work_state(vec![work_item(
+            1,
+            50 * 3_600_000,
+            json!([{ "tag": "Q1", "open": true, "askedAt": asked, "title": "Which one?",
+                     "text": "Which one?", "snoozedUntil": until }]),
+        )]);
+        let turns = crate::extras::work_cards::turns_for_work(&state);
+        assert_eq!(ages_change_at(&state, NOW), Some(NOW + 90_000));
+        let mut kept = None;
+        let snoozed = project_kept(&state, &at(NOW), &mut kept, &turns);
+        let still = project_kept(&state, &at(NOW + 89_999), &mut kept, &turns);
+        assert!(std::sync::Arc::ptr_eq(&snoozed.0, &still.0));
+        let back = project_kept(&state, &at(NOW + 90_000), &mut kept, &turns);
+        assert_ne!(*snoozed.0, *back.0, "the ask is back under Needs you");
+    }
+
+    /// Every work row's actions are the ones it had when each row walked the chat itself.
+    #[test]
+    fn one_walk_of_the_chat_serves_every_work_row() {
+        let asked = iso(NOW - 60_000);
+        let state = work_state(vec![
+            work_item(1, 60_000, json!([])),
+            work_item(
+                2,
+                60_000,
+                json!([{ "tag": "Q2", "open": true, "askedAt": asked, "title": "Which one?",
+                         "text": "Which one?" }]),
+            ),
+            work_item(3, 120_000, json!([])),
+        ]);
+        let board = coordinator_board(&state, &at(NOW)).unwrap();
+        let built = crate::extras::work_panel::work_board_at(
+            &state.session.coordinator_threads.as_ref().unwrap()["work"],
+            NOW,
+        );
+        let mut rows = 0;
+        for group in built["groups"].as_array().unwrap() {
+            for row in group["rows"].as_array().into_iter().flatten() {
+                let own = crate::extras::work_cards::panel_actions(&state, &at(NOW), row);
+                let drawn = board
+                    .groups
+                    .iter()
+                    .flat_map(|group| group.rows.iter())
+                    .find(|drawn| drawn.key == row["key"].as_str().unwrap_or_default())
+                    .expect("the row is on the panel");
+                assert_eq!(drawn.actions, own, "{}", row["key"]);
+                assert_eq!(
+                    drawn.actions["showInChat"]["messageId"], "a1",
+                    "it points at the reply of its turn"
+                );
+                rows += 1;
+            }
+        }
+        assert_eq!(rows, 3, "two items, and the third as its ask");
     }
 }
