@@ -396,7 +396,6 @@ fn omp_extension_drains_hooks_before_explicit_shutdown() {
     }
 }
 
-/// Execute the generated extension once; the server tests replay these received payloads too.
 #[cfg(unix)]
 /// CDXC:AgentHooks 2026-11-07 WHY:
 /// PR #469's hook-order tests run real `bun` processes, and on 2026-11-07 one sat at 0% CPU for 14 minutes and held up every other thread's test run (kache's runner runs one test job at a time). The driver is killed after `limit` and the test fails with what it printed, so these tests can never hang.
@@ -444,6 +443,8 @@ fn output_within(
     }
 }
 
+/// Execute the generated extension once; the server tests replay these received payloads too.
+#[cfg(unix)]
 pub(crate) fn omp_dialog_hook_sequence(answer: &str, shutdown: bool) -> Vec<Value> {
     let temp = tempfile::tempdir().expect("tempdir");
     let notify = temp.path().join("notify");
