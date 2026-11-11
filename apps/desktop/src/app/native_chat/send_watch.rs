@@ -72,6 +72,17 @@ impl NativeChatView {
                 "refused": snapshot["sendBlockedReason"],
                 "held": snapshot["sendHoldReason"],
                 "received": snapshot["submissionsReceived"],
+                // What stood above the chat box at Enter: the terminal's notice and whether its
+                // card was drawn (a notice that holds the agent's input with no card holds sends),
+                // and a question that replaces the box.
+                "notice": {
+                    "kind": snapshot["terminalNotice"]["kind"],
+                    "title": snapshot["terminalNotice"]["title"],
+                    "holdsInput": snapshot["terminalNotice"]["choices"].as_array().is_some_and(|rows| !rows.is_empty())
+                        || snapshot["terminalNotice"]["dialog"].is_object(),
+                    "cardShown": snapshot["terminalNotice"].is_object() && snapshot["noticeVisible"] == true,
+                },
+                "questionCard": snapshot["questionCard"]["visible"],
                 "unconfirmed": self.send_watch.as_ref().map_or(0, |watch| watch.sends.len()),
             }),
         );
