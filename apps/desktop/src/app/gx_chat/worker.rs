@@ -326,6 +326,22 @@ fn spawn() -> Arc<Lanes> {
     lanes
 }
 
+/// A testing aid: with `GHOSTEX_DEBUG_CHAT_HOST_STALL_MS=<ms>` in the app's environment, every
+/// turn of this thread first waits that long, which stands in for a busy chat engine. It is how
+/// the send path is proven against a stall (a sent message must still show at once, go once and
+/// never come back; packages/gx-chat-core/src/composer/delivery.rs). Unset, which is always
+/// outside such a test, it costs one read of a static.
+fn debug_stall() -> Option<Duration> {
+    static STALL: OnceLock<Option<Duration>> = OnceLock::new();
+    *STALL.get_or_init(|| {
+        std::env::var("GHOSTEX_DEBUG_CHAT_HOST_STALL_MS")
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .filter(|ms| *ms > 0)
+            .map(Duration::from_millis)
+    })
+}
+
 fn run(world: &mut World, commands: &Lanes, idle: Arc<AtomicBool>) {
     let mut slow = SlowTurns::default();
     loop {
@@ -333,6 +349,9 @@ fn run(world: &mut World, commands: &Lanes, idle: Arc<AtomicBool>) {
         let wait = world::next_wake(world).map(|at| at.saturating_duration_since(Instant::now()));
         let taken = commands.take(wait);
         idle.store(false, Ordering::Release);
+        if let (Some(stall), true) = (debug_stall(), taken.is_some()) {
+            thread::sleep(stall);
+        }
         let started = Instant::now();
         let facts = taken.as_ref().map(|taken| {
             (
