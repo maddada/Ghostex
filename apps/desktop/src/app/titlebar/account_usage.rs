@@ -56,10 +56,6 @@ fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
     shown
 }
 
-/// How many times the main window's root has rendered, read by the usage-click trace.
-pub(crate) static MAIN_WINDOW_RENDERS: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
-
 fn titlebar_entry(account: &Value, machine: &str) -> Value {
     let mut account = account.clone();
     let key = machine
@@ -442,51 +438,6 @@ impl GhostexGpuiApp {
             let _ = popup.update(cx, |_, window, _| window.remove_window());
         }
         self.open_gpui_settings_accounts_reconnect(reconnect.as_deref(), None, cx);
-    }
-
-    /// Records the main window for a second after a usage meter click, to find the flicker the
-    /// user sees (CDXC:AgentProviders 2026-11-11 in GpuiAppToastWindowChrome.m): the native side
-    /// logs the window's state as it changes, this side how often GPUI redraws it, in 50ms buckets.
-    #[cfg(target_os = "macos")]
-    fn trace_main_window_after_usage_click(&mut self, cx: &mut gpui::Context<Self>) {
-        unsafe extern "C" {
-            fn GhostexGpuiTraceMainWindow(
-                view: *mut std::ffi::c_void,
-                path: *const std::ffi::c_char,
-                seconds: f64,
-            );
-        }
-        let path = crate::support_logs::logs_directory().join("usage-popup-trace.log");
-        let _ = std::fs::create_dir_all(crate::support_logs::logs_directory());
-        if let Ok(c_path) = std::ffi::CString::new(path.to_string_lossy().as_bytes()) {
-            unsafe { GhostexGpuiTraceMainWindow(self.parent_ns_view, c_path.as_ptr(), 1.0) };
-        }
-        cx.spawn(async move |_, cx| {
-            use std::io::Write as _;
-            use std::sync::atomic::Ordering::Relaxed;
-            let mut buckets = Vec::new();
-            let mut last = MAIN_WINDOW_RENDERS.load(Relaxed);
-            for _ in 0..20 {
-                cx.background_executor()
-                    .timer(Duration::from_millis(50))
-                    .await;
-                let now = MAIN_WINDOW_RENDERS.load(Relaxed);
-                buckets.push((now - last).to_string());
-                last = now;
-            }
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-            {
-                let _ = writeln!(
-                    file,
-                    "main window renders per 50ms after the click: {}",
-                    buckets.join(" ")
-                );
-            }
-        })
-        .detach();
     }
 
     pub(crate) fn sync_titlebar_account_privacy(&self, cx: &mut gpui::Context<Self>) {
@@ -925,8 +876,6 @@ impl GhostexGpuiApp {
         }
         let opening = !self.titlebar_popup_menu_open(kind);
         let previous_focus = window.focused(cx);
-        #[cfg(target_os = "macos")]
-        self.trace_main_window_after_usage_click(cx);
         self.set_gpui_titlebar_popup_open(kind, opening, Some(trigger_bounds), window, cx);
         if opening {
             self.titlebar_dropdown_previous_focus_handle = previous_focus;
