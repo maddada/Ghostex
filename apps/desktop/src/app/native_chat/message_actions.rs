@@ -193,7 +193,7 @@ impl NativeChatView {
         }
         if message["actionContent"]["canSaveMarkdown"] == true {
             rows.push(json!({
-                "label":"Save message to Markdown","iconPath":"chat-actions/save",
+                "label":"Save to Markdown","iconPath":"chat-actions/save",
                 "command":{"type":"markdownSaveOpen","markdown":markdown},
             }));
         }

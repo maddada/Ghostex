@@ -219,7 +219,7 @@ CDXC:RemotePairing 2026-11-05 WHY:
 A phone that pairs again replaces its earlier entries, so it is listed once (desktop Settings and the phone). The phone is recognized by its tailcat client key: it lives in the app's private storage and stays the same across pairings (on iOS outside backups; on Android the phone app keeps it out of backups only from the build that moves it to `noBackupFilesDir`, so an Android phone restored from a backup made before that brings the old key along, review of finding 6, finding 1), while the SSH key is generated anew each time and the device name ("iPhone") is shared by many phones. A phone without a client key (an app build from before Easy Connect allow-listing) cannot be told apart from another phone and is never merged. Each earlier entry is revoked like Remove does it, key line first and then the row (its API token goes with it), but the tailcat key stays on the allow-list because the new entry uses it. Every earlier entry with the key goes, so a list that already holds duplicates collapses to one on the phone's next pairing. A key line that cannot be removed (a declined Windows administrator prompt) keeps that entry listed so Remove can retry it; the new pairing still succeeds. Runs after the new entry is saved, so a failure here never costs the phone its new access. Returns the replaced entries.
 
 CDXC:RemotePairing 2026-11-11 SECURITY:
-Review finding 6: the tailcat client key is only what the request STATES. Nothing checks it against the tunnel the request came in on (tailcat serve hands gxserver a plain local connection and reports no peer for it), so a device that held a code and was approved could name another paired device's key and retire that device's pairing (its SSH key line, token, push registrations and row), and take over the link and purpose keys it had registered. An earlier entry is now retired only when it is proven to be the same device: its device key is the key that signed this pairing's status ask (`pairing_status` verifies that signature before it finishes a pairing), and a phone or computer keeps one device key for good (Secure Enclave / Android Keystore, `computer_pairing::load_or_create_device_key`). A pre-11.0.1 `legacy` entry has no device key to compare; it is retired as before only when it holds no access any more (its unrestricted key line is gone, `retire_legacy_pairings`), so a false claim cannot take access from it. It can still cost that phone its next pairing: once a device that claimed the legacy entry's key has retired it, that device's new entry holds the key, and the real phone's own pairing is refused until the user removes that entry (the refusal names it). A request that names a key another paired device holds under another device key is refused (`tailcat_key_held_by_another_device`, `begin_pairing`). Approval is unchanged.
+Review finding 6: the tailcat client key is only what the request STATES. Nothing checks it against the tunnel the request came in on (tailcat serve hands gxserver a plain local connection and reports no peer for it), so a device that held a code and was approved could name another paired device's key and retire that device's pairing (its SSH key line, token, push registrations and row), and take over the link and purpose keys it had registered. An earlier entry is now retired only when it is proven to be the same device: its device key is the key that signed this pairing's status ask (`pairing_status` verifies that signature before it finishes a pairing), and a phone or computer keeps one device key for good (Secure Enclave / Android Keystore, `computer_pairing::load_or_create_device_key`). A pre-11.0.1 `legacy` entry has no device key to compare. It is retired only once it holds no access: like every earlier entry, its key line is removed first and the entry is kept when that fails or is declined (see `is_earlier_pairing_of` for Windows, review of 951cab347, finding 6). So a false claim cannot take access from it without the owner's own Windows administrator prompt, and that prompt only removes an unrestricted line 11.0.1 meant to remove anyway. It can still cost that phone its next pairing: once a device that claimed the legacy entry's key has retired it, that device's new entry holds the key, and the real phone's own pairing is refused until the user removes that entry (the refusal names it). A request that names a key another paired device holds under another device key is refused (`tailcat_key_held_by_another_device`, `begin_pairing`). Approval is unchanged.
 */
 pub fn replace_earlier_pairings_of_same_phone(
     paths: &GxserverPaths,
@@ -274,7 +274,9 @@ pub(crate) fn retire_earlier_pairings(
         if repository.find_device(&device.id)?.is_none() {
             continue;
         }
-        let removed = if device.ssh_key_fingerprint.is_empty() {
+        // A legacy entry whose line is known to be gone is not looked for again: on a Windows
+        // administrator account that would show a prompt for nothing.
+        let removed = if device.ssh_key_fingerprint.is_empty() || device.legacy_key_line_removed {
             Ok(false)
         } else {
             remove_key_line(&device.id)
@@ -314,15 +316,17 @@ pub(crate) fn retire_earlier_pairings(
     Ok(replaced)
 }
 
+/*
+CDXC:RemotePairing 2026-11-11 WHY:
+Review of 951cab347, finding 6: a legacy entry was matched only once its unrestricted key line was gone. `retire_legacy_pairings` removes those lines at start without ever showing a prompt, so on a Windows administrator account (keys in `administrators_authorized_keys`, which changes only through a UAC prompt) the line stayed, the entry was never retired when its phone paired again, and the line and the "pair again" notice stayed until the user removed the entry by hand. Before 951cab347 a pairing again retired it with the prompt. A legacy entry with the same tailcat key is matched again whatever its line, because retiring it keeps the rule that a legacy entry goes only once it holds no access: `retire_earlier_pairings` removes its key line first (on such an account through the prompt, after the new pairing is saved and outside the pairing's transaction) and keeps the entry, listed for Remove to retry, when the line cannot be removed or the prompt is declined. On macOS and Linux nothing changes: the line was removed at start, so removing it again finds nothing.
+*/
 /// Whether `device`, an entry with the same tailcat key, is an earlier pairing of the device whose
-/// key is `device_public_key` (see `replace_earlier_pairings_of_same_phone`).
+/// key is `device_public_key` (see `replace_earlier_pairings_of_same_phone`): an entry with that
+/// device key, or a `legacy` one (see above).
 fn is_earlier_pairing_of(device: &RemotePairedDeviceRecord, device_public_key: &str) -> bool {
     match device.device_key.as_ref() {
         Some(key) => key.public_key == device_public_key,
-        None => {
-            device.status == PairedDeviceStatus::Legacy
-                && (device.legacy_key_line_removed || device.ssh_key_fingerprint.is_empty())
-        }
+        None => device.status == PairedDeviceStatus::Legacy,
     }
 }
 
