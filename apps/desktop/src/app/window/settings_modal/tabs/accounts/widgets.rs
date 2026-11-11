@@ -291,7 +291,7 @@ pub(crate) fn usage_lines(
     windows: &[UsageWindow],
     window: &mut Window,
 ) -> Vec<AnyElement> {
-    let labels: Vec<String> = windows.iter().map(UsageWindow::short_label).collect();
+    let labels: Vec<String> = windows.iter().map(card_label).collect();
     let mut style = window.text_style();
     style.font_family = MODAL_UI_FONT.into();
     let widest = labels
@@ -316,6 +316,26 @@ pub(crate) fn usage_lines(
         .enumerate()
         .map(|(index, (usage, label))| usage_line(p, usage, label, column, cut.then_some(index)))
         .collect()
+}
+
+/// A row's label on the account card: the account's own two windows spelled out, every other
+/// window (a model's) as everywhere else.
+///
+/// CDXC:AgentProviders 2026-11-11 DECISION:
+/// User: "just for top 2 bars say 5 hours and 7 hours pls" (the second is the seven-day window).
+/// The card has room, so its main 5h and 7d rows read "5 hours" and "7 days". This is a stated
+/// exception to the 2026-10-14 rule that windows are written 5h and 7d: model rows ("Claude/GPT
+/// 5h", "Fable 7d") and the sidebar, the usage popup, the CLI and the phone keep 5h and 7d.
+fn card_label(window: &UsageWindow) -> String {
+    let label = window.short_label();
+    if window.model.is_some() {
+        return label;
+    }
+    match label.as_str() {
+        "5h" => "5 hours".to_string(),
+        "7d" => "7 days".to_string(),
+        _ => label,
+    }
 }
 
 /// One usage window as a row: its label, the bar, and "41% used · resets in 2h 14m". `tooltip`
