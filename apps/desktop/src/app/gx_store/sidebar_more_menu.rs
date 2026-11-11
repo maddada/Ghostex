@@ -1,5 +1,5 @@
 //! The More menu rows whose whole answer already lives in Rust: Join Discord, Keep Awake, the
-//! app's panels (Ask Ghostex, Tips & Tricks, Resources, Dev servers, Extensions) and the app's own
+//! app's panels (Ask Ghostex, Resources, Dev servers, Extensions) and the app's own
 //! New Window, Check for Updates, Restart and Quit rows.
 //!
 //! CDXC:Sidebar 2026-09-25 WHY:

@@ -1,0 +1,350 @@
+{
+  "tips": [
+    {
+      "id": "report-a-bug-with-an-agent",
+      "first": 1,
+      "icon": "bug",
+      "title": "Found a bug? Tell us",
+      "body": "Open the sidebar's menu > Help > Send Bug / Feedback and turn on Collect more data with an agent."
+    },
+    {
+      "id": "drag-session-to-split",
+      "first": 2,
+      "icon": "layout-columns",
+      "title": "Split the view by dragging",
+      "body": "Drag a session from the sidebar onto an edge of the chat to open it in a split beside it."
+    },
+    {
+      "id": "start-a-coordinator",
+      "first": 3,
+      "icon": "coordinator-captain-hat",
+      "title": "Let a coordinator delegate",
+      "body": "A coordinator hands work to threads and brings results back. Press {key:openNewThreadPalette} and pick Coordinator."
+    },
+    {
+      "id": "connect-a-device",
+      "first": 4,
+      "icon": "devices",
+      "title": "Ghostex on your phone",
+      "body": "Open the sidebar's menu > Connect a Device and scan the code with the Ghostex app to follow your agents."
+    },
+    {
+      "id": "quiet-view",
+      "icon": "eye-off",
+      "title": "Read chats in Quiet View",
+      "body": "More actions (⋯) > View > Quiet View folds the work between two replies into one line you can open."
+    },
+    {
+      "id": "coordinator-needs-you-list",
+      "icon": "chat-card-checklist",
+      "title": "Everything waiting on you",
+      "body": "In a coordinator's chat, what waits on you sits in a list above the chat box. Answer or snooze it there."
+    },
+    {
+      "id": "dictate-into-chat-box",
+      "icon": "microphone",
+      "title": "Dictate instead of typing",
+      "body": "Press the microphone beside Send, or {key:toggleDictation}, and talk. Your words land in the chat box for you to check."
+    },
+    {
+      "id": "talk-to-the-voice-agent",
+      "icon": "headset",
+      "title": "Talk to your agents",
+      "body": "Press the headset at the top of the window ({key:toggleVoiceAgent}) and ask out loud what your sessions are doing.",
+      "requires": "voiceAgent"
+    },
+    {
+      "id": "group-projects-into-spaces",
+      "icon": "layout-dashboard",
+      "title": "Group projects into Spaces",
+      "body": "Turn on Spaces in Settings > Sidebar & Sessions, then swipe sideways on the sidebar to switch."
+    },
+    {
+      "id": "unified-sidebar",
+      "icon": "layout-sidebar",
+      "title": "Every session in one list",
+      "body": "The sidebar's menu > Sort & Filter > Switch to Unified View lists every session from every project."
+    },
+    {
+      "id": "command-palette-all-actions",
+      "icon": "bolt",
+      "title": "Find any command fast",
+      "body": "Press {key:openCommandPalette}, or pick Commands in the sidebar's menu, to search every Ghostex action and setting by name."
+    },
+    {
+      "id": "quick-access-sessions-and-files",
+      "icon": "search",
+      "title": "Jump to sessions and files",
+      "body": "{key:openSessionSearchPalette} opens your recent sessions and {key:openQuickAccessFiles} the files of every project. Type a few letters, then Enter."
+    },
+    {
+      "id": "find-in-chat",
+      "icon": "search",
+      "title": "Search inside a chat",
+      "body": "Press {key:findInFocusedView} in a chat to find any word. Enter goes to older matches and Shift+Enter comes back."
+    },
+    {
+      "id": "stash-and-reuse-prompts",
+      "icon": "stack-push",
+      "title": "Stash a prompt for later",
+      "body": "{key:stashPrompt} stashes what is in the chat box, and {key:stashedPrompts} opens Saved Prompts to send it again later."
+    },
+    {
+      "id": "account-usage-meters",
+      "icon": "chart-bar",
+      "title": "Watch your plan limits",
+      "body": "The meters at the bottom of the sidebar show each account's usage. Click one for its limits and reset times."
+    },
+    {
+      "id": "switch-account-mid-session",
+      "icon": "switch-horizontal",
+      "title": "Switch accounts mid-session",
+      "body": "Hit a limit? In a Claude or Codex chat, More actions (⋯) > Switch Account moves to another account."
+    },
+    {
+      "id": "autopilot-while-away",
+      "icon": "plane",
+      "title": "Keep agents going while away",
+      "body": "Turn on Settings > Autopilot and Ghostex nudges stuck sessions and moves sessions off a usage limit."
+    },
+    {
+      "id": "connect-another-computer",
+      "icon": "device-laptop",
+      "title": "Run agents on another computer",
+      "body": "Settings > Remote > Add a computer connects another computer. Its projects and sessions join your sidebar."
+    },
+    {
+      "id": "run-in-a-cloud-box",
+      "icon": "cloud",
+      "title": "Run sessions in the cloud",
+      "body": "Connect a provider in Settings > Cloud Boxes, then pick Cloud Box in a new chat's bar.",
+      "requires": "cloudBoxes"
+    },
+    {
+      "id": "extensions-on-tab",
+      "icon": "puzzle",
+      "title": "See what you turned on",
+      "body": "Settings > Extensions > On lists everything you switched on. The other tabs have more to add."
+    },
+    {
+      "id": "new-thread-picker",
+      "icon": "keyboard",
+      "title": "Start anything in a keystroke",
+      "body": "{key:openNewThreadPalette} opens the New Thread picker: type to pick an agent, Coordinator, Browser or Terminal."
+    },
+    {
+      "id": "toggle-chat-and-terminal",
+      "icon": "terminal-2",
+      "title": "Chat or terminal, your pick",
+      "body": "Press {key:toggleChatView} to flip a session between the chat and the agent's own terminal. The agent keeps running."
+    },
+    {
+      "id": "jump-to-latest-unread",
+      "icon": "bell",
+      "title": "Jump to what's waiting",
+      "body": "{key:jumpToLatestUnreadNotification} jumps to your latest unread notification's session, and {key:openNotifications} opens the bell.",
+      "requires": "notifications"
+    },
+    {
+      "id": "focus-sidebar-hotkey",
+      "icon": "layout-sidebar-left-expand",
+      "title": "Drive the sidebar by keyboard",
+      "body": "{key:focusSidebar} moves the keyboard to the sidebar: arrows move, Enter opens a session, Escape gives the keyboard back."
+    },
+    {
+      "id": "model-and-effort-picker",
+      "icon": "brain",
+      "title": "Change model and effort",
+      "body": "Press {key:openModelPicker} for the model picker. Enter makes a choice the default; Alt+Enter uses it in this session only."
+    },
+    {
+      "id": "focus-mode",
+      "icon": "focus-2",
+      "title": "Focus on one pane",
+      "body": "When the screen is split, {key:toggleAgentsFocusMode} shows only the pane you are in. Press it again to bring the rest back."
+    },
+    {
+      "id": "see-every-hotkey",
+      "icon": "keyboard",
+      "title": "See every shortcut",
+      "body": "Press {key:openHotkeys} to open Settings > Hotkeys, where every shortcut is listed and any key can be changed."
+    },
+    {
+      "id": "copy-last-reply",
+      "icon": "copy",
+      "title": "Copy the last reply",
+      "body": "{key:copyLastChatReply} copies the agent's last reply in this chat, and {key:copyLastChatCodeBlock} the last code block it wrote."
+    },
+    {
+      "id": "cli-ghostex-guide",
+      "icon": "terminal-2",
+      "title": "Ghostex's manual in a terminal",
+      "body": "Run ghostex guide features in any terminal to read the Ghostex manual. Your agents can read it too."
+    },
+    {
+      "id": "cli-ghostex-settings",
+      "icon": "terminal-2",
+      "title": "Change settings from a terminal",
+      "body": "Run ghostex settings list to see every setting, and ghostex settings set <key> <value> to change one."
+    },
+    {
+      "id": "cli-gx-f",
+      "icon": "terminal-2",
+      "title": "Find prompts from a terminal",
+      "body": "Type gx f in any terminal to search every prompt you sent an agent. Pick one and Enter resumes that session."
+    },
+    {
+      "id": "ghostex-pages-and-forms",
+      "icon": "file-type-html",
+      "title": "Ask for pages and forms",
+      "body": "Ask an agent for a gx page (a mockup or a report) or a gx form (questions with choices)."
+    },
+    {
+      "id": "ghostex-visuals",
+      "icon": "chart-bar",
+      "title": "Charts right in the chat",
+      "body": "Ask an agent to show its numbers as gx visuals and it draws charts, tables and stat tiles in the chat."
+    },
+    {
+      "id": "files-and-links",
+      "icon": "link",
+      "title": "Every file the chat touched",
+      "body": "Press {key:toggleChatFilesLinks}, or More actions (⋯) > Files and links, for every picture, file and link this session used."
+    },
+    {
+      "id": "new-worktree-with-base-branch",
+      "icon": "git-branch",
+      "title": "Work on a fresh branch",
+      "body": "In a new chat's bar, pick New worktree and its base branch. Your first message creates it."
+    },
+    {
+      "id": "share-a-chat",
+      "icon": "users",
+      "title": "Share a chat by link",
+      "body": "Press Share at the top of a chat, then Create link. Anyone with the link and code can follow along."
+    },
+    {
+      "id": "find-session-by-prompt-text",
+      "icon": "file-search",
+      "title": "Find sessions by prompt",
+      "body": "The sidebar's menu > Tools > Search by Prompt ({key:openFindPrompts}) searches every prompt you sent. Enter resumes it."
+    },
+    {
+      "id": "star-prompts-you-want-again",
+      "icon": "star",
+      "title": "Star prompts you want again",
+      "body": "In Search by Prompt, star the prompts you reuse so they stay at the top every time you search."
+    },
+    {
+      "id": "keep-awake",
+      "icon": "coffee",
+      "title": "Keep your computer awake",
+      "body": "The sidebar's menu > Keep Awake stops your computer from sleeping for hours, or until you turn it off.",
+      "requires": "keepAwake",
+      "platforms": [
+        "macos"
+      ]
+    },
+    {
+      "id": "schedule-recurring-agent-work",
+      "icon": "clock",
+      "title": "Schedule recurring agent work",
+      "body": "Open the Automate view to run an agent on a schedule. The sidebar's menu > All Automations lists them all.",
+      "requires": "automate"
+    },
+    {
+      "id": "add-todos-to-kanban-page",
+      "icon": "layout-board-split",
+      "title": "Keep todos on the board",
+      "body": "Add your todos as cards in the Kanban view, then ask an agent to work on the high-priority ones.",
+      "requires": "kanban"
+    },
+    {
+      "id": "changes-view",
+      "icon": "file-diff",
+      "title": "Review changes in one scroll",
+      "body": "The Changes view shows your branch's changes as one diff. Comment on a line for your agent.",
+      "requires": "changes"
+    },
+    {
+      "id": "catch-me-up",
+      "icon": "history",
+      "title": "Catch up on a session",
+      "body": "Turn on Settings > Chat > Catch me up button, then click it in an empty chat box for a summary."
+    },
+    {
+      "id": "read-replies-aloud",
+      "icon": "volume",
+      "title": "Hear replies read aloud",
+      "body": "Point at an agent's reply and press the speaker. Auto-read in More actions (⋯) reads each new one.",
+      "requires": "readAloud",
+      "platforms": [
+        "macos"
+      ]
+    },
+    {
+      "id": "marked-handovers",
+      "icon": "list-details",
+      "title": "Replies you can scan",
+      "body": "Turn on Settings > Chat > Marked handovers in every session for replies in parts: Done, Needs you."
+    },
+    {
+      "id": "agents-hub",
+      "icon": "users-group",
+      "title": "Manage your agents' skills",
+      "body": "The sidebar's menu > Agents Hub lets you edit your agents' skills, instruction files, hooks and MCP."
+    },
+    {
+      "id": "ask-ghostex",
+      "icon": "help-circle",
+      "title": "Ask Ghostex anything",
+      "body": "The sidebar's menu > Help > Ask Ghostex starts an agent that explains Ghostex or changes a setting.",
+      "requires": "help"
+    },
+    {
+      "id": "sleep-idle-sessions-from-resources",
+      "icon": "moon",
+      "title": "Sleep idle sessions",
+      "body": "The sidebar's menu > Tools > Resources shows each session's CPU and memory, and puts idle ones to sleep.",
+      "requires": "resources"
+    },
+    {
+      "id": "fork-a-session",
+      "icon": "git-fork",
+      "title": "Fork a session",
+      "body": "Right-click a session > Advanced > Fork ({key:forkSession}) to copy it into a new session and try another direction."
+    },
+    {
+      "id": "delayed-send",
+      "icon": "clock-check",
+      "title": "Send a message later",
+      "body": "Type a message, then right-click the session > Advanced > Delayed Send to send it later."
+    },
+    {
+      "id": "session-notes",
+      "icon": "note",
+      "title": "Leave notes on sessions",
+      "body": "Press {key:sessionNote}, or right-click a session > Note, to write down what's next. The note stays when you resume.",
+      "requires": "sessionNotes"
+    },
+    {
+      "id": "use-ghostex-computer-use-skill",
+      "icon": "device-desktop",
+      "title": "Let agents use your apps",
+      "body": "Install Fast Computer & Browser Use in Settings > Integrations, then ask for /ghostex-computer-use."
+    },
+    {
+      "id": "use-ghostex-embedded-browser-use-skill",
+      "icon": "browser",
+      "title": "Agents that drive the Browser",
+      "body": "Install Embedded Browser Use in Settings > Integrations so agents can click and read Browser tabs.",
+      "requires": "browser"
+    },
+    {
+      "id": "floating-capture",
+      "icon": "camera",
+      "title": "Prompt from any app",
+      "body": "Settings > Integrations > Floating Capture puts a small button over every app to send a prompt."
+    }
+  ]
+}

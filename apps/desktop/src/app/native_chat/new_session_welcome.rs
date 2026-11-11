@@ -125,6 +125,12 @@ impl NativeChatView {
                         )
                     },
                 )
+                // The tips card (new_chat_tips.rs): under a regular new chat's headline only; a
+                // coordinator's welcome hides the headline and has its own intro.
+                .when(
+                    welcome.get("showTitle").and_then(Value::as_bool) != Some(false),
+                    |this| this.children(self.render_new_chat_tips(p, cx)),
+                )
                 .into_any_element();
         }
 

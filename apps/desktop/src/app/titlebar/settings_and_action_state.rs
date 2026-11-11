@@ -144,88 +144,6 @@ impl GhostexGpuiApp {
         self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, window, cx);
     }
 
-    pub(crate) fn run_gpui_titlebar_tips_header_action(
-        &mut self,
-        action_index: usize,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        match action_index {
-            0 => self.open_gpui_browser_action_url(GHOSTEX_DOCS_URL.to_string(), window, cx),
-            // CDXC:Onboarding 2026-09-15 DECISION:
-            // User: "i want setup button in the tips dropdown to open this new one instead of the old one";
-            // since 2026-09-15 the automatic first run opens the same Onboarding modal (modals/modal_window.rs
-            // `open_gpui_first_launch_setup_with_sidebar_state`). The old setup modal was deleted on
-            // 2026-09-27 (user: "delete old setup one not new one that's active"). SEE-ALSO: delayed_send/app_modal_sidebar_command/hotkey_action.rs
-            // `openWorkspaceWelcome`, Quick Access's Setup Ghostex row, which opens the same modal.
-            // CDXC:Onboarding 2026-09-15 DECISION:
-            // User: hide all buttons that talk about video for Ghostex. The old Video header
-            // action is gone, so Setup and Updates shifted down one index.
-            1 => self.open_gpui_app_modal_from_titlebar(GpuiAppModalKind::Onboarding, window, cx),
-            2 => self.open_gpui_browser_action_url(GHOSTEX_CHANGELOG_URL.to_string(), window, cx),
-            3 => self.open_gpui_settings_integrations_from_titlebar(None, window, cx),
-            _ => {}
-        }
-    }
-
-    pub(crate) fn run_gpui_titlebar_tip(
-        &mut self,
-        tip_index: usize,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(tip) = GPUI_NATIVE_TITLEBAR_TIPS.get(tip_index).copied() else {
-            return;
-        };
-        gpui_mark_titlebar_tip_read(tip.id);
-        self.titlebar_tips_unread_count = gpui_titlebar_tips_unread_count_from_settings();
-        match tip.id {
-            "use-ghostex-computer-use-skill" => self.open_gpui_settings_integrations_from_titlebar(
-                Some("Ghostex Computer Use"),
-                window,
-                cx,
-            ),
-            "use-ghostex-browser-use-skill" => self.open_gpui_settings_integrations_from_titlebar(
-                Some("Ghostex Browser Use"),
-                window,
-                cx,
-            ),
-            "use-ghostex-embedded-browser-use-skill" => self
-                .open_gpui_settings_integrations_from_titlebar(
-                    Some("Ghostex Embedded Browser Use"),
-                    window,
-                    cx,
-                ),
-            _ => cx.notify(),
-        }
-    }
-
-    pub(crate) fn open_gpui_settings_integrations_from_titlebar(
-        &mut self,
-        search_query: Option<&str>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let modal = GpuiAppModalKind::Settings;
-        let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
-        let mut open_message = serde_json::json!({
-            "initialTab": "integrations",
-            "modal": modal.modal_id(),
-            "type": "open",
-        });
-        if let Some(search_query) = search_query {
-            open_message["initialSearchQuery"] = serde_json::json!(search_query);
-        }
-        open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
-        self.open_gpui_app_modal_window(
-            modal,
-            open_message,
-            sidebar_state_message,
-            Some(window),
-            cx,
-        );
-    }
-
     pub(crate) fn open_gpui_settings_agent_hooks_page(
         &mut self,
         window: &mut Window,
@@ -241,38 +159,6 @@ impl GhostexGpuiApp {
         let mut open_message = serde_json::json!({
             "initialAgentsSection": "agentHooks",
             "initialTab": "agents",
-            "modal": modal.modal_id(),
-            "type": "open",
-        });
-        open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
-        self.open_gpui_app_modal_window(
-            modal,
-            open_message,
-            sidebar_state_message,
-            Some(window),
-            cx,
-        );
-    }
-
-    pub(crate) fn open_gpui_titlebar_notice_settings(
-        &mut self,
-        target: GpuiNativeTitlebarNoticeTarget,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let (initial_tab, search_query) = match target {
-            GpuiNativeTitlebarNoticeTarget::AgentHooks => {
-                self.open_gpui_settings_agent_hooks_page(window, cx);
-                return;
-            }
-            GpuiNativeTitlebarNoticeTarget::DebuggingMode => ("settings", "Show debug UI controls"),
-            GpuiNativeTitlebarNoticeTarget::GhostexCli => ("integrations", "Ghostex CLI"),
-        };
-        let modal = GpuiAppModalKind::Settings;
-        let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
-        let mut open_message = serde_json::json!({
-            "initialSearchQuery": search_query,
-            "initialTab": initial_tab,
             "modal": modal.modal_id(),
             "type": "open",
         });

@@ -145,9 +145,9 @@ impl GhostexGpuiApp {
                         .map_or(saved.clone(), |links| links.folded_groups_on_open(&saved)),
                 )
             }
-            GpuiTitlebarPopupKind::Resources
-            | GpuiTitlebarPopupKind::Tips
-            | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,
+            GpuiTitlebarPopupKind::Resources | GpuiTitlebarPopupKind::RemoteSites => {
+                TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT
+            }
         }
     }
 }

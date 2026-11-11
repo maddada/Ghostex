@@ -3,9 +3,9 @@
 use super::super::super::catalog::SettingOption;
 use super::super::super::catalog::settings_catalog;
 use super::super::super::fields::{
-    RowSpec, SELECT_WIDTH, SliderBinding, SliderSaver, grok_logins_field, ignored_ports_field,
-    reset_key, segmented_field, setting_row, settings_section, settings_select_with_unavailable,
-    slider_number_field_with, text_field,
+    PageAction, RowSpec, SELECT_WIDTH, SliderBinding, SliderSaver, action_buttons_field,
+    grok_logins_field, ignored_ports_field, reset_key, segmented_field, setting_row,
+    settings_section, settings_select_with_unavailable, slider_number_field_with, text_field,
 };
 use super::super::super::page::PageBlock;
 use super::super::super::store::SettingsStore;
@@ -214,6 +214,31 @@ fn chat_section(
     // CDXC:Settings 2026-11-02 SEE-ALSO: the user's words on Default to Detailed view (an Advanced row) are in packages/settings-catalog/src/general/chat.rs.
     rows.extend(page.toggle(g, s, "sessionChatDetailedView", "Default to Detailed view", "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.", false, cx));
     rows.extend(page.toggle(g, s, "chatCatchMeUp", "Catch me up button", "Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.", false, cx));
+    // CDXC:Onboarding 2026-11-11 SEE-ALSO: the new chat tips card and the user's words on it are in packages/gx-chat-core/src/extras/new_chat_tips.rs.
+    rows.extend(page.toggle(g, s, "newChatTips", "Tips on new chats", "Show a card of short tips about Ghostex under a new chat's headline. Got it on a tip hides that tip for good; Hide tips on the card turns this off.", false, cx));
+    if g.visible(s, "newChatTipsReset") {
+        let spec = RowSpec::new("Show tips again").description(
+            "Bring back every tip you marked Got it, so the new chat card shows them again.",
+        );
+        // The app writes the read tips straight to the settings file (`resetNewChatTips`), since
+        // a Settings save keeps the file's own copy of that key.
+        let reset: PageAction<GeneralTab> = Rc::new(|page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            super::super::super::store::post_store_message(
+                &store,
+                json!({ "type": "resetNewChatTips" }),
+                cx,
+            );
+            save(page, "newChatTips", json!(true), cx);
+        });
+        rows.push(action_buttons_field(
+            &g.p,
+            "newChatTipsReset",
+            spec,
+            vec![("Show tips again", reset)],
+            cx,
+        ));
+    }
     rows.extend(page.toggle(g, s, "chatSendOnPick", "Send when you pick an answer", "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.", false, cx));
     rows.extend(page.toggle(g, s, "chatAnswersWaitForIdle", "Wait for turn end before sending form answers", "Send answers from Ghostex forms and Ghostex pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.", false, cx));
     if g.visible(s, "chatPageOpenTarget") {

@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use anyhow::Result;
 
 use crate::*;
@@ -66,44 +64,22 @@ pub(crate) fn gpui_persist_titlebar_project_selection(
     shared_settings::write_shared_sidebar_settings_object(settings).map(|_| ())
 }
 
-pub(crate) fn gpui_titlebar_tips_read_ids_from_settings() -> HashSet<String> {
-    shared_settings::shared_sidebar_settings_snapshot()
-        .object()
-        .get(GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY)
-        .and_then(serde_json::Value::as_array)
+/// Saves the new chat tips card's read tips (native_chat/new_chat_tips.rs) to the settings file:
+/// the ids of tips the data file still has, so a retired tip's id leaves on the next save. An empty
+/// list is Settings > Chat > Show tips again.
+pub(crate) fn gpui_write_new_chat_tips_read_ids(read_ids: Vec<String>) {
+    let mut read_ids: Vec<serde_json::Value> = read_ids
         .into_iter()
-        .flatten()
-        .filter_map(serde_json::Value::as_str)
-        .filter(|id| TITLEBAR_TIP_IDS.contains(id))
-        .map(str::to_string)
-        .collect()
-}
-
-pub(crate) fn gpui_titlebar_tips_unread_count_from_settings() -> u64 {
-    let read_ids = gpui_titlebar_tips_read_ids_from_settings();
-    GPUI_NATIVE_TITLEBAR_TIPS
-        .iter()
-        .filter(|tip| !read_ids.contains(tip.id))
-        .count() as u64
-}
-
-pub(crate) fn gpui_mark_titlebar_tip_read(tip_id: &str) {
-    if !TITLEBAR_TIP_IDS.contains(&tip_id) {
-        return;
-    }
+        .filter(|id| ghostex_gx_chat_core::extras::new_chat_tips::is_new_chat_tip_id(id))
+        .map(serde_json::Value::String)
+        .collect();
+    read_ids.dedup();
     let mut settings = shared_settings::shared_sidebar_settings_snapshot()
         .object()
         .clone();
-    let mut read_ids = gpui_titlebar_tips_read_ids_from_settings();
-    read_ids.insert(tip_id.to_string());
-    let ordered = TITLEBAR_TIP_IDS
-        .iter()
-        .filter(|id| read_ids.contains(**id))
-        .map(|id| serde_json::Value::String((*id).to_string()))
-        .collect::<Vec<_>>();
     settings.insert(
-        GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY.to_string(),
-        serde_json::Value::Array(ordered),
+        crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_READ_SETTINGS_KEY.to_string(),
+        serde_json::Value::Array(read_ids),
     );
     let _ = shared_settings::write_shared_sidebar_settings_object(settings);
 }

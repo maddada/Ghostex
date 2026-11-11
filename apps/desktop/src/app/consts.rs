@@ -408,9 +408,6 @@ pub(crate) const TITLEBAR_ICON_CHEVRON_DOWN: &str = "titlebar/chevron-down.svg";
 
 pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR: &str = "titlebar/layout-sidebar.svg";
 
-pub(crate) const TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_EXPAND: &str =
-    "titlebar/layout-sidebar-left-expand.svg";
-
 pub(crate) const TITLEBAR_ICON_LAYOUT_BOARD_SPLIT: &str = "titlebar/layout-board-split.svg";
 
 pub(crate) const TITLEBAR_ICON_LAYOUT_COLUMNS: &str = "titlebar/layout-columns.svg";
@@ -472,21 +469,6 @@ pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL: &str = "titlebar/arrows-diagonal
 
 pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL_MINIMIZE: &str =
     "titlebar/arrows-diagonal-minimize.svg";
-
-pub(crate) const TITLEBAR_TIP_IDS: &[&str] = &[
-    "command-palette-all-actions",
-    "customize-sidebar-layout-and-tools",
-    "sleep-idle-sessions-from-resources",
-    "run-same-project-in-a-worktree",
-    "use-ghostex-computer-use-skill",
-    "use-ghostex-browser-use-skill",
-    "use-ghostex-embedded-browser-use-skill",
-    "schedule-recurring-agent-work",
-    "continue-session-from-mobile-app",
-    "find-session-by-prompt-text",
-    "star-prompts-you-want-again",
-    "add-todos-to-kanban-page",
-];
 
 // Both platform backends probe quietly at launch and every 15 minutes. The
 // titlebar is the shared availability surface; platform-specific UI is only
@@ -713,8 +695,6 @@ pub(crate) const TITLEBAR_POPUP_GIT_WIDTH: f32 = 300.0;
 
 pub(crate) const TITLEBAR_POPUP_EXTENSIONS_WIDTH: f32 = 340.0;
 
-pub(crate) const TITLEBAR_POPUP_TIPS_WIDTH: f32 = 556.0;
-
 pub(crate) const TITLEBAR_POPUP_HELP_WIDTH: f32 = 380.0;
 
 pub(crate) const TITLEBAR_POPUP_RESOURCES_WIDTH: f32 = 656.0;
@@ -777,8 +757,6 @@ pub(crate) const TITLEBAR_POPUP_MENU_BORDER_CHROME: f32 = 2.0;
 
 pub(crate) const TITLEBAR_POPUP_ACTION_PREVIEW_TEXT_SIZE: f32 = 11.0;
 
-pub(crate) const GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY: &str = "gpuiTitlebarTipsReadIds";
-
 pub(crate) const TITLEBAR_ACTION_UNCONFIGURED_PREVIEW: &str = "Set the command";
 
 pub(crate) const TITLEBAR_UPDATE_AVAILABLE_TOOLTIP: &str =
@@ -795,8 +773,6 @@ pub(crate) const BROWSER_ICON_HISTORY: &str = "titlebar/history.svg";
 pub(crate) const COMMAND_ICON_PLUS: &str = "titlebar/plus.svg";
 
 pub(crate) const COMMAND_ICON_CLOCK: &str = "titlebar/clock.svg";
-
-pub(crate) const COMMAND_ICON_COMMAND: &str = "titlebar/command.svg";
 
 pub(crate) const COMMAND_ICON_CHEVRON_UP: &str = "titlebar/chevron-up.svg";
 
@@ -815,15 +791,6 @@ pub(crate) const BROWSER_ICON_LOCK_FILLED: &str = "titlebar/lock-filled.svg";
 pub(crate) const BROWSER_ICON_WORLD: &str = "titlebar/world.svg";
 
 pub(crate) const BROWSER_ICON_TOOLS: &str = "titlebar/tools.svg";
-
-/*
-GPUI Tips uses the same child-window path as the other titlebar dropdowns.
-Its Docs and Updates actions open only these first-party URLs in a GPUI
-Browser pane.
-*/
-pub(crate) const GHOSTEX_CHANGELOG_URL: &str = "https://github.com/maddada/ghostex/releases";
-
-pub(crate) const GHOSTEX_DOCS_URL: &str = "https://ghostex.dev/docs";
 
 pub(crate) const BROWSER_ICON_POINTER: &str = "titlebar/pointer.svg";
 

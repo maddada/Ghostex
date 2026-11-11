@@ -625,9 +625,12 @@ pub fn catalog_json() -> String {
 /// CDXC:Hotkeys 2026-11-11 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so the Focus Sidebar hotkey (#558) is held the same way; a hotkey id here leaves the hotkey out of `hotkeys.md` and `settings-catalog.json`, and its Help waits in the held help patch (release-11.3.1/help/focus-sidebar-hotkey.patch).
 ///
+/// CDXC:Onboarding 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the new chat tips rows (Settings > Chat: Tips on new chats, Show tips again) are held the same way; their Help waits in the held help patch (first-run/help/tips-card.patch).
+///
 /// CDXC:SessionChat 2026-11-11 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so the three Quiet View rows (Settings > Chat > Advanced) are held the same way; their Help waits in the held help patch (release-11.3.1/help/quiet-view.patch).
-pub const HELD_FROM_HELP_FILES: &[&str] = &[];
+pub const HELD_FROM_HELP_FILES: &[&str] = &["newChatTips", "newChatTipsReset"];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).
@@ -677,7 +680,17 @@ pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &
 /// release ships the removal, in [`HELD_ROW_PLACEMENT`]'s shape.
 ///
 /// CDXC:Spaces 2026-11-10 DECISION: the Spaces card of Settings > Extensions (above).
-pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
+///
+/// CDXC:Onboarding 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the Tips & Tricks card of Settings > Extensions (removed with the panel; the tips are a card on new chats) stays in the committed Help files until the release that ships the tips card empties this list and regenerates (first-run/help/tips-card.patch). The Hide Tips button row (`tipsAndTricksTitlebarButtonHidden`, help/supplemental.rs) and its default wait for the same patch.
+pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[(
+    "tips",
+    ("extensions", "Extensions"),
+    ("official", "Built-in"),
+    "Tips & Tricks",
+    "A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu.",
+    "terminal",
+)];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
 /// with [`HELD_ROW_WORDING`]'s rows as they read before, [`HELD_ROW_PLACEMENT`]'s rows back

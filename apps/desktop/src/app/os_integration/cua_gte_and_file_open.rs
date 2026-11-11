@@ -96,7 +96,6 @@ impl GhostexGpuiApp {
             let (level, title, message) = gpui_tool_update_check_toast(&payload, name, prefix);
             let _ = this.update(cx, |this, cx| {
                 this.dispatch_open_gpui_app_modal_sidebar_state_payload(payload.clone(), cx);
-                this.dispatch_gpui_titlebar_tips_sidebar_state_payload(&payload, cx);
                 this.dispatch_gpui_app_modal_toast(level, &title, &message, cx);
             });
         })
@@ -179,7 +178,6 @@ impl GhostexGpuiApp {
     fn dispatch_gpui_install_job_progress(&mut self, cx: &mut gpui::Context<Self>) {
         let payload = gpui_install_job_progress_status_payload();
         self.dispatch_open_gpui_app_modal_sidebar_state_payload(payload.clone(), cx);
-        self.dispatch_gpui_titlebar_tips_sidebar_state_payload(&payload, cx);
     }
 
     pub(crate) fn refresh_gpui_daemon_sessions_state_in_background(

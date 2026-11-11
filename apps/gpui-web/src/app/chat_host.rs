@@ -254,6 +254,33 @@ impl GhostexGpuiApp {
                     cx.refresh_windows();
                 }
             }
+            // The new chat tips card's Got it and Hide tips (native_chat/new_chat_tips.rs). The page
+            // cannot save Settings, so they hold on this page until it reloads.
+            Some("setNewChatTipsRead") => {
+                if let Some(read_ids) = message["readIds"].as_array() {
+                    let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                        .object()
+                        .clone();
+                    settings.insert(
+                        crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_READ_SETTINGS_KEY
+                            .into(),
+                        serde_json::Value::Array(read_ids.clone()),
+                    );
+                    crate::shared_settings::install(settings);
+                    cx.refresh_windows();
+                }
+            }
+            Some("hideNewChatTips") => {
+                let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .clone();
+                settings.insert(
+                    crate::app::native_chat::new_chat_tips::NEW_CHAT_TIPS_SETTINGS_KEY.into(),
+                    false.into(),
+                );
+                crate::shared_settings::install(settings);
+                cx.refresh_windows();
+            }
             // A chat's zoom chords. The page cannot save Settings, so the zoom changes every chat
             // on this page until it reloads.
             Some("setChatZoomPercent") => {

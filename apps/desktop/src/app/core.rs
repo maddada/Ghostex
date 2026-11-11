@@ -214,7 +214,6 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_accounts: Vec<serde_json::Value>,
     pub(crate) titlebar_accounts_refresh_in_flight: std::collections::HashSet<String>,
     pub(crate) titlebar_accounts_revision: u64,
-    pub(crate) titlebar_tips_unread_count: u64,
     // Platform-neutral updater state drives the native titlebar. Sparkle owns
     // macOS delivery and Velopack owns Windows delivery; Linux only announces
     // the release. The Windows and Linux backends retain release metadata for
@@ -989,10 +988,6 @@ pub struct GhostexGpuiApp {
     pub(crate) pending_titlebar_popup_open: Option<GpuiTitlebarPopupKind>,
     pub(crate) titlebar_extension_popup_generation: u64,
     pub(crate) titlebar_extension_popup: Option<GpuiTitlebarExtensionPopupState>,
-    pub(crate) titlebar_tips_cli_status: Option<serde_json::Value>,
-    pub(crate) titlebar_tips_agent_hook_status: Option<serde_json::Value>,
-    /// Built-in agent ids the sidebar launchers map to; `None` until the first HUD read completes.
-    pub(crate) titlebar_tips_sidebar_agent_ids: Option<HashSet<String>>,
     pub(crate) agent_hook_status_request_in_flight: bool,
     /// A status walk asked for while one was running (`Some(None)` = every agent), run when it ends.
     pub(crate) agent_hook_status_request_queued: Option<Option<Vec<String>>>,

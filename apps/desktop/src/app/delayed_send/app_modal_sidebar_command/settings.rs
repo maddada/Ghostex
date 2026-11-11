@@ -119,6 +119,12 @@ impl GhostexGpuiApp {
             "testAgentTaskCompletion" => {
                 self.test_gpui_agent_task_completion(cx);
             }
+            // Settings > Chat > Show tips again (native_chat/new_chat_tips.rs): every read tip
+            // comes back. The switch is turned on by the page's own save.
+            "resetNewChatTips" => {
+                gpui_write_new_chat_tips_read_ids(Vec::new());
+                cx.refresh_windows();
+            }
             "applyRecommendedGhosttySettings" => {
                 self.update_gpui_ghostty_visible_settings(
                     shared_settings::apply_recommended_ghostty_visible_settings,

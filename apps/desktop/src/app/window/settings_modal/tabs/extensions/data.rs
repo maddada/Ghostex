@@ -192,7 +192,6 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "openIn" => icon::FOLDER_OPEN,
         "resources" => "modals/settings/device-desktop.svg",
         "terminal" => "modals/settings/terminal-2.svg",
-        "tips" => icon::INFO_CIRCLE,
         // They drew the globe below until 2026-11-09 (User, Q2037: their own icons).
         "voiceAgent" => "titlebar/headset.svg",
         "readAloud" => "titlebar/volume.svg",

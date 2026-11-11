@@ -190,9 +190,6 @@ impl GhostexGpuiApp {
             trigger_bounds,
         });
         self.titlebar_popup_window = Some(popup_window);
-        if kind == GpuiTitlebarPopupKind::Tips {
-            self.request_gpui_titlebar_tips_runtime_status(cx);
-        }
         cx.notify();
     }
 
@@ -491,26 +488,6 @@ impl GhostexGpuiApp {
                 GpuiTitlebarPopupContent::Reading(
                     cx.new(|_| GpuiTitlebarReadingPanel::resources(main_app, snapshot)),
                 )
-            }
-            GpuiTitlebarPopupKind::Tips => {
-                let live_agent_ids = self
-                    .agents_workspace
-                    .terminal_sessions
-                    .iter()
-                    .filter(|session| session.presentation_state.is_running())
-                    .filter_map(|session| session.agent_icon)
-                    .filter_map(gpui_default_sidebar_agent_by_icon)
-                    .map(|agent| agent.agent_id.to_string())
-                    .collect();
-                GpuiTitlebarPopupContent::Reading(cx.new(|_| {
-                    GpuiTitlebarReadingPanel::tips(
-                        main_app,
-                        self.titlebar_tips_cli_status.clone(),
-                        self.titlebar_tips_agent_hook_status.clone(),
-                        live_agent_ids,
-                        self.titlebar_tips_sidebar_agent_ids.clone(),
-                    )
-                }))
             }
             GpuiTitlebarPopupKind::Notifications => {
                 let feed = self.notification_feed_state.clone();
