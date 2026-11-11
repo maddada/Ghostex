@@ -213,7 +213,7 @@ impl NativeChatView {
     /// the chat's own dropdown, at the pointer.
     ///
     /// CDXC:SessionChat 2026-11-11 DECISION:
-    /// User: "I don't like these appear as empty space, please make it show the time and 3 dots under messages everywhere. i click the 3 dots to see the current options. this is for user messages and agent last replies that we show time under now". The line under your prompts and under the agent's last reply of a turn is always drawn, at rest and on hover alike: the time (its tooltip has the full date), then a ⋯ in the same quiet tone, which opens the chat's dropdown with every action that line's row of icon buttons offered, each with its icon and name. No row of icon buttons any more, and nothing shows only on hover. Supersedes the 2026-09-19 row that showed on hover (React's `CopyFooter`) and, for these buttons, the 2026-11-07 Compact footer that filled in on hover (packages/gx-chat-core/src/transcript/chat_look.rs).
+    /// User: "I don't like these appear as empty space, please make it show the time and 3 dots under messages everywhere. i click the 3 dots to see the current options. this is for user messages and agent last replies that we show time under now". The line under your prompts and under the agent's last reply of a turn is always drawn, at rest and on hover alike: the time (its tooltip has the full date), then a ⋯ in the same quiet tone, which opens the chat's dropdown with every action that line's row of icon buttons offered, each with its icon and name. No row of icon buttons any more. Then, seeing it: "swap these 2 when they are below user message and make the 3 dots only appear when im hovering on that message or on the time or on the row that has the 3 dots and time". So under your message the ⋯ comes first and the time last, at the bubble's edge (a left-aligned message keeps the time at its left edge, then the ⋯); under a reply the time then the ⋯, as before. The ⋯ shows only while the pointer is on the message, its time or its line, while it has keyboard focus, or while its menu is up; its place is kept, so nothing moves and the time never shifts. Supersedes the 2026-09-19 row that showed on hover (React's `CopyFooter`) and, for these buttons, the 2026-11-07 Compact footer that filled in on hover (packages/gx-chat-core/src/transcript/chat_look.rs).
     fn message_more_button(
         &self,
         id: &str,
@@ -229,8 +229,20 @@ impl NativeChatView {
         } else {
             24.0
         };
+        // Shown while its menu is up, wherever the pointer is.
+        let pinned = self.chat_menu_is_open(MESSAGE_MENU_TRIGGER)
+            && self.message_menu.as_deref() == Some(id);
+        let menu_id = id.to_string();
         div()
             .id(gpui::SharedString::from(format!("message-more:{id}")))
+            // Its place is always kept, so nothing moves when it shows: hidden at rest, shown while
+            // the pointer is on the message's row (its bubble or text, the time, this line) or the
+            // ⋯ has keyboard focus.
+            .when(!pinned, |button| {
+                button
+                    .opacity(0.0)
+                    .group_hover("native-chat-message", |style| style.opacity(1.0))
+            })
             .group("native-chat-message-more")
             .role(gpui::Role::Button)
             .aria_label("Message actions")
@@ -244,6 +256,7 @@ impl NativeChatView {
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.border.opacity(0.4)))
             .focus_visible(|mut style| {
+                style.opacity = Some(1.0);
                 style.box_shadow = Some(vec![gpui::BoxShadow {
                     color: p.ring.opacity(0.2),
                     offset: gpui::point(px(0.0), px(0.0)),
@@ -276,6 +289,7 @@ impl NativeChatView {
                     let in_main = chat
                         .open_main_window(cx)
                         .is_none_or(|main| main == window.window_handle());
+                    chat.message_menu = Some(menu_id.clone());
                     if in_main {
                         chat.show_chat_menu_at(rows.clone(), at, 240.0, window, cx);
                     } else {
@@ -320,17 +334,29 @@ impl NativeChatView {
         // The time, then the ⋯, on the message's side: at the bubble's right edge, or from the
         // left edge of a left-aligned message (user_message_look.rs). Compact keeps its footer's
         // height (message_spacing.rs).
+        // The time sits at the line's outer edge and never moves: under a bubble at the right the
+        // ⋯ comes first and the time last, at the bubble's edge; under a left-aligned message
+        // the time comes first, at the left edge, then the ⋯ (`message_more_button` has the user's
+        // words).
+        let time = if compact {
+            footer_time(&id, message, p)
+        } else {
+            message_time(&id, message, p)
+        };
         let line = if compact {
             super::message_spacing::message_footer(p)
                 .when(!left, |row| row.justify_end().pr(px(4.0 * p.scale)))
-                .children(footer_time(&id, message, p))
         } else {
             message_actions_row(p)
                 .when(!left, |row| row.pr(px(4.0 * p.scale)))
                 .when(left, |row| row.w_full().justify_start())
-                .children(message_time(&id, message, p))
         };
-        Some(line.child(more).into_any_element())
+        let line = if left {
+            line.children(time).child(more)
+        } else {
+            line.child(more).children(time)
+        };
+        Some(line.into_any_element())
     }
 
     /// What a prompt's ⋯ menu offers, the actions its row of buttons held: Copy, Save prompt (where

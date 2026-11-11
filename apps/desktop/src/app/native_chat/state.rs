@@ -154,6 +154,9 @@ pub(crate) struct NativeChatView {
     /// The message under the pointer while Message spacing is Compact, whose footer row shows its
     /// buttons (message_spacing.rs).
     pub(super) hovered_message: Option<String>,
+    /// The message whose ⋯ menu was opened last: its ⋯ stays shown while that menu is up
+    /// (message_actions.rs).
+    pub(super) message_menu: Option<String>,
     /// Agent work Quiet: the work button and opened steps of the reply row being drawn, which
     /// that reply's hover row takes (hidden_work.rs).
     pub(super) hidden_work: Option<super::hidden_work::HiddenWork>,
@@ -542,6 +545,7 @@ impl NativeChatView {
             quiet_steps: false,
             quiet_lines_cache: Default::default(),
             hovered_message: None,
+            message_menu: None,
             hidden_work: None,
             disclosure_motion: Default::default(),
             transcript_focus_follow: Default::default(),
