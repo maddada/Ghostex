@@ -13,22 +13,39 @@ struct Paragraph<'a> {
     text: &'a str,
 }
 
-/// The guide's paragraphs in order. A heading (`#`, `##`, …) is a paragraph of its own and the
-/// heading of the ones after it.
+/// The guide's paragraphs in order. A heading (`#`, `##`, …, after up to three spaces as in
+/// Markdown) is a paragraph of its own and the heading of the ones after it.
 fn paragraphs(guide: &str) -> Vec<Paragraph<'_>> {
     let mut heading = "";
     let mut out = Vec::new();
     for text in guide
         .split("\n\n")
-        .map(str::trim)
+        .map(without_blank_edges)
         .filter(|text| !text.is_empty())
     {
-        if text.starts_with('#') && !text.contains('\n') {
+        if is_heading(text) {
             heading = text;
         }
         out.push(Paragraph { heading, text });
     }
     out
+}
+
+/// Whether a paragraph is a Markdown ATX heading: one line starting with `#` after zero to three
+/// spaces. Four spaces make it a code block.
+fn is_heading(text: &str) -> bool {
+    let unindented = text.trim_start_matches(' ');
+    text.len() - unindented.len() <= 3 && unindented.starts_with('#') && !text.contains('\n')
+}
+
+/// `text` without the blank lines around it and the spaces after it. The indentation of its
+/// first line stays: four spaces make a Markdown paragraph a code block, so a rule indented into
+/// an example or out of one is a change.
+fn without_blank_edges(text: &str) -> &str {
+    let first_line = text[..text.len() - text.trim_start().len()]
+        .rfind('\n')
+        .map_or(0, |newline| newline + 1);
+    text[first_line..].trim_end()
 }
 
 /// The most comparisons the paragraph match may make: 4 MB of `u32` lengths. Past it the guide
@@ -140,7 +157,11 @@ pub fn guide_changes(old: &str, new: &str) -> GuideChanges {
                 } else {
                     format!(
                         "Under \"{}\"",
-                        paragraph.heading.trim_start_matches('#').trim()
+                        paragraph
+                            .heading
+                            .trim_start()
+                            .trim_start_matches('#')
+                            .trim()
                     )
                 };
                 out.push_str(&format!("\n{title} ({place}):\n"));
@@ -201,6 +222,38 @@ mod tests {
             ),
             GuideChanges::Unchanged
         );
+    }
+
+    #[test]
+    fn indenting_a_paragraph_into_a_code_block_or_out_of_one_is_a_change() {
+        let indented = with_overrides(&guide(), &["First.".into(), "    Never push.".into()]);
+        let plain = with_overrides(&guide(), &["First.".into(), "Never push.".into()]);
+        let text = changed(&indented, &plain);
+        assert!(text.contains("New or changed (Under \"The user's overrides\"):\n\nNever push.\n"));
+        assert!(text.contains("Removed (Under \"The user's overrides\"):\n\n    Never push.\n"));
+        let text = changed(&plain, &indented);
+        assert!(
+            text.contains("New or changed (Under \"The user's overrides\"):\n\n    Never push.\n")
+        );
+    }
+
+    #[test]
+    fn a_heading_indented_up_to_three_spaces_is_still_a_heading_and_four_make_it_code() {
+        for indent in 0..=4 {
+            let old = guide().replace(
+                "\n## Safety\n",
+                &format!("\n{}## Safety\n", " ".repeat(indent)),
+            );
+            let new = old.replace("Safety rule 3:", "Safety rule 3, reworded:");
+            let text = changed(&old, &new);
+            let section = if indent <= 3 { "Safety" } else { "Asking" };
+            assert!(
+                text.contains(&format!(
+                    "New or changed (Under \"{section}\"):\n\nSafety rule 3, reworded:"
+                )),
+                "indent {indent}: {text}"
+            );
+        }
     }
 
     #[test]
