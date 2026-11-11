@@ -165,6 +165,13 @@ impl Render for NativeChatView {
             cx.entity_id(),
         );
         // Status line in the chat: the working line joins or leaves the rows before they are drawn.
+        // A view shown another session holds no rows for the last one's sent messages
+        // (send_watch.rs); a no-op otherwise, since the watch keeps the list in step itself.
+        if self.sync_sent_rows()
+            && let Some(host) = &self.transcript_host
+        {
+            window.render_view_this_frame(host.entity_id());
+        }
         self.sync_status_tail(&p, window);
         let transcript = self.render_transcript_host(window, cx);
         let rows = self.list.item_count();

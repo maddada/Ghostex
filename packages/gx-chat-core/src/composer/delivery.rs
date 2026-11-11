@@ -21,6 +21,16 @@
 //!   chat as a row that says so, with Retry, Edit and Remove (`keep_unsent`). No error line, no
 //!   notification, and its words move back to the chat box only when Edit asks.
 //! - A message whose call has been out for a moment says it is still sending (`call_left`).
+//! - **At once, in the chat.** User, of a row the desktop drew above the chat box for a message
+//!   the core had not taken yet, with "Sending…" under it: "seeing my sent message appear below
+//!   the working bar. this should never happen", "we already have a ux for when i send a message
+//!   and the agent didnt pick it up yet: it should show spinner next to the message or show the
+//!   play / undo buttons next to it", "show it bottom of the chat transcript like we always did
+//!   before". A sent message is only ever a row of the transcript. So that it is there on the
+//!   Enter itself, even while this core's thread is busy, the host draws the row the core is
+//!   about to draw, from the core's own projection (`sent_row`), as the transcript's last row
+//!   until the core's row replaces it: the same bubble, pictures, pills and quotes, the play
+//!   button of a message sent to a working agent, and the spinner once it has waited a moment.
 //!
 //! What still gives its text back to the chat box: Escape (the user's own cancel), a compact, a
 //! handoff to the terminal, a picture that could not be saved, and a message held for another
@@ -39,6 +49,7 @@ use crate::session::constants::unreachable_retry_delay_ms;
 use crate::state::{
     ChatContext, ChatState, PendingSend, SendRetry, Submission, UnsentSend, TAKEN_SEND_IDS,
 };
+use crate::{KnownSession, TranscriptItem};
 
 /// Fires when a send that met a failure time can fix goes again.
 pub const SEND_RETRY_TIMER: &str = "composer.sendRetry";
@@ -420,4 +431,51 @@ pub fn held_words(state: &ChatState) -> Option<String> {
                 .and_then(|submission| submission.retry.as_ref())
                 .map(|retry| retry.words.clone())
         })
+}
+
+/// A message the chat box just sent, for the row the host draws before the core has it.
+pub struct SentRow<'a> {
+    /// The send's `sendRequestId`, which names the row.
+    pub id: &'a str,
+    pub text: &'a str,
+    /// The session's agent (the document's `agent`).
+    pub agent: Option<&'a str>,
+    /// The agent is working (the document's `working`): the message waits behind its turn.
+    pub working: bool,
+    /// It has waited a moment: the row carries the spinner of a message on its way.
+    pub on_its_way: bool,
+    /// The host's session list, which names the sessions a message mentions.
+    pub sessions: &'a [KnownSession],
+}
+
+/// A chat holding only `row`'s message as the echo the core draws at Enter, for [`sent_row`].
+/// The host makes its own context from it (the clock, the timezone, how it writes a time).
+pub fn sent_row_state(row: &SentRow, now_ms: i64) -> ChatState {
+    let mut state = ChatState::default();
+    state.session.agent = row.agent.map(str::to_string);
+    state.transcript_view.session_directory = row.sessions.to_vec();
+    state.transcript_view.session_directory_revision = 1;
+    let echo = PendingSend {
+        id: row.id.to_string(),
+        // The text the transcript will record (`run_head` draws the echo the same way).
+        text: crate::composer::review_comments::expand_review_comments(row.text),
+        sent_at_ms: now_ms,
+        sent_while_working: row.working && !crate::session::sends::steers_into_running_turn(&state),
+        startup_delivery: row.on_its_way.then(|| StartupDelivery {
+            prompt_id: format!("{SENDING_PROMPT_PREFIX}{}", row.id),
+            state: "sending".to_string(),
+            error_message: None,
+            wait_reason: None,
+        }),
+        ..Default::default()
+    };
+    state.messages.composed = crate::session::pending::pending_sends_as_messages(&[echo]);
+    state
+}
+
+/// The transcript row of the one message in a [`sent_row_state`], projected as every row is.
+pub fn sent_row(state: &ChatState, context: &ChatContext) -> Option<TranscriptItem> {
+    crate::transcript::rows::rows(state, context)
+        .into_iter()
+        .next()
 }

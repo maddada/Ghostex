@@ -127,6 +127,9 @@ pub(crate) struct NativeChatView {
     /// The transcript list holds the status row after its last row (Status line in the chat,
     /// status_tail.rs).
     pub(super) status_tail: bool,
+    /// How many rows the transcript list holds after the transcript's own for messages just
+    /// sent that the core has not drawn yet (send_watch.rs), before the status row.
+    pub(super) sent_rows_listed: usize,
     /// The chat box's pill strip (pills_strip.rs).
     pub(super) pills_strip: super::pills_strip::PillsStripCells,
     pub(super) save_markdown_window: super::save_markdown::SaveMarkdownWindowState,
@@ -530,6 +533,7 @@ impl NativeChatView {
             coordinator_intro_dont_show: false,
             working_card: Default::default(),
             status_tail: false,
+            sent_rows_listed: 0,
             pills_strip: Default::default(),
             context_editor_window: Default::default(),
             save_markdown_window: Default::default(),

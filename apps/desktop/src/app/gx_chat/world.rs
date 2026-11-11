@@ -1239,7 +1239,7 @@ fn hold(world: &mut World, key: &str, requests: Vec<HostRequest>) {
 ///
 /// It is built with the `with_*` setters rather than an exhaustive struct literal, because an
 /// input the core adds then costs this host nothing and falls back to what it did before.
-fn context(state: &ghostex_gx_chat_core::ChatState) -> ChatContext {
+pub(super) fn context(state: &ghostex_gx_chat_core::ChatState) -> ChatContext {
     let bytes = platform::random_bytes();
     let draw = |at: usize| -> f64 {
         let mut value = 0u64;

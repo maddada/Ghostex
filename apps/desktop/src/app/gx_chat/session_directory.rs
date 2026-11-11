@@ -138,7 +138,7 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
 }
 
 /// The list and its revision; revision 0 while the store has published nothing.
-pub(super) fn current() -> (u64, Arc<Vec<KnownSession>>) {
+pub(crate) fn current() -> (u64, Arc<Vec<KnownSession>>) {
     let published = PUBLISHED
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());

@@ -457,3 +457,62 @@ fn a_full_disk_neither_stops_a_send_nor_hands_a_sent_message_back() {
     assert_eq!(host.error_line(), None);
     assert_eq!(host.delivered.len(), 1);
 }
+
+/// The row a host draws on the Enter itself is the row the core then draws for the message: the
+/// same projection, so nothing about it changes when the core's row takes its place.
+#[test]
+fn the_row_drawn_at_enter_is_the_row_the_core_draws() {
+    use ghostex_gx_chat_core::composer::delivery::{sent_row, sent_row_state, SentRow};
+    let text = "look at this\n[Image #1](/Users/me/Screenshots/shot@2x.png)\n> a quoted line\n\nand `code`";
+    for working in [false, true] {
+        let mut host = Host::new();
+        if working {
+            host.core.state_mut().session.server_working = true;
+        }
+        host.send(text, "id-1");
+        let context = host.context();
+        let drawn = ghostex_gx_chat_core::transcript::rows::rows(host.core.state(), &context)
+            .into_iter()
+            .find_map(|item| match item {
+                TranscriptItem::Message { message } => {
+                    Some(serde_json::to_value(&message).unwrap())
+                }
+                _ => None,
+            })
+            .expect("the core's row");
+
+        let row = SentRow {
+            id: "id-1",
+            text,
+            agent: Some("claude"),
+            working,
+            on_its_way: false,
+            sessions: &[],
+        };
+        let state = sent_row_state(&row, host.now_ms as i64);
+        let at_enter = match sent_row(&state, &context).expect("a row") {
+            TranscriptItem::Message { message } => serde_json::to_value(&message).unwrap(),
+            other => panic!("a message row, not {other:?}"),
+        };
+        // Everything a renderer draws is the same; only the row's id differs.
+        let mut expected = drawn.clone();
+        expected["id"] = at_enter["id"].clone();
+        assert_eq!(at_enter, expected, "working: {working}");
+        assert_eq!(
+            at_enter["queued"] == true,
+            working,
+            "the play button of a queued message"
+        );
+
+        // Once it has waited a moment, the same row with the spinner's `startupDelivery`.
+        let waiting = SentRow {
+            on_its_way: true,
+            ..row
+        };
+        let state = sent_row_state(&waiting, host.now_ms as i64);
+        let TranscriptItem::Message { message } = sent_row(&state, &context).unwrap() else {
+            panic!("a message row");
+        };
+        assert_eq!(message["startupDelivery"]["state"], "sending");
+    }
+}

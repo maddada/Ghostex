@@ -19,10 +19,19 @@
 //!   message, the view sends the SAME action again (`send_watch_due`), which is harmless when the
 //!   core was only busy and is what gets the message there when the first call met a core that
 //!   was not listening (no runtime yet, a chat the host had let go).
-//! - The message's own row is the core's, drawn the moment it takes the action, which is at most
-//!   one of its turns away now that a view's call goes ahead of the frames its socket read
-//!   (gx_chat/worker.rs). Only when even that takes longer than `ROW_AFTER` does the view draw a
-//!   plain "Sending" row of its own above the box, so a message is never nowhere on screen.
+//! - A sent message is only ever a row of the transcript, and it is there on the Enter itself.
+//!   User, of a row this file drew above the chat box with "Sending…" under it: "seeing my sent
+//!   message appear below the working bar. this should never happen. i dont know what is this
+//!   Sending... crap too. we already have a ux for when i send a message and the agent didnt pick
+//!   it up yet: it should show spinner next to the message or show the play / undo buttons next to
+//!   it", "show it bottom of the chat transcript like we always did before". The row is the
+//!   core's own projection of the message (gx-chat-core `composer::delivery::sent_row`), run here
+//!   on the Enter so a busy core thread cannot delay it, and drawn by the transcript's own row
+//!   code as the list's last row (`sent_row`, after the transcript's rows and before the status
+//!   line). The core's row takes its place in the frame that says it has the message
+//!   (`sendsTaken`). It carries the play button of a message sent to a working agent, as the
+//!   core's row will, and the spinner of a message on its way once it has waited `SPINNER_AFTER`.
+//!   Supersedes the "Sending" row of the 2026-11-11 decision above, which is gone.
 //!
 //! CDXC:SessionChat 2026-11-11 WHY:
 //! The send's own breadcrumb was routine and behind Settings > Debugging, so that night's fault
@@ -31,10 +40,8 @@
 
 use std::time::Duration;
 
-use gpui::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, div, px,
-};
+use ghostex_gx_chat_core::TranscriptItem;
+use gpui::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div};
 use serde_json::json;
 
 use super::appearance::ChatAppearance;
@@ -46,9 +53,9 @@ use super::state::NativeChatView;
 /// again after twice as long, up to `SLOW_AT_MOST` apart.
 const SLOW_AFTER: Duration = Duration::from_secs(4);
 const SLOW_AT_MOST: Duration = Duration::from_secs(32);
-/// How long the core gets before the view draws the message itself. Longer than a busy turn of
-/// the core's thread, so in ordinary use the only row a message ever has is its real one.
-const ROW_AFTER: Duration = Duration::from_millis(250);
+/// How long the core gets before the view's row for a message shows the spinner of a message on
+/// its way. In ordinary use the core's own row has replaced it long before.
+const SPINNER_AFTER: Duration = Duration::from_millis(1_500);
 
 /// One message the core has not said it has.
 struct Unconfirmed {
@@ -57,6 +64,10 @@ struct Unconfirmed {
     /// The action as it left, to send again as it was.
     action: serde_json::Value,
     left: web_time::Instant,
+    /// The transcript row the core will draw for it, and the same row with the spinner of a
+    /// message on its way. `None` for a queue or a compact, which the queue strip and the
+    /// command's marker show.
+    rows: Option<[TranscriptItem; 2]>,
 }
 
 /// The sends the core has not taken yet.
@@ -155,28 +166,124 @@ impl NativeChatView {
         {
             self.send_watch = None;
         }
-        let watch = self.send_watch.get_or_insert_with(|| SendWatch {
+        self.send_watch.get_or_insert_with(|| SendWatch {
             sends: Vec::new(),
             session,
             token,
             heard_since: false,
             wait: SLOW_AFTER,
         });
+        let rows = self.sent_rows_for(&id, &action);
+        let watch = self.send_watch.as_mut().expect("the watch made above");
         watch.sends.push(Unconfirmed {
             id,
             action,
             left: now,
+            rows,
         });
         watch.token = token;
         watch.heard_since = false;
         watch.wait = SLOW_AFTER;
         self.arm_send_watch(token, SLOW_AFTER, cx);
-        // The view's own row, only if the core's has not come by then.
+        // The message is the transcript's last row from this frame on.
+        self.sync_sent_rows();
+        cx.notify();
+        // Its spinner, if the core's row has not replaced it by then.
         cx.spawn(async move |chat, cx| {
-            cx.background_executor().timer(ROW_AFTER).await;
-            let _ = chat.update(cx, |_, cx| cx.notify());
+            cx.background_executor().timer(SPINNER_AFTER).await;
+            let _ = chat.update(cx, |chat, cx| {
+                if chat.sent_rows_listed > 0 {
+                    chat.list.remeasure();
+                    cx.notify();
+                }
+            });
         })
         .detach();
+    }
+
+    /// The transcript rows for a message that just left as `action`: the core's own projection of
+    /// it, plain and with the spinner. Only a send has one.
+    fn sent_rows_for(&self, id: &str, action: &serde_json::Value) -> Option<[TranscriptItem; 2]> {
+        use ghostex_gx_chat_core::composer::delivery::{SentRow, sent_row, sent_row_state};
+        if action["type"] != "send" {
+            return None;
+        }
+        let text = action["text"]
+            .as_str()
+            .filter(|text| !text.trim().is_empty())?;
+        let sessions = crate::app::gx_chat::known_sessions();
+        let project = |on_its_way: bool| {
+            let row = SentRow {
+                id,
+                text,
+                agent: self.snapshot["agent"].as_str(),
+                working: self.snapshot["working"] == true,
+                on_its_way,
+                sessions: &sessions,
+            };
+            let state = sent_row_state(&row, crate::app::gx_chat::now_millis());
+            sent_row(&state, &crate::app::gx_chat::chat_context(&state))
+        };
+        Some([project(false)?, project(true)?])
+    }
+
+    /// The rows the view draws for messages the core has not drawn yet: this session's, oldest
+    /// first.
+    fn sent_rows(&self) -> impl Iterator<Item = &Unconfirmed> {
+        let session = self.session_key();
+        self.send_watch
+            .iter()
+            .filter(move |watch| watch.session == session)
+            .flat_map(|watch| watch.sends.iter())
+            .filter(|send| send.rows.is_some())
+    }
+
+    /// Keeps the transcript list holding one row per message just sent, after the transcript's
+    /// own rows (and before the status row, status_tail.rs).
+    /// Answers whether the list changed.
+    pub(super) fn sync_sent_rows(&mut self) -> bool {
+        let wanted = self.sent_rows().count();
+        if wanted == self.sent_rows_listed {
+            return false;
+        }
+        let rows = self.items.len();
+        self.list.splice(rows..rows + self.sent_rows_listed, wanted);
+        self.sent_rows_listed = wanted;
+        true
+    }
+
+    /// The transcript row at list index `index` for the `at`th message just sent, drawn by the
+    /// transcript's own row code.
+    pub(super) fn sent_row(
+        &mut self,
+        index: usize,
+        at: usize,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let p = ChatAppearance::current(&self.snapshot).on_window_glass(
+            crate::app::helpers::window_glass_active_for(self.main_window),
+        );
+        let rows = self.transcript_list_rows();
+        self.in_subagent = false;
+        self.detail_rows.start_row(true, index, rows);
+        let item = self.sent_rows().nth(at).and_then(|send| {
+            let [plain, on_its_way] = send.rows.as_ref()?;
+            Some(if send.left.elapsed() >= SPINNER_AFTER {
+                on_its_way.clone()
+            } else {
+                plain.clone()
+            })
+        });
+        // A row the list still holds for a moment after the core's took its place draws nothing.
+        let content = item.map(|item| self.item_content(&item, None, true, &p, window, cx));
+        self.detail_rows.end_row();
+        div()
+            .w_full()
+            .flex()
+            .justify_center()
+            .children(content.map(|content| self.transcript_row_column(&p).child(content)))
+            .into_any_element()
     }
 
     fn arm_send_watch(&mut self, token: u64, wait: Duration, cx: &mut Context<Self>) {
@@ -215,6 +322,8 @@ impl NativeChatView {
         if watch.sends.is_empty() {
             self.send_watch = None;
         }
+        // The core's own rows arrived in this frame; the view's give way to them.
+        self.sync_sent_rows();
     }
 
     /// The core has not said it has the watched sends. Nothing is taken back: the log says how
@@ -337,118 +446,5 @@ impl NativeChatView {
             }
             _ => {}
         }
-    }
-
-    /// The messages that left the box more than `ROW_AFTER` ago and the core still has not
-    /// taken, drawn by the view itself ("Sending"), so a core thread busy for longer than it ever
-    /// should be never leaves a sent message nowhere on screen. Each row goes the frame the core
-    /// says it has the message, which is the frame its own row arrives in.
-    pub(super) fn render_unconfirmed_sends(&self, p: &ChatAppearance) -> Option<AnyElement> {
-        let watch = self.send_watch.as_ref()?;
-        if watch.session != self.session_key() {
-            return None;
-        }
-        let late: Vec<&Unconfirmed> = watch
-            .sends
-            .iter()
-            .filter(|send| send.left.elapsed() >= ROW_AFTER)
-            .collect();
-        if late.is_empty() {
-            return None;
-        }
-        let s = p.scale;
-        Some(
-            div()
-                .w_full()
-                .flex()
-                .flex_col()
-                .items_end()
-                .gap(px(6.0 * s))
-                .children(late.into_iter().map(|send| {
-                    let text = plain_words(send.action["text"].as_str().unwrap_or_default());
-                    div()
-                        .id(gpui::SharedString::from(format!(
-                            "unconfirmed-send:{}",
-                            send.id
-                        )))
-                        .role(gpui::Role::Status)
-                        .aria_label("Sending")
-                        .max_w(gpui::relative(0.8))
-                        .flex()
-                        .flex_col()
-                        .items_end()
-                        .gap(px(2.0 * s))
-                        .child(
-                            div()
-                                .px(px(12.0 * s))
-                                .py(px(8.0 * s))
-                                .rounded(px(12.0 * s))
-                                .bg(p.user_band)
-                                .text_color(p.foreground)
-                                .text_size(px(14.0 * s))
-                                .line_clamp(3)
-                                .child(text),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.0 * s))
-                                .text_color(p.muted)
-                                .child("Sending\u{2026}"),
-                        )
-                })),
-        )
-        .map(IntoElement::into_any_element)
-    }
-}
-
-/// A message's words for the view's own "Sending" row: a picture or file reference reads as its
-/// label alone (`[Image #1]`), not as its Markdown link with the path.
-fn plain_words(text: &str) -> String {
-    let mut words = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(open) = rest.find('[') {
-        let (before, from) = rest.split_at(open);
-        words.push_str(before);
-        let link = from.find("](").and_then(|close| {
-            let label = &from[1..close];
-            let target = &from[close + 2..];
-            let end = target.find(')')?;
-            // A label on one line with a target on one line: a reference, not prose in brackets.
-            (!label.is_empty() && !label.contains('\n') && !target[..end].contains('\n'))
-                .then(|| (label, &target[end + 1..]))
-        });
-        match link {
-            Some((label, after)) => {
-                words.push('[');
-                words.push_str(label);
-                words.push(']');
-                rest = after;
-            }
-            None => {
-                words.push('[');
-                rest = &from[1..];
-            }
-        }
-    }
-    words.push_str(rest);
-    words
-}
-
-#[cfg(test)]
-mod tests {
-    use super::plain_words;
-
-    #[test]
-    fn a_reference_reads_as_its_label() {
-        assert_eq!(
-            plain_words("look\n[Image #1](/Users/me/Screenshots/shot@2x.png) and [notes](a/b.md)."),
-            "look\n[Image #1] and [notes]."
-        );
-        assert_eq!(
-            plain_words("no [brackets] here (at all)"),
-            "no [brackets] here (at all)"
-        );
-        assert_eq!(plain_words("an [open"), "an [open");
-        assert_eq!(plain_words(""), "");
     }
 }

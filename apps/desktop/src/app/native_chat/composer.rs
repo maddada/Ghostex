@@ -436,10 +436,6 @@ impl NativeChatView {
         let mut working_card = working_card;
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();
-        // A message that left the box and the core has not taken in yet (send_watch.rs).
-        if let Some(sending) = self.render_unconfirmed_sends(p) {
-            waiting.push(sending);
-        }
         // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
         // (saved_draft_pill.rs), which replaced the notice row here (CDXC:Drafts 2026-11-04).
         // A `composerNotReady` refusal gets its own card instead of the plain error line.

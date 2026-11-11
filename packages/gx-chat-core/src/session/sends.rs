@@ -78,7 +78,7 @@ pub fn begin_send(
 
 /// CDXC:SessionChat 2026-10-22 WHY:
 /// Codex takes a message sent while it works into the running turn instead of queueing it: live on 2026-10-22, Codex 0.163 recorded the chat's mid-turn send as a `UserMessage` of that turn about a second after the send, and its queued-message preview never appeared. So the echo is not marked queued and carries no play button ("Queued, click to interrupt and send"): its Escape could only interrupt the turn now answering the message (the 2026-10-22 DECISION in server/src/session_chat_send/queued_prompt_escape.rs).
-fn steers_into_running_turn(state: &ChatState) -> bool {
+pub(crate) fn steers_into_running_turn(state: &ChatState) -> bool {
     crate::extras::agents::transcript_agent([state.session.agent.as_deref(), None]) == Some("codex")
 }
 

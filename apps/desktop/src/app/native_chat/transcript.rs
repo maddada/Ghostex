@@ -65,8 +65,14 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        // Status line in the chat: the row after the last one is the working line (status_tail.rs).
+        // After the transcript's own rows: the messages just sent that the core has not drawn
+        // yet (send_watch.rs), then, with Status line in the chat, the working line
+        // (status_tail.rs).
         if index >= self.items.len() {
+            let after = index - self.items.len();
+            if after < self.sent_rows_listed {
+                return self.sent_row(index, after, window, cx);
+            }
             return self.status_tail_row(index, cx);
         }
         let items = self.items.clone();
