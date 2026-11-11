@@ -1165,10 +1165,10 @@ fn set_draft(
     client_id: &str,
 ) -> Result<SessionChatDraft, DomainStateError> {
     if content.len() > crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES {
-        return Err(DomainStateError::bad_request(format!(
-            "setSessionChatDraft content exceeds the {}-byte limit.",
-            crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES
-        )));
+        // In the user's words, as the send says it (send_http.rs).
+        return Err(DomainStateError::bad_request(
+            "This message is too long to send at once. Split it into smaller parts, or attach it as a file.",
+        ));
     }
     let mut draft = SessionChatDraft {
         parked: false,
