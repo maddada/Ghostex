@@ -328,24 +328,30 @@ impl NativeChatView {
         cx.notify();
     }
 
-    /// An opened line's steps: a 1px rail at a tenth of the foreground, the rows 16px in from it.
-    pub(super) fn quiet_steps(&self, rows: Vec<AnyElement>, p: &ChatAppearance) -> AnyElement {
+    /// An opened line's steps: a 1px rail at a tenth of the foreground, the rows 16px in from it;
+    /// a click on the rail shuts the line `key` (disclosure_body.rs `closing_rail`).
+    pub(super) fn quiet_steps(
+        &self,
+        key: &str,
+        rows: Vec<AnyElement>,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         div()
             .pt(px(2.0 * s))
             .pb(px(2.0 * s))
             .min_w_0()
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .min_w_0()
-                    .ml(px(6.0 * s))
-                    .pl(px(16.0 * s))
-                    .border_l(px(s))
-                    .border_color(p.foreground.opacity(0.1))
-                    .children(rows),
-            )
+            .child(super::disclosure_body::closing_rail(
+                p,
+                key.to_string(),
+                6.0,
+                23.0,
+                0.0,
+                0.0,
+                rows,
+                cx,
+            ))
             .into_any_element()
     }
 
@@ -616,7 +622,7 @@ impl NativeChatView {
                 );
             }
             if !steps.is_empty() {
-                row = row.child(self.quiet_steps(steps, p));
+                row = row.child(self.quiet_steps(&key, steps, p, cx));
             }
         } else if let Some(strip) = self.read_picture_strip(
             &format!("{key}:read"),
