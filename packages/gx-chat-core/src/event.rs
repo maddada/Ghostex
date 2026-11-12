@@ -209,6 +209,10 @@ pub struct StartConfig {
     /// for one row (`session::reads::issue_light_seed`). Absent from the desktop and older phones.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub light_seed: bool,
+    /// The computer cuts long tool outputs for this host (`toolOutputCut`): the chat's reads ask for
+    /// the cut (`transcript::output_cut`). Absent from the desktop and older phones.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cut_tool_outputs: bool,
 }
 
 /// Everything `composer('read')` answers with, in the order that host writes it.

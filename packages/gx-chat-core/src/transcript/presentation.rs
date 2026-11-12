@@ -1341,16 +1341,18 @@ fn turn_items(
                 let quiet_rows = opens_running && turn.active;
                 // A running turn's work starts past a reply it already gave
                 // (`summary_mode_turns`); the reports after that reply sit with it.
-                let earlier_ids: Vec<&str> =
-                    turn.earlier_replies.iter().map(|row| row.id.as_str()).collect();
-                let running_work = turn.active_work[turn.running_from.min(turn.active_work.len())..]
+                let earlier_ids: Vec<&str> = turn
+                    .earlier_replies
+                    .iter()
+                    .map(|row| row.id.as_str())
+                    .collect();
+                let running_work = turn.active_work
+                    [turn.running_from.min(turn.active_work.len())..]
                     .iter()
                     .filter(|row| !earlier_ids.contains(&row.id.as_str()));
                 // Pages and charts, and questions still waiting on the reader (`summary_cards`).
-                let cards = crate::transcript::turns::summary_cards(
-                    &turn.active_work,
-                    &turn.cards,
-                    |id| {
+                let cards =
+                    crate::transcript::turns::summary_cards(&turn.active_work, &turn.cards, |id| {
                         scope.askers.iter().any(|asker| {
                             asker.message_id == id
                                 && !asker.answered
@@ -1359,8 +1361,7 @@ fn turn_items(
                                 && !asker.answered_in_words()
                                 && !asker.waiting_tags().is_empty()
                         })
-                    },
-                );
+                    });
                 let carded = |row: &ChatRow| cards.iter().any(|card| card.id == row.id);
                 let shown_earlier: Vec<&ChatMessage> = turn
                     .earlier_replies
@@ -1369,13 +1370,12 @@ fn turn_items(
                     .map(|row| &**row)
                     .collect();
                 let has_reply = turn.final_message.is_some();
-                let earlier_label = if (has_reply && latest_reply == Some(index))
-                    || (turn.active && !has_reply)
-                {
-                    crate::transcript::turns::earlier_label(&shown_earlier)
-                } else {
-                    String::new()
-                };
+                let earlier_label =
+                    if (has_reply && latest_reply == Some(index)) || (turn.active && !has_reply) {
+                        crate::transcript::turns::earlier_label(&shown_earlier)
+                    } else {
+                        String::new()
+                    };
                 TranscriptItem::Summary {
                     id: turn.user.id.clone(),
                     user: builder.message_or_placeholder(&turn.user, eager, Draw::Row),
@@ -1393,7 +1393,11 @@ fn turn_items(
                     work: running_work
                         .map(|message| {
                             let eager = eager || hidden_live.contains(message.id.as_str());
-                            let draw = if quiet_rows { Draw::Row } else { Draw::InWorkFold };
+                            let draw = if quiet_rows {
+                                Draw::Row
+                            } else {
+                                Draw::InWorkFold
+                            };
                             let mut row = builder.message_or_placeholder(message, eager, draw);
                             running_thinking.mark(message, &mut row);
                             row
@@ -1680,7 +1684,64 @@ pub fn row_detail(
     index: usize,
 ) -> Option<Value> {
     let _ = context;
-    row_detail_scope(&state.transcript_view.projected, kind, message_id, index)
+    let detail = row_detail_scope(&state.transcript_view.projected, kind, message_id, index)?;
+    if kind != "tool" {
+        return Some(detail);
+    }
+    // A cut output's open row: the full text once it has been read (output_cut.rs), else today's
+    // clipped text, which the cut keeps exactly, and no copy text until the full text is here.
+    let source = &state.transcript_view.projected.get(message_id)?.source;
+    let (_, tools) = message_tool_rows(source);
+    let pair = tools.get(index)?;
+    let Some(ChatBlock::ToolResult {
+        output,
+        is_error,
+        call_id,
+        patch,
+    }) = pair.result
+    else {
+        return Some(detail);
+    };
+    if !crate::transcript::output_cut::is_cut(output) {
+        return Some(detail);
+    }
+    match crate::transcript::output_cut::full_output(
+        &state.transcript_view.full_tool_outputs,
+        call_id.as_deref(),
+    ) {
+        Some(full) => {
+            let whole = ChatBlock::ToolResult {
+                output: crate::transcript::output_cut::as_held(output, full),
+                is_error: *is_error,
+                call_id: call_id.clone(),
+                patch: patch.clone(),
+            };
+            Some(open_tool_detail(&ToolPair {
+                call: pair.call,
+                result: Some(&whole),
+            }))
+        }
+        None => {
+            let mut detail = detail;
+            detail["copyText"] = "".into();
+            detail["loadingFullOutput"] = true.into();
+            Some(detail)
+        }
+    }
+}
+
+/// The call id of an open tool row whose output was cut and is not read back yet.
+pub fn open_tool_call_id(state: &ChatState, message_id: &str, index: usize) -> Option<String> {
+    let source = &state.transcript_view.projected.get(message_id)?.source;
+    let (_, tools) = message_tool_rows(source);
+    match tools.get(index)?.result {
+        Some(ChatBlock::ToolResult {
+            output,
+            call_id: Some(call_id),
+            ..
+        }) if crate::transcript::output_cut::is_cut(output) => Some(call_id.clone()),
+        _ => None,
+    }
 }
 
 /// The same detail, read against one presentation instance's own cache.

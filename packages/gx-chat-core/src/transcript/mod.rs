@@ -44,6 +44,7 @@ pub mod message_time;
 pub mod native_markdown;
 pub mod noise;
 pub mod open_questions;
+pub mod output_cut;
 pub mod page_answers;
 pub mod page_thumbnails;
 pub mod pictures;

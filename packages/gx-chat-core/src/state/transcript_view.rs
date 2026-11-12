@@ -108,6 +108,11 @@ pub struct TranscriptViewState {
     pub backfill_revision: u64,
     /// The open-row set the renderer last reported, with the detail each row asks for.
     pub open_rows: Vec<OpenRow>,
+    /// The full text of cut tool outputs read back for an open row, by call id
+    /// (`transcript::output_cut`).
+    pub full_tool_outputs: std::collections::HashMap<String, String>,
+    /// `readSessionChatToolOutput` requests in flight: request id to call id.
+    pub tool_output_requests: std::collections::HashMap<u64, String>,
     /// The rewind sheet, or `None` when it is closed.
     pub rewind: Option<RewindRequest>,
     /// Save-prompt status by message id: `saving`, `saved` or `error`.
@@ -308,6 +313,8 @@ impl Default for TranscriptViewState {
             backfilled: std::collections::BTreeSet::new(),
             backfill_revision: 0,
             open_rows: Vec::new(),
+            full_tool_outputs: Default::default(),
+            tool_output_requests: Default::default(),
             rewind: None,
             saved_prompts: BTreeMap::new(),
             items: Default::default(),

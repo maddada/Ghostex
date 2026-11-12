@@ -196,7 +196,8 @@ fn handle_action(state: &mut ChatState, action: &UserAction, context: &ChatConte
         ActionKind::RowDetails => {
             state.transcript_view.open_rows = open_rows(action);
             state.transcript_view.row_details = rows::row_details(state, context);
-            Vec::new()
+            // An opened row whose output was cut reads the whole text back (output_cut.rs).
+            crate::transcript::output_cut::request_open_outputs(state)
         }
         // Each write lands before its mode changes (`crate::transcript::settle` on
         // `Event::StorageWritten`), so a refused write leaves the transcript as it was.

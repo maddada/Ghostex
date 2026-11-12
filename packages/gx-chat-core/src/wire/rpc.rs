@@ -21,6 +21,8 @@ pub enum ChatRpcMethod {
     ReadSessionChatSkills,
     ReadSessionChatFiles,
     ReadSessionChatImage,
+    /// The whole text of a tool output gxserver cut (`transcript::output_cut`).
+    ReadSessionChatToolOutput,
     /// One form, page or chart of the session's resource index, read back by its offsets
     /// (`server/src/session_chat_resources.rs`).
     ReadSessionChatResource,
@@ -112,6 +114,7 @@ impl ChatRpcMethod {
             Self::ReadSessionChatSkills => "readSessionChatSkills",
             Self::ReadSessionChatFiles => "readSessionChatFiles",
             Self::ReadSessionChatImage => "readSessionChatImage",
+            Self::ReadSessionChatToolOutput => "readSessionChatToolOutput",
             Self::ReadSessionChatResource => "readSessionChatResource",
             Self::ReadVisualPageThumbnail => "readVisualPageThumbnail",
             Self::ReadVisualPageSource => "readVisualPageSource",
@@ -171,6 +174,7 @@ impl ChatRpcMethod {
             "readSessionChatSkills" => Self::ReadSessionChatSkills,
             "readSessionChatFiles" => Self::ReadSessionChatFiles,
             "readSessionChatImage" => Self::ReadSessionChatImage,
+            "readSessionChatToolOutput" => Self::ReadSessionChatToolOutput,
             "readSessionChatResource" => Self::ReadSessionChatResource,
             "readVisualPageThumbnail" => Self::ReadVisualPageThumbnail,
             "readVisualPageSource" => Self::ReadVisualPageSource,

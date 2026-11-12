@@ -83,6 +83,14 @@ fn issue_read_sized(
         Value::String(state.identity.session_id.clone()),
     );
     params.insert("limit".to_string(), Value::from(limit));
+    if state
+        .session
+        .boot_config
+        .as_ref()
+        .is_some_and(|config| config.cut_tool_outputs)
+    {
+        params.insert("cutToolOutputs".to_string(), Value::Bool(true));
+    }
     if let Some(offset) = before_offset {
         params.insert("beforeOffset".to_string(), Value::from(offset));
     }

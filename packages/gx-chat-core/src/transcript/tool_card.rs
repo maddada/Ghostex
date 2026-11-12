@@ -591,6 +591,10 @@ fn short(text: &str) -> String {
 /// The short result a finished call's row shows on its right: "92 lines", "6 matches",
 /// "12 files", "214 passed", "exit 1". Empty when the output says nothing short.
 pub fn tool_result(name: &str, verb: Option<&str>, output: &str, failed: bool) -> String {
+    // A cut output carries what these lines would have read from the whole (output_cut.rs).
+    if let Some(facts) = crate::transcript::output_cut::facts(output) {
+        return result_from_facts(name, verb, &facts, failed);
+    }
     let output = script_output(output);
     // A shell call that read or searched reports what it found; one that ran something else, or
     // failed, its tests or its exit code.
@@ -633,6 +637,61 @@ pub fn tool_result(name: &str, verb: Option<&str>, output: &str, failed: bool) -
             }
         }
         _ => String::new(),
+    }
+}
+
+/// [`tool_result`]'s branches, each read from the facts a cut output carries instead of its text.
+fn result_from_facts(
+    name: &str,
+    verb: Option<&str>,
+    facts: &crate::transcript::output_cut::CutFacts,
+    failed: bool,
+) -> String {
+    let ran = match verb {
+        Some("Ran" | "Ran a script") => true,
+        Some(_) => failed && is_command_tool(name),
+        None => is_command_tool(name),
+    };
+    if ran {
+        return if failed {
+            facts.command_failed.clone()
+        } else {
+            facts.command_ok.clone()
+        };
+    }
+    // JSON is never cut, so an MCP reply that was cut counts nothing, as `json_count` would say.
+    if failed || name.starts_with("mcp__") {
+        return String::new();
+    }
+    match verb {
+        Some("Read") => facts
+            .read_lines
+            .map(|count| count_label(count, "line", "lines"))
+            .unwrap_or_default(),
+        Some("Searched for") => facts.search_matches.clone(),
+        Some("Found files") => facts.search_files.clone(),
+        Some("Listed") if facts.listed > 0 => count_label(facts.listed, "item", "items"),
+        Some("Searched the web for") if facts.urls > 0 => {
+            count_label(facts.urls, "result", "results")
+        }
+        _ => String::new(),
+    }
+}
+
+/// What every card reads from a whole output, for gxserver to send with the cut one
+/// (`output_cut::cut`).
+pub(crate) fn cut_facts(output: &str, total: usize) -> crate::transcript::output_cut::CutFacts {
+    let script = script_output(output);
+    crate::transcript::output_cut::CutFacts {
+        total,
+        command_ok: command_result(script, false),
+        command_failed: command_result(script, true),
+        read_lines: read_lines(script),
+        search_matches: search_result(script, "match", "matches"),
+        search_files: search_result(script, "file", "files"),
+        listed: meaningful_lines(script).count(),
+        urls: script.matches("\"url\":").count(),
+        failure_reason: failure_reason_of(output),
     }
 }
 
@@ -831,6 +890,13 @@ fn counts_in(line: &str, pass_words: &[&str], fail_words: &[&str]) -> (Option<u6
 /// one that names an error ("error[E0425]: cannot find value `x`") over the command's exit code
 /// and the harness's wrappers.
 pub fn failure_reason(output: &str) -> String {
+    match crate::transcript::output_cut::facts(output) {
+        Some(facts) => facts.failure_reason,
+        None => failure_reason_of(output),
+    }
+}
+
+fn failure_reason_of(output: &str) -> String {
     let lines: Vec<&str> = output
         .lines()
         .take(RESULT_SCAN_LINES)

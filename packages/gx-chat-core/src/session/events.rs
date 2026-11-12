@@ -612,6 +612,10 @@ fn rpc_settled(
     outcome: &RpcOutcome,
     context: &ChatContext,
 ) -> Vec<Effect> {
+    // A cut tool output read back for an open row (transcript/output_cut.rs).
+    if crate::transcript::output_cut::settle(state, request_id, outcome, context) {
+        return Vec::new();
+    }
     // Any answer, a refusal included, means the service is there again.
     let answered = match outcome {
         RpcOutcome::Ok { .. } => true,
