@@ -443,9 +443,11 @@ fn text_references(text: &str, user: bool, mentions: &[String]) -> Vec<Value> {
     };
     let mut references = markdown_references(&native);
     references.extend(
-        markdown_references(text)
-            .into_iter()
-            .filter(|reference| text_of(reference, "kind") == "image"),
+        markdown_references(
+            &crate::transcript::native_markdown::bracket_spaced_image_references(text),
+        )
+        .into_iter()
+        .filter(|reference| text_of(reference, "kind") == "image"),
     );
     references
 }

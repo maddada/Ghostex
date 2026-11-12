@@ -617,6 +617,90 @@ fn file_link(path: &str, label: &str) -> String {
     format!("[{escaped}]({destination})")
 }
 
+/// Writes each `[Image #N](path)` whose path holds a space as `[Image #N](<path>)`, the form
+/// CommonMark reads a spaced destination in, leaving one inside code as written.
+///
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// User, of their own sent message showing `[Image #1](/Users/madda/Library/Application
+/// Support/ClipBook Rust/attachments/…/2026-11-12_Ghostex_10-34-56@2x.png)` as raw text: every
+/// `[Image #N](<local image path>)` shows as its picture, whatever the folder and with spaces in the
+/// path, as Ghostex's own pasted pictures do. A clipboard app's paste names its own folder, and on
+/// macOS that is under `Application Support`. CommonMark ends a bare destination at its first
+/// space, so the parser saw text, not a link, and the issue-link pass then made the `#1` in the
+/// label a link of its own (`[Image [#1](ghostex-issue:1)](…)`), which the picture pass no longer
+/// recognises. Bracketed, the reference is a link to every pass after this one, on the desktop and
+/// on the phone alike (both draw from this Markdown). The file is read like any other picture's,
+/// so a missing one is the same missing-image tile.
+pub(crate) fn bracket_spaced_image_references(markdown: &str) -> std::borrow::Cow<'_, str> {
+    const OPEN: &str = "[Image #";
+    let mut found: Vec<(usize, usize)> = Vec::new();
+    let mut cursor = 0;
+    while let Some(at) = markdown[cursor..].find(OPEN) {
+        let start = cursor + at;
+        cursor = start + OPEN.len();
+        let rest = &markdown[cursor..];
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 || !rest[digits..].starts_with("](") {
+            continue;
+        }
+        let from = cursor + digits + 2;
+        let target = &markdown[from..];
+        if target.starts_with('<') {
+            continue;
+        }
+        let Some((path, consumed)) = markdown_destination(target) else {
+            continue;
+        };
+        // `consumed` ends past the closing `)`.
+        let raw = &target[..consumed - 1];
+        if path.is_empty() || !raw.chars().any(is_js_space) {
+            continue;
+        }
+        found.push((from, from + raw.len()));
+        cursor = from + consumed;
+    }
+    if found.is_empty() {
+        return std::borrow::Cow::Borrowed(markdown);
+    }
+    let code = code_ranges(markdown);
+    let mut result = String::with_capacity(markdown.len() + found.len() * 2);
+    let mut last = 0;
+    for (from, to) in found {
+        if code.iter().any(|(start, end)| from < *end && to > *start) {
+            continue;
+        }
+        result.push_str(&markdown[last..from]);
+        result.push('<');
+        // Escapes in the bare form mean the same inside the brackets; only the brackets themselves
+        // would end the destination.
+        result.push_str(&markdown[from..to].replace('<', "\\<").replace('>', "\\>"));
+        result.push('>');
+        last = to;
+    }
+    result.push_str(&markdown[last..]);
+    std::borrow::Cow::Owned(result)
+}
+
+/// The byte ranges of every code span and code block in `markdown`.
+fn code_ranges(markdown: &str) -> Vec<(usize, usize)> {
+    fn walk(node: &Node, found: &mut Vec<(usize, usize)>) {
+        if matches!(node, Node::Code(_) | Node::InlineCode(_)) {
+            if let Some(position) = node.position() {
+                found.push((position.start.offset, position.end.offset));
+            }
+            return;
+        }
+        for child in node.children().into_iter().flatten() {
+            walk(child, found);
+        }
+    }
+    let mut found = Vec::new();
+    if let Ok(tree) = markdown::to_mdast(markdown, &ParseOptions::default()) {
+        walk(&tree, &mut found);
+    }
+    found
+}
+
 /// `\[Image #\d+\]\([^)\r\n]+\)`, every match, as byte ranges.
 fn composer_image_references(markdown: &str) -> Vec<(usize, usize)> {
     let mut found = Vec::new();
@@ -1319,6 +1403,10 @@ pub fn native_markdown_with_mentions(
         literal_skill_dollars(&escaped)
     } else {
         escaped
+    };
+    let escaped = match bracket_spaced_image_references(&escaped) {
+        std::borrow::Cow::Borrowed(_) => escaped,
+        std::borrow::Cow::Owned(bracketed) => bracketed,
     };
     let markdown = escaped.as_str();
     let windows_links_wanted = markdown.contains("](")
