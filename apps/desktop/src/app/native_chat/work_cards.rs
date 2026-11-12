@@ -1203,6 +1203,30 @@ impl NativeChatView {
         // CDXC:Coordinators 2026-11-12 DECISION:
         // User, of an opened row whose description stopped where the age and the ⋯ sit: "It
         // should take up the full width of this card when I expand".
+        //
+        // CDXC:Coordinators 2026-11-12 DECISION:
+        // User, of the thread line between an opened row's title and text ("looks out of place
+        // in this case. and the spacing above it is smaller than below it"), picking the logo
+        // alone: each thread of a line of work is its agent's logo at the left of the Done /
+        // Reply line, its name in a tooltip, a click opening the thread. The title, the text and
+        // the answers are then 6 px apart (two lines of text) and 12 px before the answers.
+        let (thread_chips, other_chips): (Vec<Value>, Vec<Value>) = if open
+            && !row["waitedBy"].is_array()
+        {
+            row["chips"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .partition(|chip| chip["kind"] == "thread")
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        let thread_logos: Vec<AnyElement> = thread_chips
+            .iter()
+            .enumerate()
+            .map(|(index, chip)| self.work_thread_logo(chip, &format!("dock:{key}:{index}"), p, cx))
+            .collect();
         let opened_detail = open.then(|| {
             let mut column = div()
                 .w_full()
@@ -1231,10 +1255,8 @@ impl NativeChatView {
                 }
             } else {
                 // A line of work's threads and links, wrapping, with no separator between them.
-                let chips: Vec<AnyElement> = row["chips"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
+                let chips: Vec<AnyElement> = other_chips
+                    .iter()
                     .enumerate()
                     .map(|(index, chip)| {
                         self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx)
@@ -1262,9 +1284,13 @@ impl NativeChatView {
             // buttons they're too close together now". The gaps are the question card's
             // (question.rs: 12 from the head to the text, 12 from the text to the options).
             let mut first_body = true;
+            // Two lines of text are 6 px apart (the title's 2 under it and 4), with a work item
+            // line or a link between them the question card's 12.
+            let has_line = row["waitedBy"].is_array() || !other_chips.is_empty();
+            let body_lead = if has_line { OPENED_ROW_GAP - 2.0 } else { 4.0 };
             if !detail.is_empty() {
                 first_body = false;
-                column = column.child(div().mt(px((OPENED_ROW_GAP - 2.0) * s)).child(
+                column = column.child(div().mt(px(body_lead * s)).child(
                     self.ask_markdown(
                         &format!("detail:{key}"),
                         &detail,
@@ -1287,7 +1313,7 @@ impl NativeChatView {
                 column = column.child(
                     div()
                         .min_w_0()
-                        .when(first_body, |line| line.mt(px((OPENED_ROW_GAP - 2.0) * s)))
+                        .when(first_body, |line| line.mt(px(body_lead * s)))
                         .whitespace_normal()
                         .text_color(p.card_muted)
                         .child(line.to_string()),
@@ -1329,6 +1355,7 @@ impl NativeChatView {
             // CDXC:Coordinators 2026-11-12 DECISION:
             // User: "move the answer buttons to bottom right. keep work item tag bottom left".
             under_answers = self.item_pill_elements(&key, &pills, pill_fit, p, cx);
+            under_answers.extend(thread_logos);
             under_answers.push(div().flex_1().min_w_0().into_any_element());
             under_answers.extend(buttons);
         }
@@ -2217,6 +2244,64 @@ impl NativeChatView {
     }
 
     /// One part of a card's bottom line (`chips` in gx-chat-core work_cards.rs `item_chips`).
+    /// A thread of an opened dock row as its agent's logo alone, at the left of the answers' line:
+    /// its name (and state) is the tooltip, and a click opens the thread as the line's name did.
+    fn work_thread_logo(
+        &self,
+        chip: &Value,
+        id: &str,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let label = text(chip, "label");
+        let state = text(chip, "state");
+        let command = chip["command"].clone();
+        let agent = text(chip, "agentIcon");
+        let (icon, icon_color) = if agent.is_empty() {
+            (chip_icon("thread").to_string(), p.muted)
+        } else {
+            (
+                format!("agent-icons/{agent}.svg"),
+                super::new_session_welcome::brand_logo_color(&agent, p),
+            )
+        };
+        let tip = if state.is_empty() {
+            label.clone()
+        } else {
+            format!("{label}, {state}")
+        };
+        let tip_text = tip.clone();
+        div()
+            .id(gpui::SharedString::from(format!("work-thread-logo:{id}")))
+            .size(px(28.0 * s))
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_shrink_0()
+            .rounded(px(8.0 * s))
+            .aria_label(tip)
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(tip_text.clone()).build(window, cx)
+            })
+            .child(
+                svg()
+                    .path(icon)
+                    .size(px(14.0 * s))
+                    .flex_shrink_0()
+                    .text_color(icon_color),
+            )
+            .when(command.is_object(), |logo| {
+                logo.chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+            })
+            .into_any_element()
+    }
+
     fn work_card_part(
         &self,
         chip: &Value,
