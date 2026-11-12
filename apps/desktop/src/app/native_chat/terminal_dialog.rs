@@ -10,6 +10,9 @@ use gpui::{
 use gpui_component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use serde_json::{Value, json};
 
+/// The width, at scale 1, of the footer button named after a menu's highlighted row.
+const HIGHLIGHTED_ROW_SLOT_WIDTH: f32 = 220.0;
+
 pub(super) struct TerminalDialogInput {
     identity: String,
     server_value: String,
@@ -502,7 +505,7 @@ impl NativeChatView {
         {
             let answer = json!({"type":"answer","answer":{"kind":"terminalDialog","dialogId":dialog_id,"dialogAction":action["action"]}});
             actions.push(
-                self.tone_button(
+                self.tone_button_in_slot(
                     gpui::SharedString::from(format!("dialog-action:{}", text(action, "action"))),
                     &text(action, "label"),
                     None,
@@ -514,6 +517,8 @@ impl NativeChatView {
                     },
                     None,
                     false,
+                    // The button named after the highlighted row keeps one width as the highlight moves.
+                    (action["highlightedRow"] == true).then_some(HIGHLIGHTED_ROW_SLOT_WIDTH),
                     p,
                 )
                 .on_click(cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)))

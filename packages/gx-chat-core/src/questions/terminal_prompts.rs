@@ -153,7 +153,16 @@ pub fn terminal_dialog_presentation(dialog: &TerminalDialog) -> Value {
                     .map(str::to_string)
                     .unwrap_or_else(|| action.clone())
             };
-            json!({ "action": action, "label": label })
+            // `highlightedRow` marks the one label that changes with the list's selection, so a
+            // renderer can give it a fixed slot and keep its neighbours where they are.
+            let named_after_row = action == "confirm"
+                && highlighted.as_deref() == Some(label.as_str())
+                && action_label("confirm") != Some(label.as_str());
+            if named_after_row {
+                json!({ "action": action, "label": label, "highlightedRow": true })
+            } else {
+                json!({ "action": action, "label": label })
+            }
         })
         .collect();
     json!({

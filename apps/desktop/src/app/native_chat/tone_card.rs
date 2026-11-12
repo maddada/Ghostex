@@ -313,6 +313,25 @@ impl NativeChatView {
         disabled: bool,
         p: &ChatAppearance,
     ) -> Stateful<Div> {
+        self.tone_button_in_slot(id, label, icon, kind, hint, disabled, None, p)
+    }
+
+    /// A footer button whose label changes while the card stays open (a menu's highlighted row).
+    /// With `slot_width` it keeps that width at scale 1 whatever the label says, cutting a long one
+    /// with an ellipsis, so the buttons beside it stay where they are.
+    /// CDXC:SessionChat 2026-11-12 WHY: In the /mcp menu the Confirm button is named after the highlighted server and the footer is right aligned, so every Previous or Next press changed its width and moved the buttons to its left, and quick clicks landed on the wrong one (#576).
+    /// SEE-ALSO: apps/mobile/app/src/chat/native/cards/ToneCard.tsx (`ToneButton` `slotWidth`), packages/gx-chat-core/src/questions/terminal_prompts.rs (`highlightedRow`).
+    pub(super) fn tone_button_in_slot(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        label: &str,
+        icon: Option<&'static str>,
+        kind: ToneButton,
+        hint: Option<String>,
+        disabled: bool,
+        slot_width: Option<f32>,
+        p: &ChatAppearance,
+    ) -> Stateful<Div> {
         let s = p.scale;
         let v = &VISUAL.shell;
         let (fills, text) = match kind {
@@ -353,7 +372,24 @@ impl NativeChatView {
                         .flex_shrink_0(),
                 )
             })
-            .child(label.to_owned())
+            .when_some(slot_width, |button, width| {
+                button
+                    .w(px(width * s))
+                    .flex_shrink(1.0)
+                    .min_w_0()
+                    .justify_center()
+                    .child(
+                        div()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(label.to_owned()),
+                    )
+            })
+            .when(slot_width.is_none(), |button| {
+                button.child(label.to_owned())
+            })
             .when_some(hint, |button, hint| {
                 let primary = kind == ToneButton::Primary;
                 button.child(
