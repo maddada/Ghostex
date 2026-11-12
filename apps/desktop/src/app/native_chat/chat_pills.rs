@@ -158,6 +158,9 @@ fn trigger_id(id: &str) -> &'static str {
 }
 
 pub(super) fn pill_icon(id: &str) -> &'static str {
+    if super::minimized_pages::page_pill_key(id).is_some() {
+        return super::minimized_pages::PAGE_ICON;
+    }
     match id {
         "threads" => "titlebar/users-group.svg",
         super::coordinator_board::BOARD_MENU => "titlebar/layout-board-split.svg",
@@ -435,6 +438,11 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A hidden page's pill, from the "+N" pill's list, brings the page back.
+        if let Some(key) = super::minimized_pages::page_pill_key(id) {
+            self.host("showMinimizedPage", json!({ "key": key }), cx);
+            return;
+        }
         let trigger = trigger_id(id);
         if switch {
             self.open_autopilot_menu(id, None, window, cx);

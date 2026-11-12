@@ -120,6 +120,7 @@ mod code_block;
 mod keyboard;
 pub(crate) mod links_pill;
 mod markdown_links;
+pub(crate) mod minimized_pages;
 mod pills_strip;
 mod saved_draft_pill;
 // Settings' preview uses more of this look than the transcript does.

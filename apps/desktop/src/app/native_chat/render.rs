@@ -103,6 +103,7 @@ impl Render for NativeChatView {
         self.schedule_row_detail_sync(window, cx);
         self.refresh_issue_links(cx);
         self.refresh_links_pill(cx);
+        self.refresh_minimized_pages(cx);
         self.note_drawn_in(window, cx);
         if self.maximized_window.is_none() {
             self.ensure_input(window, cx);

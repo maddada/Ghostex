@@ -6,6 +6,9 @@
 //! in and shrinks away with the chat box's own ease. Each pill opens its menu above the box, lined up
 //! with the pill.
 //!
+//! A Ghostex page put aside shows here as a pill of its own, first among the panel pills
+//! (minimized_pages.rs), and is enough to show the strip.
+//!
 //! The strip's left holds the view status chip ("Summary view" or "Detailed view"), pinned there
 //! while the pills scroll (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
 //! Before it, while a draft saved elsewhere is offered, the Saved draft pill (saved_draft_pill.rs),
@@ -80,6 +83,11 @@ pub(super) struct PillsStripCells {
     order: Rc<RefCell<Vec<(String, f32)>>>,
     /// Each panel pill's width (unscaled) with its label and without, as last drawn each way.
     widths: Rc<RefCell<HashMap<String, (Option<f32>, Option<f32>)>>>,
+    /// A hidden page's pill's widths (unscaled) at its three tiers, known before it is drawn
+    /// (minimized_pages.rs).
+    presets: Rc<RefCell<HashMap<String, (f32, f32, f32)>>>,
+    /// Room (unscaled) kept at the row's end for a page pill's floating x when that pill is last.
+    end_room: Rc<Cell<f32>>,
     /// Which pills drop their label and how many of the last ones wait in the "+N" pill.
     plan: Rc<RefCell<StripPlan>>,
     /// The "+N" pill's width at its last paint (unscaled).
@@ -105,14 +113,17 @@ pub(super) enum StripItem {
         /// The label's width (unscaled), which dropping it frees.
         label: f32,
     },
+    /// A hidden page's pill (minimized_pages.rs), at a width known before it is drawn.
+    Page,
     Overflow,
 }
 
-/// How the row fits: the panel pills that drop their label, and how many of the last panel pills
-/// wait in the "+N" pill.
+/// How the row fits: the panel pills that drop their label, the page pills that drop their count
+/// too, and how many of the last panel pills wait in the "+N" pill.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct StripPlan {
     collapsed: HashSet<String>,
+    tiny: HashSet<String>,
     hidden: usize,
 }
 
@@ -143,31 +154,55 @@ pub(super) fn plan_strip(
     overflow: f32,
     gap: f32,
 ) -> (usize, usize) {
+    let tiers: Vec<(f32, f32, f32)> = pills
+        .iter()
+        .map(|(full, icon)| (*full, *icon, *icon))
+        .collect();
+    let (hidden, collapsed, _) = plan_strip_tiers(avail, fixed, &tiers, overflow, gap);
+    (hidden, collapsed)
+}
+
+/// `plan_strip` for pills with a third, narrowest width (a hidden page's pill, minimized_pages.rs:
+/// full, icon and count, icon and dot; a panel pill's last two are the same). The last pills shown
+/// take their narrowest width only once every pill shown has dropped its label, and before any
+/// goes into the "+N" pill: `(hidden, collapsed, tiny)`, `tiny` of the last `collapsed`.
+pub(super) fn plan_strip_tiers(
+    avail: f32,
+    fixed: &[f32],
+    pills: &[(f32, f32, f32)],
+    overflow: f32,
+    gap: f32,
+) -> (usize, usize, usize) {
     let n = pills.len();
     for hidden in 0..=n {
         let visible = n - hidden;
         for collapsed in 0..=visible {
-            let mut total: f32 = fixed.iter().sum();
-            let mut count = fixed.len();
-            for (index, (full, icon)) in pills[..visible].iter().enumerate() {
-                total += if index >= visible - collapsed {
-                    *icon
-                } else {
-                    *full
-                };
-                count += 1;
-            }
-            if hidden > 0 {
-                total += overflow;
-                count += 1;
-            }
-            total += gap * count.saturating_sub(1) as f32;
-            if total <= avail + 0.5 {
-                return (hidden, collapsed);
+            let tiny_most = if collapsed == visible { visible } else { 0 };
+            for tiny in 0..=tiny_most {
+                let mut total: f32 = fixed.iter().sum();
+                let mut count = fixed.len();
+                for (index, (full, icon, least)) in pills[..visible].iter().enumerate() {
+                    total += if index >= visible - tiny {
+                        *least
+                    } else if index >= visible - collapsed {
+                        *icon
+                    } else {
+                        *full
+                    };
+                    count += 1;
+                }
+                if hidden > 0 {
+                    total += overflow;
+                    count += 1;
+                }
+                total += gap * count.saturating_sub(1) as f32;
+                if total <= avail + 0.5 {
+                    return (hidden, collapsed, tiny);
+                }
             }
         }
     }
-    (n, 0)
+    (n, 0, 0)
 }
 
 impl PillsStripCells {
@@ -241,22 +276,40 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> Vec<(StripItem, AnyElement)> {
         let ids = self.strip_pill_ids();
-        let panel: Vec<Value> = ids
-            .iter()
-            .filter_map(|id| {
+        // A hidden page's pill comes first among them, so it is the last to shrink or go into
+        // the "+N" pill (minimized_pages.rs).
+        let mut presets = HashMap::new();
+        let pages = self.minimized_pages.iter().map(|page| {
+            presets.insert(page.pill_id(), self.page_pill_widths(page, p, cx));
+            page.overflow_row()
+        });
+        let panel: Vec<Value> = pages
+            .collect::<Vec<_>>()
+            .into_iter()
+            .chain(ids.iter().filter_map(|id| {
                 self.snapshot["chatPills"]
                     .as_array()?
                     .iter()
                     .find(|pill| pill["id"] == *id)
                     .cloned()
-            })
+            }))
             .collect();
+        *self.pills_strip.presets.borrow_mut() = presets;
         let plan = self.pills_strip.plan.borrow().clone();
         let hidden = plan.hidden.min(panel.len());
         let visible = panel.len() - hidden;
         let labels: Vec<f32> = panel
             .iter()
-            .map(|pill| self.pill_label_width(&super::transcript::text(pill, "label"), p, cx))
+            .map(|pill| {
+                if self
+                    .minimized_page(&super::transcript::text(pill, "id"))
+                    .is_some()
+                {
+                    0.0
+                } else {
+                    self.pill_label_width(&super::transcript::text(pill, "label"), p, cx)
+                }
+            })
             .collect();
         *self.pills_strip.order.borrow_mut() = panel
             .iter()
@@ -273,6 +326,17 @@ impl NativeChatView {
         for (pill, label) in panel[..visible].iter().zip(&labels) {
             let id = super::transcript::text(pill, "id");
             let collapsed = plan.collapsed.contains(&id);
+            if let Some(page) = self.minimized_page(&id) {
+                let tier = if plan.tiny.contains(&id) {
+                    super::minimized_pages::PageTier::Icon
+                } else if collapsed {
+                    super::minimized_pages::PageTier::Count
+                } else {
+                    super::minimized_pages::PageTier::Full
+                };
+                pills.push((StripItem::Page, self.minimized_page_pill(page, tier, p, cx)));
+                continue;
+            }
             pills.push((
                 StripItem::Panel {
                     id,
@@ -374,7 +438,7 @@ impl NativeChatView {
     /// Whether the strip shows: a draft is offered, or the transcript has rows and a pill, timer or
     /// view chip calls for it.
     pub(super) fn pills_strip_shown(&self) -> bool {
-        if self.saved_draft_offered() {
+        if self.saved_draft_offered() || !self.minimized_pages.is_empty() {
             return true;
         }
         let armed = self
@@ -449,11 +513,23 @@ impl NativeChatView {
             .map(|pill| (StripItem::Fixed, pill))
             .chain(pills)
             .collect();
+        // A page pill's floating x overhangs its corner; at the row's end the row keeps room for it,
+        // which the fit counts (`pills_strip_fit`).
+        let end_room = match scrolling.last() {
+            Some((StripItem::Page, _))
+                if !crate::app::window::round_close_button::close_buttons_on_left() =>
+            {
+                super::minimized_pages::X_OUTSET
+            }
+            _ => 0.0,
+        };
+        self.pills_strip.end_room.set(end_room);
         let row = div()
             .flex()
             .items_center()
             .flex_shrink_0()
             .gap(px(6.0 * s))
+            .pr(px(end_room * s))
             .children(self.measured_strip_pills(scrolling, s));
         let tint = p.foreground.opacity(STRIP_TINT);
         let measured = self.pills_strip.bounds.clone();
@@ -571,7 +647,7 @@ impl NativeChatView {
                                         }
                                     }
                                     StripItem::Overflow => overflow_width.set(Some(width)),
-                                    StripItem::Fixed => {}
+                                    StripItem::Fixed | StripItem::Page => {}
                                 }
                             },
                             |_, _, _, _| {},
@@ -606,6 +682,8 @@ impl NativeChatView {
         let widths = cells.widths.clone();
         let plan = cells.plan.clone();
         let overflow_width = cells.overflow_width.clone();
+        let presets = cells.presets.clone();
+        let end_room = cells.end_room.clone();
         let chat = cx.entity_id();
         div()
             .relative()
@@ -620,7 +698,7 @@ impl NativeChatView {
             .child(
                 canvas(
                     move |view, _, cx| {
-                        let avail = f32::from(view.size.width) / s;
+                        let avail = f32::from(view.size.width) / s - end_room.get();
                         let fixed: Vec<f32> = items
                             .borrow()
                             .iter()
@@ -630,17 +708,21 @@ impl NativeChatView {
                             .collect();
                         let order = order.borrow();
                         let current = plan.borrow().clone();
-                        let measured: Option<Vec<(f32, f32)>> = order
+                        let measured: Option<Vec<(f32, f32, f32)>> = order
                             .iter()
                             .map(|(id, label)| {
+                                if let Some(preset) = presets.borrow().get(id) {
+                                    return Some(*preset);
+                                }
                                 let (full, icon) =
                                     widths.borrow().get(id).copied().unwrap_or_default();
                                 pill_widths(full, icon, *label)
+                                    .map(|(full, icon)| (full, icon, icon))
                             })
                             .collect();
                         let next = match measured {
                             Some(pills) => {
-                                let (hidden, collapsed) = plan_strip(
+                                let (hidden, collapsed, tiny) = plan_strip_tiers(
                                     avail,
                                     &fixed,
                                     &pills,
@@ -648,11 +730,15 @@ impl NativeChatView {
                                     PILL_GAP,
                                 );
                                 let visible = order.len() - hidden;
-                                StripPlan {
-                                    collapsed: order[visible - collapsed..visible]
+                                let ids = |from: usize| {
+                                    order[visible - from..visible]
                                         .iter()
                                         .map(|(id, _)| id.clone())
-                                        .collect(),
+                                        .collect()
+                                };
+                                StripPlan {
+                                    collapsed: ids(collapsed),
+                                    tiny: ids(tiny),
                                     hidden,
                                 }
                             }

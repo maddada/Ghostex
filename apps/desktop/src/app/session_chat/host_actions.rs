@@ -271,6 +271,18 @@ impl GhostexGpuiApp {
             self.picture_unopened_page(session_id, &message, cx);
             return;
         }
+        // A hidden page's pill in the pills bar (native_chat/minimized_pages.rs): a click brings
+        // the page back, its x closes it for good (app/visual_page_hidden.rs).
+        if matches!(action, "showMinimizedPage" | "closeMinimizedPage") {
+            if let Some(key) = message.get("key").and_then(serde_json::Value::as_u64) {
+                if action == "showMinimizedPage" {
+                    self.show_hidden_visual_page(key, cx);
+                } else {
+                    self.close_hidden_visual_page(key, cx);
+                }
+            }
+            return;
+        }
         // The working card's Links pill (native_chat/links_pill.rs) opens the session's links list.
         if action == "sessionLinks" {
             if let (Some(key), Some(anchor)) = (

@@ -332,13 +332,16 @@ pub(crate) struct NativeChatView {
     pub(super) issue_link_base: Option<gpui::SharedString>,
     /// Markdown with its `#123` links resolved under the base it was resolved with
     /// (rich_markdown.rs, `issue_linked`).
-    pub(super) issue_link_memo: std::cell::RefCell<(
-        Option<String>,
-        std::collections::HashMap<String, String>,
-    )>,
+    pub(super) issue_link_memo:
+        std::cell::RefCell<(Option<String>, std::collections::HashMap<String, String>)>,
     /// The working card's Links pill, read from the sidebar store's links for this session
     /// (links_pill.rs).
     pub(super) links_pill: Option<ghostex_gx_core::SessionLinksChatPill>,
+    /// The Ghostex pages this chat's cards opened that are hidden, read from the app
+    /// (minimized_pages.rs).
+    pub(super) minimized_pages: Vec<super::minimized_pages::MinimizedPage>,
+    /// The page pill the pointer is over, and the page pill whose floating x it is over.
+    pub(super) minimized_page_hover: (Option<u64>, Option<u64>),
     /// Open or closed as this pane last asked the shared runtime, held until its snapshot agrees.
     pub(super) search_pending_open: Option<bool>,
     /// The chat zoom this view's transcript rows were last measured at (zoom.rs).
@@ -667,6 +670,8 @@ impl NativeChatView {
             issue_link_base: None,
             issue_link_memo: Default::default(),
             links_pill: None,
+            minimized_pages: Vec::new(),
+            minimized_page_hover: (None, None),
             search_pending_open: None,
             drawn_zoom_percent: None,
             draft: String::new(),

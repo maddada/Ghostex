@@ -1,12 +1,17 @@
 //! Ghostex pages put aside: a page window hidden by a click outside it, its Hide button, a link
 //! that opened in the app's browser, or another page opening (window/visual_page_modal.rs). It
-//! keeps running with its window ordered out, and a tab after the session's title in the chat's
-//! header (render/workarea_header/breadcrumb.rs) brings it back or closes it for good.
+//! keeps running with its window ordered out, and a pill in the pills bar above the chat box of
+//! the chat whose card opened it (native_chat/minimized_pages.rs) brings it back or closes it for
+//! good.
 //!
 //! CDXC:SessionChat 2026-11-11 DECISION:
-//! User's picks on the hide-page mockup (page-links/hide-page.html). The button for a hidden page is a tab after the session's title at the left of the chat's header, naming the page (option C), one tab per hidden page, shown only in the header of the chat the page came from and only while it is hidden. A dot on the tab says a question on the page is still unanswered, with no numbers (option C). Pointing at the tab shows an x that closes the page for good (option A), with the user's note: "but please make the x appear like the one we show on toasts (floating on top right of it, appears on hover, doesn't push the text etc)": the toasts' round x, smaller, floating over the tab's corner on the side the toasts' x is on (`close_buttons_on_left`), never moving or shortening the tab's text. A hidden page is kept running (option A), so its tab brings it back at once, where it was, at its size, scrolled where it was, with every pick and note as it was. Closing a hidden page keeps its saved answers with the page, so its card opens it again with them. A page whose answers are sent closes itself, which takes it off the header.
+//! User's picks on the hide-page mockup (page-links/hide-page.html): one button per hidden page, shown only in the chat the page came from and only while it is hidden. Pointing at it shows an x that closes the page for good (option A), with the user's note: "but please make the x appear like the one we show on toasts (floating on top right of it, appears on hover, doesn't push the text etc)": the toasts' round x, smaller, floating over the button's corner on the side the toasts' x is on (`close_buttons_on_left`), never moving or shortening its text. A hidden page is kept running (option A), so its button brings it back at once, where it was, at its size, scrolled where it was, with every pick and note as it was. Closing a hidden page keeps its saved answers with the page, so its card opens it again with them. A page whose answers are sent closes itself, which takes its button away.
+//!
+//! CDXC:SessionChat 2026-11-12 DECISION:
+//! User, of the hidden page's tab squeezed and cut off in the chat's header between the back and forward buttons and the agent's buttons: "when we minimize the page there's no space for the minimized page here at the top. please move them to the pills bar above the composer instead, make the pill have preset width not too wide and make sure it makes sense in terms turning to icon with qs answered only on narrow screen". The button is a pill in the pills bar above the chat box, no longer a tab in the header: a preset width with the page's icon, its title cut short and its answered count ("3/16"), dropping the title on a narrow chat and the count on the narrowest, where a dot says questions are unanswered (native_chat/minimized_pages.rs). Supersedes the header tab (option C) and its count-less dot (option C) of 2026-11-11.
 
 use crate::app::native_app_modal_lifecycle::NativeAppModal;
+use crate::app::native_chat::minimized_pages::MinimizedPage;
 use crate::app::window::visual_page_modal::GpuiVisualPageModalWindow;
 use crate::*;
 use gpui::{Entity, WindowHandle};
@@ -17,26 +22,6 @@ pub(crate) struct HiddenVisualPage {
     pub(crate) key: u64,
     window: WindowHandle<Root>,
     view: Entity<GpuiVisualPageModalWindow>,
-    /// The pointer is over its tab, or over the tab's x, which overhangs the tab's corner. The
-    /// x shows while either is true, so the tab and its x are one hover area whichever of the two
-    /// hears about a move between them first.
-    over_tab: bool,
-    over_x: bool,
-}
-
-/// The part of a hidden page's tab the pointer is over (`set_hidden_visual_page_tab_hovered`).
-#[derive(Clone, Copy)]
-pub(crate) enum HiddenVisualPageTabPart {
-    Tab,
-    X,
-}
-
-/// What a hidden page's tab shows.
-pub(crate) struct HiddenVisualPageTab {
-    pub(crate) key: u64,
-    pub(crate) title: String,
-    pub(crate) questions_left: bool,
-    pub(crate) hovered: bool,
 }
 
 /// The window's native view, for `ghostex_capture::platform`'s hide and show.
@@ -99,11 +84,10 @@ impl GhostexGpuiApp {
             key,
             window: modal.window,
             view,
-            over_tab: false,
-            over_x: false,
         });
         self.sync_app_modal_over_chat(cx);
         self.restore_keyboard_focus_after_app_modal(cx);
+        self.notify_minimized_page_chats(cx);
         cx.notify();
         true
     }
@@ -119,6 +103,7 @@ impl GhostexGpuiApp {
             return;
         };
         let page = self.hidden_visual_pages.remove(index);
+        self.notify_minimized_page_chats(cx);
         if !self.hide_visual_page_modal(cx) {
             self.remove_gpui_app_modal_window_without_focus_restore(cx);
             self.remove_native_app_modal_window(cx);
@@ -162,6 +147,7 @@ impl GhostexGpuiApp {
         let _ = page
             .window
             .update(cx, |_, window, _| window.remove_window());
+        self.notify_minimized_page_chats(cx);
         cx.notify();
     }
 
@@ -173,47 +159,35 @@ impl GhostexGpuiApp {
             .map(|page| page.key)
     }
 
-    /// The tabs of the pages `session_id`'s card opened that are hidden, oldest first.
-    pub(crate) fn hidden_visual_page_tabs(
+    /// The pills of the pages `session_id`'s card opened that are hidden, oldest first
+    /// (native_chat/minimized_pages.rs reads them through its `visual_popup.rs`).
+    pub(crate) fn minimized_page_pills(
         &self,
         session_id: TerminalSessionId,
         cx: &gpui::App,
-    ) -> Vec<HiddenVisualPageTab> {
+    ) -> Vec<MinimizedPage> {
         self.hidden_visual_pages
             .iter()
             .filter_map(|page| {
                 let view = page.view.read(cx);
-                (view.source_session() == Some(session_id)).then(|| HiddenVisualPageTab {
+                (view.source_session() == Some(session_id)).then(|| MinimizedPage {
                     key: page.key,
                     title: view.title().to_string(),
                     questions_left: view.questions_left(),
-                    hovered: page.over_tab || page.over_x,
+                    counts: view.question_counts(),
                 })
             })
             .collect()
     }
 
-    pub(crate) fn set_hidden_visual_page_tab_hovered(
-        &mut self,
-        key: u64,
-        part: HiddenVisualPageTabPart,
-        hovered: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(page) = self
-            .hidden_visual_pages
-            .iter_mut()
-            .find(|page| page.key == key)
-        else {
-            return;
-        };
-        let flag = match part {
-            HiddenVisualPageTabPart::Tab => &mut page.over_tab,
-            HiddenVisualPageTabPart::X => &mut page.over_x,
-        };
-        if *flag != hovered {
-            *flag = hovered;
-            cx.notify();
+    /// The chats draw their pills from the hidden pages, so they draw again when those change.
+    pub(crate) fn notify_minimized_page_chats(&self, cx: &mut gpui::Context<Self>) {
+        for view in self
+            .native_chat_views
+            .values()
+            .chain(self.side_panel_chat_views())
+        {
+            view.update(cx, |_, cx| cx.notify());
         }
     }
 }

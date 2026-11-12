@@ -2163,8 +2163,11 @@ answer it); until then the card shows the page's file name. On desktop the card 
 the page where Settings > Chat > Open Ghostex pages in says: Popup (the default), a
 floating window over the chat; Files, a page tab in the Files view, whose header
 can open it in your browser or close it; or System browser, your default web
-browser. Your answers reach the agent the same way from all three, and the
-picture viewer and the remembered scroll position below work in all three. A
+browser. The popup hides, still open, when you click outside it or press its Hide
+button: a pill in the row above the chat box (the page's title and how many of its
+questions you answered, for example 3/16) brings it back as you left it, and the x that
+shows when you point at the pill closes it. Your answers reach the agent the same way
+from all three, and the picture viewer and the remembered scroll position below work in all three. A
 page with no questions (a report or a mockup to look at) waits for you too: it
 ends with a "Reply about this page" box and a Mark as seen button, and until you
 press it the page sits in the list above the chat box of things that need you

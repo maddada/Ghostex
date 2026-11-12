@@ -11,7 +11,7 @@
 //! CDXC:SessionChat 2026-10-22 DECISION:
 //! User: the page window is harder to lose: clicking outside it no longer closes it on the first click, "have to click twice". The first click away arms it for `CLICK_AWAY_ARMED_FOR` (2 seconds, while the header says "Click outside again to close") and a second click away within that time closes it; Escape and the close button still close it at once. This supersedes the single click away of the 2026-10-09 decision above.
 //! CDXC:SessionChat 2026-11-11 DECISION:
-//! User's picks on the hide-page mockup (page-links/hide-page.html): a page hides instead of closing (option C of "When the page hides") when a link in it opens in the app's browser, from the Hide button beside its close x, and on any click outside it, which replaces the two clicks that closed it above; the x, Escape and sending its answers still close it for good. A hidden page is kept running (option A of "Bringing it back"): its window is only ordered out, so its tab in the chat's header (app/visual_page_hidden.rs) brings it back at once in the same place and size, scrolled where it was, with every pick and note as it was. Hidden, it has no keyboard and takes no clicks.
+//! User's picks on the hide-page mockup (page-links/hide-page.html): a page hides instead of closing (option C of "When the page hides") when a link in it opens in the app's browser, from the Hide button beside its close x, and on any click outside it, which replaces the two clicks that closed it above; the x, Escape and sending its answers still close it for good. A hidden page is kept running (option A of "Bringing it back"): its window is only ordered out, so its pill in the chat's pills bar (app/visual_page_hidden.rs) brings it back at once in the same place and size, scrolled where it was, with every pick and note as it was. Hidden, it has no keyboard and takes no clicks.
 //! CDXC:SessionChat 2026-10-09 WHY:
 //! The page is loaded with `#gx-theme=light|dark`, which the bootstrap every published page starts with (server/src/visual_pages/theme.rs) reads before first paint, so the page wears the app's appearance rather than the system's. Links the page opens go to the reader's browser, so the window only ever shows the page itself.
 //! CDXC:SessionChat 2026-11-04 DECISION:
@@ -66,8 +66,9 @@ pub(crate) enum VisualPageModalCommand {
     /// A click away or the Hide button: the window is put aside, still running
     /// (app/visual_page_hidden.rs).
     Hide,
-    /// What its tab shows while it is hidden changed: whether a question is unanswered
-    /// (`source.rs`), or the page's own title arrived for a page opened without one.
+    /// What its pill shows while it is hidden changed: whether a question is unanswered and how
+    /// many are answered (`source.rs`), or the page's own title arrived for a page opened without
+    /// one.
     TabChanged,
     /// Closes the window and opens the page in the reader's browser.
     OpenInBrowser { url: String },
@@ -84,17 +85,19 @@ pub(crate) struct GpuiVisualPageModalWindow {
     host: VisualPageModalHost,
     /// Which page window this is, for the app to tell a hidden one's commands from the shown one's.
     key: u64,
-    /// The chat whose card opened the page, whose header shows its tab while it is hidden.
+    /// The chat whose card opened the page, whose pills bar shows its pill while it is hidden.
     source_session: Option<TerminalSessionId>,
     /// gxserver says a question on the page has no answer yet (`source.rs`).
     questions_left: bool,
+    /// How many of the page's questions are answered, and how many it asks (`source.rs`).
+    question_counts: Option<(u64, u64)>,
     /// The window is put aside (`set_hidden`).
     hidden: bool,
     /// When the window was last shown; presses elsewhere from before do not count.
     shown_at: Instant,
     palette: ModalPalette,
     url: String,
-    /// The page's title, for screen readers and its tab while hidden: the page shows its own.
+    /// The page's title, for screen readers and its pill while hidden: the page shows its own.
     title: String,
     /// `title` came with the open (a page card); a page opened from a plain link to its address
     /// has none, so it takes the page's own title once the page reports it.
@@ -190,6 +193,7 @@ impl GpuiVisualPageModalWindow {
             key,
             source_session,
             questions_left: false,
+            question_counts: None,
             hidden: false,
             shown_at: Instant::now(),
             palette,
@@ -481,7 +485,7 @@ impl GpuiVisualPageModalWindow {
     }
 
     /// A page opened without a title (a plain link to its address) is named by its own title,
-    /// which its tab shows while it is hidden.
+    /// which its pill shows while it is hidden.
     fn take_page_title(&mut self, title: String, cx: &mut Context<Self>) {
         let title = title.trim();
         if self.title_known || title.is_empty() || title.starts_with("http") {
@@ -513,8 +517,12 @@ impl GpuiVisualPageModalWindow {
         self.questions_left
     }
 
+    pub(crate) fn question_counts(&self) -> Option<(u64, u64)> {
+        self.question_counts
+    }
+
     /// The app put the window aside or brought it back. Hiding saves the page's draft at once and
-    /// asks gxserver again whether questions are left, so the tab's dot counts the last pick.
+    /// asks gxserver again whether questions are left, so the pill's count counts the last pick.
     pub(crate) fn set_hidden(&mut self, hidden: bool, cx: &mut Context<Self>) {
         self.hidden = hidden;
         if hidden {

@@ -328,7 +328,7 @@ impl GhostexGpuiApp {
     /// `remote_project` is the machine whose session published the open page, `None` for this
     /// computer's.
     /// `key` is the page window that sent it (`GpuiVisualPageModalWindow::key`): a hidden page's
-    /// commands only repaint its tab.
+    /// commands only repaint its pill.
     fn handle_gpui_visual_page_modal_command(
         &mut self,
         command: VisualPageModalCommand,
@@ -337,7 +337,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         if matches!(command, VisualPageModalCommand::TabChanged) {
-            cx.notify();
+            self.notify_minimized_page_chats(cx);
             return;
         }
         if self.shown_visual_page_key(cx) != Some(key) {
