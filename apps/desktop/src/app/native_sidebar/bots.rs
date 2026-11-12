@@ -12,6 +12,7 @@ use gpui::{
     AnyElement, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled,
     div, px, rgb,
 };
+use gpui_component::h_flex;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 use serde_json::json;
@@ -179,7 +180,69 @@ impl GhostexGpuiApp {
     }
 }
 
+impl GhostexGpuiApp {
+    /// The New bot row after the last bot, laid out like the bot rows and the Automations row
+    /// (automations_row.rs) so they line up. It opens the New bot dialog.
+    ///
+    /// CDXC:Bots 2026-11-12 DECISION:
+    /// User: "Yes, add it" to a New bot button in the Bots list that asks for a name and creates the Hermes profile. The Bots list has no header of its own to hold a "+", so New bot is a row at the end of the list, the way + New group ends the bot feed's groups.
+    pub(crate) fn render_native_sidebar_new_bot_row(
+        &self,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let scale = appearance.scale;
+        h_flex()
+            .id("native-sidebar-new-bot-row")
+            .role(gpui::Role::Button)
+            .aria_label("New bot")
+            .h(px(30.0 * scale))
+            .ml(px(21.0 * scale))
+            .mr(px(8.0 * scale))
+            .mb(px(10.0 * scale))
+            .pl(px(5.0 * scale))
+            .pr(px(6.0 * scale))
+            .gap(px(10.0 * scale))
+            .rounded(px(5.0 * scale))
+            .cursor_default()
+            .text_color(appearance.muted)
+            .hover(|row| row.bg(appearance.session_hover))
+            .child(titlebar_svg_icon(
+                "titlebar/plus.svg",
+                16.0 * scale,
+                appearance.muted,
+            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .font_weight(gpui::FontWeight::LIGHT)
+                    .child("New bot"),
+            )
+            .on_click(cx.listener(|app, _, _, cx| {
+                cx.stop_propagation();
+                app.open_gpui_new_bot_modal(cx);
+            }))
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    "new-bot",
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
+            .into_any_element()
+    }
+}
+
 impl NativeSidebarGroup {
+    /// The Hermes profile of a bot's group, and `None` on every other group (gx_store/sidebar_snapshot.rs).
+    pub(crate) fn bot_profile(&self) -> Option<&str> {
+        self.project_context.as_ref()?.get("botProfile")?.as_str()
+    }
+
     /// Whether the bot's gateway runs, and `None` on every group that is not a bot's: the snapshot
     /// sets `botGatewayRunning` on bot projects only (gx_store/sidebar_snapshot.rs).
     pub(crate) fn bot_gateway_running(&self) -> Option<bool> {

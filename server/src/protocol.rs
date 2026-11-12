@@ -1013,6 +1013,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/postSlackWorkingThread" => full_local(path),
         "/api/syncBotProjects" => full_local(path),
         /*
+        CDXC:Bots 2026-11-12 WHY:
+        New bot runs `hermes profile create` on the computer whose Bots list it was pressed in, so a
+        sidebar showing another computer reaches that computer's gxserver; it only adds a profile,
+        the way starting a bot's session there already does.
+        */
+        "/api/createBot" => remote_allowed(path),
+        /*
         CDXC:Bots 2026-09-27 WHY:
         The feed reads this computer's Hermes cron output, which holds whole
         agent reports, so only the desktop on this computer may read it.

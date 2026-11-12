@@ -267,6 +267,7 @@ export type GxserverEndpointPath =
   | '/api/searchProjectFiles'
   | '/api/addProjectPath'
   | '/api/syncBotProjects'
+  | '/api/createBot'
   | '/api/listBotFeed'
   | '/api/listProjectWorktrees'
   | '/api/createProjectWorktree'

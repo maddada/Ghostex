@@ -364,6 +364,11 @@ impl GhostexGpuiApp {
                                             }
                                         },
                                     ))
+                                    .when(classic && content.bots_mode, |column| {
+                                        column.child(
+                                            self.render_native_sidebar_new_bot_row(&appearance, cx),
+                                        )
+                                    })
                                     .children(
                                         content.show_all_projects_row.filter(|_| classic).map(
                                             |row| {

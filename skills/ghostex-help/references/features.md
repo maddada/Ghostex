@@ -4261,7 +4261,18 @@ before.
   left open.
 - **One row per profile**: the default profile shows as Hermes and every
   folder in `~/.hermes/profiles` under its own name. They are found
-  automatically, and a profile you add shows up the next time you open Bots.
+  automatically, and a profile you add in a terminal shows up the next time
+  you open Bots.
+- **New bot**: the New bot row at the end of the list makes a bot for you on
+  the computer the list shows (a connected computer included). It asks for a
+  name (lowercase letters and digits, plus `-` and `_` after the first, which
+  is also the name `hermes -p` takes), an optional one-line description, and
+  what to start from: a copy of the bot you have open (Hermes if none), which
+  copies its settings, `SOUL.md` and skills but not its Discord or Telegram
+  tokens, or Blank. Create runs `hermes profile create` there; if Hermes
+  refuses (the name is taken or reserved) the dialog says why and stays open.
+  The new bot appears in the list at once and is selected, so its Edit SOUL
+  button is right there to give it a personality.
   A profile folder you already added as an ordinary project stays a project
   and gets no bot row. Bots never appear in the Projects list, belong to no
   Space, and can be dragged to reorder them among themselves.

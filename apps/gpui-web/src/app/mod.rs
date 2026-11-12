@@ -47,6 +47,7 @@ mod add_session_link_modal_lifecycle;
 mod coordinator_details_modal_lifecycle;
 mod create_linear_ticket_modal_lifecycle;
 mod export_transcript_modal_lifecycle;
+mod new_bot_modal_lifecycle;
 mod new_coordinator_modal_lifecycle;
 mod new_gbot_modal_lifecycle;
 pub(crate) mod quick_access;

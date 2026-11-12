@@ -224,6 +224,9 @@ pub(super) async fn route_projects_http(
                 ),
             }
         }
+        "/api/createBot" => {
+            bot_create::create_bot_http(state.clone(), endpoint.path, request_id, body_json).await
+        }
         "/api/listBotFeed" => {
             let feed_state = state.clone();
             match tokio::task::spawn_blocking(move || {

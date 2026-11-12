@@ -59,6 +59,77 @@ pub(crate) fn is_bot_profile_name(profile: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
 }
 
+/// A name New bot may give a new profile: Hermes's own rule (`PROFILE_ID_RE` in Hermes
+/// `hermes_constants.py`), lowercase letters and digits, then also `-` and `_`, at most 64. Hermes
+/// lowercases a name it is given, so an uppercase letter is refused here rather than renamed behind
+/// the user's back. `default` is the Hermes bot itself.
+pub(crate) fn is_new_bot_profile_name(profile: &str) -> bool {
+    let mut characters = profile.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_lowercase() || first.is_ascii_digit())
+        && profile.len() <= 64
+        && characters.all(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || matches!(character, '-' | '_')
+        })
+        && profile != DEFAULT_BOT_PROFILE
+}
+
+/// `hermes profile create`'s arguments for New bot.
+///
+/// CDXC:Bots 2026-11-12 DECISION:
+/// User: "Yes, add it" to a New bot button that asks for a name and creates the profile. It runs `hermes profile create <name>`, with `--clone-from <bot>` when it starts from a copy of a bot (Hermes copies config.yaml, .env, SOUL.md and skills, not the Discord or Telegram tokens) and `--description` when one is given. It never passes `--clone-channels`: two profiles holding one bot token collide.
+pub(crate) fn hermes_profile_create_args(
+    profile: &str,
+    clone_from: Option<&str>,
+    description: Option<&str>,
+) -> Vec<String> {
+    let mut args = vec![
+        "profile".to_string(),
+        "create".to_string(),
+        profile.to_string(),
+    ];
+    if let Some(source) = clone_from {
+        args.extend(["--clone-from".to_string(), source.to_string()]);
+    }
+    if let Some(description) = description {
+        args.extend(["--description".to_string(), description.to_string()]);
+    }
+    args
+}
+
+/// What Hermes said when it refused to create a profile: the first sentence of its `Error:` line
+/// ("A profile named 'harry' already exists."; the rest names `hermes` commands), otherwise its
+/// last line.
+pub(crate) fn hermes_refusal(output: &str) -> Option<String> {
+    let lines = || {
+        output
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+    };
+    lines()
+        .find_map(|line| line.strip_prefix("Error:").map(str::trim))
+        .or_else(|| lines().last())
+        .map(|said| match said.find(". ") {
+            Some(end) => said[..=end].to_string(),
+            None => said.to_string(),
+        })
+        // Hermes's "is reserved — it collides …" reads the same with a colon.
+        .map(|said| said.replace(" \u{2014} ", ": "))
+}
+
+/// The profile a new bot is made from: [`BotProfile`] for `profile` in `hermes_home`.
+pub(crate) fn new_bot_profile(hermes_home: &Path, profile: &str) -> BotProfile {
+    BotProfile {
+        profile: profile.to_string(),
+        name: display_name(profile),
+        path: bot_profile_home(hermes_home, profile),
+    }
+}
+
 /// A bot's Hermes home: `HERMES_HOME` itself for the default profile, `profiles/<profile>` for the
 /// others.
 pub(crate) fn bot_profile_home(hermes_home: &Path, profile: &str) -> PathBuf {

@@ -85,6 +85,7 @@ pub(crate) mod native_docs;
 pub(crate) mod native_kanban;
 pub(crate) mod native_sidebar;
 pub(crate) mod new_agent_session;
+pub(crate) mod new_bot_modal_lifecycle;
 pub(crate) mod new_coordinator_modal_lifecycle;
 pub(crate) mod new_gbot_modal_lifecycle;
 pub(crate) mod new_thread_picker_cloud_box;

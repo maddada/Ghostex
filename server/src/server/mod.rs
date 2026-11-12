@@ -126,6 +126,7 @@ mod autopilot_http;
 mod autopilot_judge;
 mod autopilot_runtime;
 pub mod background_tasks;
+mod bot_create;
 mod bot_sync;
 mod browser_tcp;
 mod cef_devtools;

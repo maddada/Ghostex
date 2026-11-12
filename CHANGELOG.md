@@ -5,6 +5,7 @@
 ### ✨ New
 
 - **Fork from a message:** the ⋯ menu under one of your messages, or under the agent's last reply of a turn, now has Fork from here. It starts a new Claude Code session beside the old one whose conversation ends at that message, named "Fork: <old name>", so you can try another direction from an earlier point while the original keeps going. On the phone it is in the message's long-press menu. Other agents keep Fork Session, which copies the whole conversation. ([#362](https://github.com/maddada/Ghostex/issues/362))
+- **New bot in the Bots list:** a New bot row at the end of the Bots list makes a Hermes bot for you, on this computer or the connected one the list shows. Give it a name, an optional one-line description, and start from a copy of the bot you have open (its settings, SOUL.md and skills, not its Discord or Telegram tokens) or from blank. It appears in the list at once and is selected, with Edit SOUL right there; if Hermes refuses the name, the dialog says why.
 
 ### 🩹 Fixes and polish
 

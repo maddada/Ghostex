@@ -643,11 +643,13 @@ fn project_context(group: &GroupView) -> Option<Value> {
             },
         }),
     );
-    if context.bot_profile.is_some() {
+    if let Some(profile) = &context.bot_profile {
         object.insert(
             "botGatewayRunning".to_string(),
             Value::Bool(context.bot_gateway_running),
         );
+        // New bot's "A copy of" names this bot's profile (new_bot_modal_lifecycle.rs).
+        object.insert("botProfile".to_string(), Value::String(profile.clone()));
     }
     // A GBot's look, which Main Hub's GBots section draws its row from (native_sidebar/gbots_rows.rs).
     if let Some(gbot) = &context.gbot {

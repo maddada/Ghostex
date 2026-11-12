@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|start-menu|chief-row|notice-modal|gbot-team|new-gbot|new-bot|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
     GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
@@ -103,6 +103,10 @@ mod gbot_team_modal;
 mod missing_project_folder_demo;
 #[path = "../app/window/missing_project_folder_modal.rs"]
 mod missing_project_folder_modal;
+#[path = "native_modal_demo/new_bot.rs"]
+mod new_bot_demo;
+#[path = "../app/window/new_bot_modal.rs"]
+mod new_bot_modal;
 #[path = "native_modal_demo/new_coordinator.rs"]
 mod new_coordinator_demo;
 #[path = "../app/window/new_coordinator_modal.rs"]
@@ -813,6 +817,7 @@ fn main() {
                 "gbot-settings" => gbot_settings_demo::open(&demo, cx),
                 "gbot-team" => gbot_team_demo::open(&demo, cx),
                 "new-gbot" => new_gbot_demo::open(&demo, cx),
+                "new-bot" => new_bot_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "page-window-band" => page_window_band_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),
