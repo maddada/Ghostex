@@ -67,6 +67,13 @@ pub(crate) struct SessionDetailsView {
     /// The cards were drawn since the panel was last off screen: their fold motions are watching
     /// the states they were drawn in (`DisclosureMotions::forget`).
     pub(super) drew: bool,
+    /// The tab on screen: 0 the first (the session and its Context card), 1 the second (the
+    /// context meter's details). Every opening starts on the first.
+    pub(super) tab: usize,
+    /// The next frame scrolls the panel to the Context card (a ring opened it).
+    pub(super) to_context: bool,
+    /// The floating card's scroll.
+    pub(super) menu_scroll: ScrollHandle,
 }
 
 impl NativeChatView {
@@ -81,6 +88,12 @@ impl NativeChatView {
             return;
         }
         self.session_details.wanted = wanted;
+        // Both rings open it on the first tab, at the Context card (the decision at `TABS` in
+        // gx-chat-core `session_details/document.rs`).
+        if wanted {
+            self.session_details.tab = 0;
+            self.session_details.to_context = true;
+        }
         if anchor.is_some() {
             self.session_details.anchor = anchor;
         }
@@ -117,6 +130,36 @@ impl NativeChatView {
         }
         self.host("showSessionDetails", json!({}), cx);
         true
+    }
+
+    /// The chat box's context ring, where the panel can go: the panel opens (or, open, comes back)
+    /// on its first tab at the Context card, in place of the Context window popover it replaces.
+    /// False leaves the click to the popover, for a chat with no panel.
+    pub(super) fn show_session_details_for_context(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.session_details_placeable() {
+            return false;
+        }
+        self.session_details.tab = 0;
+        self.session_details.to_context = true;
+        if !self.session_details.wanted {
+            self.host("showSessionDetails", json!({}), cx);
+        }
+        cx.notify();
+        true
+    }
+
+    /// Scrolls the panel to the Context card, once, when a ring asked for it.
+    fn scroll_session_details_to_context(&mut self, scale: f32) {
+        if !std::mem::take(&mut self.session_details.to_context) {
+            return;
+        }
+        let mut motions = self.disclosure_motion.borrow_mut();
+        let offset = cards::context_offset(&self.snapshot["sessionDetails"], &mut |key, open| {
+            motions.open_factor(key, open)
+        });
+        let point = gpui::point(px(0.0), px(-offset * scale));
+        self.session_details.scroll.set_offset(point);
+        self.session_details.menu_scroll.set_offset(point);
     }
 
     fn session_details_menu_open(&self, cx: &Context<Self>) -> bool {
@@ -244,9 +287,10 @@ impl NativeChatView {
         let scale = ChatAppearance::current(&self.snapshot).scale;
         let pane = f32::from(self.bounds.get().size.height) / scale;
         let mut motions = self.disclosure_motion.borrow_mut();
-        let content = cards::panel_height(&self.snapshot["sessionDetails"], &mut |key, open| {
-            motions.open_factor(key, open)
-        });
+        let details = &self.snapshot["sessionDetails"];
+        // Sized for the taller tab, so switching tabs never cuts the card; the other one scrolls.
+        let content = cards::panel_height(details, &mut |key, open| motions.open_factor(key, open))
+            .max(cards::usage_height(details));
         Some(content.min((pane - 56.0).max(200.0)))
     }
 
@@ -264,6 +308,7 @@ impl NativeChatView {
         // take over window glass, since the chat's own solid fill draws them as black slabs.
         let p = p.clone().on_window_glass(true);
         let body = self.session_details_cards(&p, window, cx);
+        self.scroll_session_details_to_context(p.scale);
         Some(
             div()
                 .id("chat-session-details-menu")
@@ -272,6 +317,7 @@ impl NativeChatView {
                 .size_full()
                 .min_h_0()
                 .overflow_y_scroll()
+                .track_scroll(&self.session_details.menu_scroll)
                 .child(body)
                 .into_any_element(),
         )
@@ -291,6 +337,7 @@ impl NativeChatView {
         }
         let s = p.scale;
         let body = self.session_details_cards(p, window, cx);
+        self.scroll_session_details_to_context(s);
         let column = div()
             .id("chat-session-details-dock")
             .role(gpui::Role::Group)

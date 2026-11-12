@@ -26,6 +26,10 @@ const SUBTITLE_HEIGHT: f32 = 20.0;
 const BAR_HEIGHT: f32 = 14.0;
 const SUMMARY_HEIGHT: f32 = 24.0;
 const NOTE_HEIGHT: f32 = 20.0;
+/// The tab bar over the cards: its 24 and the cards' gap under it.
+const TABS_HEIGHT: f32 = 24.0 + CARD_GAP;
+/// Compact context under the Context card's breakdown: the button and the room above it.
+const COMPACT_HEIGHT: f32 = 6.0 + 24.0;
 
 /// The disclosure keys of the panel's folds (`disclosure_motion.rs`).
 const MESSAGES_KEY: &str = "session-details:context:messages";
@@ -40,15 +44,15 @@ fn str_of(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
 }
 
-/// The card has something under its title to fold; the core says `foldable: false` for a Context
-/// card whose usage line and bar are all it holds.
+/// The card folds from its title. The core says `foldable: false` for a Context card whose usage
+/// line and bar are all it holds, and `pinnedOpen` for a card that is always open (Context, Agent).
 fn foldable(section: &Value) -> bool {
-    section["foldable"] != false
+    section["foldable"] != false && section["pinnedOpen"] != true
 }
 
-/// The card's body is not drawn: the user folded it, or it has none to show.
+/// The card's body is not drawn: the user folded it, or it has none to show and is not pinned open.
 fn shut(section: &Value) -> bool {
-    section["collapsed"] == true || !foldable(section)
+    section["collapsed"] == true || (section["foldable"] == false && section["pinnedOpen"] != true)
 }
 
 fn len(value: &Value, key: &str) -> usize {
@@ -78,78 +82,131 @@ fn swatch(key: &str, p: &ChatAppearance) -> Hsla {
 /// fold is open (0 shut, 1 open) given its key and whether it is open now, so the card's window
 /// follows a fold that is still easing instead of clipping it.
 pub(super) fn panel_height(details: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
-    let mut total = 0.0;
     let sections = details["sections"]
         .as_array()
         .map_or(&[][..], Vec::as_slice);
+    let mut total = tabs_height(details);
     for (index, section) in sections.iter().enumerate() {
         if index > 0 {
             total += CARD_GAP;
         }
-        total += CARD_PADDING_Y * 2.0 + HEADER_HEIGHT;
-        let id = section["id"].as_str().unwrap_or_default();
-        // Context's usage line and bar stay under its title, folded or not.
-        if id == "context" {
-            total += SUMMARY_HEIGHT + BAR_HEIGHT;
-        }
-        let fold = open(&card_key(id), !shut(section));
-        if fold <= 0.0 {
-            continue;
-        }
-        let sketched = section["skeletonRows"].as_u64().unwrap_or(0) as f32 * ROW_HEIGHT;
-        if section["loading"] == true {
-            total += sketched * fold;
-            continue;
-        }
-        let body = sketched
-            + match id {
-                "context" => {
-                    let messages = len(section, "messages") as f32
-                        * open(MESSAGES_KEY, section["messagesOpen"] == true);
-                    let status = if section["refresh"].is_object() {
-                        NOTE_HEIGHT
-                    } else {
-                        0.0
-                    };
-                    (len(section, "rows") + len(section, "deferred")) as f32 * ROW_HEIGHT
-                        + messages * ROW_HEIGHT
-                        + status
-                }
-                "connectors" => section["groups"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .map(|group| SUBTITLE_HEIGHT + len(group, "rows").max(1) as f32 * ROW_HEIGHT)
-                    .sum(),
-                "skills" => {
-                    let used = if section["usedEmpty"].is_string() {
-                        len(section, "used").max(1)
-                    } else {
-                        len(section, "used")
-                    };
-                    let all = len(section, "all") as f32
-                        * open(SKILLS_ALL_KEY, section["allOpen"] == true);
-                    (used + 1) as f32 * ROW_HEIGHT + all * ROW_HEIGHT
-                }
-                "background" => {
-                    let finished = len(section, "finished") as f32
-                        * open(BACKGROUND_FINISHED_KEY, section["finishedOpen"] == true);
-                    let toggle = usize::from(len(section, "finished") > 0);
-                    (len(section, "running") + toggle) as f32 * ROW_HEIGHT + finished * ROW_HEIGHT
-                }
-                "changes" => ROW_HEIGHT,
-                "tasks" => {
-                    let fold = usize::from(section["foldAction"].is_object());
-                    (len(section, "rows") + fold) as f32 * ROW_HEIGHT
-                }
-                _ => len(section, "rows") as f32 * ROW_HEIGHT,
-            };
-        total += body * fold;
+        total += section_height(section, open);
     }
     if sections.is_empty() {
         total = NOTE_HEIGHT * 2.0;
     }
     total + 4.0
+}
+
+/// The tab bar's height, while the core names tabs (an older core sends none).
+fn tabs_height(details: &Value) -> f32 {
+    if len(details, "tabs") > 1 {
+        TABS_HEIGHT
+    } else {
+        0.0
+    }
+}
+
+/// The second tab's height: its cards, or the line saying none is picked, then Choose details.
+pub(super) fn usage_height(details: &Value) -> f32 {
+    let cards = details["usage"]["cards"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice);
+    let mut total = tabs_height(details);
+    for card in cards {
+        total += CARD_PADDING_Y * 2.0 + HEADER_HEIGHT + len(card, "rows") as f32 * ROW_HEIGHT;
+        total += CARD_GAP;
+    }
+    if cards.is_empty() {
+        total += NOTE_HEIGHT * 2.0 + CARD_GAP;
+    }
+    total + ROW_HEIGHT + 4.0
+}
+
+/// How far down the first tab the Context card starts, for the rings that open the panel there.
+pub(super) fn context_offset(details: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
+    let mut total = tabs_height(details);
+    for section in details["sections"].as_array().into_iter().flatten() {
+        if section["id"] == "context" {
+            break;
+        }
+        total += section_height(section, open) + CARD_GAP;
+    }
+    total
+}
+
+/// One card's height: its padding and title, the part of its body still showing.
+fn section_height(section: &Value, open: &mut dyn FnMut(&str, bool) -> f32) -> f32 {
+    let mut total = CARD_PADDING_Y * 2.0 + HEADER_HEIGHT;
+    let id = section["id"].as_str().unwrap_or_default();
+    // Context's usage line and bar stay under its title, folded or not.
+    if id == "context" {
+        total += SUMMARY_HEIGHT + BAR_HEIGHT;
+    }
+    let fold = open(&card_key(id), !shut(section));
+    if fold <= 0.0 {
+        return total;
+    }
+    let sketched = section["skeletonRows"].as_u64().unwrap_or(0) as f32 * ROW_HEIGHT;
+    if section["loading"] == true {
+        return total + sketched * fold;
+    }
+    let body = sketched
+        + match id {
+            "context" => {
+                let messages = len(section, "messages") as f32
+                    * open(MESSAGES_KEY, section["messagesOpen"] == true);
+                let status = if section["refresh"].is_object() {
+                    NOTE_HEIGHT
+                } else {
+                    0.0
+                };
+                let compact = &section["compact"];
+                let compact = if compact.is_object() {
+                    COMPACT_HEIGHT
+                        + if compact["disabled"] == true && compact["reason"].is_string() {
+                            NOTE_HEIGHT
+                        } else {
+                            0.0
+                        }
+                } else {
+                    0.0
+                };
+                (len(section, "rows") + len(section, "deferred")) as f32 * ROW_HEIGHT
+                    + messages * ROW_HEIGHT
+                    + status
+                    + compact
+            }
+            "connectors" => section["groups"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|group| SUBTITLE_HEIGHT + len(group, "rows").max(1) as f32 * ROW_HEIGHT)
+                .sum(),
+            "skills" => {
+                let used = if section["usedEmpty"].is_string() {
+                    len(section, "used").max(1)
+                } else {
+                    len(section, "used")
+                };
+                let all =
+                    len(section, "all") as f32 * open(SKILLS_ALL_KEY, section["allOpen"] == true);
+                (used + 1) as f32 * ROW_HEIGHT + all * ROW_HEIGHT
+            }
+            "background" => {
+                let finished = len(section, "finished") as f32
+                    * open(BACKGROUND_FINISHED_KEY, section["finishedOpen"] == true);
+                let toggle = usize::from(len(section, "finished") > 0);
+                (len(section, "running") + toggle) as f32 * ROW_HEIGHT + finished * ROW_HEIGHT
+            }
+            "changes" => ROW_HEIGHT,
+            "tasks" => {
+                let fold = usize::from(section["foldAction"].is_object());
+                (len(section, "rows") + fold) as f32 * ROW_HEIGHT
+            }
+            _ => len(section, "rows") as f32 * ROW_HEIGHT,
+        };
+    total + body * fold
 }
 
 /// The chevron of a fold: at rest the right or down glyph, while the fold moves the right chevron
@@ -317,12 +374,168 @@ impl NativeChatView {
                     .child(error.to_string()),
             );
         }
-        for section in details["sections"].as_array().into_iter().flatten() {
-            column = column.child(self.session_details_card(section, &details, p, cx));
+        let tabs = details["tabs"].as_array().cloned().unwrap_or_default();
+        if tabs.len() > 1 {
+            column = column.child(self.session_details_tabs(&tabs, p, cx));
+        }
+        if tabs.len() > 1 && self.session_details.tab == 1 {
+            column = column.child(self.session_details_usage(&details["usage"], p, cx));
+        } else {
+            for section in details["sections"].as_array().into_iter().flatten() {
+                column = column.child(self.session_details_card(section, &details, p, cx));
+            }
         }
         // A fold that is opening or closing needs the next frame, in whichever window draws it.
         if self.disclosure_motion.borrow().running() {
             window.request_animation_frame();
+        }
+        column.into_any_element()
+    }
+
+    /// The tab bar: the core's tab names (`TABS` in gx-chat-core `session_details/document.rs`).
+    fn session_details_tabs(
+        &mut self,
+        tabs: &[Value],
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let mut bar = div()
+            .id("session-details-tabs")
+            .role(gpui::Role::TabList)
+            .flex()
+            .gap(px(2.0 * s))
+            .h(px(24.0 * s))
+            .p(px(2.0 * s))
+            .rounded(px(7.0 * s))
+            .bg(p.foreground.opacity(0.05));
+        for (index, tab) in tabs.iter().enumerate() {
+            let on = self.session_details.tab == index;
+            let label = str_of(tab, "label");
+            bar = bar.child(
+                div()
+                    .id(SharedString::from(format!("session-details-tab-{index}")))
+                    .role(gpui::Role::Tab)
+                    .aria_label(label.clone())
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.0 * s))
+                    .text_size(px(12.0 * s))
+                    .truncate()
+                    .when(on, |tab| {
+                        tab.bg(p.foreground.opacity(0.10))
+                            .text_color(p.foreground)
+                            .font_weight(FontWeight::SEMIBOLD)
+                    })
+                    .when(!on, |tab| {
+                        tab.text_color(p.card_muted)
+                            .chat_cursor_pointer()
+                            .hover(|tab| tab.bg(p.foreground.opacity(0.06)))
+                    })
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.session_details.tab = index;
+                        cx.notify();
+                    })),
+            );
+        }
+        bar.into_any_element()
+    }
+
+    /// The second tab: the core's cards of the context meter's details, then Choose details.
+    fn session_details_usage(
+        &mut self,
+        usage: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let mut column = div()
+            .flex()
+            .flex_col()
+            .gap(px(CARD_GAP * s))
+            .min_w_0()
+            .text_size(px(13.0 * s));
+        let cards = usage["cards"].as_array().cloned().unwrap_or_default();
+        if cards.is_empty() {
+            column = column.child(
+                div()
+                    .px(px(2.0 * s))
+                    .text_size(px(12.0 * s))
+                    .text_color(p.card_muted)
+                    .child(str_of(usage, "empty")),
+            );
+        }
+        for card in &cards {
+            let id = str_of(card, "id");
+            let mut rows = div().flex().flex_col().min_w_0();
+            for row in card["rows"].as_array().into_iter().flatten() {
+                rows = rows.child(self.detail_row(
+                    format!("usage-{id}-{}", str_of(row, "id")),
+                    None,
+                    str_of(row, "label"),
+                    Some(str_of(row, "value")),
+                    None,
+                    None,
+                    false,
+                    false,
+                    p,
+                    cx,
+                ));
+            }
+            column = column.child(
+                div()
+                    .id(SharedString::from(format!("session-details-usage-{id}")))
+                    .role(gpui::Role::Group)
+                    .aria_label(str_of(card, "title"))
+                    .flex()
+                    .flex_col()
+                    .min_w_0()
+                    .px(px(10.0 * s))
+                    .py(px(CARD_PADDING_Y * s))
+                    .rounded(px(10.0 * s))
+                    .border_1()
+                    .border_color(p.border)
+                    .bg(p.card_background)
+                    .text_size(px(13.0 * s))
+                    .child(
+                        div()
+                            .h(px(HEADER_HEIGHT * s))
+                            .flex()
+                            .items_center()
+                            .truncate()
+                            .text_size(px(12.0 * s))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(p.muted)
+                            .child(str_of(card, "title")),
+                    )
+                    .child(rows),
+            );
+        }
+        let choose = &usage["chooseDetails"];
+        if choose.is_object() {
+            let pencil = svg()
+                .path("titlebar/pencil.svg")
+                .size(px(12.0 * s))
+                .flex_shrink_0()
+                .text_color(p.card_muted)
+                .into_any_element();
+            column = column.child(self.detail_row_folding(
+                "usage-choose-details".to_string(),
+                None,
+                str_of(choose, "label"),
+                None,
+                None,
+                Some(choose["action"].clone()),
+                true,
+                false,
+                Some(pencil),
+                p,
+                cx,
+            ));
         }
         column.into_any_element()
     }
@@ -660,6 +873,7 @@ impl NativeChatView {
                 Some("branch") => Some("titlebar/git-branch.svg"),
                 Some("user") => Some("titlebar/user.svg"),
                 Some("memory") => Some("titlebar/cpu.svg"),
+                Some("agent") => Some("titlebar/robot.svg"),
                 _ if id == "memory" => Some("titlebar/file-text.svg"),
                 _ => None,
             };
@@ -830,6 +1044,54 @@ impl NativeChatView {
         // Agents other than Claude have no breakdown (and no refresh), so no status line under it.
         if section["refresh"].is_object() {
             column = column.child(status_line.text_size(px(11.5 * s)).child(status));
+        }
+        // Compact context, which the chat box's Context window popover held before it went (the
+        // decision at `TABS` in gx-chat-core `session_details/document.rs`).
+        let compact = &section["compact"];
+        if compact.is_object() {
+            let disabled = compact["disabled"] == true;
+            let action = compact["action"].clone();
+            let label = str_of(compact, "label");
+            column = column.child(
+                div().pt(px(6.0 * s)).flex().child(
+                    div()
+                        .id("session-details-compact")
+                        .role(gpui::Role::Button)
+                        .aria_label(label.clone())
+                        .h(px(24.0 * s))
+                        .px(px(10.0 * s))
+                        .flex()
+                        .items_center()
+                        .rounded(px(6.0 * s))
+                        .bg(p.foreground.opacity(0.06))
+                        .text_size(px(12.0 * s))
+                        .text_color(if disabled { p.card_muted } else { p.foreground })
+                        .when(!disabled, |button| {
+                            button
+                                .chat_cursor_pointer()
+                                .hover(|button| button.bg(p.foreground.opacity(0.10)))
+                        })
+                        .child(label)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            if !disabled {
+                                this.session_details_action(&action, cx);
+                            }
+                        })),
+                ),
+            );
+            if let Some(reason) = compact["reason"].as_str().filter(|_| disabled) {
+                column = column.child(
+                    div()
+                        .h(px(NOTE_HEIGHT * s))
+                        .flex()
+                        .items_end()
+                        .truncate()
+                        .text_size(px(11.5 * s))
+                        .text_color(p.card_muted)
+                        .child(reason.to_string()),
+                );
+            }
         }
         column.into_any_element()
     }

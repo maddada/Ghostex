@@ -149,7 +149,13 @@ pub fn document_with_board(
     into.subagent = Tri::Value(subagent::project(state));
     into.transcript_search = Tri::Value(search::project(&extras.search));
     into.save_markdown = Tri::Value(save_markdown::project(&extras.save_markdown));
-    into.session_details = crate::extras::session_details::document::document(state, context);
+    // The menus family projected the context meter first (`document::assemble`).
+    let meter = match &into.context_meter {
+        Tri::Value(meter) => Some(meter),
+        _ => None,
+    };
+    into.session_details =
+        crate::extras::session_details::document::document(state, context, meter);
 
     // The copy comes from the view, not the agent status, as React picked it.
     let view_kind = into.view.kind.as_str();

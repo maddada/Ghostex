@@ -357,7 +357,10 @@ impl NativeChatView {
         more_rows.extend(self.stash_menu_row());
         more_rows.push(self.skills_row());
         if self.snapshot["composerOverflow"]["optionsOverflowed"] == true {
-            if self.snapshot["contextMeter"].is_object() {
+            // CDXC:SessionDetails 2026-11-12 DECISION: where the chat has the Session details panel, its first
+            // tab's Context card and its second tab carry this (Q2763, option A); the row stays for a chat
+            // without one.
+            if self.snapshot["contextMeter"].is_object() && !self.session_details_available() {
                 more_rows.push(json!({"label":"Context window","iconPath":"titlebar/circle-half.svg","detail":self.snapshot["contextMeter"]["percentage"],"openOnHover":false,"children":self.context_menu_rows()}));
             }
             if self.snapshot["optionLabels"]["showOptions"] == true

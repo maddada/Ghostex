@@ -730,8 +730,216 @@ fn background(
     }))
 }
 
-/// The `sessionDetails` value, or `null` while the panel does not apply to this chat.
-pub fn document(state: &ChatState, context: &ChatContext) -> Value {
+/// The panel's two tabs, `(id, name)` in their order: the one place their names live, for the
+/// desktop, the web build and the phone.
+///
+/// CDXC:SessionDetails 2026-11-12 DECISION:
+/// User, of the phone's ⋯ "Context window" sheet and Session details showing the same things: "let's do 2 tabs that
+/// show the 2 things. both are under Session details. we need to deduplicate stuff too"; then, from the "Session
+/// details: final phone sheet and desktop match" page, the merged panel as drawn (Q2755, Q2762) with "i dont like that
+/// we lost the stuff that's below the context fam" and the Context card moved to the first tab, the desktop taking the
+/// same tabs in its panel while the chat box's Context window popover goes (Q2763, option A), and the names "Overview |
+/// Limits" (Q2769). The first tab is what the session is (`OVERVIEW_ORDER`, the Context card always open in it,
+/// `pinnedOpen`); the second lists the context meter's More details rows (the ones Choose details picks, which also pin
+/// the status line) as cards (`USAGE_CARDS`). Rows another place already shows are not listed (`SHOWN_ELSEWHERE`).
+pub const TABS: [(&str, &str); 2] = [("overview", "Overview"), ("usage", "Limits")];
+
+/// The first tab's cards in this order; a card added later follows them.
+const OVERVIEW_ORDER: [&str; 9] = [
+    "environment",
+    "changes",
+    "context",
+    "tasks",
+    "connectors",
+    "skills",
+    "memory",
+    "background",
+    "agent",
+];
+
+/// The second tab's cards: `(id, title, the context meter's detail rows in the card's order)`.
+const USAGE_CARDS: [(&str, &str, &[&str]); 3] = [
+    (
+        "limits",
+        "Limits",
+        &[
+            "fiveHourLimit",
+            "sevenDayLimit",
+            "modelLimit",
+            "accountResets",
+            "credits",
+            "accountSpending",
+            "plan",
+            "accountUsageStatus",
+            "accountUsageUpdated",
+        ],
+    ),
+    (
+        "costAndTime",
+        "Cost and time",
+        &[
+            "costUsd",
+            "sessionTime",
+            "apiTime",
+            "lastTurnDuration",
+            "firstTokenTime",
+            "startedAt",
+        ],
+    ),
+    (
+        "cache",
+        "Cache",
+        &[
+            "cacheState",
+            "cacheHitRate",
+            "cacheRatio",
+            "cacheMisses",
+            "cacheLastMiss",
+            "lastRequestInput",
+            "lastRequestOutput",
+            "lastRequestCached",
+            "lastRequestCacheWrite",
+            "cachedTokens",
+            "cacheWriteTokens",
+            "tokens",
+            "totalTokens",
+            "totalInputTokens",
+            "totalOutputTokens",
+            "turnTokens",
+            "reasoningTokens",
+        ],
+    ),
+];
+
+/// A row that rides on another's ("34% · resets in 2h 10m", "Warm · 4m left"): `(rider, host)`.
+const RIDES_ON: [(&str, &str); 3] = [
+    ("fiveHourReset", "fiveHourLimit"),
+    ("sevenDayReset", "sevenDayLimit"),
+    ("cacheTimeLeft", "cacheState"),
+];
+
+/// Detail rows the panel does not list: the Context card, Environment, Changes, the model pill or the
+/// chat's title already show them. They can still be pinned to the status line.
+const SHOWN_ELSEWHERE: [&str; 14] = [
+    "contextUsed",
+    "contextTokens",
+    "model",
+    "thinking",
+    "accountName",
+    "accountEmail",
+    "repo",
+    "folder",
+    "branch",
+    "worktree",
+    "lines",
+    "pr",
+    "sessionName",
+    "agentName",
+];
+
+/// The context meter's detail rows (`contextMeter.details`, the ones Choose details picked) with a
+/// value, in the meter's order: `(id, label, value)`.
+fn detail_items(meter: Option<&Value>) -> Vec<(String, String, String)> {
+    meter
+        .and_then(|meter| meter["details"].as_array())
+        .into_iter()
+        .flatten()
+        .flat_map(|group| group["items"].as_array().into_iter().flatten())
+        .filter_map(|item| {
+            let id = item["id"].as_str()?;
+            let value = item["value"].as_str().filter(|value| !value.is_empty())?;
+            Some((
+                id.to_string(),
+                item["label"].as_str().unwrap_or_default().to_string(),
+                value.to_string(),
+            ))
+        })
+        .collect()
+}
+
+/// A rider's words on its host's row: a reset is the window's name and the countdown ("5h 2h 10m"),
+/// which reads "resets in 2h 10m" there.
+fn rider_text(rider: &str, value: &str) -> String {
+    if rider.ends_with("Reset") {
+        let countdown = value.split_once(' ').map_or(value, |(_, rest)| rest);
+        format!("resets in {countdown}")
+    } else {
+        value.to_string()
+    }
+}
+
+/// The second tab: its cards from the detail rows, and Choose details (the meter's editor).
+fn usage_tab(items: &[(String, String, String)]) -> Value {
+    let find = |id: &str| items.iter().find(|item| item.0 == id);
+    let cards: Vec<Value> = USAGE_CARDS
+        .iter()
+        .filter_map(|(id, title, ids)| {
+            let rows: Vec<Value> = ids
+                .iter()
+                .filter_map(|row_id| {
+                    let rider = RIDES_ON
+                        .iter()
+                        .find(|(_, host)| host == row_id)
+                        .and_then(|(rider, _)| find(rider).map(|item| (*rider, item)));
+                    let own = find(row_id);
+                    if own.is_none() && rider.is_none() {
+                        return None;
+                    }
+                    let label = own
+                        .map(|item| item.1.clone())
+                        .or_else(|| rider.map(|(_, item)| item.1.clone()))
+                        .unwrap_or_default();
+                    let value = [
+                        own.map(|item| item.2.clone()),
+                        rider.map(|(rider, item)| rider_text(rider, &item.2)),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                    Some(json!({"id": row_id, "label": label, "value": value}))
+                })
+                .collect();
+            (!rows.is_empty()).then(|| json!({"id": id, "title": title, "rows": rows}))
+        })
+        .collect();
+    json!({
+        "cards": cards,
+        "empty": "Nothing picked to show here. Choose details picks which rows show.",
+        "chooseDetails": {"label": "Choose details", "action": {"type": "contextEdit"}},
+    })
+}
+
+/// Environment gains the agent's version ("Claude Code 2.1.4") when the details carry it.
+fn version_row(items: &[(String, String, String)]) -> Option<Value> {
+    let (_, label, value) = items.iter().find(|item| item.0 == "version")?;
+    let name = label.strip_suffix(" version").unwrap_or(label);
+    Some(json!({"icon": "agent", "text": format!("{name} {value}")}))
+}
+
+/// The Agent card: the agent's other settings rows (output style, approval policy, sandbox and the
+/// like) that no Limits card and no other place shows, so none of them is lost.
+fn agent_section(items: &[(String, String, String)]) -> Option<Value> {
+    let listed = |id: &str| {
+        id == "version"
+            || SHOWN_ELSEWHERE.contains(&id)
+            || RIDES_ON.iter().any(|(rider, _)| *rider == id)
+            || USAGE_CARDS.iter().any(|(_, _, ids)| ids.contains(&id))
+    };
+    let rows: Vec<Value> = items
+        .iter()
+        .filter(|item| !listed(&item.0))
+        .map(|(_, label, value)| json!({"text": label, "detail": value}))
+        .collect();
+    (!rows.is_empty()).then(|| {
+        json!({"id": "agent", "title": "Agent", "collapsed": false, "pinnedOpen": true, "rows": rows})
+    })
+}
+
+/// The `sessionDetails` value, or `null` while the panel does not apply to this chat. `meter` is the
+/// chat's `contextMeter` (the menus family projects it first), whose details fill the second tab
+/// and whose Compact context rides on the Context card.
+pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>) -> Value {
     if !enabled(state) {
         return Value::Null;
     }
@@ -749,7 +957,12 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
     // Claude, Environment and Changes for any other agent.
     let sketch = |id: &str| waiting && (claude || matches!(id, "environment" | "changes"));
     let mut sections = Vec::new();
-    if let Some(body) = data.and_then(|data| environment(data, state.core.hide_account_emails)) {
+    let items = detail_items(meter);
+    if let Some(mut body) = data.and_then(|data| environment(data, state.core.hide_account_emails))
+    {
+        if let (Some(rows), Some(row)) = (body["rows"].as_array_mut(), version_row(&items)) {
+            rows.push(row);
+        }
         sections.push(section("environment", "Environment", collapsed, body));
     } else if sketch("environment") {
         sections.push(loading_section("environment", "Environment", collapsed, 4));
@@ -759,12 +972,24 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
             .and_then(|data| data.pointer("/context/breakdown"))
             .is_some_and(Value::is_object);
     if claude || context_known {
-        sections.push(section(
+        let mut card = section(
             "context",
             "Context",
             collapsed,
             context_card(state, data, &usage, now_ms, offset),
-        ));
+        );
+        // Always open, with no fold (the decision at `TABS`), and the meter's Compact context under it.
+        card["collapsed"] = json!(false);
+        card["pinnedOpen"] = json!(true);
+        if let Some(meter) = meter {
+            card["compact"] = json!({
+                "label": "Compact context",
+                "action": {"type": "contextCompact"},
+                "disabled": meter["compactDisabled"] == true,
+                "reason": meter["compactDisabledReason"],
+            });
+        }
+        sections.push(card);
     }
     if let Some(body) = tasks(state) {
         sections.push(section("tasks", "Tasks", collapsed, body));
@@ -792,6 +1017,18 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
     if let Some(body) = background(state, data, now_ms, offset) {
         sections.push(section("background", "Background tasks", collapsed, body));
     }
+    if data.is_some() {
+        sections.extend(agent_section(&items));
+    }
+    let rank = |section: &Value| {
+        let id = section["id"].as_str().unwrap_or_default();
+        OVERVIEW_ORDER
+            .iter()
+            .position(|known| *known == id)
+            .unwrap_or(OVERVIEW_ORDER.len())
+    };
+    // A stable sort: a card the order does not name keeps its place among the others like it.
+    sections.sort_by_key(rank);
     json!({
         "enabled": true,
         "visible": details.visible,
@@ -808,7 +1045,9 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
         },
         "loading": data.is_none() && details.request.is_some(),
         "error": details.error,
+        "tabs": TABS.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
         "sections": sections,
+        "usage": usage_tab(&items),
     })
 }
 

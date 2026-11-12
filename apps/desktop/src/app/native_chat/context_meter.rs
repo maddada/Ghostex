@@ -235,11 +235,22 @@ impl NativeChatView {
                 this.bg(appearance.border)
             })
             .hover(|style| style.bg(appearance.border))
-            .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new("Statusline Config").build(window, cx)
+            .tooltip({
+                let label = if self.session_details_available() {
+                    "Session details"
+                } else {
+                    "Statusline Config"
+                };
+                move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx)
             })
             .child(ring(percentage, appearance))
             .on_click(cx.listener(move |chat, _, window, cx| {
+                // CDXC:SessionDetails 2026-11-12 DECISION: the user picked option A (Q2763): where the
+                // chat has the Session details panel, the ring opens it on its first tab at the Context
+                // card, and this Context window popover is only for a chat without one.
+                if chat.show_session_details_for_context(cx) {
+                    return;
+                }
                 if chat.chat_menu_toggled_shut(CONTEXT_METER_TRIGGER, cx) {
                     return;
                 }
