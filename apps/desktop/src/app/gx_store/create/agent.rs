@@ -223,7 +223,14 @@ impl GhostexGpuiApp {
                 // An agent whose Connect dialog was answered Not now starts without asking again
                 // (CDXC:Onboarding 2026-11-11 in window/onboarding/agents.rs).
                 let declined = agent_hooks_declined(hook_agent_id);
-                if declined || matches!(row_status, None | Some("installed") | Some("cliMissing")) {
+                // `notRequired`: Ghostex follows the agent without its hook
+                // (CDXC:AgentHooks 2026-11-12 in server/src/agent_hooks/hook_free.rs).
+                if declined
+                    || matches!(
+                        row_status,
+                        None | Some("installed" | "cliMissing" | "notRequired")
+                    )
+                {
                     this.gx_store_launch_agent_from_sidebar(
                         &agent_id,
                         group_id.as_deref(),

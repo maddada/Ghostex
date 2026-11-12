@@ -61,6 +61,8 @@ pub(crate) fn agent_hooks() -> Section {
         vec![
             row("agentResumeHooks", "Session resume hooks", "Hooks let Ghostex capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.").options_of(AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS, "name", "name"),
             row("agentHooksAutoInstall", "Install the hook when I turn on an agent", "Install an agent's session resume hook as soon as you turn it on, without asking."),
+            // CDXC:AgentHooks 2026-11-12 DECISION: the user's "Keep the hook code with a 'Use agent hooks' setting" (server/src/agent_hooks/hook_free.rs); off by default, it replaces Debugging's "Track Claude without its hooks".
+            row("useAgentHooks", "Use agent hooks", "Install hooks for Claude, Codex and OpenCode and follow them through their hooks. When off, Ghostex follows these three from the files they write themselves, and turns a hook on by itself for a session it can't follow, saying so in its chat. Other agents always use their hooks."),
         ],
     )
 }

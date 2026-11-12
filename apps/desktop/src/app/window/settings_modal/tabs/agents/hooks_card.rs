@@ -6,10 +6,12 @@
 //! CDXC:AgentHooks 2026-10-06 DECISION:
 //! User: "ok implement the plan" for the Agents page redesign. The bulk hook tools leave the top of the agent list for this card at the bottom; the list keeps only a summary line (counting agents that are on) with Fix all. This replaces the 2026-08-28 roster toolbar ("quiet whole-set controls, a readiness chip and an info tooltip"), because a "3/23 hooks ready" count of every supported agent named agents the user never turned on.
 use super::super::super::super::native_modal_kit::*;
+use super::super::super::fields::SettingsPage as _;
+use super::super::super::fields::row::reset_key;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, RowSpec, SettingsDialogSpec, card_inset, dialog_footer,
     settings_button, settings_button_sized, settings_dialog, settings_icon, settings_icon_button,
-    settings_section, toggle_field,
+    settings_section, toggle_field, toggle_field_with,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::search::{TabSearch, should_show_setting};
@@ -17,6 +19,12 @@ use super::AgentsTab;
 use super::icons;
 use super::model::{HookStatus, any_hook_removable, hook_agent_id};
 use super::turn_on::AUTO_INSTALL_HOOKS;
+
+/// Claude, Codex and OpenCode use their hooks (off: Ghostex follows them without; CDXC:AgentHooks
+/// 2026-11-12 in server/src/agent_hooks/hook_free.rs).
+const USE_AGENT_HOOKS: &str = "useAgentHooks";
+/// How long after the switch the hooks are read again.
+const USE_AGENT_HOOKS_SETTLE: std::time::Duration = std::time::Duration::from_secs(8);
 use gpui::{
     Anchor, AnchoredPositionMode, AnyElement, Bounds, Context, Div, InteractiveElement as _,
     IntoElement as _, MouseDownEvent, ParentElement as _, Pixels, SharedString,
@@ -55,10 +63,18 @@ impl AgentsTab {
                 .map(|item| item.agent_id.clone())
                 .collect()
         } else {
+            // An agent Ghostex follows without its hook (`notRequired`, Use agent hooks off)
+            // needs none, so it is neither counted nor installed.
             self.all_agents(cx)
                 .iter()
                 .filter(|agent| agent.enabled)
                 .filter_map(hook_agent_id)
+                .filter(|hook| {
+                    status
+                        .as_ref()
+                        .and_then(|status| status.item(hook))
+                        .is_none_or(|item| item.status != "notRequired")
+                })
                 .collect()
         };
         on_hooks.sort();
@@ -245,6 +261,35 @@ impl AgentsTab {
                     "Install an agent's session resume hook as soon as you turn it on, without asking.",
                 ),
                 checked,
+                cx,
+            ));
+        }
+        if !remote && should_show_setting(&section, USE_AGENT_HOOKS, None) {
+            let checked = self.store.read(cx).values().bool(USE_AGENT_HOOKS);
+            rows.push(toggle_field_with(
+                p,
+                USE_AGENT_HOOKS,
+                RowSpec::new("Use agent hooks").description(
+                    "Install hooks for Claude, Codex and OpenCode. When off, Ghostex follows them without hooks and turns a hook on by itself for a session it can't follow.",
+                ),
+                checked,
+                Some(reset_key::<Self>(USE_AGENT_HOOKS)),
+                |page: &mut Self, next, _window, cx| {
+                    let store = page.settings_store().clone();
+                    store.update(cx, |store, cx| {
+                        store.update_setting(USE_AGENT_HOOKS, serde_json::json!(next), cx)
+                    });
+                    // gxserver installs or removes the three agents' hooks within a few seconds
+                    // of the change (hookless_activity/hook_free_fallback.rs); read them again then.
+                    cx.spawn(async move |this, cx| {
+                        cx.background_executor().timer(USE_AGENT_HOOKS_SETTLE).await;
+                        let _ = this.update(cx, |page, cx| {
+                            page.request_hook_status(cx);
+                            cx.notify();
+                        });
+                    })
+                    .detach();
+                },
                 cx,
             ));
         }

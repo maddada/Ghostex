@@ -40,7 +40,8 @@ pub fn read_agent_hook_status(
                 .iter()
                 .find(|definition| definition.agent_id == agent_id.as_str())
             {
-                rows.push(read_hook_status(definition, &hook_paths)?);
+                let hook_free = super::hook_free::hook_free(paths, definition.agent_id);
+                rows.push(read_hook_status(definition, &hook_paths, hook_free)?);
             }
         }
         Ok(rows)
@@ -109,6 +110,11 @@ pub fn install_agent_hooks(
             true,
         ) == CliPresence::Missing
         {
+            continue;
+        }
+        // Ghostex follows this agent without its hook (CDXC:AgentHooks 2026-11-12 in
+        // hook_free.rs): nothing to install unless Use agent hooks is on.
+        if super::hook_free::hook_free(paths, definition.agent_id) {
             continue;
         }
         // Another Ghostex's hooks already serve this portable copy's sessions (foreign_owner.rs).
@@ -237,7 +243,18 @@ pub fn repair_installed_agent_hook_paths(
         }
     }
 
-    if !has_installed_ghostex_hook {
+    /*
+    CDXC:AgentHooks 2026-11-12 WHY:
+    Removing Claude's hooks keeps Ghostex's `statusLine` (hook_free_cleanup.rs): it is what names the model, effort and rate limits in the chat, not a hook. Its script is still kept current while no Ghostex hook is left.
+    */
+    let statusline_kept = provider_hook_paths("claude", &hook_paths)
+        .iter()
+        .any(|path| {
+            super::statusline::ghostex_statusline_registered(&super::install::read_json_object(
+                &read_file_text(path),
+            ))
+        });
+    if !has_installed_ghostex_hook && !statusline_kept {
         return Ok(Vec::new());
     }
 
@@ -344,6 +361,7 @@ pub fn uninstall_agent_hooks(
 fn read_hook_status(
     definition: &HookDefinition,
     hook_paths: &HookPaths,
+    hook_free: bool,
 ) -> Result<Value, DomainStateError> {
     let presence = agent_cli_presence(
         definition.agent_id,
@@ -407,6 +425,26 @@ fn read_hook_status(
         .then(|| hook_run_gate(definition, hook_paths, &provider_paths))
         .flatten();
     let hook_installed = notify_current && provider_current && run_gate.is_none();
+    /*
+    CDXC:AgentHooks 2026-11-12 WHY:
+    An agent Ghostex follows without its hook reads `notRequired` while no Ghostex hook is in its config, which every client already shows as a quiet "not needed" instead of a missing hook to install (Settings > Agents, the launch check, onboarding). A hook the safety net put back (hook_free_fallback.rs) reads as usual, so a stale one can still be repaired.
+    */
+    if hook_free && cli_installed && !ghostex_hook_present {
+        return Ok(json!({
+            "agentId": definition.agent_id,
+            "cliCommand": definition.cli_command,
+            "cliInstalled": true,
+            "cliInstallsOnDemand": false,
+            "detail": format!(
+                "Not needed: Ghostex follows {} without hooks.",
+                hook_free_agent_name(definition.agent_id)
+            ),
+            "hookFree": true,
+            "hookInstalled": false,
+            "paths": paths,
+            "status": "notRequired",
+        }));
+    }
     let status = if !cli_installed {
         "cliMissing"
     } else if hook_installed {
@@ -431,7 +469,7 @@ fn read_hook_status(
             paths.first().map(String::as_str),
         )
     };
-    Ok(json!({
+    let mut row = json!({
         "agentId": definition.agent_id,
         "cliCommand": definition.cli_command,
         "cliInstalled": cli_installed,
@@ -440,7 +478,21 @@ fn read_hook_status(
         "hookInstalled": hook_installed,
         "paths": paths,
         "status": status,
-    }))
+    });
+    if hook_free {
+        row["hookFree"] = json!(true);
+    }
+    Ok(row)
+}
+
+/// The name an agent Ghostex follows without hooks goes by in its status line.
+pub(crate) fn hook_free_agent_name(agent_id: &str) -> &'static str {
+    match agent_id {
+        "claude" => "Claude",
+        "codex" => "Codex",
+        "opencode" => "OpenCode",
+        _ => "this agent",
+    }
 }
 
 /// A provider-side switch that stops an otherwise current Ghostex hook from

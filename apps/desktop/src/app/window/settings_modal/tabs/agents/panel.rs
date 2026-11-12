@@ -317,30 +317,35 @@ impl AgentsTab {
             };
             let loading_reason: SharedString = "Hook status is being checked.".into();
             let install_hook = hook.to_string();
+            // Ghostex follows this agent without its hook (Use agent hooks off): nothing to
+            // install, the detail says so.
+            let not_required = hook_status.is_some_and(|status| status.status == "notRequired");
             let mut controls =
                 h_flex()
                     .flex_wrap()
                     .justify_end()
                     .gap(px(8.0))
-                    .child(settings_button_sized(
-                        p,
-                        SharedString::from(format!("agent-hook-install-{agent_id}")),
-                        label,
-                        Some(if hook_installed {
-                            icons::REFRESH
-                        } else {
-                            icons::DOWNLOAD
-                        }),
-                        ButtonVariant::Outline,
-                        ButtonSize::Sm,
-                        loading,
-                        Some(loading_reason.clone()),
-                        move |page: &mut Self, _window, cx| {
-                            page.install_hooks(Some(vec![install_hook.clone()]), cx);
-                            cx.notify();
-                        },
-                        cx,
-                    ));
+                    .children((!not_required).then(|| {
+                        settings_button_sized(
+                            p,
+                            SharedString::from(format!("agent-hook-install-{agent_id}")),
+                            label,
+                            Some(if hook_installed {
+                                icons::REFRESH
+                            } else {
+                                icons::DOWNLOAD
+                            }),
+                            ButtonVariant::Outline,
+                            ButtonSize::Sm,
+                            loading,
+                            Some(loading_reason.clone()),
+                            move |page: &mut Self, _window, cx| {
+                                page.install_hooks(Some(vec![install_hook.clone()]), cx);
+                                cx.notify();
+                            },
+                            cx,
+                        )
+                    }));
             if hook_removable(hook_status) {
                 let uninstall_hook = hook.to_string();
                 controls = controls.child(settings_button_sized(

@@ -135,7 +135,9 @@ pub(crate) fn detected_agents_from_hook_status(
             Some(DetectedAgent {
                 account_label: account_label(&agent_id).map(str::to_string),
                 installed: row.get("cliInstalled").and_then(Value::as_bool) == Some(true),
-                hooks_installed: row.get("hookInstalled").and_then(Value::as_bool) == Some(true),
+                // An agent Ghostex follows without its hook (`notRequired`) needs nothing more.
+                hooks_installed: row.get("hookInstalled").and_then(Value::as_bool) == Some(true)
+                    || row.get("status").and_then(Value::as_str) == Some("notRequired"),
                 update_required: row.get("status").and_then(Value::as_str)
                     == Some("updateRequired"),
                 installs_on_demand: row.get("cliInstallsOnDemand").and_then(Value::as_bool)

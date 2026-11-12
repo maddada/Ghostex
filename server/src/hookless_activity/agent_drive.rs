@@ -1,6 +1,6 @@
-//! Codex's and OpenCode's hook-free observers driving their sessions' state on a computer where
-//! that agent's Ghostex hook is not installed. Each agent is decided on its own, from its own hook
-//! status: where its hook is installed nothing here runs and the hook keeps driving, as before.
+//! Codex's and OpenCode's hook-free observers driving their sessions' state: by default (Use agent
+//! hooks off, agent_hooks/hook_free.rs), and with Use agent hooks on on a computer where that
+//! agent's Ghostex hook is not installed. Each agent is decided on its own.
 //!
 //! CDXC:AgentHooks 2026-11-07 FIX:
 //! Issue #475 asked that every agent's turns be tracked without hooks where hooks are missing, not only Claude's. Codex's observer tails the rollout Ghostex already binds to the session (the live-process scan reads the rollout Codex holds open, so this needs no hook), and OpenCode's reads OpenCode's own service events for the conversation id Ghostex chose at launch; both already ran beside the hooks for the side-by-side comparison. Where the agent's hook is missing, their events now go through `/api/ingestAgentHookEvent` like the hook's would, marked as the observer's so the comparison skips them. They see less than the hooks: Codex's rollout shows no approval waiting on the user (codex.rs). OpenCode's events carry the whole approval request or form, so its observer sends the card with them and follows the TUI to another conversation from the terminal's own records (opencode.rs, CDXC:AgentHooks 2026-11-11). Screen-based tracking for the other agents was left out: the title rules and the "Not moving" watch already read their screens, and nothing there tells a finished turn from a quiet one reliably enough to end a turn by.
@@ -13,7 +13,7 @@ use std::time::Instant;
 use serde_json::{json, Map, Value};
 
 use super::comparison::ActivityEvent;
-use super::drive::{agent_hook_installed, OBSERVER_MARK};
+use super::drive::{agent_drive_reason, OBSERVER_MARK};
 use crate::logging::{DiagnosticLogScenario, GxserverLogInput, LogLevel};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
@@ -25,14 +25,25 @@ static OPENCODE_HOOK: HookCache = LazyLock::new(Default::default);
 /// The payload key of hook params an observer event posts as they are.
 pub(super) const HOOK_PARAMS: &str = "hookParams";
 
-/// Whether Codex's observer drives Codex sessions here: its hook is not installed.
+/// Whether Codex's observer drives Codex sessions here: Ghostex follows Codex without its hook,
+/// or the hook is not installed.
 pub(super) fn codex_drive_enabled(paths: &GxserverPaths) -> bool {
-    !cfg!(test) && agent_hook_installed(paths, "codex", &CODEX_HOOK) == Some(false)
+    agent_drive_reason(paths, "codex", &CODEX_HOOK).is_some()
 }
 
-/// Whether OpenCode's observer drives OpenCode sessions here: its plugin is not installed.
+/// Whether OpenCode's observer drives OpenCode sessions here, as `codex_drive_enabled`.
 pub(super) fn opencode_drive_enabled(paths: &GxserverPaths) -> bool {
-    !cfg!(test) && agent_hook_installed(paths, "opencode", &OPENCODE_HOOK) == Some(false)
+    agent_drive_reason(paths, "opencode", &OPENCODE_HOOK).is_some()
+}
+
+/// Whether `agent`'s watcher drives its sessions here.
+pub(super) fn drive_enabled(paths: &GxserverPaths, agent: &str) -> bool {
+    match agent {
+        "claude" => super::drive::claude_drive_enabled(paths),
+        "codex" => codex_drive_enabled(paths),
+        "opencode" => opencode_drive_enabled(paths),
+        _ => false,
+    }
 }
 
 /// The events of an open turn: a baseline that ends on one finds the session mid-turn.
@@ -95,6 +106,14 @@ pub(super) fn baseline_events(events: &[ActivityEvent]) -> Vec<ActivityEvent> {
 /// Sends a driving agent's observer events through the hook path.
 pub(super) fn drive(state: &AppState, events: &[ActivityEvent]) {
     for event in baseline_events(events).iter().chain(events) {
+        // Its hook drives a session that fell back to it (hook_free_fallback.rs).
+        if crate::agent_hooks::hook_free::session_fell_back(
+            &state.paths,
+            &event.project_id,
+            &event.session_id,
+        ) {
+            continue;
+        }
         let Some(params) = hook_params(event) else {
             continue;
         };

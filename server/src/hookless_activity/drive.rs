@@ -1,12 +1,13 @@
-//! Claude's hook-free observer driving Claude sessions' state, behind Settings > Debugging >
-//! Track Claude without its hooks (`claudeHookFreeActivity`, off by default), and on by itself on
-//! a computer where Claude's hook is not installed.
+//! Claude's hook-free observer driving Claude sessions' state, by default (Use agent hooks off,
+//! agent_hooks/hook_free.rs), and with Use agent hooks on wherever Claude's hook is not installed.
 //!
 //! CDXC:AgentHooks 2026-11-01 DECISION:
-//! User: "make Claude find its conversation from the process alone, so its hooks can be dropped once the day's results look clean", with the comparison left on across a day of real use. While the switch is on, every event the Claude observer reads off Claude's session records goes through the same `/api/ingestAgentHookEvent` path a hook event takes (status, conversation id, transcript path, first prompt, question and approval cards, notifications, account error recovery), and a Claude hook event for a pane the observer follows is still recorded for the comparison but drives nothing. The hooks stay installed; every other agent keeps its hooks.
+//! User: "make Claude find its conversation from the process alone, so its hooks can be dropped once the day's results look clean", with the comparison left on across a day of real use. While the observer drives, every event it reads off Claude's session records goes through the same `/api/ingestAgentHookEvent` path a hook event takes (status, conversation id, transcript path, first prompt, question and approval cards, notifications, account error recovery), and a hook event for a pane the observer follows is still recorded for the comparison but drives nothing.
 //! CDXC:AgentHooks 2026-11-07 FIX:
-//! Issue #475: on a headless Linux computer Ghostex's hooks were never installed (#431), so its Claude threads stayed "working" after their turns ended and their coordinator heard nothing for hours; the switch would have fixed it, but no Settings page reaches that computer and `ghostex settings set` there needed the desktop app. Where Claude's hook is not installed (never installed, turned off with disableAllHooks, or not current) nothing else drives Claude's state, so the observer drives it whatever the switch says; once the hook is installed the switch decides again. The hook status is read at most every 30 seconds.
-//! SEE-ALSO: server/src/hookless_activity/claude.rs (the observer), server/src/server/agent_http.rs (where a superseded hook stops), packages/settings-catalog/src/pages/debugging.rs (the switch).
+//! Issue #475: on a headless Linux computer Ghostex's hooks were never installed (#431), so its Claude threads stayed "working" after their turns ended and their coordinator heard nothing for hours. Where Claude's hook is not installed (never installed, turned off with disableAllHooks, or not current) nothing else drives Claude's state, so the observer drives it even with Use agent hooks on. The hook status is read at most every 30 seconds.
+//! CDXC:AgentHooks 2026-11-12 DECISION:
+//! "Stop installing the hooks and remove Ghostex's own" (the user's decision in agent_hooks/hook_free.rs): the Debugging switch "Track Claude without its hooks" is gone and its behaviour is the default for Claude, Codex and OpenCode alike. The gate below covers all three: a hook event for a session its agent's watcher follows drives nothing, unless the session fell back to the hook (hook_free_fallback.rs), whose watcher then stops driving it.
+//! SEE-ALSO: server/src/hookless_activity/claude.rs (the observer), server/src/server/agent_http.rs (where a superseded hook stops), server/src/agent_hooks/hook_free.rs (the setting).
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek, SeekFrom};
@@ -17,18 +18,16 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use super::comparison::ActivityEvent;
+use crate::agent_hooks::hook_free;
 use crate::domain::DomainRepository;
 use crate::logging::{DiagnosticLogScenario, GxserverLogInput, LogLevel};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;
 
-pub(crate) const SETTING_KEY: &str = "claudeHookFreeActivity";
 /// Marks an event the observer sent, so the hook gate and the comparison's hook side skip it.
 pub(crate) const OBSERVER_MARK: &str = "hookFreeObserver";
-/// How long one read of the setting is trusted: the gate runs for every Claude hook event.
-const SETTING_TTL: Duration = Duration::from_secs(2);
-/// How long one read of Claude's hook status is trusted.
+/// How long one read of an agent's hook status is trusted.
 const HOOK_STATUS_TTL: Duration = Duration::from_secs(30);
 const TRANSCRIPT_TAIL: u64 = 512 * 1024;
 
@@ -36,35 +35,38 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|error| error.into_inner())
 }
 
-static SETTING: LazyLock<Mutex<Option<(Instant, bool)>>> = LazyLock::new(Default::default);
 static HOOK_INSTALLED: LazyLock<Mutex<Option<(Instant, Option<bool>)>>> =
     LazyLock::new(Default::default);
-/// The panes (project id, session id) a live `claude` is shown in, as the observer last saw.
-static TRACKED: LazyLock<Mutex<HashSet<(String, String)>>> = LazyLock::new(Default::default);
+/// The sessions (project id, session id) each agent's watcher follows, as it last saw.
+static TRACKED: LazyLock<Mutex<HashMap<&'static str, HashSet<(String, String)>>>> =
+    LazyLock::new(Default::default);
 
 /// Why the observer drives Claude's sessions, if it does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DriveReason {
-    /// Track Claude without its hooks is on.
-    Setting,
-    /// Claude's hook is not installed on this computer.
+    /// Use agent hooks is off: Ghostex follows Claude without its hook.
+    HookFree,
+    /// Use agent hooks is on, but Claude's hook is not installed on this computer.
     HooksMissing,
 }
 
 impl DriveReason {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
-            DriveReason::Setting => "setting",
+            DriveReason::HookFree => "hookFree",
             DriveReason::HooksMissing => "hooksMissing",
         }
     }
 }
 
-/// The switch first; else a hook status that says the hook is not installed. A status that could
+/// Hook-free first; else a hook status that says the hook is not installed. A status that could
 /// not be read (`None`) keeps the hooks.
-pub(super) fn drive_reason_for(setting: bool, hook_installed: Option<bool>) -> Option<DriveReason> {
-    if setting {
-        Some(DriveReason::Setting)
+pub(super) fn drive_reason_for(
+    hook_free: bool,
+    hook_installed: Option<bool>,
+) -> Option<DriveReason> {
+    if hook_free {
+        Some(DriveReason::HookFree)
     } else if hook_installed == Some(false) {
         Some(DriveReason::HooksMissing)
     } else {
@@ -77,29 +79,22 @@ pub(crate) fn claude_drive_enabled(paths: &GxserverPaths) -> bool {
 }
 
 pub(crate) fn claude_drive_reason(paths: &GxserverPaths) -> Option<DriveReason> {
+    agent_drive_reason(paths, "claude", &HOOK_INSTALLED)
+}
+
+/// Why an agent's watcher drives its sessions here, if it does (never in a test).
+pub(super) fn agent_drive_reason(
+    paths: &GxserverPaths,
+    agent_id: &str,
+    hook_cache: &Mutex<Option<(Instant, Option<bool>)>>,
+) -> Option<DriveReason> {
     if cfg!(test) {
         return None;
     }
-    let setting = {
-        let mut cached = lock(&SETTING);
-        match *cached {
-            Some((at, enabled)) if at.elapsed() < SETTING_TTL => enabled,
-            _ => {
-                let enabled = crate::shared_settings_file::read_shared_settings(paths)
-                    .and_then(|settings| settings.get(SETTING_KEY).and_then(Value::as_bool))
-                    .unwrap_or(false);
-                *cached = Some((Instant::now(), enabled));
-                enabled
-            }
-        }
-    };
-    if setting {
-        return Some(DriveReason::Setting);
+    if hook_free::hook_free(paths, agent_id) {
+        return Some(DriveReason::HookFree);
     }
-    drive_reason_for(
-        false,
-        agent_hook_installed(paths, "claude", &HOOK_INSTALLED),
-    )
+    drive_reason_for(false, agent_hook_installed(paths, agent_id, hook_cache))
 }
 
 /// Whether an agent's Ghostex hook is installed here and will run (`hookInstalled` in its hook
@@ -133,14 +128,35 @@ pub(super) fn agent_hook_installed(
     installed
 }
 
-pub(super) fn set_tracked<'a>(panes: impl Iterator<Item = &'a (String, String)>) {
-    *lock(&TRACKED) = panes.cloned().collect();
+/// The sessions `agent`'s watcher follows right now (none while it does not drive).
+pub(super) fn set_tracked<'a>(
+    agent: &'static str,
+    panes: impl Iterator<Item = &'a (String, String)>,
+) {
+    lock(&TRACKED).insert(agent, panes.cloned().collect());
 }
 
-/// Whether a Claude hook event no longer drives state: the switch is on and the observer follows
-/// the pane it names. A pane the observer cannot see (a Claude older than 2.1.172, which writes no
-/// session record, or a platform without the pane walk) keeps its hooks.
-pub(crate) fn claude_hook_superseded(
+pub(super) fn is_tracked(agent: &str, pane: &(String, String)) -> bool {
+    lock(&TRACKED)
+        .get(agent)
+        .is_some_and(|panes| panes.contains(pane))
+}
+
+/// The agents whose watcher can stand in for their hook.
+fn watched_agent(agent: Option<&str>) -> Option<&'static str> {
+    match agent? {
+        "claude" => Some("claude"),
+        "codex" => Some("codex"),
+        "opencode" => Some("opencode"),
+        _ => None,
+    }
+}
+
+/// Whether a hook event no longer drives state: its agent's watcher drives and follows the session
+/// it names, and the session did not fall back to the hook. A session the watcher cannot see (a
+/// Claude older than 2.1.172, which writes no session record, a Codex whose rollout is not found
+/// yet) keeps its hook.
+pub(crate) fn hook_superseded(
     state: &AppState,
     endpoint_path: &str,
     params: &Map<String, Value>,
@@ -148,17 +164,19 @@ pub(crate) fn claude_hook_superseded(
     if endpoint_path != "/api/ingestAgentHookEvent" || params.contains_key(OBSERVER_MARK) {
         return false;
     }
-    if crate::agents::normalize_agent_id(params.get("agentName").and_then(Value::as_str)).as_deref()
-        != Some("claude")
-    {
+    let normalized =
+        crate::agents::normalize_agent_id(params.get("agentName").and_then(Value::as_str));
+    let Some(agent) = watched_agent(normalized.as_deref()) else {
         return false;
-    }
+    };
     let text = |key: &str| params.get(key).and_then(Value::as_str).map(str::trim);
     let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId")) else {
         return false;
     };
-    claude_drive_enabled(&state.paths)
-        && lock(&TRACKED).contains(&(project_id.to_string(), session_id.to_string()))
+    let pane = (project_id.to_string(), session_id.to_string());
+    is_tracked(agent, &pane)
+        && super::agent_drive::drive_enabled(&state.paths, agent)
+        && !hook_free::session_fell_back(&state.paths, project_id, session_id)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -178,9 +196,38 @@ pub(super) struct ClaudeDriver {
 }
 
 /// Claude can mark itself waiting a moment before it writes the asking call to its transcript
-/// (seen live on 2026-11-01: an AskUserQuestion row 50ms after the record), so a wait whose call is
+/// (seen live on 2026-11-01: an AskUserQuestion row 50ms after the record), or before it draws the
+/// question it never writes there (2.1.322, claude_question_screen.rs), so a wait whose call is
 /// missing is read again for this long and sent once more with the card when it appears.
-const UNREAD_WAIT_RETRY: Duration = Duration::from_secs(3);
+const UNREAD_WAIT_RETRY: Duration = Duration::from_secs(8);
+
+/// The tool call a wait waits on: the transcript's newest call without a result, else, for a
+/// question (`input needed`), the one question Claude draws on screen.
+fn waiting_call(
+    state: &AppState,
+    pane: &(String, String),
+    event: &ActivityEvent,
+) -> Option<ToolCall> {
+    if let Some(call) = event.transcript.as_deref().and_then(pending_tool_call) {
+        return Some(call);
+    }
+    if event.payload.get("waitingFor").and_then(Value::as_str) != Some("input needed") {
+        return None;
+    }
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let repository = DomainRepository::new(&db, &state.metadata.server_id);
+    let capture =
+        crate::zmx::read_zmx_session_history_capture(&repository, &pane.0, &pane.1).ok()?;
+    if capture.truncated {
+        return None;
+    }
+    let input = super::claude_question_screen::single_question_on_screen(&capture.text)?;
+    Some(ToolCall {
+        name: "AskUserQuestion".to_string(),
+        input,
+        id: None,
+    })
+}
 
 impl ClaudeDriver {
     /// Sends the waits whose tool call has reached the transcript since they were first sent.
@@ -195,12 +242,7 @@ impl ClaudeDriver {
                 self.unread_waits.remove(&pane);
                 continue;
             }
-            if event
-                .transcript
-                .as_deref()
-                .and_then(pending_tool_call)
-                .is_some()
-            {
+            if waiting_call(state, &pane, event).is_some() {
                 if let Some((event, _)) = self.unread_waits.remove(&pane) {
                     self.drive(state, &event);
                 }
@@ -214,6 +256,10 @@ impl ClaudeDriver {
         }
         let pane = (event.project_id.clone(), event.session_id.clone());
         self.unread_waits.remove(&pane);
+        // Its hook drives a session that fell back to it (hook_free_fallback.rs).
+        if hook_free::session_fell_back(&state.paths, &pane.0, &pane.1) {
+            return;
+        }
         let Some(params) = self.params(state, &pane, event) else {
             return;
         };
@@ -270,7 +316,7 @@ impl ClaudeDriver {
                 None => ("SessionBusy".to_string(), true),
             },
             (_, "PermissionRequest") => {
-                match transcript.and_then(pending_tool_call) {
+                match waiting_call(state, pane, event) {
                     Some(call) => {
                         insert_tool(&mut payload, &call);
                         self.waiting.insert(pane.clone(), call);
@@ -533,10 +579,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_observer_drives_where_the_hook_is_missing_or_the_switch_is_on() {
+    fn the_observer_drives_hook_free_or_where_the_hook_is_missing() {
         assert_eq!(
             drive_reason_for(true, Some(true)),
-            Some(DriveReason::Setting)
+            Some(DriveReason::HookFree)
         );
         assert_eq!(
             drive_reason_for(false, Some(false)),

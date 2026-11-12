@@ -303,7 +303,6 @@ How to use this file:
 
 - **Show debug UI controls** `debuggingMode` (boolean, default false): Show diagnostic logs. From the next start, also opens Chromium's DevTools port (9334) for developer tools.
 - **Diagnostic logs** `diagnosticLogging` (structured value; change it in Settings, not with `ghostex settings set`): Pick the areas to log while you reproduce an issue, and when logging turns off. Warnings, errors, and crashes are always captured.
-- **Track Claude without its hooks** `claudeHookFreeActivity` (boolean, default false): Follow Claude sessions' activity and conversation from the session files Claude writes itself instead of from its hooks. The hooks stay installed and are only compared.
 ## About (tab `about`)
 
 ### About
@@ -414,6 +413,7 @@ How to use this file:
 
 - **Session resume hooks** `agentResumeHooks` (Settings UI row without a settings key; use `ghostex settings open`): Hooks let Ghostex capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.
 - **Install the hook when I turn on an agent** `agentHooksAutoInstall` (boolean, default false): Install an agent's session resume hook as soon as you turn it on, without asking.
+- **Use agent hooks** `useAgentHooks` (boolean, default false): Install hooks for Claude, Codex and OpenCode and follow them through their hooks. When off, Ghostex follows these three from the files they write themselves, and turns a hook on by itself for a session it can't follow, saying so in its chat. Other agents always use their hooks.
 ### Home folder
 
 - **Show Main Hub on all Spaces** `chiefShowOnAllSpaces` (boolean, default false): Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.

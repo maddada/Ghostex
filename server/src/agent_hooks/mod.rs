@@ -11,6 +11,8 @@ pub(crate) mod cursor_statusline;
 pub mod event_mapping;
 mod foreign_owner;
 mod hermes_gateway;
+pub(crate) mod hook_free;
+mod hook_free_cleanup;
 mod hook_store;
 pub mod install;
 pub(crate) mod nested_agent;
@@ -41,6 +43,7 @@ pub use api::{
     uninstall_agent_hooks,
 };
 pub(crate) use claude_session_record::claude_session_record_live;
+pub(crate) use hook_free_cleanup::remove_hook_free_agent_hooks;
 pub(crate) use hook_store::write_claude_surface_record;
 pub use notify_runtime::run_notify_hook;
 pub(crate) use peer_start::install_for_peer_agent_start;

@@ -214,6 +214,10 @@ pub(super) fn uninstall_opencode_hook(
     if read_file_text(&plugin).contains(OPENCODE_PLUGIN_MARKER) {
         fs::remove_file(&plugin).map_err(io_error)?;
         removed.push(path_string(&plugin));
+        // Its folder was Ghostex's too; anything else put there keeps it.
+        if let Some(folder) = plugin.parent() {
+            let _ = fs::remove_dir(folder);
+        }
     }
     for path in remove_retired_opencode_plugin(&config_dir)? {
         push_unique_path(&mut removed, path);

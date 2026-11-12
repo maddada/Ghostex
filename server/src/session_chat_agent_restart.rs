@@ -56,6 +56,12 @@ pub(crate) async fn restart(
         Some(crate::session_chat_conversation_unreported::ACTION_RESTART) => {
             return crate::session_chat_conversation_unreported::answer(state, params, false).await
         }
+        Some(crate::hookless_activity::ACTION_UPDATE_CODEX) => {
+            return crate::hookless_activity::answer_codex_update(state, params).await
+        }
+        Some(crate::hookless_activity::ACTION_RESTART_FOR_HOOK) => {
+            return crate::hookless_activity::answer_fallback_notice(state, params).await
+        }
         _ => {}
     }
     let start_fresh = params.get("actionId").and_then(Value::as_str)

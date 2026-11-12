@@ -2028,12 +2028,12 @@ Ghostex supports OpenCode 2 (version 2.0 or newer); OpenCode 1 is not supported.
 OpenCode chats read and send through OpenCode's own background service instead
 of its terminal screen, and support streamed replies, reasoning, tool results,
 image attachments, questions, permissions, queued prompts, and conversation
-rewind. Install its hooks in Settings > Agents. An OpenCode chat works without
+rewind. It needs no Ghostex plugin (see Agent Hooks). An OpenCode chat works without
 opening its terminal: the first message starts OpenCode's background service
 when it is not running and creates the conversation, and the chat keeps reading
 and sending after the terminal sleeps or exits. Opening the terminal later shows
 the same conversation.
-Installing the hooks also adds a "ghostex" OpenCode theme with a see-through
+Installing the OpenCode plugin (Use agent hooks) also adds a "ghostex" OpenCode theme with a see-through
 background, so OpenCode's terminal shows the window's glass like Claude Code and
 Codex, in colours that match Ghostex's light and dark terminal. Ghostex turns it
 on only when you have not picked an OpenCode theme yourself; to go back, pick
@@ -3484,12 +3484,20 @@ version, Max Mode, auto-run, worktree, plus the branch, lines changed, and pull
 request). Removing the hooks restores your own command. The Hermes Agent hooks
 cover every Hermes profile as well as the default one, so each bot's sessions
 report their status and fill their chat; a profile you add later gets them the
-next time Ghostex starts. On a computer where an agent's hooks are not
-installed (for example a Linux computer that runs only Ghostex's server),
-Ghostex follows Claude Code, Codex and OpenCode from the session files and
-events they write themselves, so their sessions still go from working to
-finished; questions and approvals show their cards only with the hooks. To
-install the hooks there, use Settings > Agents with that computer picked. From a terminal, `ghostex agent-hooks status`,
+next time Ghostex starts. Claude Code, Codex and OpenCode need no hooks:
+Ghostex follows them from the session files and events they write themselves
+(working, finished, questions and approvals, the conversation to resume), on
+every computer, so it installs no hooks for them and removed the ones it had
+installed (your own hooks stay). Their rows in Settings > Agents say "Not
+needed". If Ghostex can't follow one of them in a session (for example after an
+update of the agent changes its files), it turns that agent's hook back on by
+itself and says so in the session's chat; the hook takes over the next time the
+agent starts there. Claude Code older than 2.1.172 keeps its hook, and a Codex
+older than 0.163 can't show its approvals without one, so its chat asks you to
+update it (Update Codex). To use the hooks for these three again, turn on Use
+agent hooks in the Session resume hooks card (`useAgentHooks`). Every other
+agent still uses its hooks. To install hooks on another computer, use Settings >
+Agents with that computer picked. From a terminal, `ghostex agent-hooks status`,
 `ghostex agent-hooks install <agent>` (or `--all`) and `ghostex agent-hooks
 uninstall <agent>` (or `--all`) do what the Session resume hooks card does; add
 `--computer <name>` to run them on a connected computer.

@@ -349,6 +349,13 @@ fn statusline_entry_command(entry: &Map<String, Value>) -> Option<&str> {
         .filter(|command| !command.is_empty())
 }
 
+/// A `statusLine` that runs Ghostex's script, current or not.
+pub(crate) fn ghostex_statusline_registered(data: &Value) -> bool {
+    statusline_entry(data)
+        .and_then(statusline_entry_command)
+        .is_some_and(is_ghostex_statusline_command)
+}
+
 /// Ghostex's statusline is registered with the current script path.
 pub(crate) fn claude_statusline_is_current(data: &Value, hook_paths: &HookPaths) -> bool {
     statusline_is_current(data, &hook_paths.statusline_hook_path)

@@ -8984,18 +8984,6 @@
       "agentWritable": false
     },
     {
-      "key": "claudeHookFreeActivity",
-      "title": "Track Claude without its hooks",
-      "subtitle": "Follow Claude sessions' activity and conversation from the session files Claude writes itself instead of from its hooks. The hooks stay installed and are only compared.",
-      "tab": "debugging",
-      "tabTitle": "Debugging",
-      "section": "controls",
-      "sectionTitle": "Debug controls",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "version",
       "title": "Version",
       "subtitle": "Ghostex app version.",
@@ -10178,6 +10166,18 @@
       "key": "agentHooksAutoInstall",
       "title": "Install the hook when I turn on an agent",
       "subtitle": "Install an agent's session resume hook as soon as you turn it on, without asking.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentHooks",
+      "sectionTitle": "Session resume hooks",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "useAgentHooks",
+      "title": "Use agent hooks",
+      "subtitle": "Install hooks for Claude, Codex and OpenCode and follow them through their hooks. When off, Ghostex follows these three from the files they write themselves, and turns a hook on by itself for a session it can't follow, saying so in its chat. Other agents always use their hooks.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentHooks",

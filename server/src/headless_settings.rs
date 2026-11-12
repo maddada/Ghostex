@@ -118,15 +118,15 @@ mod tests {
         // Its own file again: the next save adds to it, and null removes a key.
         save_settings_patch(
             &paths,
-            &patch(json!({"claudeHookFreeActivity": true, "autoSleepMinutes": null})),
+            &patch(json!({"useAgentHooks": true, "autoSleepMinutes": null})),
         )
         .expect("save")
         .expect("saved");
-        assert_eq!(saved(&paths), json!({"claudeHookFreeActivity": true}));
+        assert_eq!(saved(&paths), json!({"useAgentHooks": true}));
         // The readers every setting goes through see it.
         assert_eq!(
             crate::shared_settings_file::read_shared_settings(&paths).expect("settings")
-                ["claudeHookFreeActivity"],
+                ["useAgentHooks"],
             true
         );
     }

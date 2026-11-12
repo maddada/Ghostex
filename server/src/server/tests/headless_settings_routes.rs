@@ -25,12 +25,12 @@ async fn a_settings_save_with_no_app_is_gxservers_where_no_app_ever_saved_settin
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
     let state = test_app_state(paths.clone());
-    let (status, body) = set(&state, json!({ "claudeHookFreeActivity": true })).await;
+    let (status, body) = set(&state, json!({ "useAgentHooks": true })).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["result"]["savedBy"], "gxserver");
     assert_eq!(
         crate::shared_settings_file::read_shared_settings(&paths).expect("settings")
-            ["claudeHookFreeActivity"],
+            ["useAgentHooks"],
         true
     );
 
@@ -38,10 +38,10 @@ async fn a_settings_save_with_no_app_is_gxservers_where_no_app_ever_saved_settin
     // save while it is closed fails as before.
     std::fs::write(
         paths.app_config_dir.join("native-sidebar-settings.json"),
-        r#"{"claudeHookFreeActivity":true,"theme":"dark"}"#,
+        r#"{"useAgentHooks":true,"theme":"dark"}"#,
     )
     .expect("app save");
-    let (status, body) = set(&state, json!({ "claudeHookFreeActivity": false })).await;
+    let (status, body) = set(&state, json!({ "useAgentHooks": false })).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
     assert_eq!(body["error"], "dependencyUnavailable", "{body}");
 }

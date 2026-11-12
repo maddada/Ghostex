@@ -179,6 +179,16 @@ fn global_bin_dir(method: &str, home: &Path) -> Option<PathBuf> {
 const UPDATE_WAIT: Duration = Duration::from_secs(20 * 60);
 
 impl PendingUpdate {
+    /// An update Ghostex starts on its own card (hookless_activity/hook_free_fallback.rs), not on
+    /// Codex's prompt.
+    pub(crate) fn new(plan: UpdatePlan, latest: String, command: String) -> Self {
+        Self {
+            plan,
+            latest,
+            command,
+        }
+    }
+
     pub(crate) fn spawn(self, state: &AppState, target: &SessionChatSendTarget) {
         let state = state.clone();
         let project_id = target.project_id.clone();

@@ -22,6 +22,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("agentAcceptAllEnabled", J::Bool(false)),
     ("trustProjectFoldersAutomatically", J::Bool(true)),
     ("agentHooksAutoInstall", J::Bool(false)),
+    ("useAgentHooks", J::Bool(false)),
     ("agentsTidyUpOfferDismissed", J::Bool(false)),
     ("agentManagerZoomPercent", J::Num(100.0)),
     ("defaultPromptAgentId", J::Str("codex")),
@@ -284,7 +285,6 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // and never the raw account id the hash is derived from.
     ("analyticsEnabled", J::Bool(true)),
     ("debuggingMode", J::Bool(false)),
-    ("claudeHookFreeActivity", J::Bool(false)),
     (
         "diagnosticLogging",
         J::Obj(&[("scenarios", J::Obj(&[])), ("version", J::Num(1.0))]),

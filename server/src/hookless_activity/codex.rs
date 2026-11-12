@@ -105,6 +105,11 @@ fn line_event(
 }
 
 impl CodexObserver {
+    /// The sessions whose rollout the observer tails.
+    pub(super) fn followed(&self) -> impl Iterator<Item = &(String, String)> {
+        self.tails.keys()
+    }
+
     /// Reads the rollout each Codex session's process holds open (the zmx process scan, cached),
     /// so a session whose hook never reported its conversation is still followed, and an in-TUI
     /// resume or `/new` moves the tail to the new rollout.

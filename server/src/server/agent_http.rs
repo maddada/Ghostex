@@ -69,8 +69,8 @@ pub(crate) fn dispatch_agent_http_blocking(
             );
         }
     };
-    // A Claude hook superseded by the hook-free observer is only compared (hookless_activity/drive.rs).
-    if crate::hookless_activity::claude_hook_superseded(state, &endpoint_path, &params) {
+    // A hook superseded by its agent's hook-free watcher is only compared (hookless_activity/drive.rs).
+    if crate::hookless_activity::hook_superseded(state, &endpoint_path, &params) {
         crate::hookless_activity::observe_hook_event(state, &endpoint_path, &params, &Value::Null);
         return routed_json(
             Some(endpoint_path),
@@ -80,7 +80,7 @@ pub(crate) fn dispatch_agent_http_blocking(
                 json!({
                     "changed": false,
                     "enteredAttention": false,
-                    "reason": "claude-hook-superseded",
+                    "reason": "hook-superseded",
                 }),
             ),
         );

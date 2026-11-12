@@ -470,6 +470,15 @@ pub fn detect_session_chat_terminal_state(
         notice =
             crate::session_chat_conversation_unreported::detect(repository, project_id, session_id);
     }
+    // A Codex too old to show its approvals without hooks asks to be updated
+    // (CDXC:AgentHooks 2026-11-12 in hookless_activity/hook_free_fallback.rs).
+    if notice.is_none() && agent == Some(SessionChatOptionAgent::Codex) {
+        notice = crate::hookless_activity::codex_update_notice(project_id, session_id);
+    }
+    // A session that went back to its agent's hook says so once (hook_free_fallback.rs).
+    if notice.is_none() {
+        notice = crate::hookless_activity::fallback_notice(project_id, session_id);
+    }
     if notice.is_none() && agent == Some(SessionChatOptionAgent::Empryo) {
         notice = screen
             .zip(

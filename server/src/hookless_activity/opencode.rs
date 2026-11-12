@@ -525,6 +525,14 @@ pub(super) fn bind_for_test(conversation: &str, project_id: &str, session_id: &s
     );
 }
 
+/// The sessions whose conversation the observer follows while OpenCode's stream is connected.
+pub(super) fn followed() -> Vec<(String, String)> {
+    if !crate::session_chat_opencode::events::connected() {
+        return Vec::new();
+    }
+    lock(&BOUND).values().cloned().collect()
+}
+
 pub(super) fn drain() -> Vec<ActivityEvent> {
     release_asks();
     follow_terminal_switches();

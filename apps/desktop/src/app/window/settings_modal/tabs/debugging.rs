@@ -93,21 +93,6 @@ impl Render for DebuggingTab {
                 cx,
             ));
         }
-        if debugging_mode && search.row_visible("controls", "claudeHookFreeActivity") {
-            rows.push(toggle_field(
-                self,
-                &p,
-                "claudeHookFreeActivity",
-                RowSpec::new("Track Claude without its hooks")
-                    .description(
-                        "Follow Claude sessions' activity and conversation from the session files Claude writes itself instead of from its hooks. The hooks stay installed and are only compared.",
-                    )
-                    .dependent()
-                    .keyed(&values, "claudeHookFreeActivity"),
-                values.bool("claudeHookFreeActivity"),
-                cx,
-            ));
-        }
         let mut blocks = Vec::new();
         if let Some(section) = settings_section(&p, "", None, None, rows) {
             let mut block = PageBlock::section("controls", section);

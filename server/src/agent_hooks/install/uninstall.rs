@@ -24,6 +24,22 @@ pub(crate) fn uninstall_agent_hook(
     definition: &HookDefinition,
     hook_paths: &HookPaths,
 ) -> Result<Vec<String>, DomainStateError> {
+    uninstall_agent_hook_with(definition, hook_paths, false)
+}
+
+/// Removes only the agent's hook entries: Claude's `statusLine` stays (hook_free_cleanup.rs).
+pub(crate) fn uninstall_agent_hook_entries(
+    definition: &HookDefinition,
+    hook_paths: &HookPaths,
+) -> Result<Vec<String>, DomainStateError> {
+    uninstall_agent_hook_with(definition, hook_paths, true)
+}
+
+fn uninstall_agent_hook_with(
+    definition: &HookDefinition,
+    hook_paths: &HookPaths,
+    keep_statusline: bool,
+) -> Result<Vec<String>, DomainStateError> {
     if hook_format(definition.agent_id) == HookFormat::Opencode {
         return uninstall_opencode_hook(hook_paths);
     }
@@ -63,7 +79,7 @@ pub(crate) fn uninstall_agent_hook(
                         removed_paths.push(path_string(&path));
                     }
                 }
-                if remove_json_hook(&config_path, definition, &command)? {
+                if remove_json_hook_with(&config_path, definition, &command, keep_statusline)? {
                     removed_paths.push(path_string(&config_path));
                     if remove_codex_hook_trust_entries(&config_path, &codex_trust_keys)? {
                         let config_toml =
@@ -139,10 +155,20 @@ pub(crate) fn uninstall_marked_yaml_hook(
     Ok(removed_paths)
 }
 
+#[cfg(test)]
 pub(crate) fn remove_json_hook(
     config_path: &Path,
     definition: &HookDefinition,
     command: &str,
+) -> Result<bool, DomainStateError> {
+    remove_json_hook_with(config_path, definition, command, false)
+}
+
+fn remove_json_hook_with(
+    config_path: &Path,
+    definition: &HookDefinition,
+    command: &str,
+    keep_statusline: bool,
 ) -> Result<bool, DomainStateError> {
     let current_text = read_file_text(config_path);
     if current_text.trim().is_empty() {
@@ -153,7 +179,7 @@ pub(crate) fn remove_json_hook(
     let mut changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
     // CDXC:AgentHooks 2026-09-03 WHY: the statusLine Ghostex registered (or
     // wrapped) leaves with the hooks, restoring the user's own command.
-    if definition.agent_id == "claude" {
+    if definition.agent_id == "claude" && !keep_statusline {
         changed |= unregister_statusline(&mut data);
     }
     if !changed {

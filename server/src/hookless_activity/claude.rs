@@ -404,7 +404,13 @@ impl ClaudeObserver {
                         }
                         _ => "SessionStart",
                     };
-                    events.push(make(name).baseline());
+                    // What a wait waits for, so a question already up gets its card
+                    // (claude_question_screen.rs).
+                    let mut event = make(name).baseline();
+                    if next.status == "waiting" {
+                        event = event.with("waitingFor", json!(next.waiting_for));
+                    }
+                    events.push(event);
                 }
                 continue;
             };

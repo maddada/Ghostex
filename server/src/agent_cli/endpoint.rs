@@ -547,7 +547,8 @@ async fn install_chat_hooks(
             )
         })
         .is_none_or(|view| view == "chat");
-        if !chat {
+        // Claude, Codex and OpenCode need no hook while Use agent hooks is off (agent_hooks/hook_free.rs).
+        if !chat || crate::agent_hooks::hook_free::hook_free(&paths, &agent_id) {
             return Ok(false);
         }
         let mut params = Map::new();
