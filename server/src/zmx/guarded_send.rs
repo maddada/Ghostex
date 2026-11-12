@@ -19,9 +19,13 @@ const ZMX_IPC_TAG_SEND_ACKED: u8 = 205;
 /// `ipc.Tag.SendAck`: the receipt, one `SendAckStatus` byte.
 #[cfg(unix)]
 const ZMX_IPC_TAG_SEND_ACK: u8 = 206;
-/// `ipc.Tag.Info`: the ordering barrier after `SendAcked`.
+/// `ipc.Tag.LabelGet` and its reply `LabelData`: the ordering barrier after `SendAcked`. Not
+/// `Info`: the capture's own `Info` barrier is still unanswered on this connection when the input
+/// goes out, and taking its reply for this one wrote every message twice (seen live 2026-11-12).
 #[cfg(unix)]
-const ZMX_IPC_TAG_INFO: u8 = 6;
+const ZMX_IPC_TAG_LABEL_GET: u8 = 14;
+#[cfg(unix)]
+const ZMX_IPC_TAG_LABEL_DATA: u8 = 17;
 /// `ipc.Tag.Unsupported`: a daemon's answer to a tag it does not know.
 #[cfg(unix)]
 const ZMX_IPC_TAG_UNSUPPORTED: u8 = 255;
@@ -95,12 +99,13 @@ pub(crate) fn send_after_screen_check(
             code => ZmxCheckedSend::NotTaken(format!("zmx send exited with {code}")),
         });
     }
-    // An `Info` barrier follows the input: a daemon too old for `SendAcked` drops it (answering
+    // A barrier follows the input: a daemon too old for `SendAcked` drops it (answering
     // `Unsupported`, or nothing) and answers the barrier first, which means nothing was queued,
     // so the bytes go through `zmx send`, which probes the daemon itself (GitHub #555 review).
+    // Any other reply (the capture's `Info`) is skipped.
     let mut frame = zmx_ipc_header(ZMX_IPC_TAG_SEND_ACKED, payload.len() as u32).to_vec();
     frame.extend_from_slice(payload.as_bytes());
-    frame.extend_from_slice(&zmx_ipc_header(ZMX_IPC_TAG_INFO, 0));
+    frame.extend_from_slice(&zmx_ipc_header(ZMX_IPC_TAG_LABEL_GET, 0));
     stream
         .write_all(&frame)
         .map_err(|error| format!("zmx session input could not be written: {error}"))?;
@@ -122,7 +127,7 @@ pub(crate) fn send_after_screen_check(
                 )),
             });
         }
-        if matches!(tag, ZMX_IPC_TAG_INFO | ZMX_IPC_TAG_UNSUPPORTED) {
+        if matches!(tag, ZMX_IPC_TAG_LABEL_DATA | ZMX_IPC_TAG_UNSUPPORTED) {
             return Ok(match super::session_chat_zmx_write(zmx_name, payload)? {
                 0 => ZmxCheckedSend::Sent,
                 code => ZmxCheckedSend::NotTaken(format!("zmx send exited with {code}")),
