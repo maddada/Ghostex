@@ -131,6 +131,33 @@ pub(super) fn unmarked_rule_input_region(lines: &[String]) -> Option<Range<usize
     Some(head + 1..foot)
 }
 
+/// Claude's input box drawn without its `❯` (or `!`) marker: the last pair of rules frames at
+/// least one row, none of them starting with the marker, and only Claude's indented footer rows
+/// follow the bottom rule. Not an input box Ghostex may type into; evidence only that the frame
+/// is Claude's own, so a full redraw (Ctrl+L) may bring the marker back.
+///
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// On the user's Windows computer a coordinator's queued message was pasted into Claude Code (2.1.322) at a 200-column grid, and Claude's repaint of the now three-row input box left the first row as `\u{a0}<message>` with its `❯` gone, while the rules around the box and the footer under it stayed whole (the shape was logged at 07:13:46 and was still on screen at 07:17:31 UTC). Every reader rightly refused it as an input box, but the held message's Ctrl+L asked for a visible `❯` too, so it never ran and the message waited four minutes for the agent to be reloaded. This frame is what the redraw is for.
+pub(crate) fn claude_frame_without_marker(lines: &[String]) -> bool {
+    let Some(region) = unmarked_rule_input_region(lines) else {
+        return false;
+    };
+    let mut rows = lines[region.clone()]
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .peekable();
+    if rows.peek().is_none()
+        || rows.any(|line| line.trim_start().starts_with(CLAUDE_COMPOSER_MARKERS))
+    {
+        return false;
+    }
+    let mut footer = lines[region.end + 1..]
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .peekable();
+    footer.peek().is_some() && footer.all(|line| line.starts_with("  "))
+}
+
 /// ZCode 3.11.2-24 uses Pi's unmarked editor, followed by its model/mode footer.
 /// Require that footer immediately after the editor so a rule inside a picker cannot qualify.
 /// CDXC:AgentScreenDetection 2026-10-16 WHY:

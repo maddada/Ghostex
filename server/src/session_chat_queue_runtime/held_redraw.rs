@@ -1,7 +1,7 @@
 //! A message held for an idle Claude session whose input box cannot be read: ask Claude to redraw.
 //!
 //! CDXC:SessionChat 2026-10-28 WHY:
-//! A coordinator's thread reports sat as "Message from … · Waiting for agent" for fifteen minutes while the coordinator was idle (S90:P3lv0:G1pif, 2:50 to 3:05 PM). gxserver held the first report because "The claude input box is not on screen yet." and queued the next four behind it as startup sends. The scheduler re-read the screen every few seconds, through a whole turn the coordinator ran in between, and it never read as an input box. It went through only when the user opened the session, which resized and repainted Claude. The send path already answers such a screen with Claude's Ctrl+L redraw (`composer_repaint.rs`), but a held message never reaches the send path, and an idle, unwatched Claude never repaints by itself. So the scheduler asks for the same redraw. Only for a running Claude session: not mid-turn and not compacting; no notice, dialog or panel on screen; Claude's `❯` prompt row visible; the agent not still starting; and the input box unreadable for 20 s. Then at most once a minute, and every redraw is logged with the screen it saw (`sessionChatQueueRedrewClaude` in session-chat-send-failures.jsonl), so a frame that still does not parse can be read and fixed in the detector.
+//! A coordinator's thread reports sat as "Message from … · Waiting for agent" for fifteen minutes while the coordinator was idle (S90:P3lv0:G1pif, 2:50 to 3:05 PM). gxserver held the first report because "The claude input box is not on screen yet." and queued the next four behind it as startup sends. The scheduler re-read the screen every few seconds, through a whole turn the coordinator ran in between, and it never read as an input box. It went through only when the user opened the session, which resized and repainted Claude. The send path already answers such a screen with Claude's Ctrl+L redraw (`composer_repaint.rs`), but a held message never reaches the send path, and an idle, unwatched Claude never repaints by itself. So the scheduler asks for the same redraw. Only for a running Claude session: not mid-turn and not compacting; no notice, dialog or panel on screen; Claude's `❯` prompt row visible (or, since 2026-11-12, its box frame drawn without it: `claude_frame_without_marker`); the agent not still starting; and the input box unreadable for 20 s. Then at most once a minute, and every redraw is logged with the screen it saw (`sessionChatQueueRedrewClaude` in session-chat-send-failures.jsonl), so a frame that still does not parse can be read and fixed in the detector.
 //!
 //! CDXC:SessionChat 2026-10-29 WHY:
 //! The same idle coordinator then showed a red Copy Report pill (user: "jsut got this?? pls fix why do i see this"). The chat's hover read of its screen had caught `❯` with no rules around it and a stray "48" under it, where the status line belongs; a minute later the screen read normally again. Two such frames are logged (2026-10-28 11:25 with the bottom rule erased, 2026-10-29 02:34 with both rules gone). Claude Code redraws only the cells it thinks changed, so when the grid is resized under it (the session is open in a terminal at 42 rows and in chat views at 24 rows, and zmx moves the grid between them), cells zmx reflowed differently stay wrong until a full repaint. The parser keeps requiring the rules around `❯`: a bare `❯` with no frame cannot be told apart from Claude's menus, and typing into a screen Ghostex cannot read is how messages get eaten. Instead the screen is repaired where it is read: the terminal-tail read behind the Terminal View light and Copy Report looks again after a moment, and only a frame still unreadable on an idle Claude gets the same Ctrl+L, sharing the once-a-minute limit (`repair_unreadable_frame`, logged as `sessionChatTailRedrewClaude`). A session nobody reads is left alone: sends repair their own screen (`composer_repaint.rs`) and held messages use the clock below.
@@ -56,7 +56,8 @@ pub(crate) fn screen_wants_redraw(
 }
 
 /// The verdict half of [`screen_wants_redraw`]: a Claude input box missing, not a panel Escape
-/// closes, `❯` on screen, and no agent still starting. `readiness` already carries the notice
+/// closes, `❯` on screen or Claude's box frame drawn without it (`claude_frame_without_marker`),
+/// and no agent still starting. `readiness` already carries the notice
 /// detector's veto when it came from `session_composer_verdict`.
 pub(crate) fn frame_wants_redraw(
     agent: Option<&str>,
@@ -66,10 +67,11 @@ pub(crate) fn frame_wants_redraw(
         && readiness.is_not_ready()
         && readiness.input_box_missing()
         && !readiness.should_dismiss()
-        && readiness
+        && (readiness
             .screen_tail
             .iter()
             .any(|line| line.trim_start().starts_with('\u{276f}'))
+            || crate::session_chat_composer::claude_frame_without_marker(&readiness.screen_tail))
         && !crate::session_chat_send_wake::screen_shows_agent_starting(&readiness.screen_tail)
 }
 
@@ -332,6 +334,69 @@ mod tests {
         format!(
             "  \u{2026} +17 completed\n{RULE}\n\u{276f}\n\n  Opus 5.5 | xhigh | Ctx 40% | $877.86 | 5h 7% \u{b7} 7d 51%\n  ff8d2575-b069-47b5-b375-69750cc8353f | \u{2026}/Ghostex\n  \u{23f5}\u{23f5} bypass permissions on (shift+tab to cycle) \u{b7} 2 feedback drafts\n"
         )
+    }
+
+    /// The frame logged on the user's Windows computer on 2026-11-12 at 07:13:46 UTC, a 200-column
+    /// grid, in its logged shape with placeholder words: the end of the coordinator's report, `✻`
+    /// pushed to the last column with its words wrapped under it, then Claude's input box holding
+    /// a pasted three-row message whose first row lost its `❯` (a no-break space is left at
+    /// column 0), the bottom rule, and Claude's footer.
+    fn windows_frame_without_marker() -> String {
+        let row = |lead: usize, words: &str, len: usize| {
+            let mut row = format!("{}{words}", " ".repeat(lead));
+            while row.chars().count() < len {
+                row.push('x');
+            }
+            row
+        };
+        let rule = "\u{2500}".repeat(200);
+        [
+            row(2, "- A finished item ", 161),
+            String::new(),
+            row(1, "\u{2753} Needs you:", 13),
+            row(1, "- Approve it, then tell me ", 193),
+            format!("{}\u{273b}", " ".repeat(199)),
+            row(1, "Worked for 3m 12s ", 31),
+            row(167, "a right-aligned hint ", 200),
+            rule.clone(),
+            row(0, "\u{a0}The pasted message starts here ", 174),
+            row(2, "and goes on ", 112),
+            row(2, "and ends here ", 119),
+            rule,
+            row(2, "Opus 4.7 high", 15),
+            "  Ctx Used: 32.0% Ctx(u) Used: 40.2% v2.1.322".to_string(),
+            "  f26dba08-4763-47f6-86d1-055924ae12e5".to_string(),
+            "  \u{23f5}\u{23f5} bypass permissions on (shift+tab to cycle)".to_string(),
+        ]
+        .join("\n")
+    }
+
+    #[test]
+    fn claude_box_frame_without_its_marker_is_redrawn() {
+        let screen = windows_frame_without_marker();
+        let verdict =
+            crate::session_chat_composer::session_composer_verdict(Some("claude"), &screen);
+        assert!(verdict.is_not_ready(), "{screen}");
+        assert!(verdict.input_box_missing());
+        assert!(frame_wants_redraw(Some("claude"), &verdict));
+        assert!(screen_wants_redraw(Some("claude"), &detection(&screen)));
+        // Only Claude gets Ctrl+L.
+        assert!(!frame_wants_redraw(Some("codex"), &verdict));
+    }
+
+    #[test]
+    fn rules_that_are_not_claude_s_box_frame_get_no_redraw() {
+        let lines =
+            |rows: &[&str]| -> Vec<String> { rows.iter().map(|row| row.to_string()).collect() };
+        let frame = crate::session_chat_composer::claude_frame_without_marker;
+        // Nothing between the rules, or nothing under them: not the box with its footer.
+        assert!(!frame(&lines(&[RULE, RULE, "  footer"])));
+        assert!(!frame(&lines(&[RULE, "  words", RULE])));
+        // A row under the bottom rule that is not indented like Claude's footer.
+        assert!(!frame(&lines(&[RULE, "  words", RULE, "$ "])));
+        // A marked box is an input box, not this case.
+        assert!(!frame(&lines(&[RULE, "\u{276f} words", RULE, "  footer"])));
+        assert!(frame(&lines(&[RULE, " words", "  more", RULE, "  footer"])));
     }
 
     /// Both logged half-drawn frames stay "no input box" for the parser (a bare `❯` with no frame
