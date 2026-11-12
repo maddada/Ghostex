@@ -349,7 +349,42 @@ pub(crate) async fn run_manual_session_title_generation_job(
                         payload: crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
                     },
                 ]);
-                steps
+                // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 second review: /rename and its
+                // Return were typed blind, so an approval that was up took them as its answer.
+                // For an agent Ghostex knows they are guarded writes, as /api/sendSessionMessage's
+                // are (zmx/endpoint.rs), and the job runs again once a prompt that refused it
+                // closes; a shell keeps its plain writes.
+                match crate::agents::identity::normalize_agent_id(agent_name.as_deref()) {
+                    Some(agent) => {
+                        let mut guarded = vec![
+                            crate::session_chat_send::SessionChatSendStep::RetryAfterPrompt {
+                                tries_left: 3,
+                            },
+                        ];
+                        let last = steps.len() - 1;
+                        guarded.extend(steps.into_iter().enumerate().map(
+                            |(index, step)| match step {
+                                crate::session_chat_send::SessionChatSendStep::WriteFrom {
+                                    payload,
+                                    ..
+                                } => crate::session_chat_send::SessionChatSendStep::GuardedWrite {
+                                    agent: Some(agent.clone()),
+                                    guard: if index == last {
+                                        crate::session_chat_send::InputGuard::ReturnFor(
+                                            command_text.clone(),
+                                        )
+                                    } else {
+                                        crate::session_chat_send::InputGuard::InputBox
+                                    },
+                                    payload,
+                                },
+                                step => step,
+                            },
+                        ));
+                        guarded
+                    }
+                    None => steps,
+                }
             };
         if !named_by_channel {
             crate::session_chat_send::enqueue_session_write_sequence(
