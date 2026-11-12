@@ -13593,6 +13593,18 @@
       "agentWritable": true
     },
     {
+      "key": "voiceAgentWaitForReply",
+      "title": "Answer when I say \"reply\"",
+      "subtitle": "The voice agent keeps listening until you end with \"reply\", \"over\" or \"go ahead\", then answers. Each Regular call starts with it saying \"Hey, I hear you. Please say reply after you finish speaking so I can reply to you.\" Off: it answers when you pause. Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call.",
+      "tab": "voiceAgent",
+      "tabTitle": "Voice Agent",
+      "section": "provider",
+      "sectionTitle": "Provider and voice",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "voiceAgentMemory",
       "title": "Last conversation",
       "subtitle": "A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Press Continue in the voice panel, or say \"pick up where we left off\", to carry on from it. Forget deletes it.",
