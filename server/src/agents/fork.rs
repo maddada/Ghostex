@@ -32,6 +32,29 @@ pub(crate) fn fork_session_as(
     context: &ZmxServerContext,
     side_chat_question: Option<&str>,
 ) -> Result<AgentEndpointOutput, AgentEndpointError> {
+    fork_session_with(repository, lifecycle, db, context, side_chat_question, None)
+}
+
+/// Fork from a message (the chat message menu's Fork from here, #362): a fork whose conversation
+/// ends at `message_id`. Claude Code only (`fork_claude_at.rs`); every other agent is refused.
+pub(crate) fn fork_session_at_message(
+    repository: &DomainRepository<'_>,
+    lifecycle: &LifecycleParams,
+    db: &Connection,
+    context: &ZmxServerContext,
+    message_id: &str,
+) -> Result<AgentEndpointOutput, AgentEndpointError> {
+    fork_session_with(repository, lifecycle, db, context, None, Some(message_id))
+}
+
+fn fork_session_with(
+    repository: &DomainRepository<'_>,
+    lifecycle: &LifecycleParams,
+    db: &Connection,
+    context: &ZmxServerContext,
+    side_chat_question: Option<&str>,
+    at_message: Option<&str>,
+) -> Result<AgentEndpointOutput, AgentEndpointError> {
     let _identity_source =
         crate::session_identity_log::identity_write_source(if side_chat_question.is_some() {
             "sideChat"
@@ -70,6 +93,10 @@ pub(crate) fn fork_session_as(
     if side_chat_question.is_some() {
         side_chat_plan(&mut plan);
     }
+    let claude_fork_id = match at_message {
+        Some(_) => Some(at_message_plan(&mut plan)?),
+        None => None,
+    };
     if plan
         .get("startupText")
         .and_then(Value::as_str)
@@ -135,6 +162,32 @@ pub(crate) fn fork_session_as(
             json!(folder.session_log().to_string_lossy()),
         );
     }
+    // Fork from a message: Claude's conversation copied up to that message under the fork's own
+    // id, recorded on the row at once like Copilot's copy above.
+    let claude_fork = match (claude_fork_id.as_deref(), at_message) {
+        (Some(fork_id), Some(message_id)) => {
+            Some(super::fork_claude_at::fork_claude_conversation_at(
+                &source_session,
+                message_id,
+                fork_id,
+            )?)
+        }
+        _ => None,
+    };
+    if let (Some(fork_id), Some(copy), Some(runtime)) = (
+        claude_fork_id.as_deref(),
+        claude_fork.as_ref(),
+        fork_params
+            .get_mut("runtimeSettings")
+            .and_then(Value::as_object_mut),
+    ) {
+        runtime.insert("agentSessionId".to_string(), json!(fork_id));
+        runtime.insert(
+            "agentSessionPath".to_string(),
+            json!(copy.session_log().to_string_lossy()),
+        );
+        runtime.insert("forkedAtMessageId".to_string(), json!(at_message));
+    }
     let fork_params = fork_params
         .as_object()
         .ok_or_else(|| DomainStateError::corrupt_state("Fork params must be an object."))?;
@@ -148,6 +201,9 @@ pub(crate) fn fork_session_as(
             }
             if let Some(folder) = copilot_fork {
                 folder.discard();
+            }
+            if let Some(copy) = claude_fork {
+                copy.discard();
             }
             return Err(error.into());
         }
@@ -182,6 +238,27 @@ pub(crate) fn fork_session_as(
             }
         }),
     })
+}
+
+/// A fork from a message resumes its own copy of the conversation (`fork_claude_at.rs`) instead of
+/// forking the whole one: Claude Code only. Returns the copy's id.
+fn at_message_plan(plan: &mut Value) -> Result<String, DomainStateError> {
+    let (Some("claude"), Some(command)) = (
+        plan.get("agentId").and_then(Value::as_str),
+        plan.get("runtimeCommand").and_then(Value::as_str),
+    ) else {
+        return Err(DomainStateError::bad_request(
+            "Fork from here works with Claude Code only. Use Fork Session to copy the whole conversation.",
+        ));
+    };
+    let fork_id = uuid::Uuid::new_v4().to_string();
+    let command = format!("{command} --resume {}", quote_shell_double_arg(&fork_id));
+    plan["primaryCommand"] = json!(command);
+    plan["displayCommand"] = json!(command);
+    plan["startupText"] = json!(as_atuin_ignored_shell_input(&command));
+    plan["startupTextDisposition"] = json!("queueAfterTerminalReady");
+    plan["claudeForkSessionId"] = json!(fork_id);
+    Ok(fork_id)
 }
 
 /// The fork's command in ask-before-edits (`side_chats::ask_before_edits_command`), and the

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### ✨ New
+
+- **Fork from a message:** the ⋯ menu under one of your messages, or under the agent's last reply of a turn, now has Fork from here. It starts a new Claude Code session beside the old one whose conversation ends at that message, named "Fork: <old name>", so you can try another direction from an earlier point while the original keeps going. On the phone it is in the message's long-press menu. Other agents keep Fork Session, which copies the whole conversation. ([#362](https://github.com/maddada/Ghostex/issues/362))
+
 ### 🩹 Fixes and polish
 
 - **Copy from an opened work row:** in the work list docked above the chat box and in the Work panel, an opened row or card now shuts only on a click on its title line. A press on its description, its work item line or the space around them is for the text: drag to select, double-click a word, Cmd+C to copy, and links still open on a click. A command in a description shows the same Copy and Paste in terminal buttons on hover as a command in the chat. On the phone, a tap under an opened row's title no longer shuts it, and a long press on the description offers Copy text, and Copy command and Paste in terminal for a command in it.

@@ -880,6 +880,39 @@ impl GhostexGpuiApp {
             self.close_deleted_side_chat_tab(session_id, &message, window, cx);
             return;
         }
+        // A prompt's or a reply's Fork from here (#362): the session's fork, ending at that message,
+        // opened beside it like Fork Session's.
+        if action == "forkFromMessage" {
+            if let (Some(session), Some(message_id)) = (
+                self.workspace_terminal_session_key(session_id),
+                message
+                    .get("messageId")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|id| !id.is_empty()),
+            ) {
+                if session.machine.is_local() {
+                    self.gx_store_run_workspace_session_fork_at(
+                        &session.project_id,
+                        &session.session_id,
+                        Some(message_id),
+                        cx,
+                    );
+                } else {
+                    self.dispatch_native_sidebar_ui(
+                        serde_json::json!({
+                            "type": "command",
+                            "message": {
+                                "type": "forkSession",
+                                "sessionId": session.to_sidebar_session_id(),
+                                "messageId": message_id,
+                            },
+                        }),
+                        cx,
+                    );
+                }
+            }
+            return;
+        }
         let request = match action {
             "rename" => TerminalAgentActionRequest::Rename,
             "sleep" => TerminalAgentActionRequest::Sleep,

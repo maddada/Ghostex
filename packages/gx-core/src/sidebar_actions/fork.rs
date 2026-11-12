@@ -151,20 +151,25 @@ pub fn plan_fork_request(core: &Core, message: &Value) -> Option<ForkRequest> {
         && focus.active_group.as_ref() == Some(&source_group);
     Some(ForkRequest {
         rpc_path: "/api/forkSession",
-        rpc_params: fork_params(&session),
+        rpc_params: fork_params(&session, message),
         activate: (!already_active).then_some(source_group),
         source_subgroup,
         session,
     })
 }
 
-/// The body of `/api/forkSession`, which is the same on either machine: that machine's raw ids.
-pub(super) fn fork_params(session: &SessionKey) -> Value {
-    json!({
+/// The body of `/api/forkSession`, which is the same on either machine: that machine's raw ids,
+/// and the message a chat's Fork from here names (#362), where the fork's conversation ends.
+pub(super) fn fork_params(session: &SessionKey, message: &Value) -> Value {
+    let mut params = json!({
         "projectId": session.project_id,
         "reason": "gpui-sidebar",
         "sessionId": session.session_id,
-    })
+    });
+    if let Some(message_id) = text_field(message, "messageId").filter(|id| !id.trim().is_empty()) {
+        params["messageId"] = json!(message_id);
+    }
+    params
 }
 
 /// What to do with the answer. `/api/forkSession` answers `{ fork: { session: { sessionId } } }`,

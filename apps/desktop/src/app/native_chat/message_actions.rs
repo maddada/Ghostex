@@ -218,6 +218,9 @@ impl NativeChatView {
                 "command":{"type":"markdownSaveOpen","markdown":markdown},
             }));
         }
+        if let Some(row) = self.fork_from_here_row(&id) {
+            rows.push(row);
+        }
         let read_aloud = &self.snapshot["readAloud"];
         if read_aloud["available"] == true {
             let reading = read_aloud["speakingId"] == message["id"];
@@ -439,6 +442,12 @@ impl NativeChatView {
                 "command":{"type":"rewindOpen","messageId":id,"prompt":prompt},
             }));
         }
+        // A message still waiting for the agent is not in its conversation yet.
+        if waiting_prompt.is_none() && !takeable {
+            if let Some(row) = self.fork_from_here_row(id) {
+                rows.push(row);
+            }
+        }
         if editable {
             rows.push(json!({
                 "label":"Edit message","iconPath":"titlebar/pencil.svg",
@@ -461,6 +470,19 @@ impl NativeChatView {
             }));
         }
         rows
+    }
+
+    /// Fork from here (#362): a new session of the same agent whose conversation ends at this
+    /// message, opened beside this one. Offered where the core says the agent's conversation can be
+    /// cut at a message (`forkFromMessageAvailable`, Claude Code only), never in a subagent's
+    /// transcript, which is not the session's own conversation.
+    fn fork_from_here_row(&self, id: &str) -> Option<Value> {
+        (!self.in_subagent && self.snapshot["forkFromMessageAvailable"] == true).then(|| {
+            json!({
+                "label":"Fork from here","iconPath":"titlebar/git-branch.svg",
+                "command":{"type":"host","action":"forkFromMessage","messageId":id},
+            })
+        })
     }
 
     /// One of a prompt's action buttons: a 24px square with a 12px icon, a hover fill and a

@@ -7,6 +7,7 @@ mod draft_switch;
 pub mod drafts;
 pub mod endpoint;
 pub mod fork;
+pub(crate) mod fork_claude_at;
 pub(crate) mod fork_copilot;
 pub(crate) mod fork_empryo;
 mod gbot_computer_use;

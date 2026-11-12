@@ -101,7 +101,13 @@ pub fn dispatch_agent_endpoint(
                 )
             })?;
             let lifecycle = read_lifecycle(params)?;
-            fork_session(repository, &lifecycle, db, context)?
+            // Fork from here on a chat message (#362): the fork's conversation ends at it.
+            match read_text(params, "messageId") {
+                Some(message_id) => {
+                    fork_session_at_message(repository, &lifecycle, db, context, &message_id)?
+                }
+                None => fork_session(repository, &lifecycle, db, context)?,
+            }
         }
         // A side chat (server/src/side_chats/): the fork above, marked, with its question sent by
         // server/src/server/side_chat_http.rs once it has started.

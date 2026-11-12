@@ -103,6 +103,12 @@ pub fn agent_supports_rewind(agent: Option<&str>) -> bool {
     matches!(agent, Some("claude") | Some("codex") | Some("opencode"))
 }
 
+/// CDXC:SessionFork 2026-11-12 WHY:
+/// Fork from here on a prompt or a reply (#362) needs the agent's saved conversation cut at that message and resumed under a new id. Only Claude Code's can be (server/src/agents/fork_claude_at.rs): Codex, Pi and Grok fork only a whole conversation, and the copies Empryo and Copilot forks make are not mapped to chat messages yet, so their menus keep only the whole-session Fork.
+pub fn agent_supports_fork_from_message(agent: Option<&str>) -> bool {
+    agent == Some("claude")
+}
+
 /// The message's own wire keys, which the projection spreads before it adds its own.
 fn message_keys(message: &ChatMessage) -> Map<String, Value> {
     match serde_json::to_value(message) {

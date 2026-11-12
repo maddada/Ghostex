@@ -348,6 +348,10 @@ pub struct Document {
     pub rewind_available: bool,
     /// Whether rewinding is allowed right now, the same gate the composer sends under.
     pub rewind_enabled: bool,
+    /// Whether a prompt's and a reply's menu offer Fork from here (#362): the agent's
+    /// conversation can be copied up to one message (`agent_supports_fork_from_message`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fork_from_message_available: bool,
     /// Which message ids have a saved prompt, so the rail can mark them. Family b.
     pub saved_prompts: Map<String, Value>,
     /// How strongly marked sections' headings take their kind's colour, 0 to 100 percent

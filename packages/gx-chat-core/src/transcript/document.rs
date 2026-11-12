@@ -100,6 +100,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     the rewind into that same pane.
     */
     into.rewind_available = agent_supports_rewind(state.session.agent.as_deref());
+    into.fork_from_message_available =
+        crate::transcript::presentation::agent_supports_fork_from_message(
+            state.session.agent.as_deref(),
+        );
     // `rewindEnabled: sendBlockedReason(state) === null`. That is family d's rule, and
     // `document::assemble` runs family b first, so it is read off the state family d's settle
     // cached it on rather than out of a half-built document.

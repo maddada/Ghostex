@@ -1453,6 +1453,13 @@ turn has finished. The copy gets its own copies of Empryo's checkpoints, so undo
 works in the fork, and deleting or closing either session leaves the other's
 checkpoints alone. Copilot has no command-line fork either, so Ghostex copies the
 Copilot conversation under a new id and resumes the copy.
+Fork from here, in the ⋯ menu under one of your messages or under the agent's
+last reply of a turn (a long press on the message on the phone), makes the
+same kind of fork, but its conversation ends at that message: everything after
+it is left out, and the original session carries on untouched. It works for
+Claude Code sessions; other agents fork only the whole conversation. From a
+terminal: `ghostex fork-session <selector> --message-id <id>`, with the id
+`ghostex read-session-chat <selector> --json` shows for the message.
 Once a conversation has forks, a small branch button in the chat's top right
 lists every session that shares the earlier history, including the thread you
 forked away from, and switches to the one you pick; a stopped branch is resumed

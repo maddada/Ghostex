@@ -179,15 +179,28 @@ impl GhostexGpuiApp {
         session_id: &str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        self.gx_store_run_workspace_session_fork_at(project_id, session_id, None, cx)
+    }
+
+    /// The same fork, ending at `message_id` when a chat message's Fork from here names one
+    /// (#362): the new session opens beside the old one like any fork.
+    pub(crate) fn gx_store_run_workspace_session_fork_at(
+        &mut self,
+        project_id: &str,
+        session_id: &str,
+        message_id: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         let session = SessionKey::local(project_id, session_id);
+        let mut message = serde_json::json!({
+            "type": "forkSession",
+            "sessionId": session.to_sidebar_session_id(),
+        });
+        if let Some(message_id) = message_id {
+            message["messageId"] = serde_json::json!(message_id);
+        }
         self.gx_store_run_sidebar_fork(
-            &serde_json::json!({
-                "type": "command",
-                "message": {
-                    "type": "forkSession",
-                    "sessionId": session.to_sidebar_session_id(),
-                },
-            }),
+            &serde_json::json!({ "type": "command", "message": message }),
             cx,
         )
     }

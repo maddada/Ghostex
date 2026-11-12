@@ -117,6 +117,10 @@ pub fn fork_session_command(args: &[String]) -> CliResult<()> {
     let mut payload = Map::new();
     insert_session_field(&mut payload, "projectId", &session);
     insert_session_field(&mut payload, "sessionId", &session);
+    // `--message-id <id>`: a Claude Code fork whose conversation ends at that message.
+    if let Some(message_id) = flags.text("messageId").filter(|id| !id.trim().is_empty()) {
+        payload.insert("messageId".to_string(), Value::String(message_id));
+    }
     let action_result =
         actions::send_gxserver_cli_action("forkSession", &Value::Object(payload), &flags)?;
     if is_failed_cli_result(&action_result) {

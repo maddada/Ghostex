@@ -273,7 +273,7 @@ pub fn plan_remote_session_action(
             RemoteActionKind::Fork,
             vec![RemoteLeg::awaited(
                 "/api/forkSession",
-                fork_params(&session),
+                fork_params(&session, message),
                 Some(RemoteFailureToast {
                     level: ToastLevel::Error,
                     title: "Remote fork failed",

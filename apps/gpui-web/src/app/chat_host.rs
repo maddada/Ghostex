@@ -519,6 +519,18 @@ impl GhostexGpuiApp {
                 );
                 return true;
             }
+            // A prompt's or a reply's Fork from here (#362).
+            Some("forkFromMessage") => {
+                if let Some(message_id) = message["messageId"].as_str() {
+                    self.gx_store_run_workspace_session_fork_at(
+                        &session.project_id,
+                        &session.session_id,
+                        Some(message_id),
+                        cx,
+                    );
+                }
+                return true;
+            }
             Some("exportTranscript") => {
                 self.git_export_session_transcript(&row, None, cx);
                 return true;
