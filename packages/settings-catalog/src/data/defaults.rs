@@ -633,8 +633,6 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sessionChatFileEditPreviews", J::Bool(false)),
     // CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." Off keeps the unified look; on, thinking takes the theme's muted text colour and replies its full foreground, in the desktop, web and phone chats.
     ("sessionChatMutedThinking", J::Bool(false)),
-    // CDXC:SessionChat 2026-10-28 DECISION: User: "Let's please do this under feature flag if possible (toggle in settings) so i can test it. Keep current look as it is." Off by default; on, the chat draws tool calls as cards (packages/gx-chat-core/src/transcript/tool_card.rs).
-    ("chatToolCallCards", J::Bool(false)),
     ("sessionChatKeepComposerExpanded", J::Bool(false)),
     ("sessionChatConfirmEscapeInterrupt", J::Bool(true)),
     // CDXC:CatchMeUp 2026-10-11 DECISION: User: "disable this feature by default. add a toggle to enable it under chat". The composer's Catch me up button shows only while this is on.
@@ -663,10 +661,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatSendOnPick", J::Bool(false)),
     ("chatAnswersWaitForIdle", J::Bool(false)),
     ("chatPageOpenTarget", J::Str("popup")),
-    // CDXC:SessionChat 2026-11-07 SEE-ALSO: the chat look settings (Message layout, Your messages, Agent work, Status line in the chat) are opt-in, all Default; the user decisions are in packages/gx-chat-core/src/transcript/chat_look.rs.
+    // CDXC:SessionChat 2026-11-07 SEE-ALSO: the chat look settings (Message layout, Your messages, Status line in the chat) are opt-in; Agent work and Tool call cards are retired (`migrate_retired_chat_looks` in lib.rs), all Default; the user decisions are in packages/gx-chat-core/src/transcript/chat_look.rs.
     ("chatMessageLayout", J::Str("default")),
     ("chatUserMessageStyle", J::Str("default")),
-    ("chatAgentWorkStyle", J::Str("default")),
     ("chatStatusInTranscript", J::Bool(false)),
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: Chat box matches transcript width is opt-in, off; the user decision is on the chat box in apps/desktop/src/app/native_chat/composer.rs.
     ("chatComposerMatchesTranscriptWidth", J::Bool(false)),

@@ -728,13 +728,6 @@ pub const CHAT_MESSAGE_LAYOUT_OPTIONS: &[Opt] =
 pub const CHAT_USER_MESSAGE_STYLE_OPTIONS: &[Opt] =
     &[opt("Default", "default"), opt("Band", "band")];
 
-/// How the agent's work shows in the transcript (`chatAgentWorkStyle`), in the Settings control's order.
-pub const CHAT_AGENT_WORK_STYLE_OPTIONS: &[Opt] = &[
-    opt("Default", "default"),
-    opt("Reduced", "reduced"),
-    opt("Quiet", "quiet"),
-];
-
 /// How close together the chat's messages sit (`chatMessageSpacing`), in the Settings control's order.
 pub const CHAT_MESSAGE_SPACING_OPTIONS: &[Opt] =
     &[opt("Default", "default"), opt("Compact", "compact")];

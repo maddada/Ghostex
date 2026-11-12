@@ -149,15 +149,12 @@ pub(super) fn chat_settings() -> ChatSettings {
         chat_text_strength: object
             .get("sessionChatTextStrengthPercent")
             .and_then(Value::as_f64),
-        // The core builds the card for either look: Tool call cards (Settings > Chat) or Tool call
-        // lines (Extensions > Experimental), which draws the same card as one quiet line.
-        tool_cards: match (
-            object.get("chatToolCallCards").and_then(Value::as_bool),
-            object.get("chatToolCallLines").and_then(Value::as_bool),
-        ) {
-            (None, None) => None,
-            (cards, lines) => Some(cards == Some(true) || lines == Some(true)),
-        },
+        // The core builds the card for Tool call lines (Extensions > Experimental), which draws it
+        // as one quiet line. The Tool call cards switch is retired (Q2775, settings catalog
+        // `migrate_retired_chat_looks`).
+        tool_cards: object
+            .get("chatToolCallLines")
+            .and_then(Value::as_bool),
         detailed_default: object
             .get("sessionChatDetailedView")
             .and_then(Value::as_bool),
@@ -177,7 +174,8 @@ pub(super) fn chat_settings() -> ChatSettings {
             ghostex_gx_chat_core::protocol::ChatLookSettings {
                 message_layout: option("chatMessageLayout"),
                 user_style: option("chatUserMessageStyle"),
-                agent_work: option("chatAgentWorkStyle"),
+                // Agent work is retired (Q2773, Q2774): the core draws Default.
+                agent_work: None,
                 status_in_transcript: Some(
                     object
                         .get("chatStatusInTranscript")

@@ -179,6 +179,7 @@ pub(super) fn read_settings_file() -> CliResult<Map<String, Value>> {
     // The experimental switches in place of Enable Experimental Features (CDXC:Extensions
     // 2026-11-09 in the settings catalog), as the app and gxserver read them.
     ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
+    ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
     Ok(object)
 }
 

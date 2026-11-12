@@ -188,8 +188,15 @@ pub fn apply_from_read(view: &mut crate::state::TranscriptViewState, settings: &
 /// Adopts what `settings` names, throwing the cached projections away when the look moved, the
 /// same way [`crate::transcript::tool_card::set_enabled`] does: every row's model depends on it.
 /// Message spacing alone moves no row (only the renderers read it), so it keeps them.
+///
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// The user answered the chat view modes page, Q2773 and Q2774 "retire": Agent work Reduced and Quiet are gone, with their setting (`chatAgentWorkStyle`), and anyone who had one picked lands on Quiet View (`migrate_retired_chat_looks` in the settings catalog). A host or an older computer that still sends an Agent work value is ignored here, so every chat draws Agent work Default under its quiet lines.
 fn apply(view: &mut crate::state::TranscriptViewState, settings: &ChatLookSettings) {
-    let next = view.chat_look.with_settings(settings);
+    let settings = ChatLookSettings {
+        agent_work: None,
+        ..settings.clone()
+    };
+    let next = view.chat_look.with_settings(&settings);
     if next != view.chat_look {
         let rows_moved = ChatLook {
             spacing: view.chat_look.spacing,

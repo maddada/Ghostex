@@ -127,6 +127,38 @@ pub fn migrate_chat_view_default(settings: &mut serde_json::Map<String, serde_js
     }
 }
 
+/// Drops the retired Agent work (`chatAgentWorkStyle`) and Tool call cards (`chatToolCallCards`)
+/// settings, and turns Quiet View on for other chats (`chatQuietViewChats`) for someone who had
+/// Agent work Reduced or Quiet or Tool call cards on. Returns whether it changed anything; a
+/// settings object without the old keys is left alone.
+///
+/// CDXC:SessionChat 2026-11-13 DECISION: The user answered the chat view modes page, Q2773, Q2774
+/// and Q2775 "retire": Agent work Reduced, Agent work Quiet and the Tool call cards preview switch
+/// are removed, anyone who had one of them picked lands on Quiet View, and their settings are
+/// dropped. Quiet View is on for every chat by default since Q2771, so this matters only for a
+/// file that saved `chatQuietViewChats` false; such a person had picked one of the retired looks
+/// after that, so the look they wanted wins. The desktop saves this once at start
+/// (shared_settings/experimental_switches.rs) and every reader applies it, as for
+/// `migrate_experimental_features_switch`.
+pub fn migrate_retired_chat_looks(settings: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    let work = settings.remove("chatAgentWorkStyle");
+    let cards = settings.remove("chatToolCallCards");
+    if work.is_none() && cards.is_none() {
+        return false;
+    }
+    let picked = matches!(
+        work.as_ref().and_then(serde_json::Value::as_str),
+        Some("reduced" | "quiet")
+    ) || cards.as_ref().and_then(serde_json::Value::as_bool) == Some(true);
+    if picked {
+        settings.insert(
+            "chatQuietViewChats".to_string(),
+            serde_json::Value::Bool(true),
+        );
+    }
+    true
+}
+
 /// The switches Enable Experimental Features (`showBetaFeatures`) used to open, with the value of
 /// each that means on, and whether it was on by default under the old switch.
 const EXPERIMENTAL_FEATURE_SWITCHES: &[(&str, bool, bool)] = &[

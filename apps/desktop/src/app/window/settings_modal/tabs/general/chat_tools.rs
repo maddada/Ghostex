@@ -130,7 +130,6 @@ fn chat_section(
         ));
     }
     rows.extend(page.toggle(g, s, "sessionChatFileEditPreviews", "Show file edit previews", "Show the first seven code lines in each file edit. Turn off to show only the path and change counts.", false, cx));
-    rows.extend(page.toggle(g, s, "chatToolCallCards", "Tool call cards (preview)", "Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look. Agent work's Reduced and Quiet replace these cards.", false, cx));
     if g.visible(s, "chatMessageLayout") {
         let spec = g.spec(
             "chatMessageLayout",
@@ -160,22 +159,6 @@ fn chat_section(
             spec,
             Some(reset_key::<GeneralTab>("chatUserMessageStyle")),
             g.options("CHAT_USER_MESSAGE_STYLE_OPTIONS"),
-            cx,
-        ));
-    }
-    if g.visible(s, "chatAgentWorkStyle") {
-        let spec = g.spec(
-            "chatAgentWorkStyle",
-            "Agent work",
-            "Default shows a Worked for card before each reply. Reduced shows one small line for everything the agent did for each of your messages. Quiet keeps the agent's work out of the chat and puts a button for it with each reply's hover buttons.",
-        );
-        rows.extend(page.segmented(
-            g,
-            s,
-            "chatAgentWorkStyle",
-            spec,
-            Some(reset_key::<GeneralTab>("chatAgentWorkStyle")),
-            g.options("CHAT_AGENT_WORK_STYLE_OPTIONS"),
             cx,
         ));
     }

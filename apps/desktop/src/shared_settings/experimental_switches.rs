@@ -26,7 +26,11 @@ pub fn migrate_experimental_features_switch_once() {
             return;
         }
     };
-    if !ghostex_settings_catalog::migrate_experimental_features_switch(&mut object) {
+    let experimental = ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
+    // Agent work and Tool call cards are retired the same way (CDXC:SessionChat 2026-11-13 in the
+    // settings catalog `migrate_retired_chat_looks`).
+    let retired = ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
+    if !experimental && !retired {
         return;
     }
     let saved = serde_json::to_vec_pretty(&Value::Object(object))

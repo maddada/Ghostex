@@ -29,6 +29,9 @@ impl SharedSidebarSettingsSnapshot {
         // Enable Experimental Features became one switch each (CDXC:Extensions 2026-11-09 in
         // the settings catalog); saved once at start by experimental_switches.rs.
         ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
+        // Agent work and Tool call cards are retired (CDXC:SessionChat 2026-11-13 in the settings
+        // catalog); saved once at start by experimental_switches.rs.
+        ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
         let content_hash = hash_settings_object(&object);
         Self {
             revision: 0,
@@ -46,6 +49,9 @@ impl SharedSidebarSettingsSnapshot {
         // Enable Experimental Features became one switch each (CDXC:Extensions 2026-11-09 in
         // the settings catalog); saved once at start by experimental_switches.rs.
         ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
+        // Agent work and Tool call cards are retired (CDXC:SessionChat 2026-11-13 in the settings
+        // catalog); saved once at start by experimental_switches.rs.
+        ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
         Self {
             revision,
             content_hash,

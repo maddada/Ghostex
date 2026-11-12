@@ -60,6 +60,7 @@ pub(crate) fn save_settings_patch(
     // Saved with the experimental switches in place of Enable Experimental Features, so the old
     // key never overrides a switch saved here (CDXC:Extensions 2026-11-09 in the settings catalog).
     ghostex_settings_catalog::migrate_experimental_features_switch(&mut settings);
+    ghostex_settings_catalog::migrate_retired_chat_looks(&mut settings);
     for (key, value) in patch {
         if value.is_null() {
             settings.remove(key);

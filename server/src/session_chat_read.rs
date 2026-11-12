@@ -689,7 +689,9 @@ pub(crate) async fn handle_read_session_chat_http(
         json!(ghostex_gx_protocol::ChatLookSettings {
             message_layout: look_option("chatMessageLayout"),
             user_style: look_option("chatUserMessageStyle"),
-            agent_work: look_option("chatAgentWorkStyle"),
+            // Agent work Reduced and Quiet are retired (Q2773, Q2774): Default, so a phone that
+            // still draws them goes back to Default.
+            agent_work: Some("default".to_string()),
             status_in_transcript: Some(
                 settings
                     .get("chatStatusInTranscript")

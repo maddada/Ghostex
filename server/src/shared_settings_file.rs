@@ -62,6 +62,8 @@ fn read_checked(
                 // (or a gxserver-owned file is saved), every read sees the switches it had
                 // (CDXC:Extensions 2026-11-09 in the settings catalog).
                 ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
+                // Agent work and Tool call cards are retired (CDXC:SessionChat 2026-11-13).
+                ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
                 Value::Object(object)
             }))
         }

@@ -66,18 +66,6 @@
       "agentWritable": true
     },
     {
-      "key": "chatToolCallCards",
-      "title": "Tool call cards (preview)",
-      "subtitle": "Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look. Agent work's Reduced and Quiet replace these cards.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
       "key": "chatMessageLayout",
       "title": "Message layout",
       "subtitle": "Default puts your messages on the right as bubbles. Left aligned starts every message at the same left edge.",
@@ -118,33 +106,6 @@
         {
           "label": "Band",
           "value": "band"
-        }
-      ],
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "chatAgentWorkStyle",
-      "title": "Agent work",
-      "subtitle": "Default shows a Worked for card before each reply. Reduced shows one small line for everything the agent did for each of your messages. Quiet keeps the agent's work out of the chat and puts a button for it with each reply's hover buttons.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "enum",
-      "default": "default",
-      "options": [
-        {
-          "label": "Default",
-          "value": "default"
-        },
-        {
-          "label": "Reduced",
-          "value": "reduced"
-        },
-        {
-          "label": "Quiet",
-          "value": "quiet"
         }
       ],
       "advanced": true,
@@ -221,7 +182,7 @@
       "section": "chat",
       "sectionTitle": "Chat",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "advanced": true,
       "agentWritable": true
     },
@@ -234,14 +195,14 @@
       "section": "chat",
       "sectionTitle": "Chat",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "advanced": true,
       "agentWritable": true
     },
     {
       "key": "sessionChatDetailedView",
       "title": "Default to Detailed view",
-      "subtitle": "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
+      "subtitle": "New chats open in Detailed view: Quiet View with every line open, so all the work between replies shows. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
