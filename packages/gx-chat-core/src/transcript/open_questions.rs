@@ -193,6 +193,8 @@ impl Asker {
 ///
 /// CDXC:SessionChat 2026-11-12 WHY:
 /// Issue #579: after a context compaction a coordinator reused tags it had already asked and the user had answered (Q49, Q51 to Q55) for new questions. Every new form and one-click question drew as answered with "Sent · Change", the user saw nothing to answer, a click sent nothing (it went to the old copy as a change), and the coordinator waited for answers that never came. A tag's answer now reaches only the copies asked before it arrived, and a copy asked after it only when it asks the same question (the 2026-11-07 decision on [`share_answers`], Q1652: same words up to its `?`, same choices). A tag reused for a different question after its answer is a new, open question; old answered questions stay answered.
+/// CDXC:SessionChat 2026-11-12 DECISION:
+/// User (Q2632, asked again): "Exact copies only (as first built)". A question asked after its tag's answer counts as the same question only when its words up to the `?` and its choices match the answered one; a reworded copy is a new, open question. The alternative, "Treat reworded copies as the same question" (matching on shared words and the same choices), was declined because a wrong guess hides a new question as answered, which is issue #579 again.
 pub fn asks_alike(a: &Asker, b: &Asker, tag: &str) -> bool {
     if a.round(tag) == b.round(tag) {
         return true;
