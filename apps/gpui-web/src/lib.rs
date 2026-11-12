@@ -210,7 +210,7 @@ pub fn run() -> Result<(), JsValue> {
 
         cx.open_window(WindowOptions::default(), |window, cx| {
             let shell = cx.new(|cx| {
-                let mut app = GhostexGpuiApp::new();
+                let mut app = GhostexGpuiApp::new(cx);
                 app.web_host.main_window = Some(window.window_handle());
                 app::web_host::install_path_links(cx.entity().downgrade());
                 if crate::app::collab_guest::guest().is_some() {

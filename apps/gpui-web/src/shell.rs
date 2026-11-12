@@ -312,6 +312,11 @@ impl Render for GhostexGpuiApp {
         if crate::app::collab_guest::guest().is_some() {
             return self.render_collab_guest_shell(window, cx);
         }
+        // With nothing focused the key path misses the root that binds Tab; park it on the root's
+        // handle, as the desktop's `hold_unfocused_keyboard_on_root` does.
+        if window.focused(cx).is_none() {
+            window.focus(&self.root_action_focus_handle, cx);
+        }
         self.web_sync_terminal_zmx_visibility(cx);
         self.web_report_chat_grid_claims(cx);
         // An entry waiting in a sidebar that was just hidden ends at once (native_sidebar/keyboard.rs).
@@ -405,6 +410,14 @@ impl Render for GhostexGpuiApp {
             .relative()
             .flex()
             .bg(titlebar_background())
+            // Zero-size and never hovered, so a click on it can't take focus from a field (the
+            // desktop's handle, render/root.rs).
+            .child(
+                div()
+                    .absolute()
+                    .size_0()
+                    .track_focus(&self.root_action_focus_handle),
+            )
             .on_action(
                 cx.listener(|app, action: &NativeSidebarAction, window, cx| {
                     app.handle_native_sidebar_action(action, window, cx)

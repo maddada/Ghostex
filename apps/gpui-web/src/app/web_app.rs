@@ -105,11 +105,18 @@ pub(crate) struct GhostexGpuiApp {
         HashMap<String, crate::app::model::GpuiSidebarCommandRunFeedbackState>,
     /// The desktop gives a command pane its keyboard focus back when a dialog closes; the page has no command pane.
     pub(crate) app_modal_command_return_focus_target: Option<()>,
+    /// Where the keyboard is parked while nothing is focused, so Tab and the root's other keys
+    /// still reach it (`render` in shell.rs, as the desktop's handle of the same name).
+    ///
+    /// CDXC:FocusRouting 2026-11-12 WHY:
+    /// GPUI sends a key along the focused element's path, and with nothing focused that path holds only the window's outermost element, above the `Root` that binds Tab. The desktop parks the keyboard on a handle of its own (`root_action_focus_handle`); the page had none, so Tab from "nothing focused" (a fresh page, a click on empty space) did nothing (GitHub #557).
+    pub(crate) root_action_focus_handle: gpui::FocusHandle,
 }
 
 impl GhostexGpuiApp {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(cx: &mut Context<Self>) -> Self {
         Self {
+            root_action_focus_handle: cx.focus_handle().tab_stop(false),
             native_sidebar: NativeSidebarState::default(),
             gx_store: Default::default(),
             sidebar_width: 300.0,
