@@ -848,7 +848,100 @@ impl NativeChatView {
     /// (A, superseded by the ⋯ menu); a very long question shows "four lines, then more" (B,
     /// superseded: an opened row shows it whole). Also as drawn: the age stays
     /// at the top right, and the work item's name and "Nothing waits on it" share one line.
+    ///
+    /// Opening or shutting, the row eases between the two as the chat's folds do
+    /// (disclosure_motion.rs, its timing, curve and the reduced motion setting): its height
+    /// moves from the one line's to the card's while the line fades out and the card fades in
+    /// over it, so the rows under it slide instead of jumping. Shutting does the same backwards,
+    /// and a press part of the way through turns it around from where it is.
+    ///
+    /// CDXC:Coordinators 2026-11-12 DECISION:
+    /// User: opening and closing each docked card animated, quickly, the way the chat's folds
+    /// ease open and shut.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+        let key = text(row, "key");
+        let open_key = format!("dock-row:{key}");
+        let page_row = row["page"] == true && row["open"].is_object();
+        let open = self.expanded.contains(&open_key) && !page_row;
+        // The shut line measures its height whenever it is drawn, kept between motions, so an
+        // opening starts from exactly the line on screen.
+        let shut_height = self.disclosure_floor(&open_key);
+        let shut_id = gpui::SharedString::from(format!("dock-row-shut:{key}"));
+        let open_id = gpui::SharedString::from(format!("dock-row-open:{key}"));
+        let Some(frame) = self.disclosure_frame(&open_key, open, cx) else {
+            let layer = self.dock_row_layout(row, open, p, cx);
+            return if open {
+                div().id(open_id).w_full().child(layer).into_any_element()
+            } else {
+                div()
+                    .id(shut_id)
+                    .w_full()
+                    .child(super::disclosure_motion::measured(shut_height, layer))
+                    .into_any_element()
+            };
+        };
+        let factor = frame.log.clamp(0.0, 1.0);
+        let card_height = self.disclosure_motion.borrow_mut().height(&open_key, "card");
+        let (shut, card) = (shut_height.get(), card_height.get());
+        // Both layers keep the ids they have at rest, so nothing they hold is lost when the
+        // motion starts or ends. The one the row is turning into lies on top and takes presses.
+        let shut_layer = div()
+            .id(shut_id)
+            .absolute()
+            .top_0()
+            .left_0()
+            .w_full()
+            .opacity((1.0 - factor / 0.75).clamp(0.0, 1.0))
+            .child(super::disclosure_motion::measured(
+                shut_height,
+                self.dock_row_layout(row, false, p, cx),
+            ))
+            .into_any_element();
+        let card_layer = div()
+            .id(open_id)
+            .w_full()
+            .flex_shrink_0()
+            .opacity(((factor - 0.25) / 0.75).clamp(0.0, 1.0))
+            .child(super::disclosure_motion::measured(
+                card_height,
+                self.dock_row_layout(row, true, p, cx),
+            ))
+            .into_any_element();
+        let layers = if open {
+            [shut_layer, card_layer]
+        } else {
+            [card_layer, shut_layer]
+        };
+        div()
+            .relative()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .flex_shrink_0()
+            .overflow_hidden()
+            .map(|holder| {
+                if shut > 0.0 && card > 0.0 {
+                    holder.h(px(shut + (card - shut) * factor))
+                } else if shut > 0.0 && factor < 0.5 {
+                    holder.h(px(shut))
+                } else {
+                    holder
+                }
+            })
+            .children(layers)
+            .into_any_element()
+    }
+
+    /// One dock row drawn shut (`open` false, one line) or opened (its card), at rest
+    /// (`dock_row` eases between the two).
+    fn dock_row_layout(
+        &self,
+        row: &Value,
+        open: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
         let open_key = format!("dock-row:{key}");
@@ -860,7 +953,7 @@ impl NativeChatView {
         // basically) where i can click to see show in chat/dismiss/snooze. don't make it expand
         // on click since it's useless when it expands".
         let page_row = row["page"] == true && row["open"].is_object();
-        let open = self.expanded.contains(&open_key) && !page_row;
+        let open = open && !page_row;
         let (icon, color) = row_mark(row, p);
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
@@ -1247,7 +1340,6 @@ impl NativeChatView {
         let mut card = div()
             .w_full()
             .group(hover)
-            .my(px(4.0 * s))
             .rounded(px(10.0 * s))
             .border_1()
             .border_color(p.foreground.opacity(if p.light { 0.10 } else { 0.10 }))
@@ -1279,7 +1371,13 @@ impl NativeChatView {
                     ),
             );
         }
-        card.into_any_element()
+        // Its spacing above and below is padding, not margin, so the height `dock_row` measures
+        // while it moves is the whole room it takes.
+        div()
+            .w_full()
+            .py(px(4.0 * s))
+            .child(card)
+            .into_any_element()
     }
 
     /// A dock row's clickable surface: its title line (opened, only that line; what sits under it
