@@ -295,8 +295,9 @@ pub(crate) async fn handle_event_socket_scoped(
     });
     let mut renderer_client_id: Option<String> = None;
     let mut session_chat_subscriptions: HashSet<(String, String)> = HashSet::new();
-    let sessions_list = (mode == EventStreamMode::SessionsList)
-        .then(|| super::sessions_list_stream::SessionsListStream::start(outbound_tx.clone()));
+    let sessions_list = (mode == EventStreamMode::SessionsList).then(|| {
+        super::sessions_list_stream::SessionsListStream::start(state.clone(), outbound_tx.clone())
+    });
     loop {
         let message = tokio::select! {
             _ = outbound_tx.wait_for_overflow() => break,

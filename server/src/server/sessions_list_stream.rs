@@ -16,6 +16,8 @@ use tokio::task::JoinHandle;
 use crate::events::EventClientSender;
 use crate::ghostex_cli::args::parse_args;
 use crate::ghostex_cli::sessions::{database_stamp, mobile_summary_value};
+use crate::server::AppState;
+use std::sync::Arc;
 
 const CHECK_MS: u64 = 1_000;
 const REBUILD_MS: u64 = 5_000;
@@ -25,6 +27,9 @@ const ALIVE_MS: u64 = 20_000;
 pub(crate) const SUMMARY_FRAME: &str = "sessionsListSummary";
 pub(crate) const PATCH_FRAME: &str = "sessionsListPatch";
 pub(crate) const ALIVE_FRAME: &str = "sessionsListAlive";
+/// CDXC:StateSync 2026-11-12 DECISION:
+/// The user asked to fold the phone's Cloud Boxes list into the same push ("ride the same push, same capability rules"): the phone asked every computer `POST /api/cloudBoxes {action: list}` every 5 s, which became its most frequent call once the sessions list was pushed. The stream sends that action's answer whenever it differs from the last one sent (at the summary's cadence), and a phone takes it only from a computer that lists `cloudBoxesPush`; others keep the poll.
+pub(crate) const CLOUD_BOXES_FRAME: &str = "cloudBoxesList";
 /// The one client message: build the list now and answer with its patch (or an alive frame) carrying
 /// the same `requestId`, for a phone that needs a list read after something it just did.
 pub(crate) const READ_MESSAGE: &str = "readSessionsList";
@@ -36,9 +41,9 @@ pub(crate) struct SessionsListStream {
 }
 
 impl SessionsListStream {
-    pub(crate) fn start(outbound: EventClientSender) -> Self {
+    pub(crate) fn start(state: Arc<AppState>, outbound: EventClientSender) -> Self {
         let (reads, read_rx) = mpsc::unbounded_channel();
-        let task = tokio::spawn(run(outbound, read_rx));
+        let task = tokio::spawn(run(state, outbound, read_rx));
         Self { task, reads }
     }
 
@@ -95,8 +100,22 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-async fn run(outbound: EventClientSender, mut reads: mpsc::UnboundedReceiver<Value>) {
+/// The Cloud Boxes list as `POST /api/cloudBoxes {action: list}` answers it, or None when it fails.
+async fn cloud_boxes(state: &Arc<AppState>) -> Option<Value> {
+    let mut params = Map::new();
+    params.insert("action".into(), json!("list"));
+    crate::cloud_boxes::endpoint::dispatch(state.clone(), &params)
+        .await
+        .ok()
+}
+
+async fn run(
+    state: Arc<AppState>,
+    outbound: EventClientSender,
+    mut reads: mpsc::UnboundedReceiver<Value>,
+) {
     let mut sent: Option<Map<String, Value>> = None;
+    let mut sent_boxes: Option<Value> = None;
     let mut seq: u64 = 0;
     let mut built_stamp = String::new();
     let mut built_at = 0u64;
@@ -119,6 +138,15 @@ async fn run(outbound: EventClientSender, mut reads: mpsc::UnboundedReceiver<Val
         let may_push = request_id.is_some() || now.saturating_sub(pushed_at) >= MIN_PUSH_GAP_MS;
         let mut frame: Option<Value> = None;
         if (due && may_push) || request_id.is_some() {
+            if let Some(boxes) = cloud_boxes(&state).await {
+                if sent_boxes.as_ref() != Some(&boxes) {
+                    let frame = json!({ "type": CLOUD_BOXES_FRAME, "result": boxes.clone() });
+                    if outbound.try_send(frame).is_err() {
+                        return;
+                    }
+                    sent_boxes = Some(boxes);
+                }
+            }
             if let Some(next) = build().await {
                 built_stamp = stamp;
                 built_at = now;

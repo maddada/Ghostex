@@ -105,6 +105,10 @@ pub const GXSERVER_ENDPOINT_CAPABILITY_TERMINAL_PAUSE: &str = "terminalPause";
 /// position of the follower's current generation gets `sessionChatResumed` and the frames after it
 /// instead of a snapshot (server/src/session_chat_stream.rs).
 pub const GXSERVER_ENDPOINT_CAPABILITY_CHAT_RESUME: &str = "chatResume";
+/// The `ghostex server endpoint` capability that promises `cloudBoxesList` frames (the answer of
+/// `POST /api/cloudBoxes {action: list}`, sent when it changes) on the
+/// [`GXSERVER_EVENTS_STREAM_SESSIONS_LIST`] stream.
+pub const GXSERVER_ENDPOINT_CAPABILITY_CLOUD_BOXES_PUSH: &str = "cloudBoxesPush";
 /// The `ghostex server endpoint` capability that promises `/api/registerPushToken` and push
 /// notifications to the phones registered there (finished, needs input, failed, agent starts).
 pub const GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS: &str = "pushNotifications";
