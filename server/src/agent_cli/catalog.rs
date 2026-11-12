@@ -222,116 +222,6 @@ pub(crate) fn methods(
         }
         plan
     };
-    // A package published for bun only (omp's starts with `#!/usr/bin/env bun`) does not run from mise's npm install.
-    let npm_runnable = definition
-        .package_managers
-        .as_ref()
-        .is_none_or(|managers| managers.iter().any(|manager| manager == "npm"));
-    let mise_tool = mise_installation
-        .and_then(|installation| installation.tool.clone())
-        .or_else(|| definition.mise_tool.clone())
-        .or_else(|| {
-            definition
-                .npm_package
-                .as_ref()
-                .filter(|_| npm_runnable)
-                .map(|package| format!("npm:{package}"))
-        });
-    // A global npm (or bun) package inside a mise runtime updates with that runtime's own package
-    // manager, run through mise, so it lands in the same folder instead of becoming a second copy.
-    let runtime_update = mise_installation
-        .filter(|installation| installation.tool.is_none())
-        .and_then(|installation| installation.runtime.as_deref())
-        .zip(definition.npm_package.as_deref())
-        .and_then(|(runtime, package)| {
-            let manager = match runtime.split('@').next() {
-                Some("node") => "npm",
-                Some("bun") => "bun",
-                _ => return None,
-            };
-            let allowed = definition
-                .package_managers
-                .as_ref()
-                .is_none_or(|managers| managers.iter().any(|offered| offered == manager));
-            allowed.then(|| {
-                let packages = npm_install_packages(definition, package, |command| {
-                    crate::agent_hooks::probing::command_exists(command, home)
-                });
-                let flags = if manager == "npm" && !definition.npm_flags.is_empty() {
-                    format!("{} ", definition.npm_flags.join(" "))
-                } else {
-                    String::new()
-                };
-                format!(
-                    "mise exec {} -- {manager} install -g {flags}{packages}",
-                    super::process::quote(runtime)
-                )
-            })
-        });
-    if let Some(command) = runtime_update {
-        methods.push(Method::new(
-            "mise",
-            "mise",
-            command.clone(),
-            note(format!("Runs {command} with your mise.")),
-        ));
-    } else if let Some(tool) = mise_tool {
-        let managed = mise_installation.is_some_and(|installation| installation.tool.is_some());
-        let exists = |command: &str| crate::agent_hooks::probing::command_exists(command, home);
-        let have_mise =
-            exists("mise") || crate::managed_tools::mise::managed_executable().is_some();
-        let mut companions =
-            mise_companion_tools(definition, exists, super::latest::npm_latest_blocking);
-        // A registry name (`gemini`) can be an `npm:` tool underneath; mise's registry says which.
-        let backend = (have_mise && !exists("npm"))
-            .then(|| super::mise::backend(&tool, home))
-            .flatten();
-        let needs_node = mise_needs_node(
-            backend.as_deref().unwrap_or(&tool),
-            &companions,
-            exists("npm"),
-        );
-        let (command, companion_reason) = match &mut companions {
-            Ok(tools) if tools.is_empty() && !needs_node => {
-                (super::mise::command(&tool, managed), None)
-            }
-            // An agent that needs other tools installs and updates them together in one `mise use`.
-            Ok(tools) => {
-                if needs_node {
-                    tools.insert(0, MISE_NODE.to_string());
-                }
-                (super::mise::use_command(&tool, tools), None)
-            }
-            Err(reason) => (super::mise::use_command(&tool, &[]), Some(reason.clone())),
-        };
-        let command = match &definition.mise_then_run {
-            Some(then) => super::mise::then_run(&command, then),
-            None => command,
-        };
-        let mut method = Method::new(
-            "mise",
-            "mise",
-            command.clone(),
-            note(format!("Runs {command} with your mise.")),
-        );
-        if have_mise {
-            method.unavailable_reason = companion_reason.or_else(|| {
-                (!managed)
-                    .then(|| super::mise::unavailable_reason(&tool, home))
-                    .flatten()
-            });
-        } else if crate::managed_tools::platform::arch().is_some() {
-            method.prerequisite = Some("mise".into());
-            method.plan = note(format!(
-                "Ghostex first downloads mise from its official GitHub releases into its tools folder (checked against the published checksum), then runs {command}. No password needed."
-            ));
-            method.unavailable_reason = companion_reason;
-        } else {
-            method.unavailable_reason =
-                Some(crate::managed_tools::platform::unsupported_cpu_reason());
-        }
-        methods.push(method);
-    }
     if let Some(native) = &definition.native {
         let install = if cfg!(windows) {
             native.windows_install.as_deref()
@@ -467,21 +357,156 @@ pub(crate) fn methods(
             methods.push(method);
         }
     }
-    mise_last_when_missing(&mut methods);
+    let runtime_update = mise_runtime_update(definition, mise_installation, home);
+    if uses_mise(
+        mise_installation,
+        runtime_update.is_some(),
+        methods.is_empty(),
+    ) {
+        if let Some(method) =
+            mise_method(definition, mise_installation, runtime_update, home, &note)
+        {
+            methods.insert(0, method);
+        }
+    }
     methods
 }
 
-/// A mise this computer does not have yet goes last, so an agent with its own installer keeps that
-/// as the default (the first method the computer can run); an agent that installs only through mise
-/// (DeepSeek Harness) still installs, mise first.
-fn mise_last_when_missing(methods: &mut Vec<Method>) {
-    if let Some(index) = methods
-        .iter()
-        .position(|method| method.prerequisite.as_deref() == Some("mise"))
-    {
-        let method = methods.remove(index);
-        methods.push(method);
+/// CDXC:AgentProviders 2026-11-12 DECISION:
+/// User: "Ghostex must stop installing agent CLIs onto mise for users who don't already have them there". A CLI mise already manages (its own mise tool, or a global npm or bun package inside a mise runtime) keeps installing and updating through mise; every other CLI, missing or installed some other way, uses its official method (install script, npm, Homebrew, WinGet), so mise is not offered for it at all. Supersedes the 2026-09-14 decision that offered mise first for every agent on a computer that has mise.
+/// WHY: mise fights each CLI's own updater, and its version list can name releases with no download (OpenCode's `@latest` returned 404s).
+/// An agent with no other way to install (DeepSeek Harness, 2026-10-28 decision in `NpmCompanion`) still installs through mise.
+fn uses_mise(
+    mise_installation: Option<&super::mise::Installation>,
+    runtime_update: bool,
+    no_other_method: bool,
+) -> bool {
+    let on_mise =
+        mise_installation.is_some_and(|installation| installation.tool.is_some()) || runtime_update;
+    on_mise || no_other_method
+}
+
+/// A global npm (or bun) package inside a mise runtime updates with that runtime's own package
+/// manager, run through mise, so it lands in the same folder instead of becoming a second copy.
+fn mise_runtime_update(
+    definition: &Definition,
+    mise_installation: Option<&super::mise::Installation>,
+    home: &Path,
+) -> Option<String> {
+    let (runtime, package) = mise_installation
+        .filter(|installation| installation.tool.is_none())
+        .and_then(|installation| installation.runtime.as_deref())
+        .zip(definition.npm_package.as_deref())?;
+    let manager = match runtime.split('@').next() {
+        Some("node") => "npm",
+        Some("bun") => "bun",
+        _ => return None,
+    };
+    let allowed = definition
+        .package_managers
+        .as_ref()
+        .is_none_or(|managers| managers.iter().any(|offered| offered == manager));
+    allowed.then(|| {
+        let packages = npm_install_packages(definition, package, |command| {
+            crate::agent_hooks::probing::command_exists(command, home)
+        });
+        let flags = if manager == "npm" && !definition.npm_flags.is_empty() {
+            format!("{} ", definition.npm_flags.join(" "))
+        } else {
+            String::new()
+        };
+        format!(
+            "mise exec {} -- {manager} install -g {flags}{packages}",
+            super::process::quote(runtime)
+        )
+    })
+}
+
+/// The mise method: the runtime's package manager for a package inside a mise runtime, else
+/// `mise upgrade` for the mise tool that holds the CLI, else `mise use` for an agent mise must install.
+fn mise_method(
+    definition: &Definition,
+    mise_installation: Option<&super::mise::Installation>,
+    runtime_update: Option<String>,
+    home: &Path,
+    note: &dyn Fn(String) -> String,
+) -> Option<Method> {
+    if let Some(command) = runtime_update {
+        return Some(Method::new(
+            "mise",
+            "mise",
+            command.clone(),
+            note(format!("Runs {command} with your mise.")),
+        ));
     }
+    // A package published for bun only (omp's starts with `#!/usr/bin/env bun`) does not run from mise's npm install.
+    let npm_runnable = definition
+        .package_managers
+        .as_ref()
+        .is_none_or(|managers| managers.iter().any(|manager| manager == "npm"));
+    let tool = mise_installation
+        .and_then(|installation| installation.tool.clone())
+        .or_else(|| definition.mise_tool.clone())
+        .or_else(|| {
+            definition
+                .npm_package
+                .as_ref()
+                .filter(|_| npm_runnable)
+                .map(|package| format!("npm:{package}"))
+        })?;
+    let managed = mise_installation.is_some_and(|installation| installation.tool.is_some());
+    let exists = |command: &str| crate::agent_hooks::probing::command_exists(command, home);
+    let have_mise = exists("mise") || crate::managed_tools::mise::managed_executable().is_some();
+    let mut companions =
+        mise_companion_tools(definition, exists, super::latest::npm_latest_blocking);
+    // A registry name (`gemini`) can be an `npm:` tool underneath; mise's registry says which.
+    let backend = (have_mise && !exists("npm"))
+        .then(|| super::mise::backend(&tool, home))
+        .flatten();
+    let needs_node = mise_needs_node(
+        backend.as_deref().unwrap_or(&tool),
+        &companions,
+        exists("npm"),
+    );
+    let (command, companion_reason) = match &mut companions {
+        Ok(tools) if tools.is_empty() && !needs_node => {
+            (super::mise::command(&tool, managed), None)
+        }
+        // An agent that needs other tools installs and updates them together in one `mise use`.
+        Ok(tools) => {
+            if needs_node {
+                tools.insert(0, MISE_NODE.to_string());
+            }
+            (super::mise::use_command(&tool, tools), None)
+        }
+        Err(reason) => (super::mise::use_command(&tool, &[]), Some(reason.clone())),
+    };
+    let command = match &definition.mise_then_run {
+        Some(then) => super::mise::then_run(&command, then),
+        None => command,
+    };
+    let mut method = Method::new(
+        "mise",
+        "mise",
+        command.clone(),
+        note(format!("Runs {command} with your mise.")),
+    );
+    if have_mise {
+        method.unavailable_reason = companion_reason.or_else(|| {
+            (!managed)
+                .then(|| super::mise::unavailable_reason(&tool, home))
+                .flatten()
+        });
+    } else if crate::managed_tools::platform::arch().is_some() {
+        method.prerequisite = Some("mise".into());
+        method.plan = note(format!(
+            "Ghostex first downloads mise from its official GitHub releases into its tools folder (checked against the published checksum), then runs {command}. No password needed."
+        ));
+        method.unavailable_reason = companion_reason;
+    } else {
+        method.unavailable_reason = Some(crate::managed_tools::platform::unsupported_cpu_reason());
+    }
+    Some(method)
 }
 
 /// The Node.js mise installs beside an `npm:` tool on a computer without npm.
@@ -836,26 +861,69 @@ mod tests {
         assert!(mise_needs_node("aqua:x/y", &dsh_companions, false));
     }
 
+    /// Every catalog agent, in both cases: a CLI mise does not manage installs with its official
+    /// method and is never offered mise; a CLI mise manages updates through mise. Run with
+    /// `--nocapture` for the table.
     #[test]
-    fn a_mise_to_download_goes_after_the_methods_that_need_nothing() {
-        let method = |id: &str, prerequisite: Option<&str>| {
-            let mut method = Method::new(id, id, id.into(), String::new());
-            method.prerequisite = prerequisite.map(str::to_string);
-            method
+    fn mise_only_for_a_cli_already_on_mise() {
+        let home = std::env::temp_dir();
+        let ids = |methods: &[Method]| {
+            methods
+                .iter()
+                .map(|method| method.id.clone())
+                .collect::<Vec<_>>()
+                .join(",")
         };
-        let mut methods = vec![
-            method("mise", Some("mise")),
-            method("native", None),
-            method("npm", Some("node")),
-        ];
-        mise_last_when_missing(&mut methods);
-        assert_eq!(
-            methods.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
-            ["native", "npm", "mise"]
-        );
-        let mut installed = vec![method("mise", None), method("native", None)];
-        mise_last_when_missing(&mut installed);
-        assert_eq!(installed[0].id, "mise");
+        for definition in CATALOG.iter() {
+            let off = methods(definition, None, &home, None);
+            let only_mise = off.len() == 1 && off[0].id == "mise";
+            assert!(
+                only_mise || off.iter().all(|method| method.id != "mise"),
+                "{} offers mise without being on mise: {}",
+                definition.agent_id,
+                ids(&off)
+            );
+            let tool = definition
+                .mise_tool
+                .clone()
+                .unwrap_or_else(|| format!("npm:{}", definition.binary));
+            let fake = format!(
+                "/home/me/.local/share/mise/installs/x/1.0.0/bin/{}",
+                definition.binary
+            );
+            let on_tool = super::super::mise::Installation {
+                tool: Some(tool),
+                executable: fake.clone(),
+                runtime: None,
+            };
+            let on = methods(definition, Some(&fake), &home, Some(&on_tool));
+            assert_eq!(
+                on[0].id,
+                "mise",
+                "{} on mise: {}",
+                definition.agent_id,
+                ids(&on)
+            );
+            let in_node = super::super::mise::Installation {
+                tool: None,
+                executable: fake.clone(),
+                runtime: Some("node@24.11.0".into()),
+            };
+            let runtime = methods(definition, Some(&fake), &home, Some(&in_node));
+            let runtime_first = runtime.first().map(|method| method.command.clone());
+            println!(
+                "{:<14} not on mise: {:<28} default {:?}\n{:<14} mise tool:   {:<28} default {:?}\n{:<14} mise node:   {:<28} default {:?}",
+                definition.agent_id,
+                ids(&off),
+                off.iter().find(|m| m.unavailable_reason.is_none()).or(off.first()).map(|m| &m.command),
+                "",
+                ids(&on),
+                on[0].command,
+                "",
+                ids(&runtime),
+                runtime_first,
+            );
+        }
     }
 
     #[test]

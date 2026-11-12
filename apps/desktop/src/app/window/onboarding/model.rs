@@ -552,6 +552,16 @@ pub(crate) fn cli_catalog() -> Vec<CliCatalogEntry> {
                 .get("packageManagers")
                 .and_then(Value::as_array)
                 .is_some_and(Vec::is_empty);
+            // The agent's official installer comes before npm and Homebrew, as gxserver orders them.
+            let official_installer = entry.get("native").and_then(|native| {
+                native
+                    .get(if cfg!(windows) {
+                        "windowsInstall"
+                    } else {
+                        "install"
+                    })
+                    .and_then(Value::as_str)
+            });
             let install_command = if let Some(tool) = text("miseTool").filter(|_| mise_only) {
                 // The companions mise installs with it unconditionally (DeepSeek Harness's `dsh`).
                 let companions: String = entry
@@ -575,6 +585,8 @@ pub(crate) fn cli_catalog() -> Vec<CliCatalogEntry> {
                     })
                     .collect();
                 Some(format!("mise use --global {tool}@latest{companions}"))
+            } else if let Some(native) = official_installer {
+                Some(native.to_string())
             } else if let Some(package) = text("npmPackage") {
                 let manager = list("packageManagers")
                     .first()
@@ -588,12 +600,6 @@ pub(crate) fn cli_catalog() -> Vec<CliCatalogEntry> {
                     String::new()
                 };
                 Some(format!("{manager} {verb} -g {flags}{package}@latest"))
-            } else if let Some(native) = entry
-                .get("native")
-                .and_then(|native| native.get("install"))
-                .and_then(Value::as_str)
-            {
-                Some(native.to_string())
             } else {
                 text("brewFormula").map(|formula| {
                     let cask = entry.get("brewCask").and_then(Value::as_bool) == Some(true);

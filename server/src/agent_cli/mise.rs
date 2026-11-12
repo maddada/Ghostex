@@ -14,8 +14,8 @@ pub(crate) struct Installation {
     pub runtime: Option<String>,
 }
 
-/// CDXC:AgentProviders 2026-09-14 DECISION:
-/// User: support mise for CLI installs and updates; most agents on their computer are managed by mise.
+/// CDXC:AgentProviders 2026-11-12 DECISION:
+/// User: keep installing and updating a CLI through mise only when mise already manages it on this computer (catalog.rs `uses_mise`); this is how Ghostex tells. Supersedes the 2026-09-14 decision that offered mise for every agent on a computer with mise.
 /// WHY: Ask mise for the tool owning a binary, including custom backends, before classifying npm packages or native binaries by their paths.
 /// A Node runtime managed by mise does not make its global npm packages separate mise tools.
 /// ZCode publishes hyphenated release versions; its catalog entry enables mise prereleases for that package so latest resolves to a published version.

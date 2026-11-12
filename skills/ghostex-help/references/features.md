@@ -3410,7 +3410,7 @@ when available) and command output, or open its Install docs link. Claude Code, 
 and Grok Build install through their official installers (PowerShell on
 Windows). OpenCode's official installer on Windows runs its install script with
 Git for Windows' Bash, so it needs Git for Windows; without Git, install
-OpenCode with mise or npm instead. When an installer leaves its folder off PATH (Claude Code's does), Ghostex
+OpenCode with npm instead. When an installer leaves its folder off PATH (Claude Code's does), Ghostex
 adds it to your user PATH so new terminals find the command; Add to PATH
 does the same for a CLI installed earlier. Installs run one at a time and wait
 their turn. Ghostex updates a CLI the way it was installed; when it cannot tell,
@@ -3423,21 +3423,18 @@ the CLI shows that release as held back by mise and the date it becomes eligible
 (when an older release is already eligible, the update installs that one);
 Ghostex leaves that setting alone. If a CLI needs a newer tool first (OMP's Bun
 install needs Bun 1.3.14 or newer), the method says what to update; the official
-installer downloads OMP's own binary and needs no Bun. mise is offered for supported CLIs and is the
-default install choice when it can install that CLI on your computer; otherwise
-(Cursor on Windows, or a computer without mise) the official installer or npm
-is. On a computer without mise the mise choice reads "installs mise first":
-Ghostex downloads mise from its official GitHub releases into its own tools
-folder (checked against the published checksum) without changing your shell
-profile, and when npm is missing it has mise install Node.js along with the
-CLI. A CLI installed through mise starts in its sessions even when your shell
+installer downloads OMP's own binary and needs no Bun. Ghostex installs a CLI
+with the method its makers document: their official install script where they
+have one (OpenCode, Antigravity and Hermes Agent too), otherwise npm, Homebrew
+or WinGet. Apart from DeepSeek Harness (below), it doesn't install agents with
+mise, even when your computer has mise; a CLI mise already manages on your
+computer keeps updating through mise. A CLI installed through mise starts in its sessions even when your shell
 doesn't set mise up (no `mise activate` needed): Ghostex runs it through mise.
 If a session's agent command still isn't found, its chat says which command is
 missing and offers Install. When Chat is your default view, installing a CLI
 here also installs the Ghostex hooks its chat needs. Existing mise tools, including custom
 backends, update through mise with their version pins bumped to the latest
-release; older versions remain available for running sessions. For example,
-ZCode can also be installed with `mise use --global 'npm:zcode-app-cli[prerelease=true]@latest'`.
+release; older versions remain available for running sessions.
 Install and update commands run on the
 selected computer and keep running if Settings closes. From a terminal,
 `ghostex agent-cli status [agent]`, `ghostex agent-cli install <agent>`,
