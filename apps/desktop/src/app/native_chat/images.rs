@@ -95,6 +95,11 @@ const RECENTLY_DRAWN: std::time::Duration = std::time::Duration::from_secs(30);
 /// least `RECENTLY_DRAWN`, so the trim spares only what was drawn after the pane went away.
 #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
 const HIDDEN_TRIM_DELAY: std::time::Duration = RECENTLY_DRAWN;
+/// CDXC:Memory 2026-11-12 WHY: up to 24 chat views stay warm (`session_chat_prewarm.rs`, the 2026-09-19 DECISION that clicking back must not show a skeleton), and each hidden one kept up to `HIDDEN_CHAT_IMAGE_BUDGET_BYTES` of pictures however long it stayed hidden, up to about 190 MB across the pool. A chat hidden for `LONG_HIDDEN_TRIM_DELAY` keeps `LONG_HIDDEN_CHAT_IMAGE_BUDGET_BYTES`: its rows and transcript stay as they are (no skeleton), only pictures drawn longest ago are read and shrunk again when shown, as scrolling back to one already does. Clicking through chats within a few minutes keeps the 8 MB tier.
+#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+const LONG_HIDDEN_TRIM_DELAY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+const LONG_HIDDEN_CHAT_IMAGE_BUDGET_BYTES: usize = 1024 * 1024;
 
 enum ChatImageEntry {
     Loading,
@@ -897,29 +902,41 @@ impl NativeChatView {
     }
 
     /// The pane went off screen: once it has stayed off screen for `HIDDEN_TRIM_DELAY`, the cache
-    /// keeps only what it drew last, up to `HIDDEN_CHAT_IMAGE_BUDGET_BYTES`.
+    /// keeps only what it drew last, up to `HIDDEN_CHAT_IMAGE_BUDGET_BYTES`, and once it has stayed
+    /// off screen for `LONG_HIDDEN_TRIM_DELAY`, up to `LONG_HIDDEN_CHAT_IMAGE_BUDGET_BYTES`.
     #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
     pub(super) fn schedule_hidden_image_trim(&mut self, cx: &mut Context<Self>) {
         self.images.hidden_trim = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(HIDDEN_TRIM_DELAY).await;
-            let _ = this.update(cx, |this, cx| {
-                this.images.hidden_trim = None;
-                if this.pane_hidden {
-                    // Still sparing what was drawn lately: a view can be drawn while its pane
-                    // counts as hidden (the floating sessions panel).
-                    let pinned = this.pinned_pictures();
-                    let released = this.images.trim(
-                        HIDDEN_CHAT_IMAGE_BUDGET_BYTES,
-                        false,
-                        &pinned,
-                        &this.mermaid,
-                    );
-                    if !released.pictures.is_empty() || !released.rendered.is_empty() {
-                        release_chat_pictures(released, cx);
-                        cx.notify();
-                    }
+            let tiers = [
+                (HIDDEN_TRIM_DELAY, HIDDEN_CHAT_IMAGE_BUDGET_BYTES),
+                (
+                    LONG_HIDDEN_TRIM_DELAY.saturating_sub(HIDDEN_TRIM_DELAY),
+                    LONG_HIDDEN_CHAT_IMAGE_BUDGET_BYTES,
+                ),
+            ];
+            for (wait, budget) in tiers {
+                cx.background_executor().timer(wait).await;
+                let still_hidden = this
+                    .update(cx, |this, cx| {
+                        if !this.pane_hidden {
+                            return false;
+                        }
+                        // Still sparing what was drawn lately: a view can be drawn while its pane
+                        // counts as hidden (the floating sessions panel).
+                        let pinned = this.pinned_pictures();
+                        let released = this.images.trim(budget, false, &pinned, &this.mermaid);
+                        if !released.pictures.is_empty() || !released.rendered.is_empty() {
+                            release_chat_pictures(released, cx);
+                            cx.notify();
+                        }
+                        true
+                    })
+                    .unwrap_or(false);
+                if !still_hidden {
+                    break;
                 }
-            });
+            }
+            let _ = this.update(cx, |this, _| this.images.hidden_trim = None);
         }));
     }
 

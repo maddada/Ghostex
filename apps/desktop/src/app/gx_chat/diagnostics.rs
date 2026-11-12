@@ -31,6 +31,14 @@ const HEAP_MOVED_BYTES: usize = 1024 * 1024;
 /// array with no marker, so the list is capped here, largest chats first.
 const CHAT_ROWS_LISTED: usize = 24;
 
+/// How often the always-kept heap record may be written, and how far the heap must have moved.
+///
+/// CDXC:Memory 2026-11-12 WHY: the heap numbers were written only behind Show debug UI controls and the chat's diagnostic scenario, so on the user's Mac, with the app's footprint at 1.1 to 1.2 GB and its Rust heap the largest part, nothing on disk said how much of that heap was live or how many rows each warm chat held. `gxChat.host.heap` is written whatever the debug switches say: numbers only (the heap counters, the retained chat count and the per-chat row counts in size order), at most every ten minutes and only when the heap moved by `HEAP_RECORD_MOVED_BYTES`, so a day adds a few dozen lines.
+#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web build has no heap counter
+const HEAP_RECORD_INTERVAL: Duration = Duration::from_secs(10 * 60);
+#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web build has no heap counter
+const HEAP_RECORD_MOVED_BYTES: usize = 32 * 1024 * 1024;
+
 /// What the host counts between two summaries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct HostCounters {
@@ -77,6 +85,9 @@ pub(super) struct HostCounters {
 #[derive(Default)]
 pub(super) struct HostDiagnostics {
     considered_at: Option<Instant>,
+    /// When the always-kept heap record was last written, and the heap's bytes in use then.
+    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web build has no heap counter
+    heap_recorded: Option<(Instant, usize)>,
     written: Option<HostCounters>,
     /// The heap's bytes in use when the last summary was written.
     heap_written: Option<usize>,
@@ -91,6 +102,7 @@ impl HostDiagnostics {
     /// `store` is read only when a summary is written, for its per-chat row counts.
     pub(super) fn summary(&mut self, counters: &HostCounters, store: &ChatStore) {
         let heap = heap_counts();
+        self.heap_record(heap, store);
         let heap_moved = match (self.heap_written, heap) {
             (Some(written), Some(heap)) => written.abs_diff(heap.in_use_bytes) >= HEAP_MOVED_BYTES,
             (None, Some(_)) => true,
@@ -156,6 +168,38 @@ impl HostDiagnostics {
             }),
         );
     }
+}
+
+impl HostDiagnostics {
+    /// Writes `gxChat.host.heap` when it is due (`HEAP_RECORD_INTERVAL`).
+    #[cfg(not(target_family = "wasm"))]
+    fn heap_record(&mut self, heap: Option<crate::heap_counter::HeapCounts>, store: &ChatStore) {
+        let Some(heap) = heap else {
+            return;
+        };
+        if self.heap_recorded.is_some_and(|(at, bytes)| {
+            at.elapsed() < HEAP_RECORD_INTERVAL
+                || bytes.abs_diff(heap.in_use_bytes) < HEAP_RECORD_MOVED_BYTES
+        }) {
+            return;
+        }
+        self.heap_recorded = Some((Instant::now(), heap.in_use_bytes));
+        support_logs::append_always(
+            GpuiSupportLog::SessionChat,
+            "gxChat.host.heap",
+            json!({
+                "inUseBytes": heap.in_use_bytes,
+                "peakBytes": heap.peak_bytes,
+                "liveAllocations": heap.live_allocations,
+                "totalAllocations": heap.total_allocations,
+                "chatsRetained": store.len(),
+                "chatRows": chat_rows(store),
+            }),
+        );
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn heap_record(&mut self, _heap: Option<HeapCountsAbsent>, _store: &ChatStore) {}
 }
 
 /// How many message rows each retained chat holds, largest first, as
