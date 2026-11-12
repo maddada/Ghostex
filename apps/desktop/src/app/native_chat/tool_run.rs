@@ -78,6 +78,9 @@ impl NativeChatView {
             .min_w_0()
             .flex()
             .flex_col()
+            .justify_center()
+            // Never shorter than the "Message to" card, a folded "2 tool calls" heading too.
+            .min_h(px(shape.height * s))
             .gap(px(ROW_GAP * s))
             .px(px((shape.padding_x - ROW_PAD_X) * s))
             .py(px(BOXED_PAD_Y * s))
