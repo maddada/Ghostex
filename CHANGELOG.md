@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 📱 On the phone
+
+- **The phone's sessions list is organized like your computer's sidebar:** it follows Sidebar organization sync, so Project or Unified, Separate by machine, Merge copies, Spaces, Active projects, Group working sessions, parking, Pinned order, the Moving section, Group by project and its project order, and your Session Tags list change on the phone when you change them on a computer, and its Settings > Sidebar & Sessions (or Sort & Filter in its ⋯ menu) changes them on your computers within seconds. With Separate by machine off, the phone's Project list is one list of every connected computer, a project on several computers is one entry with all their sessions, and the computer tabs show only while Separate by machine is on. Each project has the Working and Snoozed sections, the Tag As menu offers the tags you left on, Sort & Filter can show only sessions with a tag, and a long press on a Unified project group moves it up or down. A computer without Sidebar organization sync keeps what the phone had before.
+
 ## 11.5.0 - 2026-11-12
 
 **Ghostex 11.5.0 is out.** Active projects from every Space and computer in one list, an icon for each computer, the whole sidebar arranged the same on all your computers, the Beads view, Fork from here, a crown for coordinators, queued messages that can no longer answer an approval, a phone app that matches the desktop's chat, and a lighter, faster app.

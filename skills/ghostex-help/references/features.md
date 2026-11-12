@@ -735,11 +735,14 @@ sessions whose agent works or still runs something in the background, while the
 Moving section switch (`unifiedWorkingSection`, on by default, under the
 Sidebar switch) is on; a session leaves it for the top of the list when it needs
 you. Parked shows only while session parking is on. A snoozed or parked row
-offers Unsnooze or Unpark when you hover it. The phone picks its own layout in
-its Settings > Sessions list (Unified or Project, starting from the computer's
-choice), with its own Group by project and Show Moving section switches: Unified
-there lists every computer's sessions together, Project one computer at a time.
-On the phone, Unified hides the computer tabs: Computers in the menu at the top
+offers Unsnooze or Unpark when you hover it. The phone follows the same
+Sidebar organization as your computers (Settings > Sync on a computer): Project
+or Unified, Group by project, the Moving section, the project order and the rest
+change on the phone when you change them on a computer, and its Settings >
+Sidebar & Sessions (or Sort & Filter in its ⋯ menu) changes them on your
+computers too. On the phone, hold a project group's header in the Unified list
+for Move Up and Move Down. A computer without Sidebar organization sync keeps
+what the phone had before. On the phone, Unified hides the computer tabs: Computers in the menu at the top
 of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
@@ -972,11 +975,10 @@ sessions keep their own sections (`groupWorkingSessions`).
 out of the Project sidebar. The open project always stays, and a Show all projects
 row at the end of the list brings the rest back in their places until you press it
 again. A project whose sessions run in its worktrees (or in a merged copy of the
-repository) counts as having sessions. The phone has its own switch for the Project
-list, Hide Projects Without Sessions in the computer menu (hold the computer's tab)
-and in Settings > Sessions list: it starts as the computer has it, and once you
-change it on the phone the phone keeps its own value, and the computer is never
-changed. On the same Sort & Filter page, the tag rows sit under the heading "Show only
+repository) counts as having sessions. The phone follows the same switch, synced
+with your computers: Hide Projects Without Sessions in its computer menu (hold
+the title), in Sort & Filter in its ⋯ menu and in its Settings > Sidebar &
+Sessions changes it on your computers too. On the same Sort & Filter page, the tag rows sit under the heading "Show only
 sessions tagged"; when nothing matches, the list says "No sessions tagged X.
 Right-click a session > Tag As" with a Clear filter button.
 
@@ -5295,6 +5297,12 @@ sessions, so any client can control agents on any machine.
   one computer doesn't have keeps its place and shows there once you add it.
   The sidebar's width, animations, tooltips, card details and hover buttons,
   and what each window has folded, hidden or filtered stay on each computer.
+  The phone follows the same Sidebar organization (while its Settings > Sync >
+  Carry settings between computers is on): its sessions list is organized like
+  your computers' sidebar, with one list for every computer unless Separate by
+  machine is on, the Project list's Working and Snoozed sections, the Tag As
+  menu's tags and the tag filter, and a change in its Settings > Sidebar &
+  Sessions or Sort & Filter reaches your computers within seconds.
   The first sync between two computers makes Spaces with the same name one
   Space, and a deleted Space or a group you Ungroup goes on every computer.
   Turn Sidebar organization off and each computer keeps what it has. Appearance
