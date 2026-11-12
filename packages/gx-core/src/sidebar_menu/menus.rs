@@ -309,6 +309,15 @@ impl<'a> SidebarMenus<'a> {
         Some(menu)
     }
 
+    /// What the row's Copy ID copies (`[<session title>](<Global Ref>)`), which a session row
+    /// dropped on a chat's composer types too. `None` when the list does not draw the row or its
+    /// machine's daemon id is not known yet.
+    pub fn row_mention(&self, sidebar_session_id: &str) -> Option<String> {
+        let (group, session) = self.find_row(sidebar_session_id)?;
+        let menu_group = self.row_menu_group(group, &session.row);
+        super::clipboard::session_mention_text(&session.row, &menu_group.details())
+    }
+
     /// A card's menu in the Unified sidebar: the row's own menu, ending with Delete Worktree
     /// when the session is in a worktree project, since the Unified sidebar draws no header of
     /// the worktree's own to carry it (`unified_delete_worktree_menu`). A multi-selection's bulk

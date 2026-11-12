@@ -54,6 +54,7 @@ mod menu_host_lifted {
 }
 mod autopilot;
 mod session_links;
+mod session_mentions;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_bulk;

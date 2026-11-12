@@ -766,6 +766,14 @@ impl NativeChatView {
                 .rounded(px(22.0 * s))
                 .border_1()
                 .border_color(p.composer_border)
+                // A sidebar session row held over the box shows where its link goes: the box
+                // takes the focus ring (composer_drop.rs), with no split zones over the pane.
+                .when(self.composer_drop_hover, |this| {
+                    this.border_color(p.ring).shadow(vec![
+                        gpui::BoxShadow::new(px(0.0), px(0.0), p.ring.opacity(0.2))
+                            .spread_radius(px(3.0 * s)),
+                    ])
+                })
                 .bg(p.composer_background)
                 .when(maximized, |this| this.flex_1().min_h_0())
                 .children(pills_strip)

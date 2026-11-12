@@ -129,6 +129,7 @@ mod session_chat_runtime;
 pub(crate) mod session_chat_skeleton;
 mod session_chat_surfaces;
 pub(crate) mod session_chat_warm_pool;
+pub(crate) mod session_composer_drop;
 pub(crate) mod session_handoff_modal_lifecycle;
 pub(crate) mod session_note_modal_lifecycle;
 pub(crate) mod session_notes;

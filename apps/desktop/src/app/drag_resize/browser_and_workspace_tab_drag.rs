@@ -169,6 +169,7 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn finish_workspace_tab_drag_state(&mut self, cx: &mut gpui::Context<Self>) -> bool {
+        self.clear_composer_drop_hover(cx);
         let drag_was_active = self.workspace_tab_drag_active;
         let changed = drag_was_active || self.workspace_drop_feedback.is_some();
         if !changed {

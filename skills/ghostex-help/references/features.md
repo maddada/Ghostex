@@ -260,9 +260,10 @@ view from the strip.
   the session that was there, and a session already on screen in another pane
   is focused there instead. To split, drag a session row from the sidebar onto
   the left, right, top or bottom edge of a pane (terminal or Session Chat); drop
-  it in the middle of a pane to show it there instead. Only sessions of the
-  project on screen can go into its panes: a pane under a session from another
-  project dims and says it can't split there. You can also press
+  it in the middle of a pane to show it there instead. Dropped on a chat's
+  chat box, the row is typed there as a link to the session instead of
+  splitting. Only sessions of the project on screen can go into its panes: a
+  pane under a session from another project dims and says it can't split there. You can also press
   Option+Shift+D to move the focused session into a pane on the right. While the screen is split,
   the focused pane has a small bar along its top: click it for Close Pane (the
   sessions keep running) and Merge All Panes, or drag it to move that session
@@ -3591,11 +3592,14 @@ An agent can also read or search any other thread, including a sleeping one:
 `ghostex read-session-chat <session> --all --format text` prints the whole
 conversation, and `--grep "<words>" --context 1` finds where a topic came up.
 `<session>` can be any id from the sidebar's Copy Details (right-click a session,
-Copy > Copy Details; its Global Ref is the most precise), or the title. The same
-Copy menu also has Copy ID, which copies a mention of the session,
-`[<session title>](<Global Ref>)`, to paste into another chat (it shows there
-as the session's pill), and copies the session's branch, its Linear issue ID and
-link, and its pull request or GitHub issue link when it has them.
+Copy > Copy Details; its Global Ref is the most precise), or the title. The
+session's menu also has Copy ID, right above Tag As, which copies a mention of
+the session, `[<session title>](<Global Ref>)`, to paste into another chat (it
+shows there as the session's pill); dragging the session's row from the sidebar
+onto a chat box types the same mention where the cursor is (one per session
+when several selected rows are dragged together). The Copy menu copies the
+session's branch, its Linear issue ID and link, and its pull request or GitHub
+issue link when it has them.
 A session's Copy menu also has Copy Link, which copies an https link to that
 session. Opening it from a browser, GitHub or a note brings Ghostex forward and
 focuses the session, on this computer or a connected machine. Ghostex asks

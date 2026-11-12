@@ -31,6 +31,7 @@ mod collab;
 mod completed_work_row;
 mod composer_animation;
 mod composer_attach;
+mod composer_drop;
 mod composer_host;
 mod composer_not_ready;
 mod composer_references;

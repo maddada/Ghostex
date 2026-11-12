@@ -292,6 +292,11 @@ impl GhostexGpuiApp {
             ))
             .on_drag_move::<SidebarDrag>(cx.listener(
                 move |this, event: &gpui::DragMoveEvent<SidebarDrag>, window, cx| {
+                    if this.update_sidebar_session_composer_drag_feedback(
+                        event, pane_id, session_id, window, cx,
+                    ) {
+                        return;
+                    }
                     this.update_sidebar_session_pane_drag_feedback(event, pane_id, window, cx);
                 },
             ))
@@ -306,6 +311,11 @@ impl GhostexGpuiApp {
                 }),
             )
             .on_drop(cx.listener(move |this, dragged: &SidebarDrag, window, cx| {
+                if this
+                    .handle_sidebar_session_composer_drop(pane_id, session_id, dragged, window, cx)
+                {
+                    return;
+                }
                 this.handle_sidebar_session_pane_body_drop(pane_id, dragged, window, cx);
             }))
             .on_drop(

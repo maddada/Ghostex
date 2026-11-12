@@ -107,6 +107,8 @@ pub(crate) struct NativeChatView {
     pub(super) suggestions: super::suggestions::SuggestionWindowState,
     pub(super) frosted_overlays: super::frosted_overlay_window::FrostedOverlayWindows,
     pub(super) composer_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    /// A sidebar session row is held over the chat box, which rings it (composer_drop.rs).
+    pub(super) composer_drop_hover: bool,
     pub(super) suggestion_selection: Option<(String, usize)>,
     input_window: Option<gpui::WindowId>,
     /// The composer's focus and blur listeners, bound to `input_window`.
@@ -548,6 +550,7 @@ impl NativeChatView {
             suggestions: Default::default(),
             frosted_overlays: Default::default(),
             composer_bounds: Default::default(),
+            composer_drop_hover: false,
             suggestion_selection: None,
             input_window: None,
             input_focus_listeners: Vec::new(),

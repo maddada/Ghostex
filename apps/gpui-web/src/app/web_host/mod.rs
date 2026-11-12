@@ -3,6 +3,7 @@ mod app_modal_commands;
 mod beads;
 mod bot_feed;
 mod changes;
+mod composer_drop;
 mod create;
 mod delayed_send;
 mod extension_buttons;

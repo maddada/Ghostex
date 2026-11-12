@@ -387,9 +387,13 @@ impl Render for GhostexGpuiApp {
                 // The chat's repeating indicators are drawn over it here, as the desktop's pane
                 // does (native_chat/indicator_overlay.rs).
                 self.native_chats.get(session).map(|(_, view)| {
-                    crate::app::native_chat::indicator_overlay::hosted_chat(
-                        view.entity_id(),
-                        view.clone().into_any_element(),
+                    self.web_chat_with_composer_drop(
+                        session,
+                        crate::app::native_chat::indicator_overlay::hosted_chat(
+                            view.entity_id(),
+                            view.clone().into_any_element(),
+                        ),
+                        cx,
                     )
                 })
             }

@@ -108,6 +108,7 @@ mod runtime_facts;
 pub(crate) mod security_notice;
 mod session_deep_link;
 mod session_links;
+mod session_mentions;
 mod session_walk;
 mod settings_sync;
 mod sidebar_accounts;

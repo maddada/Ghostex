@@ -211,6 +211,39 @@ impl UnifiedSidebarHost {
             .or_else(|| self.lanes.values().find_map(menu_from))
     }
 
+    /// A card's Copy ID text from the machine list that holds the session, its own computer's
+    /// first, as `row_menu` picks the list. `None` while the Unified sidebar is off or no list
+    /// holds the row.
+    pub(crate) fn row_mention(
+        &self,
+        core: &Core,
+        menu_host: &MenuHost,
+        sidebar_session_id: &str,
+        now_ms: u64,
+    ) -> Option<String> {
+        let mention_from = |lane: &MachineLane| {
+            SidebarMenus::new(core, lane.model.view(), &lane.inputs, menu_host, now_ms)
+                .row_mention(sidebar_session_id)
+        };
+        let own = |lane: &&MachineLane| {
+            !lane
+                .model
+                .view()
+                .groups
+                .iter()
+                .flat_map(|group| group.core.sessions.iter())
+                .any(|session| {
+                    session.row.sidebar_session_id == sidebar_session_id
+                        && session.row.is_borrowed_thread()
+                })
+        };
+        self.lanes
+            .values()
+            .filter(own)
+            .find_map(mention_from)
+            .or_else(|| self.lanes.values().find_map(mention_from))
+    }
+
     /// A project's menu as its Project sidebar header shows it, from the machine list that holds
     /// it, with that machine's Spaces (`unified_lane_menu_inputs`).
     pub(crate) fn project_menu(
