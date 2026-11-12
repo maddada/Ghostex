@@ -32,8 +32,8 @@ pub use inventory::*;
 pub(crate) use js_values::*;
 pub use mobile_summary::*;
 use persisted::*;
-pub(crate) use summary_memo::note_gxserver_request;
 use summary_memo::*;
+pub(crate) use summary_memo::{database_stamp, note_gxserver_request};
 
 // Moved bodies reach sibling modules of the parent through `super::<module>::…`
 // paths; these imports keep those paths resolving from inside this directory.

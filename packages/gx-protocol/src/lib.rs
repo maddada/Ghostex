@@ -83,6 +83,13 @@ pub const GXSERVER_EVENTS_STREAM_SESSION_CHAT: &str = "sessionChat";
 pub const GXSERVER_EVENTS_STREAM_NOTIFICATIONS: &str = "notifications";
 /// The `ghostex server endpoint` capability that promises [`GXSERVER_EVENTS_STREAM_NOTIFICATIONS`].
 pub const GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM: &str = "notificationStream";
+/// `stream` query value of the phone's pushed sessions list: the whole mobile summary once, then
+/// only what changed (server/src/server/sessions_list_stream.rs). A client opens it only when
+/// `ghostex server endpoint` lists [`GXSERVER_ENDPOINT_CAPABILITY_SESSIONS_LIST_STREAM`]; an older
+/// daemon would send its whole hub.
+pub const GXSERVER_EVENTS_STREAM_SESSIONS_LIST: &str = "sessionsList";
+/// The `ghostex server endpoint` capability that promises [`GXSERVER_EVENTS_STREAM_SESSIONS_LIST`].
+pub const GXSERVER_ENDPOINT_CAPABILITY_SESSIONS_LIST_STREAM: &str = "sessionsListStream";
 /// The `ghostex server endpoint` capability that promises `/api/registerPushToken` and push
 /// notifications to the phones registered there (finished, needs input, failed, agent starts).
 pub const GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS: &str = "pushNotifications";

@@ -86,7 +86,7 @@ pub(crate) fn begin_summary_run(args: &[String], local_gxserver: bool) -> Option
 
 /// The modification time in nanoseconds and the size of `state.db` and `state.db-wal`, `-` for a
 /// missing file. One space-free word.
-fn database_stamp() -> String {
+pub(crate) fn database_stamp() -> String {
     let root = gxserver_root();
     ["state.db", "state.db-wal"]
         .iter()

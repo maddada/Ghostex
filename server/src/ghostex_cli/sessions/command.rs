@@ -29,28 +29,8 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
             print!("{printed}");
             return Ok(());
         }
-        let result = fetch_session_list_result(flags, true)?;
-        let settings = crate::ghostex_cli::settings::read_settings_file().unwrap_or_default();
-        // The phone lists no Actions while the Actions extension is off on this computer.
-        let actions_on = ghostex_settings_catalog::built_in_extensions::enabled(
-            &settings,
-            ghostex_settings_catalog::built_in_extensions::ACTIONS,
-        );
-        let hud = fetch_mobile_sidebar_hud(flags, actions_on).ok();
-        let mut merged = match to_mobile_session_list(&result, &settings) {
-            Value::Object(map) => map,
-            _ => Map::new(),
-        };
-        if let Some(Value::Object(hud_map)) = hud {
-            for (key, value) in hud_map {
-                merged.insert(key, value);
-            }
-        }
-        if actions_on {
-            insert_global_quick_actions_capability(&mut merged);
-        }
-        insert_built_in_features(&mut merged);
-        let printed = format!("{}\n", render_json(&Value::Object(merged)));
+        let merged = mobile_summary_value(flags, true)?;
+        let printed = format!("{}\n", render_json(&merged));
         if let Some(run) = &run {
             write_summary_memo(run, &printed);
         }
@@ -74,6 +54,35 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
     let grouped = !strict_true(flags, "ungrouped") && !strict_true(flags, "u");
     print_session_list(sessions, grouped);
     Ok(())
+}
+
+/// The phone's sessions list (`ghostex sessions --json --mobile-summary`) as a value: what the CLI
+/// prints over SSH and what gxserver pushes on the `sessionsList` stream
+/// (server/src/server/sessions_list_stream.rs), so both carry the same fields. `write_cache` keeps
+/// the CLI's local fallback copy; gxserver itself, which is the source, passes false.
+pub(crate) fn mobile_summary_value(flags: &Flags, write_cache: bool) -> CliResult<Value> {
+    let result = fetch_session_list_result(flags, write_cache)?;
+    let settings = crate::ghostex_cli::settings::read_settings_file().unwrap_or_default();
+    // The phone lists no Actions while the Actions extension is off on this computer.
+    let actions_on = ghostex_settings_catalog::built_in_extensions::enabled(
+        &settings,
+        ghostex_settings_catalog::built_in_extensions::ACTIONS,
+    );
+    let hud = fetch_mobile_sidebar_hud(flags, actions_on).ok();
+    let mut merged = match to_mobile_session_list(&result, &settings) {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
+    if let Some(Value::Object(hud_map)) = hud {
+        for (key, value) in hud_map {
+            merged.insert(key, value);
+        }
+    }
+    if actions_on {
+        insert_global_quick_actions_capability(&mut merged);
+    }
+    insert_built_in_features(&mut merged);
+    Ok(Value::Object(merged))
 }
 
 fn fetch_mobile_sidebar_hud(flags: &Flags, actions_on: bool) -> CliResult<Value> {

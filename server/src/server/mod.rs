@@ -163,6 +163,7 @@ mod session_links_sync;
 mod session_remove;
 mod session_self_heal_runtime;
 mod session_stall_runtime;
+mod sessions_list_stream;
 mod stall_watch;
 pub(crate) use crate::collab_shim::http::{handle_collab_http, COLLAB_ENDPOINTS};
 pub(crate) use autopilot_http::{handle_autopilot_http, AUTOPILOT_ENDPOINTS};

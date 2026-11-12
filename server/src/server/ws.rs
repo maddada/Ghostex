@@ -100,6 +100,8 @@ pub(crate) enum EventStreamMode {
     SessionChat,
     /// Notification feed changes and the daemon's start and stop, nothing else.
     Notifications,
+    /// The phone's sessions list, pushed (sessions_list_stream.rs), and the daemon's start and stop.
+    SessionsList,
 }
 
 impl EventStreamMode {
@@ -107,6 +109,7 @@ impl EventStreamMode {
         match stream {
             Some(ghostex_gx_protocol::GXSERVER_EVENTS_STREAM_SESSION_CHAT) => Self::SessionChat,
             Some(ghostex_gx_protocol::GXSERVER_EVENTS_STREAM_NOTIFICATIONS) => Self::Notifications,
+            Some(ghostex_gx_protocol::GXSERVER_EVENTS_STREAM_SESSIONS_LIST) => Self::SessionsList,
             _ => Self::Full,
         }
     }
@@ -123,6 +126,14 @@ fn notification_event_matches(event: &Value) -> bool {
                 | "serverStarted"
                 | "serverStopping"
         )
+    )
+}
+
+/// The daemon's start and stop, which every narrow stream passes so a client redials in time.
+fn daemon_lifecycle_event(event: &Value) -> bool {
+    matches!(
+        event.get("type").and_then(Value::as_str),
+        Some("serverStarted" | "serverStopping")
     )
 }
 
@@ -197,7 +208,10 @@ pub(crate) async fn handle_event_socket_scoped(
     }
     // The connecting client gets the effective lineup from boot, not only
     // after the first poll succeeds (agent_model_catalog.rs).
-    if mode != EventStreamMode::Notifications {
+    if !matches!(
+        mode,
+        EventStreamMode::Notifications | EventStreamMode::SessionsList
+    ) {
         if let Some(event) = crate::agent_model_catalog::connect_event(&state.metadata.server_id) {
             if outbound_tx.try_send(event).is_err() {
                 return;
@@ -225,6 +239,9 @@ pub(crate) async fn handle_event_socket_scoped(
                     }
                     if mode == EventStreamMode::Notifications && !notification_event_matches(&event)
                     {
+                        continue;
+                    }
+                    if mode == EventStreamMode::SessionsList && !daemon_lifecycle_event(&event) {
                         continue;
                     }
                     if broadcast_outbound_tx.try_send(event).is_err() {
@@ -259,6 +276,8 @@ pub(crate) async fn handle_event_socket_scoped(
     });
     let mut renderer_client_id: Option<String> = None;
     let mut session_chat_subscriptions: HashSet<(String, String)> = HashSet::new();
+    let sessions_list = (mode == EventStreamMode::SessionsList)
+        .then(|| super::sessions_list_stream::SessionsListStream::start(outbound_tx.clone()));
     loop {
         let message = tokio::select! {
             _ = outbound_tx.wait_for_overflow() => break,
@@ -271,6 +290,12 @@ pub(crate) async fn handle_event_socket_scoped(
             break;
         };
         if mode == EventStreamMode::Notifications {
+            continue;
+        }
+        if let Some(stream) = &sessions_list {
+            if let Some(parsed) = parse_event_client_message(message) {
+                stream.client_message(&Value::Object(parsed));
+            }
             continue;
         }
         if let Some(only) = &only {
@@ -310,6 +335,7 @@ pub(crate) async fn handle_event_socket_scoped(
     for (project_id, session_id) in session_chat_subscriptions.drain() {
         unsubscribe_session_chat_follower(&state, &project_id, &session_id);
     }
+    drop(sessions_list);
     drop(outbound_tx);
     broadcast_task.abort();
     sender_task.abort();
