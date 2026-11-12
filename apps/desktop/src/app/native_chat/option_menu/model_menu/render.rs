@@ -537,8 +537,8 @@ impl ChatOptionMenuPanel {
         Some(tray.into_any_element())
     }
 
-    /// The tab's Legacy models toggle under its rows; the core lists the legacy rows after the
-    /// current ones while it is open. It is one stop of the keyboard cursor (`index`, `lit` when
+    /// The tab's Legacy models toggle at the bottom of the list; the core lists the legacy rows
+    /// after the current ones, above it, while it is open. It is one stop of the keyboard cursor (`index`, `lit` when
     /// the cursor is on it), so Up and Down reach it and Enter or Right opens it.
     #[allow(clippy::too_many_arguments)]
     fn render_model_legacy_toggle(
@@ -776,9 +776,9 @@ impl ChatOptionMenuPanel {
                     .opacity(if view["disabled"] == true { 0.5 } else { 1.0 })
                     .flex()
                     .flex_col()
-                    // The Legacy models row sits right under the last model on a short list and
-                    // stays at the bottom of the list's room on a long one, which scrolls above it.
-                    .child(div().min_h_0().child(list))
+                    // CDXC:AgentModelCatalog 2026-11-12 DECISION:
+                    // User: "please align legacy models item to the bottom of the picker always". The Legacy models row is pinned to the bottom of the list's room, right above the footer buttons, however short the list; the models, and the legacy ones once it is open, scroll above it.
+                    .child(div().flex_1().min_h_0().child(list))
                     .when_some(view["legacy"].as_object().cloned(), |area, legacy| {
                         area.child(self.render_model_legacy_toggle(
                             &legacy,

@@ -397,17 +397,11 @@ pub fn model_menu_rows(
     for (index, entry) in pool.iter().enumerate() {
         let favorite = is_favorite(entry);
         if query.is_empty() {
-            // An agent's tab lists its legacy models after the current ones, and only once its
-            // Legacy models list is open. A starred one also stays with the favorites at the top,
-            // and the session's own model also stays in view, and each is still listed in the
-            // Legacy models list (star lit), so the list always holds every legacy model and a
-            // star can be taken off in either place.
+            // CDXC:AgentModelCatalog 2026-11-12 DECISION:
+            // User: "i said to make Fable 5.2 top and hide 5.1 under legacy like twice already PLEASE FIX". An agent's tab lists its legacy models only in its Legacy models list, after the current ones, once that list is open; a star or the session running one never lifts it out (its star still lights there and on the favorites tab). This supersedes a starred or in-use legacy model also standing with the favorites at the top, which put a starred Fable 5.1 first.
             if !favorites_tab && entry.legacy {
                 if legacy_open {
                     ranked.push((entry, favorite, index, 1, true));
-                }
-                if favorite || selected_entry.is_some_and(|selected| selected == *entry) {
-                    ranked.push((entry, favorite, index, 0, false));
                 }
                 continue;
             }
@@ -424,7 +418,7 @@ pub fn model_menu_rows(
         ranked.push((entry, favorite, index, rank, false));
     }
     // CDXC:SessionChat 2026-11-02 DECISION:
-    // User: "we need the ability to add models to favorite to show them at the top of the list (shown in order alphabetical order at the top of the models list)". Starred rows come first, sorted by label case-insensitively (the favorites tab too), then the rest in their usual order (search rank, Auto, catalog order); a search keeps matching stars first. This supersedes Auto sorting above the stars (2026-09-22) and stars keeping catalog order.
+    // User: "we need the ability to add models to favorite to show them at the top of the list (shown in order alphabetical order at the top of the models list)". Starred rows come first, sorted by label case-insensitively (the favorites tab too), then the rest in their usual order (search rank, Auto, catalog order); a search keeps matching stars first. This supersedes Auto sorting above the stars (2026-09-22) and stars keeping catalog order. Since 2026-11-12 only current models rise this way on an agent's tab; a starred legacy model stays in the Legacy models list.
     let pinned = |entry: &ModelMenuEntry| !favorites_tab && entry.value == AUTO_MODEL_VALUE;
     ranked.sort_by(|left, right| {
         // The Legacy models list follows every other row, in catalog order.
@@ -472,8 +466,7 @@ pub fn model_menu_rows(
 }
 
 /// How many legacy models the open tab folds into its Legacy models list: none on the favorites
-/// tab or during a search, which list every match. A starred or in-use legacy model counts too:
-/// it is listed there as well as where it stands out.
+/// tab or during a search, which list every match. A starred or in-use legacy model counts too.
 pub fn model_menu_legacy_count(
     entries: &ModelMenuEntries,
     tab: ModelMenuTabId,

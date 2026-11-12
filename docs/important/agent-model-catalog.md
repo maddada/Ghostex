@@ -113,6 +113,12 @@ other family after them, in file order), newest version first, ungrouped rows
 before each group (`order_claude_models` in
 `packages/gx-chat-core/src/menus/catalog.rs`). Keep the JSON in that order too:
 apps built before the sort (11.4.0 and older) still show the file's order.
+Since 2026-11-12 the core and gxserver also put every older version of a Claude
+family into the `legacy` group whatever the file says (`group_older_versions`),
+so adding a Fable 6 row moves Fable 5.2 into Legacy models with no edit to its
+row. Still give the older row `"group": "legacy"` in the file when you add a new
+version, for apps and computers built before that rule. A star never lifts a
+legacy model out of the Legacy models list.
 
 A row may name one of the agent's `groups`, which draws it inside a submenu
 instead of at the top level. The submenu takes the position of the group's
@@ -129,8 +135,9 @@ Groups are additive for clients: an app built before 2026-09-05 ignores both
 keys and renders the same rows as one flat list, so a new group never needs an
 app release. Today Codex and Antigravity nest their previous generations
 under "Legacy" and Cursor nests its long lineup under Claude / GPT / Gemini /
-Other, keeping the current flagships at the top level. Claude (4 rows) and
-Grok (2) stay flat: a group header would cost more than it saves.
+Other, keeping the current flagships at the top level. Claude keeps its
+current model of each family at the top and older versions under Legacy;
+Grok (2) stays flat: a group header would cost more than it saves.
 
 ## Editing the file
 

@@ -231,6 +231,7 @@ pub fn parse_agent_model_catalog(input: &Value) -> Option<AgentModelCatalog> {
     for (agent_id, agent_input) in agents_input {
         let mut agent = parse_agent(agent_input)?;
         if agent_id == CLAUDE_AGENT_ID {
+            group_older_versions(&mut agent.groups, &mut agent.models);
             order_claude_models(
                 &mut agent.models,
                 |model| &model.label,
@@ -352,27 +353,14 @@ pub const LEGACY_GROUP_LABEL: &str = "Legacy models";
 /// CDXC:AgentProviders 2026-10-17 DECISION:
 /// User: for the model lists read from the CLIs (Antigravity, Codex, Cursor, then Grok) "we should have 'legacy models' menu and just show the new ones at the top". No CLI flags a model as old (Codex's `visibility` only hides internal models, which gxserver drops), so the rule reads the names: a model's family is its name without the version number ("GPT 6.1 Sol" is GPT Sol, version 6.1), only the newest version of each family stays at the top, and the older ones move, in their order, into the Legacy models group after them. A name without a version number (Auto, GPT-OSS 120B, Muse Wonder) stays at the top.
 /// SEE-ALSO: server/src/agent_model_lineups.rs (the lineups that carry the rule), packages/gx-chat-core/src/menus/picker/model_menu.rs (the menu's Legacy models list).
+///
+/// CDXC:AgentModelCatalog 2026-11-12 DECISION:
+/// User: "i said to make Fable 5.2 top and hide 5.1 under legacy like twice already PLEASE FIX". Claude Code's lineup always gets this rule too (the core when it parses the catalog, gxserver in the copy it serves), whatever the file says: every older version of a family is a Legacy model, so a new Fable 6 row moves Fable 5.2 into Legacy models with no edit to its row.
 fn group_older_versions(groups: &mut Vec<CatalogGroup>, models: &mut Vec<CatalogModel>) {
-    let keys: Vec<Option<(String, Vec<u32>)>> = models
-        .iter()
-        .map(|model| family_and_version(&model.label))
-        .collect();
-    let mut newest: BTreeMap<&str, &Vec<u32>> = BTreeMap::new();
-    for (family, version) in keys.iter().flatten() {
-        let entry = newest.entry(family.as_str()).or_insert(version);
-        if version > *entry {
-            *entry = version;
-        }
-    }
-    let older: Vec<bool> = models
-        .iter()
-        .zip(&keys)
-        .map(|(model, key)| {
-            model.group.is_none()
-                && key
-                    .as_ref()
-                    .is_some_and(|(family, version)| newest[family.as_str()] > version)
-        })
+    let older: Vec<bool> = older_versions(models.iter().map(|model| model.label.as_str()))
+        .into_iter()
+        .zip(models.iter())
+        .map(|(older, model)| older && model.group.is_none())
         .collect();
     if !older.contains(&true) {
         return;
@@ -393,6 +381,25 @@ fn group_older_versions(groups: &mut Vec<CatalogGroup>, models: &mut Vec<Catalog
             description: None,
         });
     }
+}
+
+/// For each label, whether a newer version of its family is in the list (by
+/// [`family_and_version`]); a label without a version number is never older.
+pub fn older_versions<'a>(labels: impl Iterator<Item = &'a str>) -> Vec<bool> {
+    let keys: Vec<Option<(String, Vec<u32>)>> = labels.map(family_and_version).collect();
+    let mut newest: BTreeMap<&str, &Vec<u32>> = BTreeMap::new();
+    for (family, version) in keys.iter().flatten() {
+        let entry = newest.entry(family.as_str()).or_insert(version);
+        if version > *entry {
+            *entry = version;
+        }
+    }
+    keys.iter()
+        .map(|key| {
+            key.as_ref()
+                .is_some_and(|(family, version)| newest[family.as_str()] > version)
+        })
+        .collect()
 }
 
 /// A model name's family (its other words, lower case) and its version number: the first word of

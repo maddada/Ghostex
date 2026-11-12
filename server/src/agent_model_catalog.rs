@@ -142,18 +142,37 @@ fn rebuild_effective(state: &mut CatalogState) {
     state.effective = Arc::new(effective);
 }
 
-/// Claude's rows by family, Fable, Opus, Sonnet, Haiku, then newest version first, as the chat
-/// core orders them, so the New Coordinator forms and clients built before the core sorted read
-/// the same order.
-/// SEE-ALSO: packages/gx-chat-core/src/menus/catalog.rs (`order_claude_models`, the rule and the user's words).
+/// Claude's rows by family, Fable, Opus, Sonnet, Haiku, then newest version first, with every
+/// older version of a family in the Legacy models group, as the chat core reads them, so the New
+/// Coordinator forms and clients built before the core did read the same lineup.
+/// SEE-ALSO: packages/gx-chat-core/src/menus/catalog.rs (`order_claude_models` and `group_older_versions`, the rules and the user's words).
 fn order_claude_models(catalog: &mut Value) {
     use ghostex_gx_chat_core::menus::catalog as core;
-    let Some(models) = catalog
-        .pointer_mut(&format!("/agents/{}/models", core::CLAUDE_AGENT_ID))
-        .and_then(Value::as_array_mut)
+    let Some(agent) = catalog
+        .pointer_mut(&format!("/agents/{}", core::CLAUDE_AGENT_ID))
+        .and_then(Value::as_object_mut)
     else {
         return;
     };
+    let Some(models) = agent.get_mut("models").and_then(Value::as_array_mut) else {
+        return;
+    };
+    let older = core::older_versions(models.iter().map(|model| {
+        model
+            .get("label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    }));
+    let mut grouped = false;
+    for (model, older) in models.iter_mut().zip(older) {
+        if let Some(model) = model
+            .as_object_mut()
+            .filter(|model| older && model.get("group").is_none_or(Value::is_null))
+        {
+            model.insert("group".to_string(), json!(core::LEGACY_GROUP_ID));
+            grouped = true;
+        }
+    }
     core::order_claude_models(
         models,
         |model| {
@@ -164,6 +183,20 @@ fn order_claude_models(catalog: &mut Value) {
         },
         |model| model.get("group").and_then(Value::as_str),
     );
+    if grouped {
+        let groups = agent.entry("groups").or_insert_with(|| json!([]));
+        if let Some(groups) = groups.as_array_mut() {
+            let declared = groups.iter().any(|group| {
+                group.get("id").and_then(Value::as_str) == Some(core::LEGACY_GROUP_ID)
+            });
+            if !declared {
+                groups.push(json!({
+                    "id": core::LEGACY_GROUP_ID,
+                    "label": core::LEGACY_GROUP_LABEL,
+                }));
+            }
+        }
+    }
 }
 
 fn lineups_path(paths: &GxserverPaths) -> PathBuf {
