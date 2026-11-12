@@ -911,24 +911,38 @@ impl ZmxQueuedSessionMessage {
         } else {
             crate::session_chat_send::build_agent_tui_clear_input_steps(None, &self.text)
         };
-        steps.push(crate::session_chat_send::SessionChatSendStep::Write(
-            if self.submit {
-                crate::session_chat_send::disambiguate_agent_tui_submit_text(&self.text)
-            } else if crate::session_chat_send::is_multiline_draft(&self.text) {
-                // CDXC:TranscriptExport 2026-10-31 WHY:
-                // Staged text is never sent, and a bare line break in a raw write is the Return key: a handoff's multi-line first message pressed Enter on Codex's "Update available" prompt in testing, which ran its "Update now". As one paste it is text to a composer and nothing to a prompt.
-                crate::session_chat_send::wrap_terminal_bracketed_paste_text(&self.text)
-            } else {
-                self.text.clone()
+        // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: this endpoint carries `ghostex
+        // sendMessage`, automations, worktree first prompts and Ghostex's own typed commands (the
+        // Claude diff-panel hide, /rename), and wrote their text and Return blind, so an approval
+        // that was up took them as its answer. For an agent the guard can read, both are guarded
+        // writes that need the input box ready with no prompt waiting (guarded_write.rs). A
+        // refused write is not retried here: the job ends and is logged, as a refused zmx write
+        // always was. The Return checks the input box rather than the typed text, which a slow
+        // agent may not have drawn yet, so a slow repaint never holds a message back.
+        let write = |payload: String| match agent.as_deref() {
+            Some(agent) => crate::session_chat_send::SessionChatSendStep::GuardedWrite {
+                agent: Some(agent.to_string()),
+                guard: crate::session_chat_send::InputGuard::InputBox,
+                payload,
             },
-        ));
+            None => crate::session_chat_send::SessionChatSendStep::Write(payload),
+        };
+        steps.push(write(if self.submit {
+            crate::session_chat_send::disambiguate_agent_tui_submit_text(&self.text)
+        } else if crate::session_chat_send::is_multiline_draft(&self.text) {
+            // CDXC:TranscriptExport 2026-10-31 WHY:
+            // Staged text is never sent, and a bare line break in a raw write is the Return key: a handoff's multi-line first message pressed Enter on Codex's "Update available" prompt in testing, which ran its "Update now". As one paste it is text to a composer and nothing to a prompt.
+            crate::session_chat_send::wrap_terminal_bracketed_paste_text(&self.text)
+        } else {
+            self.text.clone()
+        }));
         if self.submit {
             if self.send_delay_ms > 0 {
                 steps.push(crate::session_chat_send::SessionChatSendStep::SleepMs(
                     self.send_delay_ms,
                 ));
             }
-            steps.push(crate::session_chat_send::SessionChatSendStep::Write(
+            steps.push(write(
                 crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
             ));
         }
@@ -1208,10 +1222,7 @@ mod staged_message_tests {
         message
             .steps()
             .into_iter()
-            .filter_map(|step| match step {
-                SessionChatSendStep::Write(text) => Some(text),
-                _ => None,
-            })
+            .filter_map(|step| step.written_payload().map(str::to_string))
             .collect()
     }
 

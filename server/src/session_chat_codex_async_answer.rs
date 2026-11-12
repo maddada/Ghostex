@@ -560,8 +560,29 @@ impl Driver<'_> {
         ) {
             return Err("Could not verify the question answer in Codex's input box. Check the terminal before retrying.".into());
         }
-        self.write(crate::session_chat_send::SESSION_CHAT_SUBMIT)
-            .await?;
+        // Only while Codex's input box still holds the answer and no prompt came up over it
+        // (GitHub #555 review, session_chat_send/guarded_write.rs).
+        if (self.cancelled)() {
+            return Err("The question action was cancelled.".into());
+        }
+        crate::session_chat_send::write_session_chat_payload_guarded(
+            self.project_id,
+            self.session_id,
+            self.zmx_name,
+            self.source,
+            Some("codex"),
+            &crate::session_chat_send::InputGuard::Holds(payload.clone()),
+            crate::session_chat_send::SESSION_CHAT_SUBMIT,
+            std::time::Instant::now(),
+        )
+        .await
+        .map_err(|error| {
+            if error.composer_not_ready() {
+                "Something came up in Codex's terminal before the answer was submitted, so it was not sent. Deal with it in the terminal, then send the answer again.".to_string()
+            } else {
+                error.message
+            }
+        })?;
         crate::session_chat_send_submit::confirm_submitted(
             "codex",
             self.project_id,
