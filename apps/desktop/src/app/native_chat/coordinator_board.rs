@@ -1481,6 +1481,9 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .gap(px(6.0 * s))
+                // The question card's space from the title to the text, and from the text to the
+                // answers (work_cards.rs `OPENED_ROW_GAP`, with the card's own 6).
+                .mt(px((super::work_cards::OPENED_ROW_GAP - 6.0) * s))
                 .cursor(gpui::CursorStyle::IBeam)
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation());
             // A work ask's longer explanation under its short title, in the quieter colour, whole
@@ -1504,7 +1507,11 @@ impl NativeChatView {
                 );
             }
             inner = inner.child(div().flex().min_w_0().child(chips));
-            inner = inner.child(self.board_card_buttons(row, age_slot, p, cx));
+            inner = inner.child(
+                div()
+                    .mt(px((super::work_cards::OPENED_ROW_GAP - 6.0) * s))
+                    .child(self.board_card_buttons(row, age_slot, p, cx)),
+            );
             card = card.child(inner);
         } else {
             card = card.child(

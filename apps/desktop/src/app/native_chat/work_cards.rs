@@ -93,6 +93,9 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
 /// A chip's glyph by what it says.
 /// The dock's cards stop growing here (unscaled) and scroll inside it.
 const DOCK_MAX_HEIGHT: f32 = 360.0;
+/// An opened row's (and an opened Work panel card's) space between its title with its work item
+/// line, its description and its answers: a question card's (question.rs `body` gap 12).
+pub(super) const OPENED_ROW_GAP: f32 = 12.0;
 /// The share of the window's height the dock's rows may take at most, so a short window always
 /// keeps the transcript in view above the dock and the chat box (the phone's `dockHeightCap`).
 ///
@@ -1021,15 +1024,26 @@ impl NativeChatView {
                     );
                 }
             }
+            // The description stands apart from the title and its work item line, as a question
+            // card's text stands under its head: `OPENED_ROW_GAP` with the column's own 2.
+            //
+            // CDXC:Coordinators 2026-11-12 DECISION:
+            // User, of an opened row: "please add space between the title/description/choice
+            // buttons they're too close together now". The gaps are the question card's
+            // (question.rs: 12 from the head to the text, 12 from the text to the options).
+            let mut first_body = true;
             if !detail.is_empty() {
-                column = column.child(self.ask_markdown(
-                    &format!("detail:{key}"),
-                    &detail,
-                    p.card_muted,
-                    PROSE_SIZE,
-                    PROSE_LINE_HEIGHT,
-                    p,
-                    cx,
+                first_body = false;
+                column = column.child(div().mt(px((OPENED_ROW_GAP - 2.0) * s)).child(
+                    self.ask_markdown(
+                        &format!("detail:{key}"),
+                        &detail,
+                        p.card_muted,
+                        PROSE_SIZE,
+                        PROSE_LINE_HEIGHT,
+                        p,
+                        cx,
+                    ),
                 ));
             }
             // Where a line of work stands, on lines of its own: no dot can be left at a line's end.
@@ -1043,10 +1057,12 @@ impl NativeChatView {
                 column = column.child(
                     div()
                         .min_w_0()
+                        .when(first_body, |line| line.mt(px((OPENED_ROW_GAP - 2.0) * s)))
                         .whitespace_normal()
                         .text_color(p.card_muted)
                         .child(line.to_string()),
                 );
+                first_body = false;
             }
             column
         });
@@ -1138,7 +1154,12 @@ impl NativeChatView {
                     detail
                         .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
                         .pr(px(DOCK_ROW_PAD_X * s))
-                        .pb(px(6.0 * s))
+                        // The answers' line sits `OPENED_ROW_GAP` under the text.
+                        .pb(px(if under_answers.is_empty() {
+                            6.0
+                        } else {
+                            OPENED_ROW_GAP
+                        } * s))
                         .cursor(gpui::CursorStyle::IBeam),
                 )
                 .into_any_element(),
