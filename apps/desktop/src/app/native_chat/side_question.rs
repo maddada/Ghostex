@@ -210,14 +210,12 @@ impl NativeChatView {
                     .chat_cursor_pointer()
                     .hover(|style| style.text_color(p.foreground))
                     .child(
-                        svg()
-                            .path(if expanded {
-                                "titlebar/chevron-up.svg"
-                            } else {
-                                "titlebar/chevron-down.svg"
-                            })
-                            .size(px(14.0 * s))
-                            .text_color(p.primary),
+                        super::disclosure_motion::turned_chevron(
+                            self.fold_turn(&key, expanded, cx),
+                            false,
+                        )
+                        .size(px(14.0 * s))
+                        .text_color(p.primary),
                     )
                     .child(if expanded {
                         "Show less".to_string()
@@ -298,12 +296,7 @@ impl NativeChatView {
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.border.opacity(0.35)))
             .child(
-                svg()
-                    .path(if expanded {
-                        "titlebar/chevron-down.svg"
-                    } else {
-                        "titlebar/chevron-right.svg"
-                    })
+                super::disclosure_motion::turned_chevron(self.fold_turn(&key, expanded, cx), true)
                     .size(px(14.0 * s))
                     .text_color(p.muted)
                     .flex_shrink_0(),

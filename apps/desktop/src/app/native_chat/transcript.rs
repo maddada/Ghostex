@@ -412,12 +412,7 @@ impl NativeChatView {
             .flex_shrink_0()
             .chat_cursor_pointer()
             .child(
-                gpui::svg()
-                    .path(if expanded {
-                        "titlebar/chevron-down.svg"
-                    } else {
-                        "titlebar/chevron-right.svg"
-                    })
+                super::disclosure_motion::turned_chevron(self.fold_turn(&id, expanded, cx), true)
                     .size(px(14.0 * s))
                     .text_color(p.primary),
             )
@@ -461,14 +456,12 @@ impl NativeChatView {
                     .justify_center()
                     .flex_shrink_0()
                     .child(
-                        gpui::svg()
-                            .path(if expanded {
-                                "titlebar/chevron-down.svg"
-                            } else {
-                                "titlebar/chevron-right.svg"
-                            })
-                            .size(px(14.0 * s))
-                            .text_color(p.primary),
+                        super::disclosure_motion::turned_chevron(
+                            self.fold_turn(&id, expanded, cx),
+                            true,
+                        )
+                        .size(px(14.0 * s))
+                        .text_color(p.primary),
                     ),
             )
             .child(div().flex_1().min_w_0().child(self.find_label(&id, label)))

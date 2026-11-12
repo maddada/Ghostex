@@ -341,6 +341,24 @@ pub(super) fn motion_clip(
     motion_clip_revealed(height, frame, floor, gap, content, None)
 }
 
+/// A fold's chevron turned `turn` of the way from shut (0) to open (1): a right chevron a quarter
+/// turn to point down, or (`quarter` false) a down chevron a half turn to point up.
+///
+/// CDXC:SessionChat 2026-11-12 DECISION: the user asked for every fold in the chat to animate;
+/// their chevrons turn with the fold, over its time and curve, instead of swapping the icon.
+pub(super) fn turned_chevron(turn: f32, quarter: bool) -> gpui::Svg {
+    let (path, degrees) = if quarter {
+        ("titlebar/chevron-right.svg", 90.0_f32)
+    } else {
+        ("titlebar/chevron-down.svg", 180.0_f32)
+    };
+    gpui::svg()
+        .path(path)
+        .with_transformation(gpui::Transformation::rotate(gpui::radians(
+            (degrees * turn).to_radians(),
+        )))
+}
+
 /// [`motion_clip`] that also records where the clip paints into `extent`, for the disclosure being
 /// revealed (`disclosure_anchor.rs`).
 fn motion_clip_revealed(
@@ -479,6 +497,17 @@ impl super::state::NativeChatView {
             }
             None if reveal => self.reveal_extent(key, false, body),
             None => body,
+        }
+    }
+
+    /// How far fold `key`'s chevron has turned, 0 shut to 1 open, following the fold's own motion
+    /// (still under reduced motion). Observing here starts the motion when the chevron is drawn
+    /// before the body, so the two move together.
+    pub(super) fn fold_turn(&self, key: &str, open: bool, cx: &gpui::App) -> f32 {
+        match self.disclosure_frame(key, open, cx) {
+            Some(frame) => frame.log.clamp(0.0, 1.0),
+            None if open => 1.0,
+            None => 0.0,
         }
     }
 

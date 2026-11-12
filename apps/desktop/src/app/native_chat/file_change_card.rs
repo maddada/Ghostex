@@ -465,15 +465,12 @@ impl NativeChatView {
                     view.file_secondary_press(menu_path.clone(), event, window, cx);
                 }),
             )
-            .child(icon(
-                if open {
-                    "titlebar/chevron-down.svg"
-                } else {
-                    "titlebar/chevron-right.svg"
-                },
-                13.0 * s,
-                p.muted,
-            ))
+            .child(
+                super::disclosure_motion::turned_chevron(self.fold_turn(&key, open, cx), true)
+                    .size(px(13.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.muted),
+            )
             .child(icon(status_icon(status), 15.0 * s, hue))
             .child(
                 div()

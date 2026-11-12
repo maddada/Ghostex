@@ -387,14 +387,12 @@ impl NativeChatView {
                             "Show terminal output"
                         })
                         .child(
-                            gpui::svg()
-                                .path(if tail_open {
-                                    "titlebar/chevron-down.svg"
-                                } else {
-                                    "titlebar/chevron-right.svg"
-                                })
-                                .size(px(12.0 * p.scale))
-                                .text_color(p.muted),
+                            super::disclosure_motion::turned_chevron(
+                                self.fold_turn(&tail_key, tail_open, cx),
+                                true,
+                            )
+                            .size(px(12.0 * p.scale))
+                            .text_color(p.muted),
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if !this.expanded.remove(&tail_key) {
@@ -536,6 +534,8 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
+        // The chevron turns with the notice's fold (disclosure_motion.rs `turned_chevron`).
+        let header_turn = self.fold_turn(&key, !collapsed, cx);
         let press: Option<Box<dyn FnOnce(gpui::Div) -> gpui::Stateful<gpui::Div>>> =
             foldable.then(|| {
                 let toggle = cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
@@ -559,12 +559,7 @@ impl NativeChatView {
             });
         let trailing = if foldable {
             vec![
-                gpui::svg()
-                    .path(if collapsed {
-                        "titlebar/chevron-right.svg"
-                    } else {
-                        "titlebar/chevron-down.svg"
-                    })
+                super::disclosure_motion::turned_chevron(header_turn, true)
                     .size(px(14.0 * p.scale))
                     .text_color(p.muted)
                     .flex_shrink_0()

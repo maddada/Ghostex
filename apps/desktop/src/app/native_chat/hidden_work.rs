@@ -225,15 +225,13 @@ impl NativeChatView {
                 .flex_shrink_0()
                 .text_color(p.success().opacity(0.75)),
         };
-        let chevron = svg()
-            .path(if work.expanded {
-                "titlebar/chevron-down.svg"
-            } else {
-                "titlebar/chevron-right.svg"
-            })
-            .size(px(12.0 * s))
-            .flex_shrink_0()
-            .text_color(tone);
+        let chevron = super::disclosure_motion::turned_chevron(
+            self.fold_turn(&work.key, work.expanded, cx),
+            true,
+        )
+        .size(px(12.0 * s))
+        .flex_shrink_0()
+        .text_color(tone);
         let key = work.key.clone();
         let expanded = work.expanded;
         let actions = work.actions.clone();

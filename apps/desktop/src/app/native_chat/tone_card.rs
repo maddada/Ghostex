@@ -571,12 +571,7 @@ impl NativeChatView {
                 .hover(|style| style.text_color(p.foreground))
                 .child("Details")
                 .child(
-                    gpui::svg()
-                        .path(if open {
-                            "titlebar/chevron-down.svg"
-                        } else {
-                            "titlebar/chevron-right.svg"
-                        })
+                    super::disclosure_motion::turned_chevron(self.fold_turn(&key, open, cx), true)
                         .size(px(12.0 * s))
                         .text_color(p.muted),
                 )

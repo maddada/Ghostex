@@ -264,15 +264,12 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let chevron = svg()
-            .path(if expanded {
-                "titlebar/chevron-down.svg"
-            } else {
-                "titlebar/chevron-right.svg"
-            })
+        // Shown while open or still turning shut.
+        let turn = self.fold_turn(&key, expanded, cx);
+        let chevron = super::disclosure_motion::turned_chevron(turn, true)
             .size(px(12.0 * s))
             .flex_shrink_0()
-            .text_color(if expanded {
+            .text_color(if expanded || turn > 0.0 {
                 p.quiet_dim()
             } else {
                 gpui::transparent_black()

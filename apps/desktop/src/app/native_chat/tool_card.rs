@@ -492,12 +492,7 @@ impl NativeChatView {
             })
             .children(spinner)
             .child(
-                gpui::svg()
-                    .path(if open {
-                        "titlebar/chevron-up.svg"
-                    } else {
-                        "titlebar/chevron-down.svg"
-                    })
+                super::disclosure_motion::turned_chevron(self.fold_turn(key, open, cx), false)
                     .size(px(12.0 * s))
                     .flex_shrink_0()
                     .text_color(p.muted),
