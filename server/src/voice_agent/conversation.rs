@@ -29,8 +29,10 @@ use crate::server::AppState;
 
 mod announcement;
 mod card;
+mod turn_word;
 
 pub(super) use announcement::Announcement;
+pub(super) use turn_word::TURN_WORD_INSTRUCTIONS;
 
 /// CDXC:VoiceMode 2026-10-20 DECISION:
 /// User: the voice agent "hangs up by itself after 5 minutes with nobody talking" because realtime is billed while connected. Talking is user speech the provider detected, typed text, or the agent's audio answering the user; the timer keeps running while no client is attached.
@@ -261,6 +263,19 @@ pub(super) struct Conversation {
     diagnostics: CallDiagnostics,
     /// The provider committed a turn the user spoke and no reply has started for it yet.
     turn_unanswered: bool,
+    /// "Answer when I say "reply"" was on when the call started (`voiceAgentWaitForReply`): a
+    /// Regular call answers spoken turns only after the turn word (`turn_word.rs`).
+    wait_for_reply: bool,
+    /// The intro is still to be said (on the first attach).
+    intro_pending: bool,
+    /// Replies gxserver asked for (`response.create`) that the provider has not started yet.
+    responses_requested: u32,
+    /// Replies the provider started by itself while the call waits for the turn word: cancelled,
+    /// and their events dropped (`unrequested_response`).
+    dropped_responses: HashSet<String>,
+    dropped_items: HashSet<String>,
+    /// When the user last said something that did not end with the turn word.
+    words_waiting_since: Option<Instant>,
 }
 
 /// How long after a reply ends gxserver waits for the provider to answer a turn spoken during it
@@ -273,6 +288,10 @@ const UNANSWERED_TURN_GRACE: Duration = Duration::from_millis(400);
 const MIN_CLIP_BYTES: usize = 250 * BYTES_PER_MS;
 /// A recorded turn goes to the provider in half-second appends.
 const CLIP_PIECE_BYTES: usize = 500 * BYTES_PER_MS;
+/// How long spoken words still waiting for the turn word hold back an announcement, so a user who
+/// pauses to think is not talked over (`voiceAgentWaitForReply`).
+const TURN_WORD_HOLD: Duration = Duration::from_secs(30);
+
 /// The quiet after a recorded turn in a Regular call, so the provider's turn detection hears it end.
 const CLIP_TAIL_SILENCE_MS: usize = 1_200;
 
@@ -306,6 +325,7 @@ impl Conversation {
         voice: String,
         session_update: Value,
         push_to_talk: bool,
+        wait_for_reply: bool,
         focus: Option<FocusScope>,
         client_remote: bool,
         socket: ProviderSocket,
@@ -365,6 +385,12 @@ impl Conversation {
             focus,
             scope_changes: 0,
             turn_unanswered: false,
+            wait_for_reply,
+            intro_pending: true,
+            responses_requested: 0,
+            dropped_responses: HashSet::new(),
+            dropped_items: HashSet::new(),
+            words_waiting_since: None,
             diagnostics: CallDiagnostics {
                 client: "unknown".to_string(),
                 client_remote,
@@ -551,6 +577,9 @@ impl Conversation {
                 self.diagnostics.attaches += 1;
                 self.diagnostics.audio_at = None;
                 self.diagnostics.gap_reported = false;
+                if std::mem::take(&mut self.intro_pending) && !resumed {
+                    self.say_intro().await?;
+                }
                 if std::mem::take(&mut self.briefing_pending) {
                     self.read_briefing();
                 }
@@ -590,6 +619,7 @@ impl Conversation {
                 let text = text.trim().to_string();
                 if !text.is_empty() {
                     self.last_talk = Instant::now();
+                    self.words_waiting_since = None;
                     self.typed_turns += 1;
                     let item_id = format!("typed-{}", self.typed_turns);
                     self.to_client(json!({"type": "caption", "role": "user", "itemId": item_id, "text": text, "final": true}));
@@ -756,7 +786,12 @@ impl Conversation {
                     "session": reference,
                 }));
             }
-            Input::Briefing(briefing) => self.add_scope_message(briefing, true).await?,
+            // While the call waits for the turn word, the briefing is there for the user's first
+            // question instead of being read out after the intro.
+            Input::Briefing(briefing) => {
+                let respond = !self.waits_for_word();
+                self.add_scope_message(briefing, respond).await?
+            }
             Input::BadRequest(message) => {
                 self.to_client(json!({"type": "error", "code": "badRequest", "message": message, "fatal": false}));
             }
@@ -865,6 +900,7 @@ impl Conversation {
     }
 
     async fn create_response_now(&mut self) -> Result<(), Ended> {
+        self.responses_requested += 1;
         self.create_at = None;
         self.turn_unanswered = false;
         self.outputs_waiting = false;
@@ -1024,7 +1060,7 @@ impl Conversation {
             };
             self.set_state(next);
         }
-        if !self.announcements.is_empty() && self.quiet() {
+        if !self.announcements.is_empty() && self.quiet() && !self.words_waiting(now) {
             let lines: Vec<String> = self
                 .announcements
                 .drain(..)
@@ -1070,6 +1106,9 @@ impl Conversation {
                 .unwrap_or_default()
                 .to_string()
         };
+        if self.drops_event(kind, &event).await? {
+            return Ok(());
+        }
         match kind {
             "input_audio_buffer.speech_started" => {
                 self.user_speaking = true;
@@ -1091,7 +1130,12 @@ impl Conversation {
                 self.talk.speech_stopped();
                 self.user_speaking = false;
                 self.last_talk = Instant::now();
-                self.set_state("thinking");
+                // Waiting for the turn word: nothing is being thought about yet.
+                self.set_state(if self.waits_for_word() {
+                    "listening"
+                } else {
+                    "thinking"
+                });
             }
             "conversation.item.input_audio_transcription.delta" => {
                 let item_id = str_field("item_id");
@@ -1108,13 +1152,34 @@ impl Conversation {
             "conversation.item.input_audio_transcription.completed" => {
                 let item_id = str_field("item_id");
                 self.user_captions.remove(&item_id);
-                let text = str_field("transcript").trim().to_string();
+                let mut text = str_field("transcript").trim().to_string();
+                let turn_word = if self.waits_for_word() {
+                    turn_word::strip_turn_word(&text)
+                } else {
+                    None
+                };
+                let ended = turn_word.is_some();
+                if let Some(kept) = turn_word {
+                    text = kept;
+                } else if self.waits_for_word() && !text.is_empty() {
+                    self.words_waiting_since = Some(Instant::now());
+                }
                 if !text.is_empty() {
                     self.to_client(json!({"type": "caption", "role": "user", "itemId": item_id, "text": text, "final": true}));
                 }
+                if ended {
+                    self.heard_turn_word().await?;
+                }
             }
-            "input_audio_buffer.committed" => self.turn_unanswered = true,
+            // While the call waits for the turn word, a committed turn is answered only once the
+            // word is heard (`heard_turn_word`).
+            "input_audio_buffer.committed" => self.turn_unanswered = !self.waits_for_word(),
             "response.created" => {
+                if self.responses_requested > 0 {
+                    self.responses_requested -= 1;
+                } else if self.waits_for_word() {
+                    return self.unrequested_response(&event).await;
+                }
                 self.response_active = true;
                 // This reply answers what is waiting: the user's turn, and any tool results.
                 self.turn_unanswered = false;
@@ -1322,6 +1387,7 @@ impl Conversation {
                 // ends, or now when it already has. The provider may not confirm a manual commit
                 // (`input_audio_buffer.committed`), so the refusal is what marks the turn.
                 if code == "conversation_already_has_active_response" {
+                    self.responses_requested = self.responses_requested.saturating_sub(1);
                     self.turn_unanswered = true;
                     if !self.response_active && self.create_at.is_none() {
                         self.create_at = Some(Instant::now() + UNANSWERED_TURN_GRACE);
@@ -1596,6 +1662,11 @@ impl Conversation {
         self.session_update = self
             .provider
             .with_call_mode(&self.session_update, push_to_talk);
+        if self.wait_for_reply {
+            self.session_update = self
+                .provider
+                .waiting_for_turn_word(self.session_update.clone());
+        }
         let update = self.session_update.clone();
         self.provider_send(update).await?;
         if push_to_talk || dropped {
@@ -1742,8 +1813,10 @@ impl Conversation {
             self.provider_send(json!({"type": "input_audio_buffer.append", "audio": audio}))
                 .await?;
         }
-        if self.push_to_talk {
+        // A recorded turn is a hold, so it ends the turn without the turn word too.
+        if self.push_to_talk || self.waits_for_word() {
             self.user_speaking = false;
+            self.words_waiting_since = None;
             self.provider_send(json!({"type": "input_audio_buffer.commit"}))
                 .await?;
             return self.create_response_now().await;

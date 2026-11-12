@@ -204,6 +204,29 @@ impl Provider {
         update
     }
 
+    /// `update` with a Regular call's turn detection told not to answer by itself
+    /// (`create_response: false`): gxserver asks for the reply once the user says the turn word
+    /// (`voiceAgentWaitForReply`, `Conversation::heard_turn_word`). A push-to-talk update has no turn
+    /// detection and is returned as it is.
+    ///
+    /// CDXC:VoiceMode 2026-11-12 WHY: OpenAI documents `create_response` on its turn detection. xAI
+    /// calls its realtime API OpenAI-compatible but documents no such field, and Pydantic AI reports
+    /// that xAI echoes `create_response: false` back and still answers when the user stops speaking,
+    /// so gxserver also cancels and drops any reply it did not ask for while the setting is on
+    /// (`Conversation::unrequested_response`).
+    pub(super) fn waiting_for_turn_word(self, mut update: Value) -> Value {
+        let detection = match self {
+            Self::Xai => update.pointer_mut("/session/turn_detection"),
+            Self::OpenAi => update.pointer_mut("/session/audio/input/turn_detection"),
+        };
+        if let Some(detection) = detection.filter(|detection| {
+            detection.is_object() && detection.get("type").is_some_and(|kind| !kind.is_null())
+        }) {
+            detection["create_response"] = json!(false);
+        }
+        update
+    }
+
     /// The voice a `session.updated` event says the session now speaks with.
     pub(super) fn session_voice(self, event: &Value) -> Option<String> {
         let pointer = match self {

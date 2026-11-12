@@ -511,13 +511,23 @@ async fn start_conversation(
         .and_then(|bot| super::gbot_call::voice_for(bot, provider))
         .unwrap_or_else(|| keys::selected_voice(&state.paths, provider));
     let keyterms = keyterms(state).await;
-    let update = provider.session_update(
+    // "Answer when I say "reply"" (keys.rs): the model is told about the turn word, and a Regular
+    // call's turn detection stops answering by itself (`Provider::waiting_for_turn_word`).
+    let wait_for_reply = keys::wait_for_reply(&state.paths);
+    let mut instructions = prompt::instructions(focus.as_ref());
+    if wait_for_reply {
+        instructions.push_str(super::conversation::TURN_WORD_INSTRUCTIONS);
+    }
+    let mut update = provider.session_update(
         &voice,
-        &prompt::instructions(focus.as_ref()),
+        &instructions,
         &tools::definitions(focus.as_ref()),
         &keyterms,
         push_to_talk,
     );
+    if wait_for_reply {
+        update = provider.waiting_for_turn_word(update);
+    }
     if upstream
         .send(WsMessage::Text(update.to_string().into()))
         .await
@@ -601,6 +611,7 @@ async fn start_conversation(
         voice,
         update,
         push_to_talk,
+        wait_for_reply,
         focus,
         client_remote,
         upstream,

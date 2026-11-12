@@ -66,6 +66,19 @@ pub(super) fn push_to_talk_calls(paths: &GxserverPaths) -> bool {
         == Some("pushToTalk")
 }
 
+/// CDXC:VoiceMode 2026-11-12 DECISION:
+/// User: "when a voice agent starts ... it should say something like 'Hey, I hear you. Please say reply after you finish speaking so I can reply to you.' ... Make this a setting people can turn off if they want, but it should be on by default." Q2747 named it "Answer when I say "reply"", Q2748 kept it to Regular (hands-free) calls (letting go of the talk button already ends a push-to-talk turn), Q2749 put the same switch on the phone, Q2750 ended a turn on "reply", "over" or "go ahead", and Q2751 made the agent never answer a spoken turn without one of them while it is on.
+pub(super) const WAIT_FOR_REPLY_SETTING: &str = "voiceAgentWaitForReply";
+
+/// Whether a Regular call answers only once the user says the turn word (`voiceAgentWaitForReply`,
+/// on unless saved as `false`). Read when a call starts.
+pub(super) fn wait_for_reply(paths: &GxserverPaths) -> bool {
+    read_settings(paths)
+        .get(WAIT_FOR_REPLY_SETTING)
+        .and_then(Value::as_bool)
+        != Some(false)
+}
+
 /// `voiceAgentSpeed` as one of [`SPEEDS`] (1 when unset or unknown).
 pub(super) fn selected_speed(paths: &GxserverPaths) -> f64 {
     let settings = read_settings(paths);

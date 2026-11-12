@@ -77,6 +77,8 @@ pub(crate) async fn handle_read_voice_agent_http(
         // Saving the call mode switches every running call at once (`callMode` frames, as `ready`'s
         // `callModeLive` says), so Settings can say so before any call.
         "callModeLive": true,
+        // "Answer when I say "reply"" for Regular calls (keys.rs); the phone's Settings shows it.
+        "waitForReply": keys::wait_for_reply(paths),
         "speedOptions": keys::SPEEDS,
         "memory": memory::client_view(paths),
         "memorySummaryPending": memory::summary_pending(paths),
