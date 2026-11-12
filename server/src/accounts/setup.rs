@@ -176,6 +176,16 @@ pub(crate) fn dispatch(
         }
         command.cwd(&state.paths.home_dir);
         command.env("TERM", "dumb");
+        // CDXC:AgentProviders 2026-11-13 DECISION:
+        // User (Q2779 B, Q2782): Settings › Accounts on one device signs in another computer's accounts, and the phone does the same. The login still runs here, on the computer that keeps the account, but the person is at the device that asked (`fromAnotherDevice`), so its browser does the signing in. Claude's CLI opens the sign-in page with `$BROWSER` (else `open`) and also prints it with "Paste code here if prompted"; `BROWSER=true` makes that opener a no-op, so no tab appears on this unattended computer, and the device shows the printed link and the code box. Codex's own login waits for a browser on this computer, so it runs as a device-code login (`xswap … --device-auth`), whose page and one-time code the device shows (`userCode`).
+        let from_another_device =
+            params.get("fromAnotherDevice").and_then(Value::as_bool) == Some(true);
+        if from_another_device {
+            match provider {
+                Provider::Claude => command.env("BROWSER", "true"),
+                Provider::Codex => command.arg("--device-auth"),
+            }
+        }
         if provider == Provider::Codex {
             let stop_codex = params.get("stopCodex").and_then(Value::as_bool) == Some(true);
             if stop_codex {
@@ -206,7 +216,7 @@ pub(crate) fn dispatch(
         let mut child = pair.slave.spawn_command(command).map_err(store::error)?;
         drop(pair.slave);
         let job = Arc::new(Mutex::new(SetupJob {
-            view: json!({"id":id,"owner":owner,"provider":provider,"email":email,"status":"signingIn","output":"","accountId":reconnect,"acknowledged":false,"createdAt":chrono::Utc::now().timestamp_millis()}),
+            view: json!({"id":id,"owner":owner,"provider":provider,"email":email,"status":"signingIn","output":"","accountId":reconnect,"acknowledged":false,"fromAnotherDevice":from_another_device,"createdAt":chrono::Utc::now().timestamp_millis()}),
             process_id: child.process_id(),
             writer: Some(writer),
             killer: Some(child.clone_killer()),
@@ -296,6 +306,7 @@ pub(crate) fn dispatch(
                         job.view["accountId"] = json!(id);
                         job.view["output"] = json!("");
                         job.view["url"] = Value::Null;
+                        job.view["userCode"] = Value::Null;
                     }
                     Err(error) => {
                         job.view["status"] = json!("failed");
@@ -353,6 +364,7 @@ pub(crate) fn dispatch(
             job.view["acknowledged"] = json!(true);
             job.view["output"] = json!("");
             job.view["url"] = Value::Null;
+            job.view["userCode"] = Value::Null;
         }
     }
     let jobs = state.accounts.setup_jobs.lock().map_err(store::error)?;
@@ -386,6 +398,24 @@ fn wrong_account(transcript: &str) -> Option<String> {
     (lower.contains("signed in to a different email")
         || lower.contains("now signed into another account"))
     .then(String::new)
+}
+/// The one-time code of a Codex device-code login (`codex login --device-auth`): it prints "Enter
+/// this one-time code (expires in 15 minutes)" and the code (`ABCD-12345`) after it. The device that
+/// asked for the sign-in shows it beside the page's link.
+fn device_code(screen: &str) -> Option<String> {
+    let after = &screen[screen.find("one-time code")? + "one-time code".len()..];
+    after
+        .split_whitespace()
+        .take(12)
+        .map(|word| word.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-'))
+        .find(|word| {
+            (7..=20).contains(&word.len())
+                && word.contains('-')
+                && word
+                    .chars()
+                    .all(|c| c == '-' || c.is_ascii_uppercase() || c.is_ascii_digit())
+        })
+        .map(str::to_string)
 }
 /// Where `ghostex account-login --result-file` reports, inside the job's own temporary folder.
 const RESULT_FILE: &str = "result.json";
@@ -475,6 +505,9 @@ fn read_output(mut reader: Box<dyn Read + Send>, job: Arc<Mutex<SetupJob>>) -> S
                 let _ = writer.write_all(&replies);
             }
             job.view["output"] = json!(output);
+            if let Some(code) = device_code(&output) {
+                job.view["userCode"] = json!(code);
+            }
             for word in output.split_whitespace() {
                 if let Some(start) = word.find("https://") {
                     let candidate = word[start..].trim_end_matches(['\'', '"', '>']);

@@ -27,7 +27,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-pub(super) const HELP: &str = "Usage: ghostex account-login codex [--account NUMBER] [--email EMAIL] [--json] [--result-file PATH]\n\nSign in to a Codex account and save it with Codex Swap (xswap).\nWithout --account, saves the account you choose in the browser; --email requires that account.\nWith --account, signs in again to that saved slot.\n--result-file writes the saved account, or the reason the login failed, to PATH as JSON.";
+pub(super) const HELP: &str = "Usage: ghostex account-login codex [--account NUMBER] [--email EMAIL] [--device-auth] [--json] [--result-file PATH]\n\nSign in to a Codex account and save it with Codex Swap (xswap).\n--device-auth signs in with a one-time code on another device instead of a browser on this computer.\nWithout --account, saves the account you choose in the browser; --email requires that account.\nWith --account, signs in again to that saved slot.\n--result-file writes the saved account, or the reason the login failed, to PATH as JSON.";
 
 /// The folder the shim keeps the new login in; set only on the xswap that the wrapper starts.
 const SHIM_KEEP: &str = "GHOSTEX_CODEX_LOGIN_KEEP";
@@ -107,6 +107,7 @@ pub(super) fn login(args: &[String]) -> Result<Option<Value>, LoginFailure> {
     };
     let account = value_after("--account")?;
     let email = value_after("--email")?;
+    let device_auth = args.iter().any(|arg| arg == "--device-auth");
     if args.first().map(String::as_str) != Some("codex")
         || account
             .as_deref()
@@ -159,6 +160,12 @@ pub(super) fn login(args: &[String]) -> Result<Option<Value>, LoginFailure> {
         ]
         .map(String::from)
         .to_vec(),
+    };
+    // The sign-in was asked for from another device (accounts/setup.rs, `fromAnotherDevice`).
+    let save_args = if device_auth {
+        [save_args, vec!["--device-auth".into()]].concat()
+    } else {
+        save_args
     };
     let first = run_xswap(&xswap, &save_args, &shim, false);
     if first.ok {

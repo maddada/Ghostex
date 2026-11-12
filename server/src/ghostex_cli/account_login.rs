@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::process::Stdio;
 use std::{path::Path, process::Command};
 
-const HELP: &str = "Usage: ghostex account-login claude [--account NUMBER] [--email EMAIL] [--json] [--result-file PATH]\n       ghostex account-login codex [--account NUMBER] [--email EMAIL] [--json] [--result-file PATH]\n\nclaude: sign in with a separate Claude profile and save it with cswap.\nWithout --account, saves the account you choose in the browser; --email pre-fills it and requires that account.\nWith --account, reconnects only that saved account.\n--result-file writes the saved account, or the reason the login failed, to PATH as JSON.";
+const HELP: &str = "Usage: ghostex account-login claude [--account NUMBER] [--email EMAIL] [--json] [--result-file PATH]\n       ghostex account-login codex [--account NUMBER] [--email EMAIL] [--device-auth] [--json] [--result-file PATH]\n\nclaude: sign in with a separate Claude profile and save it with cswap.\nWithout --account, saves the account you choose in the browser; --email pre-fills it and requires that account.\nWith --account, reconnects only that saved account.\n--result-file writes the saved account, or the reason the login failed, to PATH as JSON.";
 
 /// CDXC:AgentProviders 2026-10-28 WHY:
 /// Settings read the login's result from its terminal screen, and on Windows ConPTY can drop a process's last output when it exits, so a saved account was reported as "Login did not complete" with only the `{` of the result left on screen (#347). The result now also goes to a file gxserver names; the terminal stays for the person watching.
