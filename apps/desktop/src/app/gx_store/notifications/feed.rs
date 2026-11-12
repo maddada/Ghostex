@@ -33,3 +33,20 @@ pub(super) async fn update_notification_feed(
         .ok()
         .map(|result| notification_feed_state_message(&result))
 }
+
+/// `/api/removePairedDevice` for the device a bell row's Remove names, on the computer that owns the
+/// row, answered with that computer's feed after it (the row's Remove is gone with the device).
+/// `None` when either call failed.
+pub(super) async fn remove_notification_device(
+    remote: Option<GpuiRemoteGxserverRequestTarget>,
+    device_id: String,
+) -> Option<Value> {
+    gx_rpc(
+        remote.clone(),
+        "/api/removePairedDevice",
+        json!({ "deviceId": device_id }),
+    )
+    .await
+    .ok()?;
+    read_notification_feed(remote).await
+}

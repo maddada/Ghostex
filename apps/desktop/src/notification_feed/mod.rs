@@ -165,6 +165,9 @@ pub(crate) struct GpuiNotificationFeedItem {
     pub(crate) account_id: Option<String>,
     /// Set on security rows: the security log entry the row announces.
     pub(crate) security_entry: Option<u64>,
+    /// Set on the row for a phone gxserver added for Easy Connect without a click, while that phone
+    /// is still paired: its device id, for the row's Remove (server notification_feed/security_actions.rs).
+    pub(crate) remove_device: Option<String>,
     pub(crate) created_at: String,
     pub(crate) created_at_epoch_secs: Option<i64>,
     pub(crate) read: bool,
@@ -199,6 +202,12 @@ impl GpuiNotificationFeedItem {
             security_entry: value
                 .get("securityEntry")
                 .and_then(serde_json::Value::as_u64),
+            remove_device: value
+                .get("removeDevice")
+                .and_then(|device| device.get("id"))
+                .and_then(serde_json::Value::as_str)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string),
             read: value.get("read")?.as_bool()?,
             awaiting_approval: value
                 .get("awaitingApproval")

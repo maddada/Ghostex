@@ -188,6 +188,25 @@ impl GpuiTitlebarReadingPanel {
         cx.notify();
     }
 
+    /// The row's Remove: the button goes at once, and the store removes the device on the row's
+    /// computer, whose feed then comes back without it.
+    fn remove_notification_device(&mut self, key: String, cx: &mut gpui::Context<Self>) {
+        let mut target = None;
+        if let Some(feed) = self.notifications_feed_mut()
+            && let Some(item) = feed.items.iter_mut().find(|item| item.key() == key)
+            && let Some(device_id) = item.remove_device.take()
+        {
+            target = Some((item.machine.clone(), device_id));
+        }
+        let Some((machine, device_id)) = target else {
+            return;
+        };
+        cx.notify();
+        let _ = self.main_app.update_in(cx, move |app, _main_window, cx| {
+            app.gx_store_remove_notification_device(machine, device_id, cx);
+        });
+    }
+
     fn toggle_notification_read(&mut self, key: String, cx: &mut gpui::Context<Self>) {
         let tab = self.notifications_tab();
         let Some(feed) = self.notifications_feed_mut() else {
@@ -575,6 +594,7 @@ impl GpuiTitlebarReadingPanel {
         let open_id = key.clone();
         let toggle_id = key.clone();
         let read_id = key.clone();
+        let remove_id = key.clone();
         let dismiss_id = key;
         let time_label = notification_feed_relative_time(item.created_at_epoch_secs);
         let unread = !item.read;
@@ -748,6 +768,16 @@ impl GpuiTitlebarReadingPanel {
                                 .child(item.body.clone()),
                         )
                     })
+                    .when(item.remove_device.is_some(), |this| {
+                        this.child(Self::render_notification_remove_button(
+                            index,
+                            cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                                window.prevent_default();
+                                cx.stop_propagation();
+                                this.remove_notification_device(remove_id.clone(), cx);
+                            }),
+                        ))
+                    })
                     .child(
                         div()
                             .w_full()
@@ -834,6 +864,42 @@ impl GpuiTitlebarReadingPanel {
             .children(check_button)
             .into_any_element()
     }
+    /// Remove on the row for a phone added for Easy Connect without a click: a compact neutral button
+    /// (the shared neutral fills, as the app's secondary buttons), since the row is the click target.
+    fn render_notification_remove_button(
+        index: usize,
+        on_press: impl Fn(&MouseDownEvent, &mut Window, &mut gpui::App) + 'static,
+    ) -> AnyElement {
+        let fills = crate::app::window::native_modal_kit::palette::neutral_button_fills(
+            CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed),
+        );
+        h_flex()
+            .id(format!("ghostex-gpui-titlebar-notification-remove-{index}"))
+            .role(gpui::Role::Button)
+            .aria_label("Remove")
+            .flex_shrink_0()
+            .w_auto()
+            .h(px(24.0))
+            .px(px(10.0))
+            .items_center()
+            .cursor_pointer()
+            .rounded(px(RESOURCE_CONTROL_RADIUS))
+            .bg(crate::app::window::native_modal_kit::palette::hsla(
+                fills.rest,
+            ))
+            .hover(move |this| {
+                this.bg(crate::app::window::native_modal_kit::palette::hsla(
+                    fills.hover,
+                ))
+            })
+            .text_size(px(12.0))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(chrome_ink().opacity(0.92))
+            .on_mouse_down(MouseButton::Left, on_press)
+            .child("Remove")
+            .into_any_element()
+    }
+
     /// A remote row's computer, by the title (the mockup's label B). Rows from this computer have
     /// none.
     fn render_notification_machine_chip(name: String) -> AnyElement {

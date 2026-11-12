@@ -28,7 +28,7 @@ use ghostex_gx_core::{
 use serde_json::{Value, json};
 
 use super::super::focus_perform::RowFocusOptions;
-use super::feed::{read_notification_feed, update_notification_feed};
+use super::feed::{read_notification_feed, remove_notification_device, update_notification_feed};
 use crate::GhostexGpuiApp;
 
 /// The row an `open` names, as the ids the focus and the reveal need.
@@ -139,6 +139,29 @@ impl GhostexGpuiApp {
                 );
             }
         }
+    }
+
+    /// A bell row's Remove: removes the paired device it names on the row's computer, which ends
+    /// its Easy Connect and its token there (CDXC:RemotePairing 2026-11-12 in the server's
+    /// notification_feed/security_actions.rs).
+    pub(crate) fn gx_store_remove_notification_device(
+        &mut self,
+        machine: MachineId,
+        device_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(route) = self.gx_store_notification_feed_route(&machine) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let Some(message) = remove_notification_device(route, device_id).await else {
+                return;
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.gx_store_store_notification_feed(machine, message, cx);
+            });
+        })
+        .detach();
     }
 
     /// One read per online computer, each answering with its computer.
