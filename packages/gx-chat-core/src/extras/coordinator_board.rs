@@ -2145,6 +2145,8 @@ mod tests {
             superseded: Vec::new(),
             inherited: false,
             seen_only: false,
+            prints: Vec::new(),
+            rounds: Vec::new(),
             said: Vec::new(),
             title: format!("About {tag}?"),
             at: Some(at),

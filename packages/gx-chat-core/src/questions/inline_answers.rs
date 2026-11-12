@@ -131,10 +131,22 @@ pub(crate) fn copies(state: &ChatState, id: &str) -> Vec<String> {
     let Some(tag) = tag else {
         return vec![id.to_string()];
     };
+    // A form that reuses the tag for a new question after its answer is no copy (issue #579,
+    // `transcript::open_questions::asks_alike`).
+    let askers = &state.transcript_view.askers;
+    let asker = |id: &str| askers.iter().find(|asker| asker.id == id);
+    let this = asker(id);
     let mut copies: Vec<String> = Vec::new();
     for form in &state.transcript_view.question_forms {
         let same = form.error.is_empty()
-            && inline_tag(form).is_some_and(|known| known.eq_ignore_ascii_case(tag));
+            && inline_tag(form).is_some_and(|known| known.eq_ignore_ascii_case(tag))
+            && (form.id == id
+                || match (this, asker(&form.id)) {
+                    (Some(this), Some(other)) => {
+                        crate::transcript::open_questions::asks_alike(this, other, tag)
+                    }
+                    _ => true,
+                });
         if same && !copies.contains(&form.id) {
             copies.push(form.id.clone());
         }
@@ -408,7 +420,9 @@ pub(crate) fn project_copies(
             .then(|| projected.get(&owner_id).cloned())
             .flatten();
         // "Asked again below" names a newer copy, whichever copy holds the answer.
-        let asked_again = newest_for_tag(state, tag).is_some_and(|newest| newest != form.id);
+        let asked_again = copies(state, &form.id)
+            .last()
+            .is_some_and(|newest| *newest != form.id);
         let tag_now = tag_state(&state.transcript_view.askers, tag);
         let withdrawn = tag_now == Some(TagState::Withdrawn);
         // No copy holds an answer, but a ```questions form or page answered the tag: every copy
@@ -838,5 +852,47 @@ mod tests {
         let projected = crate::questions::forms::project(&state);
         assert_eq!(projected[&inline]["state"], "answered");
         assert_eq!(projected[&inline]["drafts"][0]["indices"][0], 1);
+    }
+
+    /// Issue #579: a one-click question that reuses a tag answered before it was asked is its own
+    /// question: open, not "Sent · Change", and a click answers it rather than the old one.
+    #[test]
+    fn a_tag_reused_after_its_answer_is_answered_on_its_own() {
+        let old_text = "- Q55: Ship the build? [Yes](ghostex-answer:Q55) [No](ghostex-answer:Q55)";
+        let new_text =
+            "- Q55: Rename the branch? [Yes](ghostex-answer:Q55) [No](ghostex-answer:Q55)";
+        let mut state = state_after(&[("m1", old_text), ("m3", new_text)]);
+        let (old, new) = ids(&state);
+        let old_form = state.transcript_view.question_forms[0].clone();
+        let answers =
+            crate::transcript::question_forms::answers_message(&old_form, &json!({"Q55": "Yes"}));
+        let envelope: ghostex_gx_protocol::ChatMessage = serde_json::from_value(json!({
+            "id": "u1", "role": "user", "source": "transcript", "timestamp": 2,
+            "blocks": [{"type": "text", "text": answers}],
+        }))
+        .unwrap();
+        state
+            .messages
+            .composed
+            .insert(1, std::sync::Arc::new(envelope));
+        state
+            .transcript_view
+            .page_answers
+            .push(crate::transcript::page_answers::PageAnswers {
+                page_id: old.clone(),
+                title: old_form.title.clone(),
+                answers: json!({"Q55": "Yes"}),
+            });
+        *state.transcript_view.askers =
+            crate::transcript::open_questions::askers(&state.messages.composed, &[old.clone()]);
+        assert_eq!(copies(&state, &new), [new.clone()]);
+        let projected = crate::questions::forms::project(&state);
+        assert_eq!(projected[&old]["state"], "answered");
+        assert_eq!(projected[&old]["askedAgain"], false);
+        assert_eq!(projected[&new]["state"], "open");
+        let context = ChatContext::default();
+        let text = sent_text(&pick(&mut state, &context, &new, 1));
+        assert!(text.contains(&format!("page=\"{new}\"")), "{text}");
+        assert!(!text.contains("Changed from"), "{text}");
     }
 }

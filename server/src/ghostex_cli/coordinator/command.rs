@@ -43,6 +43,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "options" => options(&parsed),
         "list" => list(&parsed),
         "status" => status(&parsed),
+        "next-tag" => next_tag(&parsed),
         "start-thread" => threads::start_thread(&parsed),
         "link" => threads::link(&parsed),
         "unlink" => threads::unlink(&parsed),
@@ -553,6 +554,27 @@ fn list(parsed: &ParsedArgs) -> CliResult<()> {
             agents::text(&row, "title"),
             counts
         );
+    }
+    Ok(())
+}
+
+/// `next-tag`: the next free question tag, one past the highest the coordinator's chat or its work
+/// items used (server/src/session_chat_open_questions.rs `read_question_tags`), so a coordinator
+/// that lost count (a context compaction) never reuses one (issue #579).
+fn next_tag(parsed: &ParsedArgs) -> CliResult<()> {
+    let (coordinator, flags) = target_coordinator(parsed)?;
+    let tags = call_gxserver_rpc(
+        "/api/readSessionChatQuestionTags",
+        &json!({
+            "projectId": coordinator["projectId"],
+            "sessionId": coordinator["sessionId"],
+        }),
+        &flags,
+    )?;
+    if parsed.flags.truthy("json") {
+        print_json(&tags);
+    } else {
+        println!("{}", agents::text(&tags, "next"));
     }
     Ok(())
 }

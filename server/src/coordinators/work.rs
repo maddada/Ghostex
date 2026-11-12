@@ -1143,14 +1143,16 @@ fn answer(item: &WorkItem, threads: &[Value], db: &Connection, key: &SessionKey)
 /// `now`, `step`, `ask`, `wait`, `done`, `drop`, `restore`, `edit` (title, link, release, untested,
 /// status, reason, threads), `answer` (an ask's one-click answer, recorded once), `settle` (an ask
 /// done or withdrawn) or `tag` (the user's tag). `ask_floor` is the highest question tag the
-/// coordinator's chat used, so a new ask's tag follows it. Returns the answer and whether the work
-/// changed.
+/// coordinator's chat used, so a new ask's tag follows it, and `chat_tags` the tags its chat asked
+/// (uppercased) with whether each is settled: an ask's own `--tag` may name one still open there,
+/// never a settled one. Returns the answer and whether the work changed.
 pub fn handle_work_request(
     db: &Connection,
     key: &SessionKey,
     threads: &[Value],
     params: &Map<String, Value>,
     ask_floor: u64,
+    chat_tags: &std::collections::HashMap<String, bool>,
 ) -> Result<(Value, bool), DomainStateError> {
     let op = param_text(params, "op").unwrap_or_else(|| "list".to_string());
     let now = now_iso();
@@ -1237,8 +1239,26 @@ pub fn handle_work_request(
         "ask" => {
             let words = param_text(params, "text").ok_or_else(|| bad("Say what you ask."))?;
             let tag = match param_text(params, "tag") {
-                Some(tag) => question_tag(&tag)
-                    .ok_or_else(|| bad(format!("{tag} is not a question tag: use Q12.")))?,
+                Some(tag) => {
+                    let tag = question_tag(&tag)
+                        .ok_or_else(|| bad(format!("{tag} is not a question tag: use Q12.")))?;
+                    // CDXC:Coordinators 2026-11-12 WHY:
+                    // Issue #579: an ask reusing a tag the chat had already settled was settled at once by that tag's old answer ("has no open ask"), so the user never saw it. `--tag` still puts a question the chat asked and is waiting on onto the board; a settled tag, or one another item already asked, is refused with the next free one.
+                    let items = list_work_items(db, key)?;
+                    let used_on_item = items.iter().any(|other| {
+                        other.asks.iter().any(|ask| {
+                            ask.tag.eq_ignore_ascii_case(&tag)
+                                && !(other.number == item.number && ask.is_open())
+                        })
+                    });
+                    if used_on_item || chat_tags.get(&tag) == Some(&true) {
+                        let next = highest_ask_tag(&items).max(ask_floor) + 1;
+                        return Err(bad(format!(
+                            "{tag} was already asked and settled in this conversation, and a tag means one question. Leave out --tag to take the next free one (Q{next})."
+                        )));
+                    }
+                    tag
+                }
                 None => {
                     let items = list_work_items(db, key)?;
                     format!("Q{}", highest_ask_tag(&items).max(ask_floor) + 1)

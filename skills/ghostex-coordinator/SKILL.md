@@ -216,7 +216,9 @@ For every question:
 
 - Tag it Q1, Q2, … and keep counting up across the whole conversation, never restarting or reusing a
   number, so a number always means one question. Refer to a question by its tag, and mark the answer
-  you recommend.
+  you recommend. After a context compaction, or whenever you are unsure of the count, run
+  `ghostex coordinator next-tag` (newer Ghostex) for the next free tag; a `visual check` that warns a
+  tag was already used means: give that question a new tag.
 - Before you send a form, write the block to a file and send it only when
   `ghostex visual check <file>` shows no error. Whoever builds a page looks at it before the user
   does: `ghostex visual check <page.html> --out <file.png>` (and `--width 390` for the phone). Put

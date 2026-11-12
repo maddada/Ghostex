@@ -102,10 +102,12 @@ pub fn handle_coordinator_endpoint(
             let key = required_ids(params, "projectId", "sessionId")?;
             resolve_coordinator(db, &key)?;
             let threads = super::panel::cached_thread_rows(&key);
+            let chat_tags = crate::session_chat_open_questions::asked_question_tags(&key.0, &key.1);
             let ask_floor =
                 crate::session_chat_open_questions::highest_question_tag(&key.0, &key.1);
-            let (result, _) =
-                super::work::handle_work_request(db, &key, &threads, params, ask_floor)?;
+            let (result, _) = super::work::handle_work_request(
+                db, &key, &threads, params, ask_floor, &chat_tags,
+            )?;
             Ok(CoordinatorEndpointOutput {
                 result,
                 changed_sessions: Vec::new(),

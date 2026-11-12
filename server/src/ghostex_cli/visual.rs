@@ -296,6 +296,68 @@ fn report_question_form(
     Ok(())
 }
 
+/// Warns about each of the form's tags the calling session's chat (or its coordinator's work items)
+/// already used: a tag means one question, and the agent may have lost count (a context
+/// compaction). Says nothing outside an agent session or when gxserver cannot be asked.
+///
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// Issue #579: a coordinator reused tags it had already asked and the user had answered, `visual check` passed, and the reused questions drew as answered, so neither side knew the work had stopped. The chat now treats a reused tag as a new question (gx-chat-core's `asks_alike`), and the check names the reuse and the next free tag (server/src/session_chat_open_questions.rs `read_question_tags`).
+fn warn_reused_tags(form: &ghostex_gx_visual::questions::QuestionForm) {
+    let asked: Vec<&str> = form
+        .questions
+        .iter()
+        .map(|question| question.tag.as_str())
+        .filter(|tag| !tag.is_empty())
+        .collect();
+    if asked.is_empty() {
+        return;
+    }
+    let Ok(Some(caller)) = crate::ghostex_cli::agents::identity::agent_caller() else {
+        return;
+    };
+    let Ok(flags) = crate::ghostex_cli::agents::inventory_flags(
+        &crate::ghostex_cli::args::Flags::default(),
+        crate::ghostex_cli::agents::text(&caller, "globalRef"),
+    ) else {
+        return;
+    };
+    let Ok(used) = crate::ghostex_cli::rpc::call_gxserver_rpc(
+        "/api/readSessionChatQuestionTags",
+        &serde_json::json!({
+            "projectId": caller["projectId"],
+            "sessionId": caller["sessionId"],
+        }),
+        &flags,
+    ) else {
+        return;
+    };
+    let entries = used["tags"].as_array().cloned().unwrap_or_default();
+    let reused: Vec<String> = asked
+        .iter()
+        .filter_map(|tag| {
+            let entry = entries.iter().find(|entry| {
+                entry["tag"]
+                    .as_str()
+                    .is_some_and(|known| known.eq_ignore_ascii_case(tag))
+            })?;
+            let state = match (entry["where"].as_str(), entry["settled"].as_bool()) {
+                (Some("board"), _) => "asked on the board",
+                (_, Some(true)) => "asked and settled",
+                _ => "asked and still open",
+            };
+            Some(format!("{tag} ({state})"))
+        })
+        .collect();
+    if reused.is_empty() {
+        return;
+    }
+    println!(
+        "Warning: this conversation already used {}. A tag means one question: give a new question a new tag, starting at {} (`ghostex coordinator next-tag` in a coordinator). Keep an old tag only to ask that same question again.",
+        reused.join(", "),
+        used["next"].as_str().unwrap_or("the next free tag")
+    );
+}
+
 fn check_command(args: &[String]) -> CliResult<()> {
     let Some(options) = parse_check(args)? else {
         println!("{}", usage::visuals_usage());
@@ -316,7 +378,9 @@ fn check_command(args: &[String]) -> CliResult<()> {
         Theme::dark()
     };
     if let Some((form, mended)) = question_form(&source, fenced_as_questions) {
-        return report_question_form(&form, &mended);
+        report_question_form(&form, &mended)?;
+        warn_reused_tags(&form);
+        return Ok(());
     }
     let visual = render(&source, options.width.unwrap_or(DEFAULT_WIDTH), &theme)
         .map_err(|message| CliError::Other(format!("The block can't be drawn: {message}")))?;

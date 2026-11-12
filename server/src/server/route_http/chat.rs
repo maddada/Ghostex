@@ -403,6 +403,23 @@ pub(super) async fn route_chat_http(
                 )
             },
         ),
+        // The question tags the session's chat asked and the next free one
+        // (session_chat_open_questions.rs `read_question_tags`).
+        "/api/readSessionChatQuestionTags" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                crate::session_chat_open_questions::read_question_tags(
+                    &state,
+                    db,
+                    repository,
+                    &read_project_id(params)?,
+                    &read_session_id(params)?,
+                )
+            },
+        ),
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await

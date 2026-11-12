@@ -32,7 +32,7 @@ use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionF
 use rusqlite::OptionalExtension;
 use serde_json::{json, Map, Value};
 
-use crate::domain::DomainRepository;
+use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::server::{read_runtime_text, AppState};
 use crate::session_chat::{
@@ -786,7 +786,10 @@ because what the reading keeps may have changed with it; a change to what
 // packages/gx-chat-core/src/transcript/open_questions.rs `tags_answered_in_envelope`).
 // 3: the resource entries list one-click questions (gx-chat-core's `resource_index::scan_message`,
 // CDXC:SessionStatus 2026-11-08), so a copy whose entries lack them is read again.
-const SAVED_LEDGER_FORMAT: u32 = 3;
+// 4: `observe` keeps every answers envelope (gx-chat-core's `Found::Answers`), so a tag's answer
+// settles only the copies asked before it (issue #579, `asks_alike`); a copy without them is read
+// again.
+const SAVED_LEDGER_FORMAT: u32 = 4;
 const SAVED_LEDGERS_DIR: &str = "open-questions";
 const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
 const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);
@@ -944,26 +947,91 @@ fn queued_answers(db: &rusqlite::Connection, project_id: &str, session_id: &str)
         .collect()
 }
 
-/// The highest question tag (`Q2101` is 2101) the session's chat has asked, as its ledger last
-/// read it, so a work item's ask takes the next one (coordinators/work.rs).
-pub(crate) fn highest_question_tag(project_id: &str, session_id: &str) -> u64 {
+/// Every question tag the session's chat has asked, uppercased, and whether its latest question is
+/// settled, as its ledger last read it.
+pub(crate) fn asked_question_tags(project_id: &str, session_id: &str) -> HashMap<String, bool> {
     let ledger_key = crate::server::session_observer_key(project_id, session_id);
     let Some(entry) = ledgers()
         .lock()
         .ok()
         .and_then(|ledgers| ledgers.get(&ledger_key).cloned())
     else {
-        return 0;
+        return HashMap::new();
     };
     let Ok(ledger) = entry.lock() else {
-        return 0;
+        return HashMap::new();
     };
-    ledger
-        .tag_states(&[], |_| false)
-        .keys()
+    ledger.tag_states(&[], |_| false)
+}
+
+/// The highest `Q` tag (`Q2101` is 2101) among `tags`.
+fn highest_q_tag<'a>(tags: impl IntoIterator<Item = &'a String>) -> u64 {
+    tags.into_iter()
         .filter_map(|tag| tag.strip_prefix('Q')?.parse::<u64>().ok())
         .max()
         .unwrap_or(0)
+}
+
+/// The highest question tag (`Q2101` is 2101) the session's chat has asked, as its ledger last
+/// read it, so a work item's ask takes the next one (coordinators/work.rs).
+pub(crate) fn highest_question_tag(project_id: &str, session_id: &str) -> u64 {
+    highest_q_tag(asked_question_tags(project_id, session_id).keys())
+}
+
+/// `/api/readSessionChatQuestionTags`: the question tags the session's chat asked (read up to
+/// date first), each with whether it is settled, and the next free tag: one past the highest the
+/// chat or a coordinator's work items used. `ghostex visual check` warns about a tag a new form
+/// reuses, and `ghostex coordinator next-tag` prints the next one.
+///
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// Issue #579: after a context compaction a coordinator lost count and reused tags it had already asked and the user had answered, and nothing told it. The chat now treats such a tag as a new question (gx-chat-core's `asks_alike`), and the agent can learn the tags already used and the next free one before it asks.
+pub(crate) fn read_question_tags(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+) -> Result<Value, DomainStateError> {
+    let session = repository
+        .get_session(project_id, session_id)?
+        .ok_or_else(|| DomainStateError::bad_request("No such session."))?;
+    let _ = read_open(state, db, &session, false);
+    let key = (project_id.to_string(), session_id.to_string());
+    let queued = queued_answers(db, project_id, session_id);
+    let ledger_key = crate::server::session_observer_key(project_id, session_id);
+    let entry = ledgers()
+        .lock()
+        .ok()
+        .and_then(|ledgers| ledgers.get(&ledger_key).cloned());
+    let states: HashMap<String, bool> = entry
+        .and_then(|entry| {
+            entry.lock().ok().map(|ledger| {
+                ledger.tag_states(&queued, |id| {
+                    crate::visual_pages::page_answered(&state.paths.root_dir, id)
+                })
+            })
+        })
+        .unwrap_or_default();
+    let items = crate::coordinators::list_work_items(db, &key).unwrap_or_default();
+    let item_tags: Vec<String> = items
+        .iter()
+        .flat_map(|item| item.asks.iter().map(|ask| ask.tag.to_ascii_uppercase()))
+        .filter(|tag| !tag.is_empty())
+        .collect();
+    let highest = highest_q_tag(states.keys()).max(highest_q_tag(item_tags.iter()));
+    let mut tags: Vec<Value> = states
+        .iter()
+        .map(|(tag, settled)| json!({ "tag": tag, "settled": settled, "where": "chat" }))
+        .chain(
+            item_tags
+                .iter()
+                .filter(|tag| !states.contains_key(*tag))
+                .map(|tag| json!({ "tag": tag, "where": "board" })),
+        )
+        .collect();
+    tags.sort_by(|a, b| a["tag"].as_str().cmp(&b["tag"].as_str()));
+    tags.dedup_by(|a, b| a["tag"] == b["tag"]);
+    Ok(json!({ "tags": tags, "highest": highest, "next": format!("Q{}", highest + 1) }))
 }
 
 /// Marks done the coordinator's Needs you items whose questions its chat has settled, from the

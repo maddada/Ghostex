@@ -740,7 +740,8 @@ pub fn handle_board_request(
     let work = |fields: Value| -> Result<Value, DomainStateError> {
         let mut fields = fields.as_object().cloned().unwrap_or_default();
         fields.retain(|_, value| !value.is_null());
-        handle_work_request(db, key, threads, &fields, 0).map(|(answer, _)| answer)
+        handle_work_request(db, key, threads, &fields, 0, &Default::default())
+            .map(|(answer, _)| answer)
     };
     // What the board's callers read back: the item (B7) or thread, its group and Later kind.
     let board_answer = |work: &Value| {

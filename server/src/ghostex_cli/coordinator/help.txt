@@ -19,6 +19,7 @@ USAGE
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
   ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
   ghostex coordinator rename-self "<title>" [--json]
+  ghostex coordinator next-tag [--json] [--coordinator <ref>]
   ghostex coordinator rename <thread-ref> "<title>" [--coordinator <ref>] [--json]
   ghostex coordinator resolve <thread-ref> [--keep-open] [--json]
   ghostex coordinator reopen <thread-ref> [--json]
@@ -252,7 +253,10 @@ WORK ITEMS
   append, say where it stands now. step records a step (--done when it is);
   --chore keeps a rebuild or test run out of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
-  chat's, or --tag Q12 for one already asked in the chat). Its title is one
+  chat's, or --tag Q12 for one the chat asked and still waits on; a tag already
+  answered is refused). next-tag prints the next free tag, one past the highest
+  the chat or an ask used: take it after a context compaction, never reuse a
+  tag. Its title is one
   short plain question or instruction a person understands at a glance, about
   ten words, with no item names or code names ("Ship the new pairing screen
   today?"); everything else (why, what to check, where) goes in --detail, which
