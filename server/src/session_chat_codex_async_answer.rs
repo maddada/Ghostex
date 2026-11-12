@@ -572,6 +572,8 @@ impl Driver<'_> {
             crate::session_chat_send::SESSION_CHAT_SUBMIT,
             self.cancelled,
             None,
+            // The question this answers has its card already; only a later one refuses.
+            std::time::Instant::now(),
         )
         .await
         .map_err(|error| error.message)?;

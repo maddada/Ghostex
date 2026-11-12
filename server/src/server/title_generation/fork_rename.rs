@@ -248,7 +248,7 @@ pub(crate) fn schedule_fork_initial_rename(state: AppState, target: ForkInitialR
                 };
                 if resume_staged_command {
                     let paste = crate::session_chat_send::build_session_chat_paste_bytes(&command);
-                    steps.retain(|step| !matches!(step, crate::session_chat_send::SessionChatSendStep::Write(payload) if payload == &paste));
+                    steps.retain(|step| step.written_payload() != Some(paste.as_str()));
                 }
                 for step in &mut steps {
                     if matches!(

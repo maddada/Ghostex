@@ -25,6 +25,8 @@ pub(super) async fn run_session_chat_send_worker(
             continue; // cancelled while queued
         }
         let mut outcome = Ok(());
+        // A card the agent's hooks raise after this is a prompt this job must not type into.
+        let job_started = Instant::now();
         let mut composer_agent: Option<String> = None;
         let mut clear_pending = false;
         let mut mid_turn_probe: Option<AgentMidTurnProbe> = None;
@@ -793,6 +795,27 @@ pub(super) async fn run_session_chat_send_worker(
                         && !payload.is_empty()
                         && payload.chars().all(|ch| matches!(ch, '\u{15}' | '\u{b}'));
                 }
+                SessionChatSendStep::GuardedWrite {
+                    agent,
+                    guard,
+                    payload,
+                } => {
+                    if let Err(error) = write_session_chat_payload_guarded(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        agent.as_deref(),
+                        &guard,
+                        &payload,
+                        job_started,
+                    )
+                    .await
+                    {
+                        outcome = Err(error);
+                        break;
+                    }
+                }
                 SessionChatSendStep::WriteFrom {
                     source: write_source,
                     payload,
@@ -951,6 +974,7 @@ pub(super) async fn run_session_chat_send_worker(
                         &submit,
                         &|| job_generation != generation.load(Ordering::SeqCst),
                         mid_turn_probe.as_ref(),
+                        job_started,
                     )
                     .await
                     {

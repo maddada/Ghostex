@@ -7,6 +7,7 @@ pub mod env;
 mod fish_startup;
 mod foreground_job;
 mod grok_startup;
+mod guarded_send;
 #[cfg(unix)]
 pub(crate) mod ipc_frame;
 pub mod launch;
@@ -42,6 +43,7 @@ mod zsh_startup;
 pub use endpoint::*;
 pub(crate) use env::*;
 pub(crate) use foreground_job::zmx_session_runs_foreground_command;
+pub(crate) use guarded_send::{send_after_screen_check, ZmxCheckedSend};
 pub(crate) use launch::*;
 pub use probe_cache::*;
 pub(crate) use process_identity::*;

@@ -133,15 +133,7 @@ pub(crate) async fn verify_session_chat_paste_landed(
                         &crate::session_chat_options::strip_ansi_sgr(&screen),
                     )
                     .contains(SESSION_CHAT_PASTING_INDICATOR_NEEDLE);
-                    // Text a cursorless capture cannot tell from a tip still counts here: it is only
-                    // matched against the message just typed, which no tip spells (seen live
-                    // 2026-10-07: every Empryo slash command from the chat failed on wmx).
-                    let body =
-                        crate::session_chat_composer::session_chat_composer_input(agent, &screen)
-                            .filter(|input| !input.is_empty() || input.text_unreadable())
-                            .map(|input| input.text)
-                            .unwrap_or_default();
-                    (body, pasting)
+                    (session_chat_input_box_text(agent, &screen), pasting)
                 })
         } else {
             capture_session_terminal_text(zmx_name).await.map(|screen| {
@@ -152,13 +144,7 @@ pub(crate) async fn verify_session_chat_paste_landed(
         };
         if let Some((screen, pasting)) = capture {
             readable = true;
-            let normalized = normalize_session_chat_screen_text(&screen);
-            if normalized
-                .to_lowercase()
-                .contains(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
-                || needles.iter().any(|needle| normalized.contains(needle))
-                || omp_paste_chip_landed(agent, &screen)
-            {
+            if paste_shown_in(agent, &screen, &needles) {
                 return SessionChatPasteVerification::Landed;
             }
             if !extended && pasting {
@@ -179,6 +165,28 @@ pub(crate) async fn verify_session_chat_paste_landed(
     } else {
         SessionChatPasteVerification::Unreadable
     }
+}
+
+/// The text in the agent's input box on `screen`, empty when there is none.
+pub(crate) fn session_chat_input_box_text(agent: &str, screen: &str) -> String {
+    // Text a cursorless capture cannot tell from a tip still counts here: it is only matched
+    // against the message just typed, which no tip spells (seen live 2026-10-07: every Empryo
+    // slash command from the chat failed on wmx).
+    crate::session_chat_composer::session_chat_composer_input(agent, screen)
+        .filter(|input| !input.is_empty() || input.text_unreadable())
+        .map(|input| input.text)
+        .unwrap_or_default()
+}
+
+/// Whether `shown` (the input box's text for an agent whose box the send reads, the whole screen
+/// otherwise) shows the message `needles` were taken from, or its collapsed paste placeholder.
+pub(crate) fn paste_shown_in(agent: Option<&str>, shown: &str, needles: &[String]) -> bool {
+    let normalized = normalize_session_chat_screen_text(shown);
+    normalized
+        .to_lowercase()
+        .contains(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
+        || needles.iter().any(|needle| normalized.contains(needle))
+        || omp_paste_chip_landed(agent, shown)
 }
 
 /// Whether OMP's input box shows the chip it draws for a long paste (`omp_paste_chip_shown`).
@@ -232,5 +240,5 @@ pub(super) fn log_session_chat_paste_verification(
 }
 
 /// Why a message was not sent when the agent's terminal did not take it.
-const TERMINAL_REFUSED: &str =
+pub(super) const TERMINAL_REFUSED: &str =
     "The agent's terminal didn't take your message. Retry, or open Terminal view to check it.";

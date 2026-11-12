@@ -76,6 +76,13 @@ pub enum SessionChatSendStep {
         source: String,
         payload: String,
     },
+    /// One write made only when a fresh read of the screen passes `guard` (guarded_write.rs): a
+    /// chat message's text and its Return, so neither lands in a prompt that appeared under it.
+    GuardedWrite {
+        agent: Option<String>,
+        guard: InputGuard,
+        payload: String,
+    },
     SleepMs(u64),
     /// See CDXC:SessionChat in session_chat_codex_question_align.rs.
     AlignCodexQuestion {
@@ -234,6 +241,18 @@ pub enum SessionChatSendStep {
     },
 }
 
+impl SessionChatSendStep {
+    /// The bytes this step writes as they are, guarded or not.
+    pub fn written_payload(&self) -> Option<&str> {
+        match self {
+            Self::Write(payload)
+            | Self::WriteFrom { payload, .. }
+            | Self::GuardedWrite { payload, .. } => Some(payload),
+            _ => None,
+        }
+    }
+}
+
 /// The screen-watch window for a payload: a floor that covers small pastes,
 /// plus time proportional to the byte count, capped so a wedged TUI cannot
 /// hold the per-session queue.
@@ -295,7 +314,7 @@ pub fn build_session_chat_clear_input_steps(
 
 /// composer wait → verified agent-specific clear → image pastes back-to-back →
 /// (300ms settle when text follows images) → paste body → screen-verified wait
-/// → SEPARATE Enter.
+/// → SEPARATE Enter. Every paste and the Enter are guarded writes (guarded_write.rs).
 pub fn build_session_chat_message_steps(
     agent: Option<&str>,
     text: &str,
@@ -321,8 +340,14 @@ pub fn build_session_chat_message_steps(
         });
     }
     steps.extend(build_session_chat_clear_input_steps(agent, text));
+    let guarded = |guard: InputGuard, payload: String| SessionChatSendStep::GuardedWrite {
+        agent: agent.map(str::to_string),
+        guard,
+        payload,
+    };
     for path in image_paths {
-        steps.push(SessionChatSendStep::Write(
+        steps.push(guarded(
+            InputGuard::InputBox,
             build_session_chat_image_paste_bytes(path),
         ));
     }
@@ -332,11 +357,14 @@ pub fn build_session_chat_message_steps(
                 SESSION_CHAT_IMAGE_ATTACHMENT_SETTLE_MS,
             ));
         }
-        steps.push(SessionChatSendStep::Write(if empryo {
-            build_empryo_input_bytes(text)
-        } else {
-            build_session_chat_paste_bytes(text)
-        }));
+        steps.push(guarded(
+            InputGuard::InputBox,
+            if empryo {
+                build_empryo_input_bytes(text)
+            } else {
+                build_session_chat_paste_bytes(text)
+            },
+        ));
     }
     let mut verify = session_chat_verify_step(text);
     if crate::session_chat_options::is_session_chat_option_command_text(agent, text) {
@@ -363,7 +391,14 @@ pub fn build_session_chat_message_steps(
     } else {
         SESSION_CHAT_SUBMIT
     };
-    steps.push(SessionChatSendStep::Write(submit.to_string()));
+    steps.push(guarded(
+        if text.trim().is_empty() {
+            InputGuard::InputBox
+        } else {
+            InputGuard::Holds(text.to_string())
+        },
+        submit.to_string(),
+    ));
     if let Some(agent) = crate::agents::identity::normalize_agent_id(agent)
         .filter(|agent| crate::session_chat_send_submit::verifies_submission(agent))
         .filter(|_| !text.trim().is_empty())

@@ -104,6 +104,11 @@ fn paste_sanitize_and_normalize_match_spec() {
 
 #[test]
 fn message_steps_verify_the_paste_before_the_separate_enter() {
+    let guarded = |guard: InputGuard, payload: &str| SessionChatSendStep::GuardedWrite {
+        agent: Some("claude".to_string()),
+        guard,
+        payload: payload.to_string(),
+    };
     let steps = build_session_chat_message_steps(Some("claude"), "hi", &[], false);
     assert_eq!(
         steps,
@@ -116,13 +121,13 @@ fn message_steps_verify_the_paste_before_the_separate_enter() {
             SessionChatSendStep::ClearComposer {
                 agent: "claude".to_string()
             },
-            SessionChatSendStep::Write("hi".to_string()),
+            guarded(InputGuard::InputBox, "hi"),
             SessionChatSendStep::VerifyPasteLanded {
                 text: "hi".to_string(),
                 settle_ms: 500,
                 timeout_ms: 2_000,
             },
-            SessionChatSendStep::Write("\r".to_string()),
+            guarded(InputGuard::Holds("hi".to_string()), "\r"),
             SessionChatSendStep::VerifySubmitted {
                 agent: "claude".to_string(),
                 text: "hi".to_string(),
@@ -147,17 +152,18 @@ fn message_steps_verify_the_paste_before_the_separate_enter() {
             SessionChatSendStep::ClearComposer {
                 agent: "claude".to_string()
             },
-            SessionChatSendStep::Write(
-                "\u{1b}[200~/tmp/ghostex-paste-1.png\u{1b}[201~".to_string()
+            guarded(
+                InputGuard::InputBox,
+                "\u{1b}[200~/tmp/ghostex-paste-1.png\u{1b}[201~"
             ),
             SessionChatSendStep::SleepMs(300),
-            SessionChatSendStep::Write("what is this".to_string()),
+            guarded(InputGuard::InputBox, "what is this"),
             SessionChatSendStep::VerifyPasteLanded {
                 text: "what is this".to_string(),
                 settle_ms: 500,
                 timeout_ms: 2_000,
             },
-            SessionChatSendStep::Write("\r".to_string()),
+            guarded(InputGuard::Holds("what is this".to_string()), "\r"),
             SessionChatSendStep::VerifySubmitted {
                 agent: "claude".to_string(),
                 text: "what is this".to_string(),
@@ -180,9 +186,9 @@ fn message_steps_verify_the_paste_before_the_separate_enter() {
             SessionChatSendStep::ClearComposer {
                 agent: "claude".to_string()
             },
-            SessionChatSendStep::Write("\u{1b}[200~/tmp/a.png\u{1b}[201~".to_string()),
+            guarded(InputGuard::InputBox, "\u{1b}[200~/tmp/a.png\u{1b}[201~"),
             SessionChatSendStep::SleepMs(500),
-            SessionChatSendStep::Write("\r".to_string()),
+            guarded(InputGuard::InputBox, "\r"),
         ]
     );
     // The window scales with the payload and is capped.

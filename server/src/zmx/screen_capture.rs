@@ -35,7 +35,7 @@ SEE-ALSO: .dependencies/zmx/src/ipc.zig (Capture), .dependencies/zmx/src/termina
 /// Recent physical rows in addition to the entire live grid. Codex dialogs
 /// inspect 160 lines, composer detection 120 nonblank lines, notices 60 and
 /// activity/options 15; 512 leaves space for blank rows and wrapped content.
-const ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS: u32 = 512;
+pub(super) const ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS: u32 = 512;
 /// `ipc.Tag.Capture` and the compatibility ordering barrier `ipc.Tag.Info`.
 #[cfg(unix)]
 const ZMX_IPC_TAG_CAPTURE: u8 = 22;
@@ -51,10 +51,10 @@ const ZMX_IPC_TAG_HISTORY: u8 = 8;
 const ZMX_IPC_CAPTURE_BYTES: usize = 8;
 /// `util.HistoryFormat.plain`.
 #[cfg(unix)]
-const ZMX_IPC_HISTORY_FORMAT_PLAIN: u8 = 0;
+pub(super) const ZMX_IPC_HISTORY_FORMAT_PLAIN: u8 = 0;
 /// Matches the 5s poll `zmx history` uses before it gives up on the daemon.
 #[cfg(unix)]
-const ZMX_SCREEN_CAPTURE_TIMEOUT: Duration = Duration::from_millis(5_000);
+pub(super) const ZMX_SCREEN_CAPTURE_TIMEOUT: Duration = Duration::from_millis(5_000);
 /// Maximum retained text on both bounded and legacy captures. Old daemons
 /// still send full history; retain its tail without unbounded memory growth.
 #[cfg(unix)]
@@ -214,6 +214,19 @@ fn read_zmx_session_screen_capture_format(
     format: u8,
     scrollback_rows: u32,
 ) -> Result<ZmxHistoryCapture, String> {
+    let mut stream = request_zmx_session_screen_capture(zmx_name, format, scrollback_rows)?;
+    read_zmx_screen_capture_reply(&mut stream, format)
+}
+
+/// Connects to the session's daemon and asks it for a capture; the reply is
+/// read with `read_zmx_screen_capture_reply` on the returned connection, which
+/// stays open for a write that must follow the capture (guarded_send.rs).
+#[cfg(unix)]
+pub(super) fn request_zmx_session_screen_capture(
+    zmx_name: &str,
+    format: u8,
+    scrollback_rows: u32,
+) -> Result<std::os::unix::net::UnixStream, String> {
     let socket_path = zmx_session_socket_path(zmx_name);
     let mut stream = std::os::unix::net::UnixStream::connect(&socket_path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::ConnectionRefused {
@@ -242,15 +255,14 @@ fn read_zmx_session_screen_capture_format(
     stream
         .write_all(&request)
         .map_err(|error| format!("zmx session screen capture could not be requested: {error}"))?;
-
-    read_zmx_screen_capture_reply(&mut stream, format)
+    Ok(stream)
 }
 
 /// Drains one capture reply, retaining only the last
 /// `ZMX_SCREEN_CAPTURE_TAIL_BYTES` of payload so a huge scrollback costs
 /// bounded memory here regardless of what the daemon serialized.
 #[cfg(unix)]
-fn read_zmx_screen_capture_reply(
+pub(super) fn read_zmx_screen_capture_reply(
     stream: &mut std::os::unix::net::UnixStream,
     format: u8,
 ) -> Result<ZmxHistoryCapture, String> {

@@ -306,6 +306,13 @@ pub(crate) fn ingest_agent_hook_event(
         );
         session_chat_prompt_changed =
             session_chat_prompt_before.as_deref() != session_chat_prompt_after.as_deref();
+        if session_chat_prompt_changed {
+            crate::session_chat_send::note_session_chat_prompt_card(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+                session_chat_prompt_after.as_deref(),
+            );
+        }
         if let Some(prompt_json) = session_chat_prompt_after.as_deref() {
             if let Some(activity_object) = update.activity.as_object_mut() {
                 activity_object.insert("sessionChatPrompt".to_string(), json!(prompt_json));

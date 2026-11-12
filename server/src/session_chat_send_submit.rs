@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 use crate::session_chat_send::{
     build_agent_tui_clear_input_for_text, capture_session_terminal_text_vt,
     normalize_session_chat_screen_text, record_busy_agent_wait, session_chat_paste_needles,
-    wait_out_busy_agent, write_session_chat_payload, AgentMidTurnProbe, BusyAgentWait,
-    SessionChatSendError, SessionChatSendFailure, SESSION_CHAT_EMPRYO_SUBMIT,
+    wait_out_busy_agent, write_session_chat_payload_guarded, AgentMidTurnProbe, BusyAgentWait,
+    InputGuard, SessionChatSendError, SessionChatSendFailure, SESSION_CHAT_EMPRYO_SUBMIT,
 };
 
 /// Codex and Claude Code clear their input box within a frame of taking a submission; the window
@@ -53,6 +53,7 @@ pub(crate) async fn confirm_submitted(
     submit: &str,
     cancelled: &(dyn Fn() -> bool + Send + Sync),
     mid_turn: Option<&AgentMidTurnProbe>,
+    since: Instant,
 ) -> Result<(), SessionChatSendError> {
     let needles = session_chat_paste_needles(text);
     if needles.is_empty() {
@@ -112,9 +113,19 @@ pub(crate) async fn confirm_submitted(
         ),
         &screen_tail(&screen),
     );
-    write_session_chat_payload(project_id, session_id, zmx_name, source, submit)
-        .await
-        .map_err(|message| SessionChatSendError::new(SessionChatSendFailure::Write, message))?;
+    // Only while the input box still holds the message (GitHub #555, guarded_write.rs).
+    let holds = InputGuard::Holds(text.to_string());
+    write_session_chat_payload_guarded(
+        project_id,
+        session_id,
+        zmx_name,
+        source,
+        Some(agent),
+        &holds,
+        submit,
+        since,
+    )
+    .await?;
     let Some(screen) = message_still_held(agent, zmx_name, &needles, cancelled).await else {
         return Ok(());
     };
@@ -144,12 +155,15 @@ pub(crate) async fn confirm_submitted(
     } else {
         // The returned-prompt detector would otherwise find this text in the box later and hand it
         // to the chat composer as a draft the sender never sees.
-        let _ = write_session_chat_payload(
+        let _ = write_session_chat_payload_guarded(
             project_id,
             session_id,
             zmx_name,
             source,
+            Some(agent),
+            &holds,
             &build_agent_tui_clear_input_for_text(text),
+            since,
         )
         .await;
         CLAUDE_KEPT_MESSAGE.to_string()
