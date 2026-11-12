@@ -94,6 +94,13 @@ pub const GXSERVER_ENDPOINT_CAPABILITY_SESSIONS_LIST_STREAM: &str = "sessionsLis
 /// opened with `encoding=deflate` and gzipped JSON answers to a request carrying
 /// `x-gxserver-compress: gzip` (server/src/server/link_compression.rs).
 pub const GXSERVER_ENDPOINT_CAPABILITY_LINK_COMPRESSION: &str = "linkCompression";
+/// The `ghostex server endpoint` capability that promises `catalogRevision` on
+/// `agentModelCatalogChanged` and no catalog on a socket opened with the matching
+/// `catalogRevision=` (server/src/agent_model_catalog.rs).
+pub const GXSERVER_ENDPOINT_CAPABILITY_MODEL_CATALOG_REVISION: &str = "modelCatalogRevision";
+/// The `ghostex server endpoint` capability that promises the attach client takes `ZMX_PAUSE` and
+/// `ZMX_BATCH` from the phone (.dependencies/zmx/src/loop.zig `ClientDisplay`).
+pub const GXSERVER_ENDPOINT_CAPABILITY_TERMINAL_PAUSE: &str = "terminalPause";
 /// The `ghostex server endpoint` capability that promises `/api/registerPushToken` and push
 /// notifications to the phones registered there (finished, needs input, failed, agent starts).
 pub const GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS: &str = "pushNotifications";
