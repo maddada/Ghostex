@@ -451,6 +451,14 @@ impl NativeChatView {
             if let Some(account) = action.command["reconnectAccountId"].as_str() {
                 open["initialAccountsReconnect"] = json!(account);
             }
+            // CDXC:AgentProviders 2026-11-13 DECISION: Q2779 B: a session on another computer shows
+            // that computer's accounts, so its Reconnect opens Settings › Accounts already on that
+            // machine (the page's machine picker), where the sign-in runs there and its page opens
+            // here. Before, it opened this computer's accounts, and the same account id matched
+            // this computer's working login.
+            if self.config.machine_id != ghostex_gx_core::LOCAL_MACHINE_ID {
+                open["initialMachineId"] = json!(self.config.machine_id);
+            }
             cx.emit(super::state::NativeChatEvent::Host(open));
         } else if action.command["type"]
             == ghostex_gx_chat_core::extras::autopilot::OPEN_SETTINGS_COMMAND

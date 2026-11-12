@@ -750,7 +750,8 @@ impl AccountsTab {
             cx,
         ));
         // claude.ai in Ghostex: the sign-in this Claude account's cloud pages use.
-        if enabled && account.provider() == "claude" {
+        // It is this computer's Browser profile, so another computer's account has none here.
+        if enabled && account.provider() == "claude" && self.client.read(cx).machine().is_none() {
             rows.push(self.render_claude_ai_row(p, account, cx));
         }
         rows.push(self.render_use_row(p, account, draft, busy, window, cx));

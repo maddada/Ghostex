@@ -102,6 +102,17 @@ pub(crate) struct AccountsTab {
     pub(crate) open_menu: Option<String>,
     /// The Cursor, Gemini or Copilot sign-in under way (`usage_flow.rs`).
     pub(crate) usage_sign_in: Option<usage_flow::UsageSignIn>,
+    /// The machine whose accounts the page shows (the machine picker's pick); `None` is this
+    /// computer. Changing it starts the page over on that machine.
+    shown_machine: Option<String>,
+}
+
+/// Where the page's machine pick stands.
+enum MachineShown {
+    Local,
+    Remote,
+    /// Picked (or opened on, from a remote session's Reconnect) but not connected: its name.
+    Unreachable(String),
 }
 
 /// What the account manager's right-hand pane shows.
@@ -186,7 +197,14 @@ impl AccountsTab {
             pending_reconnect: None,
             open_menu: None,
             usage_sign_in: None,
+            shown_machine: None,
         };
+        // Opened on a machine (a remote session's Reconnect, or a pick made on another page): the
+        // page starts there, so the pane and sign-in the opener asked for are kept.
+        let picked = page.store.read(cx).picked_machine().map(str::to_string);
+        page.shown_machine = picked.clone();
+        page.client
+            .update(cx, |client, cx| client.show_machine(picked, cx));
         page.restore_open_form(cx);
         // An account toast's Open Accounts opens on that agent's accounts and rules.
         if let Some(provider) = page
@@ -237,6 +255,89 @@ impl AccountsTab {
         }
     }
 
+    /// The saved name of the remote machine the page shows, `None` for this computer.
+    pub(crate) fn shown_machine_name(&self, cx: &App) -> Option<String> {
+        let machine = self.client.read(cx).machine()?;
+        Some(
+            super::machine_picker::machine_status(self.store.read(cx), machine)
+                .map(|(name, _)| name)
+                .unwrap_or_else(|| machine.to_string()),
+        )
+    }
+
+    /// Follows the machine picker: a new pick starts the page over on that machine (its
+    /// accounts, panes and sign-ins), and a picked machine that isn't connected is named instead
+    /// of being swapped for this computer, so a Reconnect for it never signs in this computer.
+    fn sync_machine(&mut self, cx: &mut Context<Self>) -> MachineShown {
+        let picked = self.store.read(cx).picked_machine().map(str::to_string);
+        if picked != self.shown_machine {
+            self.shown_machine = picked.clone();
+            self.pane = None;
+            self.pending_job = None;
+            self.completed_job.clear();
+            self.connected = None;
+            self.flows.clear();
+            self.editors.clear();
+            self.setups.clear();
+            self.open_menu = None;
+            self.client
+                .update(cx, |client, cx| client.show_machine(picked.clone(), cx));
+        }
+        let Some(machine) = picked else {
+            return MachineShown::Local;
+        };
+        match super::machine_picker::machine_status(self.store.read(cx), &machine) {
+            Some((_, Some(true) | None)) => MachineShown::Remote,
+            Some((name, Some(false))) => MachineShown::Unreachable(name),
+            None => MachineShown::Unreachable(machine),
+        }
+    }
+
+    /// The Accounts section for a machine that can't be reached (Q2781): what to do, and no
+    /// button that can't work.
+    fn render_unreachable_section(&mut self, name: &str, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.store.read(cx).palette();
+        let show_here = settings_sized_button(
+            &p,
+            "accounts-show-this-computer",
+            "Show this computer's accounts",
+            None,
+            None,
+            SizedButtonVariant::Outline,
+            SizedButtonSize::Sm,
+            false,
+            None,
+            |page: &mut Self, _window, cx| {
+                page.pending_reconnect = None;
+                let store = page.store.clone();
+                store.update(cx, |store, cx| store.set_picked_machine(None, cx));
+            },
+            cx,
+        );
+        settings_section(
+            &p,
+            "Configuration",
+            None,
+            None,
+            vec![settings_list_item(
+                &p,
+                Some(super::super::fields::ListItemStatus::Warning),
+                None,
+                format!("Can't reach {name} right now"),
+                Some(
+                    div()
+                        .child(format!(
+                            "Its accounts sign in there. Reconnect them in Ghostex on {name}, or come back once it's connected."
+                        ))
+                        .into_any_element(),
+                ),
+                Some(show_here),
+            )],
+        )
+        .map(IntoElement::into_any_element)
+        .unwrap_or_else(|| div().into_any_element())
+    }
+
     pub(crate) fn hide_emails(&self, cx: &App) -> bool {
         self.store.read(cx).bool("hideAccountEmails")
     }
@@ -260,6 +361,8 @@ impl AccountsTab {
             return;
         }
         sign_in_watch::stop();
+        // The machine picker and the can't-reach line need the machines' connection states.
+        super::machine_picker::request_machine_states(&self.store, cx);
         if !self.client.read(cx).connected(cx) {
             return;
         }
@@ -338,7 +441,11 @@ impl AccountsTab {
             .collect();
         job_ids.sort();
         job_ids.dedup();
-        if !job_ids.is_empty() && self.client.read(cx).connected(cx) {
+        // The watch reopens this computer's Settings; another computer's sign-in ends with the page.
+        if !job_ids.is_empty()
+            && self.client.read(cx).connected(cx)
+            && self.client.read(cx).machine().is_none()
+        {
             sign_in_watch::watch(self.store.read(cx).host(), job_ids, cx);
         }
     }
@@ -585,6 +692,8 @@ impl AccountsTab {
 
 impl Render for AccountsTab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // First, so a page opened on another machine never reads this computer's accounts.
+        let shown = self.sync_machine(cx);
         self.sync_active(cx);
         self.apply_preview_state(window, cx);
         self.start_pending_reconnect(cx);
@@ -612,6 +721,29 @@ impl Render for AccountsTab {
                 )));
             }
             return settings_page(&self.store, SettingsTabId::Accounts, &p, blocks, cx);
+        }
+        if let MachineShown::Unreachable(name) = &shown {
+            let section = self.render_unreachable_section(name, cx);
+            blocks.push(PageBlock::section("accounts", section));
+            return settings_page(&self.store, SettingsTabId::Accounts, &p, blocks, cx);
+        }
+        let store = self.store.clone();
+        if let Some(picker) = super::machine_picker::render_machine_picker_described(
+            self,
+            &p,
+            &store,
+            |shown| {
+                match shown {
+                Some(name) => format!(
+                    "Showing the accounts saved on {name}. Sign-ins run there, and their sign-in page opens here."
+                ),
+                None => "Pick a connected remote machine to see its accounts and sign them in from here.".to_string(),
+            }
+            },
+            window,
+            cx,
+        ) {
+            blocks.push(PageBlock::section("accounts-machine", picker));
         }
         blocks.push(PageBlock::section(
             "accounts",
@@ -652,7 +784,7 @@ pub(crate) fn show_added_account_in_sidebar(
     }
     super::super::store::store_host_message(
         store,
-        json!({ "type": "accountTitlebarChanged", "machineId": "local", "account": account.raw, "added": true }),
+        json!({ "type": "accountTitlebarChanged", "machineId": client.read(cx).machine().unwrap_or("local"), "account": account.raw, "added": true }),
         cx,
     );
 }

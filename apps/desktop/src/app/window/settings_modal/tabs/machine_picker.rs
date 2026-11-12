@@ -129,6 +129,20 @@ pub(crate) fn picked_machine_choice(
     choice
 }
 
+/// A saved machine's name and whether it can be reached, without dropping a pick (Settings ›
+/// Accounts keeps a machine it was opened on and says it can't be reached, Q2781): `reachable` is
+/// `None` until the states are known.
+pub(crate) fn machine_status(
+    store: &SettingsStore,
+    machine_id: &str,
+) -> Option<(String, Option<bool>)> {
+    let known = store.host_payload("remoteMachineConnectStates").is_some();
+    store_choices(store)
+        .into_iter()
+        .find(|choice| choice.machine_id.as_deref() == Some(machine_id))
+        .map(|choice| (choice.name, known.then_some(choice.unavailable.is_none())))
+}
+
 /// Asks the app for the machines' connection states (the page just opened).
 pub(crate) fn request_machine_states(store: &Entity<SettingsStore>, cx: &mut gpui::App) {
     let has_machines = store_choices(store.read(cx)).len() > 1;

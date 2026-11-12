@@ -1,4 +1,4 @@
-//! Settings > Agents (its CLIs and session resume hooks), Settings > Integrations and Settings > Dictation with a remote machine
+//! Settings > Agents (its CLIs and session resume hooks), Settings > Integrations, Settings > Accounts and Settings > Dictation with a remote machine
 //! picked: their gxserver calls go to that machine's gxserver through its tunnel instead of this
 //! computer's.
 //!
@@ -34,15 +34,88 @@ fn allowed_keys(path: &str) -> Option<&'static [&'static str]> {
         // models and clean-up (server/src/voice_agent/speech/http.rs). Keys never cross.
         "/api/readDictateSettings" | "/api/deleteOldSpeechModels" => &[],
         "/api/setDictateSettings" => &["patch"],
+        // Settings › Accounts with a remote machine picked: that computer's saved accounts, their
+        // sign-ins and settings (tabs/accounts/client.rs). Usage-only sign-ins stay local.
+        "/api/agentAccounts" => &[
+            "operation",
+            "owner",
+            "provider",
+            "id",
+            "accountId",
+            "selector",
+            "email",
+            "jobId",
+            "input",
+            "choice",
+            "firstId",
+            "secondId",
+            "name",
+            "color",
+            "indicator",
+            "action",
+            "shown",
+            "enabled",
+            "eligible",
+            "shareHistory",
+            "refresh",
+            "cachedOnly",
+            "fresh",
+            "stopCodex",
+            "fromAnotherDevice",
+            "policy",
+            "sleepSessions",
+        ],
         _ => return None,
     })
 }
+
+/// The Accounts operations that cross to a remote machine (tabs/accounts/client.rs).
+const REMOTE_ACCOUNT_OPERATIONS: &[&str] = &[
+    "list",
+    "setupStart",
+    "setupStatus",
+    "setupInput",
+    "setupCancel",
+    "setupAcknowledge",
+    "update",
+    "setEnabled",
+    "setTitlebar",
+    "register",
+    "swapSlots",
+    "remove",
+    "defaults",
+    "defaultAccount",
+    "helperStatus",
+    "helperAction",
+];
+
+/// The Accounts switches that cross as booleans.
+const ACCOUNT_SWITCHES: &[&str] = &[
+    "shown",
+    "enabled",
+    "eligible",
+    "shareHistory",
+    "refresh",
+    "cachedOnly",
+    "fresh",
+    "stopCodex",
+    "fromAnotherDevice",
+];
 
 /// The params as they cross to the machine, or `None` when the path or a value is not allowed.
 pub(crate) fn settings_remote_params(path: &str, params: &Value) -> Option<Value> {
     let keys = allowed_keys(path)?;
     let params = params.as_object()?;
     if Value::Object(params.clone()).to_string().len() > GPUI_REMOTE_GXSERVER_PARAMS_MAX_BYTES {
+        return None;
+    }
+    let accounts = path == "/api/agentAccounts";
+    if accounts
+        && !params
+            .get("operation")
+            .and_then(Value::as_str)
+            .is_some_and(|operation| REMOTE_ACCOUNT_OPERATIONS.contains(&operation))
+    {
         return None;
     }
     let mut shaped = Map::new();
@@ -52,17 +125,34 @@ pub(crate) fn settings_remote_params(path: &str, params: &Value) -> Option<Value
         }
         let allowed = match value {
             Value::String(text) => text.chars().count() <= 200,
-            Value::Bool(_) => matches!(key.as_str(), "fresh" | "includeDesktopControl"),
+            Value::Bool(_) => {
+                matches!(key.as_str(), "fresh" | "includeDesktopControl")
+                    || (accounts && ACCOUNT_SWITCHES.contains(&key.as_str()))
+            }
             // Dictate's settings patch; gxserver checks every field and the overall size above
             // keeps it bounded.
-            Value::Object(_) => path == "/api/setDictateSettings" && key == "patch",
+            Value::Object(_) => {
+                (path == "/api/setDictateSettings" && key == "patch")
+                    || (accounts && key == "policy")
+            }
             // The hook calls' agent ids, each one a short id.
             Value::Array(items) => {
-                key == "agentIds"
+                (key == "agentIds"
                     && items.len() <= 32
                     && items
                         .iter()
-                        .all(|item| item.as_str().is_some_and(|id| id.chars().count() <= 64))
+                        .all(|item| item.as_str().is_some_and(|id| id.chars().count() <= 64)))
+                    // The Codex sessions a sign-in sleeps first: each `{projectId, sessionId}`.
+                    || (accounts
+                        && key == "sleepSessions"
+                        && items.len() <= 64
+                        && items.iter().all(|item| {
+                            item.as_object().is_some_and(|session| {
+                                session.values().all(|value| {
+                                    value.as_str().is_some_and(|id| id.chars().count() <= 128)
+                                })
+                            })
+                        }))
             }
             _ => false,
         };

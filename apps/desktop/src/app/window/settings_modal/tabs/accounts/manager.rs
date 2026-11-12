@@ -317,9 +317,17 @@ impl AccountsTab {
                 .child(trailing)
         };
         let mut body: Vec<AnyElement> = vec![muted(p, "Choose a provider to sign in to.".into())];
+        // Cursor, Gemini and Copilot sign in through this computer's browser profiles, so another
+        // computer offers only Claude and Codex.
+        let machine_name = self.shown_machine_name(cx);
+        let usage_providers: &[&'static str] = if machine_name.is_some() {
+            &[]
+        } else {
+            &super::data::USAGE_PROVIDERS
+        };
         for provider in super::data::PROVIDERS
             .into_iter()
-            .chain(super::data::USAGE_PROVIDERS)
+            .chain(usage_providers.iter().copied())
         {
             let usage_only = super::data::USAGE_PROVIDERS.contains(&provider);
             let pick_data = data.clone();
@@ -352,7 +360,13 @@ impl AccountsTab {
             })
             .collect();
         if !saved.is_empty() {
-            body.push(muted(p, "Already signed in on this computer:".into()));
+            body.push(muted(
+                p,
+                match &machine_name {
+                    Some(name) => format!("Already signed in on {name}:"),
+                    None => "Already signed in on this computer:".to_string(),
+                },
+            ));
             for account in saved {
                 let provider: &'static str = if account.provider() == "claude" {
                     "claude"
@@ -401,7 +415,10 @@ impl AccountsTab {
         }
         body.push(muted(
             p,
-            "Claude and Codex accounts share their conversations, so a conversation carries on with another account when one hits its limit. Cursor, Gemini and Copilot accounts only show their usage.".into(),
+            match &machine_name {
+                Some(name) => format!("Claude and Codex accounts share their conversations, so a conversation carries on with another account when one hits its limit. The sign-in runs on {name}, and its page opens here."),
+                None => "Claude and Codex accounts share their conversations, so a conversation carries on with another account when one hits its limit. Cursor, Gemini and Copilot accounts only show their usage.".to_string(),
+            },
         ));
         v_flex()
             .id("accounts-add-pick")

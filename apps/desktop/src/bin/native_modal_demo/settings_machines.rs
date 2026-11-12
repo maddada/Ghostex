@@ -10,6 +10,12 @@
 //! `machines-windows` and `machines-windows-integrations` (Agents and Integrations, Kubuntu VM
 //! picked and answering as Windows: the Developer Mode notice; `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS=
 //! '{"settingsModalNavigation":{"windowsLinkNoticeCollapsed":true}}'` shows it folded).
+//! `machines-accounts` (Accounts, Kubuntu VM picked, as a remote session's Reconnect opens it) and
+//! `machines-accounts-unreachable` (Accounts opened on M5, whose SSH failed: the can't-reach line)
+//! answer Accounts from two real test gxservers instead of a script: `/api/agentAccounts` on this
+//! computer goes to the one `GHOSTEX_NATIVE_MODAL_DEMO_LOCAL_ENV` names, and Kubuntu VM's to the one
+//! `GHOSTEX_NATIVE_MODAL_DEMO_REMOTE_ENV` names (each a `cargo xtask test-server` env.sh), through
+//! `ghostex session-chat-rpc agentAccounts`.
 use serde_json::{Map, Value, json};
 
 pub(super) fn owns(state: &str) -> bool {
@@ -39,6 +45,10 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
         "machines-dictation-open" => json!({ "initialTab": "dictation" }),
         "machines-dictation" | "machines-dictation-openai" => {
             json!({ "initialTab": "dictation", "initialMachineId": "remote-1" })
+        }
+        "machines-accounts" => json!({ "initialTab": "accounts", "initialMachineId": "remote-1" }),
+        "machines-accounts-unreachable" => {
+            json!({ "initialTab": "accounts", "initialMachineId": "remote-2" })
         }
         "machines-integrations" | "machines-windows-integrations" => {
             json!({ "initialTab": "integrations", "initialMachineId": "remote-1" })
@@ -154,5 +164,43 @@ fn linux_rpc(state: &str, path: &str, params: &Value) -> Result<Value, String> {
         _ => Err(format!(
             "Kubuntu VM's story gxserver has no handler for {path}."
         )),
+    }
+}
+
+/// Whether `state` answers Accounts from the test gxservers (see the header).
+pub(super) fn forwards_accounts(state: &str, path: &str) -> bool {
+    state.starts_with("machines-accounts") && path == "/api/agentAccounts"
+}
+
+/// `/api/agentAccounts` on the test gxserver whose env.sh `env_var` names: this computer's
+/// (`remote: false`) or Kubuntu VM's. Runs `ghostex session-chat-rpc` there; blocks, so call it off
+/// the main thread.
+pub(super) fn forward_accounts(remote: bool, params: &Value) -> Result<Value, String> {
+    use base64::Engine as _;
+    let env_var = if remote {
+        "GHOSTEX_NATIVE_MODAL_DEMO_REMOTE_ENV"
+    } else {
+        "GHOSTEX_NATIVE_MODAL_DEMO_LOCAL_ENV"
+    };
+    let env_file =
+        std::env::var(env_var).map_err(|_| format!("Set {env_var} to a test server's env.sh."))?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(params.to_string());
+    let output = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(r#". "$1" && exec ghostex session-chat-rpc agentAccounts --params-base64 "$2" --timeout 120000"#)
+        .arg("sh")
+        .arg(&env_file)
+        .arg(&encoded)
+        .output()
+        .map_err(|error| error.to_string())?;
+    let answer: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| String::from_utf8_lossy(&output.stderr).trim().to_string())?;
+    if answer["ok"] == true {
+        Ok(answer["result"].clone())
+    } else {
+        Err(answer["message"]
+            .as_str()
+            .unwrap_or("The test gxserver refused the request.")
+            .to_string())
     }
 }

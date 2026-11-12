@@ -48,6 +48,8 @@ pub(crate) struct FlowState {
     pub(crate) terminal: bool,
     pub(crate) code: String,
     pub(crate) poll: Option<Task<()>>,
+    /// The sign-in page of a sign-in on another computer was opened on this device.
+    pub(crate) opened_url: bool,
 }
 
 impl FlowState {
@@ -61,6 +63,7 @@ impl FlowState {
             terminal: false,
             code: String::new(),
             poll: None,
+            opened_url: false,
         }
     }
 }
@@ -189,10 +192,12 @@ impl AccountsTab {
             json!({ "operation": "setupStatus", "owner": ACCOUNT_SETUP_OWNER }),
             move |result, cx| {
                 let _ = this.update(cx, |page, cx| {
+                    let remote = page.client.read(cx).machine().is_some();
                     let Some(flow) = page.flows.get_mut(&key) else {
                         return;
                     };
                     let mut connected = None;
+                    let mut open_url = None;
                     match result {
                         Ok(state) => {
                             if let Some(next) = state["setupJobs"].as_array().and_then(|jobs| {
@@ -204,10 +209,28 @@ impl AccountsTab {
                                         .filter(|id| !id.is_empty())
                                         .map(str::to_string);
                                 }
+                                // A sign-in on another computer opens nothing here by itself:
+                                // its page opens on this device once, as a local one opens in
+                                // this computer's browser.
+                                if remote
+                                    && !flow.opened_url
+                                    && let Some(url) =
+                                        next["url"].as_str().filter(|url| !url.is_empty())
+                                {
+                                    flow.opened_url = true;
+                                    open_url = Some(url.to_string());
+                                }
                                 flow.job = Some(next.clone());
                             }
                         }
                         Err(error) => flow.error = error,
+                    }
+                    if let Some(url) = open_url {
+                        post_store_message(
+                            &page.store,
+                            json!({ "type": "openExternalUrl", "url": url }),
+                            cx,
+                        );
                     }
                     if let Some(account_id) = connected {
                         page.select_pane(Pane::Account(account_id.clone()), cx);
@@ -391,6 +414,13 @@ impl AccountsTab {
         };
         let text_size = if guide { 12.0 } else { 13.0 };
         let label = provider_label(provider);
+        // The computer the sign-in runs on when it isn't this one (the machine picker's pick).
+        let machine_name = self.shown_machine_name(cx);
+        let user_code = job
+            .as_ref()
+            .and_then(|job| job["userCode"].as_str())
+            .filter(|code| !code.is_empty())
+            .map(str::to_string);
         let status = job
             .as_ref()
             .and_then(|job| job["status"].as_str().map(str::to_string));
@@ -409,7 +439,31 @@ impl AccountsTab {
                 .filter(|email| !email.is_empty())
                 .map(str::to_string)
                 .or_else(|| (!email.is_empty()).then(|| email.clone()));
-            let (title, detail) = if starting && job.is_none() {
+            let (title, detail) = if let (Some(name), false) = (&machine_name, saving) {
+                // CDXC:AgentProviders 2026-11-13 DECISION: Q2779 B and Q2782: a sign-in on
+                // another computer says where it runs; its page opens here, Claude's code (if the
+                // page shows one) is pasted below, and Codex's one-time code is entered on the page.
+                (
+                    format!("Signing in on {name}…"),
+                    if starting && job.is_none() {
+                        format!(
+                            "Ghostex is starting the {label} sign-in on {name}. Its page opens here."
+                        )
+                    } else if user_code.is_some() {
+                        "Enter the code below on the page that opened, then sign in. Ghostex finishes the rest.".to_string()
+                    } else {
+                        match &shown_email {
+                            Some(email) => format!(
+                                "Finish on the page that opened as {}. If it shows a code, paste it below.",
+                                account_text(email, hide)
+                            ),
+                            None => format!(
+                                "Finish on the page that opened with the {label} account you want. If it shows a code, paste it below."
+                            ),
+                        }
+                    },
+                )
+            } else if starting && job.is_none() {
                 (
                     "Opening your browser…".to_string(),
                     format!("Ghostex is starting the {label} sign-in."),
@@ -449,7 +503,11 @@ impl AccountsTab {
                 actions.push(settings_sized_button(
                     p,
                     SharedString::from(format!("{key}-open-page")),
-                    "Open the page again",
+                    if machine_name.is_some() {
+                        "Open the sign-in page"
+                    } else {
+                        "Open the page again"
+                    },
                     None,
                     None,
                     SizedButtonVariant::Outline,
@@ -488,6 +546,9 @@ impl AccountsTab {
                     },
                     cx,
                 ));
+            }
+            if let Some(user_code) = user_code.filter(|_| !saving) {
+                children.push(self.render_user_code(p, &key, user_code, cx));
             }
             if !actions.is_empty() {
                 children.push(
@@ -595,6 +656,63 @@ impl AccountsTab {
             .gap(px(10.0))
             .text_size(px(text_size))
             .children(children)
+            .into_any_element()
+    }
+
+    /// A Codex device-code sign-in's one-time code (`userCode`), to enter on the page that opened,
+    /// with Copy.
+    fn render_user_code(
+        &mut self,
+        p: &SettingsPalette,
+        key: &str,
+        user_code: String,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let copied = user_code.clone();
+        let copy = settings_sized_button(
+            p,
+            SharedString::from(format!("{key}-copy-user-code")),
+            "Copy",
+            None,
+            None,
+            SizedButtonVariant::Outline,
+            SizedButtonSize::Sm,
+            false,
+            None,
+            move |page: &mut Self, _window, cx| {
+                super::super::super::store::store_copy_to_clipboard(
+                    &page.store,
+                    copied.clone(),
+                    cx,
+                );
+            },
+            cx,
+        );
+        v_flex()
+            .w_full()
+            .gap(px(6.0))
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(hsla(p.muted))
+                    .child("One-time code"),
+            )
+            .child(
+                h_flex()
+                    .gap(px(10.0))
+                    .items_center()
+                    .child(
+                        div()
+                            .font_family(
+                                super::super::super::super::native_modal_kit::MODAL_MONO_FONT,
+                            )
+                            .text_size(px(20.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(hsla(p.foreground))
+                            .child(user_code),
+                    )
+                    .child(copy),
+            )
             .into_any_element()
     }
 

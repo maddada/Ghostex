@@ -3,7 +3,10 @@
 //! opens (the last reading, then refreshed when `refresh_on_open`), and a quiet re-read every 30
 //! seconds while it is open.
 //! A newer request supersedes an older one's answer (`generation`).
-use super::super::super::store::{SettingsStore, store_gxserver_rpc};
+//!
+//! CDXC:AgentProviders 2026-11-13 DECISION:
+//! User (Q2779 B): "Settings › Accounts gets a computer switch, so the user can manage (sign in, reconnect, see usage of) another computer's saved accounts from this device." Every request goes to the machine the page's machine picker shows (`machine`): this computer's gxserver, or a connected remote machine's through its tunnel (`store_machine_gxserver_rpc`, allowed in remote_conn/settings_rpc.rs). A sign-in there runs on that machine and is asked for from this device (`fromAnotherDevice`, server/src/accounts/setup.rs), under an owner of its own, so that machine's own Settings never shows it as its sign-in.
+use super::super::super::store::{SettingsStore, store_machine_gxserver_rpc};
 use super::data::AccountsState;
 use gpui::{App, Context, Entity, Task};
 use serde_json::{Value, json};
@@ -18,6 +21,23 @@ pub(crate) const ACCOUNTS_TIMEOUT: Duration = Duration::from_secs(120);
 /// `clientId`).
 /// SEE-ALSO: GPUI_SIDEBAR_GXSERVER_CLIENT_ID in apps/desktop/src/app/helpers/os_cli/process_and_constants.rs.
 pub(crate) const ACCOUNT_SETUP_OWNER: &str = "ghostex-gpui-sidebar";
+/// The owner of the sign-ins this window runs on another computer.
+pub(crate) const REMOTE_ACCOUNT_SETUP_OWNER: &str = "ghostex-gpui-settings-remote";
+
+/// `params` as they go to `machine`: on another computer the sign-ins are this device's, run there
+/// (`fromAnotherDevice`), under this window's remote owner.
+fn for_machine(mut params: Value, machine: Option<&str>) -> Value {
+    if machine.is_none() {
+        return params;
+    }
+    if params.get("owner").is_some() {
+        params["owner"] = json!(REMOTE_ACCOUNT_SETUP_OWNER);
+    }
+    if params["operation"] == "setupStart" {
+        params["fromAnotherDevice"] = json!(true);
+    }
+    params
+}
 
 pub(crate) struct AccountsClient {
     store: Entity<SettingsStore>,
@@ -30,6 +50,8 @@ pub(crate) struct AccountsClient {
     active: bool,
     refresh_on_open: bool,
     poll: Option<Task<()>>,
+    /// The remote machine whose accounts these are; `None` is this computer.
+    machine: Option<String>,
 }
 
 impl AccountsClient {
@@ -49,6 +71,7 @@ impl AccountsClient {
             active: false,
             refresh_on_open,
             poll: None,
+            machine: None,
         }
     }
 
@@ -63,6 +86,30 @@ impl AccountsClient {
             return;
         }
         self.active = active;
+        self.start_reading(cx);
+    }
+
+    /// The remote machine these accounts are read from; `None` is this computer.
+    pub(crate) fn machine(&self) -> Option<&str> {
+        self.machine.as_deref()
+    }
+
+    /// Shows `machine`'s accounts (the page's machine picker changed): the last one's answer and
+    /// error go, and an open page reads the new machine at once.
+    pub(crate) fn show_machine(&mut self, machine: Option<String>, cx: &mut Context<Self>) {
+        if self.machine == machine {
+            return;
+        }
+        self.machine = machine;
+        self.data = None;
+        self.error.clear();
+        self.start_reading(cx);
+    }
+
+    /// The reads of an open page (the last reading, then a fresh one, then every 30 seconds), or
+    /// none while it is closed.
+    fn start_reading(&mut self, cx: &mut Context<Self>) {
+        let active = self.active;
         if !active || !self.connected(cx) {
             self.poll = None;
             self.generation += 1;
@@ -137,10 +184,11 @@ impl AccountsClient {
         self.error.clear();
         cx.notify();
         let this = cx.weak_entity();
-        store_gxserver_rpc(
+        store_machine_gxserver_rpc(
             &self.store.clone(),
+            self.machine.as_deref(),
             "/api/agentAccounts",
-            params,
+            for_machine(params, self.machine.as_deref()),
             ACCOUNTS_TIMEOUT,
             move |result, cx| {
                 let succeeded = result.is_ok();
@@ -179,18 +227,23 @@ impl AccountsClient {
         reply: impl FnOnce(Result<Value, String>, &mut App) + 'static,
         cx: &mut App,
     ) {
-        let (store, connected) = {
+        let (store, connected, machine) = {
             let client = this.read(cx);
-            (client.store.clone(), client.connected(cx))
+            (
+                client.store.clone(),
+                client.connected(cx),
+                client.machine.clone(),
+            )
         };
         if !connected {
             reply(Err("The computer connection is unavailable.".into()), cx);
             return;
         }
-        store_gxserver_rpc(
+        store_machine_gxserver_rpc(
             &store,
+            machine.as_deref(),
             "/api/agentAccounts",
-            params,
+            for_machine(params, machine.as_deref()),
             ACCOUNTS_TIMEOUT,
             reply,
             cx,

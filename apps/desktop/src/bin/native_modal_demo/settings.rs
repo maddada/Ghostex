@@ -206,6 +206,19 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 ..
             } => {
                 eprintln!("gxserver rpc: {path} {params}");
+                if settings_machines::forwards_accounts(&host_state, &path) {
+                    let background = cx.background_executor().clone();
+                    cx.spawn(async move |cx| {
+                        let result = background
+                            .spawn(
+                                async move { settings_machines::forward_accounts(false, &params) },
+                            )
+                            .await;
+                        let _ = cx.update(|cx| reply(result, cx));
+                    })
+                    .detach();
+                    return;
+                }
                 if let Some(result) = orchestrator_playbook_rpc(&host_state, &path, &params) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
@@ -266,6 +279,19 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 ..
             } => {
                 eprintln!("remote gxserver rpc ({machine_id}): {path} {params}");
+                if settings_machines::forwards_accounts(&host_state, &path) {
+                    let background = cx.background_executor().clone();
+                    cx.spawn(async move |cx| {
+                        let result = background
+                            .spawn(
+                                async move { settings_machines::forward_accounts(true, &params) },
+                            )
+                            .await;
+                        let _ = cx.update(|cx| reply(result, cx));
+                    })
+                    .detach();
+                    return;
+                }
                 let result = settings_machines::remote_rpc(&host_state, &path, &params);
                 cx.defer(move |cx| reply(result, cx));
             }
