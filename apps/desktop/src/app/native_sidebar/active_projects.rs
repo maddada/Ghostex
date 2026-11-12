@@ -18,7 +18,7 @@ pub(crate) fn active_projects_menu() -> Value {
         {
             "label": "Remove Active projects",
             "icon": "eyeOff",
-            "detail": "Turn it back on in Settings > Sidebar & Sessions > Spaces",
+            "detail": "Turn it back on in Settings",
             "command": {"type": "removeActiveProjects"},
         },
     ])
