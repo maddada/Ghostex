@@ -325,7 +325,9 @@ impl NativeChatView {
                 .presentation()
                 .project(&key)
                 .and_then(|project| project.git_remote_origin_url.value())
-                .and_then(|origin| ghostex_gx_chat_core::transcript::issue_links::github_issues_url(origin))
+                .and_then(|origin| {
+                    ghostex_gx_chat_core::transcript::issue_links::github_issues_url(origin)
+                })
                 .map(gpui::SharedString::from);
             let _ = chat.update(cx, |chat, cx| {
                 if chat.issue_link_base != base {

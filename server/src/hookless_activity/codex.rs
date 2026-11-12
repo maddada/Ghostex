@@ -16,7 +16,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::comparison::ActivityEvent;
 use crate::server::{read_runtime_text, read_session_text};
@@ -390,7 +390,12 @@ mod tests {
     #[test]
     fn the_newest_root_rollout_codex_holds_open_is_followed() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let dir = temp.path().join("sessions").join("2026").join("11").join("11");
+        let dir = temp
+            .path()
+            .join("sessions")
+            .join("2026")
+            .join("11")
+            .join("11");
         std::fs::create_dir_all(&dir).expect("dir");
         let old = rollout(&dir, OLD, json!({ "id": OLD }), "");
         let started = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\"}}\n";
@@ -405,7 +410,12 @@ mod tests {
         );
         let identities = HashMap::from([(
             "S1-P1-G1".to_string(),
-            codex(vec![old.clone(), child, temp.path().join("other.log"), new.clone()]),
+            codex(vec![
+                old.clone(),
+                child,
+                temp.path().join("other.log"),
+                new.clone(),
+            ]),
         )]);
         let mut cache = HashMap::new();
         let mut observer = CodexObserver {
@@ -413,7 +423,9 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            observer.open_rollouts.get(&("P1".to_string(), "G1".to_string())),
+            observer
+                .open_rollouts
+                .get(&("P1".to_string(), "G1".to_string())),
             Some(&(NEW.to_string(), new))
         );
         let session = json!({
@@ -423,11 +435,16 @@ mod tests {
             "runtimeSettings": { "agentSessionId": OLD, "agentSessionPath": old },
         });
         let events = observer.poll(&[session]);
-        let names: Vec<_> = events.iter().map(|event| event.event_name.as_str()).collect();
-        assert_eq!(names, ["SessionStart", "UserPromptSubmit"]);
-        assert!(events
+        let names: Vec<_> = events
             .iter()
-            .all(|event| event.agent_session_id.as_deref() == Some(NEW)));
+            .map(|event| event.event_name.as_str())
+            .collect();
+        assert_eq!(names, ["SessionStart", "UserPromptSubmit"]);
+        assert!(
+            events
+                .iter()
+                .all(|event| event.agent_session_id.as_deref() == Some(NEW))
+        );
     }
 
     /// A rollout whose first line is not written yet is looked at again on the next scan.
@@ -441,8 +458,14 @@ mod tests {
         let identities = HashMap::from([("S1-P1-G1".to_string(), codex(vec![path.clone()]))]);
         let mut cache = HashMap::new();
         assert!(open_rollouts_from(&keys(), &identities, &mut cache).is_empty());
-        std::fs::write(&path, format!("{}\n", json!({ "type": "session_meta", "payload": { "id": NEW } })))
-            .expect("meta");
+        std::fs::write(
+            &path,
+            format!(
+                "{}\n",
+                json!({ "type": "session_meta", "payload": { "id": NEW } })
+            ),
+        )
+        .expect("meta");
         assert_eq!(
             open_rollouts_from(&keys(), &identities, &mut cache).len(),
             1
