@@ -115,7 +115,7 @@ pub(crate) async fn confirm_submitted(
     );
     // Only while the input box still holds the message (GitHub #555, guarded_write.rs).
     let holds = InputGuard::Holds(text.to_string());
-    write_session_chat_payload_guarded(
+    match write_session_chat_payload_guarded(
         project_id,
         session_id,
         zmx_name,
@@ -125,7 +125,26 @@ pub(crate) async fn confirm_submitted(
         submit,
         since,
     )
-    .await?;
+    .await
+    {
+        // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: the first Return was written, and an
+        // agent whose screen lags still shows the message after taking it. A refused second Return
+        // reported "nothing was sent", so the queue typed the message again and the agent got it
+        // twice (seen live with a stand-in that kept the text on screen 2.5 s after its Return).
+        // The message may well be sent: it counts as submitted, the delivery watchdog reads the
+        // transcript as it does for every send, and it is never typed again from here.
+        Err(error) if error.composer_not_ready() => {
+            crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                "sessionChatSendSecondReturnHeld",
+                project_id,
+                session_id,
+                "A prompt appeared before the second Return; the first Return was written, so the message counts as sent.",
+                &screen_tail(&screen),
+            );
+            return Ok(());
+        }
+        result => result?,
+    }
     let Some(screen) = message_still_held(agent, zmx_name, &needles, cancelled).await else {
         return Ok(());
     };
