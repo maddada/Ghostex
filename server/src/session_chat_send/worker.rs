@@ -27,6 +27,9 @@ pub(super) async fn run_session_chat_send_worker(
         let mut outcome = Ok(());
         // A card the agent's hooks raise after this is a prompt this job must not type into.
         let job_started = Instant::now();
+        if source == "session-chat-message" {
+            end_refused_message_watch(&project_id, &session_id);
+        }
         let mut composer_agent: Option<String> = None;
         let mut clear_pending = false;
         let mut mid_turn_probe: Option<AgentMidTurnProbe> = None;
@@ -812,6 +815,18 @@ pub(super) async fn run_session_chat_send_worker(
                     )
                     .await
                     {
+                        // A refused Return leaves the message typed in the input box.
+                        if let InputGuard::Holds(text) = &guard {
+                            if error.message == SESSION_CHAT_PROMPT_APPEARED {
+                                clear_refused_message_when_prompt_closes(
+                                    &project_id,
+                                    &session_id,
+                                    &zmx_name,
+                                    agent.as_deref(),
+                                    text,
+                                );
+                            }
+                        }
                         outcome = Err(error);
                         break;
                     }

@@ -82,6 +82,10 @@ pub(crate) fn send_after_screen_check(
     if let Err(reason) = check(screen) {
         return Ok(ZmxCheckedSend::Refused(reason));
     }
+    // No bytes: the caller only wanted the check.
+    if payload.is_empty() {
+        return Ok(ZmxCheckedSend::Sent);
+    }
     if capture.is_err() {
         // A reply that broke off leaves the connection mid-frame: write through `zmx send`.
         return Ok(match super::session_chat_zmx_write(zmx_name, payload)? {
@@ -135,6 +139,9 @@ pub(crate) fn send_after_screen_check(
         .map(|capture| capture.text.as_str());
     if let Err(reason) = check(screen) {
         return Ok(ZmxCheckedSend::Refused(reason));
+    }
+    if payload.is_empty() {
+        return Ok(ZmxCheckedSend::Sent);
     }
     Ok(match super::session_chat_zmx_write(zmx_name, payload)? {
         0 => ZmxCheckedSend::Sent,
