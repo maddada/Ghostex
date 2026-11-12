@@ -343,3 +343,32 @@ async fn the_route_asks_for_the_click_when_it_cannot_trace_the_login() {
     assert_eq!(body["result"]["status"], json!("pending"));
     assert_eq!(computer.waiting_requests(), 1);
 }
+
+#[tokio::test]
+async fn a_paired_phone_may_ask_only_to_add_easy_connect() {
+    let (_one_at_a_time, computer) = Computer::new();
+    let phone = Phone::new();
+    let device_token = crate::auth::mint_device_api_token();
+    computer
+        .state
+        .device_api_tokens
+        .replace([crate::auth::hash_device_api_token(&device_token)]);
+    let ask = |easy_connect: bool| {
+        route_http(
+            computer.state.clone(),
+            rpc_request(
+                "/api/pairOverSsh",
+                &device_token,
+                json!({ "params": phone.body(easy_connect) }),
+            ),
+            "pair-over-ssh".to_string(),
+        )
+    };
+    let refused = ask(false).await;
+    assert_eq!(refused.response.status(), StatusCode::FORBIDDEN);
+    let routed = ask(true).await;
+    let status = routed.response.status();
+    let body = response_json(routed.response).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["autoApproved"], json!(false));
+}

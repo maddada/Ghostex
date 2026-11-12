@@ -437,9 +437,18 @@ pub(crate) async fn handle_remote_access_http(
         }
         // A phone signing in over SSH asks to pair through that login (CDXC:RemotePairing
         // 2026-11-08 at `begin_ssh_pairing`). Only the token file asks: its SSH login is how a
-        // phone reads it; an agent session's own token, a peer or a paired phone has no business here.
+        // phone reads it; an agent session's own token or a peer has no business here. A paired
+        // phone (its own token) asks only to add Easy Connect to its pairing (CDXC:RemotePairing
+        // 2026-11-12 in tailnet_owner.rs), traced like any other ask.
         "/api/pairOverSsh" => {
-            if !matches!(caller, Principal::LocalAgent) {
+            let adds_easy_connect =
+                params.get("easyConnect").and_then(Value::as_bool) == Some(true);
+            let may_ask = match caller {
+                Principal::LocalAgent => true,
+                Principal::Device { .. } => adds_easy_connect,
+                _ => false,
+            };
+            if !may_ask {
                 return RemoteAccessHttpError {
                     status: StatusCode::FORBIDDEN,
                     code: "forbidden",
