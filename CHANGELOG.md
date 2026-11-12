@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 🩹 Fixes and polish
+
+- **A Ghostex page no longer shrinks for a moment after it opens:** about a second after an answered or new page opened, it was drawn at about two thirds of its size in the window's top-left corner and then grew back. That came from the picture taken for the page's chat card, which now leaves the page on screen as it is.
+
 ### 🤖 Agents
 
 - **Agents install the way their makers say:** first-run setup, Settings > Agents and Install buttons now install an agent with its official method (Claude Code's, Codex's, OpenCode's, Grok's, Antigravity's and Hermes Agent's own install scripts, PowerShell on Windows, or npm, Homebrew or WinGet where that is how an agent ships), not with mise, even on a computer that has mise. An agent mise already manages keeps updating through mise.

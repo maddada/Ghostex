@@ -183,9 +183,19 @@ pub(super) async fn screenshot_page_top(
     if width < 1.0 {
         return None;
     }
+    // CDXC:SessionChat 2026-11-13 WHY:
+    // User, on opening a Ghostex page: "it shows html then it becomes smaller then expands again"
+    // (their recording, frames 305 to 313: the whole page drawn at about two thirds of its size in
+    // the page window's top-left corner for 150 ms, about a second after it loaded, then back at
+    // full size). That was this screenshot: a clip `scale` other than 1 makes Chromium emulate that
+    // scale for the shot, and for a page on screen the emulation redraws the visible page too. The
+    // page window takes the picture only when the page has none or was answered since its last
+    // one, which is why it came and went. The shot is taken at the page's own scale, which
+    // Chromium draws without changing the page on screen, and `encode_picture` shrinks it to the
+    // stored size off the main thread as it already did.
     let mut screenshot = surface
         .update(cx, |surface, _| {
-            surface.capture_page_top(width, height, PICTURE.0 as f64 / width)
+            surface.capture_page_top(width, height, 1.0)
         })
         .ok()??;
     let timeout = cx.background_executor().timer(ANSWER_TIMEOUT);
