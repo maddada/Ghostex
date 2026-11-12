@@ -193,6 +193,10 @@ pub(super) struct ClaudeDriver {
     waiting: HashMap<(String, String), ToolCall>,
     /// Waits whose tool call was not in the transcript yet, read again until this deadline.
     unread_waits: HashMap<(String, String), (ActivityEvent, Instant)>,
+    /// The questions read off each pane's screen for the wait it shows, by the dialog's tab row,
+    /// so a dialog of several questions has its tabs walked once (claude_question_screen.rs);
+    /// `None` for one whose walk failed, which is not walked again.
+    screen_calls: HashMap<(String, String), (String, Option<ToolCall>)>,
 }
 
 /// Claude can mark itself waiting a moment before it writes the asking call to its transcript
@@ -201,35 +205,81 @@ pub(super) struct ClaudeDriver {
 /// missing is read again for this long and sent once more with the card when it appears.
 const UNREAD_WAIT_RETRY: Duration = Duration::from_secs(8);
 
-/// The tool call a wait waits on: the transcript's newest call without a result, else, for a
-/// question (`input needed`), the one question Claude draws on screen.
-fn waiting_call(
-    state: &AppState,
-    pane: &(String, String),
-    event: &ActivityEvent,
-) -> Option<ToolCall> {
-    if let Some(call) = event.transcript.as_deref().and_then(pending_tool_call) {
-        return Some(call);
+/// How long one tab step waits for the screen to change.
+const TAB_STEP_WAIT: Duration = Duration::from_millis(1500);
+
+/// Writes `key` to the pane's terminal and returns its screen once it has changed from `before`.
+fn screen_after_key(zmx_name: &str, before: &str, key: &str) -> Option<String> {
+    crate::zmx::session_chat_zmx_write(zmx_name, key).ok()?;
+    let started = Instant::now();
+    while started.elapsed() < TAB_STEP_WAIT {
+        std::thread::sleep(Duration::from_millis(80));
+        let capture = crate::zmx::read_zmx_session_screen_capture(zmx_name).ok()?;
+        if !capture.truncated && capture.text != before {
+            return Some(capture.text);
+        }
     }
-    if event.payload.get("waitingFor").and_then(Value::as_str) != Some("input needed") {
-        return None;
-    }
-    let db = open_gxserver_database(&state.paths).ok()?;
-    let repository = DomainRepository::new(&db, &state.metadata.server_id);
-    let capture =
-        crate::zmx::read_zmx_session_history_capture(&repository, &pane.0, &pane.1).ok()?;
-    if capture.truncated {
-        return None;
-    }
-    let input = super::claude_question_screen::single_question_on_screen(&capture.text)?;
-    Some(ToolCall {
-        name: "AskUserQuestion".to_string(),
-        input,
-        id: None,
-    })
+    None
+}
+
+/// The row of tabs of a question dialog on screen, which names its questions.
+fn question_tab_row(screen: &str) -> Option<String> {
+    let lines: Vec<&str> = screen.lines().map(str::trim_end).collect();
+    let row = crate::session_chat_question_liveness::claude_question_tab_row(&lines)?;
+    Some(lines[row].trim().to_string())
 }
 
 impl ClaudeDriver {
+    /// The tool call a wait waits on: the transcript's newest call without a result, else, for a
+    /// question (`input needed`), the questions Claude draws on screen, a dialog of several read
+    /// by walking its tabs once.
+    fn waiting_call(
+        &mut self,
+        state: &AppState,
+        pane: &(String, String),
+        event: &ActivityEvent,
+    ) -> Option<ToolCall> {
+        if let Some(call) = event.transcript.as_deref().and_then(pending_tool_call) {
+            return Some(call);
+        }
+        if event.payload.get("waitingFor").and_then(Value::as_str) != Some("input needed") {
+            return None;
+        }
+        let zmx_name = {
+            let db = open_gxserver_database(&state.paths).ok()?;
+            let repository = DomainRepository::new(&db, &state.metadata.server_id);
+            let session = repository.get_session(&pane.0, &pane.1).ok()??;
+            crate::zmx::provider_zmx_session_name(&session).ok()?
+        };
+        let capture = crate::zmx::read_zmx_session_screen_capture(&zmx_name).ok()?;
+        if capture.truncated {
+            return None;
+        }
+        let tab_row = question_tab_row(&capture.text)?;
+        if let Some((known, call)) = self.screen_calls.get(pane) {
+            if *known == tab_row {
+                return call.clone();
+            }
+        }
+        let walks = super::claude_question_screen::several_questions_on_screen(&capture.text);
+        let mut screen = capture.text;
+        let call = super::claude_question_screen::questions_on_screen(&screen.clone(), |key| {
+            let next = screen_after_key(&zmx_name, &screen, key)?;
+            screen = next.clone();
+            Some(next)
+        })
+        .map(|input| ToolCall {
+            name: "AskUserQuestion".to_string(),
+            input,
+            id: None,
+        });
+        if call.is_some() || walks {
+            self.screen_calls
+                .insert(pane.clone(), (tab_row, call.clone()));
+        }
+        call
+    }
+
     /// Sends the waits whose tool call has reached the transcript since they were first sent.
     pub(super) fn retry_unread_waits(&mut self, state: &AppState) {
         let now = Instant::now();
@@ -242,7 +292,8 @@ impl ClaudeDriver {
                 self.unread_waits.remove(&pane);
                 continue;
             }
-            if waiting_call(state, &pane, event).is_some() {
+            let event = event.clone();
+            if self.waiting_call(state, &pane, &event).is_some() {
                 if let Some((event, _)) = self.unread_waits.remove(&pane) {
                     self.drive(state, &event);
                 }
@@ -256,6 +307,10 @@ impl ClaudeDriver {
         }
         let pane = (event.project_id.clone(), event.session_id.clone());
         self.unread_waits.remove(&pane);
+        // A new question is read off the screen again.
+        if event.event_name != "PermissionRequest" {
+            self.screen_calls.remove(&pane);
+        }
         // Its hook drives a session that fell back to it (hook_free_fallback.rs).
         if hook_free::session_fell_back(&state.paths, &pane.0, &pane.1) {
             return;
@@ -316,7 +371,7 @@ impl ClaudeDriver {
                 None => ("SessionBusy".to_string(), true),
             },
             (_, "PermissionRequest") => {
-                match waiting_call(state, pane, event) {
+                match self.waiting_call(state, pane, event) {
                     Some(call) => {
                         insert_tool(&mut payload, &call);
                         self.waiting.insert(pane.clone(), call);
