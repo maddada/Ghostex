@@ -714,8 +714,8 @@ pub(crate) async fn handle_read_session_chat_http(
         "quietView".to_string(),
         json!(ghostex_gx_protocol::ChatQuietViewSettings {
             coordinators: quiet_switch("chatQuietViewCoordinators", true),
-            chats: quiet_switch("chatQuietViewChats", false),
-            expand_last: quiet_switch("chatQuietViewExpandLast", false),
+            chats: quiet_switch("chatQuietViewChats", true),
+            expand_last: quiet_switch("chatQuietViewExpandLast", true),
         }),
     );
     // The desktop's status line pins ride every read too, so the phone draws the line this

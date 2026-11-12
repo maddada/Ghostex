@@ -672,10 +672,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatComposerMatchesTranscriptWidth", J::Bool(false)),
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: Message spacing's user decision is in packages/gx-chat-core/src/transcript/chat_look.rs.
     ("chatMessageSpacing", J::Str("default")),
-    // CDXC:SessionChat 2026-11-11 SEE-ALSO: Quiet View's user decision (coordinators on, other chats and the expanded last turn off) is in packages/gx-chat-core/src/transcript/quiet_view.rs.
+    // CDXC:SessionChat 2026-11-13 SEE-ALSO: Quiet View's user decisions are in packages/gx-chat-core/src/transcript/quiet_view.rs: coordinators on (2026-11-11), and since the chat modes page (Q2771, Q2776) every other chat and the expanded last turn on too, for new users and for anyone who never saved these.
     ("chatQuietViewCoordinators", J::Bool(true)),
-    ("chatQuietViewChats", J::Bool(false)),
-    ("chatQuietViewExpandLast", J::Bool(false)),
+    ("chatQuietViewChats", J::Bool(true)),
+    ("chatQuietViewExpandLast", J::Bool(true)),
     // CDXC:Coordinators 2026-11-05 DECISION: the Board pill opens the side list until the user picks Columns (extras/coordinator_board.rs in gx-chat-core).
     ("coordinatorBoardView", J::Str("list")),
     // CDXC:Coordinators 2026-11-10 DECISION: the board's columns view collapses any column to its strip; Finished today starts collapsed (apps/desktop/src/app/native_chat/coordinator_board.rs `board_columns_body`).

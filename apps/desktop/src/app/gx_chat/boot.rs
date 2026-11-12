@@ -195,8 +195,8 @@ pub(super) fn chat_settings() -> ChatSettings {
             };
             ghostex_gx_chat_core::transcript::quiet_view::QuietViewSettings {
                 coordinators: switch("chatQuietViewCoordinators", true),
-                chats: switch("chatQuietViewChats", false),
-                expand_last: switch("chatQuietViewExpandLast", false),
+                chats: switch("chatQuietViewChats", true),
+                expand_last: switch("chatQuietViewExpandLast", true),
             }
         }),
         // The desktop draws its own status line, which is what its gxserver sends the phone

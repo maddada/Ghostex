@@ -23,6 +23,9 @@
 //! CDXC:SessionChat 2026-11-11 SEE-ALSO:
 //! apps/desktop/src/app/native_chat/quiet_view.rs (desktop and web draw the lines), apps/desktop/src/app/gx_chat/boot.rs (the settings), packages/settings-catalog/src/general/chat.rs (the rows), server/src/session_chat_history.rs (`deferredWork.toolCallCount`, the counts of a turn still on the server), `extras/transcript_search.rs` (Find skips a closed line's rows). apps/mobile/app/src/chat/native/transcript/quietView.tsx (the phone draws the lines), apps/mobile/app/src/chat/native/composer/menus.ts (its View menu row), server/src/session_chat_read.rs (the settings ride every read).
 
+//! CDXC:SessionChat 2026-11-13 DECISION:
+//! The user answered the chat view modes page: Q2771 "default on", Quiet View stays its own setting but starts on for every chat (`chatQuietViewChats` on, for new users and anyone who never saved it; Normal, the full view, stays for those who turn it off); Q2776 "on", Expand the last turn in Quiet View starts on (`chatQuietViewExpandLast`). And of an opened line: "if we expand then don't say the numbers for reports, tool calls etc on the expanded header of the quiet view row, since it's visible anyway so it's redundant." So an open line's header says `openText` ("Working", "Worked for 2m 5s", "Previous turn", "Reports"), and a shut line keeps its counts in `text`; the desktop, the web build and the phone draw the same.
+
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
@@ -40,11 +43,11 @@ pub struct QuietViewSettings {
     /// Coordinator chats start in Quiet View (`chatQuietViewCoordinators`).
     #[serde(default = "on")]
     pub coordinators: bool,
-    /// Every other chat starts in it too (`chatQuietViewChats`).
-    #[serde(default)]
+    /// Every other chat starts in it too (`chatQuietViewChats`, on since 2026-11-13).
+    #[serde(default = "on")]
     pub chats: bool,
-    /// The newest stretch shows open (`chatQuietViewExpandLast`).
-    #[serde(default)]
+    /// The newest stretch shows open (`chatQuietViewExpandLast`, on since 2026-11-13).
+    #[serde(default = "on")]
     pub expand_last: bool,
 }
 
@@ -56,8 +59,8 @@ impl Default for QuietViewSettings {
     fn default() -> Self {
         Self {
             coordinators: true,
-            chats: false,
-            expand_last: false,
+            chats: true,
+            expand_last: true,
         }
     }
 }
@@ -218,6 +221,10 @@ pub struct QuietStretch {
     pub after: Option<usize>,
     /// "3 reports · 1 message sent · 3 tool calls · 1 item updated".
     pub text: String,
+    /// What the line says while it is open, without the counts its rows now show: "Working",
+    /// "Worked for 2m 5s", "Previous turn", "Reports" or "Worked".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub open_text: String,
     /// "1:08 to 1:09 AM" on a line that reports came in on; empty otherwise.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub time: String,
@@ -1073,6 +1080,24 @@ fn count_words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs) {
         parts.push(plural(line.cards.len(), "item updated", "items updated"));
     }
     let joined = parts.join(" \u{b7} ");
+    line.open_text = if line.running {
+        "Working".to_string()
+    } else if counts.reports == 0 && counts.worked.is_some() {
+        if counts.previous_turn {
+            "Previous turn".to_string()
+        } else {
+            let (started, ended) = counts.worked.unwrap_or_default();
+            crate::transcript::turns::worked_duration_label(started, ended)
+        }
+    } else if counts.reports > 0 {
+        if inputs.coordinator {
+            "Reports".to_string()
+        } else {
+            "Messages received".to_string()
+        }
+    } else {
+        "Worked".to_string()
+    };
     line.text = if line.running {
         if joined.is_empty() {
             "Working".to_string()

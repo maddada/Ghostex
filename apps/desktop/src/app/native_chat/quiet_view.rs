@@ -574,7 +574,14 @@ impl NativeChatView {
         } else {
             vec![line_icon(lead, 13.0, p)]
         };
-        let mut segments: Vec<QuietSegment> = vec![(line.text.clone(), None)];
+        // An open line drops its counts: its rows show them (gx-chat-core `quiet_view.rs`,
+        // CDXC:SessionChat 2026-11-13).
+        let text = if open && !line.open_text.is_empty() {
+            &line.open_text
+        } else {
+            &line.text
+        };
+        let mut segments: Vec<QuietSegment> = vec![(text.clone(), None)];
         if !line.time.is_empty() {
             segments.push((format!("\u{2002}{}", line.time), None));
         }
