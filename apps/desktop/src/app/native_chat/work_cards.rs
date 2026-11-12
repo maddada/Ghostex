@@ -117,7 +117,8 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
 }
 
 /// A dock row's mark: a Ghostex page that needs him is a plain page in the need-you pink (`page`
-/// on the row, from gx-chat-core); everything else its status's mark (`status_look`). Every row
+/// on the row, from gx-chat-core), a question form that needs him the checklist in that pink;
+/// everything else its status's mark (`status_look`). Every row
 /// that is a page takes its mark here.
 ///
 /// CDXC:Coordinators 2026-11-11 DECISION:
@@ -128,6 +129,15 @@ pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::
     let (icon, color) = status_look(&status, p);
     if row["page"] == true && status == "needs" {
         return ("titlebar/file.svg", color);
+    }
+    // A question form that needs him: the visuals list's checklist (questions_list.rs
+    // `kind_icon`), in the same pink.
+    //
+    // CDXC:Coordinators 2026-11-12 DECISION:
+    // User, of a form's row that showed the question ring: "use this icon for this one when it's
+    // a question form (keep pink color)". Work item asks and pages keep theirs.
+    if text(row, "kind") == "form" && row["page"] != true && status == "needs" {
+        return ("titlebar/list-check.svg", color);
     }
     (icon, color)
 }
