@@ -19,6 +19,12 @@ const ZMX_IPC_TAG_SEND_ACKED: u8 = 205;
 /// `ipc.Tag.SendAck`: the receipt, one `SendAckStatus` byte.
 #[cfg(unix)]
 const ZMX_IPC_TAG_SEND_ACK: u8 = 206;
+/// `ipc.Tag.Info`: the ordering barrier after `SendAcked`.
+#[cfg(unix)]
+const ZMX_IPC_TAG_INFO: u8 = 6;
+/// `ipc.Tag.Unsupported`: a daemon's answer to a tag it does not know.
+#[cfg(unix)]
+const ZMX_IPC_TAG_UNSUPPORTED: u8 = 255;
 /// `ipc.SendAckStatus.queued`.
 #[cfg(unix)]
 const ZMX_SEND_ACK_QUEUED: u8 = 0;
@@ -89,8 +95,12 @@ pub(crate) fn send_after_screen_check(
             code => ZmxCheckedSend::NotTaken(format!("zmx send exited with {code}")),
         });
     }
+    // An `Info` barrier follows the input: a daemon too old for `SendAcked` drops it (answering
+    // `Unsupported`, or nothing) and answers the barrier first, which means nothing was queued,
+    // so the bytes go through `zmx send`, which probes the daemon itself (GitHub #555 review).
     let mut frame = zmx_ipc_header(ZMX_IPC_TAG_SEND_ACKED, payload.len() as u32).to_vec();
     frame.extend_from_slice(payload.as_bytes());
+    frame.extend_from_slice(&zmx_ipc_header(ZMX_IPC_TAG_INFO, 0));
     stream
         .write_all(&frame)
         .map_err(|error| format!("zmx session input could not be written: {error}"))?;
@@ -110,6 +120,12 @@ pub(crate) fn send_after_screen_check(
                 status => ZmxCheckedSend::NotTaken(format!(
                     "the session refused the input (receipt {status:?})"
                 )),
+            });
+        }
+        if matches!(tag, ZMX_IPC_TAG_INFO | ZMX_IPC_TAG_UNSUPPORTED) {
+            return Ok(match super::session_chat_zmx_write(zmx_name, payload)? {
+                0 => ZmxCheckedSend::Sent,
+                code => ZmxCheckedSend::NotTaken(format!("zmx send exited with {code}")),
             });
         }
     }
