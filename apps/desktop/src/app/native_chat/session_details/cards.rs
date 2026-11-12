@@ -40,6 +40,17 @@ fn str_of(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
 }
 
+/// The card has something under its title to fold; the core says `foldable: false` for a Context
+/// card whose usage line and bar are all it holds.
+fn foldable(section: &Value) -> bool {
+    section["foldable"] != false
+}
+
+/// The card's body is not drawn: the user folded it, or it has none to show.
+fn shut(section: &Value) -> bool {
+    section["collapsed"] == true || !foldable(section)
+}
+
 fn len(value: &Value, key: &str) -> usize {
     value[key].as_array().map_or(0, Vec::len)
 }
@@ -81,7 +92,7 @@ pub(super) fn panel_height(details: &Value, open: &mut dyn FnMut(&str, bool) -> 
         if id == "context" {
             total += SUMMARY_HEIGHT + BAR_HEIGHT;
         }
-        let fold = open(&card_key(id), section["collapsed"] != true);
+        let fold = open(&card_key(id), !shut(section));
         if fold <= 0.0 {
             continue;
         }
@@ -325,7 +336,7 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let id = str_of(section, "id");
-        let collapsed = section["collapsed"] == true;
+        let collapsed = shut(section);
         let key = card_key(&id);
         let motion = self.disclosure_frame(&key, !collapsed, cx);
         let header = self.card_header(section, !collapsed, motion, p, cx);
@@ -403,18 +414,11 @@ impl NativeChatView {
             .child(
                 div()
                     .id(SharedString::from(format!("session-details-fold-{id}")))
-                    .role(gpui::Role::Button)
-                    .aria_label(format!(
-                        "{} {}",
-                        if open { "Hide" } else { "Show" },
-                        str_of(section, "title")
-                    ))
                     .flex()
                     .items_center()
                     .gap(px(4.0 * s))
                     .flex_1()
                     .min_w_0()
-                    .chat_cursor_pointer()
                     .child(
                         div()
                             .truncate()
@@ -423,11 +427,22 @@ impl NativeChatView {
                             .text_color(p.muted)
                             .child(str_of(section, "title")),
                     )
-                    .child(fold_chevron(open, motion, 12.0 * s, p.card_muted))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.session_details_action(&toggle, cx);
-                    })),
+                    // A card with nothing to unfold (Context without a breakdown) has a plain title.
+                    .when(foldable(section), |title| {
+                        title
+                            .role(gpui::Role::Button)
+                            .aria_label(format!(
+                                "{} {}",
+                                if open { "Hide" } else { "Show" },
+                                str_of(section, "title")
+                            ))
+                            .chat_cursor_pointer()
+                            .child(fold_chevron(open, motion, 12.0 * s, p.card_muted))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.session_details_action(&toggle, cx);
+                            }))
+                    }),
             )
             .children(trailing)
             .into_any_element()
@@ -1329,5 +1344,17 @@ mod tests {
         let card = CARD_PADDING_Y * 2.0 + HEADER_HEIGHT + 4.0;
         assert_eq!(context(true), card + SUMMARY_HEIGHT + BAR_HEIGHT);
         assert_eq!(context(false) - context(true), 2.0 * ROW_HEIGHT);
+    }
+
+    #[test]
+    fn a_context_card_with_nothing_to_unfold_draws_no_body() {
+        let height = |foldable: bool| {
+            let section =
+                json!({"id": "context", "collapsed": false, "foldable": foldable, "rows": [{}]});
+            panel_height(&json!({"sections": [section]}), &mut |_, open| {
+                f32::from(open)
+            })
+        };
+        assert_eq!(height(true) - height(false), ROW_HEIGHT);
     }
 }

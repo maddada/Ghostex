@@ -390,7 +390,18 @@ fn context_card(
             used.filter(|_| !claude)
                 .map(|used| format!("{} used", format_context_tokens(Some(used))))
         });
+    // CDXC:SessionDetails 2026-11-12 DECISION:
+    // User: hide Context's fold chevron, and let its title fold nothing, when the card has nothing
+    // under its usage line and bar (an agent that sends no breakdown, such as Codex).
+    let skeleton_rows = if breakdown_coming {
+        BREAKDOWN_SKELETON_ROWS
+    } else {
+        0
+    };
+    let foldable =
+        !rows.is_empty() || !deferred.is_empty() || skeleton_rows > 0 || !status.is_empty();
     json!({
+        "foldable": foldable,
         "percentLabel": percent_label,
         "tokensLabel": match (used, window) {
             (Some(used), Some(window)) => Some(format!("{} / {}", format_context_tokens(Some(used)), format_context_tokens(Some(window)))),
@@ -404,7 +415,7 @@ fn context_card(
         "messagesOpen": details.open_lists.iter().any(|list| list == "messages"),
         "status": status,
         "statusError": error.is_some() && breakdown.is_none() && !running,
-        "skeletonRows": if breakdown_coming { BREAKDOWN_SKELETON_ROWS } else { 0 },
+        "skeletonRows": skeleton_rows,
         "refreshing": running || details.refreshing,
         "refresh": claude.then(|| json!({"type": "sessionDetailsRefresh"})),
     })
@@ -804,6 +815,36 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn context_of(agent: &str, data: Option<Value>) -> Value {
+        let mut state = ChatState::default();
+        state.session.agent = Some(agent.to_string());
+        state.extras.session_details.data = data;
+        let usage = Usage {
+            used: Some(24_000.0),
+            window: Some(258_000.0),
+            percent: None,
+        };
+        context_card(
+            &state,
+            state.extras.session_details.data.as_ref(),
+            &usage,
+            0.0,
+            0,
+        )
+    }
+
+    #[test]
+    fn a_context_card_with_nothing_under_its_bar_does_not_fold() {
+        // Codex sends no breakdown: the usage line and bar are the whole card.
+        assert_eq!(context_of("codex", Some(json!({})))["foldable"], false);
+        // Claude's breakdown is still coming: its skeleton rows sit in the fold.
+        assert_eq!(context_of("claude", None)["foldable"], true);
+        let breakdown = json!({"context": {"breakdown": {"totalTokens": 24000, "categories": [
+            {"id": "messages", "name": "Messages", "tokens": 20000, "kind": "used"}
+        ]}}});
+        assert_eq!(context_of("codex", Some(breakdown))["foldable"], true);
+    }
 
     fn rows(environment: Value) -> Vec<Value> {
         let body = super::environment(&json!({ "environment": environment }), false).unwrap();
