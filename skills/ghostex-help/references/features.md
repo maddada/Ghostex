@@ -5790,8 +5790,8 @@ had switched off as Off and take the defaults for the rest. The first answered
 iOS permission prompt turns notifications on if allowed and leaves them off if
 denied; after a denial, **Open iOS Settings** leads to the system controls.
 **Attention notification sound** and **Alert me for** stay under Sound.
-An alert names the agent and project, such as **Codex · My project**, or with
-**Show session names** on (Settings > Live Activity) the session's name, with
+An alert names the session, or with **Show session names** off (Settings > Live
+Activity) the agent and project, such as **Codex · My project**, with
 **Finished**, **Waiting for you**, **Has a question**, **Ended with an error** or
 **Reported to its coordinator** under it, never prompt or reply text. Stopping
 an agent yourself does not send an error alert. Alerts and the attention sound
@@ -5815,10 +5815,12 @@ The iPhone's **Settings > Live Activity > Show Live Activity** controls one
 card on the Lock Screen and the counts in the Dynamic Island. It starts with
 Ghostex open while agents work or wait, lists waiting agents first, then working
 agents and briefly those that just finished, with their agent, project, state
-and time, not conversation text. **Show session names** on the same page is off
-by default; turned on, each row leads with its session's name, as the Sessions
-list shows it, and the icon tells which agent it is, so several sessions of one
-agent can be told apart. Prompts and replies are never shown, but a session's
+and time, not conversation text. **Show session names** on the same page is on
+by default, so each row leads with its session's name, as the Sessions list
+shows it, and the icon tells which agent it is, so several sessions of one
+agent can be told apart; turn it off and the rows lead with the agent's name.
+Phones that had it off by default before this change start with it on once;
+turn it off again and it stays off. Prompts and replies are never shown, but a session's
 name can come from your messages, and anyone who sees your Lock Screen can read
 it. Tap a row to open its session; a question
 opens at its question card. It ends 15 minutes after Ghostex first notices that
