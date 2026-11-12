@@ -5704,9 +5704,8 @@ panel: one row per session, newest first, saying whether the agent finished a
 turn, needs your input or failed, with the last thing it said. A Not sent row stays
 until you deal with it, so a session can also show a newer row next to it (for
 example Not sent and Failed). Click a row to jump to
-that session and mark it read; hover a row to dismiss it; the header has Next
-unread, Mark all read, and Clear all. Hover a header button to see its configured
-hotkey when one is available. Hotkeys: Cmd+I opens the panel,
+that session and mark it read; hover a row to dismiss it; the header has Mark all
+read and Clear all. Hotkeys: Cmd+I opens the panel,
 Cmd+Shift+U jumps to the latest unread notification, and Cmd+Ctrl+U pushes the
 current session to the back of the unread queue and jumps to the next one.
 Clearing a session's attention by selecting it in the sidebar, focusing its
@@ -5739,8 +5738,7 @@ in the sidebar the panel has All, This computer, and Remote tabs, each with its
 own unread count. A remote row names its computer in a small chip next to the
 title; clicking it opens that session on its computer, and reading, dismissing
 or clearing it updates that computer's own list. Mark all read and Clear all act
-on the open tab, while Next unread goes through every computer. While a remote
-computer is offline its notifications are hidden and left out of the count, and
+on the open tab. While a remote computer is offline its notifications are hidden and left out of the count, and
 the panel says so until it reconnects.
 
 In the phone app, tap the bell in the Sessions header (or its side bar) for

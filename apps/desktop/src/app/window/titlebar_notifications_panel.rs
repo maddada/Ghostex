@@ -448,7 +448,7 @@ impl GpuiTitlebarReadingPanel {
     }
     /// CDXC:Notifications 2026-09-13 DECISION:
     /// User: keep the Notifications panel in native GPUI and match the Tips header buttons with full-height, equal-width, unfilled actions separated by thin borders, with an icon beside each label.
-    /// User: call the jump action "Next unread" and show each action's configured hotkey in its tooltip when one exists. 2026-09-26: an action without a hotkey shows no tooltip, because it would only repeat the label.
+    /// 2026-11-12, user: the "Next unread" action is gone from this header; Mark all read and Clear all fill it. Neither has a hotkey, so neither has a tooltip (it would only repeat the label).
     /// User: do not show the notification count next to the dropdown title.
     ///
     /// CDXC:Notifications 2026-10-16 DECISION:
@@ -459,8 +459,7 @@ impl GpuiTitlebarReadingPanel {
         tab: NotificationFeedTab,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        // Next unread spans every computer; Mark all read and Clear all act on the open tab.
-        let unread_count = feed.unread_count;
+        // Mark all read and Clear all act on the open tab.
         let tab_unread_count = feed.tab_unread_count(tab);
         let tab_has_rows = feed.items.iter().any(|item| tab.includes(&item.machine));
         resource_header()
@@ -484,24 +483,9 @@ impl GpuiTitlebarReadingPanel {
                     .flex_1()
                     .items_stretch()
                     .child(Self::render_notification_header_action(
-                        "ghostex-gpui-titlebar-notifications-jump",
-                        "Next unread",
-                        "titlebar/chevron-right.svg",
-                        Some("jumpToLatestUnreadNotification"),
-                        unread_count > 0,
-                        false,
-                        cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                            this.send_notification_feed_command("jumpToLatestUnread", None, cx);
-                            this.close_popup(window, cx);
-                        }),
-                    ))
-                    .child(Self::render_notification_header_action(
                         "ghostex-gpui-titlebar-notifications-mark-all-read",
                         "Mark all read",
                         NOTIFICATION_PANEL_CHECK_ICON,
-                        None,
                         tab_unread_count > 0,
                         false,
                         cx.listener(|this, _: &MouseDownEvent, window, cx| {
@@ -514,7 +498,6 @@ impl GpuiTitlebarReadingPanel {
                         "ghostex-gpui-titlebar-notifications-clear-all",
                         "Clear all",
                         "titlebar/xmark.svg",
-                        None,
                         tab_has_rows,
                         true,
                         cx.listener(|this, _: &MouseDownEvent, window, cx| {
@@ -533,7 +516,6 @@ impl GpuiTitlebarReadingPanel {
         id: &'static str,
         label: &'static str,
         icon: &'static str,
-        hotkey_action: Option<&'static str>,
         enabled: bool,
         last: bool,
         listener: impl Fn(&MouseDownEvent, &mut Window, &mut gpui::App) + 'static,
@@ -555,16 +537,6 @@ impl GpuiTitlebarReadingPanel {
             .whitespace_nowrap()
             .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
             .font_weight(FontWeight::NORMAL)
-            .when_some(
-                hotkey_action
-                    .and_then(crate::gpui_configured_hotkey_label)
-                    .filter(|shortcut| !shortcut.is_empty()),
-                |this, shortcut| {
-                    this.tooltip(move |window, cx| {
-                        Tooltip::new(format!("{label} ({shortcut})")).build(window, cx)
-                    })
-                },
-            )
             .when(enabled, |this| {
                 this.text_color(chrome_ink().opacity(0.78))
                     .cursor_pointer()
