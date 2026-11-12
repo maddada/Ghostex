@@ -25,6 +25,8 @@ pub(super) async fn run_session_chat_send_worker(
             continue; // cancelled while queued
         }
         let mut outcome = Ok(());
+        // The job as it was given, for running it again after a prompt (RetryAfterPrompt).
+        let retry_steps = retry_after_prompt_steps(&steps);
         // A card the agent's hooks raise after this is a prompt this job must not type into.
         let job_started = Instant::now();
         if source == "session-chat-message" {
@@ -730,6 +732,7 @@ pub(super) async fn run_session_chat_send_worker(
                     )
                     .await;
                 }
+                SessionChatSendStep::RetryAfterPrompt { .. } => {}
                 SessionChatSendStep::SleepMs(delay_ms) => {
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
@@ -815,17 +818,23 @@ pub(super) async fn run_session_chat_send_worker(
                     )
                     .await
                     {
-                        // A refused Return leaves the message typed in the input box.
-                        if let InputGuard::Holds(text) = &guard {
-                            if error.prompt_waiting() {
-                                clear_refused_message_when_prompt_closes(
-                                    &project_id,
-                                    &session_id,
-                                    &zmx_name,
-                                    agent.as_deref(),
-                                    text,
-                                );
+                        // A refused Return leaves the message typed in the input box, and a job
+                        // that asks for it is run again once the prompt closes.
+                        let text = match &guard {
+                            InputGuard::Holds(text) | InputGuard::ReturnFor(text) => {
+                                Some(text.as_str())
                             }
+                            _ => None,
+                        };
+                        if error.prompt_waiting() && (text.is_some() || retry_steps.is_some()) {
+                            clear_refused_message_when_prompt_closes(
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                agent.as_deref(),
+                                text,
+                                retry_steps.clone().map(|steps| (source.clone(), steps)),
+                            );
                         }
                         outcome = Err(error);
                         break;

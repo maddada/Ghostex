@@ -841,6 +841,10 @@ pub struct ZmxQueuedSessionMessage {
     pub send_delay_ms: u64,
 }
 
+/// How many times a sendSessionMessage job a prompt refused is run again once it closes.
+const RETRY_AFTER_PROMPT: crate::session_chat_send::SessionChatSendStep =
+    crate::session_chat_send::SessionChatSendStep::RetryAfterPrompt { tries_left: 3 };
+
 /// Callers that widen the settle window past this are clamped, so a bad value
 /// cannot park the session's queue.
 const SEND_SESSION_MESSAGE_SUBMIT_DELAY_DEFAULT_MS: u64 = 150;
@@ -897,6 +901,7 @@ impl ZmxQueuedSessionMessage {
                 ));
                 steps.extend(submit);
             }
+            steps.insert(0, RETRY_AFTER_PROMPT);
             return steps;
         }
         // CDXC:SessionChat 2026-09-26 WHY:
@@ -918,27 +923,35 @@ impl ZmxQueuedSessionMessage {
         // sendMessage`, automations, worktree first prompts and Ghostex's own typed commands (the
         // Claude diff-panel hide, /rename), and wrote their text and Return blind, so an approval
         // that was up took them as its answer. For an agent the guard can read, both are guarded
-        // writes that need the input box ready with no prompt waiting (guarded_write.rs). A
-        // refused write is not retried here: the job ends and is logged, as a refused zmx write
-        // always was. The Return checks the input box rather than the typed text, which a slow
-        // agent may not have drawn yet, so a slow repaint never holds a message back.
-        let write = |payload: String| match agent.as_deref() {
-            Some(agent) => crate::session_chat_send::SessionChatSendStep::GuardedWrite {
-                agent: Some(agent.to_string()),
-                guard: crate::session_chat_send::InputGuard::InputBox,
-                payload,
+        // writes that need the input box ready with no prompt waiting (guarded_write.rs). The
+        // Return checks the input box rather than the typed text, which a slow agent may not have
+        // drawn yet, so a slow repaint never holds a message back. Nobody waits on this job, so a
+        // job a prompt refused is run again once the prompt closes, its leftover cleared first
+        // (RetryAfterPrompt, the 2026-11-12 WHY on `clear_refused_message_when_prompt_closes`).
+        let write =
+            |payload: String, guard: crate::session_chat_send::InputGuard| match agent.as_deref() {
+                Some(agent) => crate::session_chat_send::SessionChatSendStep::GuardedWrite {
+                    agent: Some(agent.to_string()),
+                    guard,
+                    payload,
+                },
+                None => crate::session_chat_send::SessionChatSendStep::Write(payload),
+            };
+        if agent.is_some() {
+            steps.insert(0, RETRY_AFTER_PROMPT);
+        }
+        steps.push(write(
+            if self.submit {
+                crate::session_chat_send::disambiguate_agent_tui_submit_text(&self.text)
+            } else if crate::session_chat_send::is_multiline_draft(&self.text) {
+                // CDXC:TranscriptExport 2026-10-31 WHY:
+                // Staged text is never sent, and a bare line break in a raw write is the Return key: a handoff's multi-line first message pressed Enter on Codex's "Update available" prompt in testing, which ran its "Update now". As one paste it is text to a composer and nothing to a prompt.
+                crate::session_chat_send::wrap_terminal_bracketed_paste_text(&self.text)
+            } else {
+                self.text.clone()
             },
-            None => crate::session_chat_send::SessionChatSendStep::Write(payload),
-        };
-        steps.push(write(if self.submit {
-            crate::session_chat_send::disambiguate_agent_tui_submit_text(&self.text)
-        } else if crate::session_chat_send::is_multiline_draft(&self.text) {
-            // CDXC:TranscriptExport 2026-10-31 WHY:
-            // Staged text is never sent, and a bare line break in a raw write is the Return key: a handoff's multi-line first message pressed Enter on Codex's "Update available" prompt in testing, which ran its "Update now". As one paste it is text to a composer and nothing to a prompt.
-            crate::session_chat_send::wrap_terminal_bracketed_paste_text(&self.text)
-        } else {
-            self.text.clone()
-        }));
+            crate::session_chat_send::InputGuard::InputBox,
+        ));
         if self.submit {
             if self.send_delay_ms > 0 {
                 steps.push(crate::session_chat_send::SessionChatSendStep::SleepMs(
@@ -947,6 +960,7 @@ impl ZmxQueuedSessionMessage {
             }
             steps.push(write(
                 crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
+                crate::session_chat_send::InputGuard::ReturnFor(self.text.clone()),
             ));
         }
         steps

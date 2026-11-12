@@ -13,6 +13,9 @@ pub enum InputGuard {
     /// The same, with the input box holding this message and nothing else: before clearing a held
     /// message, so text typed after it is never erased (`box_holds_only`).
     HoldsOnly(String),
+    /// Checked like `InputBox`; carries the text the write submits, for the clear watcher when the
+    /// write is refused (a Return whose text a slow agent may not have drawn yet).
+    ReturnFor(String),
 }
 
 /// Why a send stopped before typing into a prompt that appeared under it (`PromptWaiting`, code
@@ -393,17 +396,46 @@ fn refused(
     }
 }
 
-/// Which watcher, per session, owns clearing a refused message; a newer one replaces it.
-fn clear_watchers() -> &'static Mutex<HashMap<String, u64>> {
-    static WATCHERS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+/// Which watcher, per session, owns clearing a refused message, and whether it carries a retry; a
+/// newer one replaces it.
+fn clear_watchers() -> &'static Mutex<HashMap<String, (u64, bool)>> {
+    static WATCHERS: OnceLock<Mutex<HashMap<String, (u64, bool)>>> = OnceLock::new();
     WATCHERS.get_or_init(Mutex::default)
 }
 
-/// Ends the session's watcher: a new message send clears the input box itself before it types.
+/// Ends the session's watcher: a new message send clears the input box itself before it types. A
+/// watcher that still has a job to run again keeps going.
 pub(crate) fn end_refused_message_watch(project_id: &str, session_id: &str) {
     if let Ok(mut watchers) = clear_watchers().lock() {
-        watchers.remove(&format!("{project_id}:{session_id}"));
+        let key = format!("{project_id}:{session_id}");
+        if watchers.get(&key).is_some_and(|(_, retry)| !retry) {
+            watchers.remove(&key);
+        }
     }
+}
+
+/// The steps a `RetryAfterPrompt` job runs again: the same job with one try fewer, or `None` when
+/// it has none left.
+pub(crate) fn retry_after_prompt_steps(
+    steps: &[SessionChatSendStep],
+) -> Option<Vec<SessionChatSendStep>> {
+    let tries = steps.iter().find_map(|step| match step {
+        SessionChatSendStep::RetryAfterPrompt { tries_left } => Some(*tries_left),
+        _ => None,
+    })?;
+    (tries > 0).then(|| {
+        steps
+            .iter()
+            .map(|step| match step {
+                SessionChatSendStep::RetryAfterPrompt { tries_left } => {
+                    SessionChatSendStep::RetryAfterPrompt {
+                        tries_left: tries_left - 1,
+                    }
+                }
+                step => step.clone(),
+            })
+            .collect()
+    })
 }
 
 /// How long a watcher waits for the prompt to close before leaving the message to the next try.
@@ -419,34 +451,44 @@ const CLEAR_WATCH_POLL: Duration = Duration::from_millis(300);
 /// queue sent it a second time. The box is emptied as soon as two looks 300 ms apart show the input
 /// box ready again (no prompt, which also gives a hook-announced dialog time to be drawn) and still
 /// holding the message; the queued row types it afresh once the prompt is answered.
+///
+/// CDXC:SessionChat 2026-11-12 WHY: GitHub #555 second review: `/api/sendSessionMessage` queues its
+/// job without waiting for it, so an automation prompt, a worktree first prompt, the Claude
+/// diff-panel hide or an agent's /rename that a prompt refused stayed typed but unsent, with no
+/// error anyone saw. Such a job carries `RetryAfterPrompt`: once the prompt has closed the watcher
+/// clears its leftover as above and runs the job again (three times at most), unless the input box
+/// now holds text that is not the job's, which a retry's clear would erase.
 pub(crate) fn clear_refused_message_when_prompt_closes(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
     agent: Option<&str>,
-    text: &str,
+    text: Option<&str>,
+    retry: Option<(String, Vec<SessionChatSendStep>)>,
 ) {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let token = NEXT.fetch_add(1, Ordering::SeqCst);
     let key = format!("{project_id}:{session_id}");
     if let Ok(mut watchers) = clear_watchers().lock() {
-        watchers.insert(key.clone(), token);
+        watchers.insert(key.clone(), (token, retry.is_some()));
     }
     let owns = move |key: &str| {
         clear_watchers()
             .lock()
-            .is_ok_and(|watchers| watchers.get(key) == Some(&token))
+            .is_ok_and(|watchers| watchers.get(key).is_some_and(|(owner, _)| *owner == token))
     };
     let (project_id, session_id, zmx_name) = (
         project_id.to_string(),
         session_id.to_string(),
         zmx_name.to_string(),
     );
-    let (agent, text) = (agent.map(str::to_string), text.to_string());
+    let (agent, text) = (agent.map(str::to_string), text.map(str::to_string));
     tokio::spawn(async move {
         let deadline = Instant::now() + CLEAR_WATCH_MAX;
-        let holds = InputGuard::HoldsOnly(text.clone());
+        let holds = text.clone().map(InputGuard::HoldsOnly);
+        let reads_box = send_reads_input_box(agent.as_deref());
         let mut ready_looks = 0;
+        let mut retried = false;
         while Instant::now() < deadline && owns(&key) {
             tokio::time::sleep(CLEAR_WATCH_POLL).await;
             let screen = if send_reads_input_box(agent.as_deref()).is_some() {
@@ -464,45 +506,106 @@ pub(crate) fn clear_refused_message_when_prompt_closes(
                 ready_looks = 0;
                 continue;
             }
-            // The box is back without the message alone: it was sent, emptied, or typed into.
-            if guarded_write_refusal(agent.as_deref(), &holds, Some(&screen)).is_err() {
+            let holds_only = holds.as_ref().is_some_and(|holds| {
+                guarded_write_refusal(agent.as_deref(), holds, Some(&screen)).is_ok()
+            });
+            // Whatever else the box holds is someone's typing, which neither a clear nor a retry
+            // (whose own clear empties the box) may erase.
+            let other_text = !holds_only
+                && match reads_box.as_deref() {
+                    Some(reader) => !normalize_session_chat_screen_text(
+                        &session_chat_input_box_text(reader, &screen),
+                    )
+                    .is_empty(),
+                    None => text.as_deref().is_some_and(|text| {
+                        guarded_write_refusal(
+                            agent.as_deref(),
+                            &InputGuard::Holds(text.to_string()),
+                            Some(&screen),
+                        )
+                        .is_ok()
+                    }),
+                };
+            if other_text {
+                if retry.is_some() {
+                    crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                        "sessionChatSendNotRetried",
+                        &project_id,
+                        &session_id,
+                        "The prompt closed, but the input box now holds other text, so the message was not typed again.",
+                        &[],
+                    );
+                }
                 break;
             }
             ready_looks += 1;
             if ready_looks < 2 {
                 continue;
             }
-            let mut steps = vec![SessionChatSendStep::GuardedWrite {
-                agent: agent.clone(),
-                guard: holds.clone(),
-                payload: String::new(),
-            }];
-            steps.extend(build_session_chat_clear_input_steps(
-                agent.as_deref(),
-                &text,
-            ));
-            let cleared = execute_session_chat_send(
-                &project_id,
-                &session_id,
-                &zmx_name,
-                "session-chat-clear-held-message",
-                steps,
-            )
-            .await;
-            crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
-                "sessionChatSendClearedHeldMessage",
-                &project_id,
-                &session_id,
-                match &cleared {
-                    Ok(()) => "The prompt closed; the held message was cleared from the input box until the queue sends it.",
-                    Err(_) => "The prompt closed; clearing the held message from the input box did not go through, the next try clears it.",
-                },
-                &[],
-            );
+            if let (true, Some(holds), Some(text)) = (holds_only, holds.as_ref(), text.as_deref()) {
+                let mut steps = vec![SessionChatSendStep::GuardedWrite {
+                    agent: agent.clone(),
+                    guard: holds.clone(),
+                    payload: String::new(),
+                }];
+                steps.extend(build_session_chat_clear_input_steps(agent.as_deref(), text));
+                let cleared = execute_session_chat_send(
+                    &project_id,
+                    &session_id,
+                    &zmx_name,
+                    "session-chat-clear-held-message",
+                    steps,
+                )
+                .await;
+                crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                    "sessionChatSendClearedHeldMessage",
+                    &project_id,
+                    &session_id,
+                    match &cleared {
+                        Ok(()) => "The prompt closed; the held message was cleared from the input box until it is sent again.",
+                        Err(_) => "The prompt closed; clearing the held message from the input box did not go through, the next try clears it.",
+                    },
+                    &[],
+                );
+                if cleared.is_err() {
+                    break;
+                }
+            }
+            if let Some((source, steps)) = retry.as_ref() {
+                retried = true;
+                let sent = execute_session_chat_send(
+                    &project_id,
+                    &session_id,
+                    &zmx_name,
+                    source,
+                    steps.clone(),
+                )
+                .await;
+                crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                    "sessionChatSendRetriedAfterPrompt",
+                    &project_id,
+                    &session_id,
+                    match &sent {
+                        Ok(()) => "The prompt closed; the message was typed again and sent.",
+                        Err(error) if error.prompt_waiting() => "The prompt closed; the message was typed again, and another prompt held it.",
+                        Err(_) => "The prompt closed; typing the message again did not go through.",
+                    },
+                    &[],
+                );
+            }
             break;
         }
+        if retry.is_some() && !retried && Instant::now() >= deadline {
+            crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                "sessionChatSendNotRetried",
+                &project_id,
+                &session_id,
+                "The prompt stayed open for thirty minutes, so the message was not typed again.",
+                &[],
+            );
+        }
         if let Ok(mut watchers) = clear_watchers().lock() {
-            if watchers.get(&key) == Some(&token) {
+            if watchers.get(&key).is_some_and(|(owner, _)| *owner == token) {
                 watchers.remove(&key);
             }
         }

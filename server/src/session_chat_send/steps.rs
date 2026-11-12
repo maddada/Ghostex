@@ -83,6 +83,11 @@ pub enum SessionChatSendStep {
         guard: InputGuard,
         payload: String,
     },
+    /// Writes nothing. A job that carries it is run again, `tries_left` more times, once a prompt
+    /// that refused one of its guarded writes has closed (guarded_write.rs).
+    RetryAfterPrompt {
+        tries_left: u8,
+    },
     SleepMs(u64),
     /// See CDXC:SessionChat in session_chat_codex_question_align.rs.
     AlignCodexQuestion {
@@ -324,7 +329,8 @@ pub(crate) fn guard_clear_burst(
     steps
         .into_iter()
         .map(|step| match step {
-            SessionChatSendStep::Write(payload) => SessionChatSendStep::GuardedWrite {
+            SessionChatSendStep::Write(payload)
+            | SessionChatSendStep::WriteFrom { payload, .. } => SessionChatSendStep::GuardedWrite {
                 agent: Some(agent.to_string()),
                 guard: InputGuard::InputBox,
                 payload,
