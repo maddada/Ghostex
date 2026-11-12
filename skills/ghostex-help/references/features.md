@@ -3696,14 +3696,14 @@ version of the Projects features in Cursor and Claude Code.
   those agents in the sidebar, open **Advanced** and choose **Make
   Coordinator** (optionally with a goal); on the phone it is in the session's
   menu too. The session keeps its conversation and is never restarted or
-  interrupted: it gets the captain's hat right away, Ghostex installs the
+  interrupted: it gets the coordinator crown right away, Ghostex installs the
   ghostex-coordinator skill for its agent, and a message telling it to read
   the skill waits in its chat queue until its current turn is over. Sessions
   it started before are not its threads yet; ask it to adopt them. A thread of
   another coordinator, a session in a box, or a draft cannot be made an
   coordinator.
-- **Threads in the Project sidebar**: a coordinator's row shows a captain's hat in
-  place of its agent's logo (Chief of Staff keeps its crown), and a crew icon
+- **Threads in the Project sidebar**: a coordinator's row shows the coordinator crown (a three-point outline) in
+  place of its agent's logo (Chief of Staff and department leads keep their filled crown), and a crew icon
   with one number: how many sessions under it (its threads' threads too) are
   stuck waiting for your approval; when none, how many of its threads are
   waiting on you; when none are waiting, how many are working; when neither,
@@ -3714,7 +3714,7 @@ version of the Projects features in Cursor and Claude Code.
   working, waiting, or active in the last 2 hours. Older threads wait behind an
   "N older threads" row at the end, which lists them all (and "Hide older
   threads" tucks them away again; both remembered across restarts). The chevron
-  that replaces the captain's hat when you hover the coordinator folds its threads away
+  that replaces the crown when you hover the coordinator folds its threads away
   and back, and a folded coordinator keeps its number and colour. While its
   threads are folded, the coordinator's row shows their status dots (with its
   own) overlapping in place of its time, like a computer tile's dots, so a thread
@@ -3758,17 +3758,19 @@ version of the Projects features in Cursor and Claude Code.
   Sessions brings those threads back under it, each on its own conversation.
   `ghostex kill` on a coordinator closes its open threads the same way.
   The phone's session list shows the same
-  tree: captain's hat, crew count, threads indented under their coordinator, and the
+  tree: the crown, crew count, threads indented under their coordinator, and the
   chevron to fold them.
 - **Threads in the Unified sidebar** (from 11.3.0): a
   coordinator's threads sit under its card, folded at first, on the computer and
-  on the phone. The card's crew count (the crew icon and a number, coloured as in
-  the Project sidebar and grey while no thread works or waits) shows or hides
-  them; a coordinator among them folds on its own, and each card remembers how
+  on the phone. The card starts with the coordinator crown, which turns into a
+  chevron when you point at it: click it to show or hide the threads (on the
+  phone, tap it). The card's crew count (the crew icon and a number, coloured as
+  in the Project sidebar and grey while no thread works or waits) only informs.
+  A coordinator among the threads folds on its own, and each card remembers how
   you left it. Unfolded, a card lists the threads that are working, waiting on
-  you or active in the last 2 hours, busiest first, one line each (with the
-  computer, branch or pull request when they differ from the card's), and the
-  rest wait behind an "N older threads" row. A folded card shows its threads'
+  you or active in the last 2 hours with the same rows and tree lines as the
+  Project sidebar (from 11.5.0; with the computer, branch or pull request when they differ
+  from the card's), and the rest wait behind an "N older threads" row. A folded card shows its threads'
   status dots overlapping in place of its own, and a card whose thread needs you
   (an approval, a question, stuck or failed) leaves the Moving shelf for the top
   of the list. A parked or snoozed thread sits on its own shelf instead, and a
