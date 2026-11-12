@@ -3038,6 +3038,16 @@ update). Claude and Codex accounts always share chat history between a
 provider's accounts, so a conversation carries on with another account when one
 runs out. Logins that Claude Swap or Codex Swap already keep on the computer are
 listed under the providers with an Add button.
+Each computer keeps its own logins. With a remote machine saved in Settings ›
+Remote, the **Machine** picker at the top of Settings › Accounts shows another
+connected computer's accounts and usage, and you can add, reconnect and set
+them up from here: the sign-in runs on that computer ("Signing in on …") while
+its page opens on the device you're using. Claude asks you to paste the code the
+page shows; Codex shows a one-time code to enter on its page. Reconnect in the
+chat's Accounts & limits panel of a session on another computer opens Settings
+› Accounts on that computer. When that computer can't be reached, Accounts says
+so instead of offering a sign-in that can't work. The phone's accounts screen
+works the same way for each paired computer.
 **Cursor, Gemini and Copilot** accounts only show usage: Ghostex never runs or
 switches a session on them. Cursor and Gemini sign in in the browser; Copilot
 shows a code to type on GitHub's page. Cursor and Copilot show their plan's use
