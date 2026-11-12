@@ -301,7 +301,7 @@ impl NativeChatView {
         let lines = self.quiet_lines();
         let line = &lines.lines[*lines.rows.get(&index)?];
         let tail_row = line.tail.as_ref().map(|tail| tail.row);
-        if self.quiet_open(line) {
+        if self.quiet_open(line) || self.disclosure_moving(&line.key) {
             (tail_row != Some(index) && index + 1 < line.end).then_some(0.0)
         } else {
             (index == line.start && tail_row.is_some_and(|row| row > index))
@@ -328,6 +328,12 @@ impl NativeChatView {
             None => parts.push((self.item_content(item, next, true, p, window, cx), 0.0)),
             Some(line) => {
                 let open = self.quiet_open(line);
+                // CDXC:SessionChat 2026-11-12 DECISION: User, of an opened Quiet View line and the
+                // "2 tool calls" card under it: "make expand / collapse of this and all similar
+                // ones animate please". The line's rows ease open and shut with the chat's one
+                // fold motion (disclosure_motion.rs), each row's part clipped to the same frame.
+                let frame = self.disclosure_frame(&line.key, open, cx);
+                let shown = open || frame.is_some();
                 if index == line.start {
                     // Midway between the time line of the row above and what follows the line: its
                     // reply, or the next row (`balanced_line`).
@@ -341,7 +347,7 @@ impl NativeChatView {
                     parts.push((balanced_line(drawn, shift, p), 0.0));
                 }
                 let tail = line.tail.as_ref().filter(|tail| tail.row == index);
-                if open {
+                if shown {
                     let mut nested: Vec<AnyElement> = Vec::new();
                     if index == line.start {
                         let cards = self.quiet_cards(line);
@@ -366,7 +372,17 @@ impl NativeChatView {
                         0.0
                     };
                     let gap = if index == line.start { 4.0 } else { 0.0 };
-                    parts.push((rail(&line.key, nested, bottom, p, cx), gap));
+                    let drawn = rail(&line.key, nested, bottom, p, cx);
+                    let ends = tail.is_some() || index + 1 >= line.end;
+                    let drawn = self.disclosure_part_motion(
+                        &line.key,
+                        &index.to_string(),
+                        frame,
+                        gap * s,
+                        drawn,
+                        ends,
+                    );
+                    parts.push((drawn, gap));
                 }
                 if let Some(tail) = tail {
                     let kept = kept_parts(item, tail);
@@ -383,13 +399,16 @@ impl NativeChatView {
                         let questions: &[Value] = match &answers {
                             Some(card) if !questions.is_empty() => {
                                 let open = self.is_expanded(&card.key, card.open);
+                                let frame = self.disclosure_frame(&card.key, open, cx);
                                 let mut part = vec![self.quiet_answers_line(card, open, p, cx)];
-                                if open
+                                if (open || frame.is_some())
                                     && let Some(cards) =
                                         self.question_exchange_cards(key, questions, p, cx)
                                 {
+                                    let cards =
+                                        div().pt(px(4.0 * s)).child(cards).into_any_element();
                                     part.push(
-                                        div().pt(px(4.0 * s)).child(cards).into_any_element(),
+                                        self.disclosure_body_motion(&card.key, frame, 0.0, cards),
                                     );
                                 }
                                 drawn.push((
@@ -423,7 +442,7 @@ impl NativeChatView {
                     self.hide_file_changes = false;
                     let gap = if parts.is_empty() {
                         0.0
-                    } else if open {
+                    } else if shown {
                         p.row_gap()
                     } else {
                         LINE_TO_REPLY
@@ -448,10 +467,20 @@ impl NativeChatView {
             let below = p.row_gap() + top_leading(items.get(index + 1));
             let shift = (below - (TIME_ROW_SLACK + LINE_TO_REPLY)) / 2.0;
             parts.push((balanced_line(drawn, shift, p), LINE_TO_REPLY));
-            if open {
+            let frame = self.disclosure_frame(&line.key, open, cx);
+            if open || frame.is_some() {
                 let cards = self.quiet_cards(line);
                 if let Some(stack) = self.work_card_stack(&cards, p, cx) {
-                    parts.push((rail(&line.key, vec![stack], 0.0, p, cx), 4.0));
+                    let drawn = rail(&line.key, vec![stack], 0.0, p, cx);
+                    let drawn = self.disclosure_part_motion(
+                        &line.key,
+                        "after",
+                        frame,
+                        4.0 * s,
+                        drawn,
+                        true,
+                    );
+                    parts.push((drawn, 4.0));
                 }
             }
         }

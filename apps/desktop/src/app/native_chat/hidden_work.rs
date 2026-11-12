@@ -107,7 +107,9 @@ impl NativeChatView {
             .collect();
         // The core moved every reply's calls into `work`, so its marks cover them all.
         let mark = finished_mark(work.iter().map(|message| &**message));
-        let steps = expanded.then(|| {
+        // The steps open and shut with the chat's fold motion (disclosure_motion.rs).
+        let motion = self.disclosure_frame(&key, expanded, cx);
+        let steps = (expanded || motion.is_some()).then(|| {
             let mut steps: Vec<AnyElement> = Vec::new();
             for (owner, section) in &sections {
                 if let Some(notice) = self.deferred_work_notice_for(owner, Some(section), p, cx) {
@@ -132,7 +134,8 @@ impl NativeChatView {
                         .into_any_element(),
                 );
             }
-            self.quiet_steps(&key, steps, p, cx)
+            let body = self.quiet_steps(&key, steps, p, cx);
+            self.disclosure_body_motion(&key, motion, 0.0, body)
         });
         self.hidden_work = Some(HiddenWork {
             carrier: work_carrier.clone(),

@@ -458,6 +458,35 @@ impl super::state::NativeChatView {
         }
     }
 
+    /// One part of a disclosure whose body spans several transcript rows (an opened Quiet View
+    /// line, quiet_view.rs): each row's part measures its own height (`part`) and eases with the
+    /// one motion of `key`, so the line opens and shuts as one. `reveal` marks the part that ends
+    /// the body, whose end is kept in view as it opens (`disclosure_anchor.rs`).
+    pub(super) fn disclosure_part_motion(
+        &self,
+        key: &str,
+        part: &str,
+        frame: Option<FoldFrame>,
+        gap: f32,
+        body: AnyElement,
+        reveal: bool,
+    ) -> AnyElement {
+        match frame {
+            Some(frame) => {
+                let height = self.disclosure_motion.borrow_mut().height(key, part);
+                let extent = if reveal { self.revealing(key) } else { None };
+                motion_clip_revealed(height, frame, 0.0, gap, body, extent)
+            }
+            None if reveal => self.reveal_extent(key, false, body),
+            None => body,
+        }
+    }
+
+    /// True while disclosure `key` is opening or closing.
+    pub(super) fn disclosure_moving(&self, key: &str) -> bool {
+        self.disclosure_motion.borrow().is_moving(key)
+    }
+
     /// The extent cell of `key` while it is the disclosure being revealed.
     fn revealing(&self, key: &str) -> Option<RevealExtent> {
         self.disclosure_motion

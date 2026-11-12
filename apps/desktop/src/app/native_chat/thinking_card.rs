@@ -120,7 +120,9 @@ impl NativeChatView {
 
         let mut column = div().w_full().min_w_0().flex().flex_col().gap(px(4.0 * s));
         column = column.child(header);
-        if expanded && expandable {
+        // The thought opens and shuts with the chat's fold motion (disclosure_motion.rs).
+        let body_motion = self.disclosure_frame(&key, expanded && expandable, cx);
+        if (expanded || body_motion.is_some()) && expandable {
             let body_key = SharedString::from(format!("{key}:body"));
             // While it is being written the open thought keeps the newest lines in view, the way a
             // terminal does, until the reader scrolls up; scrolling back to the end follows again.
@@ -147,15 +149,19 @@ impl NativeChatView {
                     )),
                 )
                 .into_any_element();
-            column = column.child(div().pl(px(ROW_PAD_X * s)).child(disclosure_body(
-                p,
-                DisclosureRail::Marker,
-                4.0,
-                key.clone(),
-                "Collapse thinking",
-                [thought],
-                cx,
-            )));
+            let body = div()
+                .pl(px(ROW_PAD_X * s))
+                .child(disclosure_body(
+                    p,
+                    DisclosureRail::Marker,
+                    4.0,
+                    key.clone(),
+                    "Collapse thinking",
+                    [thought],
+                    cx,
+                ))
+                .into_any_element();
+            column = column.child(self.disclosure_body_motion(&key, body_motion, 4.0 * s, body));
         }
         if calls.is_some() {
             let motion = self.disclosure_frame(&calls_key, calls_open, cx);

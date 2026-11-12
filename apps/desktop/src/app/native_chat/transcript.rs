@@ -514,18 +514,22 @@ impl NativeChatView {
             && let Some(card) = message["id"].as_str().and_then(|id| self.quiet_answers(id))
         {
             let open = self.is_expanded(&card.key, card.open);
+            let frame = self.disclosure_frame(&card.key, open, cx);
             let line = self.quiet_answers_line(&card, open, p, cx);
-            if !open {
+            if !open && frame.is_none() {
                 return line;
             }
+            // Opens and shuts with the chat's fold motion (disclosure_motion.rs).
+            let card_row = self.message_row_drawn(message, p, window, cx);
+            let gap = 4.0 * p.scale;
             return div()
                 .flex()
                 .flex_col()
                 .w_full()
                 .min_w_0()
-                .gap(px(4.0 * p.scale))
+                .gap(px(gap))
                 .child(line)
-                .child(self.message_row_drawn(message, p, window, cx))
+                .child(self.disclosure_body_motion(&card.key, frame, gap, card_row))
                 .into_any_element();
         }
         let row = self.message_row_drawn(message, p, window, cx);

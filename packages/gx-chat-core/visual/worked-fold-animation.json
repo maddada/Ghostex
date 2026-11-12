@@ -6,6 +6,6 @@
   "headingDelayMs": 240,
   "headingMs": 320,
   "headingOffsetPx": 3,
-  "toggleMs": 240,
+  "toggleMs": 200,
   "easing": [0.4, 0, 0.2, 1]
 }
