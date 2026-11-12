@@ -6,7 +6,7 @@
 //! shut.
 
 use super::completed_work_row::{WorkTail, spaced_tail};
-use super::quiet_work::{QuietSegment, check, line_icon, loader, styled_segments};
+use super::quiet_work::{QuietSegment, line_icon, loader, styled_segments};
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use ghostex_gx_chat_core::transcript::quiet_view::{
     QuietAnswers, QuietStretch, QuietTail, QuietTurnTail,
@@ -528,7 +528,7 @@ impl NativeChatView {
     }
 
     /// The quiet line itself: an icon (the messages icon on a line reports came in on, else the
-    /// clock) and the green check (the turning loader while the turn runs), its counts, its time,
+    /// clock; the turning loader alone while the turn runs), its counts, its time,
     /// and the chevron that shows on hover or while it is open.
     fn quiet_view_line(
         &self,
@@ -537,11 +537,13 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
-        // A finished line starts with two marks, a 13px icon then the 12px tick, so their words line
-        // up one under another; a running line shows only its turning loader.
+        // One mark: a finished line its own 13px icon, a running line its turning loader.
         //
         // CDXC:SessionChat 2026-11-12 DECISION: User, of "Working · 1 message sent · 3 tool calls so
-        // far": "Show just the spinner not spinner + icon." The phone does the same (quietView.tsx).
+        // far": "Show just the spinner not spinner + icon."; then, of finished lines ("1 item
+        // updated", "You answered …", "Worked for 19s · …"): "remove check mark from all these no
+        // need". Quiet View lines never fail, so no mark is lost. The phone does the same
+        // (quietView.tsx).
         let lead = if !line.time.is_empty() {
             "titlebar/messages.svg"
         } else {
@@ -550,7 +552,7 @@ impl NativeChatView {
         let icons = if line.running {
             vec![loader(&line.key, p, cx.reduce_motion())]
         } else {
-            vec![line_icon(lead, 13.0, p), check(p)]
+            vec![line_icon(lead, 13.0, p)]
         };
         let mut segments: Vec<QuietSegment> = vec![(line.text.clone(), None)];
         if !line.time.is_empty() {
@@ -579,7 +581,7 @@ impl NativeChatView {
     }
 
     /// An answers card drawn shut as its own line (gx-chat-core `transcript/quiet_view.rs`
-    /// `QuietAnswers` has the user's words): the question card's icon, the answered check, "You answered “…”" and its count,
+    /// `QuietAnswers` has the user's words): the question card's icon, "You answered “…”" and its count,
     /// and the chevron; opened, the card follows it.
     pub(super) fn quiet_answers_line(
         &self,
@@ -599,11 +601,8 @@ impl NativeChatView {
         self.quiet_line(
             card.key.clone(),
             spoken,
-            // The question card's own icon, then the tick, as every quiet line starts.
-            vec![
-                line_icon("titlebar/chat-card-checklist.svg", 13.0, p),
-                check(p),
-            ],
+            // The question card's own icon alone, as every finished quiet line starts.
+            vec![line_icon("titlebar/chat-card-checklist.svg", 13.0, p)],
             styled_segments(segments),
             open,
             true,
