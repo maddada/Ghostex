@@ -113,11 +113,11 @@ fn refresh(state: &AppState, cursors: &mut HashMap<String, QuestionCursor>) {
         return;
     };
     let repository = DomainRepository::new(&db, &state.metadata.server_id);
-    let Ok(sessions) = repository.list_sessions_with_lifecycle_state("running") else {
+    let Ok(sessions) = repository.running_sessions() else {
         return;
     };
     let mut active = HashSet::new();
-    for session in sessions {
+    for session in sessions.iter() {
         if resolve_session_chat_transcript_agent(
             crate::session_chat_follower::session_chat_agent_for_session(&session).as_deref(),
         ) != Some(SessionChatTranscriptAgent::Codex)

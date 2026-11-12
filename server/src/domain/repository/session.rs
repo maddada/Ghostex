@@ -899,6 +899,84 @@ impl<'a> DomainRepository<'a> {
         &self,
         lifecycle_state: &str,
     ) -> DomainResult<Vec<Value>> {
+        if lifecycle_state == "running" {
+            return Ok(self.running_sessions()?.as_ref().clone());
+        }
+        self.read_sessions_with_lifecycle_state(lifecycle_state)
+    }
+
+    /// The `running` sessions as `list_sessions_with_lifecycle_state("running")` lists them,
+    /// shared: parsed once and reused while their stored rows are unchanged.
+    ///
+    /// CDXC:SessionStatus 2026-11-12 WHY:
+    /// Seven background loops (title sync every 1 s, async questions 2 s, self-heal 3 s, fleet status 5 s, stall and open questions 10 s, hookless activity 2 s) each read every running row and parsed its six JSON columns, about 130 full rebuilds a minute on an idle Mac, and that JSON churn was much of gxserver's CPU and freed-page growth. Each call now hashes the stored rows (no JSON parsing) and returns the parsed list from the last call when the hash is unchanged, so a change to any column of any running row, or a row starting or stopping, is seen on the next call as before.
+    pub fn running_sessions(&self) -> DomainResult<std::sync::Arc<Vec<Value>>> {
+        use std::sync::{Arc, Mutex, OnceLock};
+        struct Snapshot {
+            database: String,
+            server_id: String,
+            fingerprint: u64,
+            sessions: Arc<Vec<Value>>,
+        }
+        static SNAPSHOT: OnceLock<Mutex<Option<Snapshot>>> = OnceLock::new();
+        let snapshot = SNAPSHOT.get_or_init(|| Mutex::new(None));
+        let database = self.db.path().unwrap_or_default().to_string();
+        let fingerprint = self.running_rows_fingerprint()?;
+        if let Ok(held) = snapshot.lock() {
+            if let Some(held) = held.as_ref().filter(|held| {
+                held.fingerprint == fingerprint
+                    && held.database == database
+                    && held.server_id == self.server_id
+            }) {
+                return Ok(Arc::clone(&held.sessions));
+            }
+        }
+        // Read after the fingerprint: a write in between leaves rows newer than it, which only
+        // makes the next call read again.
+        let sessions = Arc::new(self.read_sessions_with_lifecycle_state("running")?);
+        if let Ok(mut held) = snapshot.lock() {
+            *held = Some(Snapshot {
+                database,
+                server_id: self.server_id.clone(),
+                fingerprint,
+                sessions: Arc::clone(&sessions),
+            });
+        }
+        Ok(sessions)
+    }
+
+    /// A hash of every stored column of every `running` row, in listing order.
+    fn running_rows_fingerprint(&self) -> DomainResult<u64> {
+        use rusqlite::types::ValueRef;
+        use std::hash::{Hash, Hasher};
+        let mut statement = self
+            .db
+            .prepare_cached(
+                "SELECT * FROM sessions WHERE lifecycleState = 'running' ORDER BY updatedAt DESC, projectId ASC, sessionId ASC",
+            )
+            .map_err(sql_error)?;
+        let columns = statement.column_count();
+        let mut rows = statement.query([]).map_err(sql_error)?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        while let Some(row) = rows.next().map_err(sql_error)? {
+            0xff_u8.hash(&mut hasher);
+            for index in 0..columns {
+                match row.get_ref(index).map_err(sql_error)? {
+                    ValueRef::Null => 0_u8.hash(&mut hasher),
+                    ValueRef::Integer(value) => (1_u8, value).hash(&mut hasher),
+                    ValueRef::Real(value) => (2_u8, value.to_bits()).hash(&mut hasher),
+                    ValueRef::Text(bytes) => (3_u8, bytes).hash(&mut hasher),
+                    ValueRef::Blob(bytes) => (4_u8, bytes).hash(&mut hasher),
+                }
+            }
+        }
+        Ok(hasher.finish())
+    }
+
+    fn read_sessions_with_lifecycle_state(
+        &self,
+        lifecycle_state: &str,
+    ) -> DomainResult<Vec<Value>> {
         let mut statement = self
             .db
             .prepare_cached(

@@ -130,7 +130,7 @@ fn refresh_fleet_status(state: &AppState, shutdown: &tokio::sync::broadcast::Rec
         return;
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let Ok(sessions) = repository.list_sessions_with_lifecycle_state("running") else {
+    let Ok(sessions) = repository.running_sessions() else {
         return;
     };
     let publisher = crate::session_chat_compacting::SessionChatCompactingPublisher::new(state);
@@ -158,7 +158,7 @@ fn refresh_fleet_status(state: &AppState, shutdown: &tokio::sync::broadcast::Rec
         &candidate_names,
         &state.paths.home_dir,
     );
-    for session in sessions {
+    for session in sessions.iter() {
         if stopping() {
             return;
         }

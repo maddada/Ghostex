@@ -82,7 +82,7 @@ fn tick(state: &AppState) -> Vec<HealDue> {
         return Vec::new();
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let Ok(sessions) = repository.list_sessions_with_lifecycle_state("running") else {
+    let Ok(sessions) = repository.running_sessions() else {
         return Vec::new();
     };
     // No reading, no judgment: a failed `zmx list` must never read as every daemon gone.

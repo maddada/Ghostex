@@ -1280,11 +1280,11 @@ fn sweep(state: &AppState) {
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
         repository
-            .list_sessions_with_lifecycle_state("running")
+            .running_sessions()
             .unwrap_or_default()
     };
     let mut active = HashSet::new();
-    for session in sessions {
+    for session in sessions.iter() {
         let (Some(project_id), Some(session_id)) = (
             session.get("projectId").and_then(Value::as_str),
             session.get("sessionId").and_then(Value::as_str),

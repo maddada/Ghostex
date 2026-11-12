@@ -36,7 +36,7 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
         return;
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let Ok(sessions) = repository.list_sessions_with_lifecycle_state("running") else {
+    let Ok(sessions) = repository.running_sessions() else {
         return;
     };
     let Ok(mut watches) = watches.lock() else {
@@ -45,7 +45,7 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
     let now = chrono::Utc::now().timestamp_millis();
     let now_iso = crate::presentation::now_iso();
     let mut working = HashSet::new();
-    for session in &sessions {
+    for session in sessions.iter() {
         let key = (
             text_field(session, "projectId"),
             text_field(session, "sessionId"),

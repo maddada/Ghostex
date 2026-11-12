@@ -48,9 +48,9 @@ pub(crate) fn run_agent_metadata_title_sync_once(
     rows the old full list hydrated every one of them — including six JSON
     columns each — to throw all but a dozen away.
     */
-    let sessions = repository.list_sessions_with_lifecycle_state("running")?;
+    let sessions = repository.running_sessions()?;
     let mut live_keys = HashSet::new();
-    for session in sessions {
+    for session in sessions.iter() {
         let Some(project_id) = read_session_text(&session, "projectId") else {
             continue;
         };
