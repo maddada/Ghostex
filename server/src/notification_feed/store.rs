@@ -547,6 +547,7 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
         .collect::<rusqlite::Result<Vec<Value>>>()
         .map_err(sql_error)?;
     overlay_live_session_agent_icons(db, &mut items)?;
+    super::security_actions::overlay_removable_devices(db, &mut items);
     let mut newest_by_session = std::collections::HashMap::new();
     for item in &items {
         if let (Some(session), Some(id)) = (item["sessionId"].as_str(), item["id"].as_str()) {

@@ -209,7 +209,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(device_id) => device_id,
                 Err(error) => return error.into_response(endpoint_path, request_id),
             };
-            tokio::task::spawn_blocking(move || {
+            let removed = tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
                 let now = crate::security::now_ms();
                 if let Some(pending) = pairing_runtime.pending(&device_id, now) {
@@ -265,7 +265,10 @@ pub(crate) async fn handle_remote_access_http(
                     "pending": waiting_devices(&pairing_runtime, &security),
                 }))
             })
-            .await
+            .await;
+            // A bell row's Remove for this device goes with it (notification_feed/security_actions.rs).
+            crate::notification_feed::broadcast_notification_feed_changed(state);
+            removed
         }
         "/api/pairedDeviceSeen" => {
             let device_id = match read_device_id(&params) {

@@ -9,6 +9,7 @@ pub(crate) mod api;
 pub(crate) mod body;
 pub(crate) mod failure;
 pub(crate) mod producer;
+pub(crate) mod security_actions;
 pub(crate) mod store;
 pub(crate) mod thread_read;
 
