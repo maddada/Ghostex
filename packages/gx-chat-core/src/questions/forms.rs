@@ -1147,6 +1147,9 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                         json!(crate::extras::collab::owner_name(state)),
                     );
                 }
+                // The answers' call has not settled yet: a Resources modal that sent them closes
+                // once it has, unless it failed (`sendError`, the form open again).
+                object.insert("sendInFlight".to_string(), json!(entry.send.is_some()));
                 object.insert(
                     "reconnecting".to_string(),
                     json!(entry

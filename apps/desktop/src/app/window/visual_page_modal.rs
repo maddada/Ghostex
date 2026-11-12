@@ -295,6 +295,12 @@ impl GpuiVisualPageModalWindow {
             })
         };
         // CDXC:SessionChat 2026-10-11 DECISION: User: when the reader clicks Send on a page in this window, the window closes once the answers are sent, and stays open showing the error when sending fails. The page knows it floats (`gx-floating=1`, server/src/visual_pages/theme.rs) and closes itself only after gxserver accepted its answers; CEF reports that as a close request, which closes this window.
+        // CDXC:SessionChat 2026-11-12 DECISION:
+        // User: as soon as the reply is sent, close the question form popup and the Ghostex page
+        // popup with a short fade; keep it open with the answers if the send fails. The page's
+        // own close request (sent only after gxserver took its answers) fades this window out
+        // first (`popup_frame::fade_out_popup_window`), then closes it.
+        let own_window = gpui::Window::window_handle(window);
         let page_closed: cef::BrowserPageMetadataHandler = {
             let modal = cx.weak_entity();
             let async_cx = cx.to_async();
@@ -309,10 +315,35 @@ impl GpuiVisualPageModalWindow {
                 let mut async_cx = async_cx.clone();
                 foreground
                     .spawn(async move {
-                        let _ = modal.update(&mut async_cx, |this, cx| match page_title {
-                            None => (this.host)(VisualPageModalCommand::Close, cx),
-                            Some(title) => this.take_page_title(title, cx),
-                        });
+                        let Some(title) = page_title else {
+                            let wait = own_window
+                                .update(&mut async_cx, |_, window, cx| {
+                                    crate::app::window::popup_frame::fade_out_popup_window(
+                                        window,
+                                        cx.reduce_motion(),
+                                    )
+                                })
+                                .ok()
+                                .flatten();
+                            if let Some(wait) = wait {
+                                async_cx.background_executor().timer(wait).await;
+                            }
+                            let _ = modal.update(&mut async_cx, |this, cx| {
+                                (this.host)(VisualPageModalCommand::Close, cx)
+                            });
+                            // A window the close left standing (it was put aside meanwhile)
+                            // shows again when it comes back.
+                            if wait.is_some() {
+                                let _ = own_window.update(&mut async_cx, |_, window, _| {
+                                    crate::app::window::popup_frame::fade_in_popup_window(
+                                        window, true,
+                                    )
+                                });
+                            }
+                            return;
+                        };
+                        let _ =
+                            modal.update(&mut async_cx, |this, cx| this.take_page_title(title, cx));
                     })
                     .detach();
             })

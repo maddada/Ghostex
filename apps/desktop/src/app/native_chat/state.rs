@@ -314,6 +314,9 @@ pub(crate) struct NativeChatView {
     /// not yet been told.
     pub(super) resource_modal_pending: bool,
     pub(super) resource_modal_closing: bool,
+    /// The modal's form the reader sent (Send or Skip all) and whether its call was seen in
+    /// flight: the modal fades out and closes once the send settles OK (`resource_modal.rs`).
+    pub(super) resource_modal_sent: Option<(String, bool)>,
     /// The Session details panel: wanted, docked or floating (session_details/).
     pub(crate) session_details: super::session_details::SessionDetailsView,
     /// A coordinator's board: open, docked or floating (coordinator_board.rs).
@@ -669,6 +672,7 @@ impl NativeChatView {
             dictated_boxes: Default::default(),
             resource_modal_pending: false,
             resource_modal_closing: false,
+            resource_modal_sent: None,
             session_details: Default::default(),
             board: Default::default(),
             files_links_closing: false,
@@ -897,6 +901,7 @@ impl NativeChatView {
 
     pub(crate) fn invoke(&mut self, action: Value, cx: &mut Context<Self>) {
         self.hold_for_answer(&action, cx);
+        self.note_resource_modal_send(&action);
         if let Some(runtime) = &self.runtime {
             runtime.call("action", vec![action]);
         }

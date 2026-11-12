@@ -251,6 +251,29 @@ int GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
   }
 }
 
+// Fades a popup window out, its backdrop blur and shadow with it; the caller removes the window
+// once the fade has run. Like the fade in, never the app's main window (0 when refused).
+int GhostexGpuiFadeOutPopupWindow(void *nativeView, double seconds) {
+  @autoreleasepool {
+    if (nativeView == NULL) {
+      return 0;
+    }
+    NSWindow *window = ((__bridge NSView *)nativeView).window;
+    if (window == nil || window == NSApp.mainWindow || window.isMainWindow) {
+      return 0;
+    }
+    [NSAnimationContext
+        runAnimationGroup:^(NSAnimationContext *context) {
+          context.duration = seconds;
+          context.timingFunction =
+              [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseIn];
+          window.animator.alphaValue = 0.0;
+        }
+        completionHandler:nil];
+    return 1;
+  }
+}
+
 void GhostexGpuiPrepareTitlebarPopupWindow(void *nativeView) {
   @autoreleasepool {
     if (nativeView == NULL) {

@@ -145,6 +145,40 @@ pub(crate) fn reveal_popup_window(window: &mut Window, reduce_motion: bool) {
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn fade_in_popup_window(_window: &Window, _reduce_motion: bool) {}
 
+/// How long a popup takes to fade out before it is removed.
+const POPUP_CLOSE_DURATION: Duration = Duration::from_millis(170);
+
+/// Fades a popup's window out, blur included, and says how long to wait before removing it;
+/// `None` when it should go at once (Reduce Motion, Panel animations None, or the fade refused).
+#[cfg(target_os = "macos")]
+pub(crate) fn fade_out_popup_window(window: &Window, reduce_motion: bool) -> Option<Duration> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    unsafe extern "C" {
+        fn GhostexGpuiFadeOutPopupWindow(
+            native_view: *mut std::ffi::c_void,
+            seconds: f64,
+        ) -> std::ffi::c_int;
+    }
+    popup_open_duration(
+        reduce_motion,
+        crate::app::panel_motion::panel_motion_duration(),
+    )?;
+    let RawWindowHandle::AppKit(handle) = HasWindowHandle::window_handle(window).ok()?.as_raw()
+    else {
+        return None;
+    };
+    let faded = unsafe {
+        GhostexGpuiFadeOutPopupWindow(handle.ns_view.as_ptr(), POPUP_CLOSE_DURATION.as_secs_f64())
+    };
+    (faded != 0).then_some(POPUP_CLOSE_DURATION)
+}
+
+/// Elsewhere a window's alpha can't be set: the popup goes at once.
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn fade_out_popup_window(_window: &Window, _reduce_motion: bool) -> Option<Duration> {
+    None
+}
+
 /// CDXC:PlatformSupport 2026-09-23 WHY:
 /// Windows menus and borderless child dialogs must be tool popups. Normal app windows are eligible for FancyZones' last-zone placement, which moved both the chat model menu and Add Worktree dialog to the main window's top-left despite correct requested bounds.
 /// CDXC:PlatformSupport 2026-09-24 WHY:

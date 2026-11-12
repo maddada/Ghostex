@@ -127,8 +127,10 @@ impl NativeChatView {
         let open = self.snapshot["resourceModal"].is_object();
         if !open {
             self.resource_modal_closing = false;
+            self.resource_modal_sent = None;
             return;
         }
+        self.settle_resource_modal_send(cx);
         let shown = self
             .option_menu
             .as_ref()
@@ -141,6 +143,55 @@ impl NativeChatView {
             this.resource_modal_pending = false;
             this.open_resource_modal_menu(window, cx);
         });
+    }
+
+    /// The reader sent the modal's own form (Send, Skip all or their keys): watch its call.
+    pub(super) fn note_resource_modal_send(&mut self, action: &serde_json::Value) {
+        if !matches!(action["type"].as_str(), Some("formSend" | "formSkipAll")) {
+            return;
+        }
+        let form = text(action, "form");
+        let modal = &self.snapshot["resourceModal"];
+        if !form.is_empty() && modal.is_object() && text(modal, "id") == form {
+            self.resource_modal_sent = Some((form, false));
+        }
+    }
+
+    /// The modal's sent form settled: OK fades the modal out and closes it; a failure (the form
+    /// open again, with its `sendError`) keeps it open on the answers.
+    ///
+    /// CDXC:SessionChat 2026-11-12 DECISION:
+    /// User, of a question form opened from the work dock: once the answers are sent the popup
+    /// should close itself, with a short fade, and stay open with the answers if the send fails.
+    fn settle_resource_modal_send(&mut self, cx: &mut Context<Self>) {
+        let Some((id, seen)) = self.resource_modal_sent.clone() else {
+            return;
+        };
+        if text(&self.snapshot["resourceModal"], "id") != id {
+            self.resource_modal_sent = None;
+            return;
+        }
+        let form = &self.snapshot["questionForms"][id.as_str()];
+        if form["sendInFlight"] == true {
+            self.resource_modal_sent = Some((id, true));
+            return;
+        }
+        if form["state"] == "open" {
+            // Not dispatched yet, or it failed after going out.
+            if seen {
+                self.resource_modal_sent = None;
+            }
+            return;
+        }
+        self.resource_modal_sent = None;
+        let Some(menu) = self
+            .option_menu
+            .clone()
+            .filter(|menu| menu.read(cx).pill() == Some(RESOURCE_MODAL_TRIGGER))
+        else {
+            return;
+        };
+        cx.defer(move |cx| menu.update(cx, |menu, cx| menu.fade_out_then_close(cx)));
     }
 
     /// Centred over the chat box, as wide as a form needs.

@@ -226,6 +226,39 @@ impl ChatOptionMenu {
         self.close_with_focus(command, true, cx);
     }
 
+    /// Fades the menu's windows out, then closes it as `close` does; at once where a fade can't
+    /// run (`popup_frame::fade_out_popup_window`).
+    pub(in crate::app::native_chat) fn fade_out_then_close(&mut self, cx: &mut Context<Self>) {
+        if self.closed {
+            return;
+        }
+        let reduce_motion = cx.reduce_motion();
+        let wait = self
+            .windows
+            .iter()
+            .filter_map(|handle| {
+                handle
+                    .update(cx, |_, window, _| {
+                        crate::app::window::popup_frame::fade_out_popup_window(
+                            window,
+                            reduce_motion,
+                        )
+                    })
+                    .ok()
+                    .flatten()
+            })
+            .max();
+        let Some(wait) = wait else {
+            self.close(None, cx);
+            return;
+        };
+        cx.spawn(async move |menu, cx| {
+            cx.background_executor().timer(wait).await;
+            let _ = menu.update(cx, |menu, cx| menu.close(None, cx));
+        })
+        .detach();
+    }
+
     pub(in crate::app::native_chat) fn close_with_focus(
         &mut self,
         command: Option<Value>,
