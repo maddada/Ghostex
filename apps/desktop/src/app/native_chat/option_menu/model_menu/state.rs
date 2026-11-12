@@ -364,11 +364,8 @@ impl ChatOptionMenuPanel {
             return;
         }
         let moved = next["tab"] != state.view["tab"];
-        let (old_fold, old_footer, was_open) = (
-            state.fold_stop(),
-            state.footer_start(),
-            state.fold_open(),
-        );
+        let (old_fold, old_footer, was_open) =
+            (state.fold_stop(), state.footer_start(), state.fold_open());
         state.view = next;
         if moved {
             state.active = selected_row(&state.view);

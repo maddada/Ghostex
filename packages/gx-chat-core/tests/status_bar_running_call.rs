@@ -9,7 +9,6 @@ use serde_json::{json, Value};
 
 const T0: i64 = 1_793_818_000_000;
 
-
 /// The rows as the core holds them (`ChatRow`).
 fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
     rows.iter().cloned().map(std::sync::Arc::new).collect()

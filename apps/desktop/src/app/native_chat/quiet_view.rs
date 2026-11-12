@@ -368,7 +368,9 @@ impl NativeChatView {
                     let mut nested: Vec<AnyElement> = Vec::new();
                     if index == line.start {
                         let cards = self.quiet_cards(line);
-                        if let Some(stack) = self.work_card_stack(&cards, Some(RAIL_ROW_GAP * s), p, cx) {
+                        if let Some(stack) =
+                            self.work_card_stack(&cards, Some(RAIL_ROW_GAP * s), p, cx)
+                        {
                             nested.push(stack);
                         }
                     }

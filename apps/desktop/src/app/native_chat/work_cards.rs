@@ -955,7 +955,10 @@ impl NativeChatView {
             };
         };
         let factor = frame.log.clamp(0.0, 1.0);
-        let card_height = self.disclosure_motion.borrow_mut().height(&open_key, "card");
+        let card_height = self
+            .disclosure_motion
+            .borrow_mut()
+            .height(&open_key, "card");
         let (shut, card) = (shut_height.get(), card_height.get());
         // Both layers keep the ids they have at rest, so nothing they hold is lost when the
         // motion starts or ends. The one the row is turning into lies on top and takes presses.

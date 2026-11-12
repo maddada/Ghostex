@@ -686,7 +686,12 @@ fn a_question_beside_a_picture_keeps_one_answered_card() {
         let list = items(&mut state, T0 + 9_700);
         assert_eq!(every_answered_card(&list), 1, "{agent_work}: {list:#?}");
         // The reply lands: the picture's row is work kept in view, and still the card's only owner.
-        let mut rows: Vec<ChatMessage> = state.messages.list.iter().map(|row| (**row).clone()).collect();
+        let mut rows: Vec<ChatMessage> = state
+            .messages
+            .list
+            .iter()
+            .map(|row| (**row).clone())
+            .collect();
         rows.push(words("reply", T0 + 9_500, "Red it is."));
         set_rows(&mut state, rows);
         let list = items(&mut state, T0 + 10_000);
