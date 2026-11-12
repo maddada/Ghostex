@@ -110,7 +110,7 @@ pub struct SessionChoice {
     pub agent_icon: Option<String>,
     pub agent_name: String,
     pub coordinator: bool,
-    /// Its project's main coordinator on its computer: the row's detail starts with "Main".
+    /// Its project's main coordinator on its computer: the row's crown is gold.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub main_coordinator: bool,
     pub working: bool,
@@ -281,12 +281,13 @@ pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<Ses
         .collect()
 }
 
-/// What a `+` row says under its title: "Main" for a project's main coordinator (the sidebar
-/// row's tag, CDXC:Coordinators 2026-11-10 in server/src/coordinators/main_coordinator.rs), the
-/// computer and project of a session on another computer, then its agent and state.
+/// What a `+` row says under its title: the computer and project of a session on another computer,
+/// then its agent and state.
+///
+/// CDXC:Coordinators 2026-11-12 DECISION:
+/// User: "please dont' show Main for main coordinators, instead make the color of their icon gold", then "Yes, both" to the chat's `+` list following the sidebar. A main coordinator's row no longer starts its detail with "Main"; the row's `mainCoordinator` draws its crown gold instead (desktop native_chat/suggestions/render.rs, phone composer/Suggestions.tsx), in the sidebar's golds. This supersedes the "Main" word of 2026-11-10.
 pub fn choice_detail(choice: &SessionChoice) -> String {
     [
-        if choice.main_coordinator { "Main" } else { "" },
         choice.computer.as_str(),
         choice.project_name.as_str(),
         choice.agent_name.as_str(),

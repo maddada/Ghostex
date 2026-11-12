@@ -57,7 +57,7 @@ mod space_gesture;
 pub(crate) mod state;
 pub(crate) mod status;
 mod sticky;
-mod threads;
+pub(crate) mod threads;
 // The Unified store builds the Project sidebar's "N older threads" row for its cards (gx_store/unified_sidebar.rs).
 pub(crate) use threads::OlderThreadsRow;
 pub(crate) mod tooltips;

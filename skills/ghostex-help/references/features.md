@@ -1362,7 +1362,8 @@ where they are while you open, change and close views.
   > This computer for this computer, and in a saved computer's dialog under
   Computers this machine connects to for that one (it must be connected).
   The icon is kept on that computer, so your phone and your other computers
-  show the same one. Until you pick one, a laptop shows a laptop and other
+  show the same one: the phone draws it on the computer's tab and, while more
+  than one computer is connected, on every session. Until you pick one, a laptop shows a laptop and other
   computers a desktop (a computer whose kind Ghostex can't tell shows its
   Windows, Apple or Ubuntu mark).
 
@@ -3721,9 +3722,8 @@ version of the Projects features in Cursor and Claude Code.
   thread can be slept). On the phone, long-press the coordinator for the same
   item; `ghostex coordinator sleep-inactive-threads` does it from a terminal.
 - **Main coordinator**: each project has one main coordinator on each
-  computer. On the desktop its coordinator icon is gold in the Project and
-  Unified sidebars; the phone and the chat's `+` picker mark it with a small
-  **Main** tag. It is the one other
+  computer, and its coordinator icon is gold (in the Project and Unified
+  sidebars, the chat's `+` picker and the phone's sessions list). It is the one other
   agents and Chief of Staff contact when they want something from that
   project. The first coordinator you create in a project gets it; to give it to
   another coordinator there, right-click that coordinator and choose **Make

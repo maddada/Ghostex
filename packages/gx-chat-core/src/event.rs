@@ -127,7 +127,7 @@ pub struct KnownSession {
     /// row does.
     pub coordinator: bool,
     /// The coordinator is its project's main one on its computer (gxserver's
-    /// `isMainCoordinator`): the `+` picker says "Main" on its row. Not a name.
+    /// `isMainCoordinator`): the `+` picker draws its crown gold. Not a name.
     pub main_coordinator: bool,
     /// `working`, `idle` or `attention`, for the composer's `+` picker. Not a name: a change to it
     /// alone does not rebuild the transcript ([`KnownSession::same_names`]).

@@ -173,11 +173,24 @@ impl Render for SuggestionPanel {
             // Only the list's outer corners are rounded (sessionChatSuggestionRowCorners).
             let (round_top, round_bottom) = (row["roundTop"] == true, row["roundBottom"] == true);
             let logo = sessions.then(|| {
-                super::super::markdown_links::session_pill_icon(
+                let (logo, color) = super::super::markdown_links::session_pill_icon(
                     row["agentIcon"].as_str().unwrap_or_default(),
                     row["coordinator"] == true,
                     &p,
-                )
+                );
+                // A project's main coordinator: its crown in the sidebar's gold, in place of the
+                // "Main" word (CDXC:Coordinators 2026-11-12 in gx-chat-core session_mentions.rs).
+                let color = if row["mainCoordinator"] == true {
+                    gpui::rgb(if p.light {
+                        crate::app::native_sidebar::threads::MAIN_COORDINATOR_GOLD_LIGHT
+                    } else {
+                        crate::app::native_sidebar::threads::MAIN_COORDINATOR_GOLD_DARK
+                    })
+                    .into()
+                } else {
+                    color
+                };
+                (logo, color)
             });
             let working = row["working"] == true;
             let section = row["section"].as_str().map(str::to_uppercase);

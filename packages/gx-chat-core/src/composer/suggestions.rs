@@ -56,6 +56,10 @@ pub struct SuggestionRow {
     /// A `+` row's session is a coordinator: the coordinator's crown instead of the logo.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub coordinator: bool,
+    /// A `+` row's coordinator is its project's main one: its crown is gold
+    /// (CDXC:Coordinators 2026-11-12 in transcript/session_mentions.rs `choice_detail`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub main_coordinator: bool,
     /// A `+` row's session is working: its state reads in the working colour.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub working: bool,
@@ -607,6 +611,8 @@ pub fn suggestion_popup(
                     round_bottom,
                     agent_icon: choice(row_index).and_then(|choice| choice.agent_icon.clone()),
                     coordinator: choice(row_index).is_some_and(|choice| choice.coordinator),
+                    main_coordinator: choice(row_index)
+                        .is_some_and(|choice| choice.coordinator && choice.main_coordinator),
                     working: choice(row_index).is_some_and(|choice| choice.working),
                     section: row_sections.get(row_index).cloned().flatten(),
                 }

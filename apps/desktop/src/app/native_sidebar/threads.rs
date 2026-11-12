@@ -38,8 +38,8 @@ const COORDINATOR_COLOR_DARK: u32 = 0xffffff;
 const COORDINATOR_COLOR_LIGHT: u32 = 0x000000;
 /// A main coordinator's gold: the starred model's star in the chat's model menu
 /// (native_chat/option_menu/model_menu/style.rs), bright on dark glass and deeper on light.
-const MAIN_COORDINATOR_GOLD_DARK: u32 = 0xfbbf24;
-const MAIN_COORDINATOR_GOLD_LIGHT: u32 = 0xd97706;
+pub(crate) const MAIN_COORDINATOR_GOLD_DARK: u32 = 0xfbbf24;
+pub(crate) const MAIN_COORDINATOR_GOLD_LIGHT: u32 = 0xd97706;
 
 pub(crate) fn thread_depth(session: &NativeSidebarSession) -> f32 {
     session
