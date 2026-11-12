@@ -54,6 +54,48 @@ pub(super) fn footer_start(view: &Value) -> usize {
     view["rows"].as_array().map_or(0, Vec::len) + usize::from(view["legacy"].is_object())
 }
 
+/// Where the open Legacy models list starts in `rows` (the core marks its models `legacy`), which
+/// is where the list draws the Legacy models row, its models following under it. `None` while the
+/// tab has no fold or it is shut, when that row is pinned under the list instead.
+pub(super) fn fold_split(view: &Value) -> Option<usize> {
+    if view["legacy"]["open"] != true {
+        return None;
+    }
+    let rows = view["rows"].as_array().map_or(&[][..], Vec::as_slice);
+    Some(
+        rows.iter()
+            .position(|row| row["legacy"] == true)
+            .unwrap_or(rows.len()),
+    )
+}
+
+/// The scrolling list's item that draws cursor position `stop`: a model, or the open Legacy models
+/// row (the item before its first model, its models one item further down). `None` for the shut
+/// Legacy models row and the footer buttons, which the list does not draw.
+pub(super) fn list_item(view: &Value, stop: usize) -> Option<usize> {
+    let rows = view["rows"].as_array().map_or(0, Vec::len);
+    match fold_split(view) {
+        Some(split) if stop < rows => Some(if stop < split { stop } else { stop + 1 }),
+        Some(split) if stop == rows => Some(split),
+        None if stop < rows => Some(stop),
+        _ => None,
+    }
+}
+
+/// The cursor positions above the footer in the order they are drawn: the current models, the
+/// Legacy models row (cursor position `rows.len()`), then its models once it is open. Up and Down
+/// walk this order, so the keyboard follows what is on screen.
+pub(super) fn drawn_stops(view: &Value) -> Vec<usize> {
+    let rows = view["rows"].as_array().map_or(0, Vec::len);
+    let split = fold_split(view).unwrap_or(rows);
+    let mut stops: Vec<usize> = (0..split).collect();
+    if view["legacy"].is_object() {
+        stops.push(rows);
+    }
+    stops.extend(split..rows);
+    stops
+}
+
 fn selected_row(view: &Value) -> usize {
     view["rows"]
         .as_array()
@@ -139,7 +181,7 @@ impl ModelMenuState {
     }
 
     /// Whether the open tab folds older models under a Legacy models row, which the cursor visits
-    /// as one stop between the last model and the footer buttons.
+    /// as one stop between the current models and the legacy ones (or the footer while it is shut).
     pub(super) fn has_fold(&self) -> bool {
         self.view["legacy"].is_object()
     }
@@ -156,6 +198,28 @@ impl ModelMenuState {
     /// The cursor position of the first footer button: the models, then the fold's one stop.
     pub(super) fn footer_start(&self) -> usize {
         footer_start(&self.view)
+    }
+
+    /// Where the open Legacy models list starts in `rows`; see [`fold_split`].
+    pub(super) fn fold_split(&self) -> Option<usize> {
+        fold_split(&self.view)
+    }
+
+    /// The scrolling list's item that draws cursor position `stop`; see [`list_item`].
+    pub(super) fn list_item(&self, stop: usize) -> Option<usize> {
+        list_item(&self.view, stop)
+    }
+
+    /// Scrolls the list so cursor position `stop` shows, when the list draws it.
+    pub(super) fn scroll_to_stop(&self, stop: usize, strategy: ScrollStrategy) {
+        if let Some(item) = self.list_item(stop) {
+            self.scroll.scroll_to_item(item, strategy);
+        }
+    }
+
+    /// The cursor positions above the footer in drawn order; see [`drawn_stops`].
+    pub(super) fn drawn_stops(&self) -> Vec<usize> {
+        drawn_stops(&self.view)
     }
 
     /// The row the Reasoning button follows: the highlighted model, else the one the cursor last
@@ -300,8 +364,7 @@ impl ChatOptionMenuPanel {
             return;
         }
         let moved = next["tab"] != state.view["tab"];
-        let (old_rows, old_fold, old_footer, was_open) = (
-            state.rows().len(),
+        let (old_fold, old_footer, was_open) = (
             state.fold_stop(),
             state.footer_start(),
             state.fold_open(),
@@ -309,9 +372,7 @@ impl ChatOptionMenuPanel {
         state.view = next;
         if moved {
             state.active = selected_row(&state.view);
-            state
-                .scroll
-                .scroll_to_item(state.active, ScrollStrategy::Top);
+            state.scroll_to_stop(state.active, ScrollStrategy::Top);
         } else {
             // The Legacy models row opening or closing moves the rows and the buttons after it:
             // the cursor stays on the same row, the fold or the same button.
@@ -323,9 +384,13 @@ impl ChatOptionMenuPanel {
             } else if state.active >= state.rows().len() {
                 state.active = state.fold_stop().unwrap_or(new_footer);
             }
-            // Opening the list scrolls to its first model, so the click or the key shows what it added.
-            if !was_open && state.fold_open() {
-                state.scroll.scroll_to_item(old_rows, ScrollStrategy::Top);
+            // Opening the list scrolls to the Legacy models row, its models under it, so the click
+            // or the key shows what it added.
+            if !was_open
+                && let Some(fold) = state.fold_stop()
+                && state.fold_open()
+            {
+                state.scroll_to_stop(fold, ScrollStrategy::Top);
             }
         }
         let count = state.footer_start() + state.traits().len();
@@ -463,5 +528,56 @@ impl NativeChatView {
             window,
             cx,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{drawn_stops, fold_split, footer_start, list_item};
+    use serde_json::{Value, json};
+
+    /// A Claude tab: four current models and, when `open`, Fable 5.1 from its Legacy models list.
+    fn claude_tab(open: bool) -> Value {
+        let mut rows = vec![
+            json!({"key":"claude:fable-5-2"}),
+            json!({"key":"claude:opus-5-5"}),
+            json!({"key":"claude:sonnet-5-5"}),
+            json!({"key":"claude:haiku-5-5"}),
+        ];
+        if open {
+            rows.push(json!({"key":"claude:fable-5-1","legacy":true}));
+        }
+        json!({"rows": rows, "legacy": {"label":"Legacy models","count":1,"open":open}})
+    }
+
+    #[test]
+    fn shut_fold_is_the_last_stop_and_not_a_list_item() {
+        let view = claude_tab(false);
+        assert_eq!(fold_split(&view), None);
+        assert_eq!(drawn_stops(&view), vec![0, 1, 2, 3, 4]);
+        assert_eq!(footer_start(&view), 5);
+        assert_eq!(list_item(&view, 3), Some(3));
+        assert_eq!(list_item(&view, 4), None);
+    }
+
+    #[test]
+    fn open_fold_draws_its_models_under_its_row() {
+        let view = claude_tab(true);
+        assert_eq!(fold_split(&view), Some(4));
+        // Cursor 5 is the Legacy models row; Fable 5.1 (row 4) comes after it.
+        assert_eq!(drawn_stops(&view), vec![0, 1, 2, 3, 5, 4]);
+        assert_eq!(footer_start(&view), 6);
+        assert_eq!(list_item(&view, 3), Some(3));
+        assert_eq!(list_item(&view, 5), Some(4));
+        assert_eq!(list_item(&view, 4), Some(5));
+        assert_eq!(list_item(&view, 6), None);
+    }
+
+    #[test]
+    fn a_tab_without_a_fold_is_its_rows() {
+        let view = json!({"rows":[{"key":"a"},{"key":"b"}]});
+        assert_eq!(drawn_stops(&view), vec![0, 1]);
+        assert_eq!(list_item(&view, 1), Some(1));
+        assert_eq!(list_item(&view, 2), None);
     }
 }

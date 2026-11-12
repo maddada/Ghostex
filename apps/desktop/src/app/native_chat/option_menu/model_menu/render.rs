@@ -537,9 +537,10 @@ impl ChatOptionMenuPanel {
         Some(tray.into_any_element())
     }
 
-    /// The tab's Legacy models toggle at the bottom of the list; the core lists the legacy rows
-    /// after the current ones, above it, while it is open. It is one stop of the keyboard cursor (`index`, `lit` when
-    /// the cursor is on it), so Up and Down reach it and Enter or Right opens it.
+    /// The tab's Legacy models toggle: pinned under the list while it is shut, and drawn in the
+    /// list right after the current models, its models under it, while it is open. It is one stop
+    /// of the keyboard cursor (`index`, `lit` when the cursor is on it), so Up and Down reach it and
+    /// Enter or Right opens it.
     #[allow(clippy::too_many_arguments)]
     fn render_model_legacy_toggle(
         &self,
@@ -566,10 +567,15 @@ impl ChatOptionMenuPanel {
             .role(gpui::Role::Button)
             .aria_label(label.clone())
             .flex_shrink_0()
-            .mx(px(4.0 * scale))
-            .mt(px(2.0 * scale))
+            // Shut, it sits under the list and lines up with its rows; open, it is a row of the
+            // list (which pads its rows itself) and fills a model row's height.
+            .when(!open, |row| {
+                row.mx(px(4.0 * scale))
+                    .mt(px(2.0 * scale))
+                    .h(px(26.0 * scale))
+            })
+            .when(open, |row| row.w_full().h_full())
             .px(px(8.0 * scale))
-            .h(px(26.0 * scale))
             .rounded(px(ITEM_RADIUS * scale))
             .flex()
             .items_center()
@@ -627,9 +633,12 @@ impl ChatOptionMenuPanel {
         let scroll = state.scroll.clone();
         let search = state.search.clone();
         let count = state.rows().len();
-        // The list's room: the card's list area less its padding and, on a tab with one, the
-        // Legacy models row under it.
-        let list_room = LIST_HEIGHT - 8.0 - if state.has_fold() { 28.0 } else { 0.0 };
+        let fold = state.fold_stop();
+        let split = state.fold_split();
+        // The list's room: the card's list area less its padding and, while it is shut, the
+        // Legacy models row pinned under it.
+        let pinned_fold = state.has_fold() && split.is_none();
+        let list_room = LIST_HEIGHT - 8.0 - if pinned_fold { 28.0 } else { 0.0 };
         let list = if count == 0 {
             div()
                 .px(px(8.0 * scale))
@@ -640,9 +649,11 @@ impl ChatOptionMenuPanel {
                 .child(view["emptyText"].as_str().unwrap_or_default().to_owned())
                 .into_any_element()
         } else {
+            // CDXC:AgentModelCatalog 2026-11-12 DECISION:
+            // User: the open Legacy models list drew Fable 5.1 above its Legacy models row, after the current models, with an empty gap before the row; its models belong under it. While it is open the row is an item of the list itself, right after the current models and right above its own models, so no gap opens between them and they scroll together.
             uniform_list(
                 "model-menu-rows",
-                count,
+                count + usize::from(split.is_some()),
                 cx.processor(move |panel, range: std::ops::Range<usize>, _, cx| {
                     let appearance = panel.menu.read(cx).appearance.clone();
                     let palette = Palette::new(&appearance);
@@ -650,19 +661,45 @@ impl ChatOptionMenuPanel {
                         return Vec::new();
                     };
                     let active = state.active;
-                    let rows: Vec<(usize, Value)> = range
-                        .filter_map(|index| Some((index, state.rows().get(index)?.clone())))
+                    let split = state.fold_split();
+                    let fold = state.fold_stop();
+                    let legacy = state.view["legacy"].as_object().cloned();
+                    // The list's items are the rows, with the open Legacy models row before the
+                    // first of its models.
+                    enum Item {
+                        Row(usize, Value),
+                        Fold(usize, serde_json::Map<String, Value>),
+                    }
+                    let items: Vec<Item> = range
+                        .filter_map(|item| match split {
+                            Some(split) if item == split => {
+                                Some(Item::Fold(fold?, legacy.clone()?))
+                            }
+                            Some(split) if item > split => {
+                                Some(Item::Row(item - 1, state.rows().get(item - 1)?.clone()))
+                            }
+                            _ => Some(Item::Row(item, state.rows().get(item)?.clone())),
+                        })
                         .collect();
-                    rows.iter()
-                        .map(|(index, row)| {
-                            panel.render_model_row(
+                    items
+                        .iter()
+                        .map(|item| match item {
+                            Item::Row(index, row) => panel.render_model_row(
                                 *index,
                                 row,
                                 *index == active,
                                 &appearance,
                                 &palette,
                                 cx,
-                            )
+                            ),
+                            Item::Fold(index, legacy) => panel.render_model_legacy_toggle(
+                                legacy,
+                                *index,
+                                *index == active,
+                                &appearance,
+                                &palette,
+                                cx,
+                            ),
                         })
                         .collect()
                 }),
@@ -777,13 +814,15 @@ impl ChatOptionMenuPanel {
                     .flex()
                     .flex_col()
                     // CDXC:AgentModelCatalog 2026-11-12 DECISION:
-                    // User: "please align legacy models item to the bottom of the picker always". The Legacy models row is pinned to the bottom of the list's room, right above the footer buttons, however short the list; the models, and the legacy ones once it is open, scroll above it.
+                    // User: "please align legacy models item to the bottom of the picker always". The shut Legacy models row is pinned to the bottom of the list's room, right above the footer buttons, however short the list; the models scroll above it. Opened, it stays the last thing after the current models and its models are listed under it (the list draws it then, above).
                     .child(div().flex_1().min_h_0().child(list))
-                    .when_some(view["legacy"].as_object().cloned(), |area, legacy| {
+                    .when(pinned_fold, |area| {
+                        let legacy = view["legacy"].as_object().cloned().unwrap_or_default();
+                        let index = fold.unwrap_or(count);
                         area.child(self.render_model_legacy_toggle(
                             &legacy,
-                            count,
-                            active == count,
+                            index,
+                            active == index,
                             &appearance,
                             &palette,
                             cx,

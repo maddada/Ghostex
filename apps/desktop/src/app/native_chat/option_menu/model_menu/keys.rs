@@ -144,7 +144,7 @@ impl ChatOptionMenuPanel {
                     .search
                     .update(cx, |input, cx| input.set_value("", window, cx));
                 state.active = 0;
-                state.scroll.scroll_to_item(0, ScrollStrategy::Top);
+                state.scroll_to_stop(0, ScrollStrategy::Top);
                 self.model_menu_send(json!({"type":"modelMenuView","query":""}), cx);
             }
             "escape" | "toggle" => self.menu.update(cx, |menu, cx| menu.close(None, cx)),
@@ -172,38 +172,31 @@ impl ChatOptionMenuPanel {
             }
             "up" | "ctrl-p" | "down" | "ctrl-n" if count > 0 => {
                 let up = key == "up" || key == "ctrl-p";
-                // The Legacy models row is one stop below the last model and the footer one stop
-                // below that (Left and Right move along its buttons); the first model and the
-                // footer are the ends.
+                // Up and Down walk the stops in the order they are drawn: the current models, the
+                // Legacy models row, its models once it is open, then the footer (Left and Right
+                // move along its buttons); the first model and the footer are the ends.
+                let stops = state.drawn_stops();
                 state.active = if state.active >= footer {
                     if up {
-                        fold.or(rows.checked_sub(1)).unwrap_or(state.active)
+                        stops.last().copied().unwrap_or(state.active)
                     } else {
                         state.active
                     }
-                } else if fold == Some(state.active) {
-                    if up && rows > 0 {
-                        rows - 1
-                    } else if !up && count > footer {
-                        footer
-                    } else {
-                        state.active
-                    }
-                } else if up {
-                    state.active.saturating_sub(1)
-                } else if state.active + 1 < rows || count > rows {
-                    state.active + 1
                 } else {
-                    state.active
+                    let at = stops.iter().position(|stop| *stop == state.active);
+                    match at {
+                        Some(at) if up => stops[at.saturating_sub(1)],
+                        Some(at) if at + 1 < stops.len() => stops[at + 1],
+                        Some(_) if count > footer => footer,
+                        _ => state.active,
+                    }
                 };
                 if state.active < rows {
                     state.last_row = state.rows()[state.active]["key"]
                         .as_str()
                         .map(str::to_owned);
-                    state
-                        .scroll
-                        .scroll_to_item(state.active, ScrollStrategy::Nearest);
                 }
+                state.scroll_to_stop(state.active, ScrollStrategy::Nearest);
             }
             "enter" | "alt-enter" => {
                 let active = state.active;
@@ -275,7 +268,7 @@ impl ChatOptionMenuPanel {
                 {
                     state.active = index;
                     state.last_row = state.rows()[index]["key"].as_str().map(str::to_owned);
-                    state.scroll.scroll_to_item(index, ScrollStrategy::Nearest);
+                    state.scroll_to_stop(index, ScrollStrategy::Nearest);
                 }
             }
         }
