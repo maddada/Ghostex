@@ -154,6 +154,14 @@ pub struct BoardRow {
     /// it up ("iPhone push · Holds it up", work_panel.rs); "" elsewhere.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub lead: String,
+    /// A work item ask's item pills (work_cards.rs `item_pills`): the opened card leads its answers
+    /// with them; `null` for anything else.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub item_pills: Value,
+    /// What an opened card with item pills says on its line in place of `detail` (which names the
+    /// item the pills carry): "" for nothing.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub open_line: String,
     /// A work item ask's longer explanation under its short title (`item ask --detail`), which
     /// an opened card shows in the quieter colour; "" elsewhere.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -586,6 +594,8 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         },
         answers,
         lead: String::new(),
+        item_pills: row.get("itemPills").cloned().unwrap_or(Value::Null),
+        open_line: text(row, "openLine").to_string(),
         body: text(row, "body").to_string(),
         title_runs: row.get("titleRuns").cloned().unwrap_or(Value::Null),
         count: String::new(),
@@ -886,6 +896,8 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         note: String::new(),
                         answers: Vec::new(),
                         lead: String::new(),
+                        item_pills: Value::Null,
+                        open_line: String::new(),
                         body: String::new(),
                         title_runs: Value::Null,
                         replied: String::new(),

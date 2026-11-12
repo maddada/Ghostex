@@ -41,6 +41,48 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
     (icon, color.map_or(p.muted, |color| gpui::rgb(color).into()))
 }
 
+/// An item pill's sides and dot (unscaled).
+const PILL_PAD: f32 = 7.0;
+const PILL_DOT: f32 = 6.0;
+
+/// How an opened row's item pills fit before its answers: whole (dot and id), dots only, or one
+/// "+N" pill.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum PillFit {
+    Full,
+    Dots,
+    Plus,
+}
+
+/// The item pills' widths (unscaled), each with the 6px gap to the answers after them: whole,
+/// dots only, and as one "+N" pill. All 0 with no pills.
+pub(super) fn pill_widths(pills: &[Value], p: &ChatAppearance, cx: &gpui::App) -> (f32, f32, f32) {
+    if pills.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+    let gaps = 6.0 * pills.len() as f32;
+    let full: f32 = pills
+        .iter()
+        .map(|pill| {
+            PILL_PAD * 2.0 + PILL_DOT + 4.0 + dock_text_width(&text(pill, "id"), 12.0, p, cx) + 2.0
+        })
+        .sum();
+    let dots = (PILL_PAD * 2.0 + PILL_DOT + 2.0) * pills.len() as f32;
+    let plus = PILL_PAD * 2.0 + dock_text_width(&format!("+{}", pills.len()), 12.0, p, cx) + 2.0;
+    (full + gaps, dots + gaps, plus + 6.0)
+}
+
+/// The fit for `room` (unscaled) left beside the answers.
+pub(super) fn pill_fit(widths: (f32, f32, f32), room: f32) -> PillFit {
+    if widths.0 <= room {
+        PillFit::Full
+    } else if widths.1 <= room {
+        PillFit::Dots
+    } else {
+        PillFit::Plus
+    }
+}
+
 /// The thin divider that sets an opened row's Reply apart from its answers.
 fn answers_divider(p: &ChatAppearance) -> AnyElement {
     div()
@@ -885,10 +927,28 @@ impl NativeChatView {
         let line_room = row_width - DOCK_LEAD;
         let choose_width =
             dock_button_width(super::work_actions::CHOOSE_ANSWER, true, false, p, cx);
+        // An opened row's item pills lead its answers (`item_pills`): the answers fold first,
+        // then the pills drop their ids, then they become one "+N" pill.
+        let pills: Vec<Value> = if open {
+            row["itemPills"].as_array().cloned().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let pill_room = pill_widths(&pills, p, cx);
         let fold = action.is_none()
             && !answers.is_empty()
             && buttons_width(&widths) > choose_width
-            && !(fit || open && all_width <= line_room);
+            && !(if open {
+                all_width + pill_room.0 <= line_room
+            } else {
+                fit
+            });
+        let answers_used = if fold {
+            choose_width + reply_width
+        } else {
+            all_width
+        };
+        let pill_fit = pill_fit(pill_room, line_room - answers_used);
         let mut buttons: Vec<AnyElement> = match &action {
             Some(_) => self.work_row_action(&key, row, p, cx).into_iter().collect(),
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
@@ -986,19 +1046,23 @@ impl NativeChatView {
                 .gap(px(2.0 * s))
                 .pl(px(DOCK_LEAD * s));
             if row["waitedBy"].is_array() {
-                // An ask's own item, then the other items that wait on its answer: one line.
-                column = column.child(
-                    div()
-                        .w_full()
-                        .min_w_0()
-                        .flex()
-                        .items_center()
-                        .gap_x(px(6.0 * s))
-                        .overflow_hidden()
-                        .text_size(px(12.5 * s))
-                        .line_height(px(18.0 * s))
-                        .children(self.item_line(&key, row, p, cx)),
-                );
+                // An ask's own item, then the other items that wait on its answer: one line. With
+                // item pills on the answers row, only its other parts (the steps) are left here.
+                let parts = self.item_line(&key, row, p, cx);
+                if !parts.is_empty() {
+                    column = column.child(
+                        div()
+                            .w_full()
+                            .min_w_0()
+                            .flex()
+                            .items_center()
+                            .gap_x(px(6.0 * s))
+                            .overflow_hidden()
+                            .text_size(px(12.5 * s))
+                            .line_height(px(18.0 * s))
+                            .children(parts),
+                    );
+                }
             } else {
                 // A line of work's threads and links, wrapping, with no separator between them.
                 let chips: Vec<AnyElement> = row["chips"]
@@ -1094,7 +1158,8 @@ impl NativeChatView {
                 );
             }
         } else {
-            under_answers = buttons;
+            under_answers = self.item_pill_elements(&key, &pills, pill_fit, p, cx);
+            under_answers.extend(buttons);
         }
         // The row's other actions (Show in chat, Dismiss, Snooze, Mention) are one ⋯ menu that
         // takes the age's place while the pointer is over the row, closed or opened.
@@ -1270,6 +1335,112 @@ impl NativeChatView {
         rows
     }
 
+    /// An opened row's item pills (gx-chat-core `item_pills`): a dot in the item's state colour
+    /// (an item that waits on the answer in the blocked red) and its short id, its whole name and
+    /// state in the tooltip, a click opening it in the Work panel. `PillFit::Dots` drops the ids,
+    /// `PillFit::Plus` draws one "+N" pill whose click lists them.
+    pub(super) fn item_pill_elements(
+        &self,
+        key: &str,
+        pills: &[Value],
+        fit: PillFit,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        if pills.is_empty() {
+            return Vec::new();
+        }
+        let shell = |id: String| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .flex_shrink_0()
+                .h(px(20.0 * s))
+                .px(px(PILL_PAD * s))
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .rounded_full()
+                .border_1()
+                .border_color(p.foreground.opacity(0.10))
+                .bg(p.foreground.opacity(0.04))
+                .text_size(px(12.0 * s))
+                .line_height(px(16.0 * s))
+                .whitespace_nowrap()
+                .text_color(p.card_muted)
+                .chat_cursor_pointer()
+                .hover(|style| {
+                    style
+                        .bg(p.foreground.opacity(0.08))
+                        .text_color(p.foreground)
+                })
+        };
+        if fit == PillFit::Plus {
+            let tips: Vec<String> = pills.iter().map(|pill| text(pill, "tip")).collect();
+            let rows: Vec<Value> = pills
+                .iter()
+                .map(|pill| json!({ "label": text(pill, "tip"), "command": pill["command"] }))
+                .collect();
+            let tip = tips.join("\n");
+            return vec![
+                shell(format!("item-pills:{key}"))
+                    .child(format!("+{}", pills.len()))
+                    .tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                    })
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            cx.stop_propagation();
+                            let at = event.position();
+                            let in_main = this
+                                .open_main_window(cx)
+                                .is_none_or(|main| main == window.window_handle());
+                            if in_main {
+                                this.show_chat_menu_at(rows.clone(), at, 260.0, window, cx);
+                            } else {
+                                this.show_chat_menu_in_window_at(
+                                    rows.clone(),
+                                    at,
+                                    260.0,
+                                    window,
+                                    cx,
+                                );
+                            }
+                        }),
+                    )
+                    .into_any_element(),
+            ];
+        }
+        pills
+            .iter()
+            .enumerate()
+            .map(|(index, pill)| {
+                let (_, color) = status_look(&text(pill, "state"), p);
+                let tip = text(pill, "tip");
+                let command = pill["command"].clone();
+                shell(format!("item-pill:{key}:{index}"))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .size(px(PILL_DOT * s))
+                            .rounded_full()
+                            .bg(color),
+                    )
+                    .when(fit == PillFit::Full, |pill_div| {
+                        pill_div.child(text(pill, "id"))
+                    })
+                    .tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+                    .into_any_element()
+            })
+            .collect()
+    }
+
     /// An opened ask row's line: its own work item's name, then, when one other item waits on
     /// its answer, "· <that item> waits on this", or "· N others wait" that opens the list of
     /// them. It stays one line: a name too long is cut with an ellipsis and whole in its tooltip,
@@ -1332,7 +1503,14 @@ impl NativeChatView {
                 .into_any_element()
         };
         let mut parts = Vec::new();
-        for chip in chips.iter().filter(|chip| text(chip, "kind") == "item") {
+        // The item pills on the answers row carry the item and what waits on it.
+        let pilled = row["itemPills"]
+            .as_array()
+            .is_some_and(|pills| !pills.is_empty());
+        for chip in chips
+            .iter()
+            .filter(|chip| text(chip, "kind") == "item" && !pilled)
+        {
             parts.push(name(
                 format!("dock-item:{key}"),
                 text(chip, "label"),
@@ -1341,7 +1519,11 @@ impl NativeChatView {
                 chip["command"].clone(),
             ));
         }
-        let waited: Vec<Value> = row["waitedBy"].as_array().cloned().unwrap_or_default();
+        let waited: Vec<Value> = if pilled {
+            Vec::new()
+        } else {
+            row["waitedBy"].as_array().cloned().unwrap_or_default()
+        };
         match waited.as_slice() {
             [] => {}
             [other] => {

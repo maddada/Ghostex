@@ -195,7 +195,7 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
 
 /// An open ask's row: what the user is asked, under the work it belongs to, with its answers (or
 /// Done for a task). Its key is its chat card's, so an answer given in either place locks both.
-fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
+fn ask_row(items: &[&Value], item: &Value, ask: &Value, now_ms: i64) -> Value {
     let reference = text(item, "ref");
     let tag = text(ask, "tag");
     let holds = ask["holds"] == true;
@@ -234,6 +234,10 @@ fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
         "at": text(ask, "askedAt"),
         "answers": answers,
         "answered": text(ask, "answered"),
+        // The item pills that lead the opened card's answers (work_cards.rs `item_pills`), and
+        // what the opened card's line says in place of the item's name they carry: only a snooze.
+        "itemPills": crate::extras::work_cards::item_pills(items, item, tag),
+        "openLine": if snoozed.is_empty() { String::new() } else { format!("Snoozed until {snoozed}") },
     })
 }
 
@@ -310,6 +314,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
         }
     };
     let mut mentions = Map::new();
+    let all_items: Vec<&Value> = work["items"].as_array().into_iter().flatten().collect();
     for item in work["items"].as_array().into_iter().flatten() {
         let status = text(item, "status");
         if status == "dropped" {
@@ -338,7 +343,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
                 } else {
                     "needs"
                 },
-                ask_row(item, ask, now_ms),
+                ask_row(&all_items, item, ask, now_ms),
             );
         }
         // Finished before today: off the panel, though a task it left for the user stays.

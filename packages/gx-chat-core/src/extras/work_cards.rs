@@ -392,6 +392,68 @@ fn waited_by(items: &[&Value], own: &Value, tag: &str) -> Value {
     )
 }
 
+/// The work items an ask belongs to or holds up, as the small pills that lead an opened row's
+/// answers: its own item in its own state, then each item that waits on its answer in the blocked
+/// state (`waited_by`). Each pill shows a dot in its state's colour and a short id (the `#579` an
+/// item's title starts with, else its `W7`); `tip` is what hovering (a long press on the phone)
+/// reads, and `command` opens the item in the Work panel.
+///
+/// CDXC:Coordinators 2026-11-12 DECISION:
+/// User, picking "B. At the start of the answers" for the line under an opened row's title: "has
+/// to be pills looking, and small, only show id (hover to read which work item), and show dot
+/// color for each one before the id in the pill. for example red dot for waiting on answer (like
+/// it's blocked on it)".
+pub(crate) fn item_pills(items: &[&Value], item: &Value, tag: &str) -> Value {
+    let pill = |other: &Value, state: &str, tip: String| {
+        json!({
+            "id": short_item_id(other),
+            "title": text(other, "title"),
+            "state": state,
+            "tip": tip,
+            "command": { "type": "jumpToWorkCard", "key": text(other, "key") },
+        })
+    };
+    let own_state = text(item, "status");
+    let own_words = status_label(own_state);
+    let mut pills = vec![pill(
+        item,
+        own_state,
+        if own_words.is_empty() {
+            text(item, "title").to_string()
+        } else {
+            format!("{} \u{b7} {own_words}", text(item, "title"))
+        },
+    )];
+    for other in waited_by(items, item, tag).as_array().into_iter().flatten() {
+        let Some(found) = items
+            .iter()
+            .find(|candidate| text(candidate, "ref") == text(other, "ref"))
+        else {
+            continue;
+        };
+        pills.push(pill(
+            found,
+            "blocked",
+            format!("{} \u{b7} Waits on this answer", text(found, "title")),
+        ));
+    }
+    Value::Array(pills)
+}
+
+/// An item's id as its pill shows it: the `#579` its title starts with, else its `W7`.
+fn short_item_id(item: &Value) -> String {
+    let title = text(item, "title");
+    let digits: String = title
+        .strip_prefix('#')
+        .map(|rest| rest.chars().take_while(char::is_ascii_digit).collect())
+        .unwrap_or_default();
+    if digits.is_empty() {
+        text(item, "ref").to_string()
+    } else {
+        format!("#{digits}")
+    }
+}
+
 /// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here.
 fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
     at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
@@ -579,6 +641,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 // cut" when it does not fit.
                 "detail": [],
                 "waitedBy": waited_by(&items, item, text(ask, "tag")),
+                "itemPills": item_pills(&items, item, text(ask, "tag")),
                 "buttons": card["buttons"],
                 "busy": card["busy"],
                 // The words sent from here as its Reply, which its Reply button shows until gxserver

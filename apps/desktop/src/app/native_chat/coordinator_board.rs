@@ -1494,9 +1494,17 @@ impl NativeChatView {
                     inner.child(self.ask_markdown(&key, &body, p.card_muted, 13.0, 19.0, p, cx));
             }
             // Its latest line (a thread's report or what it is on, an item's note), whole.
-            let line = Some(text(row, "detail"))
-                .filter(|line| !line.is_empty())
-                .unwrap_or_else(|| note.clone());
+            // With item pills on its answers row, the line keeps only what they don't say.
+            let line = if row["itemPills"]
+                .as_array()
+                .is_some_and(|pills| !pills.is_empty())
+            {
+                text(row, "openLine")
+            } else {
+                Some(text(row, "detail"))
+                    .filter(|line| !line.is_empty())
+                    .unwrap_or_else(|| note.clone())
+            };
             if !line.is_empty() {
                 inner = inner.child(
                     div()
@@ -1670,15 +1678,31 @@ impl NativeChatView {
                 .sum();
             let need = super::work_cards::buttons_width(&widths) + reply_width;
             let picked = answers.iter().any(|answer| answer["picked"] == true);
+            // The item pills lead the answers, as on the dock's opened rows (work_cards.rs
+            // `item_pill_elements`): the answers fold first, then the pills drop their ids, then
+            // they become one "+N" pill.
+            let pills: Vec<Value> = row["itemPills"].as_array().cloned().unwrap_or_default();
+            let pill_room = super::work_cards::pill_widths(&pills, p, cx);
+            let room = self.board.answer_rooms.borrow().get(&key).copied();
             let fold = !choices.is_empty()
                 && !picked
-                && self
-                    .board
-                    .answer_rooms
-                    .borrow()
-                    .get(&key)
-                    .is_some_and(|room| need > *room);
-            let mut buttons = Vec::new();
+                && room.is_some_and(|room| need + pill_room.0 > room);
+            let choose_width = super::work_cards::dock_button_width(
+                super::work_actions::CHOOSE_ANSWER,
+                true,
+                false,
+                p,
+                cx,
+            );
+            let used = if fold {
+                choose_width + reply_width
+            } else {
+                need
+            };
+            let pill_fit = room.map_or(super::work_cards::PillFit::Full, |room| {
+                super::work_cards::pill_fit(pill_room, room - used)
+            });
+            let mut buttons = self.item_pill_elements(&key, &pills, pill_fit, p, cx);
             if fold {
                 buttons.push(self.answers_dropdown(&key, &choices, false, p, cx));
                 buttons.extend(self.work_answer_buttons(
@@ -1689,7 +1713,7 @@ impl NativeChatView {
                     cx,
                 ));
             } else {
-                buttons = self.work_answer_buttons(&key, &answers, false, p, cx);
+                buttons.extend(self.work_answer_buttons(&key, &answers, false, p, cx));
             }
             let rooms = self.board.answer_rooms.clone();
             let room_key = key.clone();
