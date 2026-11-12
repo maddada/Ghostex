@@ -37,6 +37,23 @@ pub(super) const ROW_PAD_X: f32 = 8.0;
 /// The space above and below the plain rows in an opened Quiet View line's card, so one call is
 /// the "Message to" card's 44px with its border.
 const BOXED_PAD_Y: f32 = 5.0;
+/// Around the rows under a Quiet View card's header, as the tool card's rows have (tool_card.rs).
+const BOXED_BODY_PAD: f32 = 4.0;
+
+/// A Quiet View card's header (`tool_rows`): rounded as the card is inside its 1px border, all
+/// four corners while folded and the top two when open, so its hover fill meets the card's edge.
+///
+/// CDXC:SessionChat 2026-11-12 DECISION: User, of a folded "3 tool calls" card in a Quiet View
+/// line: "make hovering here please show hover effect on whole card header not just small part
+/// like now". The header fills the card edge to edge, as the "Message to" card's does.
+fn boxed_header_corners<E: gpui::Styled>(element: E, open: bool, p: &ChatAppearance) -> E {
+    let radius = px((super::cards::SINGLE_LINE_CARD.radius - 1.0).max(0.0) * p.scale);
+    if open {
+        element.rounded_tl(radius).rounded_tr(radius)
+    } else {
+        element.rounded(radius)
+    }
+}
 /// The glyph tile's side.
 pub(super) const TILE: f32 = 22.0;
 /// A described tool row's label: the agent's prose colour, 20% dimmer.
@@ -67,12 +84,30 @@ impl NativeChatView {
     ) -> Vec<AnyElement> {
         let card = message["toolCard"].is_object()
             && !(p.tool_lines && message["toolCard"]["background"] == true);
+        if !self.quiet_boxed_here() || card {
+            return self.unboxed_tool_rows(message, p, cx);
+        }
+        self.quiet_card_header = true;
+        self.quiet_card_flush = false;
         let rows = self.unboxed_tool_rows(message, p, cx);
-        if !self.quiet_boxed_here() || card || rows.is_empty() {
+        self.quiet_card_header = false;
+        if rows.is_empty() {
             return rows;
         }
         let shape = &*super::cards::SINGLE_LINE_CARD;
         let s = p.scale;
+        // A folded group's heading or a lone call is the card's header, edge to edge as the
+        // "Message to" card's is; the rows of a list keep their own hover inside the card.
+        if std::mem::take(&mut self.quiet_card_flush) {
+            let column = div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .overflow_hidden()
+                .children(rows);
+            return vec![shape.shell(column, p).into_any_element()];
+        }
         let column = div()
             .w_full()
             .min_w_0()
@@ -94,6 +129,7 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        let card_header = std::mem::take(&mut self.quiet_card_header);
         // Settings > Chat > Tool call cards: the calls and edits are one card (`tool_card.rs`).
         // Tool call lines leave a background task's run as these rows (the core's `background`).
         if message["toolCard"].is_object()
@@ -184,6 +220,15 @@ impl NativeChatView {
                     p,
                     cx,
                 )
+            } else if card_header {
+                self.quiet_card_flush = true;
+                self.boxed_card_heading(
+                    key.clone(),
+                    text(message, "simpleToolLabel"),
+                    expanded,
+                    p,
+                    cx,
+                )
             } else {
                 self.disclosure(
                     key.clone(),
@@ -206,7 +251,21 @@ impl NativeChatView {
                     body,
                     cx,
                 );
-                rows.push(self.disclosure_body_motion(&key, motion, ROW_GAP * p.scale, body));
+                // In the card the rows sit under a hairline, inset as the tool card's are.
+                let body = if card_header {
+                    div()
+                        .w_full()
+                        .min_w_0()
+                        .p(px(BOXED_BODY_PAD * p.scale))
+                        .border_t_1()
+                        .border_color(super::cards::SINGLE_LINE_CARD.hairline(p))
+                        .child(body)
+                        .into_any_element()
+                } else {
+                    body
+                };
+                let gap = if card_header { 0.0 } else { ROW_GAP * p.scale };
+                rows.push(self.disclosure_body_motion(&key, motion, gap, body));
             } else if let Some(pictures) = self.read_picture_strip(
                 &format!("{key}:read"),
                 &message["readImages"],
@@ -228,6 +287,13 @@ impl NativeChatView {
         let fold = message["toolFold"].clone();
         let hidden = fold["hiddenCount"].as_u64().unwrap_or(0);
         if show_all || hidden == 0 {
+            if card_header && visible.len() == 1 {
+                self.quiet_card_flush = true;
+                self.quiet_flush_row = true;
+                let rows = self.tool_row_list(&id, &tools, &visible, p, cx);
+                self.quiet_flush_row = false;
+                return rows;
+            }
             return self.tool_row_list(&id, &tools, &visible, p, cx);
         }
         let run_key = format!("tool-run:{id}");
@@ -599,6 +665,57 @@ impl NativeChatView {
             .collect()
     }
 
+    /// A folded or opened group's "3 tool calls" as the header of its Quiet View card: the
+    /// disclosure's chevron and words at the card's inset and height, filling the card.
+    fn boxed_card_heading(
+        &self,
+        key: String,
+        label: String,
+        expanded: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let hover = super::cards::card_hover_fill(p);
+        let toggle_key = key.clone();
+        boxed_header_corners(
+            div()
+                .id(key.clone())
+                .role(gpui::Role::Button)
+                .aria_label(label.clone())
+                .aria_expanded(expanded)
+                .flex()
+                .items_center()
+                .w_full()
+                .min_w_0()
+                .gap(px(6.0 * s))
+                .px(px(shape.padding_x * s))
+                .h(px(shape.header_height(s)))
+                .text_color(p.primary)
+                .chat_cursor_pointer()
+                .hover(move |style| style.bg(hover)),
+            expanded,
+            p,
+        )
+        .child(
+            gpui::svg()
+                .path(if expanded {
+                    "titlebar/chevron-down.svg"
+                } else {
+                    "titlebar/chevron-right.svg"
+                })
+                .size(px(14.0 * s))
+                .flex_shrink_0()
+                .text_color(p.primary),
+        )
+        .child(div().flex_1().min_w_0().child(self.find_label(&key, label)))
+        .on_click(cx.listener(move |this, _, _, cx| {
+            this.toggle_marker_disclosure(toggle_key.clone(), expanded, cx)
+        }))
+        .into_any_element()
+    }
+
     fn tool_fold_toggle(
         &self,
         key: String,
@@ -711,6 +828,8 @@ impl NativeChatView {
             (true, false) => failure,
             (false, false) => format!("{preview} \u{b7} {failure}"),
         };
+        let flush = std::mem::take(&mut self.quiet_flush_row);
+        let shape = &*super::cards::SINGLE_LINE_CARD;
         let mut trigger = div()
             .id(key.clone())
             .file_menu((!file_path.is_empty()).then_some(file_path), cx)
@@ -722,14 +841,31 @@ impl NativeChatView {
             .items_center()
             .min_w_0()
             .gap(px(8.0 * s))
-            .px(px(ROW_PAD_X * s))
-            .py(px(5.0 * s))
-            .rounded(px(8.0 * s))
+            .when(!flush, |this| {
+                this.px(px(ROW_PAD_X * s))
+                    .py(px(5.0 * s))
+                    .rounded(px(8.0 * s))
+            })
+            // The lone call of a Quiet View card is its header: the card's height and inset, its
+            // corners, and the "Message to" card's hover fill.
+            .when(flush, |this| {
+                boxed_header_corners(
+                    this.px(px(shape.padding_x * s))
+                        .h(px(shape.header_height(s))),
+                    expanded && has_detail,
+                    p,
+                )
+            })
             .text_size(px(super::chat_text_look::PROSE_SIZE * s))
             .when(failed, |this| this.bg(p.error().opacity(0.06)))
             .when(has_detail, |this| {
+                let hover = if flush {
+                    super::cards::card_hover_fill(p)
+                } else {
+                    p.foreground.opacity(0.03)
+                };
                 this.chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.03)))
+                    .hover(move |style| style.bg(hover))
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.toggle_marker_disclosure(toggle_key.clone(), expanded, cx)
                     }))
@@ -833,7 +969,14 @@ impl NativeChatView {
                     .text_color(color),
             );
         }
-        let mut row = div().flex().flex_col().min_w_0().w_full().gap(px(4.0 * s));
+        let mut row = div()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .w_full()
+            .gap(px(4.0 * s))
+            // Under a header that fills the card, the detail keeps the rows' inset.
+            .when(flush, |this| this.pb(px(BOXED_BODY_PAD * s)));
         row = row.child(if subagent.is_empty() {
             trigger.into_any_element()
         } else {
@@ -870,6 +1013,14 @@ impl NativeChatView {
         });
         if (expanded || motion.is_some()) && has_detail {
             if let Some(body) = self.tool_detail_body(&key, message_id, index, tool, p, cx) {
+                let body = if flush {
+                    div()
+                        .px(px((shape.padding_x - ROW_PAD_X) * s))
+                        .child(body)
+                        .into_any_element()
+                } else {
+                    body
+                };
                 row = row.child(self.disclosure_body_motion(&key, motion, 4.0 * s, body));
             }
         }
