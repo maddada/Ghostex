@@ -353,25 +353,31 @@ pub async fn run_gxserver_foreground(
         let mut shutdown_rx = shutdown_tx.subscribe();
         let app = app.clone();
         tokio::spawn(async move {
-            axum::serve(listener, app)
-                .with_graceful_shutdown(async move {
-                    let _ = shutdown_rx.recv().await;
-                })
-                .await
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.recv().await;
+            })
+            .await
         })
     });
     let mut serve_task = {
         let mut shutdown_rx = shutdown_tx.subscribe();
         tokio::spawn(async move {
-            axum::serve(listener, app)
-                .with_graceful_shutdown(async move {
-                    let _ = shutdown_rx.recv().await;
-                    // Remove discovery while this daemon still holds the listener: a replacement
-                    // cannot publish its record between our ownership check and unlink.
-                    let _ = metadata_cleanup_tx
-                        .send(remove_runtime_metadata(&cleanup_paths, &cleanup_owner));
-                })
-                .await
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.recv().await;
+                // Remove discovery while this daemon still holds the listener: a replacement
+                // cannot publish its record between our ownership check and unlink.
+                let _ = metadata_cleanup_tx
+                    .send(remove_runtime_metadata(&cleanup_paths, &cleanup_owner));
+            })
+            .await
         })
     };
 

@@ -166,6 +166,7 @@ mod session_stall_runtime;
 mod stall_watch;
 pub(crate) use crate::collab_shim::http::{handle_collab_http, COLLAB_ENDPOINTS};
 pub(crate) use autopilot_http::{handle_autopilot_http, AUTOPILOT_ENDPOINTS};
+pub(crate) use http_dispatch::request_client_address;
 pub(crate) use security_http::require_owner_presence;
 pub(crate) use security_http::{presence_outcome, presence_outcome_response};
 pub mod beads_view_http;

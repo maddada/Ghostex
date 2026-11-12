@@ -11,6 +11,7 @@ pub mod probe_cache;
 pub mod repository;
 pub mod ssh_enable;
 pub mod ssh_status;
+pub mod tailnet_owner;
 pub mod tailscale;
 #[cfg(windows)]
 mod windows_authorized_keys;

@@ -226,9 +226,14 @@ pub struct PendingPairing {
     /// Empty for a computer.
     pub ssh_public_key: String,
     pub kind: super::pair_device::PairingDeviceKind,
-    /// A phone that asked over its own SSH login (`/api/pairOverSsh`): no SSH key line and no
-    /// Easy Connect allow-list entry, only its device token.
+    /// A phone that asked over its own SSH login (`/api/pairOverSsh`): only its device token,
+    /// unless it also sent Easy Connect keys (`ssh_public_key`, `tailcat_client_key`), which then
+    /// get the SSH key line and the allow-list entry a QR's phone gets.
     pub over_ssh: bool,
+    /// Approved without a click: the phone signs in over SSH from the owner's own tailnet device
+    /// (`tailnet_owner.rs`); the node it came from, for the security log. Never saved: such a
+    /// pairing finishes on the phone's next ask, seconds later.
+    pub auto_approved: Option<String>,
     /// The nonce an over-SSH phone's words come from (empty for a QR's phone, whose words come
     /// from the code), so the same phone asking again gets the same request back.
     pub nonce: String,
@@ -322,6 +327,7 @@ impl PendingPairing {
             ssh_public_key: text(&saved["sshPublicKey"]).unwrap_or_default(),
             kind: serde_json::from_value(saved["kind"].clone()).ok()?,
             over_ssh: saved["overSsh"].as_bool().unwrap_or(false),
+            auto_approved: None,
             nonce: text(&saved["nonce"]).unwrap_or_default(),
             tailcat_client_key: text(&saved["tailcatClientKey"]),
             device_key: StoredDeviceKey {
@@ -461,7 +467,9 @@ impl RemotePairingRuntime {
         map.retain(|_, pending| pending.is_live(now_ms));
         let mut waiting: Vec<_> = map
             .values()
-            .filter(|pending| pending.state == PendingState::Waiting)
+            .filter(|pending| {
+                pending.state == PendingState::Waiting && pending.auto_approved.is_none()
+            })
             .map(PendingPairing::summary)
             .collect();
         waiting.sort_by_key(|pending| pending.requested_at_ms);
@@ -475,6 +483,7 @@ impl RemotePairingRuntime {
         map.values()
             .filter(|pending| {
                 pending.over_ssh
+                    && pending.auto_approved.is_none()
                     && pending.state == PendingState::Waiting
                     && pending.device_key.public_key == device_public_key
             })

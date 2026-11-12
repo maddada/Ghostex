@@ -454,17 +454,34 @@ pub(crate) async fn handle_remote_access_http(
                         .into_response(endpoint_path, request_id)
                 }
             };
+            // Read here: the address lives in this task, not on the blocking pool.
+            let client = crate::server::request_client_address();
+            let server_port = state.config.listeners.local.port;
             tokio::task::spawn_blocking(move || {
                 let device_name = params.device_name.clone();
-                let started = begin_ssh_pairing(&pairing_runtime, &security, params);
-                // The same request handed back again is no new ask: the log keeps the first one.
-                if !matches!(&started, Ok(started) if started.reused) {
+                // Traced only for a pairing that includes Easy Connect, the one it can approve.
+                let owner = if params.tailcat_client_key.is_some() {
+                    super::tailnet_owner::check(client, server_port)
+                } else {
+                    super::tailnet_owner::TailnetOwnerCheck::Ask {
+                        reason: "no Easy Connect keys".to_string(),
+                    }
+                };
+                // Why it needs the click, said in the security log's entry for the ask.
+                let summary = match (&owner, params.tailcat_client_key.is_some()) {
+                    (super::tailnet_owner::TailnetOwnerCheck::Ask { reason }, true) => format!(
+                        "A phone that signs in over SSH asked to pair with this computer, Easy Connect included. It needs your approval: {reason}."
+                    ),
+                    _ => "A phone that signs in over SSH asked to pair with this computer".to_string(),
+                };
+                let db = open_gxserver_database(&paths)?;
+                let started = begin_ssh_pairing(&db, &pairing_runtime, &security, params, &owner);
+                // The same request handed back again is no new ask: the log keeps the first one. One
+                // approved without a click is logged once, when it pairs (`finish_pairing`).
+                if !matches!(&started, Ok(started) if started.reused || started.auto_approved) {
                     crate::audit::record(
-                        crate::audit::Action::new(
-                            "pairing.request",
-                            "A phone that signs in over SSH asked to pair with this computer",
-                        )
-                        .target(device_name.clone()),
+                        crate::audit::Action::new("pairing.request", summary)
+                            .target(device_name.clone()),
                         crate::audit::Actor::PairedDevice {
                             id: None,
                             name: device_name,
@@ -478,9 +495,15 @@ pub(crate) async fn handle_remote_access_http(
                         }),
                     );
                 }
-                let SshPairingStarted { started, nonce, .. } = started?;
+                let SshPairingStarted {
+                    started,
+                    nonce,
+                    auto_approved,
+                    ..
+                } = started?;
                 Ok(json!({
                     "status": PairingStatus::Pending,
+                    "autoApproved": auto_approved,
                     "pendingId": started.pending_id,
                     "nonce": nonce,
                     "words": started.words,

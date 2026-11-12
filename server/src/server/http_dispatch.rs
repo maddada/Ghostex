@@ -14,7 +14,31 @@ use crate::{
 
 use super::*;
 
+tokio::task_local! {
+    /// The TCP peer of the request being served (`axum`'s `ConnectInfo`), for the routes that
+    /// trace where a request came from (`remote_access/tailnet_owner.rs`).
+    static CLIENT_ADDRESS: Option<SocketAddr>;
+}
+
+/// The TCP peer of the request this task serves, when the listener recorded it.
+pub(crate) fn request_client_address() -> Option<SocketAddr> {
+    CLIENT_ADDRESS.try_with(|address| *address).ok().flatten()
+}
+
 pub(super) async fn handle_http_request(
+    state: Arc<AppState>,
+    request: Request<Body>,
+) -> std::result::Result<Response<Body>, Infallible> {
+    let client_address = request
+        .extensions()
+        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+        .map(|info| info.0);
+    CLIENT_ADDRESS
+        .scope(client_address, handle_http_request_inner(state, request))
+        .await
+}
+
+async fn handle_http_request_inner(
     state: Arc<AppState>,
     request: Request<Body>,
 ) -> std::result::Result<Response<Body>, Infallible> {

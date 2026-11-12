@@ -258,6 +258,29 @@ pub(crate) fn earlier_pairings_of_same_device(
         .collect())
 }
 
+/// The entries this device (`device_public_key`, proven by the pairing's signed ask) made by
+/// pairing over its own SSH login without Easy Connect: no tailcat key and no SSH key line. A
+/// pairing of the same phone that includes Easy Connect replaces them.
+pub(crate) fn earlier_ssh_trusts_of_same_device(
+    db: &Connection,
+    new_device_id: &str,
+    device_public_key: &str,
+) -> Result<Vec<RemotePairedDeviceRecord>> {
+    Ok(RemotePairingRepository::new(db)
+        .list_devices()?
+        .into_iter()
+        .filter(|device| {
+            device.id != new_device_id
+                && device.tailcat_client_key.is_none()
+                && device.ssh_key_fingerprint.is_empty()
+                && device
+                    .device_key
+                    .as_ref()
+                    .is_some_and(|key| key.public_key == device_public_key)
+        })
+        .collect())
+}
+
 /// Retires `earlier` (`earlier_pairings_of_same_device`) for the new entry `new_device_id`; an
 /// entry already gone is skipped.
 pub(crate) fn retire_earlier_pairings(
