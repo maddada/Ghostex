@@ -1,5 +1,5 @@
-//! A session menu's Copy submenu: Copy Details, Copy ID, Copy Link, and every link or name of the
-//! session's work.
+//! A session menu's Copy ID row and its Copy submenu: Copy Details, Copy Link, and every link or
+//! name of the session's work.
 
 use crate::sidebar_view::view::SessionRow;
 
@@ -8,17 +8,31 @@ use super::commands::{message, MenuCommand};
 use super::group::MenuGroup;
 use super::item::MenuItem;
 
+/// The session menu's own Copy ID row, or `None` while the machine's daemon id is not known yet,
+/// since a mention without the ref reaches nobody.
+///
+/// CDXC:ContextMenus 2026-11-12 DECISION:
+/// User: "i want a new Copy ID that let's me just copy the id and name of an agent so i can mention it in other chats" (2026-10-28), then (2026-11-12) "move Copy ID to sit directly above Tag As": Copy ID leaves the Copy submenu and is a row of the session menu itself, right above Tag As. It copies `[<session title>](<Global Ref>)` (`session_mention` in gx-protocol), which the chats draw as the session's agent pill; dropping a session row on a chat's composer types the same text. The phone's long-press menu matches.
+pub(crate) fn copy_id_row(row: &SessionRow, group: &MenuGroup<'_>) -> Option<MenuItem> {
+    session_mention_text(row, &group.details())
+        .filter(|text| !text.trim().is_empty())
+        .map(|text| {
+            MenuItem::row(
+                "Copy ID",
+                "hash",
+                MenuCommand::command(message::copy_text(&text)),
+            )
+        })
+}
+
 /// The Copy submenu of one row. Copy Details is always there; the other rows only when the session
 /// has something for them (a branch from the git probe or work mode, the work-mode links).
 ///
 /// CDXC:ContextMenus 2026-10-09 DECISION:
 /// User: Copy Details moves into a Copy submenu next to Copy Branch, Copy Linear ID, Copy PR Link and the like, for normal and work-mode sessions; it stays always available so anyone can hand a session to another agent. Supersedes the 2026-09-26 decision that kept Copy Details under Advanced.
 ///
-/// CDXC:ContextMenus 2026-10-28 DECISION:
-/// User: "i want a new Copy ID that let's me just copy the id and name of an agent so i can mention it in other chats". Copy ID sits right under Copy Details and copies `[<session title>](<Global Ref>)` (`session_mention` in gx-protocol), which the chats draw as the session's agent pill; it is left out only when the machine's daemon id is not known yet, since a mention without the ref reaches nobody. The phone's Copy submenu matches.
-///
 /// CDXC:ContextMenus 2026-10-31 DECISION:
-/// User (GitHub issue #373): a "Copy link" item next to Copy Details and Copy ID, named Copy Link to match the other Copy rows, and it copies the https page that works where people paste it (`session_page_url` in gx-protocol). Left out when Copy ID is, for the same reason. The phone's Copy submenu matches.
+/// User (GitHub issue #373): a "Copy link" item next to Copy Details and Copy ID, named Copy Link to match the other Copy rows, and it copies the https page that works where people paste it (`session_page_url` in gx-protocol). Left out when the machine's daemon id is not known yet, since a link without the ref reaches nobody. The phone's Copy submenu matches.
 pub(crate) fn copy_submenu(id: &str, row: &SessionRow, group: &MenuGroup<'_>) -> MenuItem {
     let mut children = vec![MenuItem::row(
         "Copy Details",
@@ -37,11 +51,6 @@ pub(crate) fn copy_submenu(id: &str, row: &SessionRow, group: &MenuGroup<'_>) ->
             ));
         }
     };
-    copy_row(
-        "Copy ID",
-        "hash",
-        session_mention_text(row, &group.details()),
-    );
     copy_row(
         "Copy Link",
         "link",
@@ -177,23 +186,27 @@ mod tests {
     }
 
     #[test]
-    fn copy_id_copies_a_mention_under_copy_details() {
+    fn copy_id_copies_a_mention() {
+        let item = copy_id_row(&row(), &group(Some("S90"))).expect("a Copy ID row");
+        assert_eq!(item.label.as_deref(), Some("Copy ID"));
+        let message = item
+            .command
+            .as_ref()
+            .map(MenuCommand::to_json)
+            .unwrap_or_default();
+        assert_eq!(
+            message["message"]["text"],
+            "[Model and effort inventory for agent CLIs](S90:P3lv0:G7hgi)"
+        );
+        assert!(copy_id_row(&row(), &group(None)).is_none());
+    }
+
+    #[test]
+    fn copy_link_copies_the_page_under_copy_details() {
         let rows = copied(&group(Some("S90")));
         assert_eq!(rows[0].0, "Copy Details");
         assert_eq!(
             rows[1],
-            (
-                "Copy ID".to_string(),
-                "[Model and effort inventory for agent CLIs](S90:P3lv0:G7hgi)".to_string()
-            )
-        );
-    }
-
-    #[test]
-    fn copy_link_copies_the_page_under_copy_id() {
-        let rows = copied(&group(Some("S90")));
-        assert_eq!(
-            rows[2],
             (
                 "Copy Link".to_string(),
                 "https://ghostex.dev/open/session#S90:P3lv0:G7hgi".to_string()
@@ -202,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_id_and_copy_link_wait_for_the_daemon_id() {
+    fn copy_link_waits_for_the_daemon_id() {
         let labels: Vec<String> = copied(&group(None)).into_iter().map(|row| row.0).collect();
         assert_eq!(labels, vec!["Copy Details".to_string()]);
     }

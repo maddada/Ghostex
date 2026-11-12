@@ -597,18 +597,25 @@ fn full_menu(
         HoverAction::Tag,
     ];
     let mut menu: Vec<MenuItem> = Vec::new();
+    // Copy ID opens the block after the line, right above Tag As (CDXC:ContextMenus 2026-11-12 in
+    // copy.rs), and keeps that place when Tag As is not in the menu.
+    let copy_id = super::copy::copy_id_row(row, group);
     for action in PRIMARY_ORDER {
         let shown = if mirror.contains(&action) {
             true
         } else {
             action != HoverAction::Note && !enabled.contains(&action)
         };
-        let Some(item) = rows.get(action).filter(|_| shown) else {
+        let item = rows.get(action).filter(|_| shown);
+        if action == HoverAction::Tag {
+            if !menu.is_empty() && (copy_id.is_some() || item.is_some()) {
+                menu.push(MenuItem::separator());
+            }
+            menu.extend(copy_id.clone());
+        }
+        let Some(item) = item else {
             continue;
         };
-        if action == HoverAction::Tag && !menu.is_empty() {
-            menu.push(MenuItem::separator());
-        }
         menu.push(if action == HoverAction::Pin && !row.is_pinned {
             MenuItem {
                 icon: Some("pin-outline".to_string()),
