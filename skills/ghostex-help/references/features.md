@@ -2266,8 +2266,9 @@ error back; the broken card goes away when the new form arrives. Questions that 
 such as choosing between two mockups, come as a Ghostex page instead, where you can
 also pick an option right at its mockup with the Pick button at the right end of its title. A
 page works the same way: its card reads Answered once you send, and opening it
-again shows what you sent. The desktop's floating page window and the mobile page close once your answers are
-sent, and stay open with the error if they could not be; in the Files view or your browser the page stays open. Until you send,
+again shows what you sent. The desktop's floating page window, a form's popup (the work dock's Open, the Resources
+list) and the phone's page and form sheet fade out and close once your answers are
+sent, and stay open on your answers with the error if they could not be; in the Files view or your browser the page stays open. Until you send,
 what you picked and typed is kept, in a form and on a page alike, even when
 you close the page or the chat, switch sessions, or restart. A small "?"
 button sits on the working card just above the chat box, left of the other
@@ -2476,7 +2477,7 @@ wait until it finishes without a delivery warning.
 To compact before sending a new prompt, press `⌥Enter` on macOS or `Alt+Enter` on Windows and Linux in the chat box,
 Option-click Send (Alt-click on Windows and Linux), or right-click Send and choose Compact & Send. Ghostex sends `/compact` first,
 then puts your written prompt in the queue above the input to send after compaction.
-Compact context in the context window panel (the context ring) sends `/compact` the same way a typed
+Compact context in Session details (the context ring) sends `/compact` the same way a typed
 `/compact` goes, and says why in the chat box when it can't run.
 Approval and dialog cards (Claude Code, Codex and the other agents) list the
 agent's choices as numbered rows: press a row's number or click it. Cmd+Enter
@@ -2718,24 +2719,33 @@ the whole app, remembered across restarts). When the chat is wide enough the
 panel sits beside it as its own column and the conversation moves over to make
 room; when it is too narrow the panel opens as a floating card under the ring,
 and a click on the chat closes it. On the phone the same ring sits in the chat's
-header and opens the cards as a sheet (Changes opens the phone's Changes view). Its cards: Environment (this computer or the
-box the session runs in, its folder, branch and account, and how much memory
-the session's processes use while it runs on this computer); Context (how full the
-context window is, with Claude's own breakdown into messages, memory files,
-skills, tools and free space; Ghostex asks a silent read-only copy of the
-session, so nothing is typed into it and no tokens are spent, and it counts
-again after a turn ends at most every ten minutes, or when you press the
+header and opens the cards as a sheet (Changes opens the phone's Changes view).
+The panel has two tabs, Overview and Limits, the same on the computer and on the
+phone. The chat box's context ring opens it too, on Overview at the Context
+card, so there is no separate Context window popover any more (a chat without
+the panel keeps it).
+
+Overview holds Environment (this computer or the
+box the session runs in, its folder, branch and account, the agent's version, and how much memory
+the session's processes use while it runs on this computer); Changes (lines changed on the
+branch against main, uncommitted edits included, with Commit, Create PR or View
+PR); Context (how full the context window is, with Claude's own breakdown into
+messages, memory files, skills, tools and free space; it is always open, and
+Compact context sits under the breakdown; Ghostex asks a silent read-only copy
+of the session, so nothing is typed into it and no tokens are spent, and it
+counts again after a turn ends at most every ten minutes, or when you press the
 refresh button); Tasks (Claude's task list; clicking the chat's Tasks pill opens
 the panel, and the pill hides while the panel shows); Connectors (your workspace's
 connected apps and every MCP server the session loaded, green when ready, amber
 while connecting or needing a sign-in; Manage opens Settings > Connectors);
 Skills (the ones the session used, then all of them; click one to open it in
 Agents Hub); Memory files (the CLAUDE.md and AGENTS.md files Claude loaded;
-click to open); Changes (lines changed on the branch against main, uncommitted
-edits included, with Commit, Create PR or View PR); and Background tasks (each
-running command with its time and a stop button, then the finished ones). A
-card's title folds it. Claude task list (Settings > Agents > Defaults, shown while the
-extension is on, on by default) starts Claude with its task list tools, which
+click to open); Background tasks (each running command with its time and a
+stop button, then the finished ones); and Agent (the agent's other settings).
+Limits holds Plan limits (each limit with when it resets), Cost and time and
+Cache, and Choose details, which picks the rows to show. A card's title folds
+it, except Context. Claude task list (Settings > Agents > Defaults, shown while
+the extension is on, on by default) starts Claude with its task list tools, which
 recent Claude models only get when Ghostex asks; it applies to Claude sessions
 started or woken afterwards. Claude only for now. Settings:
 `sessionDetailsPanelHidden`, `sessionDetailsClaudeTaskTools`. Command:
@@ -2778,6 +2788,7 @@ stay in view. Work item cards and forms you already answered fold away. Messages
 to and from other agents (a coordinator's thread reports, messages from other
 sessions) open no turn of their own: they fold into the "Agent reply" of your own
 prompt, so the summary reads as your conversation.
+The phone's Summary view looks the same, on a computer on an up-to-date Ghostex.
 Pick Summary under More actions > View, where its row shows the
 Toggle Summary Mode shortcut (Option+Ctrl+S on macOS, Ctrl+Alt+Shift+S on Windows
 and Linux), which switches it from anywhere in that chat and can be changed in
@@ -2798,7 +2809,8 @@ As space gets tighter, toolbar buttons move into More actions one at a time:
 Session note, Attach, Maximize, then Terminal View. The microphone never moves:
 it always stays right next to Send.
 If the context ring still does not fit beside the model, it moves into More
-actions > More as Context window; the model pill shortens instead of moving.
+actions > More as Session details (or Context window in a chat without the
+panel); the model pill shortens instead of moving.
 Controls return as space opens up; More actions, Dictate and Send or Stop stay visible.
 On the phone, More actions > More > Stash prompt with an empty chat box opens
 Saved prompts for this project: tap one to put it in the chat box, or delete it
@@ -4735,7 +4747,14 @@ typing anywhere (the panel shows a Space key when it works), or hold the
 while you hold Space, what you said so far is sent. On Grok push-to-talk
 calls you pay only for the audio you send and the agent's replies. GPT
 Realtime bills only audio in both modes. A change applies to your next call;
-Regular stays the default. Mute turns your microphone off; in a push-to-talk
+Regular stays the default. Answer when I say "reply" (Settings > Voice Agent,
+right under Call mode, on by default, shown only while the call mode is Regular)
+makes a Regular call wait for you: the agent answers only once what you said ends
+with "reply", "over" or "go ahead", and that word is taken off the caption. Anything
+it would have started to say by itself is dropped. Each call opens with a short spoken
+introduction that also asks you to say "reply" while the setting is on. Push-to-talk,
+typed turns and recorded turns are unchanged. Turn it off to have the agent answer
+as soon as you stop talking. Mute turns your microphone off; in a push-to-talk
 call it also locks the talk button ("Unmute to talk"), and in a muted Regular
 call holding the talk button, Space or the hotkey unmutes you for as long as
 you hold. It hangs up by itself after 5 minutes with nobody talking.
@@ -4835,7 +4854,9 @@ speeds, the same gear for the call mode, and the same talk button between
 Mute and Hang up: press and hold it to talk and let go to send, or slide your
 finger off it ("Release to cancel") and let go to send nothing; slide back on
 to keep talking. Stop talking is a pill above the buttons while the agent
-speaks. The call mode is also in the phone's Settings > Voice agent. They save the computer's settings, so the desktop and the phone talk
+speaks. The call mode is also in the phone's Settings > Voice, with the same Answer when I
+say "reply" switch under it while Regular is picked (a computer too old to have it
+shows no switch). They save the computer's settings, so the desktop and the phone talk
 with the same voice at the same speed and in the same mode. It shows
 the same "Last conversation" card with Continue, Start fresh and Forget.
 
@@ -4850,7 +4871,7 @@ Voice Agent leaves the sidebar. Dictate keeps working: Settings > Dictation
 still shows the key its engine needs and Past recordings. Turn it back on and everything returns, with your voice
 settings as you left them.
 
-Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Voice Call About This Session, Hold to Talk (`holdToTalk`).
+Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`, `voiceAgentWaitForReply`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Voice Call About This Session, Hold to Talk (`holdToTalk`).
 
 ## Remote machines, web, and mobile
 
@@ -4953,15 +4974,47 @@ sessions, so any client can control agents on any machine.
   which checks for a new update and a new app at once.
   With Auto reconnect enabled in the phone's Settings > Connection, the phone
   checks the connection when you return to the app or its network changes and
-  reconnects interrupted agent terminals. Tap a red cloud or choose Reconnect
-  from the computer's menu to start a fresh connection. Easy Connect does not
+  reconnects interrupted agent terminals. Choose Reconnect from the computer's
+  menu to start a fresh connection. Easy Connect does not
   require the separate Tailscale app; the Tailscale connection option does.
-  The phone shows a "Tailscale isn't connected" notice only when Tailscale is
-  off on the phone and the computer can't be reached. Tap its close button to
-  hide it, or turn it off or on under Settings > Connection > Tailscale reminder.
-  If the connection fails while saved sessions are still visible, the Sessions
-  list shows a warning with the failure reason and a Retry button. The warning
-  clears once the list successfully refreshes.
+  While everything works, the Sessions screen says nothing about connections:
+  no "Connected to" line and no "Refreshing" line. Each computer's own icon
+  shows its link instead: green is connected, yellow is slow, red can't
+  connect. With Separate by machine off the icons sit in a row at the right;
+  with it on, each computer's tab carries its own icon. Tap an icon (or the
+  failure line) to open the Connections sheet: every computer, the ones with
+  problems first, with the way the phone reaches it and how long a round trip
+  takes. The way is Tailscale with its address, or, for Easy Connect, Private
+  Relay (Ghostex's own relay, or a relay you run), Global Relay (Tailscale's
+  public relays), Direct (phone and computer talking straight to each other) or
+  Same network (both on the same local network). For a computer
+  that can't connect, the sheet says why in plain words and what to do (for
+  example "Tailscale is off on this phone" with Open Tailscale, or the
+  failure's reason with Remote Settings), with Retry. Logs and Connection
+  settings are at the foot of the sheet. If the connection fails while saved
+  sessions are still visible, the failure line says so for every computer ("2
+  computers aren't connected"); it says "Connecting to" a computer only after
+  five seconds. The old amber "Tailscale isn't connected" card and its reminder
+  toggle are gone.
+  Slow-connection check: while you use the phone, it times each connected
+  computer's round trip every 15 seconds. A computer counts as slow when its
+  round trip stays over 400 ms for 30 seconds, or when its link drops twice in
+  five minutes, and as fine again after a minute under the limit. A slow
+  computer's row in the Connections sheet offers Send logs.
+  Settings > Connection lists every computer with its status and its live way
+  of connecting (each opens that computer's page), then Auto reconnect and
+  Troubleshooting > Logs. Logs is also in the menu at the top of the Sessions
+  screen (☰), and Settings search finds Computers and Logs. Logs shows the
+  phone's connection and status events; Copy copies them. Send to developer,
+  beside Copy, first opens a review step that says what the report holds (the
+  phone's connection and status events, the app version and phone system,
+  routes and timings), what is replaced (IP addresses, user names, computer and
+  host names, keys) and what is never sent (sessions, chats, prompts, terminal
+  text). It says plainly that sending files a public issue in the Ghostex
+  repository on GitHub, through feedback.ghostex.dev. You can add a note and
+  your GitHub username (the one Send Bug / Feedback remembers), and show the
+  exact text. Nothing is sent until you press Send. In the demo computer the
+  route line reads "Sample, on this phone".
   To find a session on the phone, tap Search in the bar at the bottom of the
   Sessions list (beside Voice, Web and Machines) and type part of its name or tag; it searches the open and
   closed sessions of every connected computer, newest first, like the desktop's
