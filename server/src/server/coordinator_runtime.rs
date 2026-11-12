@@ -745,7 +745,7 @@ fn supervise(
                 })
             }
             ThreadState::Finished | ThreadState::Sleeping => {
-                idle_wait_report(memory, &thread, &session, turn_open, now)
+                idle_wait_report(db, memory, &thread, &session, turn_open, now)
             }
             _ => None,
         };
@@ -1276,6 +1276,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             Ok(()) => {
                 delivered_any = true;
                 failed_in_a_row = 0;
+                let mut idle_progress = None;
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&report_key);
                     if let ReportKind::Stalled { due } = &report.kind {
@@ -1292,6 +1293,25 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                             .remove(&(report.thread.key(), idle_nudge_send_key(due)));
                         if let Some(watch) = memory.idle_waits.get_mut(&report.thread.key()) {
                             watch.mark_reported(due.round);
+                            idle_progress = watch.unsaved();
+                        }
+                    }
+                }
+                // Saved at once, so a restart right after this report does not send it again.
+                if let Some(progress) = idle_progress {
+                    let (save_state, key) = (state.clone(), report.thread.key());
+                    let saved = tokio::task::spawn_blocking(move || {
+                        open_gxserver_database(&save_state.paths).is_ok_and(|db| {
+                            coordinators::save_idle_progress(&db, &key.0, &key.1, progress).is_ok()
+                        })
+                    })
+                    .await
+                    .unwrap_or(false);
+                    if saved {
+                        if let Ok(mut memory) = memory.lock() {
+                            if let Some(watch) = memory.idle_waits.get_mut(&report.thread.key()) {
+                                watch.note_saved(progress);
+                            }
                         }
                     }
                 }
@@ -1473,6 +1493,7 @@ async fn nudge_thread(
 
 /// The idle watch of a thread whose turn ended and was reported: its report when one is due.
 fn idle_wait_report(
+    db: &rusqlite::Connection,
     memory: &mut SupervisorMemory,
     thread: &ThreadRecord,
     session: &Value,
@@ -1480,17 +1501,31 @@ fn idle_wait_report(
     now: i64,
 ) -> Option<ReportKind> {
     let since = thread.reported_at.as_deref().and_then(parse_iso_ms_opt)?;
-    let watch = memory
+    let key = thread.key();
+    // A later report means a later turn ended: its idle clock starts there. A watch that starts
+    // (a new stretch, or the first tick after a restart) picks up the rounds the thread's row kept.
+    if memory
         .idle_waits
-        .entry(thread.key())
-        .or_insert_with(|| coordinators::IdleWatch::new(since));
-    // A later report means a later turn ended: its idle clock starts there.
-    if watch.since() != since {
-        *watch = coordinators::IdleWatch::new(since);
+        .get(&key)
+        .is_none_or(|watch| watch.since() != since)
+    {
+        let saved = coordinators::read_idle_progress(db, &thread.project_id, &thread.session_id)
+            .ok()
+            .flatten();
+        memory
+            .idle_waits
+            .insert(key.clone(), coordinators::IdleWatch::resume(since, saved));
     }
-    watch
-        .observe(session, thread, turn_open, now)
-        .map(|due| ReportKind::IdleWaiting { due })
+    let watch = memory.idle_waits.get_mut(&key)?;
+    let due = watch.observe(session, thread, turn_open, now);
+    if let Some(progress) = watch.unsaved() {
+        if coordinators::save_idle_progress(db, &thread.project_id, &thread.session_id, progress)
+            .is_ok()
+        {
+            watch.note_saved(progress);
+        }
+    }
+    due.map(|due| ReportKind::IdleWaiting { due })
 }
 
 /// BLOCKING. A thread's session row as it is now.

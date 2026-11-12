@@ -17,6 +17,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
+use super::idle_progress::IdleProgress;
 use super::records::ThreadRecord;
 use super::stall::{test_scaled, SessionQuiet};
 
@@ -92,6 +93,9 @@ pub struct IdleDue {
 }
 
 /// One idle thread's clock, from the end of the turn its last report came from.
+///
+/// CDXC:Coordinators 2026-11-12 WHY:
+/// GitHub #554: the rounds a watch had reported, and the outage it held through, lived only here, so after a gxserver restart a thread already reported idle was reported for the same round again, and nudged a second time when that round was its first (reproduced on a test server: one restart repeated "idle for 1 minutes" with its nudge, the next repeated "still idle"). Its clock already survived (it counts from the thread's `reportedAt`); its progress is now kept on the thread's row too (idle_progress.rs), read when a watch starts (`resume`) and saved when it changes (`unsaved`), so a restart picks up at the next round.
 pub struct IdleWatch {
     since: i64,
     /// The last moment the clock was held while offline: rounds count from here when it is later
@@ -101,6 +105,11 @@ pub struct IdleWatch {
     checked_at: Option<i64>,
     reason: Option<IdleWaitReason>,
     reported_rounds: u32,
+    /// Held on the last observation: the progress is not saved while the clock moves with an
+    /// outage, only once it is back.
+    holding: bool,
+    /// The progress the thread's row holds for this stretch.
+    saved: IdleProgress,
 }
 
 impl IdleWatch {
@@ -112,6 +121,38 @@ impl IdleWatch {
             checked_at: None,
             reason: None,
             reported_rounds: 0,
+            holding: false,
+            saved: IdleProgress::fresh(since),
+        }
+    }
+
+    /// A watch for the stretch since `since` that picks up the progress its thread's row kept, when
+    /// that progress belongs to this stretch (a later turn's end starts a new one).
+    pub fn resume(since: i64, saved: Option<IdleProgress>) -> Self {
+        let mut watch = Self::new(since);
+        if let Some(saved) = saved.filter(|saved| saved.since == since) {
+            watch.held_at = saved.clock_from;
+            watch.reported_rounds = saved.reported_rounds;
+            watch.saved = saved;
+        }
+        watch
+    }
+
+    /// The progress to save on the thread's row, when it differs from what the row holds and the
+    /// clock is not held by an outage right now.
+    pub fn unsaved(&self) -> Option<IdleProgress> {
+        let progress = IdleProgress {
+            since: self.since,
+            clock_from: self.clock_from(),
+            reported_rounds: self.reported_rounds,
+        };
+        (!self.holding && progress != self.saved).then_some(progress)
+    }
+
+    /// The thread's row now holds `progress`.
+    pub fn note_saved(&mut self, progress: IdleProgress) {
+        if progress.since == self.since {
+            self.saved = progress;
         }
     }
 
@@ -132,6 +173,7 @@ impl IdleWatch {
             self.hold(now);
             return None;
         }
+        self.holding = false;
         if self
             .checked_at
             .is_none_or(|checked| now - checked >= test_scaled(IDLE_CHECK_EVERY_MS))
@@ -156,6 +198,7 @@ impl IdleWatch {
     pub fn hold(&mut self, now: i64) {
         self.held_at = self.held_at.max(now);
         self.reported_rounds = 0;
+        self.holding = true;
     }
 
     /// Where the rounds count from: the turn's end, or the end of an outage after it.

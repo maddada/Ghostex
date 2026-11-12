@@ -190,4 +190,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0074_coordinator_work_items",
     "0075_coordinator_thread_watch_stamps",
     "0076_sessions_session_id_index",
+    "0077_coordinator_thread_idle_rounds",
 ];
