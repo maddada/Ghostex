@@ -486,3 +486,24 @@ fn a_claude_question_beside_the_side_panel_places_its_highlight() {
     assert_eq!(position.tab, 0);
     assert_eq!(position.rows_below_first, 0);
 }
+
+/// GitHub #555 review: no macOS run can make a screen unreadable at the guard (unix reads are never
+/// cut and a daemon cannot be made to vanish between the paste check and the Return), so this pins
+/// the rule: Claude and OpenClaude are written to on an unreadable screen, and the agents whose
+/// sends need positive evidence of the input box wait for a readable one.
+#[test]
+fn an_unreadable_screen_holds_only_the_agents_that_need_a_readable_input_box() {
+    for agent in [Some("claude"), Some("openclaude"), Some("opencode"), None] {
+        assert_eq!(
+            guarded_write_refusal(agent, &InputGuard::Holds("hi".to_string()), None),
+            Ok(()),
+            "{agent:?}"
+        );
+    }
+    for agent in ["codex", "grok", "empryo", "zcode"] {
+        assert!(
+            guarded_write_refusal(Some(agent), &InputGuard::InputBox, None).is_err(),
+            "{agent}"
+        );
+    }
+}
