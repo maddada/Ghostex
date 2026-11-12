@@ -181,7 +181,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 /// CDXC:VoiceMode 2026-10-20 SEE-ALSO: `voiceAgent` means `/api/voice` (conversation and dictation) and `/api/readVoiceAgent` exist (docs/2026-10-20/voice-mode/voice-agent-client-contract.md).
 /// CDXC:Notifications 2026-10-31 SEE-ALSO: `notificationStream` means `/api/events?stream=notifications` carries only notification feed changes and the daemon's start and stop (`notification_event_matches` in server/src/server/ws.rs); an older daemon would send that socket its whole hub, so the phone opens it only behind this flag and otherwise polls the feed.
 /// CDXC:Notifications 2026-11-01 SEE-ALSO: `pushNotifications` means `/api/registerPushToken` exists and this daemon pushes finished, needs-input and failed notices and agent starts to the registered phones (server/src/push/); the phone shows its push switches only behind this flag, since an older daemon has no such route.
-const ENDPOINT_CAPABILITIES: [&str; 16] = [
+const ENDPOINT_CAPABILITIES: [&str; 17] = [
     "sendRequestLedger",
     "voiceAgent",
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM,
@@ -195,6 +195,8 @@ const ENDPOINT_CAPABILITIES: [&str; 16] = [
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_CHAT_RESUME,
     // The Cloud Boxes list rides the sessions list stream (server/src/server/sessions_list_stream.rs).
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_CLOUD_BOXES_PUSH,
+    // Long tool outputs cut when asked, read back whole (server/src/session_chat_tool_outputs.rs).
+    ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_TOOL_OUTPUT_CUT,
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS,
     // A phone signing in over SSH may pair through that login (`/api/pairOverSsh`, GitHub #495).
     "pairOverSsh",
@@ -1294,6 +1296,7 @@ mod tests {
                 Value::from("modelCatalogRevision"),
                 Value::from("chatResume"),
                 Value::from("cloudBoxesPush"),
+                Value::from("toolOutputCut"),
                 Value::from("pushNotifications"),
                 Value::from("pairOverSsh"),
                 Value::from("pairOverSshEasyConnect"),

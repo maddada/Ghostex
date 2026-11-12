@@ -679,6 +679,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/saveSessionChatImage"
         | "/api/saveSessionChatAttachment"
         | "/api/readSessionChatImage"
+        // CDXC:SessionChat 2026-11-12 WHY: remote-allowed like readSessionChat: the whole text of a tool output the phone got cut lives in the transcript of the machine that runs the session (session_chat_tool_outputs.rs).
+        | "/api/readSessionChatToolOutput"
         | "/api/answerSessionChatPrompt"
         | "/api/interruptSessionChat"
         | "/api/acknowledgeSessionChatDraftHandoff"

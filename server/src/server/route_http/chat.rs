@@ -35,7 +35,38 @@ pub(super) async fn route_chat_http(
     } = request;
     Ok(match endpoint.path.as_str() {
         "/api/readSessionChat" => {
-            handle_read_session_chat_http(&state, endpoint.path, request_id, &body_json).await
+            // A phone that asked gets its long tool outputs cut (session_chat_tool_outputs.rs).
+            let cut = body_json
+                .get("params")
+                .and_then(|params| params.get("cutToolOutputs"))
+                == Some(&Value::Bool(true));
+            let ids = |name: &str| {
+                body_json
+                    .get("params")
+                    .and_then(|params| params.get(name))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let (project_id, session_id) = (ids("projectId"), ids("sessionId"));
+            let routed =
+                handle_read_session_chat_http(&state, endpoint.path, request_id, &body_json).await;
+            if cut {
+                crate::session_chat_tool_outputs::cut_read_answer(routed, &project_id, &session_id)
+                    .await
+            } else {
+                routed
+            }
+        }
+        "/api/readSessionChatToolOutput" => {
+            crate::session_chat_tool_outputs::handle_read_tool_output_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
         }
         "/api/setSessionChatView" => crate::session_chat_view::handle_set_session_chat_view_http(
             &state,

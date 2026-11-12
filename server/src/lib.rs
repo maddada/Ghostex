@@ -262,6 +262,7 @@ pub mod session_chat_terminal_activity;
 pub mod session_chat_terminal_dialog;
 #[cfg(test)]
 mod session_chat_tests;
+pub(crate) mod session_chat_tool_outputs;
 pub mod session_chat_trust_memory;
 pub(crate) mod session_chat_update_hint;
 pub(crate) mod session_chat_view;

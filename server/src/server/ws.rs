@@ -92,9 +92,30 @@ pub(crate) async fn handle_events(
     let deflate = query_value(&uri, "encoding").as_deref() == Some("deflate");
     // The lineup the client already holds, so the socket need not start with it (agent_model_catalog.rs).
     let catalog_revision = query_value(&uri, "catalogRevision");
+    // Long tool outputs cut for a phone that asked (session_chat_tool_outputs.rs).
+    let cut_outputs = query_value(&uri, "toolOutputs").as_deref() == Some("cut");
     ws.on_upgrade(move |socket| {
-        handle_event_socket_scoped(socket, state, mode, share_scope, deflate, catalog_revision)
+        handle_event_socket_scoped(
+            socket,
+            state,
+            mode,
+            share_scope,
+            SocketOptions {
+                deflate,
+                catalog_revision,
+                cut_outputs,
+            },
+        )
     })
+}
+
+/// What a client asked of its event socket in the query: deflated frames (`encoding=deflate`), the
+/// model catalog it holds (`catalogRevision=`), cut tool outputs (`toolOutputs=cut`).
+#[derive(Default)]
+pub(crate) struct SocketOptions {
+    pub(crate) deflate: bool,
+    pub(crate) catalog_revision: Option<String>,
+    pub(crate) cut_outputs: bool,
 }
 
 /// What one `/api/events` socket carries, picked by its `stream` query value.
@@ -187,7 +208,7 @@ pub(crate) async fn handle_event_socket(
     state: Arc<AppState>,
     mode: EventStreamMode,
 ) {
-    handle_event_socket_scoped(socket, state, mode, None, false, None).await
+    handle_event_socket_scoped(socket, state, mode, None, SocketOptions::default()).await
 }
 
 /// `only` keeps the socket to one chat: a Ghostex Collab guest's stream.
@@ -196,9 +217,13 @@ pub(crate) async fn handle_event_socket_scoped(
     state: Arc<AppState>,
     mode: EventStreamMode,
     only: Option<(String, String)>,
-    deflate: bool,
-    catalog_revision: Option<String>,
+    options: SocketOptions,
 ) {
+    let SocketOptions {
+        deflate,
+        catalog_revision,
+        cut_outputs,
+    } = options;
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (outbound_tx, mut outbound_rx) = state.event_hub.client_channel();
     let mut broadcast_rx = state.event_hub.subscribe();
@@ -280,6 +305,11 @@ pub(crate) async fn handle_event_socket_scoped(
         let mut chat_frames = super::chat_frame_dedupe::ChatFrameMemory::new(sender_thread_patches);
         let mut deflater = deflate.then(super::link_compression::FrameDeflater::new);
         while let Some(event) = outbound_rx.recv().await {
+            let event = if cut_outputs {
+                crate::session_chat_tool_outputs::cut_frame(event)
+            } else {
+                event
+            };
             let event = chat_frames.pass(event);
             let sent = match deflater.as_mut() {
                 Some(deflater) => match deflater.frame(&event.text()) {

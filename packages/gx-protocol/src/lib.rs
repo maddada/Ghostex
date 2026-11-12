@@ -109,6 +109,10 @@ pub const GXSERVER_ENDPOINT_CAPABILITY_CHAT_RESUME: &str = "chatResume";
 /// `POST /api/cloudBoxes {action: list}`, sent when it changes) on the
 /// [`GXSERVER_EVENTS_STREAM_SESSIONS_LIST`] stream.
 pub const GXSERVER_ENDPOINT_CAPABILITY_CLOUD_BOXES_PUSH: &str = "cloudBoxesPush";
+/// The `ghostex server endpoint` capability that promises long tool outputs cut on a chat socket
+/// opened with `toolOutputs=cut` and on a `readSessionChat` with `cutToolOutputs`, and
+/// `readSessionChatToolOutput` for the whole text (server/src/session_chat_tool_outputs.rs).
+pub const GXSERVER_ENDPOINT_CAPABILITY_TOOL_OUTPUT_CUT: &str = "toolOutputCut";
 /// The `ghostex server endpoint` capability that promises `/api/registerPushToken` and push
 /// notifications to the phones registered there (finished, needs input, failed, agent starts).
 pub const GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS: &str = "pushNotifications";
