@@ -1396,9 +1396,11 @@ impl NativeChatView {
             .border(px(s))
             .border_color(p.foreground.opacity(if expanded { 0.14 } else { 0.08 }))
             .bg(p.foreground.opacity(if expanded { 0.055 } else { 0.035 }))
-            .when(clickable, |this| {
-                this.chat_cursor_pointer()
-                    .hover(|style| style.bg(p.foreground.opacity(0.06)))
+            .when(clickable, |this| this.chat_cursor_pointer())
+            // Closed, the whole card lights up under the pointer; opened, only its title line,
+            // the part that shuts it (work_cards.rs `dock_row_press`, CDXC:Coordinators 2026-11-12).
+            .when(clickable && !expanded, |this| {
+                this.hover(|style| style.bg(p.foreground.opacity(0.06)))
             })
             // The card a board pill asked to see: ringed, and its list scrolls to it.
             .when_some(focus, |this, focus| {
@@ -1408,11 +1410,24 @@ impl NativeChatView {
             })
             .child(
                 div()
+                    .id(gpui::SharedString::from(format!(
+                        "chat-board-title-line:{key}"
+                    )))
                     .min_h(px(24.0 * s))
                     .flex()
                     .items_center()
                     .gap(px(8.0 * s))
                     .min_w_0()
+                    // Opened, the title line reaches a little past the text, rounded inside the
+                    // card, and lights up under the pointer.
+                    .when(expanded && clickable, |line| {
+                        line.mx(px(-6.0 * s))
+                            .px(px(6.0 * s))
+                            .my(px(-2.0 * s))
+                            .py(px(2.0 * s))
+                            .rounded(px(7.0 * s))
+                            .hover(|style| style.bg(p.foreground.opacity(0.06)))
+                    })
                     .child(
                         div()
                             .id(gpui::SharedString::from(format!("chat-board-title:{key}")))
@@ -1484,7 +1499,6 @@ impl NativeChatView {
                 // The question card's space from the title to the text, and from the text to the
                 // answers (work_cards.rs `OPENED_ROW_GAP`, with the card's own 6).
                 .mt(px((super::work_cards::OPENED_ROW_GAP - 6.0) * s))
-                .cursor(gpui::CursorStyle::IBeam)
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation());
             // A work ask's longer explanation under its short title, in the quieter colour, whole
             // (work_cards.rs `ask_markdown`).
@@ -1702,7 +1716,10 @@ impl NativeChatView {
             let pill_fit = room.map_or(super::work_cards::PillFit::Full, |room| {
                 super::work_cards::pill_fit(pill_room, room - used)
             });
+            // The item pills at the left, the answers and Reply at the right edge (work_cards.rs
+            // `dock_row`, CDXC:Coordinators 2026-11-12).
             let mut buttons = self.item_pill_elements(&key, &pills, pill_fit, p, cx);
+            buttons.push(div().flex_1().min_w_0().into_any_element());
             if fold {
                 buttons.push(self.answers_dropdown(&key, &choices, false, p, cx));
                 buttons.extend(self.work_answer_buttons(

@@ -350,10 +350,7 @@ fn who_icon(who: &Value, p: &ChatAppearance) -> AnyElement {
             "titlebar/user.svg".to_string(),
             gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into(),
         ),
-        "coordinator" => (
-            "titlebar/coordinator-crown-points.svg".to_string(),
-            p.muted,
-        ),
+        "coordinator" => ("titlebar/coordinator-crown-points.svg".to_string(), p.muted),
         _ => ("titlebar/clock.svg".to_string(), p.muted),
     };
     svg()
@@ -1158,7 +1155,12 @@ impl NativeChatView {
                 );
             }
         } else {
+            // The item pills at the left, the answers and Reply at the right edge.
+            //
+            // CDXC:Coordinators 2026-11-12 DECISION:
+            // User: "move the answer buttons to bottom right. keep work item tag bottom left".
             under_answers = self.item_pill_elements(&key, &pills, pill_fit, p, cx);
+            under_answers.push(div().flex_1().min_w_0().into_any_element());
             under_answers.extend(buttons);
         }
         // The row's other actions (Show in chat, Dismiss, Snooze, Mention) are one ⋯ menu that
@@ -1224,8 +1226,7 @@ impl NativeChatView {
                             6.0
                         } else {
                             OPENED_ROW_GAP
-                        } * s))
-                        .cursor(gpui::CursorStyle::IBeam),
+                        } * s)),
                 )
                 .into_any_element(),
             None => press.into_any_element(),
@@ -1299,9 +1300,13 @@ impl NativeChatView {
             .pb(px(if open { 2.0 } else { 6.0 } * s))
             .rounded(px(8.0 * s))
             .chat_cursor_pointer()
-            .when(!open, |head| {
-                head.hover(|style| style.bg(p.foreground.opacity(0.04)))
-            })
+            // Opened too: the title line is what shuts the row, so it lights up under the pointer
+            // as the rows do; what sits under it takes no hover (it is for selecting text).
+            //
+            // CDXC:Coordinators 2026-11-12 DECISION:
+            // User, of an opened row's title: "show bg hover effect change when i hover the title
+            // of this so i know clicking collapses it please".
+            .hover(|style| style.bg(p.foreground.opacity(0.04)))
             .child(line)
     }
 
@@ -1697,6 +1702,11 @@ impl NativeChatView {
                 semibold: false,
                 size,
                 line_height,
+                // An opened row's text keeps the arrow, links the hand.
+                //
+                // CDXC:Coordinators 2026-11-12 DECISION:
+                // User: "make cursor shown on the text inside the card not show caret please".
+                arrow: true,
             },
             cx,
         )

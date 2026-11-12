@@ -565,6 +565,9 @@ pub(super) struct TextLook {
     pub semibold: bool,
     pub size: f32,
     pub line_height: f32,
+    /// The arrow over the text instead of the I-beam; its links keep the hand
+    /// (`TextViewStyle::with_arrow_over_text`). The text stays selectable.
+    pub arrow: bool,
 }
 
 impl NativeChatView {
@@ -630,6 +633,7 @@ impl NativeChatView {
             semibold: label_color.is_some(),
             size: PROSE_SIZE,
             line_height: PROSE_LINE_HEIGHT,
+            arrow: false,
         };
         self.text_view_look(id, content, references, p, look, cx)
     }
@@ -701,7 +705,7 @@ impl NativeChatView {
             .then(|| super::markdown_style::code_block_cap(PROSE_LINE_HEIGHT, CODE_PADDING, scale))
         })
         .selectable(true)
-        .style(style)
+        .style(style.with_arrow_over_text(look.arrow))
         .text_size(px(look.size * p.scale))
         .line_height(px(look.line_height * p.scale))
         .text_color(look.color)
