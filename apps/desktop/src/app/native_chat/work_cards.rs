@@ -1844,19 +1844,23 @@ impl NativeChatView {
         });
     }
 
-    /// A column of cards, or `None` when there are none.
+    /// A column of cards, or `None` when there are none. `gap` spaces them when given (an opened
+    /// Quiet View line's rail, quiet_view.rs), already scaled.
     pub(super) fn work_card_stack(
         &self,
         cards: &[&Value],
+        gap: Option<f32>,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
         // A stack of work item update cards is spaced as the chat's other one-line cards are.
-        let gap = if cards.iter().all(|card| card["lead"].is_string()) {
-            super::cards::SINGLE_LINE_CARD.stack_gap(p)
-        } else {
-            6.0 * p.scale
-        };
+        let gap = gap.unwrap_or_else(|| {
+            if cards.iter().all(|card| card["lead"].is_string()) {
+                super::cards::SINGLE_LINE_CARD.stack_gap(p)
+            } else {
+                6.0 * p.scale
+            }
+        });
         (!cards.is_empty()).then(|| {
             div()
                 .flex()

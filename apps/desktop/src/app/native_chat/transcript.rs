@@ -335,7 +335,7 @@ impl NativeChatView {
                 // (work_cards.rs).
                 if main {
                     let cards = self.work_cards_of_turn(id);
-                    if let Some(stack) = self.work_card_stack(&cards, &p, cx) {
+                    if let Some(stack) = self.work_card_stack(&cards, None, &p, cx) {
                         row = row.child(stack);
                     }
                 }
@@ -538,7 +538,7 @@ impl NativeChatView {
         let mut cards = self.work_cards_under(&text(message, "id"));
         // Under Quiet View the line after the reply holds its work item lines (quiet_view.rs).
         cards.retain(|card| !self.quiet_holds_card(card));
-        match self.work_card_stack(&cards, p, cx) {
+        match self.work_card_stack(&cards, None, p, cx) {
             Some(stack) => div()
                 .flex()
                 .flex_col()

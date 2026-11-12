@@ -141,6 +141,7 @@ fn rail(
 ///
 /// CDXC:SessionChat 2026-11-12 DECISION:
 /// User, of an opened "1 report · 1 tool call · 1 item updated" line whose message row sat a row gap above the next row but 8px below the work card: "gap is different, please fix (make it like the small one, not the larger one)". Every gap on the rail is this 8px, on the desktop and the phone (`QuietRow` in apps/mobile/app/src/chat/native/transcript/quietView.tsx).
+/// CDXC:SessionChat 2026-11-12 DECISION: User, of an opened "3 items updated" line whose "Work item finished" cards sat a row gap apart while an opened "1 report · 1 tool call" line's cards sat close: the gap between stacked cards in an opened line is "ALWAYS small". The work item cards on the rail are this 8px apart too, not the row gap one-line cards keep elsewhere (`work_card_stack`; the phone's `WorkCardStack` gets the same `gap`).
 const RAIL_ROW_GAP: f32 = 8.0;
 
 /// `item` without what of it stays in view after its line.
@@ -367,7 +368,7 @@ impl NativeChatView {
                     let mut nested: Vec<AnyElement> = Vec::new();
                     if index == line.start {
                         let cards = self.quiet_cards(line);
-                        if let Some(stack) = self.work_card_stack(&cards, p, cx) {
+                        if let Some(stack) = self.work_card_stack(&cards, Some(RAIL_ROW_GAP * s), p, cx) {
                             nested.push(stack);
                         }
                     }
@@ -487,7 +488,7 @@ impl NativeChatView {
             let frame = self.disclosure_frame(&line.key, open, cx);
             if open || frame.is_some() {
                 let cards = self.quiet_cards(line);
-                if let Some(stack) = self.work_card_stack(&cards, p, cx) {
+                if let Some(stack) = self.work_card_stack(&cards, Some(RAIL_ROW_GAP * s), p, cx) {
                     let drawn = rail(&line.key, vec![stack], 0.0, p, cx);
                     let drawn = self.disclosure_part_motion(
                         &line.key,
