@@ -201,6 +201,7 @@ action_kinds! {
     QuestionRemove => "questionRemove",
     SnoozeQuestion => "snoozeQuestion",
     CancelQuestion => "cancelQuestion",
+    QuestionsReply => "questionsReply",
     QuestionListFilter => "questionListFilter",
     OpenResource => "openResource",
     CloseResource => "closeResource",

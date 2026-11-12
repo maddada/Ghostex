@@ -159,6 +159,20 @@ impl Asker {
         waiting.max(1)
     }
 
+    /// The tags it still asks here, in its order: not asked again or withdrawn later, not answered
+    /// in the reader's own words, not skipped. A dock row's Reply and Mention name them.
+    pub fn waiting_tags(&self) -> Vec<String> {
+        let gone = |tag: &str| {
+            self.superseded
+                .iter()
+                .chain(self.said.iter())
+                .chain(self.withdrawn.iter())
+                .chain(self.skipped.iter())
+                .any(|known| same_tag(known, tag))
+        };
+        self.tags.iter().filter(|tag| !gone(tag)).cloned().collect()
+    }
+
     /// Every tag it still asks here (not asked again or withdrawn later) was answered in the
     /// reader's own words or on another copy of it ([`share_answers`]), and it asks at least one.
     pub fn answered_in_words(&self) -> bool {

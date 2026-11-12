@@ -162,6 +162,10 @@ struct QuestionReply {
     /// A coordinator's work item ask (`W7`) and its card key: the words answer that ask
     /// (gx-chat-core `coordinator_board::answer` with op `reply`).
     work: Option<(String, String)>,
+    /// A whole form's or page's Reply (its dock row's, gx-chat-core `work_cards`): its id and what
+    /// the words go after, its open tags ("Q12 Q13") or, for a page that asks nothing, its
+    /// mention. The words go to the agent as one message ("Q12 Q13: words", `questionsReply`).
+    questions: Option<(String, String)>,
 }
 
 /// What the popover's actions do with the chat box.
@@ -205,10 +209,23 @@ impl NativeChatView {
     ) {
         // A work item with no open question has no tag: its words go to the item ("W7: words").
         let item = command["question"]["item"].as_str().unwrap_or_default();
+        let questions = command["question"]["questions"]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .map(|id| {
+                (
+                    id.to_owned(),
+                    command["question"]["to"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                )
+            });
         let question = command["question"]["tag"]
             .as_str()
-            .filter(|tag| !tag.is_empty() || !item.is_empty())
+            .filter(|tag| !tag.is_empty() || !item.is_empty() || questions.is_some())
             .map(|tag| QuestionReply {
+                questions: questions.clone(),
                 form: command["question"]["form"].as_str().map(str::to_owned),
                 tag: tag.to_owned(),
                 work: command["question"]["item"]
@@ -647,6 +664,23 @@ impl NativeChatView {
             if reply.is_empty() {
                 return;
             }
+            // A whole form or page: the words go to the agent after its open tags, and its
+            // questions stay open.
+            if let Some((id, to)) = &question.questions {
+                let words = if to.is_empty() {
+                    reply.to_owned()
+                } else {
+                    format!("{to}: {reply}")
+                };
+                match action {
+                    ReplyAction::Send => self.invoke(
+                        serde_json::json!({"type": "questionsReply", "id": id, "text": words}),
+                        cx,
+                    ),
+                    ReplyAction::AddToPrompt => self.append_prompt(&words, cx),
+                }
+                return;
+            }
             // A work item ask: the words are its answer, recorded once and sent to the
             // coordinator as "W7 Q12: words" (the user's "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU
             // STUFF").
@@ -748,6 +782,11 @@ impl ReplyPopover {
                 work: Some((item, _)),
                 ..
             }) if tag.is_empty() => format!("Your reply on {item}…"),
+            Some(QuestionReply {
+                tag,
+                questions: Some(_),
+                ..
+            }) if tag.is_empty() => "Your reply…".to_string(),
             Some(question) => format!("Your answer to {}…", question.tag),
             None => "Reply…".to_string(),
         };

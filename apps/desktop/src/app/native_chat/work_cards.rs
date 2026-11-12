@@ -1038,14 +1038,20 @@ impl NativeChatView {
         // The answers, the look every place shares (work_actions.rs); a row with none shows what
         // it asks for in their place (Open or Reply).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
-        // An ask with answers has Reply as its last answer (work_actions.rs `reply_answer`).
-        let reply_answer = (!answers.is_empty() && row["reply"].is_object())
-            .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
         let action = if answers.is_empty() && row["needs"] == true {
             dock_row_action(row)
         } else {
             None
         };
+        // An ask with answers has Reply as its last answer (work_actions.rs `reply_answer`), and a
+        // form or page has it after its Open: the words go to the agent tagged with the questions
+        // it still asks (gx-chat-core `questionsReply`).
+        //
+        // CDXC:Coordinators 2026-11-12 DECISION:
+        // User, of a form's row with only Open: "i can't reply to this or mention it :> pls fix".
+        let reply_answer = ((!answers.is_empty() || action == Some("Open"))
+            && row["reply"].is_object())
+        .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
         // What fits: the answers may take the first line while the question keeps half the row.
         let row_width = match self.board.dock_width.get() {
             width if width > 0.0 => width,
@@ -1370,7 +1376,7 @@ impl NativeChatView {
         let age_menu = self.row_age_menu(&key, &age, &hover, row, p, cx);
         if page_row {
             let page = row["open"].clone();
-            let right_menu = page_row_menu(row);
+            let right_row = row.clone();
             let head = Self::dock_row_press(&key, open, head.child(age_menu), p)
                 .group(hover.clone())
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -1380,7 +1386,8 @@ impl NativeChatView {
                     gpui::MouseButton::Right,
                     cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                         cx.stop_propagation();
-                        this.show_dock_row_menu(right_menu.clone(), event.position, window, cx);
+                        let rows = this.row_menu(&right_row, cx);
+                        this.show_dock_row_menu(rows, event.position, window, cx);
                     }),
                 );
             if let Some(page_id) = row["pageId"].as_str() {
@@ -1515,8 +1522,9 @@ impl NativeChatView {
             .child(line)
     }
 
-    /// An opened row's menu: Show in chat, Dismiss and Snooze (`page_row_menu`), then Mention,
-    /// which puts the item's reference in the chat box where the caret is now.
+    /// A row's ⋯ (and a page row's right-click) menu: Show in chat, Dismiss and Snooze
+    /// (`page_row_menu`), then Mention in chat box, which puts the item's, form's or page's
+    /// reference in the chat box where the caret is now.
     fn row_menu(&self, row: &Value, cx: &Context<Self>) -> Vec<Value> {
         let mut rows = page_row_menu(row);
         let mention = text(row, "mention");
@@ -1532,7 +1540,7 @@ impl NativeChatView {
                     .count()
             };
             rows.push(json!({
-                "label": "Mention",
+                "label": "Mention in chat box",
                 "command": {
                     "type": "insertBoardReference",
                     "reference": mention,

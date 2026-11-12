@@ -1014,10 +1014,53 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                 };
                 row["detail"] = json!([detail]);
                 row["open"] = json!({ "type": "openResource", "id": asker.id });
+                // Reply beside Open: the reader's own words on the whole form or page, sent to the
+                // agent tagged with the questions it still asks ("Q12 Q13: words",
+                // `questionsReply`), as a work item ask's Reply goes as "W7 Q12: words". Mention
+                // puts its name (a page's as a link to it) and those tags in the chat box.
+                //
+                // CDXC:Coordinators 2026-11-12 DECISION:
+                // User, of an opened form row with only Open and a menu of Show in chat, Dismiss
+                // and Snooze: "i can't reply to this or mention it :> pls fix".
+                let mention = questions_mention(state, &asker, text(&row, "title"), form);
+                let tags = asker.waiting_tags().join(" ");
+                row["reply"] = json!({
+                    "key": row["key"],
+                    "questions": asker.id,
+                    "tag": tags,
+                    "to": if tags.is_empty() { mention.clone() } else { tags.clone() },
+                });
+                row["mention"] = json!(mention);
             }
             (at, row)
         })
         .collect()
+}
+
+/// What a form's or page's Mention puts in the chat box: its name, a page's as a link to the
+/// page, then the questions it still asks: `[Name](https://…/p/…) Q12 Q13`. A form has no address
+/// of its own, so its name goes in quotes; its tags are what the agent finds it by.
+fn questions_mention(
+    state: &ChatState,
+    asker: &crate::transcript::open_questions::Asker,
+    title: &str,
+    form: bool,
+) -> String {
+    let name = title.replace(['[', ']'], "");
+    let name = if form {
+        format!("\u{201c}{name}\u{201d}")
+    } else {
+        match crate::questions::open_questions::page_url(state, &asker.id) {
+            Some(url) => format!("[{name}]({url})"),
+            None => format!("\u{201c}{name}\u{201d}"),
+        }
+    };
+    let tags = asker.waiting_tags();
+    if tags.is_empty() {
+        name
+    } else {
+        format!("{name} {}", tags.join(" "))
+    }
 }
 
 /// `{type: "loadPageQuestionCounts", pageId}`: asks the page's gxserver how many of its questions

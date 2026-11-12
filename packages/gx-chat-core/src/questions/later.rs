@@ -174,6 +174,35 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
     effects
 }
 
+/// `questionsReply {id, text}`: the reader's own words on a whole form or page, from its dock
+/// row's Reply, sent to the agent as a message without touching the chat box. `text` comes already
+/// tagged with the questions it still asks ("Q12 Q13: words", `extras::work_cards`), as a work
+/// item ask's Reply comes as "W7 Q12: words". The form or page stays open: the words answer none
+/// of its questions by themselves.
+pub fn reply(state: &mut ChatState, id: &str, text: &str) -> Vec<Effect> {
+    let text = text.trim();
+    if id.is_empty() || text.is_empty() {
+        return Vec::new();
+    }
+    // The same words on the same form or page are one send on every client and run, so a second
+    // press is dropped by the send ledger (FNV-1a, as `coordinator_board`'s answers are).
+    let hash = format!("{id}\n{text}")
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        });
+    let session: String = state.identity.session_id.chars().take(40).collect();
+    let request_id = state.core.allocate_request_id();
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::SendSessionChatMessage,
+        params: Box::new(json!({
+            "text": text,
+            "sendRequestId": format!("questions-reply-{session}-{hash:016x}"),
+        })),
+    }]
+}
+
 /// The call's answer, or `None` when it is not one of these. A refusal drops the change and says
 /// why; a success keeps it shown until the wire carries it (`settle`).
 pub fn rpc_settled(

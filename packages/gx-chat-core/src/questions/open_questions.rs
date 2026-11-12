@@ -969,7 +969,7 @@ pub fn show(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effec
 
 /// A question page's address, by its id: from the reply that holds it when it is loaded, else
 /// from the session's resource index (a thread's page read-only).
-fn page_url(state: &ChatState, id: &str) -> Option<String> {
+pub(crate) fn page_url(state: &ChatState, id: &str) -> Option<String> {
     let loaded = state
         .transcript_view
         .askers

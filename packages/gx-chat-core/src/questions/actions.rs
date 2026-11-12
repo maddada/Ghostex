@@ -170,6 +170,15 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .unwrap_or_default();
             effects.extend(crate::questions::later::cancel(state, id));
         }
+        ActionKind::QuestionsReply => {
+            let field = |name: &str| {
+                action
+                    .param(name)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            };
+            effects.extend(crate::questions::later::reply(state, field("id"), field("text")));
+        }
         ActionKind::QuestionRemove => {
             let id = action
                 .param("id")
