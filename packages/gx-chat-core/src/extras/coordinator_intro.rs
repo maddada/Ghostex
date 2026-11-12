@@ -50,7 +50,7 @@ pub struct Tip {
 /// The tips, in the order they show.
 pub const TIPS: &[Tip] = &[
     Tip {
-        icon: "coordinator-captain-hat-small",
+        icon: "coordinator-crown-points",
         title: "One coordinator per project",
         detail: "Give it everything. It keeps every decision in one chat.",
         example: "Fix the login bug, then plan the release.",

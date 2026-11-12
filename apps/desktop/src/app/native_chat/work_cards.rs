@@ -351,7 +351,7 @@ fn who_icon(who: &Value, p: &ChatAppearance) -> AnyElement {
             gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into(),
         ),
         "coordinator" => (
-            "titlebar/coordinator-captain-hat-small.svg".to_string(),
+            "titlebar/coordinator-crown-points.svg".to_string(),
             p.muted,
         ),
         _ => ("titlebar/clock.svg".to_string(), p.muted),
@@ -367,8 +367,8 @@ fn who_icon(who: &Value, p: &ChatAppearance) -> AnyElement {
 fn chip_icon(kind: &str) -> &'static str {
     match kind {
         "thread" => "titlebar/robot.svg",
-        // 12 px: the hat's thicker-lined copy for small sizes.
-        "coordinator" => "titlebar/coordinator-captain-hat-small.svg",
+        // The coordinator's crown (native_sidebar/threads.rs `coordinator_icon`).
+        "coordinator" => "titlebar/coordinator-crown-points.svg",
         "steps" => "titlebar/checklist.svg",
         "item" => "titlebar/stack.svg",
         "question" => "titlebar/help-circle.svg",

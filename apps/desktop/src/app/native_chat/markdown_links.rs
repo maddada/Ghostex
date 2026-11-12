@@ -182,7 +182,7 @@ pub(super) fn presentations(
 /// The icon of a board item's pill, the Board pill's own.
 pub(super) const BOARD_ICON: &str = "titlebar/layout-board-split.svg";
 
-/// The agent logo a session pill draws: the captain's hat for a coordinator, the agent's artwork tinted
+/// The agent logo a session pill draws: the outline crown for a coordinator, the agent's artwork tinted
 /// in its brand colour, else the generic robot; with the tint the label leaves to it.
 pub(super) fn session_pill_icon(
     agent_icon: &str,
@@ -195,9 +195,8 @@ pub(super) fn session_pill_icon(
         rgb(0xffffff).into()
     };
     if coordinator {
-        // A pill's logo is about 13 px: the hat's thicker-lined copy for small sizes
-        // (native_sidebar/threads.rs `captain_hat_asset`).
-        return ("titlebar/coordinator-captain-hat-small.svg", plain);
+        // The sidebar's coordinator crown (native_sidebar/threads.rs `coordinator_icon`).
+        return ("titlebar/coordinator-crown-points.svg", plain);
     }
     match crate::app::helpers::workspace_tab_agent_icon_path(agent_icon) {
         Some(path) => (

@@ -7,3 +7,5 @@
 - The phone draws the first one (`CoordinatorGlyph` in apps/mobile/app/src/components/sessions/icons.tsx).
 
 History: the side view traced from his picture (potrace) was the mark from 177cfd9f2 until this front view replaced it; it stays in git history only. Before that, a hand-drawn side view the user rejected ("this one looks simpler and uglier please fix").
+
+2026-11-12: coordinators now wear the outline crown (`coordinator-crown-points.svg`, the user's pick A in Q2650; CDXC:Coordinators 2026-11-12 in apps/desktop/src/app/native_sidebar/threads.rs). Nothing draws the hat any more; its two drawings stay here for history.

@@ -835,7 +835,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
      */
     insert_js(&mut map, "sessionNote", &[s("sessionNote")]);
     insert_js(&mut map, "agentSessionId", &[s("agentSessionId")]);
-    // CDXC:Coordinators 2026-10-01 WHY: the same second-whitelist trap: the phone draws the coordinator's captain's hat in place of the agent logo from this field, and nests each open thread under its coordinator from the link and thread state below.
+    // CDXC:Coordinators 2026-10-01 WHY: the same second-whitelist trap: the phone draws the coordinator's crown in place of the agent logo from this field, and nests each open thread under its coordinator from the link and thread state below.
     insert_js(&mut map, "coordinatorRole", &[s("coordinatorRole")]);
     // Its project's main coordinator (coordinators/main_coordinator.rs): the phone's "Main" tag.
     insert_js(&mut map, "isMainCoordinator", &[s("isMainCoordinator")]);

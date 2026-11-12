@@ -17,7 +17,7 @@
     {
       "id": "start-a-coordinator",
       "first": 3,
-      "icon": "coordinator-captain-hat",
+      "icon": "coordinator-crown-points",
       "title": "Let a coordinator delegate",
       "body": "A coordinator hands work to threads and brings results back. Press {key:openNewThreadPalette} and pick Coordinator."
     },

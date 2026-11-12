@@ -53,7 +53,7 @@ pub struct SuggestionRow {
     /// A `+` row's agent artwork id, drawn before the label.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_icon: Option<String>,
-    /// A `+` row's session is a coordinator: the captain's hat instead of the logo.
+    /// A `+` row's session is a coordinator: the coordinator's crown instead of the logo.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub coordinator: bool,
     /// A `+` row's session is working: its state reads in the working colour.

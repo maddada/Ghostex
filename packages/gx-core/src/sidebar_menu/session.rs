@@ -500,7 +500,7 @@ fn coordinator_rows(row: &SessionRow, stale: bool) -> Vec<MenuItem> {
         if !row.is_main_coordinator && !row.is_chief {
             rows.push(MenuItem::row(
                 "Make main coordinator",
-                "coordinator-captain-hat-small",
+                "coordinator-crown-points",
                 MenuCommand::coordinator_session(id, "makeMain"),
             ));
         }

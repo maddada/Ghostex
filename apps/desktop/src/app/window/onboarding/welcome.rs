@@ -57,7 +57,7 @@ const TABS: [(WelcomeTab, &str, &str, &str); 3] = [
     ),
 ];
 
-/// The tab icon that is the app's coordinator mark (the captain's hat) instead of a line icon.
+/// The tab icon that is the app's coordinator mark (the outline crown) instead of a line icon.
 const COORDINATOR_ICON: &str = "coordinator";
 
 /// `<FootActions panel>`: the panel's forward action on the footer row, right-aligned to the copy column.
@@ -295,7 +295,7 @@ impl GpuiOnboardingWindow {
                         .child(
                             ibox(s, 44.0, 11.0).child(if *icon_name == COORDINATOR_ICON {
                                 gpui::svg()
-                                    .path("titlebar/coordinator-captain-hat.svg")
+                                    .path("titlebar/coordinator-crown-points.svg")
                                     .size(s.px(24.0))
                                     .text_color(hex(0xdfe4ee))
                                     .into_any_element()

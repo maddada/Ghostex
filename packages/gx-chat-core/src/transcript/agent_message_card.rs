@@ -129,7 +129,7 @@ fn card(
     })
 }
 
-/// Marks a card whose other session is a coordinator, which the renderers draw with the captain's hat in
+/// Marks a card whose other session is a coordinator, which the renderers draw with the coordinator's crown in
 /// place of its agent's logo (the arrow badge stays: it says which way the message went).
 ///
 /// CDXC:Coordinators 2026-10-15 DECISION:
@@ -588,7 +588,7 @@ pub fn dress_sent(sent: &mut Value) {
         })
         .collect();
     let sentence = format!("Message to {count} sessions");
-    // The row's own mark is the captain's hat only when every recipient is a coordinator.
+    // The row's own mark is the coordinator's crown only when every recipient is a coordinator.
     let coordinator = recipients
         .iter()
         .all(|recipient| recipient["coordinator"] == true);

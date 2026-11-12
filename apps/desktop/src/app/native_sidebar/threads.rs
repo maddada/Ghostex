@@ -29,10 +29,10 @@ pub(crate) const THREAD_INDENT: f32 = 16.0;
 /// The coordinator marker and its thread count.
 const COORDINATOR_ICON: &str = "titlebar/users-group.svg";
 const WAITING_COLOR: u32 = 0x95d7f6;
-const COORDINATOR_ROW_ICON: &str = "titlebar/coordinator-captain-hat.svg";
-/// The same drawing with thicker lines for small sizes (coordinator-captain-hat.PROVENANCE.md).
-const COORDINATOR_ICON_SMALL: &str = "titlebar/coordinator-captain-hat-small.svg";
-/// Chief of Staff's row keeps the crown it had before coordinators took the captain's hat.
+/// The coordinator's mark: a three-point outline crown, a 24 px line icon with the 2 px round
+/// stroke of the Tabler set beside it, so one drawing reads at every size from 12 px up.
+pub(crate) const COORDINATOR_ROW_ICON: &str = "titlebar/coordinator-crown-points.svg";
+/// Chief of Staff's row keeps the filled crown coordinators wore before the captain's hat.
 const CHIEF_ROW_ICON: &str = "titlebar/coordinator-crown.svg";
 const COORDINATOR_COLOR_DARK: u32 = 0xffffff;
 const COORDINATOR_COLOR_LIGHT: u32 = 0x000000;
@@ -182,15 +182,18 @@ pub(crate) fn is_coordinator(session: &NativeSidebarSession) -> bool {
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
 /// User: "Can we please show a captain hat icon for coordinators instead of crown? but make it same color as we have now", then, of a hand-drawn cap: "this one looks simpler and uglier please fix" and "im licensed to use that image pls use it directly", then "keep the same hat exactly just make it shown from front I mean it will look better for the icon to be symmetrical" (he picked candidate A in Q2172). The mark is our own front-view drawing of his cap (assets/titlebar/coordinator-captain-hat.PROVENANCE.md), in the crown's colours and dimming; at 17 px and below it draws with slightly thicker lines (`captain_hat_asset`). The user asked it "for coordinators", so Chief of Staff (`chief`) keeps the crown. The chat's pills, cards and work chips and the phone draw the same picture.
+///
+/// CDXC:Coordinators 2026-11-12 DECISION:
+/// User: "I wanna do crown icon for coordinator again but i want a different svg", then picked A, the three-point outline crown, in Q2650 (eight crowns drawn as line icons). It replaces the captain's hat on every surface the hat had, desktop, web and phone, in the hat's colours (white on dark, black on light) and the row's dimming. It is one 24 px drawing with the Tabler set's 2 px round stroke, so it needs no thicker copy for small sizes (it lands at 1 px or more from 12 px up). Chief of Staff and GBots department leads keep their filled crown (`coordinator-crown.svg`), so the two marks stay apart. This supersedes the 2026-11-10 hat; the hat's drawings stay in assets only for its history.
 pub(crate) fn coordinator_icon(appearance: &SidebarAppearance, chief: bool) -> AnyElement {
-    // The hat is wide and short, so it fills the row's 15 px icon slot to look as big as the agent
-    // logos beside it; the crown stays 13 px.
+    // The outline crown fills the row's 15 px icon slot like the agent logos beside it; Chief's
+    // filled crown stays 13 px.
     let size = if chief { 13.0 } else { 15.0 } * appearance.scale;
     titlebar_svg_icon(
         if chief {
             CHIEF_ROW_ICON
         } else {
-            captain_hat_asset(size)
+            COORDINATOR_ROW_ICON
         },
         size,
         rgb(if appearance.light {
@@ -228,16 +231,6 @@ pub(crate) fn main_coordinator_tag(
             .child("Main")
             .into_any_element(),
     )
-}
-
-/// The captain's hat for a mark drawn `size` pixels tall: the thicker-lined copy at 17 px and below,
-/// where the drawing's thin lines go faint on a 1x screen, else the drawing as it is.
-fn captain_hat_asset(size: f32) -> &'static str {
-    if size <= 17.0 {
-        COORDINATOR_ICON_SMALL
-    } else {
-        COORDINATOR_ROW_ICON
-    }
 }
 
 /// The size of the row's time text in `sessions.rs`; the badge's icon and count use it so they sit on the time's baseline.
