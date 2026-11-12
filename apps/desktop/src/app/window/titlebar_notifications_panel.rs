@@ -2,10 +2,12 @@
 //! bell. It renders the cached feed the Rust store pushed (see
 //! `crate::notification_feed`), edits its own copy optimistically so clicks
 //! feel instant, and sends one command per click back through the main app.
-//! The rows are every online computer's (gx-core `notification_feeds.rs`): with a remote
-//! computer in the sidebar the panel shows All, This computer and Remote tabs, a remote row
-//! names its computer in a chip by the title, and the Remote tab shows one dimmed line when an offline computer has rows waiting to come back.
-use super::native_modal_kit::{ModalRailItem, modal_bordered_segmented_control};
+//! The rows are every online computer's (gx-core `notification_feeds.rs`): while more than one
+//! computer is in the sidebar every row ends its title with its computer's icon, and the list
+//! shows one dimmed line when an offline computer has rows waiting to come back.
+//!
+//! CDXC:Notifications 2026-11-12 DECISION:
+//! User, of the panel's header and its All / This computer / Remote bar: "need these to be smaller width", "Mark all read <- needs to be shorter pls", "i dont like this bar here, i think let's remove it and just add a icon next to the title instead of the pc (like we have in app's sidebar)". On the options page they picked one "..." button whose click opens a menu with Mark all read and Clear all (Q2734 C), the computer's own icon right after the title as in a sidebar row, in place of the name chip (Q2735 B), and this computer's rows wearing its icon too, the sidebar's rule (Q2741 B). The tabs are gone, so both actions cover every row. The phone's list does the same (apps/mobile/app AttentionList.tsx).
 use super::resources_style::*;
 use crate::app::helpers::*;
 use crate::notification_feed::{
@@ -20,7 +22,10 @@ const NOTIFICATION_PANEL_CHECK_ICON: &str = "titlebar/check.svg";
 const NOTIFICATION_CARD_CHECK_SIZE: f32 = 22.0;
 /// Title line height, so the line keeps one height whether or not it is hovered.
 const NOTIFICATION_CARD_TITLE_LINE_HEIGHT: f32 = 18.0;
-const NOTIFICATION_CHIP_ICON: &str = "titlebar/device-desktop.svg";
+const NOTIFICATION_MORE_ICON: &str = "titlebar/dots.svg";
+/// The sidebar row's computer icon size (native_sidebar/computer_mark.rs).
+const NOTIFICATION_COMPUTER_ICON_SIZE: f32 = 12.0;
+const NOTIFICATION_ACTIONS_MENU_WIDTH: f32 = 168.0;
 
 impl GpuiTitlebarReadingPanel {
     pub(crate) fn notifications(
@@ -33,7 +38,7 @@ impl GpuiTitlebarReadingPanel {
             state: GpuiTitlebarReadingPanelState::Notifications {
                 feed,
                 hovered_id: None,
-                tab: NotificationFeedTab::All,
+                actions_menu_open: false,
             },
         }
     }
@@ -63,30 +68,13 @@ impl GpuiTitlebarReadingPanel {
         }
     }
 
-    /// The open tab; All when the panel draws no tabs (no remote computer in the sidebar).
-    fn notifications_tab(&self) -> NotificationFeedTab {
-        match &self.state {
-            GpuiTitlebarReadingPanelState::Notifications { tab, feed, .. }
-                if feed.has_remote_machines =>
-            {
-                *tab
-            }
-            _ => NotificationFeedTab::All,
-        }
-    }
-
-    fn select_notifications_tab(
-        &mut self,
-        next: NotificationFeedTab,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    fn set_notifications_actions_menu_open(&mut self, open: bool, cx: &mut gpui::Context<Self>) {
         if let GpuiTitlebarReadingPanelState::Notifications {
-            tab, hovered_id, ..
+            actions_menu_open, ..
         } = &mut self.state
-            && *tab != next
+            && *actions_menu_open != open
         {
-            *tab = next;
-            *hovered_id = None;
+            *actions_menu_open = open;
             cx.notify();
         }
     }
@@ -97,12 +85,11 @@ impl GpuiTitlebarReadingPanel {
         row: Option<(MachineId, String)>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let tab = self.notifications_tab();
         let _ = self.main_app.update_in(cx, move |app, _main_window, cx| {
             app.request_notification_feed_command(
                 action,
                 row.as_ref().map(|(machine, id)| (machine, id.as_str())),
-                tab,
+                NotificationFeedTab::All,
                 cx,
             );
         });
@@ -151,7 +138,6 @@ impl GpuiTitlebarReadingPanel {
     }
 
     fn dismiss_notification(&mut self, key: String, cx: &mut gpui::Context<Self>) {
-        let tab = self.notifications_tab();
         let mut next_hovered_id = None;
         let mut row = None;
         if let Some(feed) = self.notifications_feed_mut()
@@ -170,12 +156,12 @@ impl GpuiTitlebarReadingPanel {
                 feed.next_unread_id = None;
             }
             // Hover only updates on mouse movement, so the card that slides into the removed slot is marked hovered here; the pointer was on the title line, which lands inside the next card's title line.
-            // Cards are grouped by read state, so the slot is filled by the next card of the same group on this tab.
+            // Cards are grouped by read state, so the slot is filled by the next card of the same group.
             next_hovered_id = feed
                 .items
                 .iter()
                 .skip(index)
-                .find(|item| item.read == removed.read && tab.includes(&item.machine))
+                .find(|item| item.read == removed.read)
                 .map(GpuiNotificationFeedItem::key);
             row = Some((removed.machine, removed.id));
         }
@@ -208,7 +194,6 @@ impl GpuiTitlebarReadingPanel {
     }
 
     fn toggle_notification_read(&mut self, key: String, cx: &mut gpui::Context<Self>) {
-        let tab = self.notifications_tab();
         let Some(feed) = self.notifications_feed_mut() else {
             return;
         };
@@ -234,7 +219,7 @@ impl GpuiTitlebarReadingPanel {
             .items
             .iter()
             .skip(index + 1)
-            .find(|item| item.read == was_read && tab.includes(&item.machine))
+            .find(|item| item.read == was_read)
             .map(GpuiNotificationFeedItem::key);
         if let GpuiTitlebarReadingPanelState::Notifications { hovered_id, .. } = &mut self.state
             && hovered_id.as_deref() == Some(key.as_str())
@@ -245,28 +230,25 @@ impl GpuiTitlebarReadingPanel {
         cx.notify();
     }
 
-    /// Reads every row the open tab shows, on every online computer it covers.
+    /// Reads every row, on every online computer.
     fn mark_all_notifications_read(&mut self, cx: &mut gpui::Context<Self>) {
-        let tab = self.notifications_tab();
         if let Some(feed) = self.notifications_feed_mut() {
             for item in &mut feed.items {
-                if tab.includes(&item.machine) && !item.awaiting_approval {
+                if !item.awaiting_approval {
                     item.read = true;
                 }
             }
-            reset_tab_unread_counts(feed, tab);
+            reset_unread_counts(feed);
         }
         self.send_notification_feed_command("markAllRead", None, cx);
         cx.notify();
     }
 
-    /// Clears every row the open tab shows, on every online computer it covers.
+    /// Clears every row, on every online computer.
     fn clear_all_notifications(&mut self, cx: &mut gpui::Context<Self>) {
-        let tab = self.notifications_tab();
         if let Some(feed) = self.notifications_feed_mut() {
-            feed.items
-                .retain(|item| item.awaiting_approval || !tab.includes(&item.machine));
-            reset_tab_unread_counts(feed, tab);
+            feed.items.retain(|item| item.awaiting_approval);
+            reset_unread_counts(feed);
         }
         self.send_notification_feed_command("clearAll", None, cx);
         cx.notify();
@@ -292,18 +274,18 @@ impl GpuiTitlebarReadingPanel {
 
     pub(super) fn render_notifications(&self, cx: &mut gpui::Context<Self>) -> AnyElement {
         let GpuiTitlebarReadingPanelState::Notifications {
-            feed, hovered_id, ..
+            feed,
+            hovered_id,
+            actions_menu_open,
         } = &self.state
         else {
             unreachable!();
         };
-        // Without a remote computer there is only one tab, so none is drawn and everything shows.
-        let tab = self.notifications_tab();
         let mut render_group = |read: bool| {
             feed.items
                 .iter()
                 .enumerate()
-                .filter(|(_, item)| item.read == read && tab.includes(&item.machine))
+                .filter(|(_, item)| item.read == read)
                 .map(|(index, item)| {
                     self.render_notification_row(
                         index,
@@ -321,7 +303,6 @@ impl GpuiTitlebarReadingPanel {
         let offline_notice = feed
             .offline_notice
             .as_deref()
-            .filter(|_| tab.shows_offline_notice())
             .map(Self::render_notifications_offline_notice);
         let mut body = v_flex().w_full().p(px(10.0)).pt(px(8.0));
         if has_unread {
@@ -336,12 +317,10 @@ impl GpuiTitlebarReadingPanel {
                 .child(v_flex().w_full().gap(px(7.0)).children(read_rows));
         }
         v_flex()
+            .relative()
             .size_full()
             .overflow_hidden()
-            .child(self.render_notifications_header(feed, tab, cx))
-            .when(feed.has_remote_machines, |this| {
-                this.child(self.render_notifications_tabs(feed, tab, cx))
-            })
+            .child(self.render_notifications_header(feed, *actions_menu_open, cx))
             .child(
                 div()
                     .relative()
@@ -385,57 +364,14 @@ impl GpuiTitlebarReadingPanel {
                             .thickness(px(TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH)),
                     ),
             )
-            .into_any_element()
-    }
-
-    /// All · This computer · Remote, each with its own unread count, in the shared bordered
-    /// segmented control (the mockup's tab A).
-    fn render_notifications_tabs(
-        &self,
-        feed: &GpuiNotificationFeedState,
-        tab: NotificationFeedTab,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        let items: Vec<ModalRailItem> = NotificationFeedTab::TABS
-            .iter()
-            .map(|tab| ModalRailItem {
-                label: tab.label().into(),
-                trailing: Some(feed.tab_unread_count(*tab).to_string().into()),
-                dot: None,
+            .when(*actions_menu_open, |this| {
+                this.child(self.render_notifications_actions_menu(feed, cx))
             })
-            .collect();
-        let selected = NotificationFeedTab::TABS
-            .iter()
-            .position(|candidate| *candidate == tab)
-            .unwrap_or(0);
-        let ink = chrome_ink();
-        div()
-            .w_full()
-            .flex_shrink_0()
-            .px(px(10.0))
-            .pt(px(9.0))
-            .child(
-                modal_bordered_segmented_control(
-                    ink,
-                    gpui::Rgba { a: 0.14, ..ink },
-                    gpui::Rgba { a: 0.55, ..ink },
-                    "ghostex-gpui-titlebar-notifications-tabs",
-                    &items,
-                    selected,
-                    |this: &mut Self, index, _window, cx| {
-                        if let Some(tab) = NotificationFeedTab::TABS.get(index) {
-                            this.select_notifications_tab(*tab, cx);
-                        }
-                    },
-                    cx,
-                )
-                .w_full(),
-            )
             .into_any_element()
     }
 
     /// "<Computer> is offline. Its notifications show again when it reconnects." as a plain dimmed
-    /// line at the top of the Remote tab while a remote computer's rows are waiting to come back.
+    /// line at the top of the list while a remote computer's rows are waiting to come back.
     ///
     /// CDXC:Notifications 2026-11-07 DECISION: User: "don't show this all the time man". A
     /// computer that is off is normal, so this is a quiet dimmed line in the list's style, not a
@@ -465,63 +401,132 @@ impl GpuiTitlebarReadingPanel {
             .child(title)
             .into_any_element()
     }
-    /// CDXC:Notifications 2026-09-13 DECISION:
-    /// User: keep the Notifications panel in native GPUI and match the Tips header buttons with full-height, equal-width, unfilled actions separated by thin borders, with an icon beside each label.
-    /// 2026-11-12, user: the "Next unread" action is gone from this header; Mark all read and Clear all fill it. Neither has a hotkey, so neither has a tooltip (it would only repeat the label).
+    /// The title, then one square "..." button at the right end whose click opens the actions menu
+    /// (CDXC:Notifications 2026-11-12 at the top of this file).
     /// User: do not show the notification count next to the dropdown title.
     ///
-    /// CDXC:Notifications 2026-10-16 DECISION:
-    /// User: "i wanted that 40px to be shown as gap to the right of the word "Notifications" instead of making the buttons wider in the header of notifications modal". The 40px the panel gained (TITLEBAR_POPUP_NOTIFICATIONS_WIDTH) is right padding on the title, so the actions keep their 480px-panel widths. 2026-10-17, user: "move the notification title at the top 4px to the right (add more margin from the word's left)": the 4px moves from the title's right padding to its left, so the actions stay where they were.
+    /// CDXC:Notifications 2026-10-17 DECISION:
+    /// User: "move the notification title at the top 4px to the right (add more margin from the word's left)".
     fn render_notifications_header(
         &self,
         feed: &GpuiNotificationFeedState,
-        tab: NotificationFeedTab,
+        menu_open: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        // Mark all read and Clear all act on the open tab.
-        let tab_unread_count = feed.tab_unread_count(tab);
-        let tab_has_rows = feed.items.iter().any(|item| tab.includes(&item.machine));
+        let enabled = !feed.items.is_empty();
+        let ink = chrome_ink();
         resource_header()
-            .border_color(chrome_ink().opacity(0.12))
+            .border_color(ink.opacity(0.12))
             .child(
                 h_flex()
-                    .flex_shrink_0()
+                    .min_w_0()
+                    .flex_1()
                     .items_center()
                     .pl(px(8.0 + 4.0))
-                    .pr(px(4.0 + 40.0))
                     .whitespace_nowrap()
                     .text_size(px(13.0))
                     .font_weight(FontWeight::BOLD)
-                    .text_color(chrome_ink().opacity(0.96))
+                    .text_color(ink.opacity(0.96))
                     .child("Notifications"),
             )
             .child(
                 h_flex()
+                    .id("ghostex-gpui-titlebar-notifications-actions")
+                    .role(gpui::Role::Button)
+                    .aria_label("Notification actions")
+                    .flex_shrink_0()
                     .h_full()
-                    .min_w_0()
-                    .flex_1()
-                    .items_stretch()
-                    .child(Self::render_notification_header_action(
+                    .w(px(TITLEBAR_POPUP_READING_HEADER_HEIGHT))
+                    .items_center()
+                    .justify_center()
+                    .border_l_1()
+                    .border_color(ink.opacity(0.12))
+                    .rounded_tr(px(RESOURCE_PANEL_RADIUS - 1.0))
+                    .when(menu_open, |this| this.bg(ink.opacity(0.14)))
+                    .when(enabled, |this| {
+                        this.cursor_pointer()
+                            .hover(|this| this.bg(ink.opacity(0.14)))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                                    window.prevent_default();
+                                    cx.stop_propagation();
+                                    this.set_notifications_actions_menu_open(!menu_open, cx);
+                                }),
+                            )
+                    })
+                    .child(titlebar_svg_icon(
+                        NOTIFICATION_MORE_ICON,
+                        TITLEBAR_POPUP_READING_HEADER_BUTTON_ICON_SIZE,
+                        ink.opacity(if enabled { 0.78 } else { 0.38 }).into(),
+                    )),
+            )
+            .into_any_element()
+    }
+
+    /// The "..." menu: Mark all read and Clear all, under the button at the header's right end.
+    /// A click outside it (on the list or the header) closes it, as the sidebar's menus do.
+    fn render_notifications_actions_menu(
+        &self,
+        feed: &GpuiNotificationFeedState,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let has_unread = feed
+            .items
+            .iter()
+            .any(|item| !item.read && !item.awaiting_approval);
+        let has_rows = feed.items.iter().any(|item| !item.awaiting_approval);
+        div()
+            .id("ghostex-gpui-titlebar-notifications-actions-backdrop")
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.set_notifications_actions_menu_open(false, cx);
+                }),
+            )
+            .child(
+                v_flex()
+                    .id("ghostex-gpui-titlebar-notifications-actions-menu")
+                    .role(gpui::Role::Menu)
+                    .aria_label("Notification actions")
+                    .absolute()
+                    .top(px(TITLEBAR_POPUP_READING_HEADER_HEIGHT + 4.0))
+                    .right(px(6.0))
+                    .w(px(NOTIFICATION_ACTIONS_MENU_WIDTH))
+                    .p(px(4.0))
+                    .rounded(px(POPUP_MENU_RADIUS))
+                    .border_1()
+                    .border_color(titlebar_popup_menu_border_color())
+                    .bg(titlebar_popup_menu_background())
+                    .shadow_lg()
+                    .occlude()
+                    .child(Self::render_notifications_menu_item(
                         "ghostex-gpui-titlebar-notifications-mark-all-read",
                         "Mark all read",
                         NOTIFICATION_PANEL_CHECK_ICON,
-                        tab_unread_count > 0,
-                        false,
+                        has_unread,
                         cx.listener(|this, _: &MouseDownEvent, window, cx| {
                             window.prevent_default();
                             cx.stop_propagation();
+                            this.set_notifications_actions_menu_open(false, cx);
                             this.mark_all_notifications_read(cx);
                         }),
                     ))
-                    .child(Self::render_notification_header_action(
+                    .child(Self::render_notifications_menu_item(
                         "ghostex-gpui-titlebar-notifications-clear-all",
                         "Clear all",
                         "titlebar/xmark.svg",
-                        tab_has_rows,
-                        true,
+                        has_rows,
                         cx.listener(|this, _: &MouseDownEvent, window, cx| {
                             window.prevent_default();
                             cx.stop_propagation();
+                            this.set_notifications_actions_menu_open(false, cx);
                             this.clear_all_notifications(cx);
                         }),
                     )),
@@ -529,51 +534,36 @@ impl GpuiTitlebarReadingPanel {
             .into_any_element()
     }
 
-    /// CDXC:Notifications 2026-09-13 WHY:
-    /// Fixed 144px actions consumed 432px of the 480px dropdown and squeezed the heading into the buttons; equal flex shares with compact padding leave room for the title.
-    fn render_notification_header_action(
+    fn render_notifications_menu_item(
         id: &'static str,
         label: &'static str,
         icon: &'static str,
         enabled: bool,
-        last: bool,
         listener: impl Fn(&MouseDownEvent, &mut Window, &mut gpui::App) + 'static,
     ) -> AnyElement {
+        let foreground = titlebar_popup_menu_foreground();
+        let opacity = if enabled { 0.92 } else { 0.38 };
         h_flex()
             .id(id)
-            .when(last, |this| {
-                this.rounded_tr(px(RESOURCE_PANEL_RADIUS - 1.0))
-            })
-            .h_full()
-            .min_w_0()
-            .flex_1()
-            .px(px(4.0))
+            .role(gpui::Role::MenuItem)
+            .aria_label(label)
+            .w_full()
+            .h(px(28.0))
+            .px(px(8.0))
+            .gap(px(8.0))
             .items_center()
-            .justify_center()
-            .gap(px(4.0))
-            .border_l_1()
-            .border_color(chrome_ink().opacity(0.12))
-            .whitespace_nowrap()
-            .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
-            .font_weight(FontWeight::NORMAL)
+            .rounded(px(5.0))
+            .text_size(px(13.0))
+            .text_color(foreground.opacity(opacity))
             .when(enabled, |this| {
-                this.text_color(chrome_ink().opacity(0.78))
-                    .cursor_pointer()
-                    .hover(|this| {
-                        this.bg(chrome_ink().opacity(0.14))
-                            .text_color(chrome_ink().opacity(0.94))
-                    })
+                this.cursor_pointer()
+                    .hover(|this| this.bg(titlebar_popup_menu_hover_color()))
                     .on_mouse_down(MouseButton::Left, listener)
-            })
-            .when(!enabled, |this| {
-                this.text_color(chrome_ink().opacity(0.38)).cursor_default()
             })
             .child(titlebar_svg_icon(
                 icon,
-                TITLEBAR_POPUP_READING_HEADER_BUTTON_ICON_SIZE,
-                chrome_ink()
-                    .opacity(if enabled { 0.78 } else { 0.38 })
-                    .into(),
+                14.0,
+                foreground.opacity(if enabled { 0.72 } else { 0.30 }),
             ))
             .child(label)
             .into_any_element()
@@ -741,7 +731,6 @@ impl GpuiTitlebarReadingPanel {
                             .child(
                                 div()
                                     .min_w_0()
-                                    .flex_1()
                                     .overflow_hidden()
                                     .whitespace_nowrap()
                                     .text_ellipsis()
@@ -750,9 +739,10 @@ impl GpuiTitlebarReadingPanel {
                                     .text_color(chrome_ink().opacity(0.94))
                                     .child(title),
                             )
-                            .when_some(item.machine_name.clone(), |this, name| {
-                                this.child(Self::render_notification_machine_chip(name))
+                            .when_some(item.computer_icon, |this, asset| {
+                                this.child(Self::render_notification_computer_icon(asset))
                             })
+                            .child(div().flex_1())
                             .child(time_slot),
                     )
                     .when(!item.body.is_empty(), |this| {
@@ -900,36 +890,18 @@ impl GpuiTitlebarReadingPanel {
             .into_any_element()
     }
 
-    /// A remote row's computer, by the title (the mockup's label B). Rows from this computer have
-    /// none.
-    fn render_notification_machine_chip(name: String) -> AnyElement {
-        h_flex()
+    /// The row's computer, as its icon right after the title: the mark a sidebar row draws for it
+    /// (native_sidebar/computer_mark.rs), in the row's muted ink.
+    fn render_notification_computer_icon(asset: &'static str) -> AnyElement {
+        div()
             .flex_shrink_0()
-            .max_w(px(150.0))
-            .h(px(17.0))
+            .flex()
             .items_center()
-            .gap(px(4.0))
-            .px(px(6.0))
-            .rounded(px(5.0))
-            .border_1()
-            .border_color(chrome_ink().opacity(0.16))
-            .bg(chrome_ink().opacity(0.07))
-            .text_size(px(10.5))
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(chrome_ink().opacity(0.80))
             .child(titlebar_svg_icon(
-                NOTIFICATION_CHIP_ICON,
-                11.0,
-                chrome_ink().opacity(0.80).into(),
+                asset,
+                NOTIFICATION_COMPUTER_ICON_SIZE,
+                chrome_ink().opacity(0.55).into(),
             ))
-            .child(
-                div()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .child(name),
-            )
             .into_any_element()
     }
 
@@ -962,31 +934,24 @@ impl GpuiTitlebarReadingPanel {
     }
 }
 
-/// The tab's unread rows were all read or cleared, except approvals still waiting for an answer
-/// (they stay unread): its counts drop to those, and the jump target goes unless it is one of them.
-fn reset_tab_unread_counts(feed: &mut GpuiNotificationFeedState, tab: NotificationFeedTab) {
+/// Every unread row was read or cleared, except approvals still waiting for an answer (they stay
+/// unread): the counts drop to those, and the jump target goes unless it is one of them.
+fn reset_unread_counts(feed: &mut GpuiNotificationFeedState) {
     let waiting = |local: bool| {
         feed.items
             .iter()
             .filter(|item| item.machine.is_local() == local && !item.read)
             .count()
     };
-    let (local_waiting, remote_waiting) = (waiting(true), waiting(false));
-    match tab {
-        NotificationFeedTab::All => {
-            feed.local_unread_count = local_waiting;
-            feed.remote_unread_count = remote_waiting;
-        }
-        NotificationFeedTab::ThisComputer => feed.local_unread_count = local_waiting,
-        NotificationFeedTab::Remote => feed.remote_unread_count = remote_waiting,
-    }
+    feed.local_unread_count = waiting(true);
+    feed.remote_unread_count = waiting(false);
     feed.unread_count = feed.local_unread_count + feed.remote_unread_count;
     let next_still_unread = feed.items.iter().any(|item| {
         !item.read
             && item.machine == feed.next_unread_machine
             && feed.next_unread_id.as_deref() == Some(item.id.as_str())
     });
-    if tab.includes(&feed.next_unread_machine) && !next_still_unread {
+    if !next_still_unread {
         feed.next_unread_id = None;
     }
 }

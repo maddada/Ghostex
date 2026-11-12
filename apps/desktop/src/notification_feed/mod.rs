@@ -151,8 +151,10 @@ impl GpuiNotificationFeedKind {
 pub(crate) struct GpuiNotificationFeedItem {
     /// The computer whose gxserver owns the row; every command on it goes there.
     pub(crate) machine: ghostex_gx_core::MachineId,
-    /// A remote computer's name as the sidebar shows it, for the row's chip.
-    pub(crate) machine_name: Option<String>,
+    /// The icon the sidebar draws for the row's computer, after the row's title; `None` with only
+    /// this computer. The app fills it as it hands the feed to the panel
+    /// (`notification_feed_for_panel`), since the marks live in its store.
+    pub(crate) computer_icon: Option<&'static str>,
     pub(crate) id: String,
     pub(crate) project_id: String,
     pub(crate) session_id: String,
@@ -184,10 +186,7 @@ impl GpuiNotificationFeedItem {
         let created_at = text("createdAt")?;
         let machine = ghostex_gx_core::notification_feed_item_machine(value);
         Some(Self {
-            machine_name: (!machine.is_local())
-                .then(|| text("machineName"))
-                .flatten()
-                .filter(|name| !name.is_empty()),
+            computer_icon: None,
             machine,
             created_at_epoch_secs: parse_iso_epoch_secs(&created_at),
             created_at,
@@ -239,8 +238,6 @@ pub(crate) struct GpuiNotificationFeedState {
     pub(crate) items: Vec<GpuiNotificationFeedItem>,
     /// "<Computer> is offline. …" while a remote computer's rows are hidden.
     pub(crate) offline_notice: Option<String>,
-    /// The sidebar has a remote computer, so the panel shows its tabs.
-    pub(crate) has_remote_machines: bool,
 }
 
 impl Default for GpuiNotificationFeedState {
@@ -253,20 +250,11 @@ impl Default for GpuiNotificationFeedState {
             next_unread_machine: ghostex_gx_core::MachineId::Local,
             items: Vec::new(),
             offline_notice: None,
-            has_remote_machines: false,
         }
     }
 }
 
 impl GpuiNotificationFeedState {
-    pub(crate) fn tab_unread_count(&self, tab: ghostex_gx_core::NotificationFeedTab) -> usize {
-        match tab {
-            ghostex_gx_core::NotificationFeedTab::All => self.unread_count,
-            ghostex_gx_core::NotificationFeedTab::ThisComputer => self.local_unread_count,
-            ghostex_gx_core::NotificationFeedTab::Remote => self.remote_unread_count,
-        }
-    }
-
     /// Takes one row's unread count off the totals, as an optimistic edit does.
     pub(crate) fn note_read(&mut self, machine: &ghostex_gx_core::MachineId) {
         self.unread_count = self.unread_count.saturating_sub(1);
@@ -328,10 +316,6 @@ impl GpuiNotificationFeedState {
                 .get("offlineNotice")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_string),
-            has_remote_machines: message
-                .get("hasRemoteMachines")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false),
         })
     }
 }
@@ -484,12 +468,25 @@ impl GhostexGpuiApp {
         if self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Notifications)
             && let Some(handle) = self.titlebar_popup_window
         {
+            let state = self.notification_feed_for_panel(state);
             let _ = handle.update(cx, |popup, window, cx| {
                 popup.update_notifications_feed(state, cx);
                 window.refresh();
             });
         }
         cx.notify();
+    }
+
+    /// The feed as the panel draws it: each row carries its computer's icon, the one its sidebar
+    /// row ends with (`notification_computer_icon`).
+    pub(crate) fn notification_feed_for_panel(
+        &self,
+        mut feed: GpuiNotificationFeedState,
+    ) -> GpuiNotificationFeedState {
+        for item in &mut feed.items {
+            item.computer_icon = self.notification_computer_icon(&item.machine);
+        }
+        feed
     }
 
     /// Acts on the feed: the Rust store performs the command against the gxserver that owns the

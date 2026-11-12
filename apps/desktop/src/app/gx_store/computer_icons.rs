@@ -347,6 +347,21 @@ impl GhostexGpuiApp {
             .map(|mark| (mark.asset, mark.name.as_str()))
     }
 
+    /// The icon a notification from that computer ends its title with: the sidebar's rule
+    /// (native_sidebar/computer_mark.rs), so every computer's, this one's included, while more than
+    /// one is in the sidebar, and none with only this computer. A remote computer without a mark
+    /// keeps the plain computer icon.
+    pub(crate) fn notification_computer_icon(
+        &self,
+        machine: &ghostex_gx_core::MachineId,
+    ) -> Option<&'static str> {
+        let marks = &self.gx_store.remote.marks;
+        match marks.get(machine.remote_id().unwrap_or(LOCAL_MACHINE_ID)) {
+            Some(mark) => Some(mark.asset),
+            None => (!machine.is_local()).then_some("titlebar/device-desktop.svg"),
+        }
+    }
+
     /// The icon a computer tile in the sidebar's top row draws.
     pub(crate) fn sidebar_machine_icon_asset(&self, machine_id: &str) -> Option<&'static str> {
         self.gx_store

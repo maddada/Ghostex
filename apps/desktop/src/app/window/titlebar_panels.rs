@@ -468,8 +468,8 @@ pub(crate) enum GpuiTitlebarReadingPanelState {
         feed: crate::notification_feed::GpuiNotificationFeedState,
         /// The hovered row's key (`GpuiNotificationFeedItem::key`), unique across computers.
         hovered_id: Option<String>,
-        /// All, This computer or Remote; All each time the panel opens.
-        tab: ghostex_gx_core::NotificationFeedTab,
+        /// The header's "..." menu (Mark all read, Clear all) is open; closed each time the panel opens.
+        actions_menu_open: bool,
     },
 }
 
