@@ -285,7 +285,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("voiceAgentHidden")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("Voice agent")),
-        ("settingKeys", J::Arr(&[J::Str("voiceAgentProvider"), J::Str("voiceAgentXaiKey"), J::Str("voiceAgentOpenaiKey"), J::Str("voiceAgentXaiVoice"), J::Str("voiceAgentOpenaiVoice"), J::Str("voiceAgentSpeed"), J::Str("voiceAgentCallMode"), J::Str("voiceAgentMemory")])),
+        ("settingKeys", J::Arr(&[J::Str("voiceAgentProvider"), J::Str("voiceAgentXaiKey"), J::Str("voiceAgentOpenaiKey"), J::Str("voiceAgentXaiVoice"), J::Str("voiceAgentOpenaiVoice"), J::Str("voiceAgentSpeed"), J::Str("voiceAgentCallMode"), J::Str("voiceAgentWaitForReply"), J::Str("voiceAgentMemory")])),
         ("settingsPages", J::Arr(&[J::Str("voiceAgent")])),
         ("hotkeys", J::Arr(&[J::Str("toggleVoiceAgent"), J::Str("voiceCallAboutSession"), J::Str("holdToTalk")])),
     ]),

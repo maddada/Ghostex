@@ -12,6 +12,7 @@ use crate::rows::{row, section, Page, Section};
 /// User: "on the voice mode screen, the user should be able to click on Eve to change the voice, and click buttons to change the voice agent's speed, with options 1, 1.2, 1.4, 1.6, 1.8, and 2." `voiceAgentSpeed` (default 1) is that speed; the voice panel's speed menu, the phone's speed buttons and this row save the same setting.
 /// CDXC:VoiceMode 2026-10-24 DECISION:
 /// User, asked "Should Push-to-talk become the default call mode?", picked "No, keep Regular as the default" ("The voice agent is built for talking while you drive or walk, and that wants hands-free. Push-to-talk stays one tap away in the gear menu"). `voiceAgentCallMode` stays `regular` by default.
+/// CDXC:VoiceMode 2026-11-12 SEE-ALSO: `voiceAgentWaitForReply` (default on), the user's decision and Q2747-Q2752 are in server/src/voice_agent/keys.rs and conversation/turn_word.rs.
 /// CDXC:VoiceMode 2026-10-20 SEE-ALSO:
 /// gxserver reads `voiceAgentProvider` and the two voice keys (server/src/voice_agent/keys.rs, which seals the API keys in its vault), and answers `/api/readVoiceAgent` and `/api/setVoiceAgentKey`; the key rows are UI rows with no stored value. Client contract: docs/2026-10-20/voice-mode/voice-agent-client-contract.md.
 pub(crate) fn page() -> Page {
@@ -50,6 +51,7 @@ pub(crate) fn provider() -> Section {
             row("voiceAgentCallMode", "Call mode", "Regular calls listen hands-free; on Grok they're billed for the whole time the call is connected, quiet and muted time included (about $0.08 a minute). Push-to-talk calls listen only while you hold the talk button next to Mute (or Space, or the Hold to Talk hotkey); on Grok you pay only for the audio you send and the agent's replies. In a muted Regular call, holding it unmutes you for as long as you hold. GPT Realtime bills only audio in both modes. A change applies to your next call; the gear in the voice panel changes it too.").options(&[
                 opt("Regular", "regular"), opt("Push-to-talk", "pushToTalk"),
             ]),
+            row("voiceAgentWaitForReply", "Answer when I say \"reply\"", "The voice agent keeps listening until you end with \"reply\", \"over\" or \"go ahead\", then answers. Each Regular call starts with it saying \"Hey, I hear you. Please say reply after you finish speaking so I can reply to you.\" Off: it answers when you pause. Shown while the call mode is Regular: a push-to-talk turn ends when you let go of the talk button. A change applies to your next call."),
         ],
     )
 }

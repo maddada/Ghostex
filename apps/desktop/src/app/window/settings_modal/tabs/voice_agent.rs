@@ -15,7 +15,7 @@ use super::super::super::native_modal_kit::*;
 use super::super::catalog::{SettingOption, settings_catalog};
 use super::super::fields::{
     ButtonVariant, FieldStates, RowSpec, SettingsPage, reset_key, select_field, setting_row,
-    settings_button, settings_section, settings_text_input,
+    settings_button, settings_section, settings_text_input, toggle_field,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -40,6 +40,7 @@ const XAI_VOICE: &str = "voiceAgentXaiVoice";
 const OPENAI_VOICE: &str = "voiceAgentOpenaiVoice";
 const SPEED: &str = "voiceAgentSpeed";
 const CALL_MODE: &str = "voiceAgentCallMode";
+const WAIT_FOR_REPLY: &str = "voiceAgentWaitForReply";
 const XAI_KEY: &str = "voiceAgentXaiKey";
 const OPENAI_KEY: &str = "voiceAgentOpenaiKey";
 const MEMORY: &str = "voiceAgentMemory";
@@ -712,6 +713,27 @@ impl VoiceAgentTab {
                 && let Some(row) = self.select_row(p, key, window, cx)
             {
                 provider_rows.push(row);
+            }
+            // CDXC:VoiceMode 2026-11-12 DECISION: User (Q2747, Q2748): "Answer when I say "reply""
+            // sits right under Call mode as its dependent row, shown only while the mode is Regular,
+            // since a push-to-talk turn ends when the talk button is let go (server/src/voice_agent/keys.rs).
+            if key == CALL_MODE
+                && values.string(CALL_MODE) != "pushToTalk"
+                && search.row_visible("provider", WAIT_FOR_REPLY)
+                && let Some((title, subtitle, _)) = Self::catalog_row(WAIT_FOR_REPLY)
+            {
+                let spec = RowSpec::new(title)
+                    .description(subtitle)
+                    .keyed(values, WAIT_FOR_REPLY)
+                    .dependent();
+                provider_rows.push(toggle_field(
+                    self,
+                    p,
+                    WAIT_FOR_REPLY,
+                    spec,
+                    values.bool(WAIT_FOR_REPLY),
+                    cx,
+                ));
             }
             // The key the chosen provider needs, right under the picker (Q1711).
             if key == PROVIDER
