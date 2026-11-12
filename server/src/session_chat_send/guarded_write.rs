@@ -202,14 +202,6 @@ pub(crate) async fn write_session_chat_payload_guarded(
             .await
             .map_err(|message| SessionChatSendError::new(SessionChatSendFailure::Write, message));
     }
-    crate::zmx::log_temporary_zmx_input_write(
-        project_id,
-        session_id,
-        zmx_name,
-        "sessionChatQueueWrite",
-        source,
-        payload,
-    );
     let vt = send_reads_input_box(agent).is_some();
     let (name, bytes, check_agent, check_guard) = (
         zmx_name.to_string(),
@@ -240,6 +232,18 @@ pub(crate) async fn write_session_chat_payload_guarded(
     .await;
     match sent {
         Ok((Ok(crate::zmx::ZmxCheckedSend::Sent), _)) => {
+            // Only what was written goes in the input log (GitHub #555 review); a check-only
+            // write writes nothing.
+            if !payload.is_empty() {
+                crate::zmx::log_temporary_zmx_input_write(
+                    project_id,
+                    session_id,
+                    zmx_name,
+                    "sessionChatQueueWrite",
+                    source,
+                    payload,
+                );
+            }
             note_session_chat_submit(project_id, session_id, payload);
             Ok(())
         }
