@@ -114,6 +114,17 @@ fn pane_from_zmx_name(name: &str) -> Option<(String, String)> {
         .then(|| (project.to_string(), session.to_string()))
 }
 
+/// The `background_tasks` Claude's Stop hook sends, as far as the record tells: a turn that ended
+/// with a background shell still running (record status `shell`) lists one, which keeps the
+/// session working instead of ringing (`activity_for_hook_event` in agent_hooks/event_mapping.rs).
+fn background_tasks(shells_running: bool) -> Value {
+    if shells_running {
+        json!([{"type": "shell", "status": "running"}])
+    } else {
+        json!([])
+    }
+}
+
 /// What a waiting record waits for, in hook terms.
 /// Claude's hooks send PermissionRequest for an approval and for an AskUserQuestion alike (the
 /// Notification that follows a few seconds later only repeats it).
@@ -320,6 +331,8 @@ impl ClaudeObserver {
             };
             // CDXC:AgentHooks 2026-11-02 WHY:
             // Claude 2.1.316 writes `shell` while it sits at the prompt with a background shell still running ("1 shell still running"), so a turn ending that way never went `idle` and never reported its Stop. It is idle for activity; the shells stay known as running (`shells_running`, and the transcript's own launches for the roster), and the shell finishing later is no event.
+            // CDXC:AgentHooks 2026-11-12 FIX:
+            // The day's comparison found the Main Coordinator ringing on every reply while its `cargo xtask rebuild` ran in the background: Claude's Stop hook lists that shell in `background_tasks`, which keeps the session working (CDXC:Notifications 2026-09-15, the user's rule to ring only once background work is done), but the observer's Stop carried none. Its Stop now lists the running shells the same way (`background_tasks`).
             let shells_running = status == "shell";
             let status = if shells_running {
                 "idle".to_string()
@@ -464,7 +477,8 @@ impl ClaudeObserver {
                         self.reminders
                             .insert(pane.clone(), since + IDLE_REMINDER_MS);
                         self.turn_ends.push(TurnEnd {
-                            event: make("Stop").with("shellsRunning", json!(next.shells_running)),
+                            event: make("Stop")
+                                .with("background_tasks", background_tasks(next.shells_running)),
                             conversation: next.conversation.clone(),
                             config_dir: config_dir.clone(),
                             cwd: cwd.clone(),
@@ -584,6 +598,8 @@ impl ClaudeObserver {
                 TurnMark::QueuedPrompt { prompt } => {
                     found.push(make("UserPromptSubmit", Some(&prompt)))
                 }
+                // Claude's hook reports a task notice folded into the turn; nothing to drive.
+                TurnMark::FoldedNotice => found.push(make("UserPromptSubmit", None).compare_only()),
                 TurnMark::Restart {
                     end,
                     ended_turn_started_ms,
@@ -600,7 +616,7 @@ impl ClaudeObserver {
                     }
                     found.push(
                         make(end, ended_turn_prompt.as_ref())
-                            .with("shellsRunning", json!(false))
+                            .with("background_tasks", background_tasks(false))
                             .with("quickRestart", json!(true)),
                     );
                     // A queued prompt was submitted when it was sent; its turn only shows work.
@@ -1070,7 +1086,12 @@ mod tests {
             names(&events),
             vec![("Stop".to_string(), Some(conversation.clone()), None)]
         );
-        assert_eq!(events[0].payload.get("shellsRunning"), Some(&json!(true)));
+        // Listed as the Stop hook's background work: the session stays working, as with the hooks.
+        assert_eq!(
+            events[0].payload.get("background_tasks"),
+            Some(&background_tasks(true))
+        );
+        assert_eq!(events[0].activity().as_deref(), Some("working"));
         let pane = (PANE.0.to_string(), PANE.1.to_string());
         assert!(observer.panes[&pane].shells_running);
         assert_eq!(observer.panes[&pane].status, "idle");

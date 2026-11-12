@@ -13,6 +13,8 @@ use crate::logging::{DiagnosticLogScenario, GxserverLogInput, GxserverLogger, Lo
 /// How far apart the two sides may see the same change and still count as one.
 const MATCH_WINDOW: Duration = Duration::from_secs(10);
 const RECENT_LIMIT: usize = 200;
+/// Why a one-sided event is expected (the `reason` of a `recentExpected` entry).
+const EXPECTED_GHOSTEX_CLOSE: &str = "ghostexClosedSession";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Side {
@@ -57,6 +59,9 @@ pub(crate) struct ActivityEvent {
     pub(crate) wall_ms: i64,
     /// The conversation's transcript on disk, when an observer knows it (Claude's).
     pub(crate) transcript: Option<PathBuf>,
+    /// Compared with the hook but never driven: what Claude's hook reports that changes nothing
+    /// (a background task's notice folded into a running turn, claude_turns.rs).
+    pub(crate) compare_only: bool,
 }
 
 impl ActivityEvent {
@@ -79,11 +84,17 @@ impl ActivityEvent {
             at: Instant::now(),
             wall_ms: chrono::Utc::now().timestamp_millis(),
             transcript: None,
+            compare_only: false,
         }
     }
 
     pub(crate) fn baseline(mut self) -> Self {
         self.baseline = true;
+        self
+    }
+
+    pub(crate) fn compare_only(mut self) -> Self {
+        self.compare_only = true;
         self
     }
 
@@ -115,7 +126,7 @@ impl ActivityEvent {
     }
 
     /// The activity the hook pipeline derives from this event (working, idle, attention).
-    fn activity(&self) -> Option<String> {
+    pub(super) fn activity(&self) -> Option<String> {
         let mut params = self.payload.clone();
         // The notify hook posts the status its own mapping derives; an observer event has none.
         if !params.contains_key("status") {
@@ -185,6 +196,9 @@ struct KindStats {
     hook_only: u64,
     observer_only: u64,
     not_observable: u64,
+    /// One side only, for a reason the comparison knows is right (`EXPECTED_*`): not counted as
+    /// a disagreement.
+    expected: u64,
     gap_sum_ms: i64,
     gap_min_ms: Option<i64>,
     gap_max_ms: Option<i64>,
@@ -203,6 +217,7 @@ impl KindStats {
         self.hook_only += other.hook_only;
         self.observer_only += other.observer_only;
         self.not_observable += other.not_observable;
+        self.expected += other.expected;
         self.gap_sum_ms += other.gap_sum_ms;
         for gap in [other.gap_min_ms, other.gap_max_ms].into_iter().flatten() {
             self.gap_min_ms = Some(self.gap_min_ms.map_or(gap, |min| min.min(gap)));
@@ -216,6 +231,7 @@ impl KindStats {
             "hookOnly": self.hook_only,
             "observerOnly": self.observer_only,
             "notObservable": self.not_observable,
+            "expected": self.expected,
             "gapMs": {
                 "avg": (self.matched > 0).then(|| self.gap_sum_ms / self.matched as i64),
                 "min": self.gap_min_ms,
@@ -237,6 +253,8 @@ struct SessionCompare {
     pending: Vec<Signal>,
     kinds: BTreeMap<String, KindStats>,
     events: [u64; 2],
+    /// When Ghostex itself last closed the session (session_close_log.rs).
+    closed_by_ghostex: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -245,6 +263,7 @@ struct Store {
     sessions: HashMap<(String, String), SessionCompare>,
     disagreements: VecDeque<Value>,
     matches: VecDeque<Value>,
+    expected: VecDeque<Value>,
 }
 
 static STORE: LazyLock<Mutex<Store>> = LazyLock::new(Default::default);
@@ -389,15 +408,51 @@ fn store_matches(logger: &GxserverLogger, matched: Vec<Value>) {
     }
 }
 
+/// CDXC:AgentHooks 2026-11-12 WHY:
+/// A day of comparison found every observer-only Claude SessionEnd was a thread Ghostex closed
+/// itself (`server.threadMarkedDone` through `killSession`, logged about 200 ms before the
+/// observer saw the record go): the pane is killed, so Claude's SessionEnd hook never posts, while
+/// the observer sees the process end. That is the observer being right where a hook cannot speak.
+/// Rule: a close Ghostex makes is noted here; an observer-only SessionEnd (and the idle it brings)
+/// within the match window of it counts as `expected`, not as a disagreement, and the hook side is
+/// settled to idle as its SessionEnd would have, so the next SessionStart compares cleanly.
+pub(crate) fn note_session_closed(project_id: &str, session_id: &str) {
+    let mut store = store();
+    if let Some(compare) = store
+        .sessions
+        .get_mut(&(project_id.to_string(), session_id.to_string()))
+    {
+        compare.closed_by_ghostex = Some(Instant::now());
+    }
+}
+
+/// Why a signal only one side reported is expected, if it is.
+fn expected_reason(compare: &SessionCompare, signal: &Signal) -> Option<&'static str> {
+    let closed_near = |closed: Instant| {
+        let gap = if closed > signal.at {
+            closed - signal.at
+        } else {
+            signal.at - closed
+        };
+        gap <= MATCH_WINDOW
+    };
+    (signal.side == Side::Observer
+        && signal.event_name == "SessionEnd"
+        && compare.closed_by_ghostex.is_some_and(closed_near))
+    .then_some(EXPECTED_GHOSTEX_CLOSE)
+}
+
 /// Settles every pending event the other side never matched within the window.
 pub(crate) fn expire(logger: &GxserverLogger) {
     let now = Instant::now();
     let mut expired = Vec::new();
+    let mut explained = Vec::new();
     {
         let mut store = store();
         let Store {
             sessions,
             disagreements,
+            expected,
             ..
         } = &mut *store;
         for ((project_id, session_id), compare) in sessions.iter_mut() {
@@ -426,6 +481,31 @@ pub(crate) fn expire(logger: &GxserverLogger) {
                 .partition(|signal| now.saturating_duration_since(signal.at) > MATCH_WINDOW);
             compare.pending = keep;
             for signal in old.into_iter().filter(|signal| !signal.settle_only) {
+                if let Some(reason) = expected_reason(compare, &signal) {
+                    compare
+                        .kinds
+                        .entry(signal.kind.clone())
+                        .or_default()
+                        .expected += 1;
+                    if signal.kind == "event:SessionEnd" {
+                        // What the hook's SessionEnd would have said.
+                        compare.activity[Side::Hook.index()] = Some("idle".to_string());
+                        compare.last_event[Side::Hook.index()] = Some("SessionEnd".to_string());
+                    }
+                    let entry = json!({
+                        "agent": compare.agent,
+                        "at": signal.wall_ms,
+                        "event": signal.event_name,
+                        "kind": signal.kind,
+                        "only": signal.side.name(),
+                        "projectId": project_id,
+                        "reason": reason,
+                        "sessionId": session_id,
+                    });
+                    push_recent(expected, entry.clone());
+                    explained.push(entry);
+                    continue;
+                }
                 let stats = compare.kinds.entry(signal.kind.clone()).or_default();
                 match signal.side {
                     Side::Hook => stats.hook_only += 1,
@@ -450,6 +530,9 @@ pub(crate) fn expire(logger: &GxserverLogger) {
     }
     for entry in expired {
         log(logger, "hooklessActivity.disagreement", entry);
+    }
+    for entry in explained {
+        log(logger, "hooklessActivity.expected", entry);
     }
 }
 
@@ -492,10 +575,134 @@ pub(crate) fn summary(enabled: bool) -> Value {
         "sessions": sessions,
         "recentDisagreements": store.disagreements.iter().rev().take(60).cloned().collect::<Vec<_>>(),
         "recentMatches": store.matches.iter().rev().take(40).cloned().collect::<Vec<_>>(),
+        // One side only, for a known reason (`expected` in the counts): not disagreements.
+        "recentExpected": store.expected.iter().rev().take(20).cloned().collect::<Vec<_>>(),
     })
 }
 
 /// Forgets everything recorded so far (`ghostex hookless-activity --reset`).
 pub(crate) fn reset() {
     *store() = Store::default();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn logger() -> (tempfile::TempDir, GxserverLogger) {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        (temp, GxserverLogger::new(paths))
+    }
+
+    fn event(session: &str, name: &str) -> ActivityEvent {
+        ActivityEvent::new("Ptest", session, "claude", name, Some("c".to_string()))
+    }
+
+    fn stats(session: &str, kind: &str) -> KindStats {
+        store().sessions[&("Ptest".to_string(), session.to_string())]
+            .kinds
+            .get(kind)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Moves a session's pending signals and close back past the match window.
+    fn age(session: &str) {
+        let mut store = store();
+        let compare = store
+            .sessions
+            .get_mut(&("Ptest".to_string(), session.to_string()))
+            .unwrap();
+        let back = |at: Instant| at.checked_sub(MATCH_WINDOW * 2).unwrap();
+        for signal in &mut compare.pending {
+            signal.at = back(signal.at);
+        }
+        compare.closed_by_ghostex = compare.closed_by_ghostex.map(back);
+    }
+
+    #[test]
+    fn a_folded_task_notice_matches_the_hooks_prompt() {
+        let (_temp, logger) = logger();
+        let session = "Gfold1";
+        record(
+            &logger,
+            Side::Hook,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(
+            &logger,
+            Side::Observer,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(&logger, Side::Hook, event(session, "UserPromptSubmit"));
+        record(
+            &logger,
+            Side::Observer,
+            event(session, "UserPromptSubmit").compare_only(),
+        );
+        assert_eq!(stats(session, "event:UserPromptSubmit").matched, 1);
+        assert!(
+            store().sessions[&("Ptest".to_string(), session.to_string())]
+                .pending
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_session_end_ghostex_caused_is_expected_not_a_disagreement() {
+        let (_temp, logger) = logger();
+        let session = "Gclose1";
+        record(
+            &logger,
+            Side::Hook,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(
+            &logger,
+            Side::Observer,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(&logger, Side::Hook, event(session, "Stop"));
+        record(&logger, Side::Observer, event(session, "Stop"));
+        assert_eq!(stats(session, "activity:attention").matched, 1);
+        note_session_closed("Ptest", session);
+        record(&logger, Side::Observer, event(session, "SessionEnd"));
+        age(session);
+        expire(&logger);
+        let end = stats(session, "event:SessionEnd");
+        assert_eq!((end.expected, end.observer_only), (1, 0));
+        let idle = stats(session, "activity:idle");
+        assert_eq!((idle.expected, idle.observer_only), (1, 0));
+        let store = store();
+        let compare = &store.sessions[&("Ptest".to_string(), session.to_string())];
+        // Settled as the hook's SessionEnd would have.
+        assert_eq!(compare.activity[0].as_deref(), Some("idle"));
+        assert!(store.expected.iter().any(
+            |entry| entry["sessionId"] == session && entry["reason"] == EXPECTED_GHOSTEX_CLOSE
+        ));
+    }
+
+    #[test]
+    fn a_session_end_with_no_ghostex_close_still_counts() {
+        let (_temp, logger) = logger();
+        let session = "Gclose2";
+        record(
+            &logger,
+            Side::Hook,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(
+            &logger,
+            Side::Observer,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(&logger, Side::Hook, event(session, "Stop"));
+        record(&logger, Side::Observer, event(session, "Stop"));
+        record(&logger, Side::Observer, event(session, "SessionEnd"));
+        age(session);
+        expire(&logger);
+        let end = stats(session, "event:SessionEnd");
+        assert_eq!((end.expected, end.observer_only), (0, 1));
+    }
 }

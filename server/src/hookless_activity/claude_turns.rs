@@ -4,6 +4,8 @@
 //!
 //! CDXC:AgentHooks 2026-11-11 WHY:
 //! A hooks-vs-observer comparison on Windows found two cases only the hooks caught, on every platform: a queued prompt restarts the turn 37 to 74 ms after it ended (16 ms seen live on macOS), so the session record goes busy, idle, busy between two 500 ms polls and the observer never saw the Stop; and a prompt sent while Claude works never changes the record's status, so no UserPromptSubmit was sent for it. Both are in the transcript. Claude writes a `system` `turn_duration` row when a turn finishes (a `[Request interrupted by user` row when it is interrupted), a `user` row when a turn starts, and a `queue-operation` row for its prompt queue: `enqueue` when a prompt is sent while it works, then `remove` when it is folded into the running turn, `dequeue` when it starts the next turn, or `popAll` when the user takes it back to edit. Claude's own UserPromptSubmit hook fires at the `enqueue` (seen live on 2026-11-11, 3 ms apart) and fires nothing when the queued prompt later starts its turn. Rule: each pane the observer follows reads only the bytes its transcript gained since the last pass. A user prompt enqueued while a turn runs and the record is not idle sends one UserPromptSubmit naming it. A turn end followed by a turn start sends Stop (or Interrupt, StopFailure), then UserPromptSubmit, or only activity (SessionBusy) when the turn's prompt is a queued one already submitted, unless the record itself showed idle during the ended turn (`statusUpdatedAt` after the ended turn started and no later than the new turn) or is idle now. When the record later shows an idle no later than a restart already sent, that idle is the one in the gap and sends nothing; when the record goes busy with a submitted prompt first in the queue, it sends only activity. So every finished turn sends one Stop and every prompt one UserPromptSubmit, whichever of the record and the transcript saw it first.
+//! CDXC:AgentHooks 2026-11-12 WHY:
+//! The day's comparison on macOS found Claude's UserPromptSubmit hook also fires when a background task's `<task-notification>` is folded into a running turn (at its `remove` row, 3 to 25 ms apart in all six cases; nothing at its `enqueue`). It is not the user's prompt and the session is already working, so the observer still drives nothing for it; it only reports the fold to the comparison (`FoldedNotice`, compared and never driven), so it stops counting as a hook-only prompt.
 //! SEE-ALSO: server/src/hookless_activity/claude.rs (`ClaudeObserver::step` and `read_turns`, which read these after the records).
 
 use std::collections::VecDeque;
@@ -35,6 +37,9 @@ pub(super) enum TurnMark {
     },
     /// A prompt the user sent while a turn ran.
     QueuedPrompt { prompt: String },
+    /// A background task's notice folded into the running turn: Claude's UserPromptSubmit hook
+    /// fires for it, and it changes nothing (compared only).
+    FoldedNotice,
 }
 
 /// One entry of Claude's prompt queue.
@@ -206,7 +211,10 @@ impl TurnCursor {
                     }
                     self.queue.push_back(Queued { content, submitted });
                 }
-                Row::Unqueue(content) => {
+                Row::Unqueue { content, folded } => {
+                    if folded && is_task_notice(&content) && self.pending_end.is_none() {
+                        marks.push(TurnMark::FoldedNotice);
+                    }
                     if let Some(at) = self.queue.iter().position(|q| q.content == content) {
                         self.queue.remove(at);
                     }
@@ -235,6 +243,11 @@ impl TurnCursor {
     }
 }
 
+/// A background task's notice (a shell, monitor or agent run in the background finished).
+fn is_task_notice(content: &str) -> bool {
+    content.starts_with("<task-notification")
+}
+
 /// A queued prompt the user typed, not a background task's notice or another session's message.
 fn is_typed_prompt(content: &str) -> bool {
     !content.is_empty()
@@ -254,7 +267,10 @@ enum Row {
     Enqueue(String),
     /// Out of the queue without starting a turn: folded into the running one (`remove`) or taken
     /// back to edit (`popAll`).
-    Unqueue(String),
+    Unqueue {
+        content: String,
+        folded: bool,
+    },
     Dequeue,
     Other,
 }
@@ -269,7 +285,10 @@ fn classify(entry: &Value) -> Row {
             let content = entry["content"].as_str().map(str::trim).map(str::to_string);
             match (entry["operation"].as_str(), content) {
                 (Some("enqueue"), Some(content)) => Row::Enqueue(content),
-                (Some("remove" | "popAll"), Some(content)) => Row::Unqueue(content),
+                (Some(operation @ ("remove" | "popAll")), Some(content)) => Row::Unqueue {
+                    content,
+                    folded: operation == "remove",
+                },
                 (Some("dequeue"), _) => Row::Dequeue,
                 _ => Row::Other,
             }
@@ -452,6 +471,48 @@ mod tests {
         let lines = lines(&[
             json!({"type": "system", "subtype": "turn_duration", "timestamp": at(3_000)}),
             enqueue("from another session"),
+        ]);
+        assert!(cursor
+            .scan(lines.iter().map(String::as_str), true)
+            .is_empty());
+    }
+
+    #[test]
+    fn a_task_notice_folded_into_the_running_turn_is_reported_for_the_comparison() {
+        let mut cursor = TurnCursor::new("c", None, 1_000);
+        let notice = "<task-notification>\n<task-id>x</task-id>";
+        let marks = scan(
+            &mut cursor,
+            &[
+                json!({"type": "user", "timestamp": at(2_000), "message": {"content": "work"}}),
+                enqueue(notice),
+                queue_op("remove", Some(notice)),
+                // Only task notices were seen firing the hook when folded; a prompt taken back to
+                // edit is not folded.
+                enqueue("<cross-session-message from=\"x\">hi</cross-session-message>"),
+                queue_op(
+                    "remove",
+                    Some("<cross-session-message from=\"x\">hi</cross-session-message>"),
+                ),
+                enqueue("typed"),
+                queue_op("popAll", Some("typed")),
+            ],
+        );
+        assert_eq!(
+            marks,
+            vec![
+                TurnMark::FoldedNotice,
+                TurnMark::QueuedPrompt {
+                    prompt: "typed".to_string()
+                },
+            ]
+        );
+        assert!(cursor.queue.is_empty());
+        // After the turn ended, a notice starts the next turn as the record shows: no fold.
+        let lines = lines(&[
+            json!({"type": "system", "subtype": "turn_duration", "timestamp": at(3_000)}),
+            enqueue(notice),
+            queue_op("remove", Some(notice)),
         ]);
         assert!(cursor
             .scan(lines.iter().map(String::as_str), true)
