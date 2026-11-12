@@ -503,6 +503,18 @@ impl SessionChatQueueRuntime {
                 now,
                 &generated_at,
             );
+            // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: a row put back for a missing
+            // input box has two minutes before a further miss marks it Not sent, and that clock ran
+            // on while an approval waited for the user, so a row held through a long approval
+            // failed on its next miss. Time the row waits for the user's answer does not count.
+            if let Assessment::Hold {
+                prompt_id,
+                reason: WaitReason::Answer,
+                ..
+            } = &assessment
+            {
+                self.composer_holds.restart_clock(&key, prompt_id, now);
+            }
             let held = match &assessment {
                 Assessment::Hold {
                     prompt_id, reason, ..
@@ -1064,7 +1076,11 @@ impl SessionChatQueueRuntime {
         .await;
         if let Ok(delivery) = &delivered {
             (self.publisher_factory)(&ready.project_id, &ready.session_id)();
-            if delivery.held {
+            if delivery.held_for_prompt {
+                // Waiting on the user's answer is no missing input box (session_chat_queue.rs).
+                self.composer_holds
+                    .restart_clock(&key, &ready.prompt_id, Utc::now());
+            } else if delivery.held {
                 self.composer_holds
                     .record(&key, &ready.prompt_id, ready.startup_send, Utc::now());
             } else {

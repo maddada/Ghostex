@@ -94,6 +94,19 @@ impl SessionChatQueueComposerHolds {
         })
     }
 
+    /// Starts this row's two-minute budget again from `now`, keeping its retry spacing: the time
+    /// it spent waiting for the user's answer to a prompt is no missing input box.
+    pub(crate) fn restart_clock(&self, key: &str, prompt_id: &str, now: DateTime<Utc>) {
+        if let Ok(mut holds) = self.holds.lock() {
+            if let Some(hold) = holds
+                .get_mut(key)
+                .filter(|hold| hold.prompt_id == prompt_id)
+            {
+                hold.since = now;
+            }
+        }
+    }
+
     pub(crate) fn record(
         &self,
         key: &str,
