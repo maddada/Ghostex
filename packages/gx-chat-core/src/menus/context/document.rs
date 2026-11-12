@@ -82,6 +82,12 @@ pub fn document_with_icon(
         },
     ) {
         Value::Null => Tri::Null,
+        Value::Object(mut editor) => {
+            if pickers.context.computer.applies() {
+                editor.insert("statusLineFromComputer".into(), Value::Bool(true));
+            }
+            Tri::Value(Value::Object(editor))
+        }
         editor => Tri::Value(editor),
     };
 }

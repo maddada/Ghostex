@@ -34,6 +34,15 @@ pub struct ComputerPins {
 }
 
 impl ComputerPins {
+    /// The status line drawn is the computer's: the host follows it and it sent pins. Context
+    /// details then says so (`statusLineFromComputer` on `contextEditor`), as its stars still edit
+    /// this host's own pins (CDXC:SessionChat 2026-11-12, the user's answer 2A: "keep editing the
+    /// phone's own pins and add the line in Context details saying the status line comes from the
+    /// computer's Ghostex app").
+    pub fn applies(&self) -> bool {
+        self.followed && self.records.is_some()
+    }
+
     /// The record the meter draws for `agent`: `own` with its pins replaced by the computer's
     /// while the host follows a computer that sent them, else `own` itself. An agent the
     /// computer's app never saved a record for pins nothing there, so it pins nothing here.
@@ -82,6 +91,21 @@ mod tests {
             ..computer(json!({ "codexContext": { "starred": { "sevenDayLimit": true } } }))
         };
         assert_eq!(*pins.preferences(ContextDetailsAgent::Codex, &own()), own());
+    }
+
+    #[test]
+    fn applies_only_while_following_a_computer_that_sent_pins() {
+        assert!(computer(json!({})).applies());
+        assert!(!ComputerPins {
+            followed: false,
+            ..computer(json!({}))
+        }
+        .applies());
+        assert!(!ComputerPins {
+            followed: true,
+            records: None
+        }
+        .applies());
     }
 
     #[test]
