@@ -12,7 +12,8 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension};
@@ -168,6 +169,8 @@ struct CachedRow {
     live: Option<ThreadLive>,
     /// When a resolved thread's row next reads its session row again (`RESOLVED_RECHECK`).
     recheck_at: std::time::Instant,
+    /// Changes exactly when `row` does (`row_generation`).
+    generation: u64,
 }
 
 /// CDXC:Coordinators 2026-11-08 WHY:
@@ -190,7 +193,10 @@ fn resolved_recheck_at(key: &SessionKey) -> std::time::Instant {
 
 /// What one coordinator's panel was last built from.
 struct PanelInputs {
-    rows: Vec<Value>,
+    /// Each local thread's row, by key and generation, in the panel's input order.
+    row_ids: Vec<(SessionKey, u64)>,
+    /// The threads on other computers, built fresh every tick (`build_remote_row`).
+    remote_rows: Vec<Value>,
     items: Vec<super::work::WorkItem>,
     custom_tags: Value,
     intro_hidden: bool,
@@ -204,13 +210,32 @@ struct PanelInputs {
 /// between two ticks nearly every panel is built from exactly the same rows. A panel whose rows,
 /// board items, tag catalog and intro choice equal what it was last built from is kept as it is.
 /// The board's groups move with the day and the relayed approval cards end after two hours
-/// (board.rs, relay.rs), so a kept panel is still rebuilt at least every minute; threads on other
-/// computers carry a clock-dependent `recent` mark, so a panel with any is rebuilt every tick.
+/// (board.rs, relay.rs), so a kept panel is still rebuilt at least every minute.
+///
+/// CDXC:Coordinators 2026-11-12 WHY:
+/// A panel with any thread on another computer used to be rebuilt every tick for its rows' clock-dependent `recent` mark. On the profiled Mac that was the coordinator holding 1,142 of the 1,258 threads and 350 work items (two remote threads, both resolved), so its board, work list and panel were rebuilt every two seconds: about half of gxserver's idle CPU. The remote rows are built every tick and compared like the local ones, so a mark that runs out still rebuilds the panel on that tick. The local rows are compared by key and generation (`row_generation`) instead of being cloned and compared in full every tick.
 const PANEL_REBUILD_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 
 fn panel_inputs() -> &'static Mutex<HashMap<SessionKey, PanelInputs>> {
     static INPUTS: OnceLock<Mutex<HashMap<SessionKey, PanelInputs>>> = OnceLock::new();
     INPUTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The last row built for each thread whose row is not cached (an open running thread, or one
+/// whose session row could not be read), with its generation, so an unchanged rebuild keeps it.
+fn fresh_rows() -> &'static Mutex<HashMap<SessionKey, (u64, Value)>> {
+    static FRESH: OnceLock<Mutex<HashMap<SessionKey, (u64, Value)>>> = OnceLock::new();
+    FRESH.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The generation of a row just built: the previous one's when the row is unchanged, a new one
+/// otherwise. A panel is kept when its rows' keys and generations are what it was built from.
+fn row_generation(previous: Option<(u64, &Value)>, row: &Value) -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    match previous {
+        Some((generation, previous)) if previous == row => generation,
+        _ => NEXT.fetch_add(1, Ordering::Relaxed),
+    }
 }
 
 fn rows() -> &'static Mutex<HashMap<SessionKey, CachedRow>> {
@@ -691,8 +716,28 @@ pub fn refresh_coordinator_panels(
         .lock()
         .map(|mut rows| std::mem::take(&mut *rows))
         .unwrap_or_default();
+    let mut previous_fresh = fresh_rows()
+        .lock()
+        .map(|mut fresh| std::mem::take(&mut *fresh))
+        .unwrap_or_default();
     let mut next_rows: HashMap<SessionKey, CachedRow> = HashMap::new();
-    let mut built: Vec<(SessionKey, Vec<Value>, bool, chrono::DateTime<chrono::Utc>)> = Vec::new();
+    let mut next_fresh: HashMap<SessionKey, (u64, Value)> = HashMap::new();
+    // Each coordinator's threads in `threads` order, grouped once instead of scanning every thread
+    // for every coordinator.
+    let mut threads_of: HashMap<SessionKey, Vec<&Arc<ThreadRecord>>> = HashMap::new();
+    for thread in threads.iter().copied() {
+        threads_of.entry(thread.coordinator_key()).or_default().push(thread);
+    }
+    let mut remote_of: HashMap<SessionKey, Vec<&RemoteThreadRecord>> = HashMap::new();
+    for thread in &remote_threads {
+        remote_of.entry(thread.coordinator_key()).or_default().push(thread);
+    }
+    let mut built: Vec<(
+        SessionKey,
+        Vec<(SessionKey, u64)>,
+        Vec<Value>,
+        chrono::DateTime<chrono::Utc>,
+    )> = Vec::new();
     let mut turn_starts = super::turns::read_turn_starts(db);
     for coordinator in coordinators {
         let key = coordinator.key();
@@ -711,12 +756,8 @@ pub fn refresh_coordinator_panels(
             super::turns::note_turn_start(db, &mut turn_starts, &key, &started);
         }
         let idle_floor = super::turns::idle_floor(&turn_starts, &key, now);
-        let mut panel_rows = Vec::new();
-        for thread in threads
-            .iter()
-            .copied()
-            .filter(|thread| thread.coordinator_key() == key)
-        {
+        let mut row_ids: Vec<(SessionKey, u64)> = Vec::new();
+        for thread in threads_of.get(&key).into_iter().flatten().copied() {
             let thread_key = thread.key();
             let live = thread_live(&thread.project_id, &thread.session_id);
             let cached = previous_rows.remove(&thread_key).filter(|cached| {
@@ -728,7 +769,7 @@ pub fn refresh_coordinator_panels(
                 Some(cached)
                     if thread.is_resolved() && std::time::Instant::now() < cached.recheck_at =>
                 {
-                    panel_rows.push(cached.row.clone());
+                    row_ids.push((thread_key.clone(), cached.generation));
                     next_rows.insert(thread_key, cached);
                     continue;
                 }
@@ -746,9 +787,9 @@ pub fn refresh_coordinator_panels(
             let fingerprint = stored
                 .as_ref()
                 .map(|row| row.as_ref().map(|(hash, _)| *hash));
-            if let (Some(fingerprint), Some(cached)) = (fingerprint, cached) {
-                if cached.session == fingerprint {
-                    panel_rows.push(cached.row.clone());
+            let previous = match (fingerprint, cached) {
+                (Some(fingerprint), Some(cached)) if cached.session == fingerprint => {
+                    row_ids.push((thread_key.clone(), cached.generation));
                     let recheck_at = resolved_recheck_at(&thread_key);
                     next_rows.insert(
                         thread_key,
@@ -759,7 +800,9 @@ pub fn refresh_coordinator_panels(
                     );
                     continue;
                 }
-            }
+                (_, cached) => cached.map(|cached| (cached.generation, cached.row)),
+            };
+            let previous = previous.or_else(|| previous_fresh.remove(&thread_key));
             let session = stored
                 .flatten()
                 .and_then(|(_, row)| row)
@@ -772,35 +815,38 @@ pub fn refresh_coordinator_panels(
                 &generated_at,
                 now,
             );
-            if let Some(fingerprint) = fingerprint {
-                if row_is_stable(thread, session.as_ref()) {
+            let generation = row_generation(
+                previous.as_ref().map(|(generation, row)| (*generation, row)),
+                &row,
+            );
+            row_ids.push((thread_key.clone(), generation));
+            match fingerprint {
+                Some(fingerprint) if row_is_stable(thread, session.as_ref()) => {
                     next_rows.insert(
                         thread_key.clone(),
                         CachedRow {
-                            thread: std::sync::Arc::clone(thread),
+                            thread: Arc::clone(thread),
                             session: fingerprint,
                             recent_until: recent_until(&row),
                             live: live.clone(),
-                            row: row.clone(),
                             recheck_at: resolved_recheck_at(&thread_key),
+                            row,
+                            generation,
                         },
                     );
                 }
+                _ => {
+                    next_fresh.insert(thread_key, (generation, row));
+                }
             }
-            panel_rows.push(row);
         }
-        let local_rows = panel_rows.len();
-        panel_rows.extend(
-            remote_threads
-                .iter()
-                .filter(|thread| thread.coordinator_key() == key)
-                .map(|thread| build_remote_row(thread, now)),
-        );
-        let has_remote = panel_rows.len() > local_rows;
-        built.push((key, panel_rows, has_remote, idle_floor));
-    }
-    if let Ok(mut rows) = rows().lock() {
-        *rows = next_rows;
+        let remote_rows = remote_of
+            .get(&key)
+            .into_iter()
+            .flatten()
+            .map(|thread| build_remote_row(thread, now))
+            .collect::<Vec<_>>();
+        built.push((key, row_ids, remote_rows, idle_floor));
     }
     let Ok(mut panels) = panels().lock() else {
         return Vec::new();
@@ -816,23 +862,32 @@ pub fn refresh_coordinator_panels(
     let mut next: HashMap<SessionKey, CachedPanel> = HashMap::new();
     // Panels built from the same inputs as last time: kept, and unchanged by definition.
     let mut kept: Vec<SessionKey> = Vec::new();
-    for (key, mut panel_rows, has_remote, idle_floor) in built {
+    for (key, row_ids, remote_rows, idle_floor) in built {
         let items = board_items.remove(&key).unwrap_or_default();
         if let Some(last) = inputs.remove(&key).filter(|last| {
-            !has_remote
-                && panels.contains_key(&key)
+            panels.contains_key(&key)
                 && last.built_at.elapsed() < PANEL_REBUILD_EVERY
                 && last.intro_hidden == intro_hidden
                 && last.custom_tags == custom_tags
                 && last.items == items
                 && last.idle_floor == idle_floor
-                && last.rows == panel_rows
+                && last.row_ids == row_ids
+                && last.remote_rows == remote_rows
         }) {
             next_inputs.insert(key.clone(), last);
             kept.push(key);
             continue;
         }
-        let rows_built_from = panel_rows.clone();
+        let mut panel_rows = row_ids
+            .iter()
+            .filter_map(|(thread_key, _)| {
+                next_rows
+                    .get(thread_key)
+                    .map(|cached| cached.row.clone())
+                    .or_else(|| next_fresh.get(thread_key).map(|(_, row)| row.clone()))
+            })
+            .collect::<Vec<_>>();
+        panel_rows.extend(remote_rows.iter().cloned());
         let approvals = super::relay::track_approvals(&mut panel_rows);
         let mut board =
             super::board::board_value(&panel_rows, &items, Some(super::board::SUMMARY_ROWS), now);
@@ -851,7 +906,8 @@ pub fn refresh_coordinator_panels(
         next_inputs.insert(
             key,
             PanelInputs {
-                rows: rows_built_from,
+                row_ids,
+                remote_rows,
                 items,
                 custom_tags: custom_tags.clone(),
                 intro_hidden,
@@ -859,6 +915,12 @@ pub fn refresh_coordinator_panels(
                 built_at: std::time::Instant::now(),
             },
         );
+    }
+    if let Ok(mut rows) = rows().lock() {
+        *rows = next_rows;
+    }
+    if let Ok(mut fresh) = fresh_rows().lock() {
+        *fresh = next_fresh;
     }
     let mut changed = next
         .iter()
