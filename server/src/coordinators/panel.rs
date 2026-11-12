@@ -43,6 +43,8 @@ fn is_recent(active_at: &str, now: chrono::DateTime<chrono::Utc>) -> bool {
 #[derive(PartialEq)]
 struct CachedPanel {
     summary: Value,
+    /// `chat_frame_dedupe::digest` of `summary`, worked out once per change.
+    summary_digest: u64,
     /// Every thread, in the panel's order.
     threads: Vec<Value>,
 }
@@ -99,6 +101,7 @@ fn cached_panel(
     }) {
         return CachedPanel {
             summary: previous.summary.clone(),
+            summary_digest: previous.summary_digest,
             threads,
         };
     }
@@ -124,7 +127,21 @@ fn cached_panel(
         // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
         "introHidden": intro_hidden,
     });
-    CachedPanel { summary, threads }
+    let summary_digest = crate::server::chat_frame_dedupe::digest(&summary);
+    CachedPanel {
+        summary,
+        summary_digest,
+        threads,
+    }
+}
+
+/// The dedupe digest of a coordinator's thread list as a chat frame carries it, when it is the
+/// panel's current summary (server/chat_frame_dedupe.rs `field_digest`). `None` while a refresh
+/// holds the panels, so an event never waits on a rebuild.
+pub(crate) fn coordinator_threads_digest(key: &SessionKey, value: &Value) -> Option<u64> {
+    let panels = panels().try_lock().ok()?;
+    let panel = panels.get(key)?;
+    (panel.summary == *value).then_some(panel.summary_digest)
 }
 
 /// `/api/readCoordinatorThreads`: every thread of the coordinator, for the panel's "N more".

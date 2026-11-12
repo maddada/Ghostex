@@ -49,7 +49,7 @@ const RECENT_BYTES_MAX: usize = 512 * 1024;
 
 impl RecentFrames {
     fn push(&mut self, seq: i64, frame: &Value) {
-        let size = frame.to_string().len();
+        let size = crate::server::chat_frame_dedupe::json_len(frame);
         self.frames.push_back((seq, frame.clone(), size));
         self.bytes += size;
         while self.frames.len() > RECENT_FRAMES_MAX || self.bytes > RECENT_BYTES_MAX {

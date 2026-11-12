@@ -141,11 +141,45 @@ impl std::io::Write for HashWriter<'_> {
     }
 }
 
-fn digest(value: &Value) -> u64 {
+/// The digest the memory compares: of the value's serialized text, so equal JSON hashes equal
+/// whatever its map order in memory. The coordinator panel works out its summary's digest with it
+/// once per change (`coordinators::coordinator_threads_digest`).
+pub(crate) fn digest(value: &Value) -> u64 {
     let mut hasher = DefaultHasher::new();
-    // Serialized, so equal JSON hashes equal whatever its map order in memory.
     let _ = serde_json::to_writer(HashWriter(&mut hasher), value);
     hasher.finish()
+}
+
+/// Counts serialized JSON without keeping it.
+struct CountWriter(usize);
+
+impl std::io::Write for CountWriter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0 += bytes.len();
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The length of `value`'s compact JSON text, without building the text.
+pub(crate) fn json_len(value: &Value) -> usize {
+    let mut counter = CountWriter(0);
+    let _ = serde_json::to_writer(&mut counter, value);
+    counter.0
+}
+
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// Digesting a coordinator chat's thread list (about 124 KB of board, work and threads) serialized it on every state frame, about 10% of gxserver's busy samples on the profiled Mac, though it only changes when the panel is rebuilt. The panel keeps its summary's digest, and a frame whose list equals the panel's current summary takes it after one comparison; any other list (the panel moved on since the frame was built) is digested as before, so a socket's memory never holds a digest of a list it did not send.
+fn field_digest(field: &str, chat: &(String, String), value: &Value) -> u64 {
+    if field == "coordinatorThreads" {
+        if let Some(known) = crate::coordinators::coordinator_threads_digest(chat, value) {
+            return known;
+        }
+    }
+    digest(value)
 }
 
 fn share_of(event: &EventPayload) -> Option<&ChatFrameShare> {
@@ -167,10 +201,13 @@ fn build_share(event: &Value) -> Option<ChatFrameShare> {
     }
     let project_id = object.get("projectId").and_then(Value::as_str)?;
     let session_id = object.get("sessionId").and_then(Value::as_str)?;
+    let chat = (project_id.to_string(), session_id.to_string());
+    let digests =
+        OMITTABLE_FIELDS.map(|field| object.get(field).map(|value| field_digest(field, &chat, value)));
     Some(ChatFrameShare {
-        chat: (project_id.to_string(), session_id.to_string()),
+        chat,
         full,
-        digests: OMITTABLE_FIELDS.map(|field| object.get(field).map(digest)),
+        digests,
         trimmed: Mutex::new(Vec::new()),
     })
 }
@@ -237,9 +274,7 @@ impl ChatFrameMemory {
             "base": base.get("revision").cloned().unwrap_or(Value::Null),
             "ops": ops,
         });
-        let patch_size = serde_json::to_string(&patch).map(|text| text.len()).ok()?;
-        let list_size = serde_json::to_string(threads).map(|text| text.len()).ok()?;
-        (patch_size * 2 < list_size).then_some(patch)
+        (json_len(&patch) * 2 < json_len(threads)).then_some(patch)
     }
 
     /// `event` as it goes out on this socket: a state frame without the fields it repeats.
