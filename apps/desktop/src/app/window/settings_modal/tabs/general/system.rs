@@ -101,7 +101,7 @@ fn auto_sleep_section(
         (
             "autoSleepProjectEditorIdleMinutes",
             "Project sleeps after",
-            "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Kanban and Automate awake when more than three views are open.",
+            "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Beads and Automate awake when more than three views are open.",
         ),
         (
             "autoSleepBrowserIdleMinutes",

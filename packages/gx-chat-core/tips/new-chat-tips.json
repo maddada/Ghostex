@@ -255,8 +255,8 @@
     {
       "id": "add-todos-to-kanban-page",
       "icon": "layout-board-split",
-      "title": "Keep todos on the board",
-      "body": "Add your todos as cards in the Kanban view, then ask an agent to work on the high-priority ones.",
+      "title": "Keep todos in Beads",
+      "body": "Add your todos as beads in the Beads view, then ask an agent to work on the ready ones with high priority.",
       "requires": "kanban"
     },
     {

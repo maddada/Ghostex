@@ -19,6 +19,8 @@ pub mod agent_message_delivery;
 pub mod agentbox;
 /// Signed approvals for sensitive actions (GitHub #495); used module-qualified.
 pub mod approval;
+/// The Beads view's snapshot (`/api/beadsView`); used module-qualified.
+pub mod beads_view;
 pub mod chat;
 /// Cards a `ghostex` command prints for the chat to draw; used module-qualified.
 pub mod chat_card;

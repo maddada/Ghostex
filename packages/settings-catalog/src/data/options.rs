@@ -683,6 +683,10 @@ pub const SIDEBAR_THEME_SETTING_OPTIONS: &[Opt] = &[
     opt("System", "system"),
 ];
 
+/// The Tree | Board switch saves this; someone who had the Kanban tab saved starts on Board (the
+/// desktop's one-time migration in native_beads/host.rs).
+pub const BEADS_VIEW_LAYOUT_OPTIONS: &[Opt] = &[opt("Tree", "tree"), opt("Board", "board")];
+
 pub const SIDEBAR_VISIBILITY_MEMORY_OPTIONS: &[Opt] = &[
     opt("Same in every view", "shared"),
     opt("Remembered per view", "perView"),

@@ -538,6 +538,7 @@ impl GhostexGpuiApp {
                 native_sidebar: Default::default(),
                 native_docs: Default::default(),
                 native_kanban: Default::default(),
+                native_beads: None,
                 floating_reveal: Default::default(),
                 ghostex_capture: Default::default(),
                 panel_motion: Default::default(),
@@ -611,6 +612,7 @@ impl GhostexGpuiApp {
             let command_gxserver_restore_started =
                 this.restore_command_terminal_gxserver_sessions_from_shell_state(cx);
             this.retry_pending_command_gxserver_cleanup(cx);
+            this.migrate_beads_layout_setting();
             if startup_activity_changed
                 || delayed_send_changed
                 || agents_delayed_send_changed

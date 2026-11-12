@@ -51,9 +51,15 @@ impl NativeKanbanState {
             let active_tag = self.view.active_tag(&tags).to_string();
             let filtered =
                 filter_tickets(&self.tickets, &self.search_query, &self.view, &active_tag);
-            let lanes = self
-                .columns
+            let hidden = self.hidden_columns.as_deref().unwrap_or_default();
+            let shown = (0..self.columns.len())
+                .filter(|index| {
+                    super::model::board_lane_shown(&self.columns[*index].key, hidden, &self.tickets)
+                })
+                .collect::<Vec<_>>();
+            let lanes = shown
                 .iter()
+                .map(|index| &self.columns[*index])
                 .map(|column| {
                     let mut indices = filtered
                         .iter()
@@ -68,6 +74,7 @@ impl NativeKanbanState {
             let nothing_matches = !self.tickets.is_empty() && filtered.is_empty();
             self.derived = Some(KanbanDerived {
                 revision: self.revision,
+                shown,
                 lanes,
                 filter_count,
                 nothing_matches,
@@ -117,10 +124,10 @@ impl GhostexGpuiApp {
         p: &super::palette::KanbanPalette,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
-        let board_empty = self.native_kanban.initial_load_done
-            && self.native_kanban.load_state == Some(super::state::KanbanLoadState::Ready)
-            && self.native_kanban.tickets.is_empty();
-        let lanes = self.native_kanban.derived().lanes.clone();
+        let (shown, lanes) = {
+            let derived = self.native_kanban.derived();
+            (derived.shown.clone(), derived.lanes.clone())
+        };
         let state = &mut self.native_kanban;
         let loading = state.loading_first();
         let measure_key = {
@@ -131,11 +138,14 @@ impl GhostexGpuiApp {
             p.font.hash(&mut hasher);
             for link in &state.conversation.links {
                 link.bead_id.hash(&mut hasher);
-                (link.openable || link.resumable).hash(&mut hasher);
+                (link.openable || link.resumable, link.live).hash(&mut hasher);
             }
             hasher.finish()
         };
-        let columns = state.columns.clone();
+        let columns = shown
+            .iter()
+            .map(|index| state.columns[*index].clone())
+            .collect::<Vec<_>>();
         state
             .lane_lists
             .retain(|key, _| columns.iter().any(|column| column.key == *key));
@@ -148,7 +158,6 @@ impl GhostexGpuiApp {
                     return self.render_native_kanban_lane(
                         column,
                         &[],
-                        None,
                         Some(position),
                         true,
                         measure_key,
@@ -156,12 +165,9 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }
-                let hint = (board_empty && column.key == "todo")
-                    .then_some("No tickets yet. Use + Ticket to add one.");
                 self.render_native_kanban_lane(
                     column,
                     &indices,
-                    hint,
                     None,
                     in_view.contains(&position),
                     measure_key,

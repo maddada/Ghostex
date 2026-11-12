@@ -51,7 +51,7 @@ pub(crate) fn auto_sleep() -> Section {
             row(
                 "autoSleepProjectEditorIdleMinutes",
                 "Project sleeps after",
-                "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Kanban and Automate awake when more than three views are open.",
+                "Choose when inactive Project panes sleep, or turn Auto Sleep off. Off also keeps Files, Beads and Automate awake when more than three views are open.",
             )
             .num_options(AUTO_SLEEP_IDLE_MINUTE_OPTIONS),
             row(

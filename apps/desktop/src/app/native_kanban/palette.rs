@@ -1,9 +1,11 @@
 //! The native Kanban's colours and type, taken from the native chat's appearance so the board and
 //! the chat read as one app, with the chat's frosted treatment under window glass.
+//!
+//! CDXC:ProjectBoard 2026-11-10 WHY:
+//! The board is the Beads view's Board layout and is muted to match its Tree (the pitch's 05-board): grey lane glyphs, mono priority tags and grey label chips instead of coloured lane dots, priority bars and label dots. The agent line's dot is grey: the board's link state says only whether the linked session is live, not whether its agent is working, so there is nothing yet to colour green.
 
 use gpui::{Hsla, Window, rgb};
 
-use super::model::LaneTone;
 use crate::app::native_chat::appearance::ChatAppearance;
 
 #[derive(Clone)]
@@ -106,48 +108,5 @@ impl KanbanPalette {
             button: chat.control_primary,
             button_text: rgb(if light { 0xffffff } else { 0x0d0d0d }).into(),
         }
-    }
-
-    /// The lane header dot (`LANE_TONE_COLORS`).
-    pub(crate) fn tone(&self, tone: LaneTone) -> Hsla {
-        match tone {
-            LaneTone::Muted => rgb(0x8f9aa7).into(),
-            LaneTone::Blue => rgb(0x5ea4ff).into(),
-            LaneTone::Amber => rgb(0xe7b85b).into(),
-            LaneTone::Violet => rgb(0xb18cff).into(),
-            LaneTone::Green => rgb(0x95d7f6).into(),
-            LaneTone::Neutral => self.foreground.opacity(0.42),
-        }
-    }
-
-    /// `chipToneColor`: one stable colour per label or assignee.
-    pub(crate) fn chip_tone(seed: &str) -> Hsla {
-        const TONES: [u32; 7] = [
-            0x5ea4ff, 0xe7b85b, 0xb18cff, 0x6fd19c, 0xf28b8b, 0x95d7f6, 0xe79ad0,
-        ];
-        let hash = seed.encode_utf16().fold(0_u32, |hash, unit| {
-            hash.wrapping_mul(31).wrapping_add(u32::from(unit))
-        });
-        rgb(TONES[hash as usize % TONES.len()]).into()
-    }
-
-    /// The priority icon's colour (`TicketPriorityIcon`).
-    pub(crate) fn priority_tone(&self, priority: Option<i64>) -> Hsla {
-        match priority.unwrap_or(2) {
-            value if value <= 0 => rgb(0xfb923c).opacity(0.9),
-            1 => rgb(0xfbbf24).opacity(0.9),
-            2 => rgb(0x38bdf8).opacity(0.8),
-            _ => self.muted.opacity(0.7),
-        }
-    }
-}
-
-trait RgbOpacity {
-    fn opacity(self, alpha: f32) -> Hsla;
-}
-
-impl RgbOpacity for gpui::Rgba {
-    fn opacity(self, alpha: f32) -> Hsla {
-        Hsla::from(self).opacity(alpha)
     }
 }

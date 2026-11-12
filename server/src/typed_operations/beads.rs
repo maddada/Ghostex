@@ -8,10 +8,10 @@ use serde_json::{json, Map, Value};
 use crate::toolchain::require_system_bd;
 
 use super::values::{
-    command_summary_json, display_unknown_value, normalize_issue_id,
-    normalize_nullish_required_text, normalize_required_text, nullish_value_to_string,
-    resolve_path_against, run_process_command, typed_result, value_to_string, CommandOutput,
-    ProcessCommand, StringOrElse, TypedOperationContext, TypedOperationError,
+    command_summary_json, display_unknown_value, normalize_issue_id, normalize_required_text,
+    nullish_value_to_string, resolve_path_against, run_process_command, typed_result,
+    value_to_string, CommandOutput, ProcessCommand, StringOrElse, TypedOperationContext,
+    TypedOperationError,
 };
 
 const BEADS_BOARD_RESPONSE_LIMIT_BYTES: usize = 4 * 1024 * 1024;
@@ -35,6 +35,20 @@ pub(crate) async fn run_beads_action(
     context: &TypedOperationContext,
 ) -> Result<Value, TypedOperationError> {
     let action = normalize_beads_action(params.get("action"))?;
+    crate::beads_view::run_beads_action_in_workspace(&action, params, context).await
+}
+
+/// One Beads action as one bd process, with no workspace lock or cache: the path every action
+/// took before the Beads view, kept for the cases the workspace cache does not cover (no bd, no
+/// workspace) and called by it under the workspace lock.
+pub(crate) async fn run_beads_action_direct(
+    action: &str,
+    params: &Map<String, Value>,
+    context: &TypedOperationContext,
+) -> Result<Value, TypedOperationError> {
+    if action == "boardHiddenColumnsSet" {
+        return super::beads_view_actions::run_board_hidden_columns_set(params, context).await;
+    }
     if action == "storageExists" {
         let exists = match require_system_bd() {
             Ok(bd) => matches!(
@@ -55,8 +69,27 @@ pub(crate) async fn run_beads_action(
     CDXC:ProjectBoard 2026-06-22-01:09:
     server must match the TypeScript Beads execution contract: every subprocess-backed Project Board action runs with BD_JSON_ENVELOPE=1, failed board reads still return an empty `issues` array for UI consumers, and board parsing uses the same bounded JSON response rules.
     */
-    let command = build_beads_command(&action, params, context)?.with_env("BD_JSON_ENVELOPE", "1");
+    let command = beads_action_command(action, params, context)?;
     let output = run_process_command(&command, context).await?;
+    finish_beads_action(action, &command, output)
+}
+
+/// The bd command an action runs, with bd's JSON envelope on.
+pub(crate) fn beads_action_command(
+    action: &str,
+    params: &Map<String, Value>,
+    context: &TypedOperationContext,
+) -> Result<ProcessCommand, TypedOperationError> {
+    Ok(build_beads_command(action, params, context)?.with_env("BD_JSON_ENVELOPE", "1"))
+}
+
+/// Turns one bd process's output into the action's reply. The Beads view's cache builds the
+/// replies it stores with this same function, so a cached reply is the reply bd's output gives.
+pub(crate) fn finish_beads_action(
+    action: &str,
+    command: &ProcessCommand,
+    output: CommandOutput,
+) -> Result<Value, TypedOperationError> {
     if action == "show" && output.exit_code == 0 {
         let (issue, stdout) = parse_beads_show_output(&output.stdout)?;
         return Ok(json!({
@@ -68,9 +101,9 @@ pub(crate) async fn run_beads_action(
             "stdout": stdout,
         }));
     }
-    if matches!(action.as_str(), "board" | "listAllLabels") {
+    if matches!(action, "board" | "listAllLabels") {
         if output.exit_code != 0 {
-            let mut result = typed_result(&action, &command, output);
+            let mut result = typed_result(action, command, output);
             if action == "board" {
                 result
                     .as_object_mut()
@@ -102,7 +135,7 @@ pub(crate) async fn run_beads_action(
             "stdout": stdout,
         }));
     }
-    Ok(typed_result(&action, &command, output))
+    Ok(typed_result(action, command, output))
 }
 
 fn build_beads_command(
@@ -189,7 +222,11 @@ pub(crate) fn build_beads_command_with_executable(
             ],
             &cwd,
         ),
-        "create" => ProcessCommand::new(bd_executable_path, build_beads_create_args(params)?, &cwd),
+        "create" => ProcessCommand::new(
+            bd_executable_path,
+            super::beads_view_actions::build_beads_create_args(params)?,
+            &cwd,
+        ),
         "delete" => ProcessCommand::new(
             bd_executable_path,
             vec![
@@ -339,10 +376,13 @@ pub(crate) fn build_beads_command_with_executable(
             ],
             &cwd,
         ),
-        _ => {
-            return Err(TypedOperationError::bad_request(format!(
-                "Unsupported Beads action: {action}"
-            )))
+        other => {
+            return super::beads_view_actions::build_beads_view_command(
+                other,
+                params,
+                &cwd,
+                bd_executable_path,
+            )
         }
     })
 }
@@ -385,7 +425,7 @@ pub(crate) async fn resolve_beads_workspace(
     }
 }
 
-fn beads_where_reports_no_workspace(text: &str) -> bool {
+pub(crate) fn beads_where_reports_no_workspace(text: &str) -> bool {
     serde_json::from_str::<Value>(text.trim())
         .ok()
         .and_then(|parsed| {
@@ -397,7 +437,7 @@ fn beads_where_reports_no_workspace(text: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn is_home_beads_directory(beads_path: &str) -> bool {
+pub(crate) fn is_home_beads_directory(beads_path: &str) -> bool {
     let home = ghostex_paths::user_home_dir();
     if !home.is_absolute() {
         return false;
@@ -1068,6 +1108,7 @@ fn normalize_beads_action(input: Option<&Value>) -> Result<String, TypedOperatio
         | "updatePriority"
         | "updateStatus"
         | "updateTitle" => Ok(action.to_string()),
+        other if super::beads_view_actions::is_beads_view_action(other) => Ok(other.to_string()),
         _ => Err(TypedOperationError::bad_request(format!(
             "Unsupported Beads action: {}",
             display_unknown_value(input)
@@ -1084,7 +1125,7 @@ shape only and let bd be the authority on which statuses exist — it already
 returns a clear error for a name it does not know, and args are passed to the
 process without a shell, so this is a well-formedness check, not a safety gate.
 */
-fn normalize_beads_status(input: Option<&Value>) -> Result<String, TypedOperationError> {
+pub(crate) fn normalize_beads_status(input: Option<&Value>) -> Result<String, TypedOperationError> {
     let status = normalize_required_text(input, "status")?;
     if status.len() <= 64
         && status.chars().enumerate().all(|(index, ch)| {
@@ -1124,7 +1165,9 @@ fn normalize_beads_rename_prefix(input: Option<&Value>) -> Result<String, TypedO
     Ok(format!("{trimmed}-"))
 }
 
-fn normalize_beads_estimate(input: Option<&Value>) -> Result<String, TypedOperationError> {
+pub(crate) fn normalize_beads_estimate(
+    input: Option<&Value>,
+) -> Result<String, TypedOperationError> {
     let Some(number) = input.and_then(Value::as_i64) else {
         return Err(TypedOperationError::bad_request(
             "estimate must be a non-negative integer.",
@@ -1138,7 +1181,9 @@ fn normalize_beads_estimate(input: Option<&Value>) -> Result<String, TypedOperat
     Ok(number.to_string())
 }
 
-fn normalize_beads_dependency_type(input: Option<&Value>) -> Result<String, TypedOperationError> {
+pub(crate) fn normalize_beads_dependency_type(
+    input: Option<&Value>,
+) -> Result<String, TypedOperationError> {
     let dep_type = input
         .and_then(Value::as_str)
         .map(str::trim)
@@ -1205,60 +1250,6 @@ fn build_beads_update_args(
     Ok(args)
 }
 
-fn build_beads_create_args(
-    params: &Map<String, Value>,
-) -> Result<Vec<String>, TypedOperationError> {
-    let mut args = vec![
-        "create".to_string(),
-        "--title".to_string(),
-        normalize_required_text(params.get("title"), "title")?,
-        "--description".to_string(),
-        nullish_value_to_string(params.get("description"), ""),
-        "--priority".to_string(),
-        normalize_nullish_required_text(params.get("priority"), "priority", "2")?,
-        "--type".to_string(),
-        "task".to_string(),
-    ];
-    if params.contains_key("estimate") {
-        args.extend([
-            "--estimate".to_string(),
-            normalize_beads_estimate(params.get("estimate"))?,
-        ]);
-    }
-    if let Some(labels_value) = params.get("labels") {
-        if !labels_value.is_null() {
-            let labels = labels_value.as_array().ok_or_else(|| {
-                TypedOperationError::bad_request("labels must be an array of non-empty strings.")
-            })?;
-            if !labels.is_empty() {
-                let labels = labels
-                    .iter()
-                    .map(|label| normalize_required_text(Some(label), "label"))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .join(",");
-                args.extend(["--labels".to_string(), labels]);
-            }
-        }
-    }
-    if let Some(depends_on) = params
-        .get("dependsOnId")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        args.extend([
-            "--deps".to_string(),
-            format!(
-                "{}:{}",
-                normalize_beads_dependency_type(params.get("depType"))?,
-                normalize_issue_id(Some(&Value::String(depends_on.to_string())))?
-            ),
-        ]);
-    }
-    args.push("--json".to_string());
-    Ok(args)
-}
-
 fn build_beads_set_label_args(input: Option<&Value>) -> Result<Vec<String>, TypedOperationError> {
     let labels = match input {
         None | Some(Value::Null) => Vec::new(),
@@ -1279,7 +1270,7 @@ fn build_beads_set_label_args(input: Option<&Value>) -> Result<Vec<String>, Type
     Ok(args)
 }
 
-fn resolve_beads_cwd(context: &TypedOperationContext) -> String {
+pub(crate) fn resolve_beads_cwd(context: &TypedOperationContext) -> String {
     context
         .beads_cwd
         .clone()

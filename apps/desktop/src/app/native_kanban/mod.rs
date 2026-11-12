@@ -1,5 +1,7 @@
-//! The desktop Kanban view, drawn natively. The entry point is `render_native_kanban` in
-//! `render.rs`.
+//! The desktop Kanban view, drawn natively: the Beads view's Board layout. The entry points are
+//! `render_native_kanban_embedded` (under the Beads header) and `render_native_kanban` (the board's
+//! own window) in `render.rs`. `host.rs`, `window.rs` and `install_beads.rs` are the desktop's
+//! own; the GPUI web build compiles the rest (`apps/gpui-web/src/app/native_kanban/`).
 
 pub(crate) mod actions;
 pub(crate) mod beads;
@@ -14,6 +16,7 @@ pub(crate) mod data;
 pub(crate) mod derived;
 pub(crate) mod filters;
 pub(crate) mod forms;
+pub(crate) mod host;
 pub(crate) mod install_beads;
 pub(crate) mod lane;
 pub(crate) mod model;

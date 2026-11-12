@@ -124,7 +124,7 @@ pub(crate) struct CommandSummary {
     pub(crate) executable: String,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct CommandOutput {
     pub(crate) error: Option<Value>,
     pub(crate) exit_code: i32,
@@ -208,6 +208,22 @@ pub(crate) async fn run_process_command(
     command: &ProcessCommand,
     context: &TypedOperationContext,
 ) -> Result<CommandOutput, TypedOperationError> {
+    run_process_command_with_timeout(
+        command,
+        context,
+        Duration::from_millis(TYPED_OPERATION_TIMEOUT_MS),
+    )
+    .await
+}
+
+/// [`run_process_command`] with its own time limit: the Beads view's reads and discovery give
+/// up long before the typed operations' two minutes, so a held Beads lock shows as busy.
+pub(crate) async fn run_process_command_with_timeout(
+    command: &ProcessCommand,
+    context: &TypedOperationContext,
+    limit: Duration,
+) -> Result<CommandOutput, TypedOperationError> {
+    let timeout_ms = limit.as_millis() as u64;
     let mut process = Command::new(&command.executable);
     process
         .args(&command.args)
@@ -254,11 +270,7 @@ pub(crate) async fn run_process_command(
     }
 
     let started = Instant::now();
-    let result = timeout(
-        Duration::from_millis(TYPED_OPERATION_TIMEOUT_MS),
-        child.wait_with_output(),
-    )
-    .await;
+    let result = timeout(limit, child.wait_with_output()).await;
     let output = match result {
         Ok(Ok(output)) => output,
         Ok(Err(error)) => {
@@ -270,8 +282,8 @@ pub(crate) async fn run_process_command(
             return Ok(CommandOutput {
                 error: Some(json!({
                     "code": "timeout",
-                    "message": format!("Typed operation timed out after {TYPED_OPERATION_TIMEOUT_MS}ms."),
-                    "timeoutMs": TYPED_OPERATION_TIMEOUT_MS,
+                    "message": format!("Typed operation timed out after {timeout_ms}ms."),
+                    "timeoutMs": timeout_ms,
                 })),
                 exit_code: 1,
                 stderr: String::new(),

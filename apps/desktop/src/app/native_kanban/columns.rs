@@ -1,5 +1,6 @@
-//! The Board columns panel (`BoardColumnsDialog`): the six built-in lanes are listed but fixed; the
-//! board's own extra statuses can be added, reordered, and deleted once empty.
+//! The Board columns panel (`BoardColumnsDialog`): the six built-in lanes are listed, with a Show
+//! switch on Backlog, Test and Review; the board's own extra statuses can be added, reordered,
+//! and deleted once empty.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -11,10 +12,14 @@ use super::model::{
     board_status_label, managed_board_column_names, move_board_column, remove_board_column,
 };
 use super::palette::KanbanPalette;
-use super::state::KanbanColumnsForm;
+use super::state::{KanbanColumnsForm, KanbanPanel};
 use super::widgets::{KanbanButtonKind, LANE_RADIUS, kanban_button, section_title, text_field};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::titlebar_svg_icon;
+use crate::app::window::native_modal_kit::{
+    SwitchRowExt as _, a11y_toggled, bind_press, modal_switch, switch_row_wash,
+};
+use ghostex_gx_protocol::beads_view::HIDEABLE_BOARD_COLUMNS;
 
 impl GhostexGpuiApp {
     pub(crate) fn render_native_kanban_columns_panel(
@@ -39,26 +44,71 @@ impl GhostexGpuiApp {
                 .border_1()
                 .border_color(p.border)
         };
+        let hidden = state.hidden_columns.clone();
+        let mp = self.gpui_native_modal_palette();
         let builtin_rows = state
             .columns
             .iter()
             .filter(|column| !managed.contains(&column.key))
             .map(|column| {
+                let label = div()
+                    .flex_1()
+                    .truncate()
+                    .text_size(px(13.0))
+                    .text_color(p.foreground.opacity(0.9))
+                    .child(column.label.clone());
+                let hideable = HIDEABLE_BOARD_COLUMNS.contains(&column.key.as_str());
+                // An older computer's gxserver can't store the choice: no switch there.
+                let Some(hidden) = hidden.as_ref().filter(|_| hideable) else {
+                    return row()
+                        .child(label)
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(p.faint)
+                                .child("Built-in"),
+                        )
+                        .into_any_element();
+                };
+                let shown = !hidden.contains(&column.key);
+                let has_cards = state
+                    .tickets
+                    .iter()
+                    .any(|ticket| ticket.board_status == column.key);
+                let key = column.key.clone();
                 row()
-                    .child(
-                        div()
-                            .flex_1()
-                            .truncate()
-                            .text_size(px(13.0))
-                            .text_color(p.foreground.opacity(0.9))
-                            .child(column.label.clone()),
+                    .id(ElementId::Name(format!("kanban-column-show-{key}").into()))
+                    .role(gpui::Role::Switch)
+                    .aria_toggled(a11y_toggled(shown))
+                    .aria_label(format!("Show {}", column.label))
+                    .child(label)
+                    .when(!shown && has_cards, |this| {
+                        this.child(
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(p.faint)
+                                .child("Shows while it has cards"),
+                        )
+                    })
+                    .child(modal_switch(&mp, shown, busy))
+                    .switch_row_press(
+                        switch_row_wash(mp.foreground),
+                        busy,
+                        bind_press(cx, move |this: &mut Self, _window, cx| {
+                            if this.native_kanban.panel.as_ref().is_some_and(
+                                |panel| matches!(panel, KanbanPanel::Columns(form) if form.busy),
+                            ) {
+                                return;
+                            }
+                            let visible = this
+                                .native_kanban
+                                .hidden_columns
+                                .as_ref()
+                                .is_some_and(|hidden| hidden.contains(&key));
+                            this.native_kanban_set_column_shown(key.clone(), visible, cx);
+                        }),
                     )
-                    .child(
-                        div()
-                            .text_size(px(11.0))
-                            .text_color(p.faint)
-                            .child("Built-in"),
-                    )
+                    .into_any_element()
             })
             .collect::<Vec<_>>();
         let managed_count = managed.len();
@@ -176,12 +226,14 @@ impl GhostexGpuiApp {
                     .border_color(p.border)
                     .child(
                         div()
+                            .flex_1()
+                            .min_w_0()
                             .flex()
                             .flex_col()
                             .gap(px(3.0))
                             .child(div().text_size(px(15.0)).text_color(p.foreground).child("Board columns"))
                             .child(div().text_size(px(12.0)).text_color(p.muted).child(
-                                "Extra columns come from this board's Beads status config. The six built-in lanes are fixed.",
+                                "Extra columns come from this board's Beads status config. Backlog, Test and Review can be hidden; a hidden column still shows while it has cards.",
                             )),
                     )
                     .child(

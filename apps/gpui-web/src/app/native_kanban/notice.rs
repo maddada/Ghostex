@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_kanban/notice.rs

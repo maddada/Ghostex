@@ -136,6 +136,7 @@ impl GhostexGpuiApp {
             None,
             None,
             scale,
+            None,
             window,
             cx,
         );
@@ -162,7 +163,37 @@ impl GhostexGpuiApp {
         let toggle = opener.trigger.map(|trigger| (trigger, opener.press));
         let max_height = opener.max_height.map(|height| px(height * scale));
         Self::open_native_sidebar_menu(
-            items, anchor, placement, toggle, max_height, scale, window, cx,
+            items, anchor, placement, toggle, max_height, scale, None, window, cx,
+        );
+    }
+
+    /// The sidebar's menu (same rows, frosted host and dismissal) hung from a button outside the
+    /// sidebar: `region` is the area it must stay inside (the Beads view's side panel menus).
+    pub(crate) fn show_native_menu_in_region(
+        items: &Value,
+        opener: SidebarMenuOpener,
+        region: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) {
+        let placement = SidebarMenuPlacement::Attached {
+            owner: opener.owner,
+            from: opener.from,
+            align_right: opener.align_right,
+            gap: px(opener.gap),
+        };
+        let anchor = Point::new(opener.owner.left(), opener.owner.bottom());
+        let toggle = opener.trigger.map(|trigger| (trigger, opener.press));
+        Self::open_native_sidebar_menu(
+            items,
+            anchor,
+            placement,
+            toggle,
+            opener.max_height.map(px),
+            1.0,
+            Some(region),
+            window,
+            cx,
         );
     }
 
@@ -319,6 +350,7 @@ impl GhostexGpuiApp {
                 trigger,
                 None,
                 scale,
+                None,
                 window,
                 cx,
             ),
@@ -350,6 +382,7 @@ impl GhostexGpuiApp {
         toggle: Option<(String, Option<Point<Pixels>>)>,
         max_height: Option<Pixels>,
         scale: f32,
+        region: Option<Bounds<Pixels>>,
         window: &mut Window,
         cx: &mut gpui::App,
     ) {
@@ -437,6 +470,7 @@ impl GhostexGpuiApp {
                         scale,
                         // CDXC:Tooltips 2026-10-17 DECISION: User (2026-09-15): no tooltip may show while a context menu is open; the suppression is held for as long as the menu is. The one exception, the user's choice on 2026-10-17 ("real tooltip"): the (i) beside New Orchestrator… shows its benefits as a real tooltip while the menu is open, so the suppression is lifted only while the pointer is on that (i) (`set_native_sidebar_menu_info_hover` in agent_launcher_menu.rs). Every other tooltip stays hidden while a menu is open.
                         tooltips: Some(Root::suppress_tooltips(window, cx)),
+                        region,
                     });
                     if let Some(command) = on_open {
                         app.dispatch_native_sidebar_ui(command, cx);
@@ -774,6 +808,44 @@ impl GhostexGpuiApp {
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
+        if self
+            .native_sidebar
+            .menu
+            .as_ref()
+            .is_some_and(|menu| menu.region.is_some())
+        {
+            // A menu that belongs to another area is drawn there (`render_native_region_menu`).
+            return None;
+        }
+        self.render_native_menu_layers(self.native_sidebar.bounds, window, cx)
+    }
+
+    /// A menu opened for another area of the window (the Beads view's menus,
+    /// `SidebarMenuState::region`): the same rows, frosted host and dismissal, drawn by that area
+    /// so it shows whether or not the sidebar is drawn. `None` for the sidebar's own menus.
+    pub(crate) fn render_native_region_menu(
+        &self,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        let region = match self.native_sidebar.menu.as_ref() {
+            Some(menu) => menu.region?,
+            None => {
+                // Closed: take down the frosted hosts it used, sidebar drawn or not.
+                hide_sidebar_menu_hosts(0, window.window_handle(), cx);
+                return None;
+            }
+        };
+        self.render_native_menu_layers(region, window, cx)
+    }
+
+    /// The menu's layers, placed from `frame`'s origin (the element that draws them).
+    fn render_native_menu_layers(
+        &self,
+        frame: Bounds<Pixels>,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
         use crate::app::window::frosted_host::{
             FrostedHostKind, SIDEBAR_MENU_HOST_LEVELS, frosted_hosting_active, show_frosted_host,
         };
@@ -781,7 +853,7 @@ impl GhostexGpuiApp {
             hide_sidebar_menu_hosts(0, window.window_handle(), cx);
             return None;
         };
-        let sidebar = self.native_sidebar.bounds;
+        let sidebar = frame;
         let hosted = frosted_hosting_active();
         let (panels, union) = self.native_sidebar_menu_panels(hosted, None, cx)?;
         let layers = div()
@@ -833,7 +905,7 @@ impl GhostexGpuiApp {
             let layers = layers.occlude();
             // One window per panel, so a submenu stacked over its parent blurs the parent the way
             // a header dropdown blurs whatever is under it.
-            let sidebar = self.native_sidebar.bounds;
+            let sidebar = menu.region.unwrap_or(self.native_sidebar.bounds);
             let scale = menu.scale;
             let count = menu.panels.len().min(usize::from(SIDEBAR_MENU_HOST_LEVELS));
             for (index, panel) in menu.panels.iter().take(count).enumerate() {
@@ -875,7 +947,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<(gpui::Div, Bounds<Pixels>)> {
         let menu = self.native_sidebar.menu.as_ref()?;
-        let sidebar = self.native_sidebar.bounds;
+        let sidebar = menu.region.unwrap_or(self.native_sidebar.bounds);
         let scale = menu.scale;
         let light = chrome_uses_light_appearance();
         let panels = menu.panels.clone();
@@ -1550,8 +1622,11 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         return;
                     }
-                    let bounds =
-                        panel.bounds(app.native_sidebar.bounds, menu.scale, panel_index > 0);
+                    let bounds = panel.bounds(
+                        menu.region.unwrap_or(app.native_sidebar.bounds),
+                        menu.scale,
+                        panel_index > 0,
+                    );
                     let y = panel.items[..index]
                         .iter()
                         .map(|item| panel.item_height(item))

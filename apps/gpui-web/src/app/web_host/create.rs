@@ -56,12 +56,15 @@ impl GhostexGpuiApp {
     ) {
     }
 
-    /// The Project Board's answer goes back to its CEF page; the page has no board.
+    /// The store's answer to a board request (agents and links, Start work, Go to agent), checked
+    /// and handed to the Board by the same code as on the desktop (`gx_store/create/board.rs`);
+    /// the page has no Automate view or CEF page to pass anything else to.
     pub(crate) fn receive_sidebar_project_board_conversation_response_payload(
         &mut self,
-        _payload: &str,
-        _cx: &mut Context<Self>,
+        payload: &str,
+        cx: &mut Context<Self>,
     ) {
+        let _ = self.gx_store_route_board_conversation_response(payload, cx);
     }
 
     /// The desktop draws a placeholder tab while an agent starts; the page shows the session once it opens.

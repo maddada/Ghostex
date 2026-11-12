@@ -77,6 +77,7 @@ pub(crate) mod missing_project_folder_modal_lifecycle;
 pub(crate) mod modals;
 pub(crate) mod native_app_modal_lifecycle;
 pub(crate) mod native_automate;
+pub(crate) mod native_beads;
 pub(crate) mod native_bot_feed;
 pub(crate) mod native_changes;
 pub(crate) mod native_changes_host;

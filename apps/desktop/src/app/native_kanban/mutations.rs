@@ -37,7 +37,7 @@ impl GhostexGpuiApp {
         self.native_kanban_rebuild_tickets();
     }
 
-    fn native_kanban_upsert_local_issue(&mut self, issue: BeadsIssue) {
+    pub(crate) fn native_kanban_upsert_local_issue(&mut self, issue: BeadsIssue) {
         let issues = &mut self.native_kanban.issues;
         match issues.iter_mut().find(|candidate| candidate.id == issue.id) {
             Some(existing) => *existing = issue,
@@ -83,11 +83,12 @@ impl GhostexGpuiApp {
         let status = column.beads_status.clone();
         let ticket_id = ticket_id.to_string();
         self.native_kanban_spawn(
-            move |context| {
+            move |context| async move {
                 beads_call(
-                    context,
+                    &context,
                     json!({ "action": "updateStatus", "issueId": issue_id, "status": status }),
                 )
+                .await
             },
             move |this, result, cx| {
                 if this
@@ -160,7 +161,9 @@ impl GhostexGpuiApp {
         self.native_kanban_rebuild_tickets();
         let issue_id = ticket_id.to_string();
         self.native_kanban_spawn(
-            move |context| beads_call(context, json!({ "action": "delete", "issueId": issue_id })),
+            move |context| async move {
+                beads_call(&context, json!({ "action": "delete", "issueId": issue_id })).await
+            },
             move |this, result, cx| match result {
                 Ok(_) => this.native_kanban_refresh(KanbanRefreshMode::Mutation, cx),
                 Err(error) => {
@@ -220,7 +223,7 @@ impl GhostexGpuiApp {
         self.native_kanban.error = None;
         self.native_kanban_upsert_local_issue(optimistic);
         self.native_kanban_spawn(
-            move |context| persist_ticket(context, &draft),
+            move |context| async move { persist_ticket(&context, &draft).await },
             |this, result, cx| {
                 if let Err(error) = result {
                     this.native_kanban.error = Some(error.clone());
@@ -258,6 +261,15 @@ impl GhostexGpuiApp {
         }
         let requested_title = form.title.read(cx).value().trim().to_string();
         let generate_title = requested_title.is_empty();
+        // CDXC:ProjectBoard 2026-11-11 WHY: a computer whose Ghostex cannot write titles (no `generateTitle` in /api/beadsView) gets no bead with a placeholder title: the form asks for one first, as the Beads view's shared form does.
+        if generate_title && self.native_kanban.title_generation != Some(true) {
+            self.native_kanban_toast(
+                "Add a title",
+                "Ghostex on that computer can't write one for you. Type a title, then create the bead.",
+                cx,
+            );
+            return;
+        }
         let title = if generate_title {
             draft_title(&prompt)
         } else {
@@ -286,7 +298,7 @@ impl GhostexGpuiApp {
         self.native_kanban.create_in_flight = true;
         self.native_kanban.panel = None;
         self.native_kanban_spawn(
-            move |context| create_issue(context, &prefix, &draft, &known_ids),
+            move |context| async move { create_issue(&context, &prefix, &draft, &known_ids).await },
             move |this, result, cx| {
                 this.native_kanban.create_in_flight = false;
                 let mut issue = match result {
@@ -355,18 +367,20 @@ impl GhostexGpuiApp {
         let id = issue_id.to_string();
         let issue_id = issue_id.to_string();
         self.native_kanban_spawn(
-            move |context| {
+            move |context| async move {
                 if needs_status {
                     beads_call(
-                        context,
+                        &context,
                         json!({ "action": "updateStatus", "issueId": id, "status": target_status }),
-                    )?;
+                    )
+                    .await?;
                 }
                 if !labels.is_empty() {
                     beads_call(
-                        context,
+                        &context,
                         json!({ "action": "setLabels", "issueId": id, "labels": labels }),
-                    )?;
+                    )
+                    .await?;
                 }
                 Ok::<(), String>(())
             },
@@ -383,45 +397,32 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// A ticket created without a title gets one from the board's default prompt agent, later
-    /// and in the background; failures keep the draft title.
+    /// A ticket created without a title gets one from the Title Generation agent of the computer
+    /// that owns the project, later and in the background; failures keep the draft title.
     fn native_kanban_schedule_generated_title(
         &mut self,
         issue_id: String,
         prompt: String,
         cx: &mut Context<Self>,
     ) {
-        let conversation = &self.native_kanban.conversation;
-        let agent = conversation
-            .default_agent_id
-            .as_deref()
-            .and_then(|id| {
-                conversation
-                    .agents
-                    .iter()
-                    .find(|agent| agent.agent_id == id)
-            })
-            .or_else(|| conversation.agents.first());
-        let agent_id = agent
-            .map(|agent| agent.agent_id.clone())
-            .or_else(|| conversation.default_agent_id.clone())
-            .unwrap_or_default();
-        let agent_command = agent.and_then(|agent| agent.command.clone());
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(GENERATED_TITLE_DELAY).await;
             let _ = this.update(cx, move |this, cx| {
                 let id = issue_id.clone();
                 this.native_kanban_spawn(
-                    move |context| {
-                        generate_and_store_title(
-                            context,
-                            &id,
-                            &prompt,
-                            &agent_id,
-                            agent_command.as_deref(),
-                        )
+                    move |context| async move {
+                        generate_and_store_title(&context, &id, &prompt).await
                     },
                     move |this, result, cx| {
+                        if let Err(error) = &result {
+                            // A computer whose Ghostex predates title generation, or an agent that
+                            // failed: the bead keeps its first words, and the user is told so.
+                            this.native_kanban_toast(
+                                "Couldn't write a title",
+                                &format!("The bead keeps its first words as its title. {error}"),
+                                cx,
+                            );
+                        }
                         if let Ok(title) = result
                             && let Some(issue) = this
                                 .native_kanban
@@ -441,6 +442,50 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// Shows or hides one built-in lane and reloads. Only the change is sent: gxserver merges it
+    /// into the workspace's current value, so another computer's choice since the last read stays.
+    pub(crate) fn native_kanban_set_column_shown(
+        &mut self,
+        column: String,
+        visible: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(KanbanPanel::Columns(form)) = self.native_kanban.panel.as_mut() {
+            form.busy = true;
+            form.error = None;
+        }
+        let request = json!({
+            "action": "boardHiddenColumnsSet",
+            "column": column.clone(),
+            "visible": visible,
+        });
+        self.native_kanban_spawn(
+            move |context| async move { beads_call(&context, request).await },
+            move |this, result, cx| {
+                let error = result.err();
+                if let Some(KanbanPanel::Columns(form)) = this.native_kanban.panel.as_mut() {
+                    form.busy = false;
+                    form.error = error.clone();
+                }
+                if error.is_none() {
+                    // Shown at once; the reload below brings the merged value.
+                    let hidden = this.native_kanban.hidden_columns.get_or_insert_default();
+                    hidden.retain(|name| *name != column);
+                    if !visible {
+                        hidden.push(column);
+                    }
+                    this.native_kanban.invalidate_derived();
+                    // Only reads: a Manual refresh would reconcile `status.custom` and the prefix,
+                    // and showing or hiding a lane must never change the workflow's statuses.
+                    this.native_kanban_refresh(KanbanRefreshMode::Mutation, cx);
+                }
+                this.native_kanban_notify(cx);
+            },
+            cx,
+        );
+        self.native_kanban_notify(cx);
+    }
+
     /// Writes the board's `status.custom` value and reloads, the way the Columns dialog does.
     pub(crate) fn native_kanban_write_column_config(
         &mut self,
@@ -453,7 +498,9 @@ impl GhostexGpuiApp {
         }
         let value = config.clone();
         self.native_kanban_spawn(
-            move |context| beads_call(context, json!({ "action": "configSet", "value": value })),
+            move |context| async move {
+                beads_call(&context, json!({ "action": "configSet", "value": value })).await
+            },
             move |this, result, cx| {
                 let error = result.err();
                 if let Some(KanbanPanel::Columns(form)) = this.native_kanban.panel.as_mut() {

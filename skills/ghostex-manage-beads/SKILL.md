@@ -12,8 +12,8 @@ disable-model-invocation: true
 
 # ghostex-manage-beads
 
-Use this skill when a user asks you to work a project board bead ("tackle bead
-12345"), to manage board beads, create or update review tasks, move work through
+Use this skill when a user asks you to work a bead from the Beads view or board
+("tackle bead 12345"), to manage beads, create or update review tasks, move work through
 bead statuses, add bead comments, or link a session to a card.
 
 ## Requirements
@@ -79,6 +79,10 @@ board's own "Start work" button writes.
    bd close <id>
    ```
 
+   A project can hide Backlog, Test or Review on its Board
+   (`bd config get custom.ghostex.board_hidden_columns` lists them). Skip the
+   statuses it hides; a bead moved to one anyway makes that lane show again.
+
 3. After each meaningful turn, add a short human-readable comment:
 
    ```bash
@@ -88,6 +92,36 @@ board's own "Start work" button writes.
 Keep comments focused on user-facing requirements delivered and high-level
 technical approach. Do not require humans to read the agent transcript to know
 what changed.
+
+## What The Beads View Shows (And The bd Commands Behind It)
+
+Ghostex's Beads view (the side panel tab that used to be called Kanban) shows
+these live, so whatever you change with `bd` appears there within seconds. Use
+the same commands; never edit Beads files by hand.
+
+- **Ready work**: `bd ready --json` lists what can be picked up now (no open
+  blockers, not deferred). Pass `--limit 0` to see more than 100.
+- **Epics and children**: `bd create --title "<title>" --type epic`, then
+  `bd create --title "<title>" --parent <epic-id>` for a child. A child takes
+  the epic's labels unless you pass `--no-inherit-labels`. `bd epic status
+  --json` shows each epic's progress.
+- **What blocks what**: `bd create ... --deps blocked-by:<id>,blocked-by:<id>`
+  at creation, or `bd dep add <id> <blocker-id>` later. `bd blocked --json`
+  lists blocked beads and what they wait on.
+- **Claim**: `bd update <id> --claim` sets you as the assignee and the status to
+  in progress (it refuses a bead someone else claimed; don't force it).
+- **Defer**: `bd defer <id> --until tomorrow` (or a date like `2026-12-01`, or
+  `+1w`) hides a bead from ready work until then; `bd defer <id>` with no date
+  puts it on ice; `bd undefer <id>` brings it back. `bd reopen <id>` reopens a
+  closed bead.
+- **Needs a decision**: the `human` label flags a bead for a person
+  (`bd label add <id> human`, or `--labels human` at creation; `bd human list`
+  shows them); it shows pinned on top of the view. People answer it with `bd human respond <id> -r
+  "<answer>"` (which comments and closes it) or `bd human dismiss <id>`. Flag a
+  bead this way when you need the user to choose, instead of guessing.
+- **Sync**: `bd dolt pull` brings in changes from the user's other computers
+  and `bd dolt push --no-adopt` sends this computer's. Only sync when the user
+  asks; a rejected push means pull first, then push again.
 
 ## Dispatch A Bead To A Worker Session (Coordinators)
 

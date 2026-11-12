@@ -6,9 +6,9 @@ use gpui::{Context, Pixels, Point, Window};
 use serde_json::{Value, json};
 
 use super::filters::{CARD_VIEW_FIELDS, KanbanSort, tag_options};
+use super::host::GpuiContextMenu;
 use super::model::{PRIORITY_OPTIONS, TSHIRT_OPTIONS};
 use crate::GhostexGpuiApp;
-use crate::app::context_menu::GpuiContextMenu;
 
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
 #[action(namespace = ghostex_gpui, no_json)]

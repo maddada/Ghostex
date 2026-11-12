@@ -37,6 +37,9 @@ pub enum DiagnosticLogScenario {
     ProgramStatusMismatch,
     SessionLinkReads,
     HooklessActivityComparison,
+    /// Every bd process the Beads view and the Board start (one line each), for proving an idle
+    /// view starts none.
+    BeadsCalls,
 }
 
 impl DiagnosticLogScenario {
@@ -58,6 +61,7 @@ impl DiagnosticLogScenario {
             Self::ProgramStatusMismatch => "gxserver.programStatusMismatch",
             Self::SessionLinkReads => "gxserver.sessionLinks",
             Self::HooklessActivityComparison => "gxserver.hooklessActivity",
+            Self::BeadsCalls => "native.project.board",
         }
     }
 }

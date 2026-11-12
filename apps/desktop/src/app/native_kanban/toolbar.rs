@@ -1,4 +1,5 @@
-//! The board's toolbar row: search, Filters, Columns, card details, then Refresh and `+ Ticket`.
+//! The board's toolbar row: search, Filters, Columns, card details, then Refresh and `+ Ticket`
+//! (only Filters, Columns and card details under the Beads header).
 
 use gpui::Focusable as _;
 use gpui::prelude::FluentBuilder as _;
@@ -83,13 +84,18 @@ impl GhostexGpuiApp {
         )
     }
 
+    /// `embedded_status` is set for the Board under the Beads header (`render_native_kanban_embedded`):
+    /// the row then has no search, Refresh or `+ Ticket` (the header has them) and shows the
+    /// board's status line on its right instead, where the title row would have shown it.
     pub(crate) fn render_native_kanban_toolbar(
         &self,
         p: &KanbanPalette,
         filter_count: usize,
+        embedded_status: Option<Option<&'static str>>,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let embedded = embedded_status.is_some();
         let state = &self.native_kanban;
         let loading = state.load_state == Some(KanbanLoadState::Loading);
         let columns_open = matches!(state.panel, Some(KanbanPanel::Columns(_)));
@@ -99,7 +105,9 @@ impl GhostexGpuiApp {
             .flex_none()
             .items_center()
             .gap(px(8.0))
-            .children(self.render_native_kanban_search(p, window, cx))
+            .when(!embedded, |this| {
+                this.children(self.render_native_kanban_search(p, window, cx))
+            })
             .child(
                 kanban_button(
                     "kanban-filters",
@@ -169,39 +177,50 @@ impl GhostexGpuiApp {
                 })),
             )
             .child(div().flex_1())
-            .child(
-                kanban_button(
-                    "kanban-refresh",
-                    Some("titlebar/refresh.svg"),
-                    None,
-                    KanbanButtonKind::Ghost,
-                    loading,
-                    p,
+            .when_some(embedded_status.flatten(), |this, status| {
+                this.child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(12.0))
+                        .text_color(p.muted)
+                        .child(status),
                 )
-                .tooltip(|window, cx| {
-                    crate::app::helpers::titlebar_tooltip("Refresh project", window, cx)
-                })
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    if loading {
-                        return;
-                    }
-                    this.native_kanban_refresh(super::state::KanbanRefreshMode::Manual, cx);
-                    this.native_kanban_request_conversation_state(cx);
-                })),
-            )
-            .child(
-                kanban_button(
-                    "kanban-new-ticket",
-                    Some("titlebar/plus.svg"),
-                    Some("Ticket".into()),
-                    KanbanButtonKind::Secondary,
-                    false,
-                    p,
+            })
+            .when(!embedded, |this| {
+                this.child(
+                    kanban_button(
+                        "kanban-refresh",
+                        Some("titlebar/refresh.svg"),
+                        None,
+                        KanbanButtonKind::Ghost,
+                        loading,
+                        p,
+                    )
+                    .tooltip(|window, cx| {
+                        crate::app::helpers::titlebar_tooltip("Refresh project", window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if loading {
+                            return;
+                        }
+                        this.native_kanban_refresh_now(cx);
+                    })),
                 )
-                .on_click(cx.listener(|this, _, window, cx| {
-                    this.native_kanban_open_new_ticket("todo", window, cx);
-                })),
-            )
+                .child(
+                    kanban_button(
+                        "kanban-new-ticket",
+                        Some("titlebar/plus.svg"),
+                        Some("Ticket".into()),
+                        KanbanButtonKind::Secondary,
+                        false,
+                        p,
+                    )
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.native_kanban_open_new_ticket("todo", window, cx);
+                    })),
+                )
+            })
             .into_any_element()
     }
 }
