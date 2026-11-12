@@ -4,7 +4,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "about",
         title: "About",
-        sections: vec![about()],
+        sections: vec![about(), privacy()],
     }
 }
 
@@ -30,6 +30,21 @@ pub(crate) fn about() -> Section {
                 "Support the continued development of Ghostex.",
             ),
         ],
+    )
+}
+
+/// The usage-data opt-out that setup points to (CDXC:Onboarding 2026-11-11 in
+/// apps/desktop/src/app/window/onboarding/get_started.rs). gxserver reads the key before every
+/// event it sends (server/src/telemetry/gate.rs).
+pub(crate) fn privacy() -> Section {
+    section(
+        "privacy",
+        "Privacy",
+        vec![row(
+            "analyticsEnabled",
+            "Anonymous usage analytics",
+            "Share usage data (your OS, which features you use, counts) to help improve Ghostex. Never your prompts, file paths, project names or email.",
+        )],
     )
 }
 

@@ -1,15 +1,17 @@
 //! The About page (packages/core-ui/settings-modal/tabs/about.tsx (deleted 2026-10-01)): the Ghostex mark, the version,
 //! and the Discord, GitHub and Sponsor links, which open in the system browser; then Experimental
 //! and Reset to defaults, which came here from General's Advanced group (CDXC:Settings 2026-10-29
-//! in model.rs).
+//! in model.rs). The Privacy section holds the usage-data switch that setup points to.
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
 use super::super::fields::{
-    ButtonVariant, FieldStates, SettingsPage, settings_button, settings_icon,
+    ButtonVariant, FieldStates, RowSpec, SettingsPage, settings_button, settings_icon,
+    settings_section, toggle_field,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, page_separator, settings_page};
 use super::super::rail::{rail_pages, render_no_matches};
+use super::super::search::should_show_setting;
 use super::super::store::{SettingsStore, post_store_message};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -65,6 +67,20 @@ impl AboutTab {
             fields: FieldStates::default(),
         }
     }
+}
+
+/// The usage-data opt-out gxserver reads before sending any event (server/src/telemetry/gate.rs).
+const ANALYTICS_ENABLED: &str = "analyticsEnabled";
+
+/// The About page's catalog row for `key`: its title and subtitle.
+fn catalog_row(key: &str) -> Option<(String, String)> {
+    settings_catalog()
+        .extra_tab(SettingsTabId::About.id())?
+        .sections
+        .iter()
+        .flat_map(|section| section.settings.iter())
+        .find(|row| row.key == key)
+        .map(|row| (row.title.clone(), row.subtitle.clone()))
 }
 
 /// `resetSettings`: the bundled app icon, then every setting back to its default except the
@@ -217,6 +233,25 @@ impl Render for AboutTab {
                     .children(links),
             );
         blocks.push(PageBlock::plain(page));
+        let privacy = search.section("privacy");
+        if should_show_setting(&privacy, ANALYTICS_ENABLED, None)
+            && let Some((title, subtitle)) = catalog_row(ANALYTICS_ENABLED)
+        {
+            let values = self.store.read(cx).values();
+            let row = toggle_field(
+                self,
+                &p,
+                ANALYTICS_ENABLED,
+                RowSpec::new(title)
+                    .description(subtitle)
+                    .keyed(&values, ANALYTICS_ENABLED),
+                values.bool(ANALYTICS_ENABLED),
+                cx,
+            );
+            if let Some(section) = settings_section(&p, "Privacy", None, None, vec![row]) {
+                blocks.push(PageBlock::section("privacy", section));
+            }
+        }
         // About has no Advanced section any more: Faster rendering, its last row, is a switch in
         // Settings > Extensions > Experimental (CDXC:Extensions 2026-11-09 in the settings catalog).
         blocks.push(PageBlock::plain(page_separator(&p)));

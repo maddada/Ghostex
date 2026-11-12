@@ -130,6 +130,9 @@ fn agent_denied_key(key: &str) -> bool {
         .any(|word| lowered.contains(word))
 }
 
+/// Keys an agent may read but never change: the usage-data opt-out is the user's own choice.
+const USER_ONLY_KEYS: &[&str] = &["analyticsEnabled"];
+
 /// Tabs whose rows are account or pairing state, never plain preferences.
 const AGENT_DENIED_TABS: &[&str] = &["accounts", "remote"];
 
@@ -242,8 +245,10 @@ fn catalog_entry(row: &SettingRow, location: &Location) -> CatalogEntry {
         value_type,
         ValueType::Boolean | ValueType::Number | ValueType::String | ValueType::Enum
     );
-    let agent_writable =
-        primitive && !AGENT_DENIED_TABS.contains(&location.tab.0) && !agent_denied_key(row.key);
+    let agent_writable = primitive
+        && !AGENT_DENIED_TABS.contains(&location.tab.0)
+        && !agent_denied_key(row.key)
+        && !USER_ONLY_KEYS.contains(&row.key);
     CatalogEntry {
         key: row.key.to_string(),
         title: row.title.clone(),

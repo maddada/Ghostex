@@ -9029,8 +9029,8 @@
     },
     {
       "key": "analyticsEnabled",
-      "title": "Anonymous analytics",
-      "subtitle": "Send anonymous usage analytics. Ask the user before changing it.",
+      "title": "Anonymous usage analytics",
+      "subtitle": "Share usage data (your OS, which features you use, counts) to help improve Ghostex. Never your prompts, file paths, project names or email.",
       "tab": "about",
       "tabTitle": "About",
       "section": "privacy",

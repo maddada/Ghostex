@@ -669,17 +669,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
-        key: "analyticsEnabled",
-        tab: ABOUT,
-        group: None,
-        section: "privacy",
-        section_title: "Privacy",
-        title: "Anonymous analytics",
-        subtitle: "Send anonymous usage analytics. Ask the user before changing it.",
-        options: &[],
-        user_only: true,
-    },
-    Supplemental {
         key: "hideAccountEmails",
         tab: ACCOUNTS,
         group: None,
