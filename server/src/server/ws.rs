@@ -90,8 +90,10 @@ pub(crate) async fn handle_events(
     }
     // Deflated frames only for a client that asked (`linkCompression`, link_compression.rs).
     let deflate = query_value(&uri, "encoding").as_deref() == Some("deflate");
+    // The lineup the client already holds, so the socket need not start with it (agent_model_catalog.rs).
+    let catalog_revision = query_value(&uri, "catalogRevision");
     ws.on_upgrade(move |socket| {
-        handle_event_socket_scoped(socket, state, mode, share_scope, deflate)
+        handle_event_socket_scoped(socket, state, mode, share_scope, deflate, catalog_revision)
     })
 }
 
@@ -185,7 +187,7 @@ pub(crate) async fn handle_event_socket(
     state: Arc<AppState>,
     mode: EventStreamMode,
 ) {
-    handle_event_socket_scoped(socket, state, mode, None, false).await
+    handle_event_socket_scoped(socket, state, mode, None, false, None).await
 }
 
 /// `only` keeps the socket to one chat: a Ghostex Collab guest's stream.
@@ -195,6 +197,7 @@ pub(crate) async fn handle_event_socket_scoped(
     mode: EventStreamMode,
     only: Option<(String, String)>,
     deflate: bool,
+    catalog_revision: Option<String>,
 ) {
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (outbound_tx, mut outbound_rx) = state.event_hub.client_channel();
@@ -217,7 +220,10 @@ pub(crate) async fn handle_event_socket_scoped(
         mode,
         EventStreamMode::Notifications | EventStreamMode::SessionsList
     ) {
-        if let Some(event) = crate::agent_model_catalog::connect_event(&state.metadata.server_id) {
+        if let Some(event) = crate::agent_model_catalog::connect_event(
+            &state.metadata.server_id,
+            catalog_revision.as_deref(),
+        ) {
             if outbound_tx.try_send(event).is_err() {
                 return;
             }

@@ -14,6 +14,8 @@ pub const MAX_LIMIT: u32 = 10_000;
 pub const NOT_FOUND_RETRY_DELAYS_MS: [u64; 4] = [1_000, 2_000, 4_000, 8_000];
 pub const NOT_FOUND_RETRY_FIXED_DELAY_MS: u64 = 10_000;
 pub const NOT_FOUND_RETRY_WINDOW_MS: f64 = 60_000.0;
+/// How long a light seed waits for the socket's first frame before the full seed goes out.
+pub const LIGHT_SEED_GRACE_MS: u64 = 2_500;
 
 /// How long the core waits before reading again after Ghostex's service did not answer at all (no
 /// connection, a timeout, or the phone's `unreachable`), as opposed to answering with a refusal.
@@ -131,6 +133,7 @@ pub const LEFT_QUEUE_UNCONFIRMED_WORDS: &str =
 /// the family prefix `docs/2026-09-21/rust-chat/FAMILIES.md` asks for so two families cannot
 /// collide in `state.core.timers`.
 pub const TIMER_SEED_RETRY: &str = "a:seed-retry";
+pub const TIMER_LIGHT_SEED_FALLBACK: &str = "a:light-seed-fallback";
 pub const TIMER_RESYNC_RETRY: &str = "a:resync-retry";
 pub const TIMER_RESYNC_FOLLOW_UP: &str = "a:resync-follow-up";
 pub const TIMER_STALL: &str = "a:stall";

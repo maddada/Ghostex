@@ -12,9 +12,9 @@ use serde_json::{Map, Value};
 use crate::effect::Effect;
 use crate::session::constants::{
     not_found_retry_delay_ms, resync_retry_delay_ms, unreachable_retry_delay_ms,
-    MAX_RESYNC_FOLLOW_UPS, NOT_FOUND_RETRY_WINDOW_MS, PAGE, READ_TIMEOUT_MS,
-    RESYNC_FOLLOW_UP_DELAY_MS, TIMER_READ_DEADLINE, TIMER_RESYNC_FOLLOW_UP, TIMER_RESYNC_RETRY,
-    TIMER_SEED_RETRY,
+    LIGHT_SEED_GRACE_MS, MAX_RESYNC_FOLLOW_UPS, NOT_FOUND_RETRY_WINDOW_MS, PAGE, READ_TIMEOUT_MS,
+    RESYNC_FOLLOW_UP_DELAY_MS, TIMER_LIGHT_SEED_FALLBACK, TIMER_READ_DEADLINE,
+    TIMER_RESYNC_FOLLOW_UP, TIMER_RESYNC_RETRY, TIMER_SEED_RETRY,
 };
 use crate::state::{ChatContext, ChatState, OutstandingRead, ReadKind};
 use crate::wire::ChatRpcMethod;
@@ -32,9 +32,31 @@ pub fn issue_read(
     kind: ReadKind,
     before_offset: Option<u64>,
 ) -> Effect {
+    issue_read_sized(state, context, kind, before_offset, false)
+}
+
+/// CDXC:SessionChat 2026-11-12 DECISION:
+/// The user chose to open a chat once instead of twice (Q2720, "open a chat once, not twice"): every open sent the transcript twice, the socket's snapshot and this core's seed read of the same 300 rows (33 KiB after one turn, 60 KiB after two, measured on the phone's link), and the snapshot outranks the seed anyway. The seed stays, because it carries agent metadata older snapshots lack (CDXC:AgentProviders 2026-09-06 in session/events.rs), but asks for one row when the host says its socket is already up (`StartConfig::light_seed`) or the socket was just replaced: the snapshot then brings the rows. Its rows never paint; if no frame came within [`LIGHT_SEED_GRACE_MS`], the full seed goes out as before. A host that does not set the flag (the desktop, an older phone) keeps today's full seed, so a cold open never waits for the socket.
+pub fn issue_light_seed(state: &mut ChatState, context: &ChatContext) -> Effect {
+    state.core.timers.arm(
+        TIMER_LIGHT_SEED_FALLBACK,
+        context.now_ms,
+        LIGHT_SEED_GRACE_MS as f64,
+    );
+    issue_read_sized(state, context, ReadKind::Seed, None, true)
+}
+
+fn issue_read_sized(
+    state: &mut ChatState,
+    context: &ChatContext,
+    kind: ReadKind,
+    before_offset: Option<u64>,
+    light: bool,
+) -> Effect {
     let request_id = state.core.allocate_request_id();
     let limit = match kind {
         ReadKind::Page => PAGE,
+        _ if light => 1,
         _ => state.messages.limit,
     };
     if matches!(kind, ReadKind::Resync) {
@@ -47,6 +69,7 @@ pub fn issue_read(
         generation: state.messages.generation,
         before_offset,
         started_at_ms: context.now_ms,
+        light,
     });
     arm_read_deadline(state, context);
 
@@ -345,6 +368,7 @@ mod tests {
             generation: 0,
             before_offset: None,
             started_at_ms: 0.0,
+            light: false,
         }
     }
 

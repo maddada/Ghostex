@@ -262,6 +262,9 @@ pub struct OutstandingRead {
     pub before_offset: Option<u64>,
     /// When it went out, for the read deadline that settles the state machine.
     pub started_at_ms: f64,
+    /// A seed that asked for one row: it brings the read's agent metadata while the socket's
+    /// snapshot brings the transcript ([`crate::session::reads::issue_light_seed`]).
+    pub light: bool,
 }
 
 /// The page read the user asked for, identified so a cancelled answer cannot complete a newer

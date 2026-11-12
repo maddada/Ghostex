@@ -373,19 +373,37 @@ pub fn model_value_for_label(agent: &str, name: &str) -> Option<String> {
 fn changed_event(server_id: &str, catalog: &Value) -> Value {
     json!({
         "catalog": catalog,
+        "catalogRevision": catalog_revision(catalog),
         "protocolVersion": GXSERVER_PROTOCOL_VERSION,
         "serverId": server_id,
         "type": AGENT_MODEL_CATALOG_CHANGED_EVENT_TYPE,
     })
 }
 
+/// A short hash of the catalog's text, which names this lineup on the wire.
+fn catalog_revision(catalog: &Value) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(catalog.to_string().as_bytes());
+    digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 /// The event a socket gets as it connects: the effective lineup, which every
 /// server announces from boot (see adopt_cached_copy).
-pub fn connect_event(server_id: &str) -> Option<Value> {
+///
+/// CDXC:SessionChat 2026-11-12 DECISION:
+/// Part of the user's "open a chat once, not twice" (Q2720): every new chat socket began with the whole catalog, 79 KiB, so each reconnect and return to the app paid it again. A client that holds the lineup sends its `catalogRevision` when it opens the socket (`catalogRevision=` on `/api/events`, behind the `modelCatalogRevision` capability) and gets no catalog when it matches; a later change is still broadcast to every socket. A client that sends none gets it as before.
+pub fn connect_event(server_id: &str, known_revision: Option<&str>) -> Option<Value> {
     let state = state().read().ok()?;
-    state
-        .published
-        .then(|| changed_event(server_id, &state.effective))
+    if !state.published {
+        return None;
+    }
+    if known_revision.is_some_and(|known| known == catalog_revision(&state.effective)) {
+        return None;
+    }
+    Some(changed_event(server_id, &state.effective))
 }
 
 fn remote_enabled() -> bool {

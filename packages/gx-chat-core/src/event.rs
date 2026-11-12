@@ -205,6 +205,10 @@ pub struct StartConfig {
     /// resting placeholder then names the tap and hold gestures instead of the keys.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub touch_composer: bool,
+    /// The host's socket is already up, so its snapshot will arrive at once: the seed read asks
+    /// for one row (`session::reads::issue_light_seed`). Absent from the desktop and older phones.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub light_seed: bool,
 }
 
 /// Everything `composer('read')` answers with, in the order that host writes it.

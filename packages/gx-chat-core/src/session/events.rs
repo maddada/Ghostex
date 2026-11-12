@@ -341,12 +341,17 @@ pub fn boot_read(
         .timers
         .arm_interval(TIMER_STALL, context.now_ms, STALL_CHECK_INTERVAL_MS as f64);
 
+    let seed = if config.light_seed {
+        crate::session::reads::issue_light_seed(state, context)
+    } else {
+        issue_read(state, context, ReadKind::Seed, None)
+    };
     vec![
         Effect::Subscribe {
             limit: state.messages.limit,
             catalog: true,
         },
-        issue_read(state, context, ReadKind::Seed, None),
+        seed,
     ]
 }
 
@@ -585,6 +590,7 @@ pub fn resubscribe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> 
     state.session.working_started_at_ms = None;
     for key in [
         TIMER_SEED_RETRY,
+        crate::session::constants::TIMER_LIGHT_SEED_FALLBACK,
         TIMER_RESYNC_RETRY,
         TIMER_RESYNC_FOLLOW_UP,
         TIMER_READ_DEADLINE,
@@ -595,7 +601,8 @@ pub fn resubscribe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> 
         .core
         .timers
         .arm_interval(TIMER_STALL, context.now_ms, STALL_CHECK_INTERVAL_MS as f64);
-    vec![issue_read(state, context, ReadKind::Seed, None)]
+    // The fresh socket answers its subscribe with a snapshot, so the seed only needs the metadata.
+    vec![crate::session::reads::issue_light_seed(state, context)]
 }
 
 /// A read the core asked for has settled.
@@ -628,6 +635,7 @@ fn rpc_settled(
                 return Vec::new();
             }
             match request.kind {
+                ReadKind::Seed if request.light => light_seed_settled(state, &read, context),
                 ReadKind::Seed => seed_read_settled(state, &read, context),
                 ReadKind::Resync => resync_read_settled(state, &read, context),
                 ReadKind::Page => page_read_settled(state, &read, &request, context),
@@ -698,6 +706,36 @@ fn seed_read_settled(
         && inside_seed_window(state, context)
     {
         schedule_seed_retry(state, context);
+    }
+    Vec::new()
+}
+
+/// A light seed's answer: the read's agent metadata only, as the seed applies it once a frame has
+/// landed. Its one row never paints; the snapshot brings the transcript, or the full seed armed in
+/// `issue_light_seed` does when no frame came.
+fn light_seed_settled(
+    state: &mut ChatState,
+    read: &ghostex_gx_protocol::ReadSessionChatResult,
+    context: &ChatContext,
+) -> Vec<Effect> {
+    if state.messages.position.frame_arrived
+        && state
+            .messages
+            .position
+            .epoch
+            .is_some_and(|epoch| read.epoch < epoch)
+    {
+        return request_resync(state, context);
+    }
+    let before = FrameIdentity::capture(state);
+    let moved = carries_new_agents(read);
+    apply_draft_agent_carriage(state, read);
+    apply_selected_options(state, read.state.selected_options.as_ref());
+    if read.state.screen_probed == Some(true) {
+        state.session.screen_probed = true;
+    }
+    if moved || before != FrameIdentity::capture(state) {
+        state.core.request_render();
     }
     Vec::new()
 }
@@ -867,6 +905,14 @@ fn tick(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         effects.extend(expire_overdue_reads(state, context));
     }
     if state.core.timer_fired(TIMER_SEED_RETRY) {
+        effects.push(issue_read(state, context, ReadKind::Seed, None));
+    }
+    // A light seed's fallback has nothing to bring once a frame has landed.
+    if state
+        .core
+        .timer_fired(crate::session::constants::TIMER_LIGHT_SEED_FALLBACK)
+        && !state.messages.position.frame_arrived
+    {
         effects.push(issue_read(state, context, ReadKind::Seed, None));
     }
     if state.core.timer_fired(TIMER_RESYNC_RETRY) {
