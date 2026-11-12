@@ -761,7 +761,8 @@ const OVERVIEW_ORDER: [&str; 9] = [
 const USAGE_CARDS: [(&str, &str, &[&str]); 3] = [
     (
         "limits",
-        "Limits",
+        // Not "Limits": the tab it sits in is named that (Q2769).
+        "Plan limits",
         &[
             "fiveHourLimit",
             "sevenDayLimit",
