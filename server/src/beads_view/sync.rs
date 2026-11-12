@@ -1,4 +1,4 @@
-//! Pull and Push (`bd dolt pull`, `bd dolt push --no-adopt`) as background operations whose
+//! Pull and Push (`bd dolt pull`, `bd dolt push --remote <the workspace's remote>`) as background operations whose
 //! progress and result the Beads view reads with its polls.
 
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use crate::typed_operations::{
-    beads_action_command, run_process_command_with_timeout, TypedOperationContext,
+    beads_action_command, run_process_command_with_timeout, ProcessCommand, TypedOperationContext,
     TypedOperationError,
 };
 
@@ -111,7 +111,12 @@ pub(crate) fn start_sync(
 ) -> Result<Value, TypedOperationError> {
     load_saved(&entry);
     let kind = if action == "doltPush" { "push" } else { "pull" };
-    let command = beads_action_command(action, &Map::new(), &context)?;
+    // Push first reads the remote it pushes to (`push_to_own_remote`); Pull runs as it is.
+    let command = if kind == "push" {
+        beads_action_command("doltRemoteList", &Map::new(), &context)?
+    } else {
+        beads_action_command(action, &Map::new(), &context)?
+    };
     {
         let mut state = entry.state();
         if state.sync.running.is_some() {
@@ -130,27 +135,14 @@ pub(crate) fn start_sync(
         let result = match entry.lock_within(SYNC_DEADLINE).await {
             None => timeout_result(&kind),
             Some(guard) => {
-                let left = SYNC_DEADLINE.saturating_sub(started.elapsed());
                 super::log::bd_call("sync", &kind);
-                let output = run_process_command_with_timeout(&command, &context, left).await;
+                let result = if kind == "push" {
+                    push_to_own_remote(&command, &context, started).await
+                } else {
+                    run_and_classify(&kind, &command, &context, started).await
+                };
                 drop(guard);
-                match output {
-                    Ok(output) => classify(
-                        &kind,
-                        output.exit_code,
-                        &output.stdout,
-                        &output.stderr,
-                        output.error.as_ref(),
-                    ),
-                    Err(error) => BeadsSyncResult {
-                        kind: kind.clone(),
-                        ok: false,
-                        code: "other".to_string(),
-                        message: error.message.clone(),
-                        output: error.message,
-                        at: now(),
-                    },
-                }
+                result
             }
         };
         let _ = &info;
@@ -174,6 +166,75 @@ pub(crate) fn start_sync(
         save(&entry, &saved);
     });
     Ok(json!({ "action": action, "started": true, "exitCode": 0, "stderr": "", "stdout": "" }))
+}
+
+/// Push to the workspace's own Dolt remote, named with `--remote` (`doltPush` in
+/// beads_view_actions.rs), read under the same lock just before; with no remote nothing is pushed.
+async fn push_to_own_remote(
+    list: &ProcessCommand,
+    context: &TypedOperationContext,
+    started: Instant,
+) -> BeadsSyncResult {
+    let left = SYNC_DEADLINE.saturating_sub(started.elapsed());
+    let output = match run_process_command_with_timeout(list, context, left).await {
+        Ok(output) => output,
+        Err(error) => return failed_to_run("push", error),
+    };
+    if output.exit_code != 0 || output.error.is_some() {
+        return classify(
+            "push",
+            output.exit_code,
+            &output.stdout,
+            &output.stderr,
+            output.error.as_ref(),
+        );
+    }
+    let Some(remote) = super::snapshot::parse_remote(&output.stdout) else {
+        return BeadsSyncResult {
+            kind: "push".to_string(),
+            ok: false,
+            code: "noRemote".to_string(),
+            message: "No Dolt remote is set up.".to_string(),
+            output: String::new(),
+            at: now(),
+        };
+    };
+    let mut params = Map::new();
+    params.insert("remote".to_string(), Value::String(remote.name));
+    match beads_action_command("doltPush", &params, context) {
+        Ok(push) => run_and_classify("push", &push, context, started).await,
+        Err(error) => failed_to_run("push", error),
+    }
+}
+
+async fn run_and_classify(
+    kind: &str,
+    command: &ProcessCommand,
+    context: &TypedOperationContext,
+    started: Instant,
+) -> BeadsSyncResult {
+    let left = SYNC_DEADLINE.saturating_sub(started.elapsed());
+    match run_process_command_with_timeout(command, context, left).await {
+        Ok(output) => classify(
+            kind,
+            output.exit_code,
+            &output.stdout,
+            &output.stderr,
+            output.error.as_ref(),
+        ),
+        Err(error) => failed_to_run(kind, error),
+    }
+}
+
+fn failed_to_run(kind: &str, error: TypedOperationError) -> BeadsSyncResult {
+    BeadsSyncResult {
+        kind: kind.to_string(),
+        ok: false,
+        code: "other".to_string(),
+        message: error.message.clone(),
+        output: error.message,
+        at: now(),
+    }
 }
 
 fn now() -> String {

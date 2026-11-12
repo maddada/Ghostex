@@ -586,7 +586,9 @@ fn parse_custom_statuses(reply: &Value) -> Vec<String> {
         .collect()
 }
 
-fn parse_remote(stdout: &str) -> Option<ghostex_gx_protocol::beads_view::BeadsSyncRemote> {
+pub(super) fn parse_remote(
+    stdout: &str,
+) -> Option<ghostex_gx_protocol::beads_view::BeadsSyncRemote> {
     let remotes = unwrap_envelope(stdout)?;
     let remotes = remotes.as_array()?;
     let pick = remotes

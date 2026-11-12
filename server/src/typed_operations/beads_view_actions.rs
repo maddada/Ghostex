@@ -60,8 +60,20 @@ pub(crate) fn build_beads_view_command(
         ],
         "humanDismiss" => vec!["human".into(), "dismiss".into(), id()?],
         "doltPull" => vec!["dolt".into(), "pull".into()],
-        // CDXC:ProjectBoard 2026-11-11 WHY: without --no-adopt a push with no Dolt remote can quietly adopt the git origin as one; Ghostex never makes that choice for the user. `bd dolt pull` has no such flag (it rejects it).
-        "doltPush" => vec!["dolt".into(), "push".into(), "--no-adopt".into()],
+        // CDXC:ProjectBoard 2026-11-12 WHY: a push with no Dolt remote can quietly adopt the git origin as one, and Ghostex never makes that choice for the user. Push names the workspace's own Dolt remote with `--remote` (sync.rs reads it first and does not push without one). It replaces `--no-adopt`, which bd 1.2.2 rejects as an unknown flag, so every Push failed there; `--remote` is in every bd that has `dolt push`.
+        "doltPush" => vec![
+            "dolt".into(),
+            "push".into(),
+            "--remote".into(),
+            normalize_required_text(params.get("remote"), "remote")?,
+        ],
+        // Internal: the remote list Push reads before it pushes. Not a client action.
+        "doltRemoteList" => vec![
+            "dolt".into(),
+            "remote".into(),
+            "list".into(),
+            "--json".into(),
+        ],
         "boardHiddenColumnsGet" => vec![
             "config".into(),
             "get".into(),
