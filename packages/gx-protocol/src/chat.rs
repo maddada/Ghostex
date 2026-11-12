@@ -637,6 +637,14 @@ pub struct ReadSessionChatResult {
     /// an older gxserver: the chat keeps the full view there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quiet_view: Option<ChatQuietViewSettings>,
+    /// The status line the computer's own chat (its desktop app) shows under the chat box: each
+    /// agent's saved context details record, keyed by its store (`claudeContext`, `codexContext`,
+    /// ...), as that app saved it; an agent the app never saved a record for pins nothing. Sent on
+    /// every read from a computer whose desktop app keeps its chat storage there, so a host that
+    /// follows the computer (the phone) draws the same line. `None` is an older gxserver, or a
+    /// computer with no desktop app: the host keeps its own line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_line_pins: Option<std::collections::BTreeMap<String, Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

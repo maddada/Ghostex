@@ -718,6 +718,13 @@ pub(crate) async fn handle_read_session_chat_http(
             expand_last: quiet_switch("chatQuietViewExpandLast", false),
         }),
     );
+    // The desktop's status line pins ride every read too, so the phone draws the line this
+    // computer's chat shows (CDXC:SessionChat 2026-11-12 in
+    // packages/gx-chat-core/src/menus/context/computer_pins.rs); a computer with no desktop chat
+    // storage sends none.
+    if let Some(pins) = crate::session_chat_status_line::status_line_pins(&state.paths) {
+        result.insert("statusLinePins".to_string(), json!(pins));
+    }
     if let Some(session_agent_id) = session_agent_id.as_deref() {
         result.insert("sessionAgentId".to_string(), json!(session_agent_id));
     }

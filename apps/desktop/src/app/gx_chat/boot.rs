@@ -199,6 +199,9 @@ pub(super) fn chat_settings() -> ChatSettings {
                 expand_last: switch("chatQuietViewExpandLast", false),
             }
         }),
+        // The desktop draws its own status line, which is what its gxserver sends the phone
+        // (gx-chat-core `menus/context/computer_pins.rs`).
+        status_line_from_computer: None,
     }
 }
 

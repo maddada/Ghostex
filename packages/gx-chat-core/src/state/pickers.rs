@@ -139,6 +139,9 @@ pub struct ContextState {
     pub preferences: ContextPreferencesByAgent,
     /// The row editor's draft, or `None` when the dialog is closed.
     pub editor: Option<ContextEditorState>,
+    /// The session computer's status line, for a host that follows it
+    /// (`menus/context/computer_pins.rs`).
+    pub computer: crate::menus::context::computer_pins::ComputerPins,
 }
 
 /// One preferences record per agent.

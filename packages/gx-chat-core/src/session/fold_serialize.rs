@@ -371,6 +371,13 @@ pub(crate) mod tests {
                 chats: Some(!flag),
                 expand_last: Some(true),
             }),
+            status_line_pins: Some(
+                [(
+                    "claudeContext".to_string(),
+                    json!({ "starred": { "repo": flag }, "starredOrder": [tag] }),
+                )]
+                .into(),
+            ),
             fork_info: Some(ChatForkInfo {
                 forked_from_id: Some("parent".into()),
                 ancestor_ids: vec!["root".into()],

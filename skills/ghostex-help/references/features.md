@@ -2328,7 +2328,11 @@ Nothing is pinned to the status line under the chat box until you pin
 something, so a new install shows no line there. To show one, star items in
 Context details; hover the status line and click the pen after its last item to
 open Context details again. Everyone who already used Ghostex keeps the line
-they had, and your own changes are never overwritten. Reset to recommended
+they had, and your own changes are never overwritten. The phone shows the line
+the chat's computer shows: what you pinned in the Ghostex app on that computer,
+for each agent, picked up when a chat opens or catches up. The phone's own pins
+are used only with a computer that has no Ghostex app or runs an older Ghostex.
+Reset to recommended
 pins the setup Ghostex suggests: Claude Code gets Account, Model limit, 5h
 limit, 7d limit, and Repository; Codex gets Account email, 7d limit, 7d reset,
 and Account resets; Cursor gets Context used, Branch, and Lines changed; Hermes

@@ -347,6 +347,12 @@ pub struct ChatSettings {
     /// no Quiet View (the phone), whose chats stay in the full view.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quiet_view: Option<crate::transcript::quiet_view::QuietViewSettings>,
+    /// The status line under the chat box follows the session's computer: the pins its reads carry
+    /// (`statusLinePins`) are drawn in place of this host's own, which stay for a computer that
+    /// sends none (`menus/context/computer_pins.rs`). The phone sends `true`; absent (the desktop,
+    /// the web build, an older phone) keeps this host's own line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_line_from_computer: Option<bool>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

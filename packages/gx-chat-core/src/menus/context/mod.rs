@@ -6,6 +6,7 @@
 
 pub mod actions;
 pub mod codex;
+pub mod computer_pins;
 pub mod document;
 pub mod editor;
 pub mod meter;

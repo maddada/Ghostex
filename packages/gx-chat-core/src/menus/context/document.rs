@@ -56,11 +56,12 @@ pub fn document_with_icon(
     if let Some(latched) = state.menus.meter_now_ms {
         meter_context.now_ms = latched;
     }
-    let result = compute_context_meter(
-        &input,
-        pickers.context.preferences.get(agent),
-        &meter_context,
-    );
+    // The pins of the session's computer when this host follows it (`computer_pins.rs`).
+    let preferences = pickers
+        .context
+        .computer
+        .preferences(agent, pickers.context.preferences.get(agent));
+    let result = compute_context_meter(&input, &preferences, &meter_context);
     into.context_meter = match result.meter {
         Value::Null => Tri::Null,
         meter => Tri::Value(meter),

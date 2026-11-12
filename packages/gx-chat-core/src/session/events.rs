@@ -169,6 +169,9 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             if let Some(quiet) = settings.quiet_view {
                 crate::transcript::quiet_view::apply_from_host(state, quiet);
             }
+            if let Some(follow) = settings.status_line_from_computer {
+                state.pickers.context.computer.followed = follow;
+            }
             state.core.request_publish();
             Vec::new()
         }
@@ -284,6 +287,9 @@ pub fn boot_read(
         }
         if let Some(quiet) = settings.quiet_view {
             crate::transcript::quiet_view::apply_from_host(state, quiet);
+        }
+        if let Some(follow) = settings.status_line_from_computer {
+            state.pickers.context.computer.followed = follow;
         }
     }
     let config = state.session.boot_config.clone().unwrap_or_default();
