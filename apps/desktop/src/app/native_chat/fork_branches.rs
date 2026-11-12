@@ -9,7 +9,7 @@
 //! `apps/desktop/src/app/session_chat_fork_branches.rs`.
 //!
 //! CDXC:SessionFork 2026-10-10 DECISION:
-//! User: remove the "This conversation has N branches" button from the chat's top right and put a "Branches" item at the top of the "Chat" section of the More actions menu, above "View". Hovering or clicking it opens a submenu with the list the button's popover showed (the "Branches" header, one row per branch with its title, time, "Current" on this one, the fork marker and "Resumes when opened"); a row does what it did in the popover. The item shows only when the conversation has branches. The phone's More actions has the same item (apps/mobile/app/src/chat/native/composer/menus.ts). This supersedes the floating button, its frosted window and its 20%-at-rest opacity.
+//! User: remove the "This conversation has N branches" button from the chat's top right and put a "Branches" item at the top of the "Chat" section of the More actions menu, above "View". Clicking it opens a submenu (never hover, user decision 2026-11-12) with the list the button's popover showed (the "Branches" header, one row per branch with its title, time, "Current" on this one, the fork marker and "Resumes when opened"); a row does what it did in the popover. The item shows only when the conversation has branches. The phone's More actions has the same item (apps/mobile/app/src/chat/native/composer/menus.ts). This supersedes the floating button, its frosted window and its 20%-at-rest opacity.
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use gpui::Hsla;

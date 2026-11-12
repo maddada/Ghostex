@@ -115,7 +115,6 @@ pub(super) struct ChatOptionMenuPanel {
     pub(super) selected: Option<usize>,
     pub(super) scroll: ScrollHandle,
     pub(super) child: Option<usize>,
-    pub(super) hover_task: Option<gpui::Task<()>>,
     /// The Switch Account panel's Customize state (`SessionAccountsPanel`'s local `customize`).
     pub(super) accounts_customize: bool,
     /// Screen bounds of the panel's account preference select, where its dropdown opens.
@@ -367,11 +366,12 @@ impl ChatOptionMenu {
         let windows = self.windows.split_off(depth);
         let parent = self.windows.last().copied();
         cx.defer(move |cx| {
-            for handle in windows.into_iter().rev() {
-                let _ = handle.update(cx, |_, window, _| window.remove_window());
-            }
+            // CDXC:ContextMenus 2026-11-12 WHY: The parent takes key status before the submenu's window goes. Removing the key window first left no window of the menu active for a moment, and with the press that shut the submenu still recent that read as a click away, closing the whole menu (the dock row's Snooze).
             if focus_parent && let Some(parent) = parent {
                 let _ = parent.update(cx, |_, window, _| window.activate_window());
+            }
+            for handle in windows.into_iter().rev() {
+                let _ = handle.update(cx, |_, window, _| window.remove_window());
             }
         });
     }
@@ -769,7 +769,6 @@ impl ChatOptionMenu {
                                 selected: None,
                                 scroll: Default::default(),
                                 child: None,
-                                hover_task: None,
                                 accounts_customize,
                                 select_bounds: Rc::new(Cell::new(Bounds::default())),
                                 model_menu,

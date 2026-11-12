@@ -90,37 +90,15 @@ impl ChatOptionMenuPanel {
         }
     }
 
-    fn hover(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn hover(&mut self, index: usize, _window: &mut Window, cx: &mut Context<Self>) {
         if self.selected == Some(index) {
             return;
         }
         self.selected = Some(index);
-        self.hover_task = None;
-        // CDXC:SessionChat 2026-09-22 DECISION: The user asked that the Switch Account submenu not close when the pointer moves over another More Actions row. A submenu its row opens only on a press (`openOnHover: false`) therefore stays up while other rows are hovered; a press, the arrow keys, or Escape still replace or close it.
-        let pinned = self
-            .child
-            .is_some_and(|child| child != index && self.rows[child]["openOnHover"] == false)
-            && self.menu.read(cx).windows.len() > self.depth + 1;
-        if pinned {
-            cx.notify();
-            return;
-        }
-        if self.rows[index]["children"].is_array() && self.rows[index]["openOnHover"] != false {
-            self.hover_task = Some(cx.spawn_in(window, async move |this, cx| {
-                cx.background_executor()
-                    .timer(std::time::Duration::from_millis(180))
-                    .await;
-                let _ = this.update_in(cx, |this, window, cx| {
-                    if this.selected == Some(index) {
-                        this.activate(index, false, window, cx);
-                    }
-                });
-            }));
-        } else if self.child != Some(index) {
-            self.child = None;
-            self.menu
-                .update(cx, |menu, cx| menu.truncate(self.depth + 1, false, cx));
-        }
+        // CDXC:SessionChat 2026-09-22 DECISION: The user asked that the Switch Account submenu not close when the pointer moves over another More Actions row. A submenu stays up while other rows are hovered; a press, the arrow keys, or Escape still replace or close it.
+        // CDXC:ContextMenus 2026-11-12 DECISION:
+        // User: "make clicking here not close the dropdown please. and make it need to click on this to show the menu", then "apply this to all sub menus like this". No chat menu submenu opens on hover any more (the dock row's Snooze, Branches, the Skills list and the rest): a row with `children` opens only on a press or the right arrow, and hovering it does nothing.
+        // The submenu a press opened stays up while other rows are hovered, so hovering never closes it either.
         cx.notify();
     }
 
@@ -219,7 +197,6 @@ impl ChatOptionMenuPanel {
                 }
             }
             "up" | "down" | "home" | "end" => {
-                self.hover_task = None;
                 self.child = None;
                 self.menu
                     .update(cx, |menu, cx| menu.truncate(self.depth + 1, false, cx));
