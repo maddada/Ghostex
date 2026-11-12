@@ -470,7 +470,7 @@ fn ask_card(
         "ref": reference,
         "title": text(ask, "text"),
         // Its longer explanation under the short title (`item ask --detail`), "" for none.
-        "body": text(ask, "detail"),
+        "body": crate::transcript::native_markdown::ask_markdown(text(ask, "detail")),
         "status": ask_status,
         "statusLabel": status_label(ask_status),
         "tag": tag,

@@ -1257,6 +1257,33 @@ fn literal_windows_line(line: &str) -> String {
     out
 }
 
+/// A work item ask's description as the dock rows and the Work panel draw it: an inline span
+/// holding a command becomes the `ghostex-run:` link the renderers draw with the transcript's Copy
+/// and Paste in terminal (`run_command.rs`), and a file reference becomes its pill, as in an
+/// agent's reply. A run link the author wrote is reduced to its text, as there. Block marks are
+/// left out: the dock draws the description as one Markdown view, not the transcript's segments.
+///
+/// CDXC:Coordinators 2026-11-12 DECISION:
+/// User, of a dock row whose description held a command: "please also show the same floating
+/// buttons that appear when i hover on a command that we have now in the chat transcript normally".
+pub fn ask_markdown(markdown: &str) -> String {
+    if markdown.is_empty() {
+        return String::new();
+    }
+    let unmarked;
+    let markdown = if markdown.contains(NATIVE_MARK) {
+        unmarked = markdown.replace(NATIVE_MARK, "");
+        unmarked.as_str()
+    } else {
+        markdown
+    };
+    let commands = has_inline_code_command_evidence(markdown);
+    if !commands && !has_run_link_evidence(markdown) && !has_inline_code_path_evidence(markdown) {
+        return markdown.to_string();
+    }
+    link_file_references(markdown, false, &[], commands)
+}
+
 /// The Markdown the GPUI transcript renders for one message.
 ///
 /// Inline-code file references are promoted in every message, the way React promotes them wherever

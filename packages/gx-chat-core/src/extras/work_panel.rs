@@ -228,7 +228,7 @@ fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
         // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
         "titleRuns": crate::questions::form_links::word_runs(text(ask, "text")),
         // Its longer explanation under the short title (`item ask --detail`).
-        "body": text(ask, "detail"),
+        "body": crate::transcript::native_markdown::ask_markdown(text(ask, "detail")),
         "detail": detail,
         "note": if steps.is_empty() { detail.clone() } else { format!("{detail} \u{b7} Steps: {steps}") },
         "at": text(ask, "askedAt"),

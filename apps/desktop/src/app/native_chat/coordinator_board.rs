@@ -1472,18 +1472,30 @@ impl NativeChatView {
                     .children(self.board_restore_button(row, p, cx)),
             );
         if expanded {
+            // Opened, only the title line opens and shuts the card (and drags it): a press under
+            // it stops here, so the text takes it, a drag selects and Cmd+C copies (work_cards.rs
+            // `dock_row`, CDXC:Coordinators 2026-11-12).
+            let mut inner = div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(6.0 * s))
+                .cursor(gpui::CursorStyle::IBeam)
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation());
             // A work ask's longer explanation under its short title, in the quieter colour, whole
             // (work_cards.rs `ask_markdown`).
             let body = text(row, "body");
             if !body.is_empty() {
-                card = card.child(self.ask_markdown(&key, &body, p.card_muted, 13.0, 19.0, p, cx));
+                inner =
+                    inner.child(self.ask_markdown(&key, &body, p.card_muted, 13.0, 19.0, p, cx));
             }
             // Its latest line (a thread's report or what it is on, an item's note), whole.
             let line = Some(text(row, "detail"))
                 .filter(|line| !line.is_empty())
                 .unwrap_or_else(|| note.clone());
             if !line.is_empty() {
-                card = card.child(
+                inner = inner.child(
                     div()
                         .text_size(px(13.0 * s))
                         .line_height(px(19.0 * s))
@@ -1491,8 +1503,9 @@ impl NativeChatView {
                         .child(line),
                 );
             }
-            card = card.child(div().flex().min_w_0().child(chips));
-            card = card.child(self.board_card_buttons(row, age_slot, p, cx));
+            inner = inner.child(div().flex().min_w_0().child(chips));
+            inner = inner.child(self.board_card_buttons(row, age_slot, p, cx));
+            card = card.child(inner);
         } else {
             card = card.child(
                 div()

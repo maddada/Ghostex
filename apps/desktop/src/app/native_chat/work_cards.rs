@@ -1092,7 +1092,7 @@ impl NativeChatView {
         if page_row {
             let page = row["open"].clone();
             let right_menu = page_row_menu(row);
-            let head = Self::dock_row_press(&key, open, head.child(age_menu), None, p)
+            let head = Self::dock_row_press(&key, open, head.child(age_menu), p)
                 .group(hover.clone())
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.invoke(page.clone(), cx);
@@ -1109,15 +1109,41 @@ impl NativeChatView {
             }
             return div().w_full().child(head).into_any_element();
         }
-        let head = Self::dock_row_press(&key, open, head.child(age_menu), opened_detail, p)
-            .on_click(cx.listener(move |this, _, _, cx| {
+        let press = Self::dock_row_press(&key, open, head.child(age_menu), p).on_click(
+            cx.listener(move |this, _, _, cx| {
                 // One row open at a time: opening this one shuts the one that was open.
                 if !this.expanded.remove(&toggle) {
                     this.expanded.retain(|key| !key.starts_with("dock-row:"));
                     this.expanded.insert(toggle.clone());
                 }
                 cx.notify();
-            }));
+            }),
+        );
+        // Opened, only the title line opens and shuts the row: what sits under it takes a press
+        // as text, so a drag selects, a double-click picks a word and Cmd+C copies.
+        //
+        // CDXC:Coordinators 2026-11-12 DECISION:
+        // User, of an opened row whose command he could not select: "let's make collapsing
+        // require clicking on the header of the card not the inner part please".
+        let head = match opened_detail {
+            Some(detail) => div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(press)
+                .child(
+                    // `pl` again, the title's indent with the row's own padding: `px` would
+                    // replace the indent the column carries.
+                    detail
+                        .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                        .pr(px(DOCK_ROW_PAD_X * s))
+                        .pb(px(6.0 * s))
+                        .cursor(gpui::CursorStyle::IBeam),
+                )
+                .into_any_element(),
+            None => press.into_any_element(),
+        };
         if !open {
             return div().w_full().group(hover).child(head).into_any_element();
         }
@@ -1169,12 +1195,12 @@ impl NativeChatView {
         card.into_any_element()
     }
 
-    /// A dock row's clickable surface: its title line, then, opened, what sits under it.
+    /// A dock row's clickable surface: its title line (opened, only that line; what sits under it
+    /// is the row's text, `dock_row`).
     fn dock_row_press(
         key: &str,
         open: bool,
         line: gpui::Div,
-        detail: Option<gpui::Div>,
         p: &ChatAppearance,
     ) -> gpui::Stateful<gpui::Div> {
         let s = p.scale;
@@ -1182,18 +1208,15 @@ impl NativeChatView {
             .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
             .w_full()
             .min_w_0()
-            .flex()
-            .flex_col()
-            .gap(px(2.0 * s))
             .px(px(DOCK_ROW_PAD_X * s))
-            .py(px(6.0 * s))
+            .pt(px(6.0 * s))
+            .pb(px(if open { 2.0 } else { 6.0 } * s))
             .rounded(px(8.0 * s))
             .chat_cursor_pointer()
             .when(!open, |head| {
                 head.hover(|style| style.bg(p.foreground.opacity(0.04)))
             })
             .child(line)
-            .children(detail)
     }
 
     /// An opened row's menu: Show in chat, Dismiss and Snooze (`page_row_menu`), then Mention,

@@ -198,6 +198,9 @@ const COMMAND_WORDS: &[&str] = &[
     "cswap",
     "zmx",
     "agentbox",
+    // The virtual display agents test windows on (CDXC:Coordinators 2026-11-12: a dock row asked
+    // the user to run `spaceo safety clear-host-health --operator` and offered no Copy).
+    "spaceo",
     // Editors launched from a shell.
     "code",
     "cursor",
