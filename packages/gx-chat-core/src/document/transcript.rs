@@ -201,6 +201,9 @@ pub struct WorkTally {
     pub extends_to_ms: Option<i64>,
     /// Its tool calls, as `work_summary::work_stats` counts them.
     pub tool_calls: usize,
+    /// How many of `tool_calls` sent another agent a message, which a Quiet View line counts as
+    /// messages sent instead (`work_summary::sent_call_count`).
+    pub sent_calls: usize,
     /// The paths its "N files changed" counts, the held-back ones included.
     pub changed: Vec<String>,
     /// The messages between agents and the answers folded into it (`transcript/folded_cards.rs`).

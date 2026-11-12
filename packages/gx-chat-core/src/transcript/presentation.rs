@@ -1435,17 +1435,21 @@ fn turn_items(
                     }
                 }
                 let changed_files = changed.len();
-                let tool_calls = if turn.user.deferred_work.is_some() && work.is_empty() {
-                    // The rows are still on the server: only the files are known until it opens.
-                    0
-                } else {
-                    let rows: Vec<&ChatMessage> = work
-                        .iter()
-                        .chain(turn.final_message.iter())
-                        .map(|row| &**row)
-                        .collect();
-                    tool_call_count(&rows)
-                };
+                let (tool_calls, sent_calls) =
+                    if turn.user.deferred_work.is_some() && work.is_empty() {
+                        // The rows are still on the server: only the files are known until it opens.
+                        (0, 0)
+                    } else {
+                        let rows: Vec<&ChatMessage> = work
+                            .iter()
+                            .chain(turn.final_message.iter())
+                            .map(|row| &**row)
+                            .collect();
+                        (
+                            tool_call_count(&rows),
+                            crate::transcript::work_summary::sent_call_count(&rows),
+                        )
+                    };
                 let stats = counted_work_stats(tool_calls, changed_files);
                 let loaded =
                     section.map(|rows| crate::transcript::transcript::section_part(turn, rows));
@@ -1546,6 +1550,7 @@ fn turn_items(
                         ended_ms,
                         extends_to_ms,
                         tool_calls,
+                        sent_calls,
                         changed,
                         // A section still on the server, with gxserver's count of its calls.
                         held: turn

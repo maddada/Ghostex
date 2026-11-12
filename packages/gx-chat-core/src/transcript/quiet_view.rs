@@ -590,6 +590,8 @@ fn list<'a>(row: &'a Value, key: &str) -> &'a [Value] {
 }
 
 /// What a line counts.
+///
+/// CDXC:SessionChat 2026-11-12 WHY: a call that sent another agent a message (`coordinator start-thread`, `agents send`, `SendMessage`) is drawn as its "Message to …" card, so the line counts it once, as a message sent, and not also as a tool call: a turn that only started a thread read "1 message sent · 1 tool call". The full view's "Worked for" fold still lists the call's row, so its own count keeps it.
 #[derive(Default)]
 struct Counts {
     reports: usize,
@@ -612,7 +614,10 @@ impl Counts {
             self.reports += 1;
         }
         self.sent += sent_count(list(row, "sentMessages"));
-        self.tools += list(row, "tools").len();
+        self.tools += list(row, "tools")
+            .iter()
+            .filter(|tool| tool["sentMessage"] != true)
+            .count();
         for file in list(row, "files") {
             if let Some(path) = file["path"].as_str() {
                 self.files.insert(path.to_string());
@@ -630,7 +635,7 @@ impl Counts {
 
     fn turn(&mut self, label: &str, tally: &crate::document::WorkTally) {
         if tally.held.is_empty() {
-            self.tools += tally.tool_calls;
+            self.tools += tally.tool_calls - tally.sent_calls;
         }
         for section in &tally.held {
             if !self.held.iter().any(|(start, _)| *start == section.0) {

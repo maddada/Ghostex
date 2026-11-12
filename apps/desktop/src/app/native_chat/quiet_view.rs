@@ -124,8 +124,24 @@ fn rail(
     p: &ChatAppearance,
     cx: &Context<NativeChatView>,
 ) -> AnyElement {
-    super::disclosure_body::closing_rail(p, key.to_string(), 6.0, 23.0, 8.0, bottom, rows, cx)
+    super::disclosure_body::closing_rail(
+        p,
+        key.to_string(),
+        6.0,
+        23.0,
+        RAIL_ROW_GAP,
+        bottom,
+        rows,
+        cx,
+    )
 }
+
+/// The space between the rows on an opened line's rail, between two parts of one row (its work
+/// cards and the row) and between one row and the next alike.
+///
+/// CDXC:SessionChat 2026-11-12 DECISION:
+/// User, of an opened "1 report · 1 tool call · 1 item updated" line whose message row sat a row gap above the next row but 8px below the work card: "gap is different, please fix (make it like the small one, not the larger one)". Every gap on the rail is this 8px, on the desktop and the phone (`QuietRow` in apps/mobile/app/src/chat/native/transcript/quietView.tsx).
+const RAIL_ROW_GAP: f32 = 8.0;
 
 /// `item` without what of it stays in view after its line.
 fn fold_part(item: &TranscriptItem, tail: &QuietTail) -> TranscriptItem {
@@ -365,9 +381,10 @@ impl NativeChatView {
                     };
                     self.quiet_boxed = false;
                     nested.push(content);
-                    // The rail runs on through the row gap to the next row of the line.
+                    // The rail runs on to the next row of the line, as far below as its parts sit
+                    // apart.
                     let bottom = if tail.is_none() && index + 1 < line.end {
-                        p.row_gap()
+                        RAIL_ROW_GAP
                     } else {
                         0.0
                     };

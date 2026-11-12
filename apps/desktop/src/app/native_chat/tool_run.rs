@@ -322,7 +322,7 @@ impl NativeChatView {
                 .copied()
                 .partition(|index| fold["visible"][*index] == true);
             let mut body: Vec<AnyElement> =
-                vec![self.tool_fold_toggle(run_key.clone(), label, run_expanded, p, cx)];
+                vec![self.tool_fold_toggle(run_key.clone(), label, run_expanded, None, p, cx)];
             let hidden_rows = self.tool_row_list(&id, &tools, &hidden, p, cx);
             if !hidden_rows.is_empty() {
                 body.push(motion_clip(
@@ -356,7 +356,7 @@ impl NativeChatView {
         if run_expanded {
             let (above, below) = split(&visible, true);
             let mut body = self.tool_row_list(&id, &tools, &above, p, cx);
-            body.push(self.tool_fold_toggle(run_key.clone(), label, true, p, cx));
+            body.push(self.tool_fold_toggle(run_key.clone(), label, true, None, p, cx));
             body.extend(self.tool_row_list(&id, &tools, &below, p, cx));
             let group = disclosure_body(
                 p,
@@ -392,17 +392,21 @@ impl NativeChatView {
             }
         }
         let mut rows = self.tool_row_list(&id, &tools, &above, p, cx);
-        rows.push(self.tool_fold_toggle(run_key.clone(), label, false, p, cx));
-        if let Some(pictures) = self.read_picture_strip(
+        let pictures = self.read_picture_strip(
             &format!("{run_key}:read"),
             &Value::Array(folded_pictures),
             super::read_pictures::FOLDED_CALLS_INSET,
             p.background,
             p,
             cx,
-        ) {
-            rows.push(pictures);
-        }
+        );
+        // In an opened Quiet View line's card the toggle is the card's header wherever it
+        // touches the card's edges (`tool_fold_toggle`).
+        let bleed = self
+            .quiet_boxed_here()
+            .then(|| (above.is_empty(), pictures.is_none() && below.is_empty()));
+        rows.push(self.tool_fold_toggle(run_key.clone(), label, false, bleed, p, cx));
+        rows.extend(pictures);
         rows.extend(self.tool_row_list(&id, &tools, &below, p, cx));
         rows
     }
@@ -706,16 +710,27 @@ impl NativeChatView {
         .into_any_element()
     }
 
+    /// The "N tool calls" toggle of a folded group. `bleed` is set inside an opened Quiet View
+    /// line's card (`tool_rows`), with whether the toggle is the card's first row and its last:
+    /// there it reaches past the card's inset to the card's sides, and to its top or bottom edge
+    /// where it is the first or last row, taking the card's rounded corners and the one-line
+    /// cards' hover fill, so its hover lights the card's whole header. Its chevron and words stay
+    /// where they were.
+    ///
+    /// CDXC:SessionChat 2026-11-12 DECISION:
+    /// User, of the collapsed "3 tool calls" card whose hover lit only a strip inset inside it: "make hovering here show the hover effect on the whole card header, not just a small part like now". The phone has no hover there; its press feedback is the row's own.
     fn tool_fold_toggle(
         &self,
         key: String,
         label: String,
         expanded: bool,
+        bleed: Option<(bool, bool)>,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        div()
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let toggle = div()
             .id(key.clone())
             .role(gpui::Role::Button)
             .aria_label(label.clone())
@@ -723,13 +738,35 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(8.0 * s))
-            .px(px(ROW_PAD_X * s))
-            .py(px(2.0 * s))
-            .rounded(px(8.0 * s))
             .text_size(px(super::chat_text_look::PROSE_SIZE * s))
             .text_color(p.muted)
-            .chat_cursor_pointer()
-            .hover(|style| style.bg(p.foreground.opacity(0.03)))
+            .chat_cursor_pointer();
+        let toggle = match bleed {
+            None => toggle
+                .px(px(ROW_PAD_X * s))
+                .py(px(2.0 * s))
+                .rounded(px(8.0 * s))
+                .hover(|style| style.bg(p.foreground.opacity(0.03))),
+            Some((first, last)) => {
+                let inset = shape.padding_x - ROW_PAD_X;
+                // Inside the shell's one-pixel border.
+                let corner = px(((shape.radius - 1.0) * s).max(0.0));
+                let edge = |at: bool| if at { BOXED_PAD_Y } else { 0.0 };
+                toggle
+                    .mx(px(-inset * s))
+                    .px(px(shape.padding_x * s))
+                    .mt(px(-edge(first) * s))
+                    .mb(px(-edge(last) * s))
+                    .pt(px((2.0 + edge(first)) * s))
+                    .pb(px((2.0 + edge(last)) * s))
+                    // Alone in the card it is the card's whole height inside its border.
+                    .when(first && last, |this| this.h(px(shape.header_height(s))))
+                    .when(first, |this| this.rounded_t(corner))
+                    .when(last, |this| this.rounded_b(corner))
+                    .hover(|style| style.bg(super::cards::card_hover_fill(p)))
+            }
+        };
+        toggle
             .child(
                 // The chevron sits in a slot as wide as the rows' glyph tiles, so the label
                 // starts where their names do.

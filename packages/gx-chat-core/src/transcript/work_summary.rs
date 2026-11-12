@@ -219,6 +219,24 @@ pub fn tool_call_count(rows: &[&ChatMessage]) -> usize {
         .sum()
 }
 
+/// The calls of [`tool_call_count`] that sent another agent a message (`ghostex agents send`,
+/// `coordinator start-thread`, Claude's `SendMessage`), which draw a "Message to …" card.
+pub fn sent_call_count(rows: &[&ChatMessage]) -> usize {
+    rows.iter()
+        .map(|message| {
+            let message = background_task_source(message);
+            let (_, tools) = split_blocks(&message.blocks);
+            pair_tool_blocks(tools)
+                .iter()
+                .filter(|pair| pair.call_name().is_some() && pair.call_input().is_some())
+                .filter(|pair| {
+                    !crate::transcript::sent_message::sent_agent_messages(pair, &[]).is_empty()
+                })
+                .count()
+        })
+        .sum()
+}
+
 /// [`work_stats`] for counts already taken: a Reduced line adds up its turns'
 /// (`grouped_work.rs`).
 pub fn counted_work_stats(calls: usize, changed_files: usize) -> Vec<Value> {

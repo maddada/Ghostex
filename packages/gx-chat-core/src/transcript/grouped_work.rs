@@ -55,6 +55,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
     let mut started: Option<i64> = None;
     let mut ended: Option<i64> = None;
     let mut tool_calls = 0;
+    let mut sent_calls = 0;
     let mut changed: Vec<String> = Vec::new();
     let mut files: Vec<Value> = Vec::new();
     let mut expandable = false;
@@ -94,6 +95,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             ended = ended.max(tally.extends_to_ms);
         }
         tool_calls += tally.tool_calls;
+        sent_calls += tally.sent_calls;
         messages += tally.messages;
         answers += tally.answers;
         cards_in_fold |= turn_folds;
@@ -209,6 +211,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             ended_ms: ended,
             extends_to_ms: ended,
             tool_calls,
+            sent_calls,
             changed,
             messages,
             answers,
