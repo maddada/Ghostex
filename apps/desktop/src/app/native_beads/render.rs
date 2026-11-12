@@ -129,14 +129,14 @@ impl BeadsView {
         let Some(modal) = self.modal else {
             return div().into_any_element();
         };
-        div()
+        let left = div()
             .flex()
-            .flex_none()
             .items_center()
             .gap(px(10.0))
-            .pb(px(12.0))
-            .border_b_1()
-            .border_color(p.border)
+            .flex_grow(1.0)
+            .flex_shrink(1.0)
+            .flex_basis(px(380.0))
+            .min_w_0()
             .child(
                 div()
                     .flex_none()
@@ -202,8 +202,13 @@ impl BeadsView {
                                 .text_color(p.foreground),
                         ),
                     ),
-            )
-            .child(div().flex_1())
+            );
+        let right = div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(10.0))
+            .ml_auto()
             .when(ready && sync_ok && has_remote, |this| {
                 this.child(
                     joined(p)
@@ -290,7 +295,20 @@ impl BeadsView {
                         this.open_create(None, board, window, cx)
                     }))
                 }),
-            )
+            );
+        // CDXC:ProjectBoard 2026-11-12 WHY: in the side panel at its usual width the one-row header ran past the panel's edge once the Sync controls showed, and New bead could not be reached. The row wraps: the sync controls, Refresh and New bead move to a second line, right-aligned, when they do not fit beside the title, layout switch and search.
+        div()
+            .flex()
+            .flex_none()
+            .flex_wrap()
+            .items_center()
+            .gap_x(px(10.0))
+            .gap_y(px(8.0))
+            .pb(px(12.0))
+            .border_b_1()
+            .border_color(p.border)
+            .child(left)
+            .child(right)
             .into_any_element()
     }
 

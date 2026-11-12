@@ -9,7 +9,7 @@
 
 ### 🧵 Beads view
 
-- **The Kanban view is now the Beads view:** it opens in the same place with the same hotkey, and a Tree | Board switch sits in its header. Tree shows every bead under its epic with the epic's progress, beads waiting on you pinned on top, filters for Ready, In progress, Blocked and Deferred, and a details pane to close, defer, reprioritize, comment and go to the agent on it. Board is the board you know, and its Columns dialog can now hide Backlog, Test and Review. The header shows when the beads last synced, with Pull and Push one click away (#573, #577), thanks to @sebastianarena.
+- **The Kanban view is now the Beads view:** it opens in the same place with the same hotkey, and a Tree | Board switch sits in its header. Tree shows every bead under its epic with the epic's progress, beads waiting on you pinned on top, filters for Ready, In progress, Blocked and Deferred, and a details pane to close, defer, reprioritize, comment and go to the agent on it. Board is the board you know, and its Columns dialog can now hide Backlog, Test and Review. The header shows when the beads last synced, with Pull and Push one click away; Push works with Beads 1.2 too, and in a narrow side panel the header's buttons move to a second line instead of past the edge (#573, #577), thanks to @sebastianarena.
 
 ### 🩹 Fixes and polish
 

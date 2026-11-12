@@ -113,16 +113,16 @@ impl GhostexGpuiApp {
         self.titlebar_mode_available(TitlebarMode::Kanban) && self.native_kanban_project().is_some()
     }
 
-    /// The board window's title: "Kanban – <project>".
+    /// The board window's title: "Beads – <project>" (the view is called Beads wherever a user reads it, `TitlebarMode::Kanban`).
     fn native_kanban_window_title(&self) -> String {
         let name = self
             .native_kanban_project()
             .map(|project| project.display_name)
             .unwrap_or_default();
         if name.trim().is_empty() {
-            "Kanban".to_string()
+            "Beads".to_string()
         } else {
-            format!("Kanban – {name}")
+            format!("Beads – {name}")
         }
     }
 
@@ -377,7 +377,7 @@ impl GhostexGpuiApp {
                             .line_height(px(21.0))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(ink.opacity(0.9))
-                            .child("Kanban is open in its own window"),
+                            .child("Beads is open in its own window"),
                     )
                     .child(
                         div()
