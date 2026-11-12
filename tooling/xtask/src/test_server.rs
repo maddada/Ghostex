@@ -858,17 +858,31 @@ fn find_zmx() -> Res<PathBuf> {
             && stdout_if_ok(Command::new(candidate).arg("version"))
                 .is_some_and(|out| out.contains("wire_generation"))
         {
+            if is_debug_zmx(candidate) {
+                bail!(
+                    "{} is a Debug build: each of its session daemons holds about 86 MB (Zig's debug allocator) instead of about 3 MB. Rebuild it with `zig build -Doptimize=ReleaseSafe` in .dependencies/zmx (as prepare-macos-runtime.sh does), then start the test server again.",
+                    candidate.display()
+                );
+            }
             return Ok(candidate.clone());
         }
     }
     bail!(
-        "No working zmx found. Build it with `zig build` in .dependencies/zmx (as prepare-macos-runtime.sh does) or install Ghostex. Looked at:\n  {}",
+        "No working zmx found. Build it with `zig build -Doptimize=ReleaseSafe` in .dependencies/zmx (as prepare-macos-runtime.sh does) or install Ghostex. Looked at:\n  {}",
         candidates
             .iter()
             .map(|c| c.display().to_string())
             .collect::<Vec<_>>()
             .join("\n  ")
     )
+}
+
+/// Whether a zmx was built in Debug mode: only a Debug build links Zig's `DebugAllocator` (zmx picks it on `builtin.mode == .debug`), so its symbol name is in the binary.
+///
+/// CDXC:Zmx 2026-11-12 WHY: a plain `zig build` makes a Debug zmx, and a test server's 64 daemons from one held 2.46 GB (86 MB each against about 3 MB from the ReleaseSafe build the app ships). A daemon keeps running the binary that spawned it, so a later release rebuild of zig-out does not shrink them.
+fn is_debug_zmx(path: &Path) -> bool {
+    const MARKER: &[u8] = b"heap.debug_allocator.DebugAllocator(";
+    fs::read(path).is_ok_and(|bytes| bytes.windows(MARKER.len()).any(|window| window == MARKER))
 }
 
 fn launch(server: &Server) -> Res {
