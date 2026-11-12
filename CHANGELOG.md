@@ -5,6 +5,11 @@
 ### 🤖 Agents
 
 - **Agents install the way their makers say:** first-run setup, Settings > Agents and Install buttons now install an agent with its official method (Claude Code's, Codex's, OpenCode's, Grok's, Antigravity's and Hermes Agent's own install scripts, PowerShell on Windows, or npm, Homebrew or WinGet where that is how an agent ships), not with mise, even on a computer that has mise. An agent mise already manages keeps updating through mise.
+- **DeepSeek Harness installs with npm:** Install runs its documented `npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui` (plus pnpm when it is missing), then `dsh-tui update`; Ghostex no longer downloads mise for it.
+- **Pi installs with its official installer:** Install runs `curl -fsSL https://pi.dev/install.sh | sh` (PowerShell's `install.ps1` on Windows), installing Node.js first when npm is missing, and Update runs `pi update`; npm stays as another choice.
+- **Claude Code installs on Windows without Git for Windows,** as its docs say.
+- **OpenCode's Homebrew choice installs OpenCode 2** (`anomalyco/tap/opencode-v2`) instead of Homebrew's older `opencode`.
+- **Antigravity's Update says it updates itself:** Antigravity updates itself while it runs, so Settings > Agents and the Updates list say so instead of re-running an installer that does nothing.
 
 ## 11.5.0 - 2026-11-12
 

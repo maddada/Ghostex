@@ -34,8 +34,8 @@ pub(crate) struct Definition {
     pub update_stops_sessions: bool,
     /// The CLI's own updater for an agent without an official installer entry (`copilot update`).
     pub self_update: Option<String>,
-    /// A command a mise install or update runs next, inside the tools it set up (`dsh-tui update`).
-    pub mise_then_run: Option<String>,
+    /// A command an npm or mise install or update runs next, once it succeeded (`dsh-tui update`).
+    pub then_run: Option<String>,
     /// Arguments of the CLI's own "is there an update" check, for an agent whose version number does not
     /// move with its releases (Hermes updates by git commit).
     pub update_check: Option<Vec<String>>,
@@ -43,10 +43,10 @@ pub(crate) struct Definition {
     pub minimum_bun_version: Option<String>,
 }
 
-/// CDXC:AgentProviders 2026-10-28 DECISION:
-/// User: DeepSeek Harness installs and updates "through mise, the way it installs the other npm-based agents (e.g. mise's npm backend, `npm:@deepseek-ai/dsh`), not with a global npm install". The terminal app Ghostex runs (`dsh-tui`, `@deepseek-harness-tui/dsh-tui`) runs on the official `dsh` CLI (`@deepseek-ai/dsh`, which has no terminal app of its own) and sets its profile up with pnpm, so one `mise use` installs all of them as `npm:` tools; pnpm only when it is missing, because many users already have it from Homebrew or corepack.
-/// WHY: dsh-tui's command and the profile copy it starts are installed separately, and a command a minor version ahead of its profile refuses to start, so after mise installs or upgrades it the job runs `dsh-tui update` (`mise_then_run`), which brings the profile to the same release.
-/// WHY: every `@deepseek-ai/dsh` release is a pre-release. mise skips those unless asked, and asked it takes the newest one (0.2.1-rc.4 on 2026-10-28), which dsh-tui 0.17 refused to install its profile on ("incompatible with dsh 0.2.1-rc.4"). npm's `latest` tag is DeepSeek's stable channel (0.2.1-rc.2) and what `npm install -g @deepseek-ai/dsh` installs, so mise installs exactly that release (`pin_npm_latest`), on install and on update alike.
+/// CDXC:AgentProviders 2026-11-12 DECISION:
+/// User: DeepSeek Harness installs with its documented `npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`, keeps mise only where mise already manages it, and Ghostex no longer downloads mise for it. Supersedes the 2026-10-28 decision to install it only through mise. The terminal app Ghostex runs (`dsh-tui`) runs on the official `dsh` CLI (`@deepseek-ai/dsh`) and sets its profile up with pnpm, so the install names all of them; pnpm only when it is missing, because many users already have it from Homebrew or corepack.
+/// WHY: dsh-tui's command and the profile copy it starts are installed separately, and a command a minor version ahead of its profile refuses to start, so after an install or update the job runs `dsh-tui update` (`then_run`), which brings the profile to the same release.
+/// WHY: every `@deepseek-ai/dsh` release is a pre-release. mise skips those unless asked, and asked it takes the newest one (0.2.1-rc.4 on 2026-10-28), which dsh-tui 0.17 refused to install its profile on ("incompatible with dsh 0.2.1-rc.4"). npm's `latest` tag is DeepSeek's stable channel, so a mise that already manages it installs exactly that release (`pin_npm_latest`).
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NpmCompanion {
@@ -81,6 +81,14 @@ pub(crate) struct Native {
     needs_applications_folder: bool,
     /// Tooltip wording for an inline script that is not worth showing verbatim (Rovo Dev's download).
     plan: Option<String>,
+    /// The installer needs Node.js and npm already (Pi's), so Ghostex installs its own Node.js first
+    /// when npm is missing.
+    #[serde(default)]
+    needs_npm: bool,
+    /// The CLI updates itself in the background while it runs and has no update command, and its
+    /// installer does nothing over an existing install (Antigravity's).
+    #[serde(default)]
+    updates_itself: bool,
 }
 
 /// Folders the official installer puts the binary in, `~` and `%VAR%` expanded. An installer that does not
@@ -129,6 +137,13 @@ impl Definition {
             .as_ref()
             .and_then(Native::update_command)
             .or(self.self_update.as_deref())
+    }
+
+    /// The CLI updates itself while it runs and Ghostex has no update to run (Antigravity).
+    pub(crate) fn updates_itself(&self) -> bool {
+        self.native
+            .as_ref()
+            .is_some_and(|native| native.updates_itself && native.update_command().is_none())
     }
 
     /// The official installer for this platform family (unix: `native.install`).
@@ -243,7 +258,16 @@ pub(crate) fn methods(
                     None => format!("Runs the official installer: {command}. No password needed."),
                 }),
             );
-            if installed
+            if installed && definition.updates_itself() {
+                // CDXC:AgentProviders 2026-11-12 DECISION:
+                // User: "Antigravity's Update says it updates itself instead of re-running a script that does nothing". Its installer stops at "already installed" and the CLI updates itself in the background while it runs, so the method names no command and says so.
+                let name = crate::sidebar_hud::default_agent_name(&definition.agent_id)
+                    .unwrap_or(&definition.binary);
+                let reason = format!("{name} updates itself in the background while it runs, so there is nothing for Ghostex to run. Start a new session to use the newest version.");
+                method.command = String::new();
+                method.plan = reason.clone();
+                method.unavailable_reason = Some(reason);
+            } else if installed
                 && command != install
                 && !command.starts_with("curl ")
                 && !command.contains("irm ")
@@ -252,6 +276,23 @@ pub(crate) fn methods(
                 method.unavailable_reason = None;
             } else {
                 apply_native_requirements(&mut method, native, command, home);
+                if native.needs_npm
+                    && method.prerequisite.is_none()
+                    && method.unavailable_reason.is_none()
+                    && missing_command("npm", home).is_some()
+                {
+                    // CDXC:AgentProviders 2026-11-12 WHY:
+                    // Pi's installer installs Node.js itself only after asking in a terminal, and a Ghostex job has none ("No terminal detected; install Node.js 22.19.0 or newer and npm"), so Ghostex installs its own Node.js first, as the npm method does.
+                    match crate::managed_tools::node::supported() {
+                        Ok(()) => {
+                            method.prerequisite = Some("node".into());
+                            method.plan = note(format!(
+                                "Ghostex first downloads Node.js (LTS) from nodejs.org into its tools folder and adds it to the end of your PATH, then runs the official installer: {command}. No password needed."
+                            ));
+                        }
+                        Err(reason) => method.unavailable_reason = Some(reason),
+                    }
+                }
             }
             methods.push(method);
         }
@@ -271,7 +312,10 @@ pub(crate) fn methods(
             } else {
                 String::new()
             };
-            let command = format!("{manager} {verb} -g {flags}{packages}");
+            let command = then_run(
+                format!("{manager} {verb} -g {flags}{packages}"),
+                definition.then_run.as_deref(),
+            );
             let mut method = Method::new(
                 &manager,
                 &manager,
@@ -358,11 +402,7 @@ pub(crate) fn methods(
         }
     }
     let runtime_update = mise_runtime_update(definition, mise_installation, home);
-    if uses_mise(
-        mise_installation,
-        runtime_update.is_some(),
-        methods.is_empty(),
-    ) {
+    if uses_mise(mise_installation, runtime_update.is_some()) {
         if let Some(method) =
             mise_method(definition, mise_installation, runtime_update, home, &note)
         {
@@ -375,15 +415,18 @@ pub(crate) fn methods(
 /// CDXC:AgentProviders 2026-11-12 DECISION:
 /// User: "Ghostex must stop installing agent CLIs onto mise for users who don't already have them there". A CLI mise already manages (its own mise tool, or a global npm or bun package inside a mise runtime) keeps installing and updating through mise; every other CLI, missing or installed some other way, uses its official method (install script, npm, Homebrew, WinGet), so mise is not offered for it at all. Supersedes the 2026-09-14 decision that offered mise first for every agent on a computer that has mise.
 /// WHY: mise fights each CLI's own updater, and its version list can name releases with no download (OpenCode's `@latest` returned 404s).
-/// An agent with no other way to install (DeepSeek Harness, 2026-10-28 decision in `NpmCompanion`) still installs through mise.
-fn uses_mise(
-    mise_installation: Option<&super::mise::Installation>,
-    runtime_update: bool,
-    no_other_method: bool,
-) -> bool {
-    let on_mise =
-        mise_installation.is_some_and(|installation| installation.tool.is_some()) || runtime_update;
-    on_mise || no_other_method
+/// Since 2026-11-12 no agent installs only through mise (DeepSeek Harness moved to npm), so Ghostex never downloads mise to install an agent.
+fn uses_mise(mise_installation: Option<&super::mise::Installation>, runtime_update: bool) -> bool {
+    mise_installation.is_some_and(|installation| installation.tool.is_some()) || runtime_update
+}
+
+/// `command` followed by `then` once `command` succeeded (`npm install -g … && dsh-tui update`).
+fn then_run(command: String, then: Option<&str>) -> String {
+    match then {
+        Some(then) if cfg!(windows) => format!("{command}; if (-not $LASTEXITCODE) {{ {then} }}"),
+        Some(then) => format!("{command} && {then}"),
+        None => command,
+    }
 }
 
 /// A global npm (or bun) package inside a mise runtime updates with that runtime's own package
@@ -415,10 +458,14 @@ fn mise_runtime_update(
         } else {
             String::new()
         };
-        format!(
+        let command = format!(
             "mise exec {} -- {manager} install -g {flags}{packages}",
             super::process::quote(runtime)
-        )
+        );
+        match &definition.then_run {
+            Some(then) => super::mise::then_run(&command, then),
+            None => command,
+        }
     })
 }
 
@@ -481,7 +528,7 @@ fn mise_method(
         }
         Err(reason) => (super::mise::use_command(&tool, &[]), Some(reason.clone())),
     };
-    let command = match &definition.mise_then_run {
+    let command = match &definition.then_run {
         Some(then) => super::mise::then_run(&command, then),
         None => command,
     };
@@ -497,14 +544,10 @@ fn mise_method(
                 .then(|| super::mise::unavailable_reason(&tool, home))
                 .flatten()
         });
-    } else if crate::managed_tools::platform::arch().is_some() {
-        method.prerequisite = Some("mise".into());
-        method.plan = note(format!(
-            "Ghostex first downloads mise from its official GitHub releases into its tools folder (checked against the published checksum), then runs {command}. No password needed."
-        ));
-        method.unavailable_reason = companion_reason;
     } else {
-        method.unavailable_reason = Some(crate::managed_tools::platform::unsupported_cpu_reason());
+        // Offered only for a CLI mise already manages, so mise is there; Ghostex never downloads it for an agent.
+        method.unavailable_reason =
+            Some("Ghostex can't find mise on this computer's PATH. Open a new terminal and check that mise runs, then try again.".into());
     }
     Some(method)
 }
@@ -655,7 +698,7 @@ fn apply_native_requirements(method: &mut Method, native: &Native, command: &str
             continue;
         }
         // CDXC:ManagedTools 2026-09-29 DECISION:
-        // User (8B): when git is missing outside Linux (Hermes on a Mac without Apple's Command Line Tools, Claude Code on Windows without Git for Windows), show a clear "install git first" message instead of installing it.
+        // User (8B): when git is missing outside Linux (Hermes on a Mac without Apple's Command Line Tools, OpenCode on Windows without Git for Windows; Claude Code no longer needs Git for Windows to install since 2026-11-12, as its docs say), show a clear "install git first" message instead of installing it.
         method.unavailable_reason = Some(match (tool, cfg!(target_os = "macos")) {
             ("git", true) => "This agent needs git. Install Apple's Command Line Tools first (run xcode-select --install in a terminal), then try again.".into(),
             ("git", false) => "This agent needs Git for Windows. Install it from git-scm.com/downloads/win, then try again.".into(),
@@ -806,7 +849,7 @@ mod tests {
     }
 
     #[test]
-    fn deepseek_harness_installs_only_through_mise() {
+    fn deepseek_harness_installs_with_npm_then_updates_its_profile() {
         let definition = dsh();
         assert_eq!(definition.binary, "dsh-tui");
         let home = std::env::temp_dir();
@@ -816,14 +859,14 @@ mod tests {
                 .iter()
                 .map(|method| method.id.as_str())
                 .collect::<Vec<_>>(),
-            ["mise"]
+            ["npm"]
         );
         assert!(methods[0]
             .command
-            .starts_with("mise use --global --yes 'npm:@deepseek-harness-tui/dsh-tui@latest' "));
+            .starts_with("npm install -g @deepseek-ai/dsh@latest "));
         assert!(methods[0]
             .command
-            .ends_with(" && mise exec -- dsh-tui update"));
+            .contains(" @deepseek-harness-tui/dsh-tui@latest && dsh-tui update"));
         assert_eq!(definition.self_updater(), Some("dsh-tui update"));
     }
 
@@ -874,11 +917,26 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(",")
         };
+        // The Windows-only parts, which this computer cannot run: Claude Code's installer needs no
+        // Git for Windows, and Pi's runs PowerShell's install.ps1.
+        let native = |id: &str| {
+            CATALOG
+                .iter()
+                .find(|definition| definition.agent_id == id)
+                .and_then(|definition| definition.native.as_ref())
+                .unwrap()
+        };
+        assert!(native("claude").requires.windows.is_empty());
+        assert_eq!(
+            native("pi").windows_install.as_deref(),
+            Some("irm https://pi.dev/install.ps1 | iex")
+        );
         for definition in CATALOG.iter() {
             let off = methods(definition, None, &home, None);
-            let only_mise = off.len() == 1 && off[0].id == "mise";
             assert!(
-                only_mise || off.iter().all(|method| method.id != "mise"),
+                off.iter()
+                    .all(|method| method.id != "mise"
+                        && method.prerequisite.as_deref() != Some("mise")),
                 "{} offers mise without being on mise: {}",
                 definition.agent_id,
                 ids(&off)
@@ -911,6 +969,19 @@ mod tests {
             };
             let runtime = methods(definition, Some(&fake), &home, Some(&in_node));
             let runtime_first = runtime.first().map(|method| method.command.clone());
+            // Installed by its own method (the official installer's folder, or npm's), not on mise.
+            let own = home.join(".pi-check").join(&definition.binary);
+            let own = own.to_string_lossy().into_owned();
+            let elsewhere = methods(definition, Some(&own), &home, None);
+            assert!(elsewhere.iter().all(|method| method.id != "mise"));
+            if definition.agent_id == "antigravity" {
+                let native = elsewhere.iter().find(|m| m.id == "native").unwrap();
+                assert!(native.command.is_empty());
+                assert!(native
+                    .unavailable_reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.contains("updates itself")));
+            }
             println!(
                 "{:<14} not on mise: {:<28} default {:?}\n{:<14} mise tool:   {:<28} default {:?}\n{:<14} mise node:   {:<28} default {:?}",
                 definition.agent_id,
@@ -922,6 +993,18 @@ mod tests {
                 "",
                 ids(&runtime),
                 runtime_first,
+            );
+            println!(
+                "{:<14} installed elsewhere: {}",
+                "",
+                elsewhere
+                    .iter()
+                    .map(|m| match &m.unavailable_reason {
+                        Some(reason) => format!("{} [{}] ({reason})", m.id, m.command),
+                        None => format!("{} [{}]", m.id, m.command),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             );
         }
     }

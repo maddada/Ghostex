@@ -597,7 +597,9 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
     let can_tell = definition.latest_version.is_some()
         || definition.npm_package.is_some()
         || definition.update_check.is_some();
-    let can_run = method.is_some() || definition.self_updater().is_some();
+    // A CLI that updates itself (Antigravity) has no update to run, unless mise manages it.
+    let updates_itself = definition.updates_itself() && method != Some("mise");
+    let can_run = !updates_itself && (method.is_some() || definition.self_updater().is_some());
     let detail = match method {
         Some(method) => format!("Agent · {}", method_label(method)),
         None => "Agent".to_string(),
@@ -653,6 +655,11 @@ fn agent_item(agent: &Value, usage: &Usage) -> Option<Value> {
     let sessions = usage.running.get(id).map_or(0, Vec::len);
     let note = if let Some(held_back) = held_back {
         Some(held_back.to_string())
+    } else if updates_itself {
+        Some(
+            "Updates itself while it runs; start a new session to use the newest version."
+                .to_string(),
+        )
     } else if available && definition.update_stops_sessions {
         Some(format!(
             "Its updater stops running {name} sessions, so it waits until they're idle."

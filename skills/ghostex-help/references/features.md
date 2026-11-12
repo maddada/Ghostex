@@ -3409,15 +3409,21 @@ its name, command, permission mode and default view, duplicate it as a custom
 agent, install or update its CLI, see its installed version (and the newer one
 when available) and command output, or open its Install docs link. Claude Code, Codex, Cursor Agent
 and Grok Build install through their official installers (PowerShell on
-Windows). OpenCode's official installer on Windows runs its install script with
+Windows; Claude Code doesn't need Git for Windows to install). Pi installs with
+its official installer too, which needs Node.js 22.19 or newer and npm (Ghostex
+installs its own Node.js first when npm is missing), and updates with
+`pi update`; npm stays as another choice. OpenCode's official installer on Windows runs its install script with
 Git for Windows' Bash, so it needs Git for Windows; without Git, install
-OpenCode with npm instead. When an installer leaves its folder off PATH (Claude Code's does), Ghostex
+OpenCode with npm instead. OpenCode's Homebrew choice installs
+`anomalyco/tap/opencode-v2`, the OpenCode 2 formula its docs name. When an installer leaves its folder off PATH (Claude Code's does), Ghostex
 adds it to your user PATH so new terminals find the command; Add to PATH
 does the same for a CLI installed earlier. Installs run one at a time and wait
 their turn. Ghostex updates a CLI the way it was installed; when it cannot tell,
-it uses the CLI's own updater (such as `copilot update`, `pi update self` or
+it uses the CLI's own updater (such as `copilot update`, `pi update` or
 `omp update`), and only a CLI without one asks you to choose the original
-installation method. Hermes Agent is checked with its own `hermes update --check`,
+installation method. Antigravity updates itself in the background while it
+runs, so its Update says so instead of running anything; start a new session
+to use the newest version. Hermes Agent is checked with its own `hermes update --check`,
 so Update available is shown when Hermes is behind even if its version number has
 not changed. When mise's `minimum_release_age` setting holds a newer release back,
 the CLI shows that release as held back by mise and the date it becomes eligible
@@ -3427,8 +3433,8 @@ install needs Bun 1.3.14 or newer), the method says what to update; the official
 installer downloads OMP's own binary and needs no Bun. Ghostex installs a CLI
 with the method its makers document: their official install script where they
 have one (OpenCode, Antigravity and Hermes Agent too), otherwise npm, Homebrew
-or WinGet. Apart from DeepSeek Harness (below), it doesn't install agents with
-mise, even when your computer has mise; a CLI mise already manages on your
+or WinGet. It doesn't install agents with mise, even when your computer has
+mise, and never downloads mise for an agent; a CLI mise already manages on your
 computer keeps updating through mise. A CLI installed through mise starts in its sessions even when your shell
 doesn't set mise up (no `mise activate` needed): Ghostex runs it through mise.
 If a session's agent command still isn't found, its chat says which command is
@@ -3446,13 +3452,11 @@ and update it with `npm install -g zcode-app-cli@latest`, as documented at
 Freebuff launches with `freebuff` and installs with `npm install -g freebuff`;
 sign in once in its terminal the first time it starts.
 DeepSeek Harness (under More agents until you turn it on) launches with
-`dsh-tui` and installs and updates only through mise (which Ghostex downloads
-itself when the computer has none): Install and Update run
-`mise use --global npm:@deepseek-harness-tui/dsh-tui@latest npm:@deepseek-ai/dsh@<release>`
-with the DeepSeek Harness release npm currently marks as latest (plus pnpm when it
+`dsh-tui` and installs and updates with its documented
+`npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui` (plus pnpm when it
 is missing), then `dsh-tui update`, which sets up its profile, so the terminal app
-and its profile stay on the same release. A copy installed another way
-updates with `dsh-tui update`. It needs a DeepSeek API key (`DEEPSEEK_API_KEY`)
+and its profile stay on the same release. A copy mise already manages keeps
+updating through mise; a copy installed another way updates with `dsh-tui update`. It needs a DeepSeek API key (`DEEPSEEK_API_KEY`)
 or a DeepSeek account sign-in in its terminal.
 Empryo launches with `empryo` (`em` works too) and installs with
 `curl -fsSL https://empryo.com/install.sh | bash`, which puts it in

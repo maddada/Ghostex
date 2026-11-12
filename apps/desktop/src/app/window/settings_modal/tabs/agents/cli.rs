@@ -1272,19 +1272,22 @@ impl AgentsTab {
                     ),
             );
             if let Some(method) = &method {
-                body = body.child(
-                    div()
-                        .w_full()
-                        .min_w_0()
-                        .p(px(8.0))
-                        .rounded(px(4.0))
-                        .bg(hsla(muted_fill(p)))
-                        .font_family(MODAL_MONO_FONT)
-                        .text_size(px(12.0))
-                        .line_height(px(16.0))
-                        .text_color(hsla(p.foreground))
-                        .child(method.command.clone()),
-                );
+                // A CLI that updates itself (Antigravity) has no command to show, only why.
+                if !method.command.is_empty() {
+                    body = body.child(
+                        div()
+                            .w_full()
+                            .min_w_0()
+                            .p(px(8.0))
+                            .rounded(px(4.0))
+                            .bg(hsla(muted_fill(p)))
+                            .font_family(MODAL_MONO_FONT)
+                            .text_size(px(12.0))
+                            .line_height(px(16.0))
+                            .text_color(hsla(p.foreground))
+                            .child(method.command.clone()),
+                    );
+                }
                 if let Some(reason) = &method.unavailable_reason {
                     body = body.child(small(reason.clone(), muted));
                 } else if let Some(plan) = &method.plan {

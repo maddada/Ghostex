@@ -35,10 +35,7 @@
     "native": {
       "install": "curl -fsSL https://claude.ai/install.sh | bash",
       "update": "claude update",
-      "windowsInstall": "irm https://claude.ai/install.ps1 | iex",
-      "requires": {
-        "windows": ["git"]
-      }
+      "windowsInstall": "irm https://claude.ai/install.ps1 | iex"
     },
     "wingetId": "Anthropic.ClaudeCode",
     "miseTool": "claude",
@@ -74,14 +71,24 @@
     "npmPackage": "@earendil-works/pi-coding-agent",
     "npmFlags": ["--ignore-scripts"],
     "miseTool": "pi",
-    "selfUpdate": "pi update self"
+    "native": {
+      "install": "curl -fsSL https://pi.dev/install.sh | sh",
+      "update": "pi update",
+      "windowsInstall": "irm https://pi.dev/install.ps1 | iex",
+      "needsNpm": true,
+      "pathMarkers": ["/.pi/agent/"]
+    },
+    "installDirs": {
+      "windows": ["~/.pi/agent/bin"],
+      "unix": ["~/.pi/agent/bin", "~/.local/bin"]
+    }
   },
   {
     "agentId": "opencode",
     "binary": "opencode",
     "docsUrl": "https://opencode.ai/v2/docs",
     "npmPackage": "@opencode/cli",
-    "brewFormula": "opencode",
+    "brewFormula": "anomalyco/tap/opencode-v2",
     "native": {
       "install": "curl -fsSL https://opencode.ai/v2/install | bash",
       "update": "opencode upgrade",
@@ -155,7 +162,8 @@
     "docsUrl": "https://antigravity.google/docs/cli/install/",
     "native": {
       "install": "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-      "windowsInstall": "irm https://antigravity.google/cli/install.ps1 | iex"
+      "windowsInstall": "irm https://antigravity.google/cli/install.ps1 | iex",
+      "updatesItself": true
     },
     "miseTool": "agy",
     "latestVersion": {
@@ -344,9 +352,9 @@
       { "package": "@deepseek-ai/dsh", "pinNpmLatest": true },
       { "package": "pnpm", "unlessCommand": "pnpm" }
     ],
-    "packageManagers": [],
+    "packageManagers": ["npm"],
     "miseTool": "npm:@deepseek-harness-tui/dsh-tui",
-    "miseThenRun": "dsh-tui update",
+    "thenRun": "dsh-tui update",
     "selfUpdate": "dsh-tui update"
   }
 ]
