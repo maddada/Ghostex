@@ -14,7 +14,8 @@ Environment:
     GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png>                  (any preview, built with
         --features modal-demo-snapshot: draw offscreen to <png> and quit;
         GHOSTEX_NATIVE_MODAL_DEMO_HOVER=<x>,<y> points at that spot first, for a tooltip;
-        GHOSTEX_NATIVE_MODAL_DEMO_CLICKS=<x>,<y>;<x>,<y> clicks each spot in turn, for a click-through)
+        GHOSTEX_NATIVE_MODAL_DEMO_CLICKS=<x>,<y>;<x>,<y> clicks each spot in turn, for a click-through;
+        GHOSTEX_NATIVE_MODAL_DEMO_KEYS=<key>,<key> then presses each key, for a typing check)
     GHOSTEX_EXPORT_MODAL_DEMO_MODE=handoff|export             (Handoff / Export only)
     GHOSTEX_EXPORT_MODAL_DEMO_PREFS=<file>                    (Handoff / Export's saved choices)
 Hosts simulate the daemon: a primary action answers after one second with a
@@ -466,6 +467,41 @@ fn snapshot_after_wait(window: WindowHandle<Root>, path: String, cx: &mut App) {
                         modifiers,
                         click_count: 1,
                     }),
+                    cx,
+                );
+                window.refresh();
+            });
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(1000))
+                .await;
+        }
+        // GHOSTEX_NATIVE_MODAL_DEMO_KEYS=<key>,<key>…: press each key in turn after the clicks (a
+        // letter types itself; `escape`, `enter` and the like are named), for a typing check.
+        let keys: Vec<String> = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_KEYS")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+            .map(str::to_string)
+            .collect();
+        for key in keys {
+            let key_char = (key.chars().count() == 1).then(|| key.clone());
+            let keystroke = gpui::Keystroke {
+                modifiers: gpui::Modifiers::default(),
+                key,
+                key_char,
+            };
+            let _ = cx.update_window(window.into(), |_, window, cx| {
+                window.dispatch_event(
+                    gpui::PlatformInput::KeyDown(gpui::KeyDownEvent {
+                        keystroke: keystroke.clone(),
+                        is_held: false,
+                        prefer_character_input: false,
+                    }),
+                    cx,
+                );
+                window.dispatch_event(
+                    gpui::PlatformInput::KeyUp(gpui::KeyUpEvent { keystroke }),
                     cx,
                 );
                 window.refresh();

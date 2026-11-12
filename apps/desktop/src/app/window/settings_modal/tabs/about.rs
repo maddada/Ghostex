@@ -76,14 +76,15 @@ impl AboutTab {
     }
 
     /// The preview binary's page state (`preview_state`): `about-reset-confirm` opens the
-    /// confirmation.
-    fn apply_preview_state(&mut self, cx: &mut Context<Self>) {
+    /// confirmation, focused as the button leaves it.
+    fn apply_preview_state(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.preview_applied {
             return;
         }
         self.preview_applied = true;
         if self.store.read(cx).request().preview_state.as_deref() == Some("about-reset-confirm") {
             self.confirming_reset = true;
+            self.confirm_focus.focus(window, cx);
         }
     }
 
@@ -172,7 +173,7 @@ impl SettingsPage for AboutTab {
 
 impl Render for AboutTab {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.apply_preview_state(cx);
+        self.apply_preview_state(window, cx);
         let (p, search, matching) = {
             let store = self.store.read(cx);
             let search = store.tab_search(SettingsTabId::About);

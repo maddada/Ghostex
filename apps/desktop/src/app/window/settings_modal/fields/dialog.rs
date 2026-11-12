@@ -137,6 +137,7 @@ pub(crate) fn settings_dialog<V: 'static>(
 ) -> AnyElement {
     let on_dismiss = Rc::new(on_dismiss);
     let key_dismiss = on_dismiss.clone();
+    let key_focus = focus.cloned();
     let mouse_dismiss = on_dismiss.clone();
     let title_line = h_flex()
         .w_full()
@@ -183,6 +184,16 @@ pub(crate) fn settings_dialog<V: 'static>(
             if event.keystroke.key == "escape" {
                 cx.stop_propagation();
                 key_dismiss(page, window, cx);
+                return;
+            }
+            // A key typed on the dialog itself stays here instead of reaching the Settings window,
+            // which would type it into the search behind the dialog (as dialog_sheet.rs does).
+            // A text field inside the dialog holds its own focus, so its keys still reach it.
+            if key_focus
+                .as_ref()
+                .is_some_and(|focus| focus.is_focused(window))
+            {
+                cx.stop_propagation();
             }
         }))
         .on_mouse_down_out(cx.listener(move |page, _: &MouseDownEvent, window, cx| {
