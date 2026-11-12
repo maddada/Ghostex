@@ -90,15 +90,26 @@ const DEFINITIONS: &[Definition] = &[
     },
 ];
 
-/// Actions the composer's own toolbar already offers, so the menu does not repeat them.
+/// Actions the composer's own toolbar already offers, so the menu does not repeat them, and the
+/// ones the More actions menu dropped (below).
+///
+/// CDXC:SessionChat 2026-11-12 DECISION:
+/// User, shortening the chat's More actions menu on the phone and the computer (layout A of the
+/// "phone chat menu cleanup" page, then Q2725 "Which rows should go?"): Close After Done and
+/// Handoff / Export leave the menu. Both stay where else they are (the sidebar's and the sessions
+/// list's session menu, their hotkeys, and the model menu's handoff to another agent), so they are
+/// still `DEFINITIONS` for `is_host_action`.
 const COMPOSER_MENU_EXCLUDED: &[&str] = &[
     "attachPath",
     "promptEditor",
     "stashPrompt",
     "stashedPrompts",
+    "closeAfterDone",
+    "exportTranscript",
 ];
 
-/// Actions that act on the agent rather than on the session row.
+/// Actions that act on the agent rather than on the session row. The More actions menus (desktop
+/// `actions.rs`, the phone's `menus.ts`) put every host action under their Agent submenu, these first.
 const AGENT_ACTIONS: &[&str] = &["fork", "fullReload", "rename", "sleep", "switchAccount"];
 
 /// The rows the document's `hostActions` carries.

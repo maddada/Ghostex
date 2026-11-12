@@ -1460,7 +1460,7 @@ is saved in ZCode's own session store once its session row exists (after the
 first prompt), and ZCode's automatic naming will not replace it. Before that,
 the rename is saved only in Ghostex and ZCode's later automatic naming may
 replace it.
-Fork (a session's right-click menu, or More actions in its chat) opens the new
+Fork (a session's right-click menu, or More actions > Agent in its chat) opens the new
 session beside the original and switches to it. It starts as
 `Fork: <original name>` and saves that name through the agent's own rename
 command so it survives reopening the conversation.
@@ -1599,7 +1599,7 @@ when you open it.
   on the same computer; sleeping sessions are excluded. Ghostex waits until the
   selected agent has remained idle for 10 seconds and restarts that wait if it
   resumes work. Close After Done closes a pane once its command exits.
-- Handoff / Export (the chat's ⋯ menu, a session's right-click menu, or picking
+- Handoff / Export (a session's right-click menu, or picking
   another agent's model in the model picker) writes the conversation to a
   Markdown file and offers two choices. **Handoff to an agent** starts a new
   session. Its chat box starts with a line saying which session and project it
@@ -1725,7 +1725,7 @@ home skills folders (Codex, Pi, Cursor, Gemini CLI and GitHub Copilot also read
 Codex, `/skill:skill-name` for Pi and `@skill-name` for OpenCode. A skill name
 you type yourself (`/skill-name` or `$skill-name`, without picking it) becomes
 the same pill when you send, as long as the list has that skill.
-Skills, second from the bottom of the chat's More actions menu and of the ⋯ menu
+Skills, under More in the chat's More actions menu and in the ⋯ menu
 under a terminal view (on the computer and the phone), lists the Ghostex skills
 the session's agent has installed: in the chat a skill goes into the chat box as
 that pill, and in the terminal it is typed into the agent's input; neither sends
@@ -1858,7 +1858,7 @@ drive or walk. It is experimental and off by default: switch on Read aloud in
 Settings > Extensions > Experimental. On the computer, hover an
 agent's final reply and press Read aloud (the speaker, last before the time); on
 the reply being read it becomes Stop reading. Turn on Auto-read in the chat's
-More actions (⋯) menu to hear each finished reply of the chat you are looking
+More actions (⋯) menu, under View, to hear each finished reply of the chat you are looking
 at; while something is read, the same menu has Stop reading. Only the agent's
 final reply of each turn is read, never your messages, tool calls or thinking.
 Code blocks and tables are skipped with a short note, links are read by their
@@ -2392,8 +2392,8 @@ also returns the selected text when the message was never accepted, keeping
 anything already in the composer (`ghostex interrupt-session-chat <session>`).
 To stop the agent and send a new message at once, press Ctrl+Enter in the chat box
 (on every platform, the same key Claude Code uses in the terminal), or right-click
-Send and choose Interrupt & Send; on the phone, choose Interrupt & Send in More
-actions. It is offered while the agent is working; Claude Code stops its turn and
+Send and choose Interrupt & Send; on the phone, hold Send and choose Interrupt & Send
+(the same menu has Compact & Send). It is offered while the agent is working; Claude Code stops its turn and
 takes the message the way its own Ctrl+Enter does, and other agents are stopped as
 with Escape before the message is sent. While the agent is idle, Ctrl+Enter just sends.
 Codex rewind continues in a new conversation before the selected prompt and
@@ -2776,7 +2776,7 @@ Pick Summary under More actions > View, where its row shows the
 Toggle Summary Mode shortcut (Option+Ctrl+S on macOS, Ctrl+Alt+Shift+S on Windows
 and Linux), which switches it from anywhere in that chat and can be changed in
 Settings > Hotkeys.
-Stash prompt is in More actions, second from the bottom: it stashes what is in
+Stash prompt is in More actions > More: it stashes what is in
 the chat box, or, with an empty chat box, opens your stashed prompts; the row
 shows how many are stashed. While this chat has stashed prompts, a Stashed pill
 with their number sits in the pill strip along the chat box's top edge, after
@@ -2791,10 +2791,10 @@ maximizes the chat box with your text in it, and pressing it again restores it.
 As space gets tighter, toolbar buttons move into More actions one at a time:
 Session note, Attach, Maximize, then Terminal View. The microphone never moves:
 it always stays right next to Send.
-If the context ring still does not fit beside the model, it moves into Model
-settings at the top of More actions; the model pill shortens instead of moving.
+If the context ring still does not fit beside the model, it moves into More
+actions > More as Context window; the model pill shortens instead of moving.
 Controls return as space opens up; More actions, Dictate and Send or Stop stay visible.
-On the phone, More actions > Stash prompt with an empty chat box opens
+On the phone, More actions > More > Stash prompt with an empty chat box opens
 Saved prompts for this project: tap one to put it in the chat box, or delete it
 with its trash button. Tags and editing stay on the computer.
 Click the model pill or the context meter to open it; hovering does not open either control.
@@ -3112,7 +3112,7 @@ that turn and sends "." afterwards so it carries on); `ghostex create-agent <cla
 agent and starts it again on the same conversation, losing what its current turn
 was doing. A coordinator uses them when a thread can't start or gets stuck,
 and tells you what it did.
-In the chat's More actions menu, and in the ⋯ menu of the bar under a Claude or
+In the chat's More actions menu (under Agent), and in the ⋯ menu of the bar under a Claude or
 Codex terminal view, click Switch Account to open its submenu of saved accounts
 with their usage; hovering over it does not open it. Open submenus stay open when you move the
 pointer across other menu items, so you can move into them without rushing.
@@ -3149,7 +3149,7 @@ the session stopped. With Switch accounts, Try first picks which account Ghostex
 tries first. Every Claude and Codex session follows those settings as they are now,
 including sessions that are already open, forks, and restored sessions, so a
 change there applies everywhere at once. To make one session behave differently,
-open More actions > Switch Account and click Customize under Keep going at a
+open More actions > Agent > Switch Account and click Customize under Keep going at a
 limit; Use session defaults returns it to the Settings values.
 When a Claude or Codex turn ends on a lost connection or a server error (such as
 "API Error: Can't reach the API server"), the chat shows it as a card and
@@ -4000,7 +4000,7 @@ version of the Projects features in Cursor and Claude Code.
   dialog (Edit), or by right-clicking a coordinator and choosing **Playbook
   overrides…**. To read the playbook a coordinator follows, right-click it in
   the sidebar (long-press on the phone) and choose **View playbook**, or choose
-  **View playbook** in its chat's More actions menu (…); it is also in
+  **View playbook** in its chat's More actions menu (…), under Agent; it is also in
   **Settings > Chat > Coordinator playbook**, in the New Coordinator dialog and
   in the overrides editor. It shows Ghostex's playbook with the reply format
   you chose, read-only, then your overrides in their own box marked as yours,
@@ -6581,7 +6581,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   conversation, such as what to do next when you come back to it. Then
   right-click a session and choose **Note** (or use its hover button, or
   Option+Cmd+N on macOS for the focused session), or pick **Session note** in the chat's
-  or the terminal's More actions; a session with a note shows a small dot on
+  More actions (under Agent) or the terminal's More actions; a session with a note shows a small dot on
   its card, the note in its tooltip and a "1" beside Session note. The note
   belongs to the conversation, so it is still there after you close the
   session and resume it, and the phone app shows and edits the same notes.
