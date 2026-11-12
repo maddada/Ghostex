@@ -35,6 +35,8 @@ pub(crate) enum ZmxCheckedSend {
     Refused(String),
     /// The check passed and the terminal did not take the bytes.
     NotTaken(String),
+    /// The session's daemon could not be reached at all: nothing was read or written.
+    Unreachable(String),
 }
 
 /// Reads the session's screen (`vt` keeps its styles), hands it to `check` (`None` when it could not
@@ -64,14 +66,8 @@ pub(crate) fn send_after_screen_check(
         ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS,
     ) {
         Ok(stream) => stream,
-        Err(error) => {
-            // No daemon to read from is no daemon to write to either; the check still decides
-            // whether an unreadable screen may be written to, for the error it reports.
-            return Ok(match check(None) {
-                Err(reason) => ZmxCheckedSend::Refused(reason),
-                Ok(()) => ZmxCheckedSend::NotTaken(error),
-            });
-        }
+        // No daemon to read from is no daemon to write to either.
+        Err(error) => return Ok(ZmxCheckedSend::Unreachable(error)),
     };
     let capture = read_zmx_screen_capture_reply(&mut stream, format);
     let screen = capture
@@ -128,7 +124,12 @@ pub(crate) fn send_after_screen_check(
     check: impl FnOnce(Option<&str>) -> Result<(), String>,
 ) -> Result<ZmxCheckedSend, String> {
     let capture = if vt {
+        // A styled read is cut at the stdout cap long before a plain one; a cut read is read
+        // again as plain text, which the checks also understand (GitHub #555 review).
         super::read_zmx_session_screen_capture_vt(zmx_name)
+            .ok()
+            .filter(|capture| !capture.truncated)
+            .map_or_else(|| super::read_zmx_session_screen_capture(zmx_name), Ok)
     } else {
         super::read_zmx_session_screen_capture(zmx_name)
     };

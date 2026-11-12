@@ -17,6 +17,16 @@ pub enum InputGuard {
 /// kept as a queued message and a queued row is put back, both sent once the prompt is answered.
 pub(crate) const SESSION_CHAT_PROMPT_APPEARED: &str = "The agent asked something in its terminal just as your message was going out, so nothing was typed into it. Your message goes out once that is answered.";
 
+/// The refusal for a screen that could not be read, which is no prompt.
+const SCREEN_UNREADABLE: &str = "The agent's screen could not be read before typing.";
+
+/// What a sender is told when its message waits for a readable screen.
+const SCREEN_UNREADABLE_HELD: &str =
+    "The agent's screen could not be read, so nothing was typed yet. Ghostex tries again shortly.";
+
+/// What a sender is told when the agent's terminal could not be reached at all.
+const TERMINAL_UNREACHABLE: &str = "The agent's terminal could not be reached, so nothing was typed. Open Terminal view to check it.";
+
 /// Whether a send's error is the guard refusing to type into a prompt that appeared under it.
 pub(crate) fn refused_for_prompt(error: &crate::domain::DomainStateError) -> bool {
     error.code == "composerNotReady" && error.message == SESSION_CHAT_PROMPT_APPEARED
@@ -53,10 +63,20 @@ pub(crate) fn guarded_write_refusal(
     screen: Option<&str>,
 ) -> Result<(), String> {
     let reads_box = send_reads_input_box(agent);
+    // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: refusing every write on a screen that
+    // could not be read whole held Claude's messages forever on Windows, whose styled read is cut
+    // at 256 KB, and named a gone daemon as "the agent asked something". An unreadable screen is
+    // written to, as the input-box wait already allows it, except for the agents whose sends need
+    // positive evidence of the input box (Grok, Codex, ZCode, Empryo), which wait for a readable
+    // one under their own reason. A cut styled read is read again as plain text first
+    // (`send_after_screen_check`), and an unreachable daemon is a terminal error.
     let Some(screen) = screen else {
-        return match reads_box {
-            Some(_) => Err("The agent's screen could not be read before typing.".to_string()),
-            None => Ok(()),
+        return if crate::session_chat_composer::SessionChatComposerReadiness::default()
+            .blocks_message_for(agent)
+        {
+            Err(SCREEN_UNREADABLE.to_string())
+        } else {
+            Ok(())
         };
     };
     let plain = crate::session_chat_options::strip_ansi_sgr(screen);
@@ -229,6 +249,15 @@ pub(crate) async fn write_session_chat_payload_guarded(
             &reason,
             screen.as_deref(),
         )),
+        Ok((Ok(crate::zmx::ZmxCheckedSend::Unreachable(error)), _)) => {
+            eprintln!(
+                "[gxserver] chat input for {project_id}/{session_id} found no terminal ({error})"
+            );
+            Err(SessionChatSendError::new(
+                SessionChatSendFailure::Write,
+                TERMINAL_UNREACHABLE.to_string(),
+            ))
+        }
         Ok((Ok(crate::zmx::ZmxCheckedSend::NotTaken(error)), _)) => {
             eprintln!("[gxserver] chat input for {project_id}/{session_id} refused ({error})");
             Err(SessionChatSendError::new(
@@ -268,7 +297,12 @@ fn prompt_appeared(
     );
     SessionChatSendError::new(
         SessionChatSendFailure::ComposerNotReady,
-        SESSION_CHAT_PROMPT_APPEARED.to_string(),
+        if reason == SCREEN_UNREADABLE {
+            SCREEN_UNREADABLE_HELD
+        } else {
+            SESSION_CHAT_PROMPT_APPEARED
+        }
+        .to_string(),
     )
 }
 
