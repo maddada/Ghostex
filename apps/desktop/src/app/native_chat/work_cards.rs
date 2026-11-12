@@ -64,11 +64,11 @@ pub(super) fn pill_widths(pills: &[Value], p: &ChatAppearance, cx: &gpui::App) -
     let full: f32 = pills
         .iter()
         .map(|pill| {
-            PILL_PAD * 2.0 + PILL_DOT + 4.0 + dock_text_width(&text(pill, "id"), 12.0, p, cx) + 2.0
+            PILL_PAD * 2.0 + PILL_DOT + 4.0 + dock_text_width(&text(pill, "id"), PROSE_SIZE, p, cx) + 2.0
         })
         .sum();
     let dots = (PILL_PAD * 2.0 + PILL_DOT + 2.0) * pills.len() as f32;
-    let plus = PILL_PAD * 2.0 + dock_text_width(&format!("+{}", pills.len()), 12.0, p, cx) + 2.0;
+    let plus = PILL_PAD * 2.0 + dock_text_width(&format!("+{}", pills.len()), PROSE_SIZE, p, cx) + 2.0;
     (full + gaps, dots + gaps, plus + 6.0)
 }
 
@@ -158,7 +158,7 @@ const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 pub(super) fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
-    super::fonts::label_width(label, &p.font, gpui::FontWeight::MEDIUM, size * p.scale, cx)
+    super::fonts::label_width(label, &p.font, gpui::FontWeight::NORMAL, size * p.scale, cx)
         / p.scale
 }
 
@@ -171,7 +171,7 @@ pub(super) fn dock_button_width(
     p: &ChatAppearance,
     cx: &gpui::App,
 ) -> f32 {
-    dock_text_width(label, 13.0, p, cx)
+    dock_text_width(label, PROSE_SIZE, p, cx)
         + 24.0
         + if icon { 20.0 } else { 0.0 }
         + if mark { 16.0 } else { 0.0 }
@@ -622,9 +622,9 @@ impl NativeChatView {
             .iter()
             .map(|(group, count)| {
                 14.0 + 5.0
-                    + dock_text_width(&count.to_string(), 13.0, p, cx)
+                    + dock_text_width(&count.to_string(), PROSE_SIZE, p, cx)
                     + 4.0
-                    + dock_text_width(name_of(group, *count), 13.0, p, cx)
+                    + dock_text_width(name_of(group, *count), PROSE_SIZE, p, cx)
             })
             .sum::<f32>()
             + 12.0 * counts.len().saturating_sub(1) as f32;
@@ -638,7 +638,7 @@ impl NativeChatView {
         // separate bar like u show here". So it is always on this bar while the chat has a dock.
         let status_card = self.dock_status_card();
         let status_width = status_card.as_ref().map_or(0.0, |card| {
-            24.0 + dock_text_width(card["label"].as_str().unwrap_or_default(), 13.0, p, cx) + 12.0
+            24.0 + dock_text_width(card["label"].as_str().unwrap_or_default(), PROSE_SIZE, p, cx) + 12.0
         });
         let named = named_width + status_width <= room;
         let marks: Vec<AnyElement> = counts
@@ -671,7 +671,6 @@ impl NativeChatView {
                     )
                     .child(
                         div()
-                            .font_weight(FontWeight::MEDIUM)
                             .text_color(p.foreground)
                             .font_features(gpui::FontFeatures(vec![("tnum".into(), 1)].into()))
                             .child(count.to_string()),
@@ -692,7 +691,7 @@ impl NativeChatView {
             .gap(px(6.0 * s))
             .pl(px(12.0 * s))
             .pr(px(5.0 * s))
-            .text_size(px(13.0 * s))
+            .text_size(px(PROSE_SIZE * s))
             .line_height(px(19.0 * s))
             .whitespace_nowrap()
             .text_color(p.card_muted)
@@ -1225,8 +1224,8 @@ impl NativeChatView {
                             .items_center()
                             .gap_x(px(6.0 * s))
                             .overflow_hidden()
-                            .text_size(px(12.5 * s))
-                            .line_height(px(18.0 * s))
+                            .text_size(px(PROSE_SIZE * s))
+                            .line_height(px(20.0 * s))
                             .children(parts),
                     );
                 }
@@ -1548,8 +1547,8 @@ impl NativeChatView {
                 .border_1()
                 .border_color(p.foreground.opacity(0.10))
                 .bg(p.foreground.opacity(0.04))
-                .text_size(px(12.0 * s))
-                .line_height(px(16.0 * s))
+                .text_size(px(PROSE_SIZE * s))
+                .line_height(px(18.0 * s))
                 .whitespace_nowrap()
                 .text_color(p.card_muted)
                 .chat_cursor_pointer()

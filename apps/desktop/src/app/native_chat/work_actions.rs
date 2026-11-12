@@ -11,7 +11,10 @@
 //! look different between the 2 now". One component for each, so the places cannot drift apart
 //! again; the fills are the neutral glass-safe ones (no black on glass).
 
-use super::{appearance::ChatAppearance, state::NativeChatView, tone_card::ToneButton};
+use super::{
+    appearance::ChatAppearance, chat_text_look::PROSE_SIZE, state::NativeChatView,
+    tone_card::ToneButton,
+};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -44,7 +47,7 @@ fn answer_menu_rows(answers: &[Value]) -> Vec<Value> {
 /// A closed card's answer button's width (unscaled), as `work_compact_answers` draws it: its
 /// label, 8px sides and border, then its check, reply arrow, star or Draft (`mark`).
 fn compact_answer_width(label: &str, mark: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
-    (super::work_cards::dock_text_width(label, 12.5, p, cx) + 18.0 + mark).max(34.0)
+    (super::work_cards::dock_text_width(label, PROSE_SIZE, p, cx) + 18.0 + mark).max(34.0)
 }
 
 /// An icon button's box, and the icon in it (unscaled).
@@ -66,6 +69,31 @@ fn draft_sign(p: &ChatAppearance) -> gpui::Div {
 }
 
 impl NativeChatView {
+    /// The dock's answer button: `tone_button` at the dock's one text size (`PROSE_SIZE`, the row
+    /// titles') in regular weight, not the ask cards' 13 medium.
+    ///
+    /// CDXC:Coordinators 2026-11-12 DECISION:
+    /// User, of the phone's dock, which mixed sizes (header counts, row titles, answer buttons,
+    /// ages): "ONE font size for all text in the dock", the secondary text (ages, "(2 questions)",
+    /// "need you", descriptions) a little dimmer than the primary, the button labels at normal or
+    /// medium weight, not bold. The desktop dock had the same mix, so it follows.
+    /// SEE-ALSO: apps/mobile/app/src/chat/native/cards/workItemParts.tsx (`buttonLabel`).
+    #[allow(clippy::too_many_arguments)]
+    fn dock_tone_button(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        label: &str,
+        icon: Option<&'static str>,
+        kind: ToneButton,
+        hint: Option<String>,
+        disabled: bool,
+        p: &ChatAppearance,
+    ) -> gpui::Stateful<gpui::Div> {
+        self.tone_button(id, label, icon, kind, hint, disabled, p)
+            .text_size(px(PROSE_SIZE * p.scale))
+            .font_weight(gpui::FontWeight::NORMAL)
+    }
+
     /// An ask's answers, the dock's look everywhere: one filled button each, the recommended one
     /// ending in its star, the one picked here carrying a check. `busy`: an answer is being sent,
     /// so the others wait.
@@ -96,7 +124,7 @@ impl NativeChatView {
                 } else {
                     None
                 };
-                self.tone_button(
+                self.dock_tone_button(
                     gpui::SharedString::from(format!("work-answer:{key}:{index}")),
                     &label,
                     icon,
@@ -162,7 +190,7 @@ impl NativeChatView {
         let s = p.scale;
         let locked = busy || answers.iter().all(|answer| answer["locked"] == true);
         let rows = answer_menu_rows(answers);
-        self.tone_button(
+        self.dock_tone_button(
             gpui::SharedString::from(format!("work-answers-choose:{key}")),
             CHOOSE_ANSWER,
             None,
@@ -270,7 +298,7 @@ impl NativeChatView {
             return None;
         };
         Some(
-            self.tone_button(
+            self.dock_tone_button(
                 gpui::SharedString::from(id),
                 label,
                 Some(icon),
@@ -333,7 +361,7 @@ impl NativeChatView {
                     mark += 13.0;
                 }
                 if reply && !picked && self.has_kept_reply(&answer["reply"]) {
-                    mark += super::work_cards::dock_text_width("Draft", 12.5, p, cx) + 4.0;
+                    mark += super::work_cards::dock_text_width("Draft", PROSE_SIZE, p, cx) + 4.0;
                 }
                 compact_answer_width(&text(answer, "label"), mark, p, cx)
             })
@@ -367,7 +395,7 @@ impl NativeChatView {
                     )))
                     .role(gpui::Role::Button)
                     .aria_label(format!("{CHOOSE_ANSWER}, {} answers", rows.len()))
-                    .h(px(22.0 * s))
+                    .h(px(24.0 * s))
                     .px(px(8.0 * s))
                     .flex_shrink_0()
                     .flex()
@@ -376,7 +404,7 @@ impl NativeChatView {
                     .rounded(px(7.0 * s))
                     .border(px(s))
                     .chat_filled(p.neutral_button_fills(), !rows.is_empty())
-                    .text_size(px(12.5 * s))
+                    .text_size(px(PROSE_SIZE * s))
                     .text_color(p.foreground)
                     .chat_cursor_pointer()
                     .child(div().whitespace_nowrap().child(CHOOSE_ANSWER))
@@ -417,7 +445,7 @@ impl NativeChatView {
                     } else {
                         label.clone()
                     })
-                    .h(px(22.0 * s))
+                    .h(px(24.0 * s))
                     .px(px(8.0 * s))
                     .flex_shrink(1.0)
                     .min_w(px(34.0 * s))
@@ -427,7 +455,7 @@ impl NativeChatView {
                     .rounded(px(7.0 * s))
                     .border(px(s))
                     .chat_filled(p.neutral_button_fills(), !locked)
-                    .text_size(px(12.5 * s))
+                    .text_size(px(PROSE_SIZE * s))
                     .text_color(p.foreground)
                     .when(locked && !picked, |this| this.opacity(0.4))
                     .when(picked, |this| {
