@@ -253,7 +253,8 @@ fn dispatch(argv: &[String]) -> CliResult<i32> {
         println!("{}", usage::command_usage(command_name));
         return Ok(0);
     }
-    run_command(command_name, &args)?;
+    run_command(command_name, &args)
+        .map_err(|error| computers::point_to_session_on_another_computer(&args, error))?;
     Ok(exit_code())
 }
 

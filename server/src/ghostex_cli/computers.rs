@@ -278,6 +278,154 @@ pub(crate) fn args_for_session_on_another_computer(
         })
 }
 
+/// `error` from a verb that named a session ref this computer does not have, with the connected
+/// computer that does have that session and the ref that reaches it. Any other error is returned
+/// as it is.
+///
+/// CDXC:RemoteMachines 2026-11-12 WHY:
+/// A coordinator was handed the Mac's server id with a session's ids for a chat that lives on the user's Windows computer. The ref named this Mac, so `read-session-chat` asked this Mac's gxserver and answered "This chat was closed somewhere else. Pick another one in the sidebar. (The session no longer exists.)", and the coordinator took the session for lost in an app relaunch and set out to restore it, while it was running on Windows the whole time. A ref of a connected computer already goes there (`args_for_session_on_another_computer`); a ref naming this computer, or a computer that is not connected, for a session this computer does not have now says where that session is. Only a failed verb pays for the lookup: one `findSessions` here and one per connected computer.
+pub(crate) fn point_to_session_on_another_computer(args: &[String], error: CliError) -> CliError {
+    let Some(hint) = session_on_another_computer_hint(args) else {
+        return error;
+    };
+    match error {
+        CliError::Rpc { message, response } => CliError::Rpc {
+            message: format!("{message}\n{hint}"),
+            response,
+        },
+        CliError::Connection(message) => CliError::Connection(format!("{message}\n{hint}")),
+        CliError::Other(message) => CliError::Other(format!("{message}\n{hint}")),
+    }
+}
+
+fn session_on_another_computer_hint(args: &[String]) -> Option<String> {
+    let parsed = super::args::parse_args(args);
+    if parsed.flags.contains("computer") || parsed.flags.contains("server") {
+        return None;
+    }
+    // `agents send <ref>` and the like take the ref after a subverb, so any argument that is a ref
+    // counts, not only the one `session_selector_from_args` reads.
+    let reference = args
+        .iter()
+        .map(|arg| arg.trim())
+        .find(|arg| super::rpc::is_gxserver_global_session_ref(arg))?;
+    let local = super::rpc::resolve_local_gxserver_target().ok()?;
+    let this_server_id = super::rpc::local_gxserver_server_id();
+    let computers = connected_computers(&local);
+    let (found, named) = locate_session_elsewhere(
+        reference,
+        this_server_id.as_deref(),
+        &computers,
+        |target, routing_id| {
+            let target = match target {
+                None => local.clone(),
+                Some(server_id) => relay_target(&local, server_id),
+            };
+            request_gxserver_rpc(
+                &target,
+                "/api/findSessions",
+                &json!({ "selector": routing_id }),
+                &Flags::default(),
+            )
+            .ok()
+        },
+    )?;
+    Some(session_elsewhere_text(reference, &named, &found))
+}
+
+/// Which computer `reference` names, in words, and the connected computers that have its session
+/// (with its title) when this computer does not. `find` answers `/api/findSessions` for a
+/// `project:session` selector on this computer (`None`) or a connected one (`Some(server id)`).
+fn locate_session_elsewhere<'a>(
+    reference: &str,
+    this_server_id: Option<&str>,
+    computers: &'a [ConnectedComputer],
+    find: impl Fn(Option<&str>, &str) -> Option<Value>,
+) -> Option<(Vec<(&'a ConnectedComputer, Option<String>)>, String)> {
+    let mut parts = reference.split(':');
+    let (server_id, project_id, session_id) = (parts.next()?, parts.next()?, parts.next()?);
+    // A connected computer's ref already went there, and its own answer stands.
+    if computers
+        .iter()
+        .any(|computer| computer.server_id == server_id)
+    {
+        return None;
+    }
+    let routing_id = format!("{project_id}:{session_id}");
+    // `None`: no answer. `Some(None)`: no such session there. `Some(Some(title))`: it is there.
+    let session_in = |answer: Option<Value>| -> Option<Option<String>> {
+        let answer = answer?;
+        let row = answer
+            .get("sessions")
+            .and_then(Value::as_array)?
+            .iter()
+            .find(|row| {
+                row.get("projectId").and_then(Value::as_str) == Some(project_id)
+                    && row.get("sessionId").and_then(Value::as_str) == Some(session_id)
+            });
+        Some(row.map(|row| {
+            row.get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        }))
+    };
+    // Here it is (or this computer could not say): the verb's own error is the answer.
+    if session_in(find(None, &routing_id)) != Some(None) {
+        return None;
+    }
+    let found: Vec<_> = computers
+        .iter()
+        .filter(|computer| computer.agent_access && computer.waiting.is_none())
+        .filter_map(|computer| {
+            let title = session_in(find(Some(&computer.server_id), &routing_id))??;
+            Some((computer, Some(title).filter(|title| !title.is_empty())))
+        })
+        .collect();
+    if found.is_empty() {
+        return None;
+    }
+    let named = if Some(server_id) == this_server_id {
+        format!("this computer ({server_id})")
+    } else {
+        format!(
+            "{server_id}, which is not a computer connected to this one, so it was looked up here"
+        )
+    };
+    Some((found, named))
+}
+
+fn session_elsewhere_text(
+    reference: &str,
+    named: &str,
+    found: &[(&ConnectedComputer, Option<String>)],
+) -> String {
+    let mut parts = reference.split(':');
+    let (_, project_id, session_id) = (
+        parts.next().unwrap_or_default(),
+        parts.next().unwrap_or_default(),
+        parts.next().unwrap_or_default(),
+    );
+    let places = found
+        .iter()
+        .map(|(computer, title)| {
+            let title = title
+                .as_deref()
+                .map(|title| format!(" (\"{title}\")"))
+                .unwrap_or_default();
+            format!(
+                "{}: {}:{project_id}:{session_id}{title}",
+                computer.name, computer.server_id
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!(
+        "{reference} names {named}, which has no session {project_id}:{session_id}. That session is on {places}. Use that ref, or add --computer <name>."
+    )
+}
+
 /// The session ref `args` name, read the way the verbs read it (for the routing test).
 #[cfg(test)]
 fn named_session(args: &[&str]) -> Option<String> {
@@ -355,6 +503,62 @@ mod tests {
         assert!(error.contains("more than one"), "{error}");
         let error = pick_computer(&[], "omarchy", None).unwrap_err().to_string();
         assert!(error.contains("Settings > Remote"), "{error}");
+    }
+
+    /// `findSessions` answers: Windows (S7a) has P7:G9, this computer (S9l) and Omarchy do not.
+    fn find_on(target: Option<&str>, routing_id: &str) -> Option<Value> {
+        assert_eq!(routing_id, "P7:G9");
+        Some(match target {
+            Some("S7a") => json!({ "sessions": [
+                { "projectId": "P7", "sessionId": "G1", "title": "Other" },
+                { "projectId": "P7", "sessionId": "G9", "title": "Coordinator" },
+            ] }),
+            _ => json!({ "sessions": [] }),
+        })
+    }
+
+    #[test]
+    fn a_ref_naming_this_computer_for_a_session_on_another_says_where_it_is() {
+        let computers = computers();
+        let (found, named) =
+            locate_session_elsewhere("S9l:P7:G9", Some("S9l"), &computers, find_on).unwrap();
+        let text = session_elsewhere_text("S9l:P7:G9", &named, &found);
+        assert_eq!(
+            text,
+            "S9l:P7:G9 names this computer (S9l), which has no session P7:G9. That session is on Windows PC: S7a:P7:G9 (\"Coordinator\"). Use that ref, or add --computer <name>."
+        );
+        // A server id no connected computer has was looked up here too.
+        let (_, named) =
+            locate_session_elsewhere("S1x:P7:G9", Some("S9l"), &computers, find_on).unwrap();
+        assert!(
+            named.starts_with("S1x, which is not a computer connected"),
+            "{named}"
+        );
+    }
+
+    #[test]
+    fn no_hint_when_the_session_is_here_unknown_or_the_ref_went_to_its_computer() {
+        let computers = computers();
+        // A connected computer's ref went there; its own answer stands.
+        assert!(locate_session_elsewhere("S7a:P7:G9", Some("S9l"), &computers, find_on).is_none());
+        // This computer has it, or could not say: the verb's own error is the answer.
+        let here = |_: Option<&str>, _: &str| {
+            Some(json!({ "sessions": [{ "projectId": "P7", "sessionId": "G9" }] }))
+        };
+        assert!(locate_session_elsewhere("S9l:P7:G9", Some("S9l"), &computers, here).is_none());
+        let silent = |_: Option<&str>, _: &str| None;
+        assert!(locate_session_elsewhere("S9l:P7:G9", Some("S9l"), &computers, silent).is_none());
+        // Nowhere at all.
+        let nowhere = |_: Option<&str>, _: &str| Some(json!({ "sessions": [] }));
+        assert!(locate_session_elsewhere("S9l:P7:G9", Some("S9l"), &computers, nowhere).is_none());
+        // A computer whose Agent access is off is not asked.
+        let only_laptop = |target: Option<&str>, _: &str| match target {
+            Some("S2b") => Some(json!({ "sessions": [{ "projectId": "P7", "sessionId": "G9" }] })),
+            _ => Some(json!({ "sessions": [] })),
+        };
+        assert!(
+            locate_session_elsewhere("S9l:P7:G9", Some("S9l"), &computers, only_laptop).is_none()
+        );
     }
 
     #[test]
