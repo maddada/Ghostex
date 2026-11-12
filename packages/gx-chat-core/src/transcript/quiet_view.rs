@@ -348,10 +348,21 @@ fn chosen(state: &ChatState) -> Option<bool> {
     Some(state.transcript_view.quiet_view_override.unwrap_or(default))
 }
 
+/// Whether the chat is in Detailed view, which is Quiet View with every line open.
+///
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// The user answered the chat view modes page, Q2772 "rebuild": Detailed becomes Quiet View with every line open, so switching views only opens or shuts lines. Wherever Quiet View is available (the host sent its settings), a chat in Detailed draws the quiet lines whatever its own Quiet View choice, each starting open (`Inputs::all_open`), over the rows Detailed already projects; a line the reader shuts stays shut. Normal is the chat's Quiet View choice (on by default since Q2771), Summary is unchanged.
+fn detailed(state: &ChatState) -> bool {
+    crate::transcript::view_level::view_level(&state.transcript_view)
+        == crate::transcript::view_level::DETAILED
+}
+
 /// Sets `quiet_view_on` from the settings, the chat's choice and its view, throwing the cached
 /// rows away when that changes how Agent work Quiet projects.
 pub fn sync(state: &mut ChatState) {
-    let on = chosen(state) == Some(true) && !state.transcript_view.summary_mode;
+    let chosen = chosen(state);
+    let on = !state.transcript_view.summary_mode
+        && (chosen == Some(true) || (chosen.is_some() && detailed(state)));
     let view = &mut state.transcript_view;
     if on != view.quiet_view_on {
         view.quiet_view_on = on;
@@ -446,6 +457,7 @@ pub fn document_kept(
                 .transcript_view
                 .quiet_view_settings
                 .is_some_and(|settings| settings.expand_last),
+            all_open: detailed(state),
             approvals: open_approval_anchors(approvals),
             cards: turn_lines(work_cards),
         };
@@ -492,6 +504,8 @@ struct Inputs {
     coordinator: bool,
     working: bool,
     expand_last: bool,
+    /// Detailed view: every line and answers card starts open ([`detailed`]).
+    all_open: bool,
     /// The rows an open relayed approval sits under (`relayedApprovals` `anchorId`).
     approvals: BTreeSet<String>,
     /// The work item lines under replies: (reply id, card key).
@@ -918,7 +932,7 @@ fn stretches<'a>(
         .into_iter()
         .enumerate()
         .map(|(at, (mut line, counts))| {
-            line.open = inputs.expand_last && Some(at) == newest;
+            line.open = inputs.all_open || (inputs.expand_last && Some(at) == newest);
             words(&mut line, counts, inputs, context);
             line
         })
@@ -931,7 +945,7 @@ fn stretches<'a>(
         .into_iter()
         .enumerate()
         .map(|(at, (mut card, _))| {
-            card.open = inputs.expand_last && Some(at) == newest_answers;
+            card.open = inputs.all_open || (inputs.expand_last && Some(at) == newest_answers);
             card
         })
         .collect();
@@ -952,6 +966,7 @@ pub(crate) fn summary_work_lines(
         coordinator,
         working,
         expand_last,
+        all_open: false,
         approvals: BTreeSet::new(),
         cards: Vec::new(),
     };
@@ -1168,6 +1183,7 @@ pub fn closed_rows(
             .transcript_view
             .quiet_view_settings
             .is_some_and(|settings| settings.expand_last),
+        all_open: detailed(state),
         approvals: open_approval_anchors(&approvals),
         cards: Vec::new(),
     };
