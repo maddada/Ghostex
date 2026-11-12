@@ -12,6 +12,7 @@ use serde_json::{json, Map, Value};
 use crate::extras::activity::format_activity_elapsed;
 use crate::extras::agent_tasks::agent_task_panel;
 use crate::extras::session_details::settle::{claude, enabled};
+use crate::extras::session_details::state::is_collapsed;
 use crate::extras::time::parse_iso_millis;
 use crate::menus::context::usage::{format_context_percentage, format_context_tokens};
 use crate::state::{ChatContext, ChatState};
@@ -101,10 +102,7 @@ fn section(id: &str, title: &str, collapsed: &[String], body: Value) -> Value {
     let mut section = Map::new();
     section.insert("id".into(), json!(id));
     section.insert("title".into(), json!(title));
-    section.insert(
-        "collapsed".into(),
-        json!(collapsed.iter().any(|known| known == id)),
-    );
+    section.insert("collapsed".into(), json!(is_collapsed(collapsed, id)));
     if let Value::Object(body) = body {
         section.extend(body);
     }

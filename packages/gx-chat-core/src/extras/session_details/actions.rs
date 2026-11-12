@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use crate::action::{ActionKind, UserAction};
 use crate::effect::{Effect, OpenTarget};
 use crate::extras::session_details::settle;
-use crate::extras::session_details::state::collapsed_key;
+use crate::extras::session_details::state::{collapsed_key, toggle_collapsed};
 use crate::state::ChatState;
 use crate::wire::ChatRpcMethod;
 
@@ -51,7 +51,7 @@ pub fn handle(
                 return Vec::new();
             }
             let collapsed = &mut state.extras.session_details.collapsed;
-            toggle(collapsed, section);
+            toggle_collapsed(collapsed, section);
             let value = (!collapsed.is_empty()).then(|| collapsed.join(","));
             state.core.request_publish();
             vec![Effect::WriteStorage {

@@ -77,6 +77,10 @@ pub(super) fn panel_height(details: &Value, open: &mut dyn FnMut(&str, bool) -> 
         }
         total += CARD_PADDING_Y * 2.0 + HEADER_HEIGHT;
         let id = section["id"].as_str().unwrap_or_default();
+        // Context's usage line and bar stay under its title, folded or not.
+        if id == "context" {
+            total += SUMMARY_HEIGHT + BAR_HEIGHT;
+        }
         let fold = open(&card_key(id), section["collapsed"] != true);
         if fold <= 0.0 {
             continue;
@@ -96,9 +100,7 @@ pub(super) fn panel_height(details: &Value, open: &mut dyn FnMut(&str, bool) -> 
                     } else {
                         0.0
                     };
-                    SUMMARY_HEIGHT
-                        + BAR_HEIGHT
-                        + (len(section, "rows") + len(section, "deferred")) as f32 * ROW_HEIGHT
+                    (len(section, "rows") + len(section, "deferred")) as f32 * ROW_HEIGHT
                         + messages * ROW_HEIGHT
                         + status
                 }
@@ -219,6 +221,71 @@ fn skeleton_rows(id: &str, section: &Value, p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
+/// CDXC:SessionDetails 2026-11-12 DECISION:
+/// User: the Context card opens folded and, folded, still shows its usage at a glance. Its usage
+/// line (percentage and tokens) and the overall usage bar sit under the title outside the fold;
+/// the fold holds the breakdown. "Main bar" is that overall bar, the only bar the card draws.
+fn context_summary(section: &Value, details: &Value, p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let mut column = div().flex().flex_col().min_w_0();
+    let reading = section["percentLabel"].is_null() && details["loading"] == true;
+    let percent = section["percentLabel"]
+        .as_str()
+        .unwrap_or("No usage reported yet")
+        .to_string();
+    column = column.child(
+        div()
+            .flex()
+            .items_center()
+            .h(px(SUMMARY_HEIGHT * s))
+            .gap(px(6.0 * s))
+            .map(|line| {
+                if reading {
+                    return line.child(skeleton_bar(0.4, p));
+                }
+                line.child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(p.foreground)
+                        .child(percent),
+                )
+            })
+            .when_some(section["tokensLabel"].as_str(), |line, tokens| {
+                line.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.card_muted)
+                        .child(tokens.to_string()),
+                )
+            }),
+    );
+    let mut bar = div()
+        .flex()
+        .w_full()
+        .h(px(5.0 * s))
+        .rounded(px(3.0 * s))
+        .overflow_hidden()
+        .bg(p.border);
+    for segment in section["segments"].as_array().into_iter().flatten() {
+        let fraction = segment["fraction"].as_f64().unwrap_or(0.0) as f32;
+        if fraction <= 0.0 {
+            continue;
+        }
+        bar = bar.child(
+            div()
+                .h_full()
+                .w(gpui::relative(fraction))
+                .bg(swatch(segment["color"].as_str().unwrap_or_default(), p)),
+        );
+    }
+    column = column.child(div().h(px(BAR_HEIGHT * s)).flex().items_center().child(bar));
+    column.into_any_element()
+}
+
 impl NativeChatView {
     /// Every card, top to bottom.
     pub(super) fn session_details_cards(
@@ -263,11 +330,12 @@ impl NativeChatView {
         let motion = self.disclosure_frame(&key, !collapsed, cx);
         let header = self.card_header(section, !collapsed, motion, p, cx);
         let loading = section["loading"] == true;
+        let summary = (id == "context").then(|| context_summary(section, details, p));
         // The core keeps a folded card's rows, so a closing card has its body to ease away.
         let body = (!collapsed || motion.is_some()).then(|| {
             let body = match id.as_str() {
                 _ if loading => skeleton_rows(&id, section, p),
-                "context" => self.context_body(section, details, p, cx),
+                "context" => self.context_body(section, p, cx),
                 "tasks" => self.tasks_body(section, p, cx),
                 "connectors" => self.connectors_body(section, p, cx),
                 "skills" => self.skills_body(section, p, cx),
@@ -292,6 +360,7 @@ impl NativeChatView {
             .bg(p.card_background)
             .text_size(px(13.0 * s))
             .child(header)
+            .children(summary)
             .children(body)
             .into_any_element()
     }
@@ -611,67 +680,11 @@ impl NativeChatView {
     fn context_body(
         &mut self,
         section: &Value,
-        details: &Value,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
         let mut column = div().flex().flex_col().min_w_0();
-        let reading = section["percentLabel"].is_null() && details["loading"] == true;
-        let percent = section["percentLabel"]
-            .as_str()
-            .unwrap_or("No usage reported yet")
-            .to_string();
-        column = column.child(
-            div()
-                .flex()
-                .items_center()
-                .h(px(SUMMARY_HEIGHT * s))
-                .gap(px(6.0 * s))
-                .map(|line| {
-                    if reading {
-                        return line.child(skeleton_bar(0.4, p));
-                    }
-                    line.child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(p.foreground)
-                            .child(percent),
-                    )
-                })
-                .when_some(section["tokensLabel"].as_str(), |line, tokens| {
-                    line.child(
-                        div()
-                            .flex_shrink_0()
-                            .text_size(px(12.0 * s))
-                            .text_color(p.card_muted)
-                            .child(tokens.to_string()),
-                    )
-                }),
-        );
-        let mut bar = div()
-            .flex()
-            .w_full()
-            .h(px(5.0 * s))
-            .rounded(px(3.0 * s))
-            .overflow_hidden()
-            .bg(p.border);
-        for segment in section["segments"].as_array().into_iter().flatten() {
-            let fraction = segment["fraction"].as_f64().unwrap_or(0.0) as f32;
-            if fraction <= 0.0 {
-                continue;
-            }
-            bar = bar.child(
-                div()
-                    .h_full()
-                    .w(gpui::relative(fraction))
-                    .bg(swatch(segment["color"].as_str().unwrap_or_default(), p)),
-            );
-        }
-        column = column.child(div().h(px(BAR_HEIGHT * s)).flex().items_center().child(bar));
         if section["skeletonRows"].as_u64().unwrap_or(0) > 0 {
             column = column.child(skeleton_rows("context", section, p));
         }
@@ -1303,5 +1316,18 @@ mod tests {
             })
         };
         assert_eq!(tasks(true) - tasks(false), ROW_HEIGHT);
+    }
+
+    #[test]
+    fn a_folded_context_card_keeps_its_usage_line_and_bar() {
+        let context = |collapsed: bool| {
+            let section = json!({"id": "context", "collapsed": collapsed, "rows": [{}, {}]});
+            panel_height(&json!({"sections": [section]}), &mut |_, open| {
+                f32::from(open)
+            })
+        };
+        let card = CARD_PADDING_Y * 2.0 + HEADER_HEIGHT + 4.0;
+        assert_eq!(context(true), card + SUMMARY_HEIGHT + BAR_HEIGHT);
+        assert_eq!(context(false) - context(true), 2.0 * ROW_HEIGHT);
     }
 }
