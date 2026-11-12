@@ -16,6 +16,10 @@ pub(crate) const STATUS_DOT_SIZE: f32 = 8.0;
 /// User: "the icons on the right side are not the same horizontal alignment (not aligned to each other), pls fix". Every status indicator at a session row's right edge sits in a slot of this one width with its dot centred in it, so all kinds (working, attention, question, shell-running, failed) share one vertical centre line; the question dot used to sit in a narrower slot and drew 6px right of the others. A question row that is also working puts the orange dot left of the slot, so the pink dot stays on the line.
 pub(crate) const STATUS_SLOT_WIDTH: f32 = 19.0;
 
+/// CDXC:RemoteMachines 2026-11-12 DECISION:
+/// User: the computer icons must be "always in the same column across rows" (a row with a status dot, one with "4h" and one with "15m" had them at different places). While a row draws its computer's icon (computer_mark.rs), what follows it (the status dot, the last-active age, the question, approval or folded dots) sits in a right-aligned slot at least this wide, which fits the widest usual age ("59m", "23h", "12d") and a status slot, so the icon keeps one distance from the row's right edge. A longer timer still shows whole and pushes the icon left.
+pub(crate) const TRAILING_SLOT_WIDTH: f32 = 28.0;
+
 /// CDXC:SessionStatus 2026-09-21 DECISION:
 /// User: "I feel we have multiple degrees for the orange color status \"working\" in the sidebar pls unify all of them on this new one you picked", so every working dot, count, and badge in the sidebar uses this one orange (the Spaces badge orange, 20% darker than the old 0xf8ad07 so a white digit stays readable on it).
 pub(crate) const WORKING_COLOR: u32 = 0xc68a06;

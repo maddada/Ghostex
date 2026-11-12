@@ -239,6 +239,62 @@ impl GhostexGpuiApp {
             })
             .unwrap_or("")
             .to_owned();
+        let computer_badge = (!buttons_shown)
+            .then(|| self.session_computer_badge(session, appearance))
+            .flatten();
+        let has_computer_badge = computer_badge.is_some();
+        // What follows the computer's icon: the status dot or the last-active age, then a question,
+        // approval or folded dots.
+        let mut trailing: Vec<AnyElement> = Vec::new();
+        if !buttons_shown && folded_dots.is_none() && !question && !approval {
+            trailing.extend(super::status::activity_indicator(
+                &session.activity,
+                session.has_background_work,
+                failed,
+                scale,
+            ));
+        }
+        // CDXC:SessionStatus 2026-09-13 DECISION: User: hide Last Active while the question dot is shown so they do not overlap, including when the session is not working.
+        if !buttons_shown
+            && folded_dots.is_none()
+            && !question
+            && !approval
+            && !failed
+            && (timer.is_some()
+                || (show_time
+                    && session.activity != "working"
+                    && session.activity != "attention"
+                    && !session.has_background_work))
+        {
+            trailing.push(
+                div()
+                    .text_size(px(13.55 * scale))
+                    .text_color(if sleeping {
+                        chrome_color(0x686868, 0x959595)
+                    } else {
+                        chrome_color(0xa6a6a6, 0x424242)
+                    })
+                    .child(time.clone())
+                    .into_any_element(),
+            );
+        }
+        if approval {
+            trailing.push(super::status::approval_indicator(scale));
+        }
+        if question {
+            trailing.push(super::status::question_indicator(
+                &session.activity,
+                scale,
+                super::status::session_row_ring(
+                    appearance,
+                    highlighted,
+                    visible,
+                    question_fill,
+                    hovered,
+                ),
+            ));
+        }
+        trailing.extend(folded_dots);
         // What an assistive client or an e2e run reads after the title: the row's state words, which the pixels convey by colour and glyph.
         let a11y_description = [
             session.lifecycle_state.as_deref().unwrap_or(""),
@@ -296,17 +352,14 @@ impl GhostexGpuiApp {
                 .when(clock_fold, |row| row.children(self.render_unified_crew_count(session, appearance, cx)))
                 .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::worktree_badge(session, appearance)))
-                .when(!buttons_shown, |row| row.children(self.session_computer_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(self.render_voice_call_badge(&session.session_id, appearance)))
                 .when(!buttons_shown, |row| row.children(super::agentbox::agentbox_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
                 .when(!buttons_shown, |row| row.children(super::cloud_box::cloud_box_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
-                .when(!buttons_shown && folded_dots.is_none() && !question && !approval, |row| row.children(super::status::activity_indicator(&session.activity, session.has_background_work, failed, scale)))
-                // CDXC:SessionStatus 2026-09-13 DECISION: User: hide Last Active while the question dot is shown so they do not overlap, including when the session is not working.
-                .when(!buttons_shown && folded_dots.is_none() && !question && !approval && !failed && (timer.is_some() || (show_time && session.activity != "working" && session.activity != "attention" && !session.has_background_work)), |row| row.child(div().text_size(px(13.55 * scale)).text_color(if sleeping { chrome_color(0x686868, 0x959595) } else { chrome_color(0xa6a6a6, 0x424242) }).child(time)))
+                // The computer's icon comes last before the trailing slot, which keeps one width while it
+                // is drawn so the icons line up down the list (CDXC:RemoteMachines 2026-11-12 in status.rs).
+                .when(!buttons_shown, |row| row.children(computer_badge))
                 .when(buttons_shown, |row| row.child(self.render_native_session_hover_strip(session, strip_expanded, strip_toggle, appearance, cx)))
-                .when(approval, |row| row.child(super::status::approval_indicator(scale)))
-                .when(question, |row| row.child(super::status::question_indicator(&session.activity, scale, super::status::session_row_ring(appearance, highlighted, visible, question_fill, hovered))))
-                .children(folded_dots))
+                .when(!trailing.is_empty() || has_computer_badge, |row| row.child(h_flex().flex_shrink_0().justify_end().gap(px(6.0 * scale)).when(has_computer_badge, |slot| slot.min_w(px(super::status::TRAILING_SLOT_WIDTH * scale))).children(trailing))))
                 .children(self.render_native_session_work_chips(session, indent, tooltip_span, appearance, cx))
                 .children(self.render_native_session_link_line(session, indent, tooltip_span, appearance, cx))
                 .when(can_drag && self.native_sidebar.menu.is_none(), |row| row.sidebar_drag_source(dragged, cx))
