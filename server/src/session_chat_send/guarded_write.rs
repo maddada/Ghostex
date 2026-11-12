@@ -10,6 +10,9 @@ pub enum InputGuard {
     InputBox,
     /// The same, with the input box holding this message: before its Return.
     Holds(String),
+    /// The same, with the input box holding this message and nothing else: before clearing a held
+    /// message, so text typed after it is never erased (`box_holds_only`).
+    HoldsOnly(String),
 }
 
 /// Why a send stopped before typing into a prompt that appeared under it (`PromptWaiting`, code
@@ -136,6 +139,13 @@ pub(crate) fn guarded_write_refusal(
             GuardRefusal::InputBox(reason)
         });
     }
+    if let InputGuard::HoldsOnly(text) = guard {
+        if !box_holds_only(reads_box.as_deref(), screen, text) {
+            return Err(GuardRefusal::InputBox(
+                "The input box holds more than the held message.".to_string(),
+            ));
+        }
+    }
     if let InputGuard::Holds(text) = guard {
         let needles = session_chat_paste_needles(text);
         if !needles.is_empty() {
@@ -151,6 +161,35 @@ pub(crate) fn guarded_write_refusal(
         }
     }
     Ok(())
+}
+
+/// Whether the input box on `screen` holds `text` and nothing else.
+///
+/// CDXC:SessionChat 2026-11-12 WHY: GitHub #555 second review: the clear watcher took any box that
+/// showed the message for the held message, so text the user typed right after a refused Return
+/// was erased with it. For an agent whose box Ghostex reads, the box must hold exactly the message
+/// (or only the agent's collapsed paste placeholder for it); for one whose box it cannot read on
+/// its own, the message's own words must be on screen, and no `[paste` text counts for them.
+fn box_holds_only(reads_box: Option<&str>, screen: &str, text: &str) -> bool {
+    let want = normalize_session_chat_screen_text(text);
+    match reads_box {
+        Some(agent) => {
+            let typed =
+                normalize_session_chat_screen_text(&session_chat_input_box_text(agent, screen));
+            typed == want || {
+                let lower = typed.to_lowercase();
+                lower.starts_with("[paste")
+                    && lower.ends_with(']')
+                    && lower.matches('[').count() == 1
+                    && (text.contains('\n') || text.chars().count() > 200)
+            }
+        }
+        None => {
+            let shown = normalize_session_chat_screen_text(screen);
+            let needles = session_chat_paste_needles(text);
+            !needles.is_empty() && needles.iter().all(|needle| shown.contains(needle.as_str()))
+        }
+    }
 }
 
 /// When an approval or question card last arrived by hook, per session.
@@ -406,7 +445,7 @@ pub(crate) fn clear_refused_message_when_prompt_closes(
     let (agent, text) = (agent.map(str::to_string), text.to_string());
     tokio::spawn(async move {
         let deadline = Instant::now() + CLEAR_WATCH_MAX;
-        let holds = InputGuard::Holds(text.clone());
+        let holds = InputGuard::HoldsOnly(text.clone());
         let mut ready_looks = 0;
         while Instant::now() < deadline && owns(&key) {
             tokio::time::sleep(CLEAR_WATCH_POLL).await;
@@ -425,7 +464,7 @@ pub(crate) fn clear_refused_message_when_prompt_closes(
                 ready_looks = 0;
                 continue;
             }
-            // The box is back without the message: it was sent or emptied by someone else.
+            // The box is back without the message alone: it was sent, emptied, or typed into.
             if guarded_write_refusal(agent.as_deref(), &holds, Some(&screen)).is_err() {
                 break;
             }
