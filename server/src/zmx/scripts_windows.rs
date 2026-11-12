@@ -127,6 +127,20 @@ pub(crate) fn build_zmx_screen_capture_command(
 pub(crate) fn build_zmx_grid_command(name: &str, program: &str) -> String {
     simple(program, "grid", name)
 }
+/// `wmx resize <name> <rows> <cols>`: sets the session's console size itself (no client id), the
+/// way `stty rows` sets a pty's on macOS and Linux.
+pub(crate) fn build_zmx_resize_command(name: &str, program: &str, rows: u16, cols: u16) -> String {
+    invocation(
+        program,
+        vec![
+            "resize".into(),
+            name.into(),
+            rows.to_string(),
+            cols.to_string(),
+        ],
+        HashMap::new(),
+    )
+}
 pub(crate) fn build_zmx_send_command(name: &str, program: &str) -> String {
     simple(program, "send", name)
 }

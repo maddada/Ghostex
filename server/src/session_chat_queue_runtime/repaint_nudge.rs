@@ -14,8 +14,8 @@
 //! unreadable, the agent not starting. First after 45 s of an unreadable box (the Ctrl+L at 20 s
 //! had its chance), then at most every two minutes, each logged with its screen
 //! (`sessionChatQueueResizedForRepaint` in session-chat-send-failures.jsonl). The size is put back
-//! only if nobody resized the terminal in between. Not on native Windows, whose wmx sessions have
-//! no pty to resize from here.
+//! only if nobody resized the terminal in between. On native Windows wmx resizes the session's
+//! console (`resize_and_restore` there).
 //! SEE-ALSO: wait_reason.rs (the ladder's thresholds), wiring.rs (runs this after each fresh read).
 
 use std::{
@@ -197,7 +197,60 @@ fn resize_and_restore(zmx_name: &str) -> Result<(u16, u16), String> {
     Ok((original.ws_row, original.ws_col))
 }
 
-#[cfg(not(unix))]
+/// CDXC:SessionChat 2026-11-12 WHY:
+/// On native Windows this step only logged "The resize could not be done: not available on this platform", so a coordinator whose Claude input box could not be read (S8g, 2026-11-12 07:13 to 07:17 UTC) had no repaint at all until the reload at four minutes. wmx owns the session's console, and its `resize` request without a client id sets the console size directly (ConPTY), which Claude Code's Node sees as a terminal resize, as the pty resize does on macOS and Linux. The size comes from wmx's `grid` and is put back only if it is still the smaller one.
+#[cfg(windows)]
+fn resize_and_restore(zmx_name: &str) -> Result<(u16, u16), String> {
+    let program = crate::toolchain::require_bundled_zmx()
+        .map_err(|error| error.to_string())?
+        .executable_path;
+    let size = || -> Result<(u16, u16), String> {
+        let grid = crate::zmx::screen_capture::read_zmx_grid(zmx_name)
+            .ok_or("the session's console size could not be read")?;
+        wmx_grid_size(&grid).ok_or_else(|| "wmx answered no console size".to_string())
+    };
+    let resize = |rows: u16, cols: u16| -> Result<(), String> {
+        let result = crate::zmx::run_zmx_interaction_command(
+            crate::zmx::build_zmx_resize_command(zmx_name, &program, rows, cols),
+            crate::zmx::ZmxCommandOptions::default(),
+        )
+        .map_err(|error| match error {
+            crate::zmx::ZmxEndpointError::DependencyUnavailable(message) => message,
+            crate::zmx::ZmxEndpointError::Domain(error) => error.message,
+        })?;
+        if result.exit_code == 0 {
+            Ok(())
+        } else {
+            Err(format!(
+                "wmx resize exited {}: {}",
+                result.exit_code,
+                result.stderr.trim()
+            ))
+        }
+    };
+    let (rows, cols) = size()?;
+    if rows < 3 {
+        return Err(format!("the console is only {rows} rows tall"));
+    }
+    resize(rows - 1, cols)?;
+    // Long enough for the agent to take the first change as its own resize.
+    std::thread::sleep(Duration::from_millis(250));
+    if size().is_ok_and(|now| now == (rows - 1, cols)) {
+        resize(rows, cols).map_err(|error| format!("the size could not be put back: {error}"))?;
+    }
+    Ok((rows, cols))
+}
+
+/// The console size in wmx's `grid` answer (`display.rs` `snapshot`).
+#[cfg(any(windows, test))]
+fn wmx_grid_size(grid_json: &str) -> Option<(u16, u16)> {
+    let grid: serde_json::Value = serde_json::from_str(grid_json.trim()).ok()?;
+    let rows = u16::try_from(grid.get("rows")?.as_u64()?).ok()?;
+    let cols = u16::try_from(grid.get("cols")?.as_u64()?).ok()?;
+    Some((rows, cols))
+}
+
+#[cfg(not(any(unix, windows)))]
 fn resize_and_restore(_zmx_name: &str) -> Result<(u16, u16), String> {
     Err("not available on this platform".to_string())
 }
@@ -234,6 +287,14 @@ mod tests {
             Some("unknown-agent"),
             &detection("unknown-agent", claude)
         ));
+    }
+
+    #[test]
+    fn the_console_size_is_read_from_wmx_grid() {
+        let grid = r#"{"rows":24,"cols":200,"leader_fd":-1,"resting_rows":50,"resting_cols":200,"chat_claim":true,"clients":[]}"#;
+        assert_eq!(wmx_grid_size(grid), Some((24, 200)));
+        assert_eq!(wmx_grid_size("{}"), None);
+        assert_eq!(wmx_grid_size("not json"), None);
     }
 
     #[test]
