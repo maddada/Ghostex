@@ -10,6 +10,7 @@
 //! `dictation`, `dictation-hex-missing`, `dictation-openai` and `voice-agent` are Settings › Dictation and
 //! Voice Agent (settings_voice.rs).
 //! `page-<id>` opens the rail page with that id (`page-connectors`, `page-tools`).
+//! `about-reset-confirm` is Settings › About with the Reset all settings? confirmation open.
 //! `GHOSTEX_NATIVE_MODAL_DEMO_GLASS=1` previews the frosted palette.
 //! `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_WIDTH=<points>` opens the dialog narrower or wider than its
 //! base 900 (before the app's enlargement), to check a page at another window width.
@@ -307,6 +308,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "terminal" | "pick-color" => json!({ "initialSection": "terminal" }),
         // Settings > Security scrolled to its log (with `{"securityLogsEnabled":true}`).
         "security-log" => json!({ "initialTab": "security", "initialSection": "log" }),
+        // Settings > About with its Reset all settings? confirmation open.
+        "about-reset-confirm" => json!({ "initialTab": "about" }),
         // `page-<id>`: that rail page (`page-connectors`, `page-tools`), for pages with no state of their own.
         state if state.starts_with("page-") => json!({ "initialTab": &state["page-".len()..] }),
         "tags" => {

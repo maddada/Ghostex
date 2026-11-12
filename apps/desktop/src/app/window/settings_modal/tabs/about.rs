@@ -5,16 +5,18 @@
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
 use super::super::fields::{
-    ButtonVariant, FieldStates, SettingsPage, settings_button, settings_icon,
+    ButtonVariant, FieldStates, SettingsDialogSpec, SettingsPage, dialog_footer, settings_button,
+    settings_dialog, settings_icon,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, page_separator, settings_page};
+use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
 use super::super::store::{SettingsStore, post_store_message};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyView, App, AppContext as _, ClickEvent, Context, Entity, FontWeight,
-    InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
+    AnyElement, AnyView, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle,
+    FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, img, px,
 };
 use gpui_component::{h_flex, v_flex};
@@ -55,6 +57,10 @@ pub(crate) fn about_tab_view(store: &Entity<SettingsStore>, cx: &mut App) -> Any
 pub(crate) struct AboutTab {
     store: Entity<SettingsStore>,
     fields: FieldStates,
+    /// The Reset all settings? confirmation is open.
+    confirming_reset: bool,
+    confirm_focus: FocusHandle,
+    preview_applied: bool,
 }
 
 impl AboutTab {
@@ -63,7 +69,82 @@ impl AboutTab {
         Self {
             store,
             fields: FieldStates::default(),
+            confirming_reset: false,
+            confirm_focus: cx.focus_handle(),
+            preview_applied: false,
         }
+    }
+
+    /// The preview binary's page state (`preview_state`): `about-reset-confirm` opens the
+    /// confirmation.
+    fn apply_preview_state(&mut self, cx: &mut Context<Self>) {
+        if self.preview_applied {
+            return;
+        }
+        self.preview_applied = true;
+        if self.store.read(cx).request().preview_state.as_deref() == Some("about-reset-confirm") {
+            self.confirming_reset = true;
+        }
+    }
+
+    fn close_reset_dialog(&mut self, cx: &mut Context<Self>) {
+        self.confirming_reset = false;
+        cx.notify();
+    }
+
+    /// The Reset all settings? confirmation, drawn like Agents' Skip permissions?.
+    fn render_reset_dialog(
+        &mut self,
+        p: &SettingsPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if !self.confirming_reset {
+            return None;
+        }
+        let p = &p.nested_dialog();
+        let cancel = settings_button(
+            p,
+            "settings-reset-to-defaults-cancel",
+            "Cancel",
+            None,
+            ButtonVariant::Outline,
+            false,
+            None,
+            |page: &mut Self, _window, cx| page.close_reset_dialog(cx),
+            cx,
+        );
+        let confirm = settings_button(
+            p,
+            "settings-reset-to-defaults-confirm",
+            "Reset all settings",
+            None,
+            ButtonVariant::DestructiveDialog,
+            false,
+            None,
+            |page: &mut Self, _window, cx| {
+                page.close_reset_dialog(cx);
+                reset_all(page, cx);
+            },
+            cx,
+        );
+        let focus = self.confirm_focus.clone();
+        Some(settings_dialog(
+            p,
+            SettingsDialogSpec::new("settings-reset-to-defaults-dialog", "Reset all settings?")
+                .width(400.0)
+                .spacing(20.0, 16.0)
+                .description(
+                    "Every setting and the app icon go back to their defaults. Your saved remote machines are kept. This can't be undone."
+                        .into_any_element(),
+                ),
+            Vec::new(),
+            Some(dialog_footer(vec![cancel, confirm])),
+            Some(&focus),
+            |page: &mut Self, _window, cx| page.close_reset_dialog(cx),
+            window,
+            cx,
+        ))
     }
 }
 
@@ -90,7 +171,8 @@ impl SettingsPage for AboutTab {
 }
 
 impl Render for AboutTab {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.apply_preview_state(cx);
         let (p, search, matching) = {
             let store = self.store.read(cx);
             let search = store.tab_search(SettingsTabId::About);
@@ -233,10 +315,32 @@ impl Render for AboutTab {
                     ButtonVariant::Outline,
                     false,
                     None,
-                    |page: &mut Self, _window, cx| reset_all(page, cx),
+                    |page: &mut Self, window, cx| {
+                        page.confirming_reset = true;
+                        page.confirm_focus.focus(window, cx);
+                        cx.notify();
+                    },
                     cx,
                 )),
         ));
-        settings_page(&self.store, SettingsTabId::About, &p, blocks, cx)
+        let dialog = self.render_reset_dialog(&p, window, cx);
+        div()
+            .size_full()
+            .child(settings_page(
+                &self.store,
+                SettingsTabId::About,
+                &p,
+                blocks,
+                cx,
+            ))
+            .children(dialog)
+            .into_any_element()
+    }
+}
+
+impl super::HoldsUnsavedInput for AboutTab {
+    /// The Reset all settings? confirmation is open.
+    fn holds_unsaved_input(&self, _cx: &App) -> bool {
+        self.confirming_reset
     }
 }
