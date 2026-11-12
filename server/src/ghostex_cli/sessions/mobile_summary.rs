@@ -216,6 +216,14 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     if settings.get("chiefConfirmNewChat").and_then(Value::as_bool) == Some(false) {
         map.insert("chiefConfirmNewChat".to_string(), json!(false));
     }
+    // CDXC:Spaces 2026-11-12 SEE-ALSO: packages/gx-core/src/sidebar_view/active_projects.rs; the phone's Space row leads with the Active projects star while the computer's switch is on (apps/mobile/app/src/spaces/activeProjects.ts). Sent only when off (the default is on); an older phone ignores it.
+    if settings
+        .get("sidebarActiveProjects")
+        .and_then(Value::as_bool)
+        == Some(false)
+    {
+        map.insert("sidebarActiveProjects".to_string(), json!(false));
+    }
     // Its Parked shelf shows only while session parking is on (the default).
     if settings
         .get("enableSessionParking")

@@ -1067,6 +1067,9 @@ what works and waits there. It is on by default: right-click the star and
 choose Remove Active projects to hide it, and turn it back on with Active
 projects in Settings > Sidebar & Sessions > Spaces (`sidebarActiveProjects`).
 The Go to Space hotkeys count your Spaces, not the star.
+On the phone, a star chip leads the Space row above the Sessions list and lists
+the active projects of every connected computer; long-press it to remove it.
+In the phone's Unified list, pick Active projects in the filter.
 A project added with Add Project (from its button right of Search at the top of
 the sidebar, from the sidebar's menu while the sidebar is too narrow for that
 button, from the "Add Project"
