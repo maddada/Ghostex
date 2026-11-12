@@ -46,6 +46,7 @@ pub fn space_landing_project_ids(core: &Core, inputs: &SidebarInputs, now_ms: u6
             .selected_space_by_section
             .get(&section_key)
             .map(String::as_str),
+        inputs.settings.active_projects,
     );
     let recent = inputs
         .ui

@@ -358,6 +358,9 @@ pub struct SidebarSettings {
     /// The home project (Main Hub's group) shows at the top of every Space
     /// (`chiefShowOnAllSpaces`); off, only at the top of its own Space.
     pub chief_show_on_all_spaces: bool,
+    /// The Spaces row leads with the Active projects star (`sidebarActiveProjects`, on by
+    /// default; `active_projects.rs`).
+    pub active_projects: bool,
     /// Settings › Sidebar's Separate by machine (`sidebarSeparateByMachine`): machine tabs and one
     /// machine's list at a time, as before. Off by default: one list for every machine
     /// (`sidebar_view/merged.rs`).
@@ -404,6 +407,7 @@ impl Default for SidebarSettings {
             unified_project_order: Vec::new(),
             hide_projects_without_sessions: false,
             chief_show_on_all_spaces: false,
+            active_projects: true,
             separate_by_machine: false,
             merge_repository_copies: true,
             worktree_sessions_in_project: true,
@@ -501,6 +505,10 @@ impl SidebarSettings {
             chief_show_on_all_spaces: boolean(
                 "chiefShowOnAllSpaces",
                 defaults.chief_show_on_all_spaces,
+            ),
+            active_projects: boolean(
+                ghostex_settings_catalog::spaces::ACTIVE_PROJECTS_KEY,
+                defaults.active_projects,
             ),
             separate_by_machine: boolean("sidebarSeparateByMachine", defaults.separate_by_machine),
             merge_repository_copies: boolean(

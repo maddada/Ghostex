@@ -8,6 +8,7 @@
 //! cache that keeps all of it up to date from a `ChangeSummary`, and `inputs` and `view` are the
 //! two ends a host talks to.
 
+pub(crate) mod active_projects;
 pub(crate) mod agents;
 mod armed_actions;
 mod assemble;
@@ -61,6 +62,9 @@ mod work;
 pub(crate) mod workspaces;
 mod worktree_fold;
 
+pub use active_projects::{
+    project_list_merges_machines, ACTIVE_RECENT_MS, ACTIVE_SPACE_ID, ACTIVE_SPACE_LABEL,
+};
 pub use armed_actions::{
     armed_actions_by_session, ArmedAction, ARMED_ACTION_CLOSE_AFTER_DONE, ARMED_ACTION_DELAYED_SEND,
 };

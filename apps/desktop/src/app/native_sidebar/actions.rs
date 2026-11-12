@@ -40,6 +40,9 @@ impl GhostexGpuiApp {
                 self.titlebar_notification_bell_bounds.set(Some(bounds));
             }
             self.toggle_gpui_titlebar_notifications_popup(window, cx);
+        } else if action.command["type"] == "removeActiveProjects" {
+            // The Active projects star's menu (active_projects.rs).
+            self.remove_native_active_projects(cx);
         } else if action.command["type"] == "selectSpace" {
             // The More menu's overflowing Spaces switch with the same slide-and-fade as the row.
             if let Some(id) = action.command["spaceId"].as_str() {

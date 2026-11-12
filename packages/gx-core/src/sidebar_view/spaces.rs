@@ -232,6 +232,8 @@ fn sanitize_space_color(value: &str, fallback_index: usize) -> String {
 pub(crate) enum SpaceSelection {
     Space(String),
     Other,
+    /// The Active projects tile (`active_projects.rs`).
+    Active,
 }
 
 impl SpaceSelection {
@@ -239,22 +241,32 @@ impl SpaceSelection {
         match self {
             SpaceSelection::Space(space_id) => space_id,
             SpaceSelection::Other => OTHER_SPACE_ID,
+            SpaceSelection::Active => super::active_projects::ACTIVE_SPACE_ID,
         }
     }
 
     pub(crate) fn is_other(&self) -> bool {
         matches!(self, SpaceSelection::Other)
     }
+
+    pub(crate) fn is_active_projects(&self) -> bool {
+        matches!(self, SpaceSelection::Active)
+    }
 }
 
 /// `resolveSelectedSidebarSpace`: the stored Space when it still exists, else the section's first
-/// Space, else Other.
+/// Space, else Other. Active projects resolves only while `active_projects` (its switch) is on;
+/// off, a stored pick of it falls back like a deleted Space.
 pub(crate) fn resolve_selected_space(
     state: &SpacesState,
     selected_space_id: Option<&str>,
+    active_projects: bool,
 ) -> SpaceSelection {
     if selected_space_id == Some(OTHER_SPACE_ID) {
         return SpaceSelection::Other;
+    }
+    if active_projects && selected_space_id == Some(super::active_projects::ACTIVE_SPACE_ID) {
+        return SpaceSelection::Active;
     }
     if let Some(space_id) = selected_space_id.filter(|id| state.spaces.contains_key(*id)) {
         return SpaceSelection::Space(space_id.to_string());
@@ -295,6 +307,11 @@ pub(crate) fn space_claims_project(
 /// Whether the selected view shows a group. A row whose project cannot be resolved is invisible in
 /// a Space and visible in Other; a user-made session group is asked
 /// with the project it was made in.
+///
+/// Active projects answers yes for every project: which ones its list draws depends on their
+/// sessions, which the list itself decides (assemble.rs). Everywhere else this is asked (a reveal,
+/// a focus remembered, a project placed) the answer keeps Active projects selected, so opening a
+/// session from it never switches Space (CDXC:Spaces 2026-11-12 in active_projects.rs).
 pub(crate) fn selection_shows_project(
     selection: &SpaceSelection,
     state: &SpacesState,
@@ -313,6 +330,7 @@ pub(crate) fn selection_shows_project(
             .ordered()
             .into_iter()
             .any(|space| space_claims_project(space, project_id, collection_id, parent_project_id)),
+        SpaceSelection::Active => true,
     }
 }
 
@@ -347,4 +365,22 @@ pub(crate) fn space_for_group(
         })
         .cloned()
         .unwrap_or_else(|| OTHER_SPACE_ID.to_string())
+}
+
+/// Where a project sorts in Space order: its Space's place in the row, Other after every Space
+/// (Active projects lists its projects in this order, `active_projects.rs`).
+pub(crate) fn space_rank_of_project(
+    state: &SpacesState,
+    project_id: Option<&str>,
+    collection_id: Option<&str>,
+    parent_project_id: Option<&str>,
+) -> usize {
+    let ordered = state.ordered();
+    let Some(project_id) = project_id else {
+        return ordered.len();
+    };
+    ordered
+        .iter()
+        .position(|space| space_claims_project(space, project_id, collection_id, parent_project_id))
+        .unwrap_or(ordered.len())
 }

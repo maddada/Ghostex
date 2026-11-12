@@ -268,15 +268,15 @@ pub use crate::sidebar_view::{
     SpaceSleepScope, SpaceSwitchFocus, SpaceView, SpacesState, SuggestedSessionLink, TagListItem,
     TagListItemKind, TagPresentation, ThreadTally, TreeDropTarget, UnavailableState,
     WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest, WorktreeView,
-    ARMED_ACTION_CLOSE_AFTER_DONE, ARMED_ACTION_DELAYED_SEND, DAEMON_RETRY_INTERVAL_MS,
-    LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED, OTHER_SPACE_ID, RENAME_SHAKE_FRESH_MS,
-    SERVICE_START_FAILED_TITLE, SESSIONS_LOADING_DETAIL, SESSIONS_LOADING_TITLE,
-    SUGGESTED_SHOWN_FIRST, THIS_COMPUTER_NOTICE_STATE, UNTAGGED_TAG_FILTER,
+    ACTIVE_RECENT_MS, ACTIVE_SPACE_ID, ACTIVE_SPACE_LABEL, ARMED_ACTION_CLOSE_AFTER_DONE,
+    ARMED_ACTION_DELAYED_SEND, DAEMON_RETRY_INTERVAL_MS, LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED,
+    OTHER_SPACE_ID, RENAME_SHAKE_FRESH_MS, SERVICE_START_FAILED_TITLE, SESSIONS_LOADING_DETAIL,
+    SESSIONS_LOADING_TITLE, SUGGESTED_SHOWN_FIRST, THIS_COMPUTER_NOTICE_STATE, UNTAGGED_TAG_FILTER,
 };
 pub use crate::sidebar_view::{
     collection_groups, machine_switch_memory, owner_project_group_id, plan_machine_switch_restore,
-    plan_workspace_switch_restore, project_workspace_id, toggle_all_project_ids,
-    window_machine_tabs, window_spaces, window_workspace, WindowWorkspace,
+    plan_workspace_switch_restore, project_list_merges_machines, project_workspace_id,
+    toggle_all_project_ids, window_machine_tabs, window_spaces, window_workspace, WindowWorkspace,
     MACHINE_SESSION_MEMORY_SPACE_ID,
 };
 pub use crate::sidebar_view::{

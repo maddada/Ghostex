@@ -87,6 +87,7 @@ How to use this file:
 ### Spaces
 
 - **Spaces** `sidebarSpacesEnabled` (boolean, default false): Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping. Off by default; your saved Spaces are kept while it is off.
+- **Active projects** `sidebarActiveProjects` (boolean, default true): Show a star before your Spaces that lists the projects you are working on from every Space in one list: any project with a session working or waiting on you, or used in the last 8 hours. Click a session there to open it without switching Spaces. On by default; right-click the star to remove it.
 - **When switching to a Space** `sidebarSpaceSwitchBehavior` (one of restore | keep; default restore): Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while Spaces is on. Option labels: restore = Restore the Space's projects, keep = Don't switch projects.
 - **Switch Space when opening a session from another Space** `sidebarSpaceFollowActiveSession` (boolean, default false) [advanced]: Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while Spaces is on.
 ### Session Cards

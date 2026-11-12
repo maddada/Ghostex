@@ -6,6 +6,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::active_projects::{
+    ACTIVE_SPACE_COLOR, ACTIVE_SPACE_ICON, ACTIVE_SPACE_ID, ACTIVE_SPACE_LABEL,
+};
 use super::collections::{project_sidebar_collections, CollectionItem, CollectionsState};
 use super::daemon_wait::{DaemonWait, TRY_NOW_LABEL};
 use super::groups::{group_summary, GroupBuild, GroupKind, GroupPlan};
@@ -15,8 +18,8 @@ use super::inputs::{
 };
 use super::projects::ProjectMeta;
 use super::spaces::{
-    resolve_selected_space, selection_shows_project, space_for_group, SpaceSelection, SpacesState,
-    OTHER_SPACE_ICON, OTHER_SPACE_ID, OTHER_SPACE_LABEL,
+    resolve_selected_space, selection_shows_project, space_for_group, space_rank_of_project,
+    SpaceSelection, SpacesState, OTHER_SPACE_ICON, OTHER_SPACE_ID, OTHER_SPACE_LABEL,
 };
 use super::view::{
     CollectionView, EmptyState, GroupSummary, GroupView, MachineSummary, MachineTabView, NeedsYou,
@@ -150,12 +153,66 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 .selected_space_by_section
                 .get(&section_key)
                 .map(String::as_str),
+            input.settings.active_projects,
         )
     });
+    // Active projects (active_projects.rs): the projects whose rows keep them active now, by
+    // their own project group (a user-made session group's rows count for its project), and the
+    // project holding the session open now. `active_until_ms` is when the list next changes with
+    // the clock alone.
+    let active_projects_on = input.settings.active_projects && selection.is_some();
+    let mut active_owners: BTreeSet<String> = BTreeSet::new();
+    let mut active_until_ms: Option<u64> = None;
+    if active_projects_on {
+        let mut owners: BTreeMap<String, (bool, Option<u64>)> = BTreeMap::new();
+        for plan in input.plans {
+            let Some(build) = input.builds.get(&plan.group_id) else {
+                continue;
+            };
+            let owner =
+                owner_project_group_id(&plan.group_id).unwrap_or_else(|| plan.group_id.clone());
+            let (keeps, until) = super::active_projects::rows_keep_active(
+                build.store_rows.iter().map(|session| session.row.as_ref()),
+                input.now_ms,
+            );
+            let keeps = keeps || build.contains_focused_session();
+            let until = until.filter(|_| !build.contains_focused_session());
+            let entry = owners.entry(owner).or_insert((false, None));
+            match (entry.0, keeps) {
+                (_, false) => {}
+                (false, true) => *entry = (true, until),
+                (true, true) => {
+                    entry.1 = match (entry.1, until) {
+                        (Some(left), Some(right)) => Some(left.max(right)),
+                        _ => None,
+                    }
+                }
+            }
+        }
+        for (owner, (keeps, until)) in owners {
+            if keeps {
+                active_owners.insert(owner);
+                active_until_ms = match (active_until_ms, until) {
+                    (Some(left), Some(right)) => Some(left.min(right)),
+                    (value, None) | (None, value) => value,
+                };
+            }
+        }
+    }
+    let group_is_active = |group_id: &str| {
+        active_owners.contains(
+            owner_project_group_id(group_id)
+                .as_deref()
+                .unwrap_or(group_id),
+        )
+    };
     // Bots belong to no Space: a Space only ever shows and counts projects.
     let shows_group = |selection: &SpaceSelection, group_id: &str| -> bool {
         if is_bot_group(group_id) || is_gbot_group(group_id) {
             return false;
+        }
+        if selection.is_active_projects() {
+            return group_is_active(group_id);
         }
         // CDXC:Chief 2026-11-08 DECISION:
         // User: the home row "should remain top of the space that it's a part of you know? so i should be able to move it to a space if i want and it'll remain in that space, not show on top of all spaces like we have now (make this a setting, default off, 'Show on all spaces')". The home project is a Space member like any project (Move to Space moves it, and the adopted project keeps the Space it was in); `chiefShowOnAllSpaces` shows it in every Space. Either way it is drawn first (below).
@@ -223,9 +280,24 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             color: String::new(),
             ..SpaceView::default()
         });
+        // The Active projects star leads the row, left of every Space.
+        if active_projects_on {
+            rows.insert(
+                0,
+                SpaceView {
+                    id: ACTIVE_SPACE_ID.to_string(),
+                    name: ACTIVE_SPACE_LABEL.to_string(),
+                    icon: ACTIVE_SPACE_ICON.to_string(),
+                    color: ACTIVE_SPACE_COLOR.to_string(),
+                    ..SpaceView::default()
+                },
+            );
+        }
         for row in &mut rows {
             let view = if row.id == OTHER_SPACE_ID {
                 SpaceSelection::Other
+            } else if row.id == ACTIVE_SPACE_ID {
+                SpaceSelection::Active
             } else {
                 SpaceSelection::Space(row.id.clone())
             };
@@ -420,11 +492,35 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             id: group_id.clone(),
         }));
     }
-    let rendered_ids: Vec<String> = rendered_ids
+    let mut rendered_ids: Vec<String> = rendered_ids
         .into_iter()
         .filter(|group_id| !in_home(group_id) && !is_gbot_group(group_id))
         .collect();
-    let collection_items = if bots_mode {
+    // Active projects is one flat list in Space order: the Spaces row's order, Other last, and each
+    // Space's own project order inside it (a stable sort keeps the list's order, and a session
+    // group stays right after its project). No collection folds it.
+    let active_view = !bots_mode
+        && selection
+            .as_ref()
+            .is_some_and(SpaceSelection::is_active_projects);
+    if active_view {
+        let rank = |group_id: &String| {
+            let owner = owner_project_group_id(group_id).unwrap_or_else(|| group_id.clone());
+            let project = space_project_of_group(&owner);
+            space_rank_of_project(
+                &spaces_state,
+                project.as_ref().map(|project| project.project_id.as_str()),
+                project
+                    .as_ref()
+                    .and_then(|project| project.collection_id.as_deref()),
+                project
+                    .as_ref()
+                    .and_then(|project| project.parent_project_id.as_deref()),
+            )
+        };
+        rendered_ids.sort_by_cached_key(rank);
+    }
+    let collection_items = if bots_mode || active_view {
         rendered_ids
             .iter()
             .map(|group_id| CollectionItem::Project {
@@ -557,7 +653,8 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         .host
         .machines
         .iter()
-        .filter(|_| !input.host.merge_machines)
+        // Separate by machine keeps its tabs while Active projects merges the list.
+        .filter(|_| !input.host.merge_machines || input.settings.separate_by_machine)
         .map(|machine| {
             let counts = if machine.machine_id == input.ui.selected_machine_id {
                 machine_summary
@@ -603,6 +700,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         machine: machine_summary,
         spaces_enabled: selection.is_some(),
         spaces,
+        active_projects_until_ms: active_until_ms,
         bots_enabled: input.settings.bots_enabled,
         bots_mode,
         // Bot automations is Hermes' cron feed.
@@ -732,6 +830,15 @@ fn empty_state(
         "No projects added yet."
     } else if empty_projects > 0 {
         "No projects with sessions."
+    } else if selection.is_some_and(SpaceSelection::is_active_projects) {
+        return EmptyState {
+            loading,
+            error,
+            can_add_project,
+            copy: "Nothing active right now.".to_string(),
+            detail: "A project shows here while an agent works or waits in it, and for 8 hours after you last used it.".to_string(),
+            ..EmptyState::default()
+        };
     } else if selection.is_some_and(|selection| !selection.is_other()) {
         "No projects in this Space."
     } else {

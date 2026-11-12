@@ -609,6 +609,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("syncCoordinator", J::Bool(false)),
     ("projectSwitchKeepAliveMinutes", J::Num(10.0)),
     ("sidebarSpaceFollowActiveSession", J::Bool(false)),
+    // CDXC:Spaces 2026-11-12 DECISION in packages/settings-catalog/src/spaces.rs: Active projects is on by default.
+    ("sidebarActiveProjects", J::Bool(true)),
     ("sidebarVisibilityMemory", J::Str("shared")),
     ("expandCollapsedProjectsOnJump", J::Bool(true)),
     // CDXC:Theming 2026-09-14 DECISION: User: default App theme to System, with Chat and Terminal on Follow app. Existing saved theme selections remain unchanged.

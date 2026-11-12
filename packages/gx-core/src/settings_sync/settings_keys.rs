@@ -60,6 +60,7 @@ pub const SIDEBAR_ORGANIZATION_KEYS: &[&str] = &[
     "sidebarMergeRepositoryCopies",
     "worktreeSessionsInProject",
     "sidebarSpacesEnabled",
+    "sidebarActiveProjects",
     "chiefShowOnAllSpaces",
     "sidebarHideProjectsWithoutSessions",
     "groupWorkingSessions",

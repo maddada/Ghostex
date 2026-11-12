@@ -122,8 +122,13 @@ impl GhostexGpuiApp {
         let user_spaces: Vec<_> = snapshot
             .spaces
             .iter()
-            .filter(|space| space.id != "other")
+            .filter(|space| space.id != "other" && space.id != ghostex_gx_core::ACTIVE_SPACE_ID)
             .collect();
+        // The Active projects star leads the Spaces and never folds into More (active_projects.rs).
+        let star = snapshot
+            .spaces
+            .iter()
+            .find(|space| space.id == ghostex_gx_core::ACTIVE_SPACE_ID);
         // The computers come first (machines.rs). Sharing the row, the computer tiles and the Space
         // tiles may narrow from 28 to `SHARED_ROW_TILE_MIN`; the computers fold into one button
         // only when every Space and Other still cannot fit beside them at that, and after that the
@@ -149,12 +154,14 @@ impl GhostexGpuiApp {
             110.0 + 4.0 + tile_min
         } else {
             (user_spaces.len() + 1) as f32 * pitch_min - 4.0
-        };
+        } + if star.is_some() { pitch_min } else { 0.0 };
         let folded = machines > 0 && row_room - bots_room - computers_room(machines) < spaces_need;
         let leading = computers_room(if folded { 1 } else { machines });
-        let capacity = ((row_room + 4.0 - bots_room - leading) / pitch_min)
-            .floor()
-            .max(2.0) as usize;
+        let capacity =
+            ((row_room + 4.0 - bots_room - leading - if star.is_some() { pitch_min } else { 0.0 })
+                / pitch_min)
+                .floor()
+                .max(2.0) as usize;
         let overflow = user_spaces.len() + 1 > capacity;
         let mut visible: Vec<_> = user_spaces
             .iter()
@@ -183,7 +190,7 @@ impl GhostexGpuiApp {
         // From one tile's start to the next's, which a dropped Space reads to find its place: the
         // tiles that stretch (the shown Spaces, Other and the More tile) share what the Create
         // button and the Bots slot leave of the row.
-        let stretched = visible.len() + 1 + usize::from(overflow);
+        let stretched = visible.len() + 1 + usize::from(overflow) + usize::from(star.is_some());
         let shared = row_room - bots_room - leading + 4.0;
         let pitch = (shared / stretched as f32).max(pitch_min);
         let computers = if machines > 0 {
@@ -198,12 +205,14 @@ impl GhostexGpuiApp {
             h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(28.0 * scale)).px(px(edge * scale)).gap(px(4.0 * scale))
                 .children(computers)
                 .when(machines > 0, |row| row.child(div().flex_shrink_0().w(px(1.0)).h(px(16.0 * scale)).bg(appearance.foreground.opacity(0.12))))
+                .children(star.map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, leading, tile_min), appearance, cx)))
                 // Words give way first: on a narrow row Create space keeps its plus and loses its label.
                 .when(user_spaces.is_empty(), |row| row.child(h_flex().id("native-sidebar-create-space").role(gpui::Role::Button).aria_label("Create space").flex_shrink(1.0).min_w(px(28.0 * scale)).overflow_hidden().h(px(28.0 * scale)).px(px(10.0 * scale)).gap(px(6.0 * scale)).rounded(px(radius * scale)).border_1().border_color(appearance.muted.opacity(0.25)).text_size(px(12.0 * scale))
                     .text_color(appearance.chrome_label).child(div().flex_shrink_0().child(titlebar_svg_icon("titlebar/plus.svg", 14.0 * scale, appearance.chrome_icon))).child(div().min_w_0().whitespace_nowrap().overflow_hidden().child("Create space"))
                     .on_click(cx.listener(|app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({"type": "editSpace"}), cx); }))
                     .map(|button| self.sidebar_focus_stop(button, "space:create", super::focus_order::SidebarStopPlace::Fixed, appearance, cx))))
-                .children(visible.into_iter().chain(snapshot.spaces.iter().filter(|space| space.id == "other")).map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, leading, tile_min), appearance, cx)))
+                // A dragged Space finds its place after the star's tile too.
+                .children(visible.into_iter().chain(snapshot.spaces.iter().filter(|space| space.id == "other")).map(|space| self.render_native_sidebar_space(space, &visible_ids, (pitch, leading + if star.is_some() { pitch } else { 0.0 }, tile_min), appearance, cx)))
                 .when(overflow, |row| row.child(div().id("native-sidebar-more-spaces").on_prepaint(super::menus::record_menu_owner(&more_owner)).role(gpui::Role::Button).aria_label("More spaces").h(px(28.0 * scale)).flex_1().min_w(px(tile_min * scale)).flex().items_center().justify_center().rounded(px(radius * scale)).hover(|row| row.bg(appearance.hover))
                     .child(titlebar_svg_icon("titlebar/dots.svg", 16.0 * scale, appearance.chrome_icon))
                     .on_click(cx.listener(move |_, event: &gpui::ClickEvent, window, cx| {
@@ -230,6 +239,8 @@ impl GhostexGpuiApp {
         let id = space.id.clone();
         let menu_id = id.clone();
         let drag_id = id.clone();
+        // The Active projects star: no drag, no project drops, its own menu (active_projects.rs).
+        let is_star = id == ghostex_gx_core::ACTIVE_SPACE_ID;
         let name = space.name.clone();
         let scale = appearance.scale;
         let tooltip_span = super::tooltips::SidebarTooltipSpan::sidebar(self.sidebar_width, scale);
@@ -388,8 +399,12 @@ impl GhostexGpuiApp {
                     )
                 },
             )
-            .when(id != "other", |row| row.sidebar_drag_source(dragged, cx))
-            .sidebar_drop_target("space", drag_id, None, cx)
+            .when(id != "other" && !is_star, |row| {
+                row.sidebar_drag_source(dragged, cx)
+            })
+            .when(!is_star, |row| {
+                row.sidebar_drop_target("space", drag_id, None, cx)
+            })
             .on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
                 app.select_native_space(&id, cx);
@@ -425,6 +440,9 @@ impl GhostexGpuiApp {
 impl GhostexGpuiApp {
     /// A Space's right-click menu, which the Unified filter dropdown's Space rows open too.
     pub(crate) fn native_space_menu(&self, space_id: &str) -> serde_json::Value {
+        if space_id == ghostex_gx_core::ACTIVE_SPACE_ID {
+            return super::active_projects::active_projects_menu();
+        }
         let mut items = Vec::new();
         // CDXC:Spaces 2026-09-22 DECISION: User: a Space icon's menu is two labelled groups: "Manage" at the top (Edit Space, New Space) and "Sleep" at the bottom, and the Sleep group shows only Sleep Inactive. This supersedes the same-day request for Sleep Space and Sleep Others on this menu. Sleep Inactive is the Space's idle sessions only. The Other button offers the same rows for the projects no Space claims.
         items.push(json!({"label": "Manage", "heading": true}));

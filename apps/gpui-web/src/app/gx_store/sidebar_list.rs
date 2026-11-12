@@ -117,7 +117,8 @@ impl SidebarList {
         }
         // One list for every machine unless Separate by machine (gx-core `sidebar_view/merged.rs`);
         // the page has only this computer, so it merges the clones of one repository.
-        self.last_inputs.host.merge_machines = !self.last_inputs.settings.separate_by_machine;
+        self.last_inputs.host.merge_machines =
+            ghostex_gx_core::project_list_merges_machines(&self.last_inputs);
         let changes = std::mem::take(&mut self.changes);
         self.model.update(core, &self.last_inputs, &changes, now_ms);
         self.last_changes = changes;

@@ -29,6 +29,9 @@ pub struct SidebarView {
     /// Every machine tab, this computer first, with the counts its badge draws.
     pub machines: Vec<MachineTabView>,
     pub spaces_enabled: bool,
+    /// When the Active projects list next changes with the clock alone (a project's 8 hours run
+    /// out, `active_projects.rs`); `None` while nothing ends that way.
+    pub active_projects_until_ms: Option<u64>,
     pub spaces: Vec<SpaceView>,
     /// The Bots extension is on, so the renderer draws the Hermes button.
     pub bots_enabled: bool,

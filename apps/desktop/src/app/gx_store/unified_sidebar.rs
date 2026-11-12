@@ -854,6 +854,10 @@ impl UnifiedSidebarHost {
         project_id: &str,
     ) -> Option<(String, String)> {
         let scope = unified_space_scope(core.presentation(), list_inputs)?;
+        // Active projects lists a project the moment a session starts in it, so it stays.
+        if scope.is_active_projects() {
+            return None;
+        }
         let machine = match machine_id {
             LOCAL_MACHINE_ID => MachineId::Local,
             remote => MachineId::Remote(remote.to_string()),

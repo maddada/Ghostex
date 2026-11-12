@@ -1054,6 +1054,19 @@ empty part of the list (below the last project or between projects).
 To jump straight to a Space, press Cmd+Option+Shift+1 to 9 (Ctrl+Alt+Shift+1 to 9
 on Windows and Linux) for the first to ninth Space in the order the Space row
 shows them; rebind them under Go to Space 1-9 in Settings > Hotkeys.
+**Active projects** is the star at the start of the Space row, before your
+Spaces. Click it to see, in one list, the projects you are working on from
+every Space and every connected computer: any project with a session working,
+waiting on you or still running something, or that you used in the last 8
+hours. The list keeps your Spaces' order and each Space's own project order,
+and each project shows all its sessions as in its own Space. A project leaves
+the list as soon as neither is true; the project of the session open now always
+stays. Click a session to open it without switching Spaces. In the Unified
+sidebar the star shows only those projects' sessions. Its status dots count
+what works and waits there. It is on by default: right-click the star and
+choose Remove Active projects to hide it, and turn it back on with Active
+projects in Settings > Sidebar & Sessions > Spaces (`sidebarActiveProjects`).
+The Go to Space hotkeys count your Spaces, not the star.
 A project added with Add Project (from its button right of Search at the top of
 the sidebar, from the sidebar's menu while the sidebar is too narrow for that
 button, from the "Add Project"

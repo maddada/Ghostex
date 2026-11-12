@@ -470,6 +470,15 @@ fn spaces_section(
     ));
     // CDXC:Settings 2026-09-11 DECISION: dependent rows are hidden, not disabled, while their parent is off.
     if ghostex_settings_catalog::spaces::enabled_with(|key| Some(g.values.bool(key))) {
+        rows.extend(page.toggle(
+            g,
+            s,
+            ghostex_settings_catalog::spaces::ACTIVE_PROJECTS_KEY,
+            "Active projects",
+            "Show a star before your Spaces that lists the projects you are working on from every Space in one list: any project with a session working or waiting on you, or used in the last 8 hours. Click a session there to open it without switching Spaces. On by default; right-click the star to remove it.",
+            true,
+            cx,
+        ));
         rows.extend(page.select(
             g,
             s,

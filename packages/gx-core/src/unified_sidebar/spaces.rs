@@ -42,6 +42,14 @@ pub struct UnifiedSpaceScope {
     pub every_machine: bool,
 }
 
+impl UnifiedSpaceScope {
+    /// The Active projects tile is selected: every machine's active projects, whatever their Space
+    /// (`sidebar_view/active_projects.rs`).
+    pub fn is_active_projects(&self) -> bool {
+        self.space_id == crate::sidebar_view::ACTIVE_SPACE_ID
+    }
+}
+
 /// The Space the Project sidebar's Space row has selected, or `None` when the machine that row
 /// belongs to (the Project sidebar's selected machine) has Spaces off, or while the Project sidebar
 /// is left in Bots mode, where that row selects no Space.
@@ -76,13 +84,18 @@ pub fn unified_space_scope(
             .selected_space_by_section
             .get(&list_inputs.ui.section_key())
             .map(String::as_str),
+        list_inputs.settings.active_projects,
     );
     let space_id = selection.space_id().to_string();
-    let label = spaces
-        .spaces
-        .get(&space_id)
-        .filter(|_| space_id != OTHER_SPACE_ID)
-        .map_or_else(|| "Other".to_string(), |space| space.name.clone());
+    let label = if selection.is_active_projects() {
+        crate::sidebar_view::ACTIVE_SPACE_LABEL.to_string()
+    } else {
+        spaces
+            .spaces
+            .get(&space_id)
+            .filter(|_| space_id != OTHER_SPACE_ID)
+            .map_or_else(|| "Other".to_string(), |space| space.name.clone())
+    };
     Some(UnifiedSpaceScope {
         machine,
         space_id,

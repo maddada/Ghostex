@@ -624,9 +624,16 @@ pub fn build_unified_sidebar_folded(
             detail: None,
             ..UnifiedFilterOption::default()
         });
+        // Active projects scopes every machine, Spaces or none (CDXC:Spaces 2026-11-12 in
+        // sidebar_view/active_projects.rs).
         let scoped = scope.filter(|scope| {
-            (scope.every_machine || scope.machine == machine.machine) && machine.spaces.is_some()
+            scope.is_active_projects()
+                || ((scope.every_machine || scope.machine == machine.machine)
+                    && machine.spaces.is_some())
         });
+        let active_owners = scoped
+            .filter(|scope| scope.is_active_projects())
+            .map(|_| active_project_groups(machine.view, now_ms));
         if let Some(spaces) = machine.spaces.as_ref().filter(|_| scoped.is_none()) {
             let remote = (!machine.machine.is_local()).then(|| machine.label.clone());
             for space in spaces.ordered() {
@@ -659,7 +666,13 @@ pub fn build_unified_sidebar_folded(
                 .spaces
                 .as_ref()
                 .map(|spaces| space_of_group(spaces, group));
-            if let Some(scope) = scoped {
+            if let Some(owners) = &active_owners {
+                let owner = crate::sidebar_view::owner_project_group_id(&group.core.group_id)
+                    .unwrap_or_else(|| group.core.group_id.clone());
+                if !owners.contains(&owner) {
+                    continue;
+                }
+            } else if let Some(scope) = scoped {
                 // Another machine's copy of a shared Space is the same Space by id, else by name
                 // before the shared pass has given it the same id (`project_docs::shared`).
                 let same_space = |space_id: &str| {
@@ -903,4 +916,27 @@ fn tie_break(left: &UnifiedRow, right: &UnifiedRow) -> std::cmp::Ordering {
         .row
         .sidebar_session_id
         .cmp(&right.session.row.sidebar_session_id)
+}
+
+/// The project groups of `view` that are active now (sidebar_view/active_projects.rs): a session
+/// of the project or of one of its session groups keeps it, and so does the session open now.
+fn active_project_groups(view: &SidebarView, now_ms: u64) -> HashSet<String> {
+    let mut owners = HashSet::new();
+    for group in &view.groups {
+        let (keeps, _) = crate::sidebar_view::active_projects::rows_keep_active(
+            group
+                .core
+                .sessions
+                .iter()
+                .map(|session| session.row.as_ref()),
+            now_ms,
+        );
+        if keeps || group.core.sessions.iter().any(|session| session.is_focused) {
+            owners.insert(
+                crate::sidebar_view::owner_project_group_id(&group.core.group_id)
+                    .unwrap_or_else(|| group.core.group_id.clone()),
+            );
+        }
+    }
+    owners
 }

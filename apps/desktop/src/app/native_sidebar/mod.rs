@@ -1,4 +1,5 @@
 pub(crate) mod actions;
+mod active_projects;
 mod agent_launcher_menu;
 mod agentbox;
 pub(crate) mod appearance;

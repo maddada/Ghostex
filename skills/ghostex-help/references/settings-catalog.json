@@ -1032,6 +1032,18 @@
       "agentWritable": true
     },
     {
+      "key": "sidebarActiveProjects",
+      "title": "Active projects",
+      "subtitle": "Show a star before your Spaces that lists the projects you are working on from every Space in one list: any project with a session working or waiting on you, or used in the last 8 hours. Click a session there to open it without switching Spaces. On by default; right-click the star to remove it.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "spaces",
+      "sectionTitle": "Spaces",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "sidebarSpaceSwitchBehavior",
       "title": "When switching to a Space",
       "subtitle": "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while Spaces is on.",

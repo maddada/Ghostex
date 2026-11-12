@@ -14,8 +14,16 @@ use serde_json::{Map, Value};
 /// The Spaces switch; `true` means on.
 pub const SWITCH_KEY: &str = "sidebarSpacesEnabled";
 
+/// The Active projects switch (`true` means on, the default): the star tile first in the Spaces
+/// row, which lists the projects being worked on from every Space.
+///
+/// CDXC:Spaces 2026-11-12 DECISION:
+/// User: "i wanna add a feature called 'active projects' and it should just show the projects that i'm actively working on from all spaces in 1 place so i can jump between them easily without switching spaces ... should be feature can be disabled but enabled by default (can right click on Active Space button in the sidebar to remove it). should be shown on the left of all spaces and have star icon". Its switch is the first row under the Spaces switch in Settings > Sidebar & Sessions > Spaces, shown only while Spaces is on, and the star's right-click menu turns it off.
+pub const ACTIVE_PROJECTS_KEY: &str = "sidebarActiveProjects";
+
 /// The rows shown only while Spaces is on, which a Settings search leaves out while it is off.
 pub const SETTING_KEYS: &[&str] = &[
+    ACTIVE_PROJECTS_KEY,
     "sidebarSpaceSwitchBehavior",
     "sidebarSpaceFollowActiveSession",
 ];

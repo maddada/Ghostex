@@ -918,6 +918,9 @@ impl SidebarViewModel {
         );
         state.view.machines_with_home = super::chief::machines_with_home(store, &state.view.chiefs);
         state.view.project_copies = project_copies;
+        // A project leaves Active projects once its 8 hours are up, with no store change.
+        state.next_deadline_ms =
+            min_deadline(state.next_deadline_ms, state.view.active_projects_until_ms);
         // The waiting copy of an empty sidebar moves with the clock alone.
         state.next_deadline_ms = min_deadline(
             state.next_deadline_ms,

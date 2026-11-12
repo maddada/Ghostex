@@ -612,8 +612,11 @@ fn follow_to_space(
             .selected_space_by_section
             .get(&inputs.ui.section_key())
             .map(String::as_str),
+        inputs.settings.active_projects,
     );
-    if selected.space_id() != target {
+    // Active projects lists the project wherever it moves, so the view stays (CDXC:Spaces
+    // 2026-11-12 in sidebar_view/active_projects.rs).
+    if selected.space_id() != target && !selected.is_active_projects() {
         plan.writes.push(ProjectWrite::FollowToSpace {
             space_id: target,
             group_id: group_id.to_string(),

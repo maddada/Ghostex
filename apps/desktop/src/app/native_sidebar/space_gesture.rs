@@ -284,10 +284,17 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        let Some(target) = position
-            .checked_sub(1)
-            .filter(|index| *index < snapshot.spaces.len())
-        else {
+        // The numbers count the Spaces, not the Active projects star before them, so Go to Space 1
+        // stays the first Space (CDXC:Spaces 2026-11-12 in gx-core active_projects.rs).
+        let Some(target) = position.checked_sub(1).and_then(|index| {
+            snapshot
+                .spaces
+                .iter()
+                .enumerate()
+                .filter(|(_, space)| space.id != ghostex_gx_core::ACTIVE_SPACE_ID)
+                .nth(index)
+                .map(|(target, _)| target)
+        }) else {
             return;
         };
         let selected = snapshot.spaces.iter().position(|space| space.selected);
