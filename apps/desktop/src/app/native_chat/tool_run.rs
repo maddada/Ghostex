@@ -68,7 +68,7 @@ impl NativeChatView {
         let card = message["toolCard"].is_object()
             && !(p.tool_lines && message["toolCard"]["background"] == true);
         let rows = self.unboxed_tool_rows(message, p, cx);
-        if !self.quiet_boxed || card || self.quiet_steps || rows.is_empty() {
+        if !self.quiet_boxed_here() || card || rows.is_empty() {
             return rows;
         }
         let shape = &*super::cards::SINGLE_LINE_CARD;

@@ -473,6 +473,13 @@ impl NativeChatView {
         )
     }
 
+    /// Whether the tool calls drawn now sit in the "Message to" card's shell: in an opened Quiet
+    /// View line's rows, but not in a finished turn's log under its "Worked for" card (already a
+    /// card) nor as quiet steps.
+    pub(super) fn quiet_boxed_here(&self) -> bool {
+        self.quiet_boxed && !self.in_work_fold && !self.quiet_steps
+    }
+
     /// The work item lines a line holds, as the dock's card JSON.
     /// Borrowed from the snapshot, as every work card stack takes its cards (work_cards.rs).
     fn quiet_cards(&self, line: &QuietStretch) -> Vec<&Value> {

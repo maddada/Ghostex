@@ -184,7 +184,7 @@ impl NativeChatView {
         // like this, just like we have for the message to card there." There (`quiet_boxed`) the
         // card wears the "Message to" card's shell, Tool call lines or not; elsewhere both looks
         // stay. The phone does the same (ToolCard.tsx `BoxedToolCards`).
-        let boxed = self.quiet_boxed;
+        let boxed = self.quiet_boxed_here();
         let line = p.tool_lines && !boxed;
         let open = self.is_expanded(&key, card["waiting"] == true || (line && p.work_open));
         let motion = self.disclosure_frame(&key, open, cx);
@@ -299,7 +299,7 @@ impl NativeChatView {
         // opened Quiet View line, of the "Message to" card's fill laid over it.
         let surface = if line {
             p.background
-        } else if self.quiet_boxed {
+        } else if self.quiet_boxed_here() {
             super::cards::SINGLE_LINE_CARD.solid_fill(p)
         } else {
             card_surface
@@ -431,7 +431,7 @@ impl NativeChatView {
             .gap(px(8.0 * s))
             .px(px(if line {
                 8.0
-            } else if self.quiet_boxed {
+            } else if self.quiet_boxed_here() {
                 super::cards::SINGLE_LINE_CARD.padding_x
             } else {
                 10.0
