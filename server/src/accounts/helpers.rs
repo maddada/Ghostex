@@ -186,6 +186,9 @@ fn window(
         model,
     })
 }
+/// CDXC:AgentProviders 2026-11-12 WHY:
+/// User: a session at account 4's limit sat on "Waiting for an eligible account to have capacity" while its Switch account list said account 5's "saved login expired. Reconnect this account.", although sessions were running on account 5 and Reconnect changed nothing. cswap reports `token_expired` when the access token it holds is past its expiry and the refresh is deferred: another process holds the refresh lock, or a running Claude on that account owns the login and renews it on its next request (claude-swap `json_output.usage_fields`, "refresh deferred this pass; retries automatically"; its own auto-switch waits instead of switching for it). The login works, so the account stays ready; only a dead login (`relogin_required`, `no_credentials`) needs a sign-in. A reading cswap took no longer ago than it polls an idle candidate (`CANDIDATE_MAX_INTERVAL_S`, 600 seconds) still counts as the account's usage, so a switch can pick the account when that reading shows room; an older one is shown as last known and never counts as room (2026-09-18).
+const TOKEN_RENEWING_READING_SECONDS: f64 = 600.;
 /// The user-facing line for a cswap `usageStatus` other than `ok`. `has_last_good` says whether the row still carries an older reading to show, and `last_good_age` is that reading's age in seconds when cswap reports it.
 fn claude_usage_notice(
     status: &str,
@@ -205,7 +208,15 @@ fn claude_usage_notice(
             }
             (false, _) => "Usage could not be read yet. Ghostex keeps trying.".into(),
         },
-        "token_expired" => "The saved login expired. Reconnect this account.".into(),
+        // Not a dead login (`TOKEN_RENEWING_READING_SECONDS`): no Reconnect.
+        "token_expired" => match (has_last_good, last_good_age) {
+            (true, Some(age)) => format!(
+                "Usage is from {} ago. This login renews its access the next time it is used; Ghostex keeps trying.",
+                age_text(age)
+            ),
+            _ => "Usage can't be read until this login renews its access, the next time it is used. Ghostex keeps trying."
+                .into(),
+        },
         "relogin_required" => "This account needs to sign in again. Reconnect it.".into(),
         "no_credentials" => "No saved login was found for this account. Reconnect it.".into(),
         "foreign_credential" => {
@@ -372,10 +383,7 @@ fn discover_row(home: &Path, provider: Provider, row: &Value) -> Option<Discover
             account.status = "loginRequired".into();
         }
         let status = text(row, "usageStatus");
-        if matches!(
-            status.as_str(),
-            "relogin_required" | "no_credentials" | "token_expired"
-        ) {
+        if matches!(status.as_str(), "relogin_required" | "no_credentials") {
             account.status = "loginRequired".into();
         }
         if status == "foreign_credential" {
@@ -392,7 +400,14 @@ fn discover_row(home: &Path, provider: Provider, row: &Value) -> Option<Discover
                 row.get("lastGoodAgeSeconds").and_then(Value::as_f64),
             )
         };
-        account.usage_error = claude_usage_notice(&status, usage.is_object(), last_good_age);
+        let renewing_reading = status == "token_expired"
+            && usage.is_object()
+            && last_good_age.is_some_and(|age| age <= TOKEN_RENEWING_READING_SECONDS);
+        account.usage_error = if renewing_reading {
+            None
+        } else {
+            claude_usage_notice(&status, usage.is_object(), last_good_age)
+        };
         // A session reported this login expired, and no reading of the saved login since says it works.
         if account.status == "ready"
             && super::store::login_expired(provider, &account.selector).is_some_and(|marked| {
@@ -418,7 +433,7 @@ fn discover_row(home: &Path, provider: Provider, row: &Value) -> Option<Discover
                 });
             }
         }
-        account.usage_stale = !row["usage"].is_object() && usage.is_object();
+        account.usage_stale = !row["usage"].is_object() && usage.is_object() && !renewing_reading;
         if let Some(w) = window("fiveHour", "5h", &usage["fiveHour"], "pct", None) {
             account.usage.push(w);
         }

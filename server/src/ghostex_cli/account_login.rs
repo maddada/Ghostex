@@ -299,7 +299,8 @@ fn login(args: &[String]) -> CliResult<Option<Value>> {
 fn login_broken(row: &Value) -> bool {
     matches!(
         row["usageStatus"].as_str(),
-        Some("relogin_required" | "no_credentials" | "token_expired" | "foreign_credential")
+        // `token_expired` is a working login whose refresh is deferred (helpers.rs, `TOKEN_RENEWING_READING_SECONDS`).
+        Some("relogin_required" | "no_credentials" | "foreign_credential")
     )
 }
 

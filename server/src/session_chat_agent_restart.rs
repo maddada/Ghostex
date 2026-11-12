@@ -417,7 +417,8 @@ fn claude_slot_has_login(slot: &str) -> bool {
                     == Some(slot)
                     && matches!(
                         row["usageStatus"].as_str(),
-                        Some("ok" | "unavailable" | "api_key")
+                        // `token_expired`: a working login whose refresh is deferred (accounts/helpers.rs).
+                        Some("ok" | "unavailable" | "api_key" | "token_expired")
                     )
             })
         })

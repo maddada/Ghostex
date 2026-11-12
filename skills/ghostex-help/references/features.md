@@ -3195,7 +3195,11 @@ Accounts, the account usage popup, and the chat's Switch account rows show the
 last reading with its age ("Usage is from 3 hours ago") and Ghostex keeps
 retrying on its own. Automatic switching and the New sessions start on rule
 skip that account until its usage refreshes. A login problem shows what to do
-instead, such as "The saved login expired. Reconnect this account."
+instead, such as "This account needs to sign in again. Reconnect it." A login
+whose access is only waiting to renew (a session running on that account renews
+it the next time it is used) is not a login problem: the account stays usable,
+its row says so without a Reconnect button, and a usage reading from the last
+ten minutes still counts for automatic switching.
 A newly added account starts set to Use this account Automatically; set it to
 Only when I pick it in Settings > Accounts to keep that account out of automatic
 switching.
