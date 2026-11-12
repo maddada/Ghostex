@@ -817,7 +817,7 @@ pub(super) async fn run_session_chat_send_worker(
                     {
                         // A refused Return leaves the message typed in the input box.
                         if let InputGuard::Holds(text) = &guard {
-                            if error.message == SESSION_CHAT_PROMPT_APPEARED {
+                            if error.prompt_waiting() {
                                 clear_refused_message_when_prompt_closes(
                                     &project_id,
                                     &session_id,

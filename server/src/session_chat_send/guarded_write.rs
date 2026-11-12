@@ -12,25 +12,54 @@ pub enum InputGuard {
     Holds(String),
 }
 
-/// Why a send stopped before typing into a prompt that appeared under it. It never ends with
-/// "Answer it in chat before sending." (`holds_until_agent_takes_input`), so a chat box send is
-/// kept as a queued message and a queued row is put back, both sent once the prompt is answered.
+/// Why a send stopped before typing into a prompt that appeared under it (`PromptWaiting`, code
+/// `promptWaiting`): a chat box send is kept as a queued message and a queued row is put back, both
+/// sent once the prompt is answered.
 pub(crate) const SESSION_CHAT_PROMPT_APPEARED: &str = "The agent asked something in its terminal just as your message was going out, so nothing was typed into it. Your message goes out once that is answered.";
 
-/// The refusal for a screen that could not be read, which is no prompt.
-const SCREEN_UNREADABLE: &str = "The agent's screen could not be read before typing.";
+/// What a sender is told when the input box was missing or changed at the write (no prompt).
+const INPUT_BOX_CHANGED: &str =
+    "The agent's input box changed just as your message was going out, so it was not sent.";
 
-/// What a sender is told when its message waits for a readable screen.
+/// What a sender is told when the screen could not be read for an agent that needs it.
 const SCREEN_UNREADABLE_HELD: &str =
-    "The agent's screen could not be read, so nothing was typed yet. Ghostex tries again shortly.";
+    "The agent's screen could not be read, so the message was not typed.";
+
+/// Why the guard refused a write.
+///
+/// CDXC:SessionChat 2026-11-12 WHY: GitHub #555 second review: every refusal but an unreadable
+/// screen was told as "a prompt appeared" by its words, so a damaged or gone input box was put back
+/// for good, outside the two-minute budget that marks such a row Not sent. Only a prompt waiting on
+/// the user (a blocking notice, the agent's own question, a card its hooks raised) is `Prompt`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum GuardRefusal {
+    /// A prompt waits on the user.
+    Prompt(String),
+    /// The input box is missing, or no longer holds the message.
+    InputBox(String),
+    /// The screen could not be read, for an agent that needs it read.
+    Unreadable,
+}
+
+impl GuardRefusal {
+    fn reason(&self) -> &str {
+        match self {
+            Self::Prompt(reason) | Self::InputBox(reason) => reason,
+            Self::Unreadable => "The agent's screen could not be read before typing.",
+        }
+    }
+}
 
 /// What a sender is told when the agent's terminal could not be reached at all.
 const TERMINAL_UNREACHABLE: &str = "The agent's terminal could not be reached, so nothing was typed. Open Terminal view to check it.";
 
 /// Whether a send's error is the guard refusing to type into a prompt that appeared under it.
 pub(crate) fn refused_for_prompt(error: &crate::domain::DomainStateError) -> bool {
-    error.code == "composerNotReady" && error.message == SESSION_CHAT_PROMPT_APPEARED
+    error.code == SESSION_CHAT_PROMPT_WAITING_CODE
 }
+
+/// The error code a `PromptWaiting` send failure is answered with.
+pub(crate) const SESSION_CHAT_PROMPT_WAITING_CODE: &str = "promptWaiting";
 
 /// The agents whose input box the send reads back (the paste check's `composer_agent`).
 pub(crate) fn send_reads_input_box(agent: Option<&str>) -> Option<String> {
@@ -61,7 +90,7 @@ pub(crate) fn guarded_write_refusal(
     agent: Option<&str>,
     guard: &InputGuard,
     screen: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), GuardRefusal> {
     let reads_box = send_reads_input_box(agent);
     // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: refusing every write on a screen that
     // could not be read whole held Claude's messages forever on Windows, whose styled read is cut
@@ -74,7 +103,7 @@ pub(crate) fn guarded_write_refusal(
         return if crate::session_chat_composer::SessionChatComposerReadiness::default()
             .blocks_message_for(agent)
         {
-            Err(SCREEN_UNREADABLE.to_string())
+            Err(GuardRefusal::Unreadable)
         } else {
             Ok(())
         };
@@ -93,9 +122,19 @@ pub(crate) fn guarded_write_refusal(
         notice.as_ref(),
     );
     if readiness.blocks_message_for(agent) {
-        return Err(readiness
+        let reason = readiness
             .reason
-            .unwrap_or_else(|| "The agent's input box is not on screen.".to_string()));
+            .clone()
+            .unwrap_or_else(|| "The agent's input box is not on screen.".to_string());
+        let prompt = readiness.waits_on_question()
+            || notice
+                .as_ref()
+                .is_some_and(|notice| notice.blocks_input() || notice.is_answerable());
+        return Err(if prompt {
+            GuardRefusal::Prompt(reason)
+        } else {
+            GuardRefusal::InputBox(reason)
+        });
     }
     if let InputGuard::Holds(text) = guard {
         let needles = session_chat_paste_needles(text);
@@ -105,7 +144,9 @@ pub(crate) fn guarded_write_refusal(
                 None => screen.to_string(),
             };
             if !paste_shown_in(reads_box.as_deref(), &shown, &needles) {
-                return Err("The input box no longer shows the message.".to_string());
+                return Err(GuardRefusal::InputBox(
+                    "The input box no longer shows the message.".to_string(),
+                ));
             }
         }
     }
@@ -182,18 +223,13 @@ pub(crate) async fn write_session_chat_payload_guarded(
     if let Some(screen) = test_terminal::capture(zmx_name) {
         let verdict = guarded_write_refusal(agent, guard, screen.as_deref()).and_then(|()| {
             if prompt_card_arrived_since(project_id, session_id, since) {
-                Err(PROMPT_CARD_ARRIVED.to_string())
+                Err(GuardRefusal::Prompt(PROMPT_CARD_ARRIVED.to_string()))
             } else {
                 Ok(())
             }
         });
-        if let Err(reason) = verdict {
-            return Err(prompt_appeared(
-                project_id,
-                session_id,
-                &reason,
-                screen.as_deref(),
-            ));
+        if let Err(refusal) = verdict {
+            return Err(refused(project_id, session_id, &refusal, screen.as_deref()));
         }
         if payload.is_empty() {
             return Ok(());
@@ -211,23 +247,24 @@ pub(crate) async fn write_session_chat_payload_guarded(
     );
     let (project, session) = (project_id.to_string(), session_id.to_string());
     let sent = tokio::task::spawn_blocking(move || {
-        let mut refused_screen = None;
+        let mut refusal = None;
         let sent = crate::zmx::send_after_screen_check(&name, vt, &bytes, |screen| {
             // The hook check runs after the screen read, right before the write.
             let verdict = guarded_write_refusal(check_agent.as_deref(), &check_guard, screen)
                 .and_then(|()| {
                     if prompt_card_arrived_since(&project, &session, since) {
-                        Err(PROMPT_CARD_ARRIVED.to_string())
+                        Err(GuardRefusal::Prompt(PROMPT_CARD_ARRIVED.to_string()))
                     } else {
                         Ok(())
                     }
                 });
-            if verdict.is_err() {
-                refused_screen = screen.map(str::to_string);
-            }
-            verdict
+            verdict.map_err(|kind| {
+                let reason = kind.reason().to_string();
+                refusal = Some((kind, screen.map(str::to_string)));
+                reason
+            })
         });
-        (sent, refused_screen)
+        (sent, refusal)
     })
     .await;
     match sent {
@@ -247,12 +284,10 @@ pub(crate) async fn write_session_chat_payload_guarded(
             note_session_chat_submit(project_id, session_id, payload);
             Ok(())
         }
-        Ok((Ok(crate::zmx::ZmxCheckedSend::Refused(reason)), screen)) => Err(prompt_appeared(
-            project_id,
-            session_id,
-            &reason,
-            screen.as_deref(),
-        )),
+        Ok((Ok(crate::zmx::ZmxCheckedSend::Refused(reason)), refusal)) => {
+            let (kind, screen) = refusal.unwrap_or((GuardRefusal::InputBox(reason), None));
+            Err(refused(project_id, session_id, &kind, screen.as_deref()))
+        }
         Ok((Ok(crate::zmx::ZmxCheckedSend::Unreachable(error)), _)) => {
             eprintln!(
                 "[gxserver] chat input for {project_id}/{session_id} found no terminal ({error})"
@@ -283,31 +318,40 @@ pub(crate) async fn write_session_chat_payload_guarded(
     }
 }
 
-/// Logs what the refused write saw and answers the error that holds the message.
-fn prompt_appeared(
+/// Logs what the refused write saw and answers its error: `PromptWaiting` for a prompt, an
+/// ordinary missing input box otherwise.
+fn refused(
     project_id: &str,
     session_id: &str,
-    reason: &str,
+    refusal: &GuardRefusal,
     screen: Option<&str>,
 ) -> SessionChatSendError {
     crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
-        "sessionChatSendHeldForPrompt",
+        match refusal {
+            GuardRefusal::Prompt(_) => "sessionChatSendHeldForPrompt",
+            GuardRefusal::InputBox(_) | GuardRefusal::Unreadable => "sessionChatSendGuardRefused",
+        },
         project_id,
         session_id,
-        reason,
+        refusal.reason(),
         &screen
             .map(crate::session_chat_composer::composer_terminal_preview_tail)
             .unwrap_or_default(),
     );
-    SessionChatSendError::new(
-        SessionChatSendFailure::ComposerNotReady,
-        if reason == SCREEN_UNREADABLE {
-            SCREEN_UNREADABLE_HELD
-        } else {
-            SESSION_CHAT_PROMPT_APPEARED
-        }
-        .to_string(),
-    )
+    match refusal {
+        GuardRefusal::Prompt(_) => SessionChatSendError::new(
+            SessionChatSendFailure::PromptWaiting,
+            SESSION_CHAT_PROMPT_APPEARED.to_string(),
+        ),
+        GuardRefusal::InputBox(_) => SessionChatSendError::new(
+            SessionChatSendFailure::ComposerNotReady,
+            INPUT_BOX_CHANGED.to_string(),
+        ),
+        GuardRefusal::Unreadable => SessionChatSendError::new(
+            SessionChatSendFailure::ComposerNotReady,
+            SCREEN_UNREADABLE_HELD.to_string(),
+        ),
+    }
 }
 
 /// Which watcher, per session, owns clearing a refused message; a newer one replaces it.

@@ -133,7 +133,7 @@ pub(crate) async fn confirm_submitted(
         // twice (seen live with a stand-in that kept the text on screen 2.5 s after its Return).
         // The message may well be sent: it counts as submitted, the delivery watchdog reads the
         // transcript as it does for every send, and it is never typed again from here.
-        Err(error) if error.composer_not_ready() => {
+        Err(error) if error.composer_not_ready() || error.prompt_waiting() => {
             crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
                 "sessionChatSendSecondReturnHeld",
                 project_id,

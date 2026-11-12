@@ -382,7 +382,7 @@ fn take_back_failure(
         endpoint_path,
         request_id,
         DomainStateError {
-            code: if error.composer_not_ready() {
+            code: if error.composer_not_ready() || error.prompt_waiting() {
                 "composerNotReady"
             } else {
                 "sessionInputFailed"

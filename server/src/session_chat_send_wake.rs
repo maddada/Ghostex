@@ -504,8 +504,9 @@ pub(crate) fn screen_shows_agent_starting(screen_tail: &[String]) -> bool {
 /// User: "due to the lag due to M drive when i just started a session and tried to send chat message there it goes in chat transcript then back to composer after few seconds. this shouldn't actually happen we should just keep it in chat and keep trying every X seconds until it does get posted. imagine the user sent it then went away. we need to self heal as i said many times before!! … doesn't matter the reason we need to have best self heal for all situations". A chat message refused because the agent's input box is not there yet (still starting, a shell still loading, a resume, a repaint, a panel) is never handed back to the composer: gxserver keeps it as a startup send in the session's queue, the chat draws it in the transcript as waiting, and the queue scheduler types it the moment the input box appears, retrying every 2 s and backing off to every 15 s for as long as the session lives (`session_chat_queue_undelivered.rs`). It survives closed clients and gxserver restarts because the queue is in SQLite. It ends up Not sent (with its reason, Retry and Remove) only when retrying cannot help: a question or dialog only the user can answer, or a refusal that is not about the input box. Pictures wait with the text (session_chat_queue_attachments.rs).
 /// SEE-ALSO: packages/gx-chat-core/src/session/startup_sends.rs draws the held row in the transcript; apps/desktop/src/app/native_chat/startup_delivery.rs and message_actions.rs, and apps/mobile/app/src/chat/native/transcript/MessageActions.tsx, show its waiting state with Edit and Delete.
 pub(crate) fn holds_until_agent_takes_input(error: &DomainStateError) -> bool {
-    error.code == "composerNotReady"
-        && !error.message.ends_with("Answer it in chat before sending.")
+    (error.code == "composerNotReady"
+        && !error.message.ends_with("Answer it in chat before sending."))
+        || error.code == crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE
 }
 
 fn startup_send_pending(state: &AppState, target: &SessionChatSendTarget) -> bool {

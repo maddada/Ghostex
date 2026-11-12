@@ -99,6 +99,7 @@ pub(crate) fn submitted_nothing(code: &str) -> bool {
             | "invalidState"
             | "notFound"
             | "composerNotReady"
+            | "promptWaiting"
             | "composerNotCleared"
             | "sendCancelled"
             | "accountRecoveryNotReady"

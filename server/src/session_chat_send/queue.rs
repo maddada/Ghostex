@@ -34,6 +34,10 @@ pub enum SessionChatSendFailure {
     */
     ComposerNotReady,
     ComposerNotCleared,
+    /// The send's guard found a prompt waiting on the user (a dialog, a question, a card its hooks
+    /// raised) and typed nothing into it (session_chat_send/guarded_write.rs). Callers map it to
+    /// `promptWaiting`: the message waits for the answer, which is no missing input box.
+    PromptWaiting,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,6 +69,11 @@ impl SessionChatSendError {
     /// True when the send stopped because the agent CLI had no input box.
     pub fn composer_not_ready(&self) -> bool {
         self.failure == SessionChatSendFailure::ComposerNotReady
+    }
+
+    /// True when the send's guard stopped it because a prompt waits on the user.
+    pub fn prompt_waiting(&self) -> bool {
+        self.failure == SessionChatSendFailure::PromptWaiting
     }
 
     /// True when the send was cancelled before its Enter was written: the

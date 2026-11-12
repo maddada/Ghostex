@@ -121,8 +121,10 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
                 .await;
                 match sent {
                     Err(error)
-                        if matches!(error.code, "composerNotReady" | "accountRecoveryNotReady") => {
-                    }
+                        if matches!(
+                            error.code,
+                            "composerNotReady" | "promptWaiting" | "accountRecoveryNotReady"
+                        ) => {}
                     result => break result.map(|_| ()),
                 }
             }

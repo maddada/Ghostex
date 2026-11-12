@@ -1290,8 +1290,10 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
                 json!("Continuation sent. Ghostex is watching for further errors.");
         }
         Err(error) => {
-            if matches!(error.code, "composerNotReady" | "accountRecoveryNotReady")
-                && plan.prompt.is_none()
+            if matches!(
+                error.code,
+                "composerNotReady" | "promptWaiting" | "accountRecoveryNotReady"
+            ) && plan.prompt.is_none()
                 && super::api_errors::is_connection_trigger(&recovery)
             {
                 // Nothing reached the agent: the try does not count.
@@ -1303,8 +1305,10 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
                 if let Some(next) = time(recovery.get("nextAttemptAt")) {
                     super::api_errors::wake_at(&state, &plan.project, &plan.session, next);
                 }
-            } else if matches!(error.code, "composerNotReady" | "accountRecoveryNotReady")
-                && plan.prompt.is_none()
+            } else if matches!(
+                error.code,
+                "composerNotReady" | "promptWaiting" | "accountRecoveryNotReady"
+            ) && plan.prompt.is_none()
             {
                 let attempt = recovery["attempt"].as_u64().unwrap_or(1);
                 let next = Utc::now() + backoff(attempt);

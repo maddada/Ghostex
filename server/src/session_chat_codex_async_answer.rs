@@ -577,7 +577,7 @@ impl Driver<'_> {
         )
         .await
         .map_err(|error| {
-            if error.composer_not_ready() {
+            if error.composer_not_ready() || error.prompt_waiting() {
                 "Something came up in Codex's terminal before the answer was submitted, so it was not sent. Deal with it in the terminal, then send the answer again.".to_string()
             } else {
                 error.message

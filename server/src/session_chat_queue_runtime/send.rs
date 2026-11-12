@@ -1077,6 +1077,12 @@ async fn send_session_chat_message_locked(
                 message: error.message,
             });
         }
+        if error.prompt_waiting() {
+            return Err(DomainStateError {
+                code: crate::session_chat_send::SESSION_CHAT_PROMPT_WAITING_CODE,
+                message: error.message,
+            });
+        }
         // The user's own Escape stopped this send before Enter: not a failure
         // the composer should announce, and the text is still theirs.
         if error.cancelled() {
