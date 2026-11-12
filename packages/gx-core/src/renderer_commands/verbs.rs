@@ -69,6 +69,8 @@ const SETTINGS_SEARCH_MAX_UTF16: usize = 200;
 pub const SETTINGS_PATCH_MAX_KEYS: usize = 50;
 /// Far above the ~100 hotkey ids; bounds what one `ghostex settings hotkeys` save can carry.
 const SETTINGS_PATCH_MAX_HOTKEYS: usize = 512;
+/// The longest list setting a patch carries (`unifiedProjectOrder`, `sidebarSessionTagListItems`).
+const SETTINGS_PATCH_MAX_LIST_ITEMS: usize = 1024;
 
 /// What `/api/appUpdate*` asks this computer's app updater (server/src/app_update/).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -420,14 +422,22 @@ fn settings_patch(payload: &Value) -> Result<RendererVerb, RendererCommandError>
     })
 }
 
-/// A value `updateSettingsPatch` takes for `key`: a boolean, string or finite number, or the
-/// `hotkeys` map. Settings sync carries only these (gx-core settings_sync/settings_keys.rs).
+/// A value `updateSettingsPatch` takes for `key`: a boolean, string or finite number, the
+/// `hotkeys` map, or one of the sidebar's two lists. Settings sync carries only these (gx-core settings_sync/settings_keys.rs).
 pub fn settings_patch_value_allowed(key: &str, value: &Value) -> bool {
     match value {
         Value::Bool(_) | Value::String(_) => true,
         Value::Number(number) => number.as_f64().is_some_and(f64::is_finite),
         Value::Object(hotkeys) if key == "hotkeys" => {
             hotkeys.len() <= SETTINGS_PATCH_MAX_HOTKEYS && hotkeys.values().all(Value::is_string)
+        }
+        // CDXC:SettingsSync 2026-11-12 WHY: Sidebar organization carries the sidebar's two list
+        // settings (gx-core settings_sync/settings_keys.rs), so they are the lists a patch takes.
+        Value::Array(order) if key == "unifiedProjectOrder" => {
+            order.len() <= SETTINGS_PATCH_MAX_LIST_ITEMS && order.iter().all(Value::is_string)
+        }
+        Value::Array(items) if key == "sidebarSessionTagListItems" => {
+            items.len() <= SETTINGS_PATCH_MAX_LIST_ITEMS && items.iter().all(Value::is_object)
         }
         _ => false,
     }

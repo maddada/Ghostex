@@ -79,9 +79,14 @@ fn send_settings_patch(state: &AppState, patch: serde_json::Map<String, Value>) 
         return;
     }
     let hub = state.event_hub.clone();
-    let entries: Vec<(String, Value)> = patch.into_iter().collect();
-    let patches: Vec<serde_json::Map<String, Value>> = entries
+    // CDXC:SettingsSync 2026-11-12 WHY: a desktop app older than the sidebar's list settings
+    // refuses a whole patch that carries one, so the lists travel in patches of their own and the
+    // rest still lands there.
+    let (lists, values): (Vec<(String, Value)>, Vec<(String, Value)>) =
+        patch.into_iter().partition(|(_, value)| value.is_array());
+    let patches: Vec<serde_json::Map<String, Value>> = values
         .chunks(ghostex_gx_core::SETTINGS_PATCH_MAX_KEYS)
+        .chain(lists.chunks(1))
         .map(|chunk| chunk.iter().cloned().collect())
         .collect();
     tokio::spawn(async move {
@@ -185,6 +190,11 @@ impl Engine<'_> {
             return Ok(());
         }
         let baseline = self.store.spaces_baseline.clone();
+        let projects_added = baseline.as_ref().is_some_and(|baseline| {
+            read.repos
+                .iter()
+                .any(|(project, _)| !baseline.repos.iter().any(|(known, _)| known == project))
+        });
         let edits = derive_spaces_edits(
             local(&read),
             baseline.as_ref().map(|baseline| LocalSpaces {
@@ -221,6 +231,9 @@ impl Engine<'_> {
             }
         }
         self.store.spaces_baseline = Some(baseline_of(read));
+        if projects_added {
+            self.apply_spaces()?;
+        }
         Ok(())
     }
 
@@ -374,6 +387,14 @@ impl Engine<'_> {
         self.export()?;
         let patch = self.import_values()?;
         self.settings_patch.extend(patch);
+        self.apply_spaces()
+    }
+
+    /// Writes this computer's Spaces and groups from the entries (after an export).
+    ///
+    /// CDXC:SettingsSync 2026-11-12 WHY:
+    /// An export runs this on its own when it finds a project added here, so a project another computer already filed lands in its Space at once, without waiting for some other computer's next edit to bring an exchange (found proving Sidebar organization sync on two throwaway gxservers).
+    fn apply_spaces(&mut self) -> Result<(), DomainStateError> {
         if !self.enabled("spaces/") {
             return Ok(());
         }

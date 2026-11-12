@@ -5265,10 +5265,21 @@ sessions, so any client can control agents on any machine.
 - **Settings sync**: Settings > Sync keeps your computers' settings the same
   whenever two of them are connected to each other: a Remote machine, Easy
   Connect or Tailscale. Nothing goes through a server, and each computer works
-  on its own while apart. Spaces (Spaces and project groups: names, icons,
-  colours, order and which projects are in them) sync by default; the first
-  sync between two computers makes Spaces with the same name one Space, and a
-  deleted Space or a group you Ungroup goes on every computer. Appearance
+  on its own while apart. Sidebar organization syncs by default: your Spaces
+  (names, icons, colours, their order, which projects are in each and in which
+  order), project groups, Project or Unified sidebar, Separate by machine,
+  Merge copies of the same repository, Worktree sessions show in their
+  project, the Spaces switch, Show Main Hub on all Spaces, Hide projects
+  without sessions, Group working sessions, session parking, Pinned order, the
+  Unified sidebar's Moving section, Group by project and project order, and
+  your Session Tags (the tags you made and the tag list's order). A change
+  shows on your other computers within a minute, without a restart. A project
+  one computer doesn't have keeps its place and shows there once you add it.
+  The sidebar's width, animations, tooltips, card details and hover buttons,
+  and what each window has folded, hidden or filtered stay on each computer.
+  The first sync between two computers makes Spaces with the same name one
+  Space, and a deleted Space or a group you Ungroup goes on every computer.
+  Turn Sidebar organization off and each computer keeps what it has. Appearance
   (theme, colours, fonts, the chat's look and the glass; the glass picture or
   video, the interface scale and zoom stay on each computer), Agent defaults
   (the default agent, how new sessions open, the title agent, Accept all, each
@@ -5300,7 +5311,7 @@ sessions, so any client can control agents on any machine.
   settings between computers, on by default); a computer's Settings > Sync
   lists the phone, and Remove stops it there. Sign-ins and secrets never sync.
   Settings:
-  `syncSpaces` (on by default), `syncAppearance`, `syncAgentDefaults`,
+  `syncSpaces` (Sidebar organization, on by default), `syncAppearance`, `syncAgentDefaults`,
   `syncSoundsAndNotifications`, `syncKeybindings`, `syncCoordinator`,
   `syncAgents`, `syncSkills`, `syncAccounts`.
 - **Web app**: the desktop's sidebar (with its session, group and project

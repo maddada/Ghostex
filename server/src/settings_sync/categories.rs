@@ -1,5 +1,6 @@
 //! The categories that sync values rather than documents: Appearance, Agent defaults, Agents,
-//! Skills, Accounts, Sounds and notifications, Keybindings and Coordinator (which keys: gx-core
+//! Skills, Accounts, Sounds and notifications, Keybindings and Coordinator, and Sidebar
+//! organization's sidebar settings and Session Tags (which keys: gx-core
 //! `settings_sync/settings_keys.rs` and `settings_sync/lists.rs`; the lists' reads and writes:
 //! lists_bridge.rs).
 //!
@@ -17,10 +18,11 @@ use crate::domain::DomainStateError;
 
 use super::engine::Engine;
 use super::lists_bridge::LIST_CATEGORIES;
+use super::sidebar_tags::is_session_tag_key;
 use super::spaces_bridge::{project_repo_keys, KeyBy};
 
 /// Every category but Spaces, in Settings > Sync order.
-pub(super) const VALUE_CATEGORIES: [&str; 8] = [
+const VALUE_CATEGORIES: [&str; 8] = [
     "appearance",
     "agents",
     "agentRoster",
@@ -30,6 +32,24 @@ pub(super) const VALUE_CATEGORIES: [&str; 8] = [
     "keybindings",
     "coordinator",
 ];
+
+/// Sidebar organization (`spaces`): its Spaces and groups are documents (spaces_bridge.rs), and
+/// its sidebar settings and Session Tags are values, synced here like the other categories'.
+const SIDEBAR_ORGANIZATION: &str = "spaces";
+
+/// The categories that sync values here: every category above, and Sidebar organization's
+/// settings and Session Tags.
+fn value_categories() -> impl Iterator<Item = &'static str> {
+    VALUE_CATEGORIES
+        .into_iter()
+        .chain(std::iter::once(SIDEBAR_ORGANIZATION))
+}
+
+/// A key of category `prefix` that this file reads and writes: for Sidebar organization only its
+/// settings and Session Tags (its Spaces, groups and projects' places are spaces_bridge.rs's).
+fn value_key(prefix: &str, key: &str) -> bool {
+    prefix != SIDEBAR_ORGANIZATION || setting_of_sync_key(key).is_some() || is_session_tag_key(key)
+}
 
 const MODEL_PIN_PREFIX: &str = "agents/modelPin/";
 const PLAYBOOK_ALL: &str = "coordinator/playbook/all";
@@ -111,6 +131,7 @@ impl Engine<'_> {
                 }
             }
             prefix if LIST_CATEGORIES.contains(&prefix) => values.extend(self.list_values(prefix)?),
+            SIDEBAR_ORGANIZATION => values.extend(self.session_tag_values()?),
             _ => {}
         }
         Ok((values, defaults.into_iter().collect()))
@@ -209,7 +230,7 @@ impl Engine<'_> {
     /// Takes what changed in each value category since the last sync into the entries.
     pub(super) fn export_values(&mut self) -> Result<(), DomainStateError> {
         self.key_playbooks_by_folder()?;
-        for prefix in VALUE_CATEGORIES {
+        for prefix in value_categories() {
             if !self.enabled(&format!("{prefix}/")) {
                 // Turned off: the next time it is on, this computer's values seed again.
                 self.store.value_baselines.remove(prefix);
@@ -260,7 +281,7 @@ impl Engine<'_> {
     /// here; the settings-file values are returned as one patch for the app to save.
     pub(super) fn import_values(&mut self) -> Result<Map<String, Value>, DomainStateError> {
         let mut patch = Map::new();
-        for prefix in VALUE_CATEGORIES {
+        for prefix in value_categories() {
             if !self.enabled(&format!("{prefix}/")) || !self.category_ready(prefix)? {
                 continue;
             }
@@ -269,7 +290,7 @@ impl Engine<'_> {
                 .store
                 .entries
                 .values()
-                .filter(|entry| key_category(&entry.key) == prefix)
+                .filter(|entry| key_category(&entry.key) == prefix && value_key(prefix, &entry.key))
                 .filter(|entry| current.get(&entry.key) != entry.value.as_ref())
                 .filter(|entry| !self.playbook_entry_ignored(entry, &current))
                 .map(|entry| {
@@ -286,6 +307,9 @@ impl Engine<'_> {
             log_incoming_instructions(&wanted);
             if LIST_CATEGORIES.contains(&prefix) {
                 self.write_list_values(prefix, &wanted)?;
+            }
+            if prefix == SIDEBAR_ORGANIZATION {
+                self.write_session_tags(&wanted)?;
             }
             let mut playbook_all: Option<Option<&Value>> = None;
             let mut playbook_projects: Vec<(String, Option<&Value>)> = Vec::new();

@@ -29,7 +29,7 @@ pub use lists::{
 };
 pub use settings_keys::{
     category_setting_keys, category_setting_values, describe_setting_key, setting_of_sync_key,
-    setting_sync_key,
+    setting_sync_key, SIDEBAR_ORGANIZATION_KEYS,
 };
 pub use spaces::{
     apply_spaces_entries, derive_spaces_edits, describe_spaces_key, group_deleted_edit,
@@ -55,9 +55,11 @@ pub struct SyncCategory {
 /// `group` (who is in the sync group) always syncs; it is not a user choice.
 pub const SYNC_CATEGORIES: &[SyncCategory] = &[
     SyncCategory {
+        // Shown as Sidebar organization; the key and prefix keep their first name so a computer
+        // that turned it on keeps it on and older computers still trade its entries.
         prefix: "spaces",
         setting_key: "syncSpaces",
-        label: "Spaces",
+        label: "Sidebar organization",
         default_on: true,
         available: true,
     },

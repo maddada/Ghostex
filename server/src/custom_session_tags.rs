@@ -64,6 +64,39 @@ pub fn update_custom_session_tags(
     Ok(normalized)
 }
 
+/// Saves the catalog `params.state` and tells every client: the catalog, then a delta for each
+/// session that lost a tag the catalog no longer has.
+///
+/// CDXC:Sessions 2026-09-11 WHY:
+/// Tag editors write-through-sync the whole normalized catalog after each local edit, exactly like Spaces. A tag deleted from the catalog is cleared from every session that carried it inside the same sequenced write, so no client ever sees a session pointing at an id the daemon no longer knows; each cleared session then gets its ordinary presentation delta so sidebars drop the marker without a full snapshot reload. Settings sync writes a catalog another computer changed the same way (server/src/settings_sync/sidebar_tags.rs).
+pub(crate) fn write_custom_session_tags_and_publish(
+    state: &crate::server::AppState,
+    db: &Connection,
+    repository: &crate::domain::DomainRepository<'_>,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let (tags, cleared) = {
+        let _event_sequence = crate::server::lock_presentation_event_sequence(state)?;
+        let tags = update_custom_session_tags(db, params)?;
+        let cleared = clear_session_tags_missing_from_catalog(db, &tags)?;
+        let revision = crate::presentation::increment_presentation_revision(db)?;
+        state.event_hub.broadcast(json!({
+            "protocolVersion": crate::constants::GXSERVER_PROTOCOL_VERSION,
+            "revision": revision,
+            "serverId": state.metadata.server_id.clone(),
+            "customSessionTags": tags.clone(),
+            "type": "customSessionTagsChanged",
+        }));
+        (tags, cleared)
+    };
+    for (project_id, session_id) in &cleared {
+        crate::server::schedule_presentation_session_delta(
+            state, db, repository, project_id, session_id,
+        )?;
+    }
+    Ok(tags)
+}
+
 /// Clear `sessionTag` on every session whose custom tag is no longer in the
 /// catalog, returning the affected `(projectId, sessionId)` pairs so the
 /// caller can publish a presentation delta for each one.

@@ -12621,8 +12621,8 @@
     },
     {
       "key": "syncSpaces",
-      "title": "Spaces",
-      "subtitle": "Keep Spaces and project groups the same on your computers while they are connected to each other: their names, icons, colours, order and which projects are in them. On by default.",
+      "title": "Sidebar organization",
+      "subtitle": "Keep the sidebar organized the same way on your computers while they are connected to each other: your Spaces (names, icons, colours, order and which projects are in each, in which order), project groups, Project or Unified sidebar, Separate by machine and the other sidebar settings that arrange it, and your Session Tags and their order. The sidebar's width, animations and card details stay on each computer. On by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",

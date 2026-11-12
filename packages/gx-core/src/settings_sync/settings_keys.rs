@@ -1,6 +1,7 @@
 //! Which settings each category syncs, and how their keys read.
 //!
-//! Keys are `<category>/setting/<settings key>` for a value of the settings file (Keybindings:
+//! Keys are `<category>/setting/<settings key>` for a value of the settings file (Sidebar
+//! organization's settings: `spaces/setting/<settings key>`; Keybindings:
 //! `keybindings/setting/<os>/hotkeys`), `agents/modelPin/<agent>` for an agent's remembered
 //! default model and effort, `coordinator/playbook/overrides` for the user's playbook overrides,
 //! and `coordinator/playbook/all` or `coordinator/playbook/project/<repo>` for a full copy of the
@@ -48,6 +49,28 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
     "showQuickModelPickerInTerminal",
 ];
 
+/// Sidebar organization: the settings that change how the sidebar is organized, synced with the
+/// Spaces themselves (the `spaces` category, its switch `syncSpaces`).
+///
+/// CDXC:SettingsSync 2026-11-12 DECISION:
+/// User: "the spaces order and the projects inside them and whether we separate by machines or not need to be synced please when i select sync spaces. (call it sync sidebar organization instead)", then "also sync whether it's unified or not unified and the stuff related to sidebar in general that change how it is organized". So the Spaces switch, renamed Sidebar organization, also carries these: the Project or Unified sidebar, Separate by machine, how copies and worktrees are listed, the Spaces switch, the Unified sidebar's sections, grouping and project order, Hide projects without sessions, Pinned order, Group working sessions, the Parked section and the Session Tags list (the custom tags themselves sync per tag, server/src/settings_sync/sidebar_tags.rs). Left on each computer: sizes, animations, tooltips, card details and hover buttons (how it looks, not how it is organized), the click and parking behaviours, and what each window collapsed, hid, filtered or selected (kept in that window's own storage by this computer's project ids).
+pub const SIDEBAR_ORGANIZATION_KEYS: &[&str] = &[
+    "sidebarView",
+    "sidebarSeparateByMachine",
+    "sidebarMergeRepositoryCopies",
+    "worktreeSessionsInProject",
+    "sidebarSpacesEnabled",
+    "chiefShowOnAllSpaces",
+    "sidebarHideProjectsWithoutSessions",
+    "groupWorkingSessions",
+    "enableSessionParking",
+    "pinnedSessionOrder",
+    "unifiedWorkingSection",
+    "unifiedGroupByProject",
+    "unifiedProjectOrder",
+    "sidebarSessionTagListItems",
+];
+
 const COORDINATOR_KEYS: &[&str] = &[
     "orchestratorPlainReplies",
     "orchestratorAllEfforts",
@@ -82,6 +105,7 @@ pub fn category_setting_keys(prefix: &str) -> Vec<&'static str> {
         "agents" => AGENT_DEFAULT_KEYS.to_vec(),
         "keybindings" => vec!["hotkeys"],
         "coordinator" => COORDINATOR_KEYS.to_vec(),
+        "spaces" => SIDEBAR_ORGANIZATION_KEYS.to_vec(),
         _ => Vec::new(),
     }
 }

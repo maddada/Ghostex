@@ -59,9 +59,18 @@ pub fn derive_spaces_edits(
 ) -> Vec<(String, Option<Value>)> {
     let now = values(current);
     let before = baseline.map(values).unwrap_or_default();
+    // CDXC:SettingsSync 2026-11-12 WHY:
+    // A project added here that is in no Space yet says nothing: it takes the place the other computers gave it, now or once they sync (the user: "a project that exists on one device but not another keeps its place and appears when it is added there"). Its "nowhere" used to go out as a new edit, newer than the other computers' arrangement, and took it out of its Space on every computer, even when it was added while this computer was apart from them.
+    let newly_added_nowhere = |key: &str, value: &Value| {
+        baseline.is_some()
+            && value.is_null()
+            && !before.contains_key(key)
+            && parse_key(key).is_some_and(|(kind, field, _)| kind == "repo" && field == "place")
+    };
     let mut edits: Vec<(String, Option<Value>)> = now
         .iter()
         .filter(|(key, value)| before.get(*key) != Some(*value))
+        .filter(|(key, value)| !newly_added_nowhere(key, value))
         .map(|(key, value)| (key.clone(), Some(value.clone())))
         .collect();
     for key in before.keys() {
@@ -77,16 +86,39 @@ pub fn derive_spaces_edits(
             .and_then(|entry| entry.value.as_ref())
             .and_then(Value::as_f64)
     };
-    let mut orders: Vec<(&str, Vec<String>)> = vec![
-        ("space", ordered_ids(current.spaces, "spaces")),
-        ("group", ordered_ids(current.collections, "collections")),
-    ];
-    let repo_of: BTreeMap<&str, &str> = current
+    // CDXC:SettingsSync 2026-11-12 WHY:
+    // Only a list this computer reordered (or filled) since the last sync writes positions. Every list used to be compared with the entries' positions on each step, and a step runs right after another computer's entries are merged, so the computer receiving a reorder saw its own old order as "out of order", stamped it as a newer edit and undid the reorder everywhere: the Spaces' order never synced (found proving Sidebar organization sync on two throwaway gxservers).
+    let before_lists = baseline.map(order_lists).unwrap_or_default();
+    let now_lists = order_lists(current);
+    for ((kind, container), ids) in &now_lists {
+        if baseline.is_some() && before_lists.get(&(*kind, container.clone())) == Some(ids) {
+            continue;
+        }
+        for (id, position) in order_edits(ids, |id| pos(kind, id)) {
+            edits.push((key(kind, "pos", &id), Some(json!(position))));
+        }
+    }
+    edits
+}
+
+/// The ordered lists of a computer's documents, by kind and container: the Spaces, the groups,
+/// and each group's and Space's repositories.
+fn order_lists(local: LocalSpaces<'_>) -> BTreeMap<(&'static str, String), Vec<String>> {
+    let mut lists = BTreeMap::new();
+    lists.insert(
+        ("space", String::new()),
+        ordered_ids(local.spaces, "spaces"),
+    );
+    lists.insert(
+        ("group", String::new()),
+        ordered_ids(local.collections, "collections"),
+    );
+    let repo_of: BTreeMap<&str, &str> = local
         .repos
         .iter()
         .map(|(project, repo)| (project.as_str(), repo.as_str()))
         .collect();
-    let repo_lists = members_by_container(current).into_values().map(|projects| {
+    for (container, projects) in members_by_container(local) {
         let mut repos: Vec<String> = Vec::new();
         for project in projects {
             if let Some(repo) = repo_of.get(project.as_str()) {
@@ -95,15 +127,9 @@ pub fn derive_spaces_edits(
                 }
             }
         }
-        repos
-    });
-    orders.extend(repo_lists.map(|repos| ("repo", repos)));
-    for (kind, ids) in orders {
-        for (id, position) in order_edits(&ids, |id| pos(kind, id)) {
-            edits.push((key(kind, "pos", &id), Some(json!(position))));
-        }
+        lists.insert(("repo", container), repos);
     }
-    edits
+    lists
 }
 
 /// What this computer's documents say, as synced keys (positions aside).
@@ -630,4 +656,70 @@ pub(super) fn strings(value: Option<&Value>) -> Vec<String> {
         .filter_map(Value::as_str)
         .map(str::to_string)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(key: &str, value: Value) -> (String, SyncEntry) {
+        (
+            key.to_string(),
+            SyncEntry {
+                key: key.to_string(),
+                value: Some(value),
+                hlc: "0000000000002-000000-S1a".to_string(),
+                parent: None,
+                origin: "S1a".to_string(),
+                origin_name: "Studio".to_string(),
+            },
+        )
+    }
+
+    fn spaces(order: &[&str]) -> Value {
+        let items: Map<String, Value> = order
+            .iter()
+            .map(|id| {
+                (
+                    id.to_string(),
+                    json!({ "spaceId": id, "name": id, "memberCollectionIds": [], "memberProjectIds": [] }),
+                )
+            })
+            .collect();
+        json!({ "order": order, "spaces": items })
+    }
+
+    #[test]
+    fn a_reorder_from_another_computer_is_not_written_back() {
+        let collections = json!({ "collections": {}, "order": [] });
+        let synced = spaces(&["work", "play"]);
+        let local = |document| LocalSpaces {
+            spaces: document,
+            collections: &collections,
+            repos: &[],
+        };
+        // The laptop moved Play first: its edit puts Work after Play.
+        let mut entries: BTreeMap<String, SyncEntry> = [
+            entry("spaces/space/exists/work", json!(true)),
+            entry("spaces/space/exists/play", json!(true)),
+            entry("spaces/space/pos/work", json!(0.0)),
+            entry("spaces/space/pos/play", json!(1.0)),
+        ]
+        .into_iter()
+        .collect();
+        let reordered = spaces(&["play", "work"]);
+        let laptop = derive_spaces_edits(local(&reordered), Some(local(&synced)), &entries);
+        assert_eq!(
+            laptop,
+            vec![("spaces/space/pos/work".to_string(), Some(json!(2.0)))]
+        );
+        entries.extend([entry("spaces/space/pos/work", json!(2.0))]);
+
+        // The studio still lists Work first until it applies the entries: that is no edit of its
+        // own, and applying gives it the laptop's order.
+        let studio = derive_spaces_edits(local(&synced), Some(local(&synced)), &entries);
+        assert!(studio.is_empty(), "{studio:?}");
+        let applied = apply_spaces_entries(&entries, local(&synced));
+        assert_eq!(applied.spaces["order"], json!(["play", "work"]));
+    }
 }

@@ -692,7 +692,7 @@ How to use this file:
 
 ### What syncs
 
-- **Spaces** `syncSpaces` (boolean, default true): Keep Spaces and project groups the same on your computers while they are connected to each other: their names, icons, colours, order and which projects are in them. On by default.
+- **Sidebar organization** `syncSpaces` (boolean, default true): Keep the sidebar organized the same way on your computers while they are connected to each other: your Spaces (names, icons, colours, order and which projects are in each, in which order), project groups, Project or Unified sidebar, Separate by machine and the other sidebar settings that arrange it, and your Session Tags and their order. The sidebar's width, animations and card details stay on each computer. On by default.
 - **Appearance** `syncAppearance` (boolean, default false): Keep the theme, colours, fonts, the chat's look and the glass the same on your computers. The glass picture or video, the interface scale and zoom stay on each computer. Off by default.
 - **Agent defaults** `syncAgentDefaults` (boolean, default false): Keep the default agent, how new sessions open, the title agent, Accept all, and each agent's default model and effort the same on your computers. Off by default.
 - **Agents** `syncAgents` (boolean, default false): Keep which agents are on in Settings > Agents, their names, commands and flags, and their order the same on your computers. An agent a computer doesn't have shows Not installed here, with Install and Install all missing; nothing installs until you click. Off by default.

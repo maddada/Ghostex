@@ -1,6 +1,6 @@
 //! Settings sync between the user's own computers (rules: gx-core `settings_sync`): this computer's
 //! synced entries, the exchange another computer starts over the peer link, the rounds this one
-//! starts, the bridges to the Spaces documents and to Accounts, Agents and Skills, and Settings >
+//! starts, the bridges to the Spaces documents, the Session Tags and to Accounts, Agents and Skills, and Settings >
 //! Sync's calls.
 
 mod categories;
@@ -9,6 +9,7 @@ mod exchange;
 mod http;
 mod lists_bridge;
 mod runner;
+mod sidebar_tags;
 mod spaces_bridge;
 mod store;
 
