@@ -8,7 +8,7 @@ Fix the place where the wrong decision is made, not the place where the symptom 
 
 1. **gxserver** (`server/src/`, Rust only; the old TypeScript gxserver is gone): anything about an agent session: what is typed into its terminal, reading its screen, hooks, activity, transcripts, lifecycle, git and worktrees, settings, CLI verbs. One change covers every client.
 2. **Session daemons**: zmx (macOS, Linux, Windows WSL) and wmx (native Windows, PowerShell) change together; Ghostex startup and paths stay in gxserver.
-3. **Rust cores**: `packages/gx-core` (sidebar), `packages/gx-chat-core` (the only chat brain: desktop, web and, as WebAssembly in a hidden WebView, the phone), `packages/gx-protocol` (wire types), `packages/settings-catalog` (Settings search rows, setting defaults, option tables and the hotkey catalog, read by native Settings, Quick Access, `ghostex settings` and the Help generator).
+3. **Rust cores**: `packages/gx-core` (sidebar), `packages/gx-chat-core` (the only chat brain: desktop, web and, as WebAssembly in a hidden WebView, the phone), `packages/gx-protocol` (wire types), `packages/settings-catalog` (Settings search rows, setting defaults, option tables and the hotkey catalog, read by native Settings, Quick Access, `ghostex settings` and the Help generator; the phone's Settings search keeps a copy of its words, `cargo xtask generate-mobile-settings-search-words`, which the release preflight fails on when stale).
 4. **Renderers** (`native_chat/`, `native_sidebar/`, `native_kanban/`, `native_automate/`): layout and input only; `apps/gpui-web` compiles the same files.
 5. **Host glue** (`apps/desktop/src/app/gx_chat/`, `gx_store/`): platform I/O only.
 

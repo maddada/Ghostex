@@ -23,10 +23,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  `cargo xtask web-build` and the editor build are not run by any release workflow, so
  they are not here either.
 
- Two of the steps write TRACKED files: the sidebar CSS build regenerates
- packages/core-ui/styles/shadcn.generated.css and generate-chat-agents.mjs
- regenerates the committed chat agent list inside the apps/mobile/app submodule. Both builds
- are deterministic (verified by rebuilding twice), so on a release-ready tree they
+ Three of the steps write TRACKED files: the sidebar CSS build regenerates
+ packages/core-ui/styles/shadcn.generated.css, generate-chat-agents.mjs regenerates the
+ committed chat agent list inside the apps/mobile/app submodule, and
+ generate-settings-search-words.mjs regenerates the phone Settings search's copy of the
+ desktop's words for each setting (from skills/ghostex-help/references/settings-catalog.json
+ and packages/settings-catalog/src/search_keywords.rs), also inside the submodule. All three
+ builds are deterministic (verified by rebuilding twice), so on a release-ready tree they
  are no-ops on disk. Every tracked output is snapshotted before its command runs;
  if the rebuild changes any of them, the previous bytes are put back so the
  worktree is left exactly as found, and the step fails telling the operator to
@@ -45,6 +48,16 @@ export const RELEASE_BUILD_SCRIPTS = Object.freeze([
     command: 'node apps/mobile/app/scripts/generate-chat-agents.mjs',
     timeoutMs: 5 * 60 * 1000,
     trackedOutputs: ['apps/mobile/app/src/chat/session-chat-agents.generated.ts'],
+  },
+  {
+    // CI: the same three phone scripts as generate-chat-agents.mjs, right after it
+    //   (tooling/release-mobile/android.sh, ios-testflight.sh and ota-export.sh).
+    // A desktop Settings change (help-generate's settings-catalog.json, or search_keywords.rs)
+    // that the phone's committed copy has not taken in fails here.
+    caller: 'release-gpui-android.yml -> tooling/release-mobile/android.sh (also ios-testflight.sh, ota-export.sh)',
+    command: 'node apps/mobile/app/scripts/generate-settings-search-words.mjs',
+    timeoutMs: 60 * 1000,
+    trackedOutputs: ['apps/mobile/app/src/screens/settings/search/desktopSettingsWords.generated.ts'],
   },
   {
     // CI: release-gpui-macos.yml -> tooling/release-gpui/macos.sh -> apps/desktop/scripts/build-macos-app.sh

@@ -64,6 +64,8 @@ Checks and generators
   build-editor            build the GhostexEditor page and app
   generate-mobile-chat-agents
                           write the phone's chat-capable agent list
+  generate-mobile-settings-search-words
+                          write the phone Settings search's copy of the desktop's words per setting
   generate-mobile-tabler-icons
                           regenerate the phone's Tabler icon set
   build-agentation        build the Annotate tool (the Agentation fork in .dependencies/agentation)
@@ -119,6 +121,9 @@ fn main() {
         "build-editor" => tasks::build_editor(&args),
         "generate-mobile-chat-agents" => {
             tasks::mobile_script(&name, "generate-chat-agents.mjs", &args)
+        }
+        "generate-mobile-settings-search-words" => {
+            tasks::mobile_script(&name, "generate-settings-search-words.mjs", &args)
         }
         "generate-mobile-tabler-icons" => {
             tasks::mobile_script(&name, "generate-tabler-icons.mjs", &args)

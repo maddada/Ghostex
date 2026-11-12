@@ -40,6 +40,11 @@ export GHOSTEX_RELEASE_BUILD_NUMBER="$BUILD_NUMBER"
 # committed list from an earlier revision can never reach the TestFlight archive.
 cd "$REPO_ROOT"
 node apps/mobile/app/scripts/generate-chat-agents.mjs
+# The phone's Settings search carries the desktop's words for each setting it shares
+# (title, subtitle, choices, hidden search words), generated from the Settings catalog
+# (skills/ghostex-help/references/settings-catalog.json, packages/settings-catalog). Regenerate
+# them from the release checkout too, so the phone's search never finds settings by older words.
+node apps/mobile/app/scripts/generate-settings-search-words.mjs
 
 cd "$MOBILE_ROOT"
 bunx expo prebuild --platform ios --no-install

@@ -64,6 +64,11 @@ export ORG_GRADLE_PROJECT_ghostexReleaseKeyPassword="$GHOSTEX_ANDROID_SIGNING_KE
 # committed list from an earlier revision can never reach the APK.
 cd "$REPO_ROOT"
 node apps/mobile/app/scripts/generate-chat-agents.mjs
+# The phone's Settings search carries the desktop's words for each setting it shares
+# (title, subtitle, choices, hidden search words), generated from the Settings catalog
+# (skills/ghostex-help/references/settings-catalog.json, packages/settings-catalog). Regenerate
+# them from the release checkout too, so the phone's search never finds settings by older words.
+node apps/mobile/app/scripts/generate-settings-search-words.mjs
 
 # The release workflow sets GHOSTEX_ANDROID_ABIS (space separated); every ABI
 # listed must have its gomobile and chat-core libraries staged.
