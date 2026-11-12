@@ -15,6 +15,7 @@ const MATCH_WINDOW: Duration = Duration::from_secs(10);
 const RECENT_LIMIT: usize = 200;
 /// Why a one-sided event is expected (the `reason` of a `recentExpected` entry).
 const EXPECTED_GHOSTEX_CLOSE: &str = "ghostexClosedSession";
+const EXPECTED_GHOSTEX_SLEEP: &str = "ghostexSleptSession";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Side {
@@ -253,8 +254,9 @@ struct SessionCompare {
     pending: Vec<Signal>,
     kinds: BTreeMap<String, KindStats>,
     events: [u64; 2],
-    /// When Ghostex itself last closed the session (session_close_log.rs).
-    closed_by_ghostex: Option<Instant>,
+    /// When Ghostex itself last closed or slept the session, and the `expected` reason it gives
+    /// (session_close_log.rs, zmx/endpoint.rs).
+    closed_by_ghostex: Option<(Instant, &'static str)>,
 }
 
 #[derive(Default)]
@@ -416,13 +418,26 @@ fn store_matches(logger: &GxserverLogger, matched: Vec<Value>) {
 /// Rule: a close Ghostex makes is noted here; an observer-only SessionEnd (and the idle it brings)
 /// within the match window of it counts as `expected`, not as a disagreement, and the hook side is
 /// settled to idle as its SessionEnd would have, so the next SessionStart compares cleanly.
+/// A sleep kills the pane the same way: the Windows PC's 11 observer-only SessionEnds of
+/// 2026-11-12, first taken for a watcher that ended live sessions, were Auto Sleep's sweep (on its
+/// 60 s grid, two sessions 350 ms apart in one sweep, each pane's wmx host started anew when the
+/// session woke), so a sleep is noted too (`note_session_slept`, zmx/endpoint.rs).
 pub(crate) fn note_session_closed(project_id: &str, session_id: &str) {
+    note_session_ended_by_ghostex(project_id, session_id, EXPECTED_GHOSTEX_CLOSE);
+}
+
+/// A sleep Ghostex made (Auto Sleep, the user's Sleep, an account switch's cycle).
+pub(crate) fn note_session_slept(project_id: &str, session_id: &str) {
+    note_session_ended_by_ghostex(project_id, session_id, EXPECTED_GHOSTEX_SLEEP);
+}
+
+fn note_session_ended_by_ghostex(project_id: &str, session_id: &str, reason: &'static str) {
     let mut store = store();
     if let Some(compare) = store
         .sessions
         .get_mut(&(project_id.to_string(), session_id.to_string()))
     {
-        compare.closed_by_ghostex = Some(Instant::now());
+        compare.closed_by_ghostex = Some((Instant::now(), reason));
     }
 }
 
@@ -436,10 +451,9 @@ fn expected_reason(compare: &SessionCompare, signal: &Signal) -> Option<&'static
         };
         gap <= MATCH_WINDOW
     };
-    (signal.side == Side::Observer
-        && signal.event_name == "SessionEnd"
-        && compare.closed_by_ghostex.is_some_and(closed_near))
-    .then_some(EXPECTED_GHOSTEX_CLOSE)
+    let (closed, reason) = compare.closed_by_ghostex?;
+    (signal.side == Side::Observer && signal.event_name == "SessionEnd" && closed_near(closed))
+        .then_some(reason)
 }
 
 /// Settles every pending event the other side never matched within the window.
@@ -618,7 +632,9 @@ mod tests {
         for signal in &mut compare.pending {
             signal.at = back(signal.at);
         }
-        compare.closed_by_ghostex = compare.closed_by_ghostex.map(back);
+        compare.closed_by_ghostex = compare
+            .closed_by_ghostex
+            .map(|(at, reason)| (back(at), reason));
     }
 
     #[test]
@@ -681,6 +697,40 @@ mod tests {
         assert!(store.expected.iter().any(
             |entry| entry["sessionId"] == session && entry["reason"] == EXPECTED_GHOSTEX_CLOSE
         ));
+    }
+
+    /// The Windows PC on 2026-11-12: Auto Sleep killed idle Claude panes, Claude's SessionEnd hook
+    /// never posted, and the observer's SessionEnd was counted as a disagreement.
+    #[test]
+    fn a_session_end_from_a_ghostex_sleep_is_expected_not_a_disagreement() {
+        let (_temp, logger) = logger();
+        let session = "Gsleep1";
+        record(
+            &logger,
+            Side::Hook,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(
+            &logger,
+            Side::Observer,
+            event(session, "UserPromptSubmit").baseline(),
+        );
+        record(&logger, Side::Hook, event(session, "Stop"));
+        record(&logger, Side::Observer, event(session, "Stop"));
+        note_session_slept("Ptest", session);
+        record(&logger, Side::Observer, event(session, "SessionEnd"));
+        age(session);
+        expire(&logger);
+        let end = stats(session, "event:SessionEnd");
+        assert_eq!((end.expected, end.observer_only), (1, 0));
+        let store = store();
+        assert!(store.expected.iter().any(
+            |entry| entry["sessionId"] == session && entry["reason"] == EXPECTED_GHOSTEX_SLEEP
+        ));
+        assert!(!store
+            .disagreements
+            .iter()
+            .any(|entry| entry["sessionId"] == session));
     }
 
     #[test]
