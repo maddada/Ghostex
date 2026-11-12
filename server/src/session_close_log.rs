@@ -79,6 +79,11 @@ pub fn log_session_close(
     endpoint: &str,
     outcome: &str,
 ) {
+    // Claude's SessionEnd hook cannot post from a pane Ghostex killed; the hook-free comparison
+    // counts the observer's SessionEnd for it as expected (hookless_activity/comparison.rs).
+    if outcome != "failed" {
+        crate::hookless_activity::note_session_closed(project_id, session_id);
+    }
     let _ = logger.log_record(GxserverLogInput {
         level: LogLevel::Info,
         event: "sessionClosed".to_string(),

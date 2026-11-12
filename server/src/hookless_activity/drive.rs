@@ -209,6 +209,9 @@ impl ClaudeDriver {
     }
 
     pub(super) fn drive(&mut self, state: &AppState, event: &ActivityEvent) {
+        if event.compare_only {
+            return;
+        }
         let pane = (event.project_id.clone(), event.session_id.clone());
         self.unread_waits.remove(&pane);
         let Some(params) = self.params(state, &pane, event) else {
@@ -319,7 +322,10 @@ impl ClaudeDriver {
                 params.insert("hookSource".to_string(), json!(source));
             }
         }
+        // `background_tasks` decides a Stop's activity again on the hook path, as the notify hook
+        // forwards it (CDXC:Notifications 2026-09-15 in agent_hooks/event_mapping.rs).
         for key in [
+            "background_tasks",
             "source",
             "trigger",
             "notificationKind",

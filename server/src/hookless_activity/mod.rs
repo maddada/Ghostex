@@ -16,6 +16,7 @@ mod process_starts;
 mod surfaces;
 mod task;
 
+pub(crate) use comparison::note_session_closed;
 pub(crate) use drive::{claude_hook_superseded, OBSERVER_MARK};
 pub(crate) use hook::observe_hook_event;
 pub(crate) use opencode::{
