@@ -19,9 +19,11 @@ use crate::gxserver::health;
 use crate::util::{home_dir, kill_pid, output, root, sleep_ms, stdout_if_ok, xdg_state_root, Res};
 
 const USAGE: &str = "Usage: cargo xtask test-server <command>
-  start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run]
+  start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] [--binaries <dir>]
                 build (or reuse) the debug gxserver, start it on its own GHOSTEX_HOME and port,
-                add the projects, and print the env lines for the ghostex CLI and `ghostex web`
+                add the projects, and print the env lines for the ghostex CLI and `ghostex web`;
+                --binaries runs the gxserver and ghostex in <dir> instead (an older release's, to check
+                compatibility)
   env <name>    print those env lines again
   stop <name>   close its sessions, stop it, and remove any LaunchAgent it created
   remove <name> stop it and delete its folder
@@ -359,6 +361,7 @@ fn start(args: &[String]) -> Res<i32> {
     let mut projects = Vec::new();
     let mut build = true;
     let mut dry_run = false;
+    let mut binaries: Option<PathBuf> = None;
     let mut index = 0;
     while index < args.len() {
         let value = |index: usize| -> Res<&String> {
@@ -386,6 +389,13 @@ fn start(args: &[String]) -> Res<i32> {
             }
             "--no-build" => build = false,
             "--dry-run" => dry_run = true,
+            // Another build's gxserver and ghostex (an older release's, for a compatibility check): staged instead of
+            // server/target/debug, with the same isolation.
+            "--binaries" => {
+                binaries = Some(std::path::absolute(value(index)?)?);
+                build = false;
+                index += 1;
+            }
             other => bail!("unknown argument {other}.\n\n{USAGE}"),
         }
         index += 1;
@@ -407,7 +417,8 @@ fn start(args: &[String]) -> Res<i32> {
 
     let built = if build { build_binaries() } else { Ok(()) };
     let lock = lock()?;
-    let debug = root().join("server/target/debug");
+    let linked = binaries.is_some();
+    let debug = binaries.unwrap_or_else(|| root().join("server/target/debug"));
     if let Err(error) = built {
         if !debug.join("gxserver").is_file() || !debug.join("ghostex").is_file() {
             return Err(error);
@@ -460,7 +471,7 @@ fn start(args: &[String]) -> Res<i32> {
         }
         None => Server::new(&name, port),
     };
-    prepare_folder(&server, &debug)?;
+    prepare_folder(&server, &debug, linked)?;
     ensure_isolated(&server)?;
     server.write_env_file()?;
     fs::write(
@@ -808,12 +819,21 @@ fn pick_port() -> Res<u16> {
         .ok_or_else(|| format!("No free port in {PORT_RANGE:?}.").into())
 }
 
-fn prepare_folder(server: &Server, debug: &Path) -> Res {
+/// `linked` links the binaries instead of copying them: a signed release binary taken out of its app bundle no longer
+/// passes macOS's signature check (amfid kills it), so `--binaries` points at it where it lies.
+fn prepare_folder(server: &Server, debug: &Path, linked: bool) -> Res {
     #[cfg(unix)]
     create_private_home(&server.home())?;
     let bin = server.bin();
     fs::create_dir_all(&bin)?;
     for binary in ["gxserver", "ghostex"] {
+        #[cfg(unix)]
+        if linked {
+            let link = bin.join(binary);
+            let _ = fs::remove_file(&link);
+            std::os::unix::fs::symlink(fs::canonicalize(debug.join(binary))?, &link)?;
+            continue;
+        }
         // A rename over the old copy: a stopped server's binary may still be mapped by a process that is exiting.
         let staged = bin.join(format!(".{binary}.new"));
         fs::copy(debug.join(binary), &staged)?;
