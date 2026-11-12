@@ -122,7 +122,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
     let Some(entry) = followers.get_mut(&key) else {
         return; // Nobody subscribed — nothing to follow.
     };
-    if entry.subscribers == 0 || !is_session_chat_followable_session(session) {
+    if !entry.wanted() || !is_session_chat_followable_session(session) {
         if let Some(task) = entry.task.take() {
             task.abort();
         }
@@ -542,7 +542,7 @@ pub(crate) fn sync_session_chat_followers_for_all_sessions(state: &AppState, rea
         };
         followers
             .iter()
-            .filter(|(_, entry)| entry.subscribers > 0)
+            .filter(|(_, entry)| entry.wanted())
             .map(|(key, _)| key.clone())
             .collect()
     };
@@ -672,9 +672,11 @@ pub(crate) fn subscribe_session_chat_follower(
                 stream: Arc::new(crate::session_chat::SessionChatStream::new()),
                 resnapshot: Arc::new(tokio::sync::Notify::new()),
                 heartbeat: Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new()),
+                linger_until_ms: 0,
             });
         if new_subscriber {
             entry.subscribers += 1;
+            entry.linger_until_ms = 0;
         }
         /*
         The window only ever GROWS. Snapshot/replaced frames carry the
@@ -721,9 +723,83 @@ pub(crate) fn unsubscribe_session_chat_follower(
     };
     entry.subscribers = entry.subscribers.saturating_sub(1);
     if entry.subscribers == 0 {
-        if let Some(task) = entry.task.take() {
-            task.abort();
-        }
-        followers.remove(&key);
+        // Lingers so a client that comes back soon resumes instead of taking a new snapshot
+        // (CDXC:SessionChat 2026-11-12 in session_chat_stream.rs); `end_lingering_follower` stops it.
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            if let Some(task) = entry.task.take() {
+                task.abort();
+            }
+            followers.remove(&key);
+            return;
+        };
+        entry.linger_until_ms = crate::session_chat::now_epoch_ms() + FOLLOWER_LINGER_MS;
+        let followers_handle = state.session_chat_followers.clone();
+        runtime.spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(
+                FOLLOWER_LINGER_MS as u64 + 50,
+            ))
+            .await;
+            end_lingering_follower(&followers_handle, &key);
+        });
     }
+}
+
+/// How long a follower keeps running after its last subscriber left.
+const FOLLOWER_LINGER_MS: i64 = 60_000;
+
+fn end_lingering_follower(
+    followers: &std::sync::Mutex<std::collections::HashMap<String, SessionChatFollowerEntry>>,
+    key: &str,
+) {
+    let Ok(mut followers) = followers.lock() else {
+        return;
+    };
+    let Some(entry) = followers.get_mut(key) else {
+        return;
+    };
+    if entry.wanted() {
+        return;
+    }
+    if let Some(task) = entry.task.take() {
+        task.abort();
+    }
+    followers.remove(key);
+}
+
+/// A subscribe that brings a position of the follower's current generation: the frames it missed
+/// go to this socket alone, with no new snapshot for the session's other clients. False when the
+/// follower is not running, would have to widen its window, or cannot bridge the position; the
+/// caller then subscribes as before.
+pub(crate) fn resume_session_chat_follower(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    limit: usize,
+    new_subscriber: bool,
+    position: (i64, i64),
+    announce: impl FnOnce(i64),
+    send: impl FnMut(Value),
+    register: impl FnOnce(),
+) -> bool {
+    let Ok(mut followers) = state.session_chat_followers.lock() else {
+        return false;
+    };
+    let Some(entry) = followers.get_mut(&session_observer_key(project_id, session_id)) else {
+        return false;
+    };
+    let task_alive = entry.task.as_ref().is_some_and(|task| !task.is_finished());
+    if !task_alive || limit > entry.limit {
+        return false;
+    }
+    if !entry
+        .stream
+        .resume(position.0, position.1, announce, send, register)
+    {
+        return false;
+    }
+    if new_subscriber {
+        entry.subscribers += 1;
+        entry.linger_until_ms = 0;
+    }
+    true
 }

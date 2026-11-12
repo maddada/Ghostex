@@ -416,6 +416,50 @@ pub(crate) async fn handle_event_client_message(
                 // (and can still raise the follower's window).
                 let new_subscriber =
                     session_chat_subscriptions.insert((project_id.clone(), session_id.clone()));
+                // A client holding a position of the current generation gets only what it missed
+                // (CDXC:SessionChat 2026-11-12 in session_chat_stream.rs).
+                let resume = parsed.get("resume").and_then(|resume| {
+                    let server = resume.get("serverId").and_then(Value::as_str)?;
+                    (server == state.metadata.server_id).then_some(())?;
+                    Some((
+                        resume.get("epoch").and_then(Value::as_i64)?,
+                        resume.get("seq").and_then(Value::as_i64)?,
+                    ))
+                });
+                if let Some(position) = resume {
+                    let resumed = crate::session_chat_follower::resume_session_chat_follower(
+                        state,
+                        &project_id,
+                        &session_id,
+                        limit,
+                        new_subscriber,
+                        position,
+                        |current_seq| {
+                            let _ = outbound_tx.try_send(json!({
+                                "type": "sessionChatResumed",
+                                "projectId": project_id.clone(),
+                                "sessionId": session_id.clone(),
+                                "serverId": state.metadata.server_id.clone(),
+                                "epoch": position.0,
+                                "seq": current_seq,
+                                "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+                            }));
+                        },
+                        |frame| {
+                            let _ = outbound_tx.try_send(frame);
+                        },
+                        || {
+                            if let Some(filter) = chat_filter {
+                                if let Ok(mut subscriptions) = filter.write() {
+                                    subscriptions.insert((project_id.clone(), session_id.clone()));
+                                }
+                            }
+                        },
+                    );
+                    if resumed {
+                        return true;
+                    }
+                }
                 if let Some(filter) = chat_filter {
                     let Ok(mut subscriptions) = filter.write() else {
                         return false;

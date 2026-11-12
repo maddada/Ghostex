@@ -116,6 +116,17 @@ pub(crate) struct SessionChatFollowerEntry {
     Replaced on every respawn (see `sync_session_chat_follower_for_session`).
     */
     pub(crate) heartbeat: Arc<crate::session_chat::SessionChatFollowerHeartbeat>,
+    /// When the last subscriber left, the follower keeps running until this time (ms since the
+    /// epoch), so a client that reconnects soon can resume (`session_chat_follower/registry.rs`).
+    /// 0 while subscribed.
+    pub(crate) linger_until_ms: i64,
+}
+
+impl SessionChatFollowerEntry {
+    /// Subscribed, or still lingering after its last subscriber left.
+    pub(crate) fn wanted(&self) -> bool {
+        self.subscribers > 0 || crate::session_chat::now_epoch_ms() < self.linger_until_ms
+    }
 }
 
 pub(super) const GXSERVER_AGENT_TITLE_METADATA_DEBOUNCE_MS: u64 = 3_000;

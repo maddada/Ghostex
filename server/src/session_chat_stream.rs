@@ -32,6 +32,33 @@ pub struct SessionChatStream {
     rollover can never interleave with an in-flight frame.
     */
     emit_order: std::sync::Mutex<()>,
+    /// The generation's latest frames, for a client that resumes ([`SessionChatStream::resume`]).
+    recent: std::sync::Mutex<RecentFrames>,
+}
+
+/// CDXC:SessionChat 2026-11-12 DECISION:
+/// The user chose to resume a chat from where it was after a reconnect (Q2720, "resume after reconnect"): every reconnect and every return to the phone app resubscribed each open chat and got its whole snapshot again (60 KiB for a two-turn chat, up to four warm chats). A client that holds a position of the current generation sends it with its subscribe (`resume`, behind the `chatResume` capability) and gets a `sessionChatResumed` frame and only the frames it missed, from this buffer of the generation's latest frames; a position this buffer cannot bridge (another generation, older than the buffer) gets the snapshot as before.
+#[derive(Default)]
+struct RecentFrames {
+    frames: std::collections::VecDeque<(i64, Value, usize)>,
+    bytes: usize,
+}
+
+const RECENT_FRAMES_MAX: usize = 128;
+const RECENT_BYTES_MAX: usize = 512 * 1024;
+
+impl RecentFrames {
+    fn push(&mut self, seq: i64, frame: &Value) {
+        let size = frame.to_string().len();
+        self.frames.push_back((seq, frame.clone(), size));
+        self.bytes += size;
+        while self.frames.len() > RECENT_FRAMES_MAX || self.bytes > RECENT_BYTES_MAX {
+            let Some((_, _, dropped)) = self.frames.pop_front() else {
+                break;
+            };
+            self.bytes -= dropped;
+        }
+    }
 }
 
 impl SessionChatStream {
@@ -40,12 +67,58 @@ impl SessionChatStream {
             epoch: AtomicI64::new(0),
             seq: AtomicI64::new(0),
             emit_order: std::sync::Mutex::new(()),
+            recent: std::sync::Mutex::new(RecentFrames::default()),
         }
+    }
+
+    fn lock_recent(&self) -> std::sync::MutexGuard<'_, RecentFrames> {
+        self.recent
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Brings a client at `(epoch, seq)` of this generation up to date, all under the emission
+    /// lock: `announce` (given the current seq) and `send` (each frame after `seq`) queue for the
+    /// client first, then `register` lets later frames reach it. A frame of this generation already
+    /// on its way to the client's socket when it registers is one the client holds and drops; one
+    /// queued ahead of the replay would read as a gap and force a full read. False, with nothing
+    /// done, when the position is not one this buffer can bridge.
+    pub fn resume(
+        &self,
+        epoch: i64,
+        seq: i64,
+        announce: impl FnOnce(i64),
+        mut send: impl FnMut(Value),
+        register: impl FnOnce(),
+    ) -> bool {
+        let _order = self.lock_emit_order();
+        let (current_epoch, current_seq) = self.current();
+        if epoch != current_epoch || current_epoch == 0 || seq > current_seq || seq < 0 {
+            return false;
+        }
+        let recent = self.lock_recent();
+        let missed: Vec<Value> = recent
+            .frames
+            .iter()
+            .filter(|(frame_seq, _, _)| *frame_seq > seq)
+            .map(|(_, frame, _)| frame.clone())
+            .collect();
+        if missed.len() as i64 != current_seq - seq {
+            return false;
+        }
+        drop(recent);
+        announce(current_seq);
+        for frame in missed {
+            send(frame);
+        }
+        register();
+        true
     }
 
     /// Starts a new follower generation: takes a fresh epoch, resets seq to 0.
     pub fn begin_generation(&self) -> i64 {
         let _order = self.lock_emit_order();
+        *self.lock_recent() = RecentFrames::default();
         self.seq.store(0, Ordering::SeqCst);
         let epoch = next_stream_epoch();
         self.epoch.store(epoch, Ordering::SeqCst);
@@ -75,7 +148,9 @@ impl SessionChatStream {
     {
         let _order = self.lock_emit_order();
         let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
-        broadcast(build(seq));
+        let frame = build(seq);
+        self.lock_recent().push(seq, &frame);
+        broadcast(frame);
     }
 }
 
@@ -149,7 +224,7 @@ impl Default for SessionChatFollowerHeartbeat {
     }
 }
 
-fn now_epoch_ms() -> i64 {
+pub(crate) fn now_epoch_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis() as i64)

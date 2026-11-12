@@ -175,7 +175,7 @@ pub(crate) fn emit_session_chat_options_state_frame(
             return;
         };
         let follower_active =
-            entry.subscribers > 0 && entry.task.as_ref().is_some_and(|task| !task.is_finished());
+            entry.wanted() && entry.task.as_ref().is_some_and(|task| !task.is_finished());
         if !follower_active {
             return;
         }

@@ -1031,6 +1031,7 @@ async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
             stream: Arc::new(crate::session_chat::SessionChatStream::new()),
             resnapshot: Arc::new(tokio::sync::Notify::new()),
             heartbeat: Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new()),
+            linger_until_ms: 0,
         },
     );
     let mut events = state.event_hub.subscribe();

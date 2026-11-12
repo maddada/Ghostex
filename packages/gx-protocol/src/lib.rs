@@ -101,6 +101,10 @@ pub const GXSERVER_ENDPOINT_CAPABILITY_MODEL_CATALOG_REVISION: &str = "modelCata
 /// The `ghostex server endpoint` capability that promises the attach client takes `ZMX_PAUSE` and
 /// `ZMX_BATCH` from the phone (.dependencies/zmx/src/loop.zig `ClientDisplay`).
 pub const GXSERVER_ENDPOINT_CAPABILITY_TERMINAL_PAUSE: &str = "terminalPause";
+/// The `ghostex server endpoint` capability that promises `resume` on `subscribeSessionChat`: a
+/// position of the follower's current generation gets `sessionChatResumed` and the frames after it
+/// instead of a snapshot (server/src/session_chat_stream.rs).
+pub const GXSERVER_ENDPOINT_CAPABILITY_CHAT_RESUME: &str = "chatResume";
 /// The `ghostex server endpoint` capability that promises `/api/registerPushToken` and push
 /// notifications to the phones registered there (finished, needs input, failed, agent starts).
 pub const GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS: &str = "pushNotifications";
