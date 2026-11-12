@@ -484,6 +484,7 @@ impl NativeChatView {
                     (DOCK_MAX_HEIGHT * s).min(window_height * DOCK_WINDOW_SHARE)
                 ))
                 .overflow_y_scroll()
+                .track_scroll(&self.board.dock_scroll)
                 .flex()
                 .flex_col()
                 .p(px(4.0 * s));
@@ -859,6 +860,79 @@ impl NativeChatView {
     /// User: opening and closing each docked card animated, quickly, the way the chat's folds
     /// ease open and shut.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+        let key = text(row, "key");
+        let open_key = format!("dock-row:{key}");
+        let drawn = self.dock_row_moving(row, p, cx);
+        self.dock_row_reveal(&open_key, drawn)
+    }
+
+    /// A row the reader just opened, past the dock's height cap: as it grows, the dock's rows
+    /// scroll just far enough that its end shows, never so far that its title leaves the top,
+    /// with the transcript's own arithmetic for a fold opened by a reader scrolled up
+    /// (disclosure_reveal.rs `reveal_distance`, the row's title being inside what is measured).
+    /// It follows the row while it moves and lands once on its settled height; a row that fits
+    /// moves nothing, and a row opened more than 1.5 seconds ago is left where the reader puts it.
+    ///
+    /// CDXC:Coordinators 2026-11-12 DECISION:
+    /// User: when a docked row opens while the dock is at its height cap, scroll it into view, as
+    /// the chat's folds do.
+    fn dock_row_reveal(&self, open_key: &str, drawn: AnyElement) -> AnyElement {
+        let Some((_, pressed)) = self
+            .board
+            .dock_reveal
+            .as_ref()
+            .filter(|(key, pressed)| key == open_key && pressed.elapsed().as_millis() <= 1500)
+        else {
+            return drawn;
+        };
+        let pressed = *pressed;
+        let scroll = self.board.dock_scroll.clone();
+        div()
+            .relative()
+            .w_full()
+            .min_w_0()
+            .flex_shrink_0()
+            .child(drawn)
+            .child(
+                gpui::canvas(
+                    move |bounds, window, _| {
+                        let view = scroll.bounds();
+                        let distance = super::disclosure_reveal::reveal_distance(
+                            view.top().as_f32(),
+                            view.bottom().as_f32(),
+                            bounds.top().as_f32(),
+                            bounds.bottom().as_f32(),
+                            0.0,
+                        );
+                        let offset = scroll.offset();
+                        let max = scroll.max_offset().y.as_f32();
+                        let target = (offset.y.as_f32() - distance).max(-max);
+                        if distance > 0.5 && target < offset.y.as_f32() - 0.5 {
+                            scroll.set_offset(gpui::point(offset.x, px(target)));
+                            // The row's height and the list's room are a frame behind: look
+                            // again until nothing is left to show.
+                            if pressed.elapsed().as_millis() <= 1500 {
+                                window.refresh();
+                            }
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full(),
+            )
+            .into_any_element()
+    }
+
+    /// One dock row at rest, or easing between its line and its card.
+    fn dock_row_moving(
+        &self,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let key = text(row, "key");
         let open_key = format!("dock-row:{key}");
         let page_row = row["page"] == true && row["open"].is_object();
@@ -1288,9 +1362,13 @@ impl NativeChatView {
         let press = Self::dock_row_press(&key, open, head.child(age_menu), p).on_click(
             cx.listener(move |this, _, _, cx| {
                 // One row open at a time: opening this one shuts the one that was open.
-                if !this.expanded.remove(&toggle) {
+                if this.expanded.remove(&toggle) {
+                    this.board.dock_reveal = None;
+                } else {
                     this.expanded.retain(|key| !key.starts_with("dock-row:"));
                     this.expanded.insert(toggle.clone());
+                    // Past the dock's height cap it scrolls into view as it opens.
+                    this.board.dock_reveal = Some((toggle.clone(), web_time::Instant::now()));
                 }
                 cx.notify();
             }),

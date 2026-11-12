@@ -357,6 +357,12 @@ pub(crate) struct CoordinatorBoardView {
     /// The dock's rows' width at its last paint (unscaled), 0 before the first: what decides
     /// whether a row's answers fit beside its question (work_cards.rs `dock_row`).
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
+    /// The dock's rows' scroll position, which an opened row past the dock's height cap scrolls so
+    /// its end shows (work_cards.rs `dock_row_reveal`).
+    pub(super) dock_scroll: gpui::ScrollHandle,
+    /// The dock row the reader last opened and when: it is scrolled into view as it grows
+    /// (work_cards.rs `dock_row_reveal`).
+    pub(super) dock_reveal: Option<(String, web_time::Instant)>,
     /// When each page row last asked its gxserver for its counts (work_cards.rs
     /// `refresh_page_counts`), by page id.
     pub(super) page_counts_asked:
