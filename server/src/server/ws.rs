@@ -88,7 +88,11 @@ pub(crate) async fn handle_events(
             ),
         );
     }
-    ws.on_upgrade(move |socket| handle_event_socket_scoped(socket, state, mode, share_scope))
+    // Deflated frames only for a client that asked (`linkCompression`, link_compression.rs).
+    let deflate = query_value(&uri, "encoding").as_deref() == Some("deflate");
+    ws.on_upgrade(move |socket| {
+        handle_event_socket_scoped(socket, state, mode, share_scope, deflate)
+    })
 }
 
 /// What one `/api/events` socket carries, picked by its `stream` query value.
@@ -181,7 +185,7 @@ pub(crate) async fn handle_event_socket(
     state: Arc<AppState>,
     mode: EventStreamMode,
 ) {
-    handle_event_socket_scoped(socket, state, mode, None).await
+    handle_event_socket_scoped(socket, state, mode, None, false).await
 }
 
 /// `only` keeps the socket to one chat: a Ghostex Collab guest's stream.
@@ -190,6 +194,7 @@ pub(crate) async fn handle_event_socket_scoped(
     state: Arc<AppState>,
     mode: EventStreamMode,
     only: Option<(String, String)>,
+    deflate: bool,
 ) {
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (outbound_tx, mut outbound_rx) = state.event_hub.client_channel();
@@ -267,9 +272,17 @@ pub(crate) async fn handle_event_socket_scoped(
         // Unchanged heavy side fields stay out of state frames, and a client that asked gets thread
         // list patches (chat_frame_dedupe.rs).
         let mut chat_frames = super::chat_frame_dedupe::ChatFrameMemory::new(sender_thread_patches);
+        let mut deflater = deflate.then(super::link_compression::FrameDeflater::new);
         while let Some(event) = outbound_rx.recv().await {
             let event = chat_frames.pass(event);
-            if send_event_message(&mut socket_sender, event).await.is_err() {
+            let sent = match deflater.as_mut() {
+                Some(deflater) => match deflater.frame(&event.text()) {
+                    Some(bytes) => socket_sender.send(Message::Binary(bytes.into())).await,
+                    None => break,
+                },
+                None => send_event_message(&mut socket_sender, event).await,
+            };
+            if sent.is_err() {
                 break;
             }
         }

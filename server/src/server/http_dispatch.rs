@@ -50,6 +50,7 @@ async fn handle_http_request_inner(
         .map(|address| address.ip().to_string());
     let headers = request.headers().clone();
     let request_id = request_id(&headers);
+    let gzip_wanted = super::link_compression::wants_gzip(&headers);
     // Who asked, for the security log (server/src/audit/caller.rs).
     let caller = crate::audit::Caller::from_headers(
         &headers,
@@ -99,9 +100,10 @@ async fn handle_http_request_inner(
             details: Some(details),
         },
     );
+    let routed_response = super::link_compression::gzip_answer(gzip_wanted, routed.response).await;
     // CDXC:ServerApi 2026-10-23 DECISION:
     // The user chose to stop broadcasting an `apiRequestHandled` frame for every HTTP request served, because no client reads it: the desktop, the web build and `gx-client` dropped it unparsed, nothing in the phone app, the `ghostex` CLI or the extensions reads it, and it was about five frames a second to every open event socket. Clients keep tolerating it (`ServerEvent::ApiRequestHandled`, the `gx-client` peek), because gxservers of older releases still send it.
-    Ok(routed.response)
+    Ok(routed_response)
 }
 
 pub(super) fn handle_domain_http<F>(

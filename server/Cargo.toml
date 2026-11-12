@@ -12,6 +12,8 @@ base64 = "0.22"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 crossterm = "0.29"
+# CDXC:StateSync 2026-11-12 WHY: deflate for the phone's link (server/src/server/link_compression.rs); already in the graph through zip, so a direct-dependency promotion, not a new download.
+flate2 = "1"
 futures-util = "0.3"
 hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }

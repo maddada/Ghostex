@@ -144,6 +144,7 @@ mod foreground;
 mod http_dispatch;
 pub mod http_endpoints;
 pub mod http_infra;
+mod link_compression;
 pub(crate) mod machine_integrations_http;
 #[cfg(target_os = "macos")]
 pub(crate) mod macos_login_recovery;
