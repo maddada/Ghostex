@@ -1245,7 +1245,9 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
         )
         .await
         .and_then(|d| {
-            if d.sent {
+            // A row the send's guard put back (a prompt appeared) waits in the queue and goes out
+            // once the prompt is answered (session_chat_queue.rs).
+            if d.sent || d.held_for_prompt {
                 Ok(())
             } else {
                 Err(store::error(d.error_message.unwrap_or_default()))

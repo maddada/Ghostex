@@ -17,6 +17,11 @@ pub enum InputGuard {
 /// kept as a queued message and a queued row is put back, both sent once the prompt is answered.
 pub(crate) const SESSION_CHAT_PROMPT_APPEARED: &str = "The agent asked something in its terminal just as your message was going out, so nothing was typed into it. Your message goes out once that is answered.";
 
+/// Whether a send's error is the guard refusing to type into a prompt that appeared under it.
+pub(crate) fn refused_for_prompt(error: &crate::domain::DomainStateError) -> bool {
+    error.code == "composerNotReady" && error.message == SESSION_CHAT_PROMPT_APPEARED
+}
+
 /// The agents whose input box the send reads back (the paste check's `composer_agent`).
 pub(crate) fn send_reads_input_box(agent: Option<&str>) -> Option<String> {
     crate::agents::identity::normalize_agent_id(agent).filter(|agent| {

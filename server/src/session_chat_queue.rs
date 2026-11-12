@@ -342,6 +342,10 @@ pub struct SessionChatQueueDelivery {
     /// The input box was missing and the caller allowed a hold: the row is
     /// `queued` again, untouched, for the scheduler's next attempt.
     pub held: bool,
+    /// The hold was the send's guard refusing to type into a prompt that appeared under it
+    /// (session_chat_send/guarded_write.rs): the row waits for the user's answer, which is no
+    /// missing input box and spends none of the scheduler's two-minute budget.
+    pub held_for_prompt: bool,
     pub error_message: Option<String>,
     pub snapshot: SessionChatQueueSnapshot,
 }
@@ -600,11 +604,21 @@ pub async fn deliver_session_chat_queued_prompt(
     .await;
     let db = open_gxserver_database(paths).map_err(internal_error)?;
     let mut held = false;
+    // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
+    // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
+    // as it went out) ended Not sent while its words said it would go out once the prompt is
+    // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
+    // once the prompt is answered.
+    let held_for_prompt = outcome
+        .as_ref()
+        .err()
+        .is_some_and(crate::session_chat_send::refused_for_prompt);
     let error_message = match outcome {
         // A delivery that restarted the agent made this row a startup send; it waits for the new
         // input box whichever caller delivered it.
         Err(error)
             if (hold_when_composer_missing && error.code == "composerNotReady")
+                || held_for_prompt
                 || error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
         {
             db.execute(
@@ -641,6 +655,7 @@ pub async fn deliver_session_chat_queued_prompt(
     Ok(SessionChatQueueDelivery {
         sent: error_message.is_none() && !held,
         held,
+        held_for_prompt,
         error_message,
         snapshot: read_snapshot(&db, project_id, session_id)?,
     })
