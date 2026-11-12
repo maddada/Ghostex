@@ -297,8 +297,8 @@
     {
       "id": "ask-ghostex",
       "icon": "help-circle",
-      "title": "Ask Ghostex anything",
-      "body": "The sidebar's menu > Help > Ask Ghostex starts an agent that explains Ghostex or changes a setting.",
+      "title": "Ask Ghostex AI anything",
+      "body": "The sidebar's menu > Ask Ghostex AI starts an agent that explains Ghostex or changes a setting.",
       "requires": "help"
     },
     {

@@ -506,7 +506,7 @@ How to use this file:
 - **Hide Storybook view** `storybookViewTabHidden` (boolean, default false): Hide the built-in component workshop. When enabled, it appears only in projects with Storybook.
 - **Hide Terminal view** `terminalViewTabHidden` (boolean, default false): Stop offering the Terminal view, so it is missing from the view panel tab strip, its + menu and the view picker.
 - **Hide Notifications bell** `notificationsTitlebarButtonHidden` (boolean, default false): Hide the Notifications bell from the sidebar's top row.
-- **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Stop offering the Ask Ghostex page, so it is missing from the sidebar's menu and the view picker.
+- **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Stop offering the Ask Ghostex AI page, so it is missing from the sidebar's menu and the view picker.
 - **Hide Resources button** `resourcesTitlebarButtonHidden` (boolean, default false): Stop offering the Resources page, so it is missing from the sidebar's menu and the view picker.
 - **Hide Dev Servers button** `devServersTitlebarButtonHidden` (boolean, default false): Hide Dev servers from the sidebar's menu.
 - **Hide Extensions button** `extensionsTitlebarButtonHidden` (boolean, default false): Hide Extensions from the sidebar's menu.

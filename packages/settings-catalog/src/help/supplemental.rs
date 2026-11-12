@@ -353,7 +353,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "viewOrder",
         section_title: "Views",
         title: "Hide Help button",
-        subtitle: "Stop offering the Ask Ghostex page, so it is missing from the sidebar's menu and the view picker.",
+        subtitle: "Stop offering the Ask Ghostex AI page, so it is missing from the sidebar's menu and the view picker.",
         options: &[],
         user_only: false,
     },

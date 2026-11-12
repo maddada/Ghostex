@@ -328,6 +328,20 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             MenuCommand::command(message::open_menu_panel(panel)),
         )
     };
+    // CDXC:Sidebar 2026-11-12 DECISION: User: Ask Ghostex AI, Join Discord and Send Bug / Feedback leave the Help submenu and sit in the main menu itself, directly below Keep Awake, with a line above and below the three. Help held nothing else, so it is gone; this supersedes the three-submenu shape (Tools, Help, Ghostex) of the 2026-11-11 DECISION above and its Help rows.
+    // The separator after Keep Awake (or after Connect a Device while Keep Awake is off) is the line above; the one below follows the three.
+    if input.host.menu_panels {
+        more.push(panel("Ask Ghostex AI", "help-circle", MENU_PANEL_HELP));
+    }
+    more.push(MenuItem::row(
+        "Join Discord",
+        "users-group",
+        MenuCommand::command(message::open_external_url(DISCORD_URL)),
+    ));
+    // Opens the Send Bug / Feedback pop-up (apps/desktop/src/app/window/feedback_modal/).
+    more.push(intent("Send Bug / Feedback", "message-circle", "feedback"));
+    more.push(MenuItem::separator());
+
     let mut tools = vec![
         MenuItem::row(
             "Search by Prompt",
@@ -343,19 +357,6 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         tools.push(panel("Resources", "device-desktop", MENU_PANEL_RESOURCES));
     }
     more.push(MenuItem::submenu("Tools", "tools", tools).with_beside());
-
-    let mut help = Vec::new();
-    if input.host.menu_panels {
-        help.push(panel("Ask Ghostex", "help-circle", MENU_PANEL_HELP));
-    }
-    help.push(MenuItem::row(
-        "Join Discord",
-        "users-group",
-        MenuCommand::command(message::open_external_url(DISCORD_URL)),
-    ));
-    // Opens the Send Bug / Feedback pop-up (apps/desktop/src/app/window/feedback_modal/).
-    help.push(intent("Send Bug / Feedback", "message-circle", "feedback"));
-    more.push(MenuItem::submenu("Help", "help-circle", help).with_beside());
 
     if input.host.app_lifecycle {
         let mut app = Vec::new();

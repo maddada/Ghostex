@@ -954,9 +954,9 @@ Shortcuts: `focusNextSession`, `focusPreviousSession`, `focusNextPaneTab`,
 Top chrome holds tag filters, Spaces, and the sidebar's menu (More Options, the
 three-lines button at the top of the sidebar): Sort & Filter and Collapse All;
 then Commands, Agents Hub, All Automations, Connect a Device and Keep Awake
-(while it is switched on); then three submenus: Tools (Search by Prompt, Import Sessions,
-Extensions, Dev servers, Resources), Help (Ask Ghostex, Join Discord, Send
-Bug / Feedback) and, in the desktop app, Ghostex (New Window, Check
+(while it is switched on); then, between lines, Ask Ghostex AI, Join Discord and
+Send Bug / Feedback; then two submenus: Tools (Search by Prompt, Import Sessions,
+Extensions, Dev servers, Resources) and, in the desktop app, Ghostex (New Window, Check
 for Updates, Restart Ghostex and the Quit rows); and Settings as the last row
 (there is no Settings gear at the bottom of the sidebar). Add Project is
 the folder button right of Search; it is the menu's first row only while the
@@ -6764,12 +6764,12 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   disable` turns Executor off for the workspace but keeps its apps and
   sign-ins for next time. `ghostex connectors executor` shows its state.
   Every command takes `--workspace <name>`.
-- Ask Ghostex is under Help in the sidebar's menu, and Extensions, Dev
-  servers and Resources under Tools. Each opens a panel under the menu
-  button that closes when you click away. Ask Ghostex and Resources are
+- Ask Ghostex AI is a row of the sidebar's menu (below Keep Awake), and Extensions, Dev
+  servers and Resources are under Tools. Each opens a panel under the menu
+  button that closes when you click away. Ask Ghostex AI and Resources are
   available in every project. Resources lists what Ghostex is running with
   per-session CPU and RAM, and can put a session or the editor to sleep; Ask
-  Ghostex lists sample questions, and picking one opens a Ghostex Help chat
+  Ghostex AI lists sample questions, and picking one opens a Ghostex Help chat
   with the question staged so the user can edit it and press Enter. Dev
   servers lists the development servers running on this computer and on your
   remote computers. Extensions lists your installed extensions, and its

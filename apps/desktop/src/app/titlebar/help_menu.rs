@@ -1,5 +1,5 @@
-// Ghostex Help: the "Ask Ghostex" sample-question popup menu reached from the
-// sidebar menu's Help submenu or the Ghostex Help hotkey, and the flow that turns a picked
+// Ghostex Help: the "Ask Ghostex AI" sample-question popup menu reached from the
+// sidebar menu's Ask Ghostex AI row or the Ghostex Help hotkey, and the flow that turns a picked
 // question into a Ghostex Help agent session.
 
 use futures::FutureExt as _;
