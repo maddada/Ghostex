@@ -36,6 +36,10 @@ pub(crate) const COORDINATOR_ROW_ICON: &str = "titlebar/coordinator-crown-points
 const CHIEF_ROW_ICON: &str = "titlebar/coordinator-crown.svg";
 const COORDINATOR_COLOR_DARK: u32 = 0xffffff;
 const COORDINATOR_COLOR_LIGHT: u32 = 0x000000;
+/// A main coordinator's gold: the starred model's star in the chat's model menu
+/// (native_chat/option_menu/model_menu/style.rs), bright on dark glass and deeper on light.
+const MAIN_COORDINATOR_GOLD_DARK: u32 = 0xfbbf24;
+const MAIN_COORDINATOR_GOLD_LIGHT: u32 = 0xd97706;
 
 pub(crate) fn thread_depth(session: &NativeSidebarSession) -> f32 {
     session
@@ -185,10 +189,23 @@ pub(crate) fn is_coordinator(session: &NativeSidebarSession) -> bool {
 ///
 /// CDXC:Coordinators 2026-11-12 DECISION:
 /// User: "I wanna do crown icon for coordinator again but i want a different svg", then picked A, the three-point outline crown, in Q2650 (eight crowns drawn as line icons). It replaces the captain's hat on every surface the hat had, desktop, web and phone, in the hat's colours (white on dark, black on light) and the row's dimming. It is one 24 px drawing with the Tabler set's 2 px round stroke, so it needs no thicker copy for small sizes (it lands at 1 px or more from 12 px up). Chief of Staff and GBots department leads keep their filled crown (`coordinator-crown.svg`), so the two marks stay apart. This supersedes the 2026-11-10 hat; the hat's drawings stay in assets only for its history.
-pub(crate) fn coordinator_icon(appearance: &SidebarAppearance, chief: bool) -> AnyElement {
+///
+/// CDXC:Coordinators 2026-11-12 DECISION:
+/// User: "please dont' show Main for main coordinators, instead make the color of their icon gold". A project's main coordinator on its computer (gxserver's `isMainCoordinator`) draws its coordinator icon in gold (`MAIN_COORDINATOR_GOLD_DARK` on dark themes, `MAIN_COORDINATOR_GOLD_LIGHT` on light ones) and no "Main" tag, in the Project and Unified sidebars; every other coordinator keeps white on dark and black on light. Only the colour follows the rule, so it holds for whichever drawing the icon is. This supersedes the 2026-11-10 "Main" tag.
+pub(crate) fn coordinator_icon(
+    appearance: &SidebarAppearance,
+    chief: bool,
+    main: bool,
+) -> AnyElement {
     // The outline crown fills the row's 15 px icon slot like the agent logos beside it; Chief's
     // filled crown stays 13 px.
     let size = if chief { 13.0 } else { 15.0 } * appearance.scale;
+    let color = match (main && !chief, appearance.light) {
+        (true, true) => MAIN_COORDINATOR_GOLD_LIGHT,
+        (true, false) => MAIN_COORDINATOR_GOLD_DARK,
+        (false, true) => COORDINATOR_COLOR_LIGHT,
+        (false, false) => COORDINATOR_COLOR_DARK,
+    };
     titlebar_svg_icon(
         if chief {
             CHIEF_ROW_ICON
@@ -196,41 +213,14 @@ pub(crate) fn coordinator_icon(appearance: &SidebarAppearance, chief: bool) -> A
             COORDINATOR_ROW_ICON
         },
         size,
-        rgb(if appearance.light {
-            COORDINATOR_COLOR_LIGHT
-        } else {
-            COORDINATOR_COLOR_DARK
-        })
-        .into(),
+        rgb(color).into(),
     )
     .into_any_element()
 }
 
-/// The quiet "Main" tag after a coordinator's title when it is its project's main coordinator on
-/// its computer (gxserver's `isMainCoordinator`), in the muted outlined style of a GBot chat's
-/// "Chief" tag (gbots_rows.rs `opened_by_chief_tag`), so the sidebar's small row tags look alike.
-///
-/// CDXC:Coordinators 2026-11-10 WHY: the user asked for a label on the main coordinator ("first one created in a project per machine gets this label"); the brief kept it quiet (no coloured pill) and one style on every surface. The Project and Unified sidebars draw it here; the phone's SessionRow.tsx draws the same tag.
-pub(crate) fn main_coordinator_tag(
-    session: &NativeSidebarSession,
-    appearance: &SidebarAppearance,
-) -> Option<AnyElement> {
-    if session.details.get("isMainCoordinator") != Some(&Value::Bool(true)) {
-        return None;
-    }
-    let scale = appearance.scale;
-    Some(
-        div()
-            .flex_shrink_0()
-            .px(px(4.0 * scale))
-            .rounded(px(4.0 * scale))
-            .border_1()
-            .border_color(appearance.muted.opacity(0.35))
-            .text_size(px(10.0 * scale))
-            .text_color(appearance.muted)
-            .child("Main")
-            .into_any_element(),
-    )
+/// The coordinator is its project's main one on its computer (gxserver's `isMainCoordinator`).
+pub(crate) fn is_main_coordinator(session: &NativeSidebarSession) -> bool {
+    session.details.get("isMainCoordinator") == Some(&Value::Bool(true))
 }
 
 /// The size of the row's time text in `sessions.rs`; the badge's icon and count use it so they sit on the time's baseline.
@@ -311,84 +301,6 @@ pub(crate) fn crew_badge(
                     .child(count.to_string()),
             )
         })
-}
-
-/// The computer a thread runs on, after its title, for a thread drawn under a coordinator on
-/// another computer (gx-core's `remote_thread_rows`, `computerName` in the row's details).
-///
-/// CDXC:RemoteMachines 2026-11-04 DECISION:
-/// User, of a thread a coordinator here started on their Windows computer: "why dont i see that thread in the workers under you??". The thread sits under its coordinator like a local one, and says which computer runs it in the muted text a Cloud Box row names its box with, so a click that opens it there is no surprise.
-pub(crate) fn computer_badge(
-    session: &NativeSidebarSession,
-    appearance: &SidebarAppearance,
-) -> Option<AnyElement> {
-    // Also a session of a project the one-list sidebar merged from another machine
-    // (`machineName`, gx-core `sidebar_view/merged.rs`).
-    let full_name = session
-        .details
-        .get("computerName")
-        .or_else(|| session.details.get("machineName"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|name| !name.is_empty())?
-        .to_owned();
-    // CDXC:RemoteMachines 2026-11-06: the badge reads the computer's short name (gx-core
-    // machine_short_names.rs); the row's tooltip names it in full (sessions.rs).
-    let name = session
-        .details
-        .get("machineShortName")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|short| !short.is_empty())
-        .map_or(full_name, str::to_owned);
-    let scale = appearance.scale;
-    // CDXC:RemoteMachines 2026-11-08 DECISION: user, on the offline-notice page (Q1837): "just
-    // show WN with redish color in sidebar to indicate, that's enough". The badge takes the soft
-    // red the machine tab's icon turns when it fails (machines.rs) while that computer is offline
-    // (gx_chat/computers.rs); nothing else on the row changes.
-    let color = if session_computer_offline(session) {
-        gpui::rgb(0xff9494).into()
-    } else {
-        appearance.muted
-    };
-    Some(
-        div()
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(3.0 * scale))
-            .max_w(px(96.0 * scale))
-            .child(titlebar_svg_icon(
-                "titlebar/device-desktop.svg",
-                12.0 * scale,
-                color,
-            ))
-            .child(
-                div()
-                    .min_w_0()
-                    .truncate()
-                    .text_size(px(11.5 * scale))
-                    .text_color(color)
-                    .child(name),
-            )
-            .into_any_element(),
-    )
-}
-
-/// Whether the computer a row's session runs on is offline, as the chats are told
-/// (`gx_chat/computers.rs`).
-fn session_computer_offline(session: &NativeSidebarSession) -> bool {
-    let Some(key) = ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
-    else {
-        return false;
-    };
-    let Some(machine_id) = key.machine.remote_id() else {
-        return false;
-    };
-    let (_, computers) = crate::app::gx_chat::computers::current();
-    computers
-        .get(machine_id)
-        .is_some_and(|computer| computer.offline)
 }
 
 /// The worktree a session runs in, after its title, on a worktree session its parent project lists

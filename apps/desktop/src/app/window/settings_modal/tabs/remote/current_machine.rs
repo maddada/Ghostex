@@ -1,10 +1,10 @@
-//! "This computer": what belongs to the computer you're on (its name, its short name, its SSH
+//! "This computer": what belongs to the computer you're on (its name, its icon, its SSH
 //! access), behind its row on the Remote page, and the one-line SSH status the Tailscale steps show
 //! instead of their own SSH controls.
 //!
 //! The 2026-11-08 "Current machine" card above the tabs (Q1970 to Q1973) became this row on
 //! 2026-11-10 (CDXC:RemotePairing 2026-11-10 in mod.rs). What it holds stays as the user decided
-//! then: the name read-only from the OS, the short name, SSH access; the Tailscale steps show "SSH
+//! then: the name read-only from the OS, the short name (an icon since 2026-11-12, computer_icon.rs), SSH access; the Tailscale steps show "SSH
 //! access is on", or "SSH access is off" with a link that opens this row and highlights its SSH
 //! access row.
 use super::super::super::super::native_modal_kit::*;
@@ -14,12 +14,10 @@ use super::paired_devices::remote_row;
 use super::style::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use gpui_component::input::{InputEvent, InputState};
 use gpui_component::{h_flex, v_flex};
-use serde_json::Value;
 use std::time::Duration;
 
 /// How long the SSH access row stays highlighted after a setup step's link brought you to it.
@@ -64,27 +62,9 @@ fn computer_name(tab: &RemoteTab) -> String {
         .unwrap_or_else(crate::host_name::local_computer_name)
 }
 
-/// The row's one line: "Mohamad's Laptop · short name MM · SSH access on".
-pub(super) fn this_computer_summary(tab: &RemoteTab, cx: &gpui::App) -> String {
-    let mut settings = serde_json::Map::new();
-    settings.insert(
-        "remoteMachines".to_string(),
-        Value::Array(tab.remote_machines(cx)),
-    );
-    settings.insert(
-        "localMachineShortName".to_string(),
-        tab.store.read(cx).value("localMachineShortName"),
-    );
-    let short = ghostex_gx_core::machine_short_names::short_names_by_machine_id(
-        &crate::host_name::local_computer_name(),
-        &settings,
-    )
-    .remove(ghostex_gx_core::LOCAL_MACHINE_ID)
-    .unwrap_or_default();
+/// The row's one line: "Mohamad's Laptop · SSH access on".
+pub(super) fn this_computer_summary(tab: &RemoteTab, _cx: &gpui::App) -> String {
     let mut parts = vec![computer_name(tab)];
-    if !short.is_empty() {
-        parts.push(format!("short name {short}"));
-    }
     match tab.access.as_ref().map(|access| access.ssh.enabled) {
         Some(true) => parts.push("SSH access on".to_string()),
         Some(false) => parts.push("SSH access off".to_string()),
@@ -93,7 +73,7 @@ pub(super) fn this_computer_summary(tab: &RemoteTab, cx: &gpui::App) -> String {
     parts.join(" · ")
 }
 
-/// The rows behind "This computer": its name, its short name and SSH access, under hairlines.
+/// The rows behind "This computer": its name, its icon and SSH access, under hairlines.
 pub(super) fn this_computer_rows(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
@@ -120,95 +100,34 @@ pub(super) fn this_computer_rows(
                 .into_any_element(),
         ),
     );
-    let short_row = short_name_row(tab, t, &crate::host_name::local_computer_name(), window, cx);
+    let icon_row = icon_row(tab, t, cx);
     let ssh_row = ssh_row(tab, t, window, cx);
-    vec![name_row, short_row, ssh_row]
+    vec![name_row, icon_row, ssh_row]
 }
 
-/// This computer's short name (`localMachineShortName`); empty uses the one made from the name,
-/// shown as the placeholder (gx-core machine_short_names.rs). It is per computer, like the machine
-/// list, so Settings sync does not carry it.
-fn short_name_row(
-    tab: &mut RemoteTab,
-    t: &RemoteTokens,
-    local_name: &str,
-    window: &mut Window,
-    cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    if tab.local_short_name.is_none() {
-        // This computer's made short name, with the saved machines' names left out of the
-        // clash check the way the sidebar makes it.
-        let mut settings = serde_json::Map::new();
-        settings.insert(
-            "remoteMachines".to_string(),
-            Value::Array(tab.remote_machines(cx)),
-        );
-        let made =
-            ghostex_gx_core::machine_short_names::short_names_by_machine_id(local_name, &settings)
-                .remove(ghostex_gx_core::LOCAL_MACHINE_ID)
-                .unwrap_or_default();
-        let saved = tab
-            .store
-            .read(cx)
-            .value("localMachineShortName")
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
-        let input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(made)
-                .default_value(saved)
-        });
-        let subscription = cx.subscribe_in(
-            &input,
-            window,
-            |tab: &mut RemoteTab, input, event: &InputEvent, window, cx| {
-                if !matches!(event, InputEvent::Change) {
-                    return;
-                }
-                let text = input.read(cx).value().to_string();
-                let short = ghostex_gx_core::machine_short_names::clean_machine_short_name(&text);
-                if short != text {
-                    let value = short.clone();
-                    input.update(cx, |input, cx| input.set_value(value, window, cx));
-                }
-                let mut patch = serde_json::Map::new();
-                patch.insert("localMachineShortName".to_string(), Value::String(short));
-                tab.store.update(cx, |store, cx| {
-                    store.apply_patch(patch, "settings:localMachineShortName", cx)
-                });
-            },
-        );
-        tab.local_short_name = Some((input, subscription));
-    }
-    let input = tab
-        .local_short_name
-        .as_ref()
-        .map(|(input, _)| input.clone())
-        .expect("made above");
+/// This computer's icon (CDXC:RemoteMachines 2026-11-12 in gx-core computer_icons.rs): kept on
+/// this computer by its gxserver, so the phone and other computers show it too. It replaces the
+/// short name, which the sidebar no longer draws.
+fn icon_row(tab: &RemoteTab, t: &RemoteTokens, cx: &mut Context<RemoteTab>) -> AnyElement {
     remote_row(
-        row_main(
-            t,
-            "Short name",
-            "Up to 2 characters, shown on the sidebar's computer pills. Each remote machine's own is in its settings.",
-        ),
-        Some(
-            div()
-                .flex_shrink_0()
-                .w(px(64.0))
-                .child(remote_input(
-                    &t.p,
-                    &input,
-                    32.0,
-                    10.0,
-                    Some(64.0),
-                    false,
-                    false,
-                    window,
-                    cx,
-                ))
-                .into_any_element(),
-        ),
+        v_flex()
+            .w_full()
+            .min_w_0()
+            .gap(px(10.0))
+            .py(px(10.0))
+            .child(row_main(
+                t,
+                "Icon",
+                "Marks this computer in the sidebar while more than one computer is there, on every device that reaches it.",
+            ))
+            .child(super::computer_icon::computer_icon_picker(
+                tab,
+                t,
+                ghostex_gx_core::LOCAL_MACHINE_ID,
+                cx,
+            ))
+            .into_any_element(),
+        None,
     )
 }
 

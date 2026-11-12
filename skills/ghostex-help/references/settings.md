@@ -654,9 +654,8 @@ How to use this file:
 ### This computer
 
 - **Name** `computerName` (Settings UI row without a settings key; use `ghostex settings open`): This computer's name, set by the system; your phone and other computers show it.
-- **Short name** `computerShortName` (Settings UI row without a settings key; use `ghostex settings open`): This computer's 2-character name on the sidebar's computer pills; empty uses one made from its name.
+- **Icon** `computerIcon` (Settings UI row without a settings key; use `ghostex settings open`): This computer's icon in the sidebar while more than one computer is there; kept on this computer, so your phone and other computers show it too.
 - **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.
-- **Short name** `localMachineShortName` (text, default (empty)) [not agent-writable]: Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.
 ### Phones and computers that can reach this machine
 
 - **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself.
@@ -672,7 +671,7 @@ How to use this file:
 
 - **Add a computer** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Add a computer by SSH details or its code; saved computers appear as sidebar sections.
 - **Show in sidebar** `showInSidebar` (Settings UI row without a settings key; use `ghostex settings open`): Hide a saved remote machine from the sidebar without deleting it.
-- **Short names** `shortName` (Settings UI row without a settings key; use `ghostex settings open`): Each remote machine's 2-character name on the sidebar's computer pills, set in its settings.
+- **Computer icons** `machineIcon` (Settings UI row without a settings key; use `ghostex settings open`): Each saved computer's icon in the sidebar, picked in its settings while it is connected; it is kept on that computer.
 - **SSH host** `sshHost` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH host.
 - **SSH user** `sshUser` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH user.
 - **SSH port** `sshPort` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH port.

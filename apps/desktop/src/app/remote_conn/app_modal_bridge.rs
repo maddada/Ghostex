@@ -142,6 +142,11 @@ impl GhostexGpuiApp {
                     self.handle_remote_app_update_command(command, cx);
                 }
             }
+            "computerIcon" => {
+                if let Some(command) = message.as_object() {
+                    self.handle_computer_icon_command(command, cx);
+                }
+            }
             "addProjectDialogRequest" => {
                 if let Some(command) = message.as_object() {
                     self.handle_gpui_add_project_dialog_request_message(command, cx);

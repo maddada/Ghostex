@@ -139,6 +139,7 @@ fn render_session_icon(
             .child(super::threads::coordinator_icon(
                 appearance,
                 session.is_chief,
+                super::threads::is_main_coordinator(session),
             ))
             .into_any_element();
     }

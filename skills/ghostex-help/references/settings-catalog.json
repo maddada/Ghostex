@@ -12333,9 +12333,9 @@
       "agentWritable": false
     },
     {
-      "key": "computerShortName",
-      "title": "Short name",
-      "subtitle": "This computer's 2-character name on the sidebar's computer pills; empty uses one made from its name.",
+      "key": "computerIcon",
+      "title": "Icon",
+      "subtitle": "This computer's icon in the sidebar while more than one computer is there; kept on this computer, so your phone and other computers show it too.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
@@ -12352,18 +12352,6 @@
       "section": "currentMachine",
       "sectionTitle": "This computer",
       "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "localMachineShortName",
-      "title": "Short name",
-      "subtitle": "Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.",
-      "tab": "remote",
-      "tabTitle": "Remote",
-      "section": "currentMachine",
-      "sectionTitle": "Current machine",
-      "type": "string",
-      "default": "",
       "agentWritable": false
     },
     {
@@ -12467,9 +12455,9 @@
       "agentWritable": false
     },
     {
-      "key": "shortName",
-      "title": "Short names",
-      "subtitle": "Each remote machine's 2-character name on the sidebar's computer pills, set in its settings.",
+      "key": "machineIcon",
+      "title": "Computer icons",
+      "subtitle": "Each saved computer's icon in the sidebar, picked in its settings while it is connected; it is kept on that computer.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",

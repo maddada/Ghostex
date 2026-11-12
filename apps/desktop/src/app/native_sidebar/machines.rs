@@ -45,18 +45,6 @@ fn machine_state_words(machine: &NativeSidebarMachine) -> &'static str {
     }
 }
 
-/// The icon a remote computer's system gets (the brand marks Settings > Remote shows), as the name
-/// a sidebar menu row takes (`gpui_sidebar_command_icon_asset_path`), so its tile and its row in
-/// the folded menu agree.
-fn system_icon_name(system: Option<&&'static str>) -> &'static str {
-    match system.copied() {
-        Some("windows") => "brandWindows",
-        Some("macos") => "brandApple",
-        Some("linux") => "brandUbuntu",
-        _ => "cloud",
-    }
-}
-
 /// Where a computer tile's status dots sit: centred over its lower edge, where a Space tile puts
 /// its own (selectors.rs), whatever the tile shows.
 ///
@@ -99,9 +87,34 @@ impl GhostexGpuiApp {
             .collect()
     }
 
-    /// The icon a computer shows: this computer's monitor, a spinner while a remote one connects,
-    /// else its system's mark.
+    /// The drawing a computer wears: its mark (the icon picked for it, gx-core computer_icons.rs),
+    /// else this computer's monitor or a remote one's system mark.
+    fn native_machine_asset(
+        &self,
+        machine: &NativeSidebarMachine,
+        systems: &HashMap<String, &'static str>,
+    ) -> &'static str {
+        if let Some(asset) = self.sidebar_machine_icon_asset(&machine.id) {
+            return asset;
+        }
+        if machine.id == ghostex_gx_core::LOCAL_MACHINE_ID {
+            return "titlebar/device-desktop.svg";
+        }
+        match systems.get(&machine.id).copied() {
+            Some("windows") => "titlebar/brand-windows.svg",
+            Some("macos") => "titlebar/brand-apple.svg",
+            Some("linux") => "titlebar/brand-ubuntu.svg",
+            _ => "titlebar/cloud.svg",
+        }
+    }
+
+    /// The icon a computer shows: a spinner while a remote one connects, else its mark.
+    ///
+    /// CDXC:RemoteMachines 2026-11-12 SEE-ALSO: the tiles draw the icon picked for each computer
+    /// (gx-core computer_icons.rs), which supersedes the monitor and system marks of 2026-11-11 as
+    /// the tile's picture; those stay for a computer whose icon is not known yet.
     fn native_machine_icon(
+        &self,
         machine: &NativeSidebarMachine,
         systems: &HashMap<String, &'static str>,
         appearance: &SidebarAppearance,
@@ -111,14 +124,10 @@ impl GhostexGpuiApp {
         let local = machine.id == ghostex_gx_core::LOCAL_MACHINE_ID;
         let failed = !local && ghostex_gx_core::machine_state_is_failure(&machine.state);
         let icon = gpui::svg()
-            .path(if local {
-                gpui::SharedString::new_static("titlebar/device-desktop.svg")
-            } else if busy {
-                gpui::SharedString::new_static("titlebar/loader2.svg")
+            .path(if busy && !local {
+                "titlebar/loader2.svg"
             } else {
-                gpui_sidebar_command_icon_asset_path(Some(system_icon_name(
-                    systems.get(&machine.id),
-                )))
+                self.native_machine_asset(machine, systems)
             })
             .size(px(size))
             .flex_shrink_0()
@@ -232,12 +241,7 @@ impl GhostexGpuiApp {
                     })
             })
             .hover(|tile| tile.bg(appearance.hover))
-            .child(Self::native_machine_icon(
-                machine,
-                systems,
-                appearance,
-                15.0 * scale,
-            ))
+            .child(self.native_machine_icon(machine, systems, appearance, 15.0 * scale))
             /*
             CDXC:Sidebar 2026-09-25 DECISION:
             User: stop showing the status on the machine we're on and show it on the other machines as dots, not numbers, exactly like the Spaces. The picked computer's sessions are already listed below.
@@ -358,7 +362,8 @@ impl GhostexGpuiApp {
                 let mut item = json!({
                     "label": machine.label,
                     "detail": machine_state_words(machine),
-                    "icon": if local { "deviceDesktop" } else { system_icon_name(systems.get(&machine.id)) },
+                    // Its mark, as the name a menu row takes (`titlebar/<name>.svg`).
+                    "icon": self.native_machine_asset(machine, systems).trim_start_matches("titlebar/").trim_end_matches(".svg"),
                     // The name and the state on two lines with room (menu_state.rs `item_height`).
                     "twoLineRow": true,
                     "checked": machine.id == snapshot.selected_machine_id,
@@ -394,12 +399,7 @@ impl GhostexGpuiApp {
             .border_color(appearance.foreground.opacity(0.08))
             .cursor_pointer()
             .hover(|tile| tile.bg(appearance.hover))
-            .child(Self::native_machine_icon(
-                picked,
-                systems,
-                appearance,
-                15.0 * scale,
-            ))
+            .child(self.native_machine_icon(picked, systems, appearance, 15.0 * scale))
             .when(has_status, |tile| {
                 tile.child(machine_dots(scale).child(super::status::status_dot_stack(
                     working,

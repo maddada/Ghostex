@@ -117,15 +117,15 @@ impl GhostexGpuiApp {
             refused: Default::default(),
             panes_only: false,
         };
-        // The chips draw short names (CDXC:RemoteMachines 2026-11-06 in gx-core
-        // machine_short_names.rs); the title's tooltip names the computers in full.
+        // The chips draw each computer's icon (CDXC:RemoteMachines 2026-11-12 in gx-core
+        // computer_icons.rs); the title's tooltip names the computers.
         let tooltip = if group.machine_names.is_empty() {
             group.title_tooltip.clone()
         } else {
             let computers = group
                 .machine_names
                 .iter()
-                .map(|(name, short)| format!("{short}: {name}"))
+                .map(|(name, _)| format!("On {name}"))
                 .collect::<Vec<_>>()
                 .join("\n");
             Some(match &group.title_tooltip {
@@ -166,13 +166,15 @@ impl GhostexGpuiApp {
                         .truncate()
                         .child(home_title.clone().unwrap_or_else(|| group.title.clone())),
                 )
-                .children(
-                    group
-                        .machine_names
-                        .iter()
-                        .filter(|_| home.is_none())
-                        .map(|(_, short)| machine_name_chip(short, appearance)),
-                )
+                .children(group.machine_names.iter().filter(|_| home.is_none()).map(
+                    |(_, machine_id)| {
+                        machine_icon_chip(
+                            self.sidebar_machine_icon_asset(machine_id)
+                                .unwrap_or("titlebar/device-desktop.svg"),
+                            appearance,
+                        )
+                    },
+                ))
                 .when_some(tooltip.filter(|_| home.is_none()), |title, tooltip| {
                     title.when(
                         self.native_sidebar.pointer_inside
@@ -489,19 +491,12 @@ pub(in crate::app::native_sidebar) fn letter_tile(
 /// One machine a merged project is on, after its name (gx-core `sidebar_view/merged.rs`): a light
 /// outlined chip in the muted text colour, never a filled one, holding the machine's short name.
 /// The Unified sidebar's project headers draw the same chip (unified/groups.rs).
-pub(crate) fn machine_name_chip(name: &str, appearance: &SidebarAppearance) -> AnyElement {
+pub(crate) fn machine_icon_chip(asset: &'static str, appearance: &SidebarAppearance) -> AnyElement {
     let scale = appearance.scale;
     div()
         .flex_shrink_0()
-        .max_w(px(72.0 * scale))
-        .px(px(5.0 * scale))
-        .rounded(px(99.0))
-        .border_1()
-        .border_color(appearance.muted.opacity(0.35))
-        .text_size(px(10.0 * scale))
-        .text_color(appearance.muted)
-        .font_weight(gpui::FontWeight::NORMAL)
-        .truncate()
-        .child(name.to_owned())
+        .flex()
+        .items_center()
+        .child(titlebar_svg_icon(asset, 12.0 * scale, appearance.muted))
         .into_any_element()
 }

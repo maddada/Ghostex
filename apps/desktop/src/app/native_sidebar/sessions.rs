@@ -163,15 +163,9 @@ impl GhostexGpuiApp {
             Some(lines) => format!("{tooltip}\n\n{lines}"),
             None => tooltip,
         };
-        // The computer badge draws a short name; the tooltip says it in full.
-        let tooltip = match session
-            .details
-            .get("computerName")
-            .or_else(|| session.details.get("machineName"))
-            .and_then(Value::as_str)
-            .filter(|name| !name.trim().is_empty())
-        {
-            Some(name) => format!("{tooltip}\nOn {}", name.trim()),
+        // The computer icon draws no name; the tooltip says it (computer_mark.rs).
+        let tooltip = match self.session_computer_name(session) {
+            Some(name) => format!("{tooltip}\nOn {name}"),
             None => tooltip,
         };
         // A worktree session its parent project lists says which worktree (`worktree_badge`).
@@ -301,9 +295,8 @@ impl GhostexGpuiApp {
                 // A Unified coordinator whose hat a clock owns folds from its count, idle or hovered too.
                 .when(clock_fold, |row| row.children(self.render_unified_crew_count(session, appearance, cx)))
                 .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))
-                .when(!buttons_shown, |row| row.children(super::threads::main_coordinator_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::worktree_badge(session, appearance)))
-                .when(!buttons_shown, |row| row.children(super::threads::computer_badge(session, appearance)))
+                .when(!buttons_shown, |row| row.children(self.session_computer_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(self.render_voice_call_badge(&session.session_id, appearance)))
                 .when(!buttons_shown, |row| row.children(super::agentbox::agentbox_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))
                 .when(!buttons_shown, |row| row.children(super::cloud_box::cloud_box_badge(session, appearance, tooltip_span, self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag())))

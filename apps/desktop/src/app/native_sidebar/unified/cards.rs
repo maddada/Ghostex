@@ -349,6 +349,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:Sidebar 2026-11-06 DECISION:
     /// User: "please move the name of the pc that has the session to be after the branch name in the 2nd row so it's 2 rows not 3 rows ... i really hate seeing 2 rows for some and 3 rows for some other sessions". The computer's name of a session on another computer no longer sits on a line of its own (or after the repository): it follows the branch on the branch line, "main · WN", on every card, with no branch ("No branch · WN", "Untracked · WN") and in the ungrouped list too. So under a project header every card is two lines and in the ungrouped list every card is three. When the line is tight the branch is cut first, so the name never disappears. It is the computer's short name (CDXC:RemoteMachines 2026-11-06 in gx-core machine_short_names.rs), with the full name in the card's tooltip.
+    /// Since 2026-11-12 the name is the computer's icon, on every card while more than one computer is in the sidebar (CDXC:RemoteMachines 2026-11-12 in native_sidebar/computer_mark.rs).
     pub(in crate::app::native_sidebar) fn render_native_unified_card(
         &self,
         card: &UnifiedCard,
@@ -464,7 +465,8 @@ impl GhostexGpuiApp {
         let tooltip = [
             Some(session.title().to_owned()),
             Some(card.repo_label.clone()),
-            card.machine_label.clone(),
+            self.session_computer_name(session)
+                .map(|name| format!("On {name}")),
             card.row.menu_facts.branch.clone(),
         ]
         .into_iter()
@@ -561,9 +563,6 @@ impl GhostexGpuiApp {
                     // What the card holds: its crew count (CDXC:Coordinators 2026-11-11 in
                     // native_sidebar/threads.rs).
                     .children(self.render_unified_crew_count(session, appearance, cx))
-                    .children(crate::app::native_sidebar::threads::main_coordinator_tag(
-                        session, appearance,
-                    ))
                     .children(right.take()),
             )
             .child(
@@ -588,15 +587,9 @@ impl GhostexGpuiApp {
                             )
                             .child(div().min_w_0().truncate().child(branch_text)),
                     )
-                    // The computer's short name (gx-core machine_short_names.rs); the card's
-                    // tooltip names it in full.
-                    .children(card.machine_short_label.clone().map(|machine| {
-                        div()
-                            .flex_shrink_0()
-                            .max_w(px(96.0 * scale))
-                            .truncate()
-                            .child(format!("· {machine}"))
-                    }))
+                    // Its computer's icon while more than one computer is in the sidebar
+                    // (native_sidebar/computer_mark.rs); the card's tooltip names it.
+                    .children(self.session_computer_badge(session, appearance))
                     // The pull request and the agent stay on the right edge.
                     .child(div().flex_1())
                     .children(pull_request.map(|pull_request| {

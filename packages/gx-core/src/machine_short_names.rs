@@ -2,6 +2,8 @@
 //!
 //! CDXC:RemoteMachines 2026-11-06 DECISION:
 //! User: "i really hate these pills showing local and windows. i want each machine to get 2 chars max, i wanna be able to set the short names in settings for each machine. also we should show this name on unified sidebar project headers when group by proj is enabled". A computer's pill reads its short name: the one set in Settings > Remote (`remoteMachines[].shortName`, and `localMachineShortName` for this computer), else one made from its name: the first letters of its first two words ("Mac Studio" is MS), or of a one-word name its first letter and the next consonant ("Windows" is WN), uppercased. A made name never repeats a set one or an earlier made one: it tries the first letter with each later letter of the name, then with 2 to 9. The full name stays in the pill's tooltip.
+//!
+//! CDXC:RemoteMachines 2026-11-12 WHY: the sidebar no longer draws short names; a computer's mark is its icon (computer_icons.rs, the user's decision there), and Settings no longer sets them. The rows still carry them until this plumbing is taken out.
 
 /// The longest short name, in characters.
 pub const MACHINE_SHORT_NAME_MAX: usize = 2;

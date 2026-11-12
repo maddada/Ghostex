@@ -1346,26 +1346,25 @@ where they are while you open, change and close views.
   Unsnooze brings it back early. Snooze needs no setting; it is always
   available.
 - With Separate by machine on, each computer is an icon tile at the start of
-  the row under New session, before the Spaces: this computer's monitor, then
-  each remote computer's Windows, Apple or Ubuntu mark (a cloud when Ghostex
-  doesn't know its system), with a spinner while it connects and its status
-  dots on the tile. The picked computer is filled like a picked Space. Hover a
+  the row under New session, before the Spaces, showing that computer's icon,
+  with a spinner while it connects and its status dots on the tile. The
+  picked computer is filled like a picked Space. Hover a
   tile for its name and state, with the reason when it couldn't connect;
   right-click it for its menu, and click a computer that isn't connected to
   connect it. When the row is too narrow, the computers fold into one button
   that lists them.
-- Every computer has a short name of up to 2 characters, which the sidebar's
-  computer pills show instead of the full name: the chips after a project's
-  name, the computer badge on another computer's session and a Unified card's
-  branch line ("main · WN"). Hover a pill or the row for the full name. With
-  Group by project on, the Unified sidebar's project headers draw no pills:
-  hover a project's name to see the computers that have it, full name first
-  ("Windows (WN)"), when it is on more than one or only on another one. Set a
-  machine's in Settings > Remote > Computers this machine connects to (its
-  dialog's Short name field) and this computer's in Settings > Remote >
-  This computer (`localMachineShortName`); empty uses one made from the name (the first
-  letters of its first two words, or its first letter and the next consonant,
-  so Windows is WN), never the same as another computer's.
+- Every computer has an icon. While more than one computer is in the
+  sidebar, every session row ends with its computer's icon, this computer's
+  sessions included (a Unified card shows it after the branch), and a
+  project's header shows the icons of the computers that have it. Hover a row
+  or a project's name for the computer's full name. Pick an icon (a laptop, a
+  desktop, a server, a cloud, a house, a rocket and more) in Settings > Remote
+  > This computer for this computer, and in a saved computer's dialog under
+  Computers this machine connects to for that one (it must be connected).
+  The icon is kept on that computer, so your phone and your other computers
+  show the same one. Until you pick one, a laptop shows a laptop and other
+  computers a desktop (a computer whose kind Ghostex can't tell shows its
+  Windows, Apple or Ubuntu mark).
 
 Related settings: everything under Sidebar & Sessions > Sidebar, `interfaceScalePercent`
 and `agentManagerZoomPercent` (the sidebar's size, Settings > Interface > UI Scale), `sidebarSpacesEnabled`,
@@ -3722,8 +3721,9 @@ version of the Projects features in Cursor and Claude Code.
   thread can be slept). On the phone, long-press the coordinator for the same
   item; `ghostex coordinator sleep-inactive-threads` does it from a terminal.
 - **Main coordinator**: each project has one main coordinator on each
-  computer, marked with a small **Main** tag on its row (in the Unified
-  sidebar, on the phone and in the chat's `+` picker too). It is the one other
+  computer. On the desktop its coordinator icon is gold in the Project and
+  Unified sidebars; the phone and the chat's `+` picker mark it with a small
+  **Main** tag. It is the one other
   agents and Chief of Staff contact when they want something from that
   project. The first coordinator you create in a project gets it; to give it to
   another coordinator there, right-click that coordinator and choose **Make
@@ -4855,7 +4855,7 @@ sessions, so any client can control agents on any machine.
   isn't installed it says so with Install, the install's step while it runs,
   and Try again when it failed), Computers this machine connects to
   (the saved computers and Add a computer), and three rows that open in place:
-  This computer (its name, set by the system, its short name and SSH access,
+  This computer (its name, set by the system, its icon and SSH access,
   with the macOS, Windows or Linux steps to turn SSH on by hand), Tailscale
   (another way in for tailnets; its code sits behind a click-to-show QR with
   Copy as text) and Advanced (Relay, ports, allowed keys, the pairing address,

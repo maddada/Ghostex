@@ -883,6 +883,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         User: a ticket command's create is remote-allowed, like Linear's and GitHub's: a remote client may create a ticket on the computer that owns the project. It takes only ids and text and returns the ticket the command made, never a credential, as `listWorkItems` makes that computer run its command.
         */
         "/api/createWorkTicket" => remote_allowed(path),
+        // CDXC:RemoteMachines 2026-11-12 WHY: a computer's icon is a picture name the user picked for it (computer_icon.rs); every client that reaches this computer reads it, and the desktop app and phone of its owner set it from wherever they are, so both answer on either listener.
+        "/api/computerIcon" | "/api/setComputerIcon" => remote_allowed(path),
         "/api/readWorkTracker" | "/api/setWorkTracker" => full_local(path),
         /*
         CDXC:WorkMode 2026-10-31 DECISION:

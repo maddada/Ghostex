@@ -540,7 +540,9 @@ fn native_group(
         machine_names: core
             .machine_names
             .iter()
-            .map(|chip| (chip.name.clone(), chip.short_name.clone()))
+            // The computer's name and id: its chip draws the computer's icon (gx-core
+            // computer_icons.rs).
+            .map(|chip| (chip.name.clone(), chip.machine_id.clone()))
             .collect(),
         holds_active_session_group: group.holds_active_session_group,
         project_context: project_context(group),

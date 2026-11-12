@@ -160,6 +160,8 @@ pub(crate) fn gpui_remote_machines_with_changed_connection(
         fields.remove("name");
         // The sidebar pill's short name is a label too (gx-core machine_short_names.rs).
         fields.remove("shortName");
+        // So is the icon kept to draw it while it is away (gx-core computer_icons.rs).
+        fields.remove("icon");
         fields.remove("disabled");
         // Agent access is renewed in place (remote_conn/connected_computers.rs), never a reconnect.
         fields.remove("agentAccess");

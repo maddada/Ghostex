@@ -473,8 +473,8 @@ impl UnifiedSidebarHost {
             }
         }
         let last_branches = &self.last_branches;
-        // Every computer's name and pill (CDXC:RemoteMachines 2026-11-06 in gx-core
-        // machine_short_names.rs), from the machine tabs the host builds.
+        // Every computer's name and id (its icon is drawn from the id, gx-core
+        // computer_icons.rs), from the machine tabs the host builds.
         let chips: HashMap<MachineId, (String, String)> = list_inputs
             .host
             .machines
@@ -490,10 +490,7 @@ impl UnifiedSidebarHost {
                 } else {
                     tab.label.clone()
                 };
-                let short = Some(tab.short_name.clone())
-                    .filter(|short| !short.trim().is_empty())
-                    .unwrap_or_else(|| name.chars().take(2).collect::<String>().to_uppercase());
-                (machine, (name, short))
+                (machine, (name, tab.machine_id.clone()))
             })
             .collect();
         let base = |row: &UnifiedRow, nesting: RowNesting| -> Option<UnifiedCard> {
@@ -517,12 +514,6 @@ impl UnifiedSidebarHost {
                 repo_icon: icons.get(&row.repo.key).cloned(),
                 repo_key: row.repo.key.clone(),
                 repo_label: row.repo.label.clone(),
-                machine_short_label: row.machine_label.as_ref().map(|label| {
-                    chips
-                        .get(&row.machine)
-                        .map_or_else(|| label.clone(), |(_, short)| short.clone())
-                }),
-                machine_label: row.machine_label.clone(),
                 status: row.status,
                 branch_line,
                 in_group: grouped && row.shelf != UnifiedShelf::Drafts,

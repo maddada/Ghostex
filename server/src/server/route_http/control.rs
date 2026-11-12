@@ -119,6 +119,15 @@ pub(super) async fn route_control_http(
                 &body_json,
             )
         }
+        path if crate::computer_icon::COMPUTER_ICON_ENDPOINTS.contains(&path) => {
+            crate::computer_icon::handle_computer_icon_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/appUpdateStatus"
         | "/api/appUpdateCheck"
         | "/api/appUpdateInstall"

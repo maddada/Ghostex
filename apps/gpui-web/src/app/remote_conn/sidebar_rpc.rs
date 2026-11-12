@@ -81,4 +81,14 @@ impl GhostexGpuiApp {
     pub(crate) fn remote_machine_systems(&self) -> std::collections::HashMap<String, &'static str> {
         std::collections::HashMap::new()
     }
+
+    /// The desktop's computer marks (`apps/desktop/src/app/gx_store/computer_icons.rs`): drawn
+    /// only while more than one computer is in the sidebar, which a page never has.
+    pub(crate) fn sidebar_computer_mark(&self, _session_id: &str) -> Option<(&'static str, &str)> {
+        None
+    }
+
+    pub(crate) fn sidebar_machine_icon_asset(&self, _machine_id: &str) -> Option<&'static str> {
+        None
+    }
 }

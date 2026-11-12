@@ -346,6 +346,30 @@ pub(super) fn rpc(path: &str, params: &Value) -> Result<Value, String> {
 
 /// `probeRemoteGxserverInstall`: the story machine runs gxserver 0.9.3.
 pub(super) fn answers(message: &Value) -> Vec<Value> {
+    // Settings > Remote asks for every computer's icon: this one unpicked (a laptop), the
+    // connected story machine a server; a pick comes back as picked.
+    if message.get("type").and_then(Value::as_str) == Some("computerIcon") {
+        let mut picked = json!({ "local": null, "remote-1": "server" });
+        if message.get("op").and_then(Value::as_str) == Some("set")
+            && let Some(id) = message.get("machineId").and_then(Value::as_str)
+        {
+            let icon = message
+                .get("icon")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            picked[id] = if icon.is_empty() {
+                Value::Null
+            } else {
+                json!(icon)
+            };
+        }
+        return vec![json!({
+            "type": "computerIcons",
+            "picked": picked,
+            "localDefaultAsset": "titlebar/device-laptop.svg",
+            "connected": ["remote-1"],
+        })];
+    }
     // Settings > Remote opened: the app answers with each saved machine's connection state (the
     // first connected, the second not), which the Remote machines tab counts as 1/2.
     if message.get("type").and_then(Value::as_str) == Some("remoteAppUpdate")

@@ -32,6 +32,7 @@ pub(crate) mod cloud_runner;
 pub(crate) mod codex_rollout_archive;
 pub(crate) mod collab_shim;
 pub(crate) mod components;
+pub(crate) mod computer_icon;
 pub(crate) mod computer_startup;
 pub mod config;
 pub(crate) mod connected_computers;

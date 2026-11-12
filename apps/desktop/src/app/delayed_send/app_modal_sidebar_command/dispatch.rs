@@ -121,6 +121,7 @@ impl GhostexGpuiApp {
             | "reconnectRemoteMachine"
             | "probeRemoteGxserverInstall"
             | "remoteAppUpdate"
+            | "computerIcon"
             | "updates"
             | "requestRemoteMachineConnectStates"
             | "requestDictateDevices"

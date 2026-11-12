@@ -157,7 +157,7 @@ impl GhostexGpuiApp {
                     let computers = group
                         .machines
                         .iter()
-                        .map(|(name, short)| format!("{name} ({short})"))
+                        .map(|(name, _)| name.clone())
                         .collect::<Vec<_>>()
                         .join("\n");
                     format!("{}\n\nOn these computers:\n{computers}", group.label)

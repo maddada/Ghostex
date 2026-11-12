@@ -858,6 +858,9 @@ pub(super) struct MachineDraft {
     pub(super) name: String,
     /// The sidebar pill's short name, at most two characters (gx-core `machine_short_names`).
     pub(super) short_name: String,
+    /// The icon last read on that computer (gx-core computer_icons.rs), kept through a save; the
+    /// dialog's picker changes it on the computer itself, not here.
+    pub(super) icon: String,
     /// `ssh` or `easyConnect`.
     pub(super) easy_connect: bool,
     pub(super) easy_connect_code: String,
@@ -911,6 +914,7 @@ pub(super) fn machine_draft_from_settings(machine: &Value) -> MachineDraft {
         id: text(machine, "id").unwrap_or_default(),
         name: text(machine, "name").unwrap_or_default(),
         short_name: text(machine, "shortName").unwrap_or_default(),
+        icon: text(machine, "icon").unwrap_or_default(),
         easy_connect: machine.get("transport").and_then(Value::as_str) == Some("easyConnect"),
         easy_connect_code: String::new(),
         easy_connect_address: text(machine, "easyConnectAddress").unwrap_or_default(),
@@ -994,6 +998,7 @@ pub(super) fn normalize_remote_machine_draft(draft: &MachineDraft) -> Option<Val
         "id": draft.id,
         "name": draft.name,
         "shortName": draft.short_name,
+        "icon": draft.icon,
         "transport": if draft.easy_connect { "easyConnect" } else { "ssh" },
         "easyConnectAddress": draft.easy_connect_address,
         "sshHost": if draft.easy_connect { "" } else { draft.ssh_host.as_str() },

@@ -806,17 +806,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: true,
     },
     Supplemental {
-        key: "localMachineShortName",
-        tab: REMOTE,
-        group: None,
-        section: "currentMachine",
-        section_title: "Current machine",
-        title: "Short name",
-        subtitle: "Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
         key: "remoteTailscaleEnabled",
         tab: REMOTE,
         group: None,

@@ -24,6 +24,7 @@ pub mod bot_feed;
 mod change;
 mod claude_cloud;
 pub mod cloud_boxes;
+pub mod computer_icons;
 mod connection;
 mod core;
 mod doc_sync;

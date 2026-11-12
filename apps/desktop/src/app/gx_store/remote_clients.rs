@@ -108,6 +108,12 @@ pub(crate) struct RemoteClients {
     /// them. The sidebar list reads this; nothing else builds it.
     tabs: Vec<MachineTabInput>,
     tabs_read_at: Option<Instant>,
+    /// Each tab's computer mark (computer_icons.rs), empty with only this computer: the icon its
+    /// tile and every session row it holds draw.
+    pub(super) marks: std::collections::HashMap<String, super::computer_icons::ComputerMark>,
+    /// The computers whose icon has been asked for since their client started (this computer's
+    /// once a run).
+    pub(super) icons_asked: std::collections::BTreeSet<String>,
     /// Machines whose last-seen copy has been asked for in this run, whatever the answer was. A
     /// second ask would open the database again per reconcile for a machine that has no stored
     /// copy, which is most of them, and the answer cannot change: only the machine connecting
@@ -409,7 +415,13 @@ impl GhostexGpuiApp {
 
         let tabs = self.remote_machine_tabs(&ordered);
         let moved = self.gx_store.remote.tabs != tabs;
+        let marks = self.gx_store_computer_marks(&tabs);
+        if self.gx_store.remote.marks != marks {
+            self.gx_store.remote.marks = marks;
+            cx.notify();
+        }
         self.gx_store.remote.tabs = tabs;
+        self.gx_store_ask_computer_icons(cx);
         self.gx_store_correct_selected_machine_tab(settings_revision, cx);
         if moved {
             self.gx_store_sidebar_state_changed(cx);
@@ -664,6 +676,8 @@ impl GhostexGpuiApp {
         token: &str,
         cx: &mut gpui::Context<Self>,
     ) {
+        // Its icon may have been picked from another device while it was away.
+        self.gx_store.remote.icons_asked.remove(machine_id);
         self.gx_store
             .remote
             .clients

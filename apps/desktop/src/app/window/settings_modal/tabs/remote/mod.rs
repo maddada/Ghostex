@@ -31,6 +31,7 @@ pub(crate) fn machine_with_easy_connect_code(
 
 mod advanced;
 mod app_update;
+mod computer_icon;
 mod current_machine;
 mod easy_connect;
 mod machines;
@@ -191,11 +192,8 @@ pub(crate) struct RemoteTab {
     pub(super) advanced: advanced::AdvancedState,
     pub(super) relay: relay::RelayState,
     pub(super) machine_dialog: Option<machines::MachineDialog>,
-    /// This computer's short-name field in the Current machine card, made on its first draw.
-    pub(super) local_short_name: Option<(
-        Entity<gpui_component::input::InputState>,
-        gpui::Subscription,
-    )>,
+    /// Every computer's icon pick, as the app sends it (`computerIcons`, computer_icon.rs).
+    pub(super) computer_icons: computer_icon::ComputerIcons,
     /// The machine dialog the last visit left open, kept closed by this open's deep link and
     /// carried to the next open until another machine dialog opens.
     pub(super) kept_machine_form: Option<Value>,
@@ -289,6 +287,11 @@ impl RemoteTab {
                 {
                     tab.receive_app_update_state(&message, cx);
                 }
+                if kind == "computerIcons"
+                    && let Some(message) = store.read(cx).host_payload(kind).cloned()
+                {
+                    tab.receive_computer_icons(&message, cx);
+                }
                 if kind == "remoteMachineConnectStates"
                     && let Some(message) = store.read(cx).host_payload(kind).cloned()
                 {
@@ -364,7 +367,7 @@ impl RemoteTab {
             advanced: advanced::AdvancedState::default(),
             relay: relay::RelayState::default(),
             machine_dialog: None,
-            local_short_name: None,
+            computer_icons: Default::default(),
             kept_machine_form: None,
             machines_bounds: Rc::new(Cell::new(None)),
             folds_bounds: Rc::new(Cell::new(None)),
@@ -456,6 +459,7 @@ impl RemoteTab {
             self.was_active = active;
             if active {
                 self.request_app_update_rows(cx);
+                self.request_computer_icons(cx);
             }
             if !active {
                 self.targeted_section = None;

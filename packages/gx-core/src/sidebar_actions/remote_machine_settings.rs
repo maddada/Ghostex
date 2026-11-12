@@ -61,6 +61,15 @@ pub fn normalize_remote_machine_settings(candidate: Option<&Value>) -> Vec<Value
         if !short_name.is_empty() {
             machine.insert("shortName".to_string(), Value::String(short_name));
         }
+        // The computer's icon as this computer last read it from there (`computer_icons.rs`), kept
+        // to draw while it is not connected; left out when unset or not one of the icons offered.
+        if let Some(icon) = item
+            .get("icon")
+            .and_then(Value::as_str)
+            .and_then(crate::computer_icons::computer_icon)
+        {
+            machine.insert("icon".to_string(), Value::String(icon.id.to_string()));
+        }
         machine.insert("sshHost".to_string(), Value::String(ssh_host));
         if item.get("sshPasswordSaved") == Some(&Value::Bool(true)) {
             machine.insert("sshPasswordSaved".to_string(), Value::Bool(true));

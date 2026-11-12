@@ -23,6 +23,10 @@ impl GhostexGpuiApp {
             "remoteAppUpdate" => {
                 self.handle_remote_app_update_command(command, cx);
             }
+            // Settings > Remote's icon pickers (gx_store/computer_icons.rs).
+            "computerIcon" => {
+                self.handle_computer_icon_command(command, cx);
+            }
             // Settings > Updates and the top bar's update list (app/updates/).
             "updates" => {
                 self.handle_updates_command(command, cx);

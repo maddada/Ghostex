@@ -20,7 +20,7 @@ pub(crate) fn current_machine() -> Section {
         "This computer",
         vec![
             row("computerName", "Name", "This computer's name, set by the system; your phone and other computers show it."),
-            row("computerShortName", "Short name", "This computer's 2-character name on the sidebar's computer pills; empty uses one made from its name."),
+            row("computerIcon", "Icon", "This computer's icon in the sidebar while more than one computer is there; kept on this computer, so your phone and other computers show it too."),
             row("sshAccess", "SSH access", "Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt."),
         ],
     )
@@ -57,7 +57,7 @@ pub(crate) fn remote_machines() -> Section {
         vec![
             row("addMachine", "Add a computer", "Add a computer by SSH details or its code; saved computers appear as sidebar sections."),
             row("showInSidebar", "Show in sidebar", "Hide a saved remote machine from the sidebar without deleting it."),
-            row("shortName", "Short names", "Each remote machine's 2-character name on the sidebar's computer pills, set in its settings."),
+            row("machineIcon", "Computer icons", "Each saved computer's icon in the sidebar, picked in its settings while it is connected; it is kept on that computer."),
             row("sshHost", "SSH host", "Remote machine SSH host."),
             row("sshUser", "SSH user", "Remote machine SSH user."),
             row("sshPort", "SSH port", "Remote machine SSH port."),
