@@ -246,7 +246,10 @@ fn the_unified_sidebar_nests_the_thread_under_its_coordinators_card() {
         .iter()
         .find(|thread| thread.session.row.key == Some(SessionKey::remote(MACHINE, "R1", "RT")))
         .expect("the thread nested under its coordinator's card");
-    assert!(thread.lane.is_local(), "drawn from the copy this computer borrows");
+    assert!(
+        thread.lane.is_local(),
+        "drawn from the copy this computer borrows"
+    );
 }
 
 #[test]
@@ -389,5 +392,80 @@ fn a_thread_on_a_computer_held_from_the_last_run_is_still_found() {
     assert_eq!(
         thread.row.coordinator_parent,
         Some(SessionKey::local("L1", "LC"))
+    );
+}
+
+/// Copy ID's mention of a row, as the row's menu and a drop on a chat box build it
+/// (`SidebarMenus::row_mention`), from the list that draws it.
+fn mention(
+    core: &Core,
+    view: &ghostex_gx_core::SidebarView,
+    inputs: &SidebarInputs,
+    key: &SessionKey,
+) -> Option<String> {
+    let row = view
+        .groups
+        .iter()
+        .flat_map(|group| group.core.sessions.iter())
+        .find(|row| row.row.key.as_ref() == Some(key))
+        .expect("the row is drawn in this list");
+    let host = ghostex_gx_core::MenuHost::default();
+    ghostex_gx_core::SidebarMenus::new(core, view, inputs, &host, NOW_MS)
+        .row_mention(&row.row.sidebar_session_id)
+}
+
+#[test]
+fn a_mention_of_another_computers_session_names_that_computer() {
+    let core = core();
+    // A thread of the other computer, drawn here under its coordinator.
+    let inputs = inputs();
+    let view = SidebarViewModel::build_from_scratch(&core, &inputs, NOW_MS);
+    assert_eq!(
+        mention(
+            &core,
+            &view,
+            &inputs,
+            &SessionKey::remote(MACHINE, "R1", "RT")
+        )
+        .as_deref(),
+        Some("[Session RT](S4k:R1:RT)")
+    );
+    assert_eq!(
+        mention(&core, &view, &inputs, &SessionKey::local("L1", "LC")).as_deref(),
+        Some("[Session LC](S9l:L1:LC)")
+    );
+
+    // The one list of every computer ("Separate by machine" off).
+    let mut merged = inputs.clone();
+    merged.host.merge_machines = true;
+    merged.settings.separate_by_machine = false;
+    let view = SidebarViewModel::build_from_scratch(&core, &merged, NOW_MS);
+    assert_eq!(
+        mention(
+            &core,
+            &view,
+            &merged,
+            &SessionKey::remote(MACHINE, "R1", "RO")
+        )
+        .as_deref(),
+        Some("[Session RO](S4k:R1:RO)")
+    );
+
+    // The other computer's own list ("Separate by machine" on, and its Unified sidebar lane).
+    let lanes = lanes(&core);
+    let (machine, model) = lanes
+        .iter()
+        .find(|(machine, _)| !machine.is_local())
+        .expect("the other computer's lane");
+    let lane_inputs = neutral_indicator_inputs(&inputs, machine);
+    assert_eq!(
+        mention(
+            &core,
+            model.view(),
+            &lane_inputs,
+            &SessionKey::remote(MACHINE, "R1", "RO")
+        )
+        .as_deref(),
+        Some("[Session RO](S4k:R1:RO)")
     );
 }

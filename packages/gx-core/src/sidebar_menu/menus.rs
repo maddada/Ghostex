@@ -48,6 +48,9 @@ pub struct SidebarMenus<'a> {
     /// The drawn machine's daemon id (`S…`), the first part of a session's global ref; absent
     /// until a stream frame has named it.
     server_id: Option<String>,
+    /// Every loaded machine's daemon id, for a row drawn here that belongs to another computer
+    /// (`row_menu_group`).
+    server_ids: std::collections::BTreeMap<MachineId, String>,
     /// The drawn orchestrators that have a thread Sleep Inactive Threads would sleep. Left empty
     /// when no orchestrator is drawn, so a list without one never walks the rows for it.
     coordinators_with_inactive_threads: std::collections::HashSet<SessionKey>,
@@ -141,6 +144,13 @@ impl<'a> SidebarMenus<'a> {
                 .loaded(&machine)
                 .map(|loaded| loaded.server_id.clone())
                 .filter(|server_id| !server_id.is_empty()),
+            server_ids: store
+                .machines()
+                .filter_map(|(machine, _)| {
+                    let server_id = &store.loaded(machine)?.server_id;
+                    (!server_id.is_empty()).then(|| (machine.clone(), server_id.clone()))
+                })
+                .collect(),
             coordinators_with_inactive_threads: if view.groups.iter().any(|group| {
                 group
                     .core
@@ -172,6 +182,7 @@ impl<'a> SidebarMenus<'a> {
         self.workspaces.hash(&mut hasher);
         self.project_workspaces.hash(&mut hasher);
         self.server_id.hash(&mut hasher);
+        self.server_ids.hash(&mut hasher);
         hasher.finish()
     }
 
@@ -245,6 +256,14 @@ impl<'a> SidebarMenus<'a> {
     /// what a remote row offers, and no session group of this entry to make or join.
     fn row_menu_group(&self, group: &'a GroupView, row: &'a SessionRow) -> MenuGroup<'a> {
         let mut menu_group = self.menu_group(group);
+        // CDXC:ContextMenus 2026-11-12 WHY: a row of another computer drawn in this list (the one
+        // list of every computer, a thread under a coordinator here) took the drawn machine's
+        // daemon id, so its Copy ID, Copy Link, Copy Details and a drop on a chat box named this
+        // computer (`S90:P715t:G39v8` for a session on the Windows computer `S8g`). The ref names
+        // the row's own computer; one not loaded yet has no ref, so those rows wait for it.
+        if let Some(key) = row.key.as_ref() {
+            menu_group.server_id = self.server_ids.get(&key.machine).cloned();
+        }
         if let Some(machine_name) = row.machine_name.as_deref() {
             menu_group.is_remote = true;
             menu_group.remote_machine_name = Some(machine_name);
