@@ -298,8 +298,26 @@ pub fn apply_from_read(
 
 /// Adopts the settings.
 pub fn apply_settings(state: &mut ChatState, settings: QuietViewSettings) {
+    let expand_moved = expand_last(state) != settings.expand_last;
     state.transcript_view.quiet_view_settings = Some(settings);
+    // The Summary view's open "Active work" follows Expand the last turn (`summary_work_lines`).
+    if expand_moved && state.transcript_view.summary_mode {
+        state.transcript_view.invalidate();
+    }
     sync(state);
+}
+
+/// Settings > Chat > Expand the last turn in Quiet View.
+pub(crate) fn expand_last(state: &ChatState) -> bool {
+    state
+        .transcript_view
+        .quiet_view_settings
+        .is_some_and(|settings| settings.expand_last)
+}
+
+/// [`coordinator`], for the Summary view's quiet lines.
+pub(crate) fn is_coordinator_chat(state: &ChatState) -> bool {
+    coordinator(state)
 }
 
 /// Whether this chat is a coordinator's.
@@ -913,6 +931,55 @@ fn stretches<'a>(
     (lines, answers)
 }
 
+/// The quiet lines over a Summary view turn's open "Active work" (`TranscriptItem::Summary`
+/// `workLines`), by row index into its `work`: what Quiet View draws for the same rows.
+///
+/// CDXC:SessionChat 2026-11-12 DECISION: User, on the Summary view page (Q2767), of what shows while the agent works: Active work open, and "show what we show in quiet mode in active work". So the open "Active work" draws the running rows as Quiet View does: what the user reads (the agent's words with their calls folded behind them, pages, forms, questions, pictures, approvals, errors) stays in view, and each run of the rest (tool calls, thinking, reports from threads, messages sent) is one counted line, the newest one "Working · 3 tool calls so far" while the agent works. Expand the last turn in Quiet View opens the newest line, as it does there. Under Agent work Reduced and Quiet the running work keeps its own look (`presentation::turn_items`).
+pub(crate) fn summary_work_lines(
+    work: &[crate::document::ProjectedMessage],
+    working: bool,
+    expand_last: bool,
+    coordinator: bool,
+) -> Vec<QuietStretch> {
+    let inputs = Inputs {
+        coordinator,
+        working,
+        expand_last,
+        approvals: BTreeSet::new(),
+        cards: Vec::new(),
+    };
+    let mut built: Vec<(QuietStretch, Counts)> = Vec::new();
+    let mut open: Option<Open> = None;
+    for (at, row) in work.iter().enumerate() {
+        if reads(row, &inputs) {
+            if let Some(Open { start, key, counts }) = open.take() {
+                built.push((stretch(key, start, at, None), counts));
+            }
+            continue;
+        }
+        let line = open.get_or_insert_with(|| Open {
+            start: at,
+            key: format!("quiet:{}", row["id"].as_str().unwrap_or_default()),
+            counts: Counts::default(),
+        });
+        line.counts.row(row);
+    }
+    let trailing = open.take().map(|Open { start, key, counts }| {
+        let mut line = stretch(key, start, work.len(), None);
+        line.running = working;
+        line.open = expand_last;
+        (line, counts)
+    });
+    built.extend(trailing);
+    built
+        .into_iter()
+        .map(|(mut line, counts)| {
+            count_words(&mut line, counts, &inputs);
+            line
+        })
+        .collect()
+}
+
 /// The answers cards a row draws (`QuietAnswers`).
 fn answers_in(item: &TranscriptItem) -> Vec<QuietAnswers> {
     match item {
@@ -975,6 +1042,15 @@ fn plural(count: usize, one: &str, many: &str) -> String {
 
 /// The line's words and time.
 fn words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs, context: &ChatContext) {
+    let (first_at, last_at, reports) = (counts.first_at, counts.last_at, counts.reports);
+    count_words(line, counts, inputs);
+    if reports > 0 && !line.running {
+        line.time = time_range(first_at, last_at, context);
+    }
+}
+
+/// The line's words: what it holds, in counts.
+fn count_words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs) {
     let tools = counts.tools + counts.held.iter().map(|(_, calls)| calls).sum::<usize>();
     let mut parts: Vec<String> = Vec::new();
     if counts.reports > 0 {
@@ -1020,9 +1096,6 @@ fn words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs, context: &Cha
     } else {
         joined
     };
-    if counts.reports > 0 && !line.running {
-        line.time = time_range(counts.first_at, counts.last_at, context);
-    }
 }
 
 /// "1:08 AM", or "1:08 to 1:09 AM" when the line spans two times.

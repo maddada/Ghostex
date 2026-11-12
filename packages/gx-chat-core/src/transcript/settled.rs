@@ -1254,5 +1254,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         quiet_finished_before: crate::session::working::quiet_finished_before(state),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
+        quiet_expand_last: crate::transcript::quiet_view::expand_last(state),
+        coordinator: crate::transcript::quiet_view::is_coordinator_chat(state),
     }
 }

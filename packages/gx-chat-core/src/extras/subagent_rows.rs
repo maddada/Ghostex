@@ -73,6 +73,8 @@ fn scope<'a>(
         quiet_finished_before: None,
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
+        quiet_expand_last: false,
+        coordinator: false,
     }
 }
 

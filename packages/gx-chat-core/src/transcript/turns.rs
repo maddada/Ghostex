@@ -53,6 +53,9 @@ pub struct SummaryModeTurn {
     /// The agent's messages in the turn that hold generated content (a page card, a question form
     /// or a chart), drawn in full under the prompt and never inside a fold (`content_rows`).
     pub cards: Vec<ChatRow>,
+    /// Where the running work starts in `active_work`: past the reply the agent gave before
+    /// something woke it again in the same turn (`summary_mode_turns`), else 0.
+    pub running_from: usize,
 }
 
 /// The agent's rows of `work` that hold generated content: a published page's card, a question
@@ -72,6 +75,55 @@ pub fn content_rows(work: &[ChatRow]) -> Vec<ChatRow> {
         })
         .cloned()
         .collect()
+}
+
+/// The rows of a summary turn drawn in full under the prompt: those holding a page or a chart, and
+/// those asking a question that still waits on the reader (`waiting`, by message id), a form or
+/// one-click answers alike, in the order they came.
+///
+/// CDXC:SessionChat 2026-11-12 DECISION: User, on the Summary view page (Q2766), of what may show besides their messages and the newest reply: "questions and forms still waiting on the user (fold once answered), pages and charts the agent made (as today), pictures the agent opened as a strip under the closed reply, and Interrupted and command output lines". A form or a one-click question stays drawn in full only until it is answered, then it folds into the turn's "Agent reply" like any reply; pages and charts keep the 2026-10-27 rule. Everything else hides, answered forms and work item cards included. Supersedes, for forms, the 2026-10-27 rule above that kept every form in full.
+pub fn summary_cards(
+    work: &[ChatRow],
+    cards: &[ChatRow],
+    waiting: impl Fn(&str) -> bool,
+) -> Vec<ChatRow> {
+    use crate::transcript::question_forms::{content_fences, ContentKind};
+    work.iter()
+        .filter(|row| row.role == ChatRole::Assistant && row.id != STREAMING_ID)
+        .filter(|row| {
+            let carded = cards.iter().any(|card| card.id == row.id);
+            (carded
+                && content_fences(&crate::transcript::prose::prose_markdown(&row.blocks))
+                    .iter()
+                    .any(|fence| fence.kind != ContentKind::Form))
+                || waiting(&row.id)
+        })
+        .cloned()
+        .collect()
+}
+
+/// The closed line above the newest reply that holds the turn's earlier replies and the messages
+/// other agents sent into it: "2 earlier replies · 1 report".
+pub fn earlier_label(earlier: &[&ChatMessage]) -> String {
+    let reports = earlier
+        .iter()
+        .filter(|row| is_agent_conversation(row))
+        .count();
+    let replies = earlier.len() - reports;
+    let mut parts = Vec::new();
+    if replies > 0 {
+        parts.push(format!(
+            "{replies} earlier {}",
+            if replies == 1 { "reply" } else { "replies" }
+        ));
+    }
+    if reports > 0 {
+        parts.push(format!(
+            "{reports} {}",
+            if reports == 1 { "report" } else { "reports" }
+        ));
+    }
+    parts.join(" \u{b7} ")
 }
 
 /// A message between agents: another agent's message delivered into the chat (an orchestrator's
@@ -163,6 +215,7 @@ pub fn summary_mode_turns(
                 outcome: Vec::new(),
                 running_row: None,
                 cards: Vec::new(),
+                running_from: 0,
             });
         } else if let Some(current) = turns.last_mut() {
             current.active_work.push(message.clone());
@@ -200,6 +253,22 @@ pub fn summary_mode_turns(
     }
     if is_working {
         if let Some(newest) = turns.last_mut() {
+            // CDXC:SessionChat 2026-11-12 DECISION: User picked "build this fix" on the Summary view page (Q2765): work after a reply in the same turn must not hide. A thread's report or a background task that wakes the agent after it replied makes that reply final (`final_assistant_message_ids`) while the turn opens no new row, so the turn drew the old reply and nothing of the running work until the agent finished. While the newest turn runs, a reply it already has is one of its earlier replies, with the reports that came after it, and the work after them is the turn's Active work.
+            if let Some(reply) = newest.final_message.take() {
+                let after = newest
+                    .active_work
+                    .iter()
+                    .position(|row| row.id == reply.id)
+                    .map_or(newest.active_work.len(), |at| at + 1);
+                newest.earlier_replies.push(reply);
+                newest.earlier_replies.extend(
+                    newest.active_work[after..]
+                        .iter()
+                        .filter(|row| is_agent_conversation(row) && !is_hidden_message(row))
+                        .cloned(),
+                );
+                newest.running_from = after;
+            }
             newest.active = true;
             newest.running_row = newest
                 .active_work

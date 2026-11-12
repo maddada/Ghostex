@@ -191,6 +191,8 @@ fn build_after(
         quiet_finished_before,
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
+        quiet_expand_last: crate::transcript::quiet_view::expand_last(state),
+        coordinator: crate::transcript::quiet_view::is_coordinator_chat(state),
     };
 
     // Turns a newer accepted prompt has closed since the prefix was settled join it, one chunk

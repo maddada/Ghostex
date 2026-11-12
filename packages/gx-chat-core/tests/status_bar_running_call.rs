@@ -193,11 +193,12 @@ fn default_follows_the_folds_the_reader_opened_or_closed() {
         Some("Build the project"),
         "a closed fold leaves the words to the bar"
     );
-    // Summary view: the running turn's Active work and its newest row start open.
+    // Summary view: the running turn's Active work starts open and draws as Quiet View does, the
+    // calls folded behind the agent's sentence (2026-11-12, Q2767), so the bar names the call.
     let mut state = chat("default", running_turn());
     state.transcript_view.summary_mode = true;
     let list = items(&mut state, T0 + 6_500);
-    assert_eq!(status_bar(&state).as_deref(), Some("Sprouting…"));
+    assert_eq!(status_bar(&state).as_deref(), Some("Build the project"));
     let summary = list
         .iter()
         .rev()

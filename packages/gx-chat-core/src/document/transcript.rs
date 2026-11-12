@@ -65,6 +65,15 @@ pub enum TranscriptItem {
         /// "Active work" fold while the fold is closed (`transcript/read_images.rs`).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         read_images: Vec<Value>,
+        /// The closed line above the newest reply, or above a running turn's "Active work", that
+        /// holds `earlierReplies`: "2 earlier replies · 1 report" (`turns::earlier_label`).
+        /// Empty when there is none.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        earlier_label: String,
+        /// The quiet lines the open "Active work" draws over `work`, by row index
+        /// (`quiet_view::summary_work_lines`): a row inside a line shows only while it is open.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        work_lines: Vec<crate::transcript::quiet_view::QuietStretch>,
     },
     /// A finished turn in verbose mode: its file changes collapse into one fold.
     #[serde(rename = "completed-work", rename_all = "camelCase")]

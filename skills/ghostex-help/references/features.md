@@ -2761,17 +2761,23 @@ included, grouped by thread title, and Open thread opens the thread that
 mentioned the item. Agents can read the same list with `ghostex
 read-session-files-links <session> --json`.
 
-Summary mode folds each turn down to your prompt and an "Agent reply" row; the
-newest reply stays open, and older ones open with a click. The row holds every
-reply the agent gave to that prompt, including the ones it wrote after a
-background task finished. While the agent is still working, that turn's work
-shows open under Active work, with the running command visible; close it with a
-click, and it folds into the reply once the turn finishes. Any message that holds
-a Ghostex page, a Ghostex form or Ghostex visuals is always shown in full under its prompt,
-never folded, so you can scroll up through every page. Messages to and from other
-agents (a coordinator's thread reports, messages from other sessions) open no
-turn of their own: they fold into the "Agent reply" of your own prompt, so the
-summary reads as your conversation.
+Summary mode folds each turn down to your prompt and a closed "Agent reply" row;
+older ones open with a click and hold every reply the agent gave to that prompt.
+Under your newest prompt only the last reply is open, with the earlier replies and
+reports behind one closed line above it, such as "2 earlier replies · 1 report".
+While the agent works, that turn's Active work shows open the way Quiet View shows
+a running turn: the agent's words, pages, questions and approvals stay in view,
+and each run of tool calls, thinking and reports is one line that counts it
+("Working · 3 tool calls so far"); Expand the last turn in Quiet View opens the
+newest of those lines. Work the agent does after a reply in the same turn, when a
+thread's report or a background task wakes it, shows there too. Ghostex pages and
+Ghostex visuals stay in full under their prompt, never folded, and so does a
+Ghostex form or question until you answer it; a strip of the pictures the agent
+opened sits under the closed reply, and "Interrupted" and command output lines
+stay in view. Work item cards and forms you already answered fold away. Messages
+to and from other agents (a coordinator's thread reports, messages from other
+sessions) open no turn of their own: they fold into the "Agent reply" of your own
+prompt, so the summary reads as your conversation.
 Pick Summary under More actions > View, where its row shows the
 Toggle Summary Mode shortcut (Option+Ctrl+S on macOS, Ctrl+Alt+Shift+S on Windows
 and Linux), which switches it from anywhere in that chat and can be changed in

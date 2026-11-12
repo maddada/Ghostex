@@ -412,9 +412,11 @@ fn the_summary_views_running_work_follows_reduced_and_quiet() {
         let opened = work.iter().any(|row| row["toolsOpen"] == true);
         (*work_open, opened, work.len())
     };
+    // Default opens the running work and draws it as Quiet View does, the calls folded behind the
+    // agent's sentence (2026-11-12, Q2767 in `quiet_view::summary_work_lines`).
     let (open, opened, rows_in) = summary(AgentWork::Default);
     assert!(
-        open && opened && rows_in > 0,
+        open && !opened && rows_in > 0,
         "Default opens the running work"
     );
     let (open, opened, rows_in) = summary(AgentWork::Reduced);

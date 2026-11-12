@@ -595,6 +595,36 @@ impl NativeChatView {
         )
     }
 
+    /// One quiet line of the Summary view's open "Active work" (gx-chat-core
+    /// `quiet_view::summary_work_lines`, where the user's decision is): the line, and while it is
+    /// open the rows it holds on the rail an opened Quiet View line draws them on.
+    pub(super) fn summary_quiet_run(
+        &mut self,
+        line: &QuietStretch,
+        rows: &[&std::sync::Arc<Value>],
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let open = self.quiet_open(line);
+        let frame = self.disclosure_frame(&line.key, open, cx);
+        let mut column = div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .child(self.quiet_view_line(line, open, p, cx));
+        if open || frame.is_some() {
+            let drawn: Vec<AnyElement> = rows
+                .iter()
+                .map(|row| self.message_row(row, p, window, cx))
+                .collect();
+            let body = rail(&line.key, drawn, 0.0, p, cx);
+            column = column.child(self.disclosure_body_motion(&line.key, frame, 4.0 * s, body));
+        }
+        column.into_any_element()
+    }
+
     /// The answers card `card` stands for, under Quiet View, when the row `id` is one.
     pub(super) fn quiet_answers(&self, id: &str) -> Option<QuietAnswers> {
         self.quiet_lines().answers.get(id).cloned()

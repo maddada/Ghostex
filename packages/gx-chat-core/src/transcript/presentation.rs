@@ -711,6 +711,11 @@ pub struct ProjectionScope<'a> {
     pub picture_digests: &'a std::collections::HashMap<String, u64>,
     /// [`ProjectionScope::seen_pictures`], read once per pass.
     pub seen_pictures: std::cell::OnceCell<crate::transcript::read_images::SeenPictures>,
+    /// Settings > Chat > Expand the last turn in Quiet View, which the Summary view's open "Active
+    /// work" follows (`quiet_view::summary_work_lines`).
+    pub quiet_expand_last: bool,
+    /// The chat is a coordinator's: a quiet line counts "reports", else "messages received".
+    pub coordinator: bool,
 }
 
 impl<'a> ProjectionScope<'a> {
@@ -785,6 +790,8 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         quiet_finished_before: crate::session::working::quiet_finished_before(state),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
+        quiet_expand_last: crate::transcript::quiet_view::expand_last(state),
+        coordinator: crate::transcript::quiet_view::is_coordinator_chat(state),
     }
 }
 
@@ -1267,6 +1274,25 @@ pub(crate) fn hide_running_work(
     if scope.grouped_work && scope.summary {
         crate::transcript::grouped_work::keep_in_view_while_shut(items);
     }
+    if scope.summary && !scope.grouped_work {
+        for item in items.iter_mut() {
+            if let TranscriptItem::Summary {
+                active: true,
+                final_message: None,
+                work,
+                work_lines,
+                ..
+            } = item
+            {
+                *work_lines = crate::transcript::quiet_view::summary_work_lines(
+                    work,
+                    scope.working,
+                    scope.quiet_expand_last,
+                    scope.coordinator,
+                );
+            }
+        }
+    }
 }
 
 /// The rows [`hide_running_work`] judges: the running response's, while Quiet hides it (all of
@@ -1309,8 +1335,47 @@ fn turn_items(
                 builder.current = index;
                 let eager = builder.eager(index);
                 // Agent work Reduced and Quiet: the running turn's work starts shut, as their
-                // lines do (`grouped_work::hide_work`).
+                // lines do (`grouped_work::hide_work`). Default draws it as Quiet View would
+                // (`quiet_view::summary_work_lines`): each row as the full view draws it.
                 let opens_running = !scope.grouped_work;
+                let quiet_rows = opens_running && turn.active;
+                // A running turn's work starts past a reply it already gave
+                // (`summary_mode_turns`); the reports after that reply sit with it.
+                let earlier_ids: Vec<&str> =
+                    turn.earlier_replies.iter().map(|row| row.id.as_str()).collect();
+                let running_work = turn.active_work[turn.running_from.min(turn.active_work.len())..]
+                    .iter()
+                    .filter(|row| !earlier_ids.contains(&row.id.as_str()));
+                // Pages and charts, and questions still waiting on the reader (`summary_cards`).
+                let cards = crate::transcript::turns::summary_cards(
+                    &turn.active_work,
+                    &turn.cards,
+                    |id| {
+                        scope.askers.iter().any(|asker| {
+                            asker.message_id == id
+                                && !asker.answered
+                                && !asker.obsolete
+                                && !asker.inherited
+                                && !asker.answered_in_words()
+                                && !asker.waiting_tags().is_empty()
+                        })
+                    },
+                );
+                let carded = |row: &ChatRow| cards.iter().any(|card| card.id == row.id);
+                let shown_earlier: Vec<&ChatMessage> = turn
+                    .earlier_replies
+                    .iter()
+                    .filter(|row| !carded(row))
+                    .map(|row| &**row)
+                    .collect();
+                let has_reply = turn.final_message.is_some();
+                let earlier_label = if (has_reply && latest_reply == Some(index))
+                    || (turn.active && !has_reply)
+                {
+                    crate::transcript::turns::earlier_label(&shown_earlier)
+                } else {
+                    String::new()
+                };
                 TranscriptItem::Summary {
                     id: turn.user.id.clone(),
                     user: builder.message_or_placeholder(&turn.user, eager, Draw::Row),
@@ -1325,23 +1390,12 @@ fn turn_items(
                         .collect(),
                     active: turn.active,
                     work_open: opens_running && turn.active && turn.final_message.is_none(),
-                    // The running row's tool calls start open, so the call that is running shows.
-                    work: turn
-                        .active_work
-                        .iter()
+                    work: running_work
                         .map(|message| {
                             let eager = eager || hidden_live.contains(message.id.as_str());
-                            let mut row =
-                                builder.message_or_placeholder(message, eager, Draw::InWorkFold);
+                            let draw = if quiet_rows { Draw::Row } else { Draw::InWorkFold };
+                            let mut row = builder.message_or_placeholder(message, eager, draw);
                             running_thinking.mark(message, &mut row);
-                            if opens_running
-                                && turn.running_row.as_deref() == Some(message.id.as_str())
-                                && row.is_object()
-                            {
-                                if let Value::Object(fields) = Arc::make_mut(&mut row) {
-                                    fields.insert("toolsOpen".to_string(), Value::Bool(true));
-                                }
-                            }
                             row
                         })
                         .collect(),
@@ -1351,11 +1405,12 @@ fn turn_items(
                         .map(|message| builder.message_or_placeholder(message, eager, Draw::Row))
                         .collect(),
                     latest_reply: latest_reply == Some(index),
-                    cards: turn
-                        .cards
+                    cards: cards
                         .iter()
                         .map(|message| builder.message_or_placeholder(message, eager, Draw::Row))
                         .collect(),
+                    earlier_label,
+                    work_lines: Vec::new(),
                     read_images: Vec::new(),
                 }
             })

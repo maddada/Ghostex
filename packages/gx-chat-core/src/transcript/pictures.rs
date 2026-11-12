@@ -234,6 +234,8 @@ mod tests {
                 latest_reply: true,
                 cards: vec![],
                 read_images: vec![],
+                earlier_label: String::new(),
+                work_lines: vec![],
             },
             TranscriptItem::Message {
                 message: message("a2", vec![], "```md\n![not a picture](/code.png)\n```"),

@@ -219,7 +219,7 @@ impl NativeChatView {
         &mut self,
         item: &TranscriptItem,
         next: Option<&TranscriptItem>,
-        main: bool,
+        _main: bool,
         p: &ChatAppearance,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -239,6 +239,8 @@ impl NativeChatView {
                 latest_reply,
                 cards,
                 read_images,
+                earlier_label,
+                work_lines,
             } => {
                 let reply = final_message.as_deref().filter(|reply| reply.is_object());
                 // A running turn's "Active work" fold starts open and has a key of its own, so
@@ -263,9 +265,9 @@ impl NativeChatView {
                 for output in outcome {
                     row = row.child(self.message_row(output, &p, window, cx));
                 }
-                // The turn's messages holding a page card, a question form or a chart, drawn in
-                // full and never folded; the folds below leave them out (gx-chat-core
-                // `content_rows`, where the user's decision lives).
+                // The turn's pages and charts, and the questions still waiting on the reader,
+                // drawn in full and never folded; the folds below leave them out (gx-chat-core
+                // `summary_cards`, where the user's decision lives).
                 let content: Vec<&str> = cards
                     .iter()
                     .filter_map(|card| card["id"].as_str())
@@ -278,15 +280,57 @@ impl NativeChatView {
                         .as_str()
                         .is_some_and(|id| content.contains(&id))
                 };
+                let earlier: Vec<&std::sync::Arc<serde_json::Value>> =
+                    earlier_replies.iter().filter(folded).collect();
+                // The newest reply, or a running turn's work, keeps the turn's earlier replies and
+                // the reports between them behind one closed line ("2 earlier replies · 1 report",
+                // gx-chat-core `turns::earlier_label`).
+                let earlier_key = format!("summary-earlier:{id}");
+                let earlier_line = (!earlier_label.is_empty() && !earlier.is_empty()).then(|| {
+                    let open = self.is_expanded(&earlier_key, false);
+                    let frame = self.disclosure_frame(&earlier_key, open, cx);
+                    let mut part = div().flex().flex_col().w_full().gap(px(part_gap)).child(
+                        self.disclosure(
+                            earlier_key.clone(),
+                            earlier_label.clone().into(),
+                            open,
+                            None,
+                            &p,
+                            cx,
+                        ),
+                    );
+                    if open || frame.is_some() {
+                        let mut body = div().flex().flex_col().w_full().gap(px(part_gap));
+                        for message in &earlier {
+                            body = body.child(self.message_row(message, &p, window, cx));
+                        }
+                        part = part.child(self.disclosure_body_motion(
+                            &earlier_key,
+                            frame,
+                            part_gap,
+                            body.into_any_element(),
+                        ));
+                    }
+                    part.into_any_element()
+                });
+                let (earlier_line, earlier_in_fold) = match (earlier_line, reply.is_some()) {
+                    // Above a running turn's "Active work".
+                    (Some(line), false) => (Some(line), None),
+                    (line, _) => (None, line),
+                };
                 let fold_rows: Vec<&std::sync::Arc<serde_json::Value>> = match reply {
-                    Some(_) => earlier_replies
+                    Some(_) if earlier_in_fold.is_some() => final_message.iter().filter(folded).collect(),
+                    Some(_) => earlier
                         .iter()
-                        .chain(final_message.iter())
-                        .filter(folded)
+                        .copied()
+                        .chain(final_message.iter().filter(folded))
                         .collect(),
                     None => work.iter().filter(folded).collect(),
                 };
-                if (reply.is_some() || *active) && !fold_rows.is_empty() {
+                if let Some(line) = earlier_line {
+                    row = row.child(line);
+                }
+                if (reply.is_some() || *active) && (!fold_rows.is_empty() || earlier_in_fold.is_some()) {
                     row = row.child(
                         self.disclosure(
                             key.clone(),
@@ -302,8 +346,8 @@ impl NativeChatView {
                             cx,
                         ),
                     );
-                    // The closed "Active work" fold keeps the pictures its rows read in view
-                    // (gx-chat-core `read_images.rs`).
+                    // The closed fold keeps the pictures its rows read in view (gx-chat-core
+                    // `read_images.rs`).
                     if !expanded && motion.is_none() {
                         let pictures = serde_json::Value::Array(read_images.clone());
                         if let Some(strip) = self.read_picture_strip(
@@ -319,8 +363,39 @@ impl NativeChatView {
                     }
                     if expanded || motion.is_some() {
                         let mut body = div().flex().flex_col().w_full().gap(px(part_gap));
-                        for message in fold_rows {
-                            body = body.child(self.message_row(message, &p, window, cx));
+                        if let Some(line) = earlier_in_fold {
+                            body = body.child(line);
+                        }
+                        if reply.is_some() || work_lines.is_empty() {
+                            for message in fold_rows {
+                                body = body.child(self.message_row(message, &p, window, cx));
+                            }
+                        } else {
+                            // The running work as Quiet View draws it (gx-chat-core
+                            // `quiet_view::summary_work_lines`): what the reader reads in full,
+                            // each run of the rest as one counted line.
+                            let mut at = 0;
+                            while at < work.len() {
+                                match work_lines.iter().find(|line| line.start == at) {
+                                    Some(line) => {
+                                        let end = line.end.clamp(at + 1, work.len());
+                                        let rows: Vec<&std::sync::Arc<serde_json::Value>> =
+                                            work[at..end].iter().filter(folded).collect();
+                                        body = body.child(
+                                            self.summary_quiet_run(line, &rows, &p, window, cx),
+                                        );
+                                        at = end;
+                                    }
+                                    None => {
+                                        if folded(&&work[at]) {
+                                            body = body.child(
+                                                self.message_row(&work[at], &p, window, cx),
+                                            );
+                                        }
+                                        at += 1;
+                                    }
+                                }
+                            }
                         }
                         row = row.child(self.disclosure_body_motion(
                             &key,
@@ -331,14 +406,7 @@ impl NativeChatView {
                     }
                 }
                 self.in_summary_turn = false;
-                // The turn's work item cards, under the whole turn and outside its folds
-                // (work_cards.rs).
-                if main {
-                    let cards = self.work_cards_of_turn(id);
-                    if let Some(stack) = self.work_card_stack(&cards, None, &p, cx) {
-                        row = row.child(stack);
-                    }
-                }
+                // Work item cards stay out of the Summary view (gx-chat-core `summary_cards`).
                 row.into_any_element()
             }
             TranscriptItem::CompletedWork { .. } => self.completed_work_row(item, &p, window, cx),
