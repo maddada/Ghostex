@@ -669,6 +669,14 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             };
             let (kill, session) =
                 kill_and_cache_session_provider(repository, &lifecycle, target_lifecycle)?;
+            // Claude's SessionEnd hook cannot post from a pane a sleep killed; the hook-free
+            // comparison counts the observer's SessionEnd for it as expected (comparison.rs).
+            if endpoint_path == "/api/sleepSession" {
+                crate::hookless_activity::note_session_slept(
+                    &lifecycle.project_id,
+                    &lifecycle.session_id,
+                );
+            }
             json!({ "kill": kill_to_value(&kill), "session": session })
         }
         _ => {
