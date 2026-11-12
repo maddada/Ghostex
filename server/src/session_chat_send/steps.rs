@@ -308,8 +308,30 @@ pub fn build_session_chat_clear_input_steps(
     {
         vec![SessionChatSendStep::ClearComposer { agent }]
     } else {
-        build_agent_tui_clear_input_steps(None, text)
+        guard_clear_burst(agent, build_agent_tui_clear_input_steps(None, text))
     }
+}
+
+/// The clear burst's write as a guarded write for an agent (GitHub #555 review: its Ctrl+U and
+/// Ctrl+K went into an approval that was up); a shell keeps its plain write.
+pub(crate) fn guard_clear_burst(
+    agent: Option<&str>,
+    steps: Vec<SessionChatSendStep>,
+) -> Vec<SessionChatSendStep> {
+    let Some(agent) = agent else {
+        return steps;
+    };
+    steps
+        .into_iter()
+        .map(|step| match step {
+            SessionChatSendStep::Write(payload) => SessionChatSendStep::GuardedWrite {
+                agent: Some(agent.to_string()),
+                guard: InputGuard::InputBox,
+                payload,
+            },
+            step => step,
+        })
+        .collect()
 }
 
 /// composer wait → verified agent-specific clear → image pastes back-to-back →

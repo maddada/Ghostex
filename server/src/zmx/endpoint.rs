@@ -909,7 +909,10 @@ impl ZmxQueuedSessionMessage {
                 ),
             ]
         } else {
-            crate::session_chat_send::build_agent_tui_clear_input_steps(None, &self.text)
+            crate::session_chat_send::guard_clear_burst(
+                agent.as_deref(),
+                crate::session_chat_send::build_agent_tui_clear_input_steps(None, &self.text),
+            )
         };
         // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: this endpoint carries `ghostex
         // sendMessage`, automations, worktree first prompts and Ghostex's own typed commands (the
