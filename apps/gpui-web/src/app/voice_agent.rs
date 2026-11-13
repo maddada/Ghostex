@@ -3,6 +3,7 @@
 //!
 //! CDXC:VoiceMode 2026-10-20 WHY: the page has no echo-cancelled microphone path yet (the contract's `AudioWorklet` capture is not built), so it draws neither the Voice button (its header is its own) nor Dictate (`DICTATION` is desktop only); `native_chat/dictation.rs` still names the Dictate state it would record with.
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use gpui::{Context, EventEmitter};
@@ -16,6 +17,22 @@ pub(crate) enum DictatePhase {
     Recording,
     Transcribing,
     Failed { kept: (), failure: DictateFailure },
+    Unavailable { failure: DictateFailure },
+}
+
+/// The desktop's `voice_agent::dictation::WAVEFORM_BARS`.
+pub(crate) const WAVEFORM_BARS: usize = 24;
+
+/// A spoken phrase's levels for the preview's waveform (no microphone here): syllables rising and
+/// falling with a short pause, so the pill can be looked at as it reads while someone speaks.
+fn preview_levels() -> VecDeque<f32> {
+    [
+        0.05, 0.08, 0.35, 0.62, 0.48, 0.71, 0.55, 0.3, 0.12, 0.05, 0.04, 0.22, 0.58, 0.83, 0.66,
+        0.42, 0.6, 0.74, 0.5, 0.26, 0.4, 0.64, 0.45, 0.2,
+    ]
+    .into_iter()
+    .take(WAVEFORM_BARS)
+    .collect()
 }
 
 /// Why a transcription failed, as the desktop's `voice_agent::DictateFailure` names it.
@@ -34,11 +51,13 @@ pub(crate) enum DictateEvent {
     Failure { title: String, message: String },
 }
 
-/// `?dictatePreview=recording|transcribing|failed` draws the Dictate button on the page, and
+/// `?dictatePreview=recording|transcribing|failed|unavailable` draws the Dictate button on the page, and
 /// pressing it shows that state, so the chat box's Dictate pill can be looked at in a browser. No
 /// microphone is opened; ✕ (or pressing the button again) goes back to idle. `failed:<code>`
 /// shows the failure card for one of gxserver's codes (`failed:noKey`, `failed:providerUnavailable`,
-/// ...), worded as gxserver words it (`server/src/voice_agent/transcribe.rs`).
+/// ...), worded as gxserver words it (`server/src/voice_agent/transcribe.rs`);
+/// `unavailable:<code>` the card a press shows while the engine can't transcribe (the microphone
+/// greyed meanwhile, `dictation_unready`).
 pub(crate) fn dictation_preview() -> bool {
     preview_phase().is_some()
 }
@@ -53,7 +72,33 @@ fn preview_phase() -> Option<DictatePhase> {
         "recording" => Some(DictatePhase::Recording),
         "transcribing" => Some(DictatePhase::Transcribing),
         "failed" => preview_failure("paymentRequired"),
-        _ => value.strip_prefix("failed:").and_then(preview_failure),
+        "unavailable" => preview_unavailable("hexNotInstalled"),
+        _ => value
+            .strip_prefix("failed:")
+            .and_then(preview_failure)
+            .or_else(|| {
+                value
+                    .strip_prefix("unavailable:")
+                    .and_then(preview_unavailable)
+            }),
+    }
+}
+
+fn preview_unavailable(code: &str) -> Option<DictatePhase> {
+    match preview_failure(code)? {
+        DictatePhase::Failed { failure, .. } => Some(DictatePhase::Unavailable { failure }),
+        _ => None,
+    }
+}
+
+/// The engine the preview reports: not ready under `unavailable`, so the microphone shows greyed.
+fn preview_engine() -> Option<serde_json::Value> {
+    match preview_phase()? {
+        DictatePhase::Unavailable { failure } => Some(serde_json::json!({
+            "engine": "hex", "label": "Hex", "ready": false,
+            "problem": {"code": failure.code, "message": failure.message},
+        })),
+        _ => None,
     }
 }
 
@@ -97,6 +142,11 @@ fn preview_failure(code: &str) -> Option<DictatePhase> {
         "hexNotInstalled" => (
             Some("hex"),
             "Hex 3 isn't installed on this computer. Install it to transcribe with Hex.",
+            None,
+        ),
+        "hexTimeout" => (
+            Some("hex"),
+            "Hex didn't answer within 112 seconds. Check that Hex is working (try dictating in Hex itself), then transcribe again.",
             None,
         ),
         _ => return None,
@@ -143,6 +193,10 @@ impl Dictate {
         Duration::from_secs(7)
     }
 
+    pub(crate) fn levels(&self) -> VecDeque<f32> {
+        preview_levels()
+    }
+
     pub(crate) fn toggle(&mut self, cx: &mut Context<Self>) {
         self.phase = match self.phase {
             DictatePhase::Idle => preview_phase().unwrap_or(DictatePhase::Idle),
@@ -176,9 +230,10 @@ impl Dictate {
     }
 }
 
-/// What will transcribe: the page asks no gxserver for it, so the tooltip says only "Dictate".
+/// What will transcribe: the page asks no gxserver for it, so the tooltip says only "Dictate"
+/// (and the microphone greys under `?dictatePreview=unavailable`).
 pub(crate) fn dictate_engine() -> Option<serde_json::Value> {
-    None
+    preview_engine()
 }
 
 pub(crate) fn refresh_engine() {}

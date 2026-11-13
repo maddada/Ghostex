@@ -21,7 +21,8 @@
 //! - `typing.rs`: whether the user is typing, which keeps the agent's follow from switching sessions.
 //! - `dictation.rs`: the chat box's and the terminal bar's Dictate: `recorder.rs` records to a
 //!   file first, then gxserver keeps and transcribes it with the engine picked in Settings ›
-//!   Dictation (Hex, OpenAI or xAI); `dictate_hotkey.rs` the hotkey's tap and hold;
+//!   Dictation (Hex, OpenAI or xAI), `level_meter.rs` the level its pill's waveform draws;
+//!   `dictate_hotkey.rs` the hotkey's tap and hold;
 //!   `microphones.rs` the input devices the microphone picker offers.
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -41,6 +42,7 @@ pub(crate) mod gbot_call;
 pub(crate) mod header_button;
 pub(crate) mod hex_install;
 pub(crate) mod hold_to_talk;
+mod level_meter;
 pub(crate) mod memory;
 pub(crate) mod microphones;
 pub(crate) mod panel;

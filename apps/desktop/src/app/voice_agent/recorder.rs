@@ -21,6 +21,7 @@ use serde_json::{Value, json};
 
 use super::audio::{AudioStartError, MICROPHONE_KEPT_STOPPING, VoiceAudio};
 use super::conversation::MAX_AUDIO_RESTARTS;
+use super::level_meter::{LevelMeter, SharedLevel};
 
 const SAMPLE_RATE: u32 = 24_000;
 /// Raw bytes per upload piece: under the 1 MiB JSON limit once base64 grows it by a third.
@@ -104,6 +105,8 @@ pub(crate) struct ActiveRecording {
     failure: Arc<Mutex<Option<AudioStartError>>>,
     /// The microphone gives only silence (a warning; the recording goes on).
     silent: Arc<AtomicBool>,
+    /// How loud the microphone is now, for the pill's waveform (`level_meter.rs`).
+    level: SharedLevel,
 }
 
 impl ActiveRecording {
@@ -139,11 +142,13 @@ impl ActiveRecording {
 
         let (sender, receiver) = std::sync::mpsc::channel::<Vec<i16>>();
         let stopped = Arc::new(AtomicBool::new(false));
+        let level = SharedLevel::default();
         let writer = {
             let stopped = stopped.clone();
+            let meter = LevelMeter::new(level.clone());
             std::thread::Builder::new()
                 .name("ghostex-dictation-writer".into())
-                .spawn(move || write_samples(file, receiver, stopped))
+                .spawn(move || write_samples(file, receiver, stopped, meter))
                 .ok()
         };
         let running: Arc<Mutex<Option<VoiceAudio>>> = Arc::new(Mutex::new(None));
@@ -233,6 +238,7 @@ impl ActiveRecording {
             writer,
             failure,
             silent,
+            level,
         };
         match first_result.recv() {
             Ok(Ok(())) => Ok(active),
@@ -251,6 +257,11 @@ impl ActiveRecording {
 
     pub(crate) fn elapsed(&self) -> Duration {
         self.started.elapsed()
+    }
+
+    /// How loud the microphone is now, 0 to 1.
+    pub(crate) fn level(&self) -> f32 {
+        self.level.get()
     }
 
     /// Whether the microphone gives only silence, once (the recording goes on).
@@ -314,12 +325,13 @@ fn wav_header(data_bytes: u32) -> [u8; 44] {
     header
 }
 
-/// The writer thread: appends samples, keeps the header current every couple of seconds, and
-/// answers how many audio bytes were written once the microphone stops.
+/// The writer thread: appends samples, keeps the header current every couple of seconds, feeds
+/// the pill's level meter, and answers how many audio bytes were written once the microphone stops.
 fn write_samples(
     file: fs::File,
     receiver: std::sync::mpsc::Receiver<Vec<i16>>,
     stopped: Arc<AtomicBool>,
+    mut meter: LevelMeter,
 ) -> u64 {
     let mut out = BufWriter::new(file);
     let mut written: u64 = 0;
@@ -327,6 +339,7 @@ fn write_samples(
     loop {
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(samples) => {
+                meter.push(&samples);
                 let bytes: Vec<u8> = samples
                     .iter()
                     .flat_map(|sample| sample.to_le_bytes())
@@ -374,11 +387,21 @@ pub(crate) type Dictation = Value;
 
 /// Calls this computer's gxserver (`/api/<method>`), waiting out a restart.
 pub(crate) fn rpc(method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+    rpc_waiting(method, params, timeout, RESTART_WAIT)
+}
+
+/// [`rpc`] that waits `restart_wait` for a restarting gxserver (zero: a press that must not stall).
+pub(crate) fn rpc_waiting(
+    method: &str,
+    params: Value,
+    timeout: Duration,
+    restart_wait: Duration,
+) -> Result<Value, String> {
     let (status, body) = crate::app::helpers::gxserver_post_typed_operation_across_restart(
         &format!("/api/{method}"),
         &params,
         timeout,
-        RESTART_WAIT,
+        restart_wait,
     )?;
     let mut envelope: Value = serde_json::from_str(&body)
         .map_err(|_| "Ghostex's service returned an answer it couldn't read.".to_string())?;

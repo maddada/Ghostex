@@ -10,6 +10,7 @@
 //! User: "i want to be able to do escape to cancel the voice recording, and we need to show "Transcribing (X)" so user can click on x to cancel the recording but even if he cancels it we need to save so user can hover over the voice button and click "Transcribe previous"". Escape (in the chat box) cancels a recording; after Stop the chat box shows Transcribing with an ✕ that cancels; a cancelled recording is kept as dismissed and Transcribe previous transcribes the newest recording that has no text. A failure says why and offers Transcribe again. The words go into the draft (or the terminal) and are never sent (CDXC:SessionChat 2026-10-08 DECISION). Supersedes the 2026-10-20 streaming dictation through `/api/voice?mode=dictation`, which lost what was said whenever xAI refused or the connection dropped.
 //! CDXC:VoiceMode 2026-10-20 SEE-ALSO: server/src/voice_agent/recordings.rs (the store and the user's decision on keeping every recording), the phone's `src/chat/native/composer/useDictation.ts`.
 
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -22,8 +23,14 @@ use super::recorder::{self, ActiveRecording, LocalRecording};
 /// xAI usually answers within a few seconds; a long recording gets longer.
 const TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(180);
 const LIST_TIMEOUT: Duration = Duration::from_secs(10);
-/// How often the recording row's clock and the microphone health are looked at.
-const TICK: Duration = Duration::from_millis(250);
+/// How often the recording pill's clock, waveform and the microphone health are looked at: the
+/// waveform takes one bar per tick, as the level meter makes one level per 50 ms.
+const TICK: Duration = Duration::from_millis(50);
+/// How long a press waits for gxserver to say whether the engine can transcribe before the
+/// microphone opens anyway (the recording is kept either way).
+const ENGINE_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
+/// The bars of the recording pill's waveform (1.2 s of levels).
+pub(crate) const WAVEFORM_BARS: usize = 24;
 
 /// Where a recording that has no text yet is.
 #[derive(Clone, Debug)]
@@ -45,6 +52,11 @@ pub(crate) enum DictatePhase {
     /// The transcription failed; `failure` says why. The recording is kept.
     Failed {
         kept: Kept,
+        failure: DictateFailure,
+    },
+    /// gxserver said its engine can't transcribe yet (`readDictateEngine`), so nothing was
+    /// recorded; `failure` says why (its code and sentence).
+    Unavailable {
         failure: DictateFailure,
     },
 }
@@ -112,6 +124,8 @@ pub(crate) struct Dictate {
     work: Option<Task<()>>,
     ticker: Option<Task<()>>,
     elapsed: Duration,
+    /// The microphone's level at each tick of this recording, oldest first ([`WAVEFORM_BARS`]).
+    levels: VecDeque<f32>,
     /// A hotkey hold ended while the microphone was still opening: stop as soon as it records.
     stop_when_started: bool,
 }
@@ -128,6 +142,7 @@ impl Dictate {
             work: None,
             ticker: None,
             elapsed: Duration::ZERO,
+            levels: resting_levels(),
             stop_when_started: false,
         }
     }
@@ -150,10 +165,17 @@ impl Dictate {
         self.elapsed
     }
 
+    /// The microphone's recent levels for the waveform, oldest first.
+    pub(crate) fn levels(&self) -> &VecDeque<f32> {
+        &self.levels
+    }
+
     /// The microphone button: start, or stop and transcribe.
     pub(crate) fn toggle(&mut self, cx: &mut Context<Self>) {
         match self.phase {
-            DictatePhase::Idle | DictatePhase::Failed { .. } => self.start(cx),
+            DictatePhase::Idle | DictatePhase::Failed { .. } | DictatePhase::Unavailable { .. } => {
+                self.start(cx)
+            }
             DictatePhase::Recording => self.stop(cx),
             DictatePhase::Starting | DictatePhase::Transcribing => {}
         }
@@ -165,15 +187,37 @@ impl Dictate {
         }
         self.phase = DictatePhase::Starting;
         self.elapsed = Duration::ZERO;
+        self.levels = resting_levels();
         self.stop_when_started = false;
         self.reset_run();
         let cancelled = self.cancelled.clone();
         self.work = Some(cx.spawn(async move |this, cx| {
+            // The engine first: when it can't transcribe, nothing is recorded and the pill says why.
             let started = cx
                 .background_executor()
-                .spawn(async move { ActiveRecording::start() })
+                .spawn(async move {
+                    match engine_not_ready() {
+                        Some(failure) => Err(Start::Unavailable(failure)),
+                        None => ActiveRecording::start().map_err(Start::Microphone),
+                    }
+                })
                 .await;
             let _ = this.update(cx, |this, cx| match started {
+                Err(Start::Unavailable(_)) if cancelled.load(Ordering::SeqCst) => {
+                    this.phase = DictatePhase::Idle;
+                    cx.notify();
+                }
+                Err(Start::Unavailable(failure)) => {
+                    let message = failure.message.clone();
+                    // The phase first, so the chat box knows its card shows this.
+                    this.phase = DictatePhase::Unavailable { failure };
+                    this.stop_when_started = false;
+                    cx.emit(DictateEvent::Failure {
+                        title: "Dictation isn't ready".to_string(),
+                        message,
+                    });
+                    cx.notify();
+                }
                 Ok(active) if cancelled.load(Ordering::SeqCst) => {
                     // Escape before the microphone opened: keep nothing that was never said.
                     let recording = active.finish();
@@ -191,7 +235,7 @@ impl Dictate {
                     this.start_ticker(cx);
                     cx.notify();
                 }
-                Err(error) => {
+                Err(Start::Microphone(error)) => {
                     this.phase = DictatePhase::Idle;
                     cx.emit(DictateEvent::Failure {
                         title: "Dictation couldn't start".to_string(),
@@ -220,6 +264,8 @@ impl Dictate {
                         return false;
                     };
                     this.elapsed = active.elapsed();
+                    this.levels.pop_front();
+                    this.levels.push_back(active.level());
                     if active.take_silent() {
                         // A warning only: a headset with a noise gate is silent too.
                         cx.emit(DictateEvent::Failure {
@@ -326,7 +372,7 @@ impl Dictate {
                     work.detach();
                 }
             }
-            DictatePhase::Failed { .. } => {}
+            DictatePhase::Failed { .. } | DictatePhase::Unavailable { .. } => {}
         }
         self.phase = DictatePhase::Idle;
         cx.notify();
@@ -415,6 +461,45 @@ impl Dictate {
         }
         cx.notify();
     }
+}
+
+/// Why a press did not start recording.
+enum Start {
+    Unavailable(DictateFailure),
+    Microphone(super::audio::AudioStartError),
+}
+
+fn resting_levels() -> VecDeque<f32> {
+    std::iter::repeat_n(0.0, WAVEFORM_BARS).collect()
+}
+
+/// Asks gxserver whether its engine can transcribe now, with `prepare` so a closed Hex opens
+/// while the user speaks (blocking, short). `Some` with why when it can't; `None` when it can,
+/// or when gxserver didn't answer in time (the recording is kept and transcribed later).
+///
+/// CDXC:Dictate 2026-11-13 DECISION: User: "Don't let me dictate all of this and then fail to send: tell me Hex isn't set up on the computer, or grey out the button." The microphone is greyed while the engine can't transcribe (`toolbar.rs`), and a press asks again first: an engine that still can't shows the card with what to do instead of recording.
+fn engine_not_ready() -> Option<DictateFailure> {
+    let engine = recorder::rpc_waiting(
+        "readDictateEngine",
+        json!({"prepare": true}),
+        ENGINE_CHECK_TIMEOUT,
+        Duration::ZERO,
+    )
+    .ok()?;
+    if let Ok(mut slot) = ENGINE.lock() {
+        *slot = Some(engine.clone());
+    }
+    if engine["ready"].as_bool() != Some(false) {
+        return None;
+    }
+    let problem = &engine["problem"];
+    Some(DictateFailure::new(
+        problem["code"].as_str().unwrap_or("notReady"),
+        problem["message"]
+            .as_str()
+            .unwrap_or("Dictation on this computer needs setting up first.")
+            .to_string(),
+    ))
 }
 
 enum Outcome {

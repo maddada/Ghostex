@@ -207,6 +207,7 @@ impl NativeChatView {
             "attachPath" => "Attach a file or folder",
             "terminalView" => "Terminal View",
             "dictate" if self.dictating(cx) => "Stop dictating",
+            "dictate" if super::dictation::dictation_unready(cx) => "Dictate isn't ready",
             "dictate" => "Dictate",
             _ => action,
         };
@@ -224,6 +225,8 @@ impl NativeChatView {
             "sessionNote" if chrome["notePresence"] == true => Some(String::new()),
             _ => None,
         };
+        // Greyed, still pressed: a press says why (the Unavailable card in `dictation.rs`).
+        let dimmed = action == "dictate" && !pressed && super::dictation::dictation_unready(cx);
         div()
             .id(action)
             .relative()
@@ -243,6 +246,8 @@ impl NativeChatView {
                     .size(px(16.0 * p.scale))
                     .text_color(if pressed {
                         p.control_primary
+                    } else if dimmed {
+                        p.primary.opacity(0.38)
                     } else {
                         p.primary
                     }),

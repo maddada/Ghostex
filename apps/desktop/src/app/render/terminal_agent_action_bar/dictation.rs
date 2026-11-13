@@ -147,7 +147,9 @@ impl GhostexGpuiApp {
                     TerminalDictationState::Recording
                 }
                 DictatePhase::Transcribing => TerminalDictationState::Transcribing,
-                DictatePhase::Idle | DictatePhase::Failed { .. } => TerminalDictationState::Idle,
+                DictatePhase::Idle
+                | DictatePhase::Failed { .. }
+                | DictatePhase::Unavailable { .. } => TerminalDictationState::Idle,
             };
             if let Some(dictation) = this.terminal_dictation.as_mut()
                 && dictation.dictate == dictate

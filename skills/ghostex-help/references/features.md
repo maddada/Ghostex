@@ -1837,13 +1837,17 @@ Voice or OpenAI GPT Realtime), so Dictate can stay on Hex while calls use xAI
 or OpenAI; the key that provider needs sits right under it, and it is the same
 key Dictation uses. A problem with the provider or the connection never loses
 what you said: when the transcription fails, a small card above the microphone
-says what went wrong and what to do (no key, a refused key, Hex not installed or
-not running, no internet, too many requests, credit or plan usage, audio the
-provider couldn't read), with Add
-key or Check key, which opens that key's field in Settings > Dictation, Set up
-Hex, which opens Settings > Dictation at the engine, and Transcribe again; hover its sentence for the provider's own words when it gave any. In
+says what went wrong in plain words and that your recording is safe (no key, a
+refused key, Hex not installed, no internet, too many requests, credit or plan
+usage, audio the provider couldn't read), with Add key or Check key, which opens
+that key's field in Settings > Dictation, Open settings, which opens Settings >
+Dictation at the engine, and Try again; hover its sentence for the provider's own words when it gave any.
+While the engine can't transcribe at all (Hex not installed, no key), the
+microphone is greyed: pressing it records nothing and the card says why, with
+Open settings to fix it or pick another engine. In
 the chat box, a small pill right above the microphone shows what Dictate is
-doing: the recording time while you talk, then Transcribing. Its ✕ cancels, and
+doing: the recording time and a live waveform of your voice while you talk (so
+you can see the microphone hears you), then Transcribing. Its ✕ cancels, and
 so does Esc. A cancelled recording is still
 kept: rest the pointer on the microphone (or right-click it) and choose
 Transcribe previous to type the newest recording that has no text yet into the
@@ -1852,8 +1856,10 @@ to cancel, and right-click it for Transcribe previous. Every recording is listed
 in Settings > Dictation > Past recordings. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
 the chat box, which stays there even when other buttons move into More actions; it
 uses the engine (and key) of the computer the chat lives on, keeps the recording on the phone
-until that computer has it, shows Recording, Transcribing and Transcribe again
-(or Set up Hex) in a row above the chat box, and a long press on the microphone
+until that computer has it, shows the recording time with a live waveform, then
+Transcribing, above the chat box, and when something goes wrong a card that says
+your recording is safe with Try again (or Open settings); the microphone is
+greyed while that computer's engine can't transcribe, and a long press on it
 offers Transcribe previous.
 Settings: `dictateHotkeyMode`, `dictateMicrophone`, `dictateInsertSpacing` (this computer's own); Dictate's engine and language are saved by each computer's gxserver and changed in Settings > Dictation (`ghostex settings open --tab dictation`). Hotkey: Dictate (`toggleDictation`).
 Read aloud speaks the agent's replies, so you can follow a session while you
