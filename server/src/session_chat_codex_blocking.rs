@@ -217,7 +217,21 @@ fn is_structured_request_user_input(lines: &[String], selected_index: usize) -> 
 /// this detector names, plus the key-hint footer only a live dialog draws in its last rows. Text
 /// that merely quotes a dialog's words (a draft, transcript prose) has no such footer.
 pub(crate) fn codex_dialog_holds_screen(text: &str) -> bool {
-    detect_codex_blocking_screen(text).is_some() && latest_modal_footer(&scan_lines(text)).is_some()
+    if detect_codex_blocking_screen(text).is_none() {
+        return false;
+    }
+    let lines = scan_lines(text);
+    latest_modal_footer(&lines).is_some() || onboarding_continue_footer(&lines)
+}
+
+/// CDXC:AgentScreenDetection 2026-11-13 WHY:
+/// Codex's sign-in screens offer no Escape: the sign-in picker and the "Signed in with your ChatGPT account" confirmation end on a hint row that reads exactly "Press enter to continue" (codex-rs tui/src/onboarding/auth.rs, its rendered snapshots), so the Escape footer rule (`is_codex_modal_footer`) never sees them. That whole row, among the last four, is their footer.
+fn onboarding_continue_footer(lines: &[String]) -> bool {
+    lines[lines.len().saturating_sub(4)..].iter().any(|line| {
+        strip_box_border(line)
+            .trim()
+            .eq_ignore_ascii_case("press enter to continue")
+    })
 }
 
 /// Classify a live Codex screen that has replaced the ordinary composer with a
