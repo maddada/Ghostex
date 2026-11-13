@@ -72,12 +72,15 @@ impl GhostexGpuiApp {
                                 &params,
                                 timeout,
                             ),
-                            None => gpui_gxserver_rpc_result("/api/agentAccounts", &params, timeout),
+                            None => {
+                                gpui_gxserver_rpc_result("/api/agentAccounts", &params, timeout)
+                            }
                         }
                     })
                     .await;
                 let _ = this.update(cx, |this, cx| {
-                    this.titlebar_accounts_revision = this.titlebar_accounts_revision.wrapping_add(1);
+                    this.titlebar_accounts_revision =
+                        this.titlebar_accounts_revision.wrapping_add(1);
                     this.refresh_titlebar_accounts(cx);
                 });
             }

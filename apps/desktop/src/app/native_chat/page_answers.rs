@@ -4,21 +4,19 @@
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! The phone draws the same card in apps/mobile/app/src/chat/native/transcript/PageAnswersCard.tsx; the page's own card reads Answered in visual.rs. Change them together.
 
-use super::ask_card::{
-    AskBodyMotion, RECEIPT_QUESTION_LINE, answer_aside, single_line_press_head,
-};
+use super::ask_card::{AskBodyMotion, RECEIPT_QUESTION_LINE, answer_aside, single_line_press_head};
 use super::cards::SINGLE_LINE_CARD;
-use crate::app::native_chat::cursor::ChatCursor as _;
-use gpui::prelude::FluentBuilder as _;
-use gpui::{InteractiveElement as _, SharedString, StatefulInteractiveElement as _};
-use gpui_component::tooltip::ManagedTooltipExt as _;
 use super::link_words::LinkWords;
 use super::startup_delivery::{DeliveryNote, NoteAction};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt as _;
+use crate::app::native_chat::cursor::ChatCursor as _;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, Hsla, IntoElement, ParentElement as _, Styled as _, div, px, rgb, svg,
 };
+use gpui::{InteractiveElement as _, SharedString, StatefulInteractiveElement as _};
+use gpui_component::tooltip::ManagedTooltipExt as _;
 use serde_json::{Value, json};
 
 /// About two lines of a note at the card's usual width: a longer note folds to two lines with More.
@@ -86,8 +84,8 @@ impl NativeChatView {
         let motion = (!body_only)
             .then(|| self.disclosure_frame(&key, open, cx))
             .flatten();
-        let rows = (open || motion.is_some())
-            .then(|| self.answers_rows(answers, &key, !body_only, p, cx));
+        let rows =
+            (open || motion.is_some()).then(|| self.answers_rows(answers, &key, !body_only, p, cx));
         let note = delivery
             .is_object()
             .then(|| self.answers_delivery(answers, delivery, p, cx));
@@ -244,7 +242,9 @@ impl NativeChatView {
             .managed_tooltip_with(
                 Some(gpui_component::Placement::Top),
                 Some(super::ask_card::QUICK_TOOLTIP_DELAY),
-                |window, cx| gpui_component::tooltip::Tooltip::new("Open the page").build(window, cx),
+                |window, cx| {
+                    gpui_component::tooltip::Tooltip::new("Open the page").build(window, cx)
+                },
             )
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
@@ -485,7 +485,11 @@ impl NativeChatView {
                     div()
                         .id(SharedString::from(format!("{key}:more")))
                         .role(gpui::Role::Button)
-                        .aria_label(if open { "Show less" } else { "Show the whole note" })
+                        .aria_label(if open {
+                            "Show less"
+                        } else {
+                            "Show the whole note"
+                        })
                         .chat_cursor_pointer()
                         .text_size(px(12.5 * s))
                         .line_height(px(18.0 * s))
