@@ -202,8 +202,11 @@ fn build_share(event: &Value) -> Option<ChatFrameShare> {
     let project_id = object.get("projectId").and_then(Value::as_str)?;
     let session_id = object.get("sessionId").and_then(Value::as_str)?;
     let chat = (project_id.to_string(), session_id.to_string());
-    let digests =
-        OMITTABLE_FIELDS.map(|field| object.get(field).map(|value| field_digest(field, &chat, value)));
+    let digests = OMITTABLE_FIELDS.map(|field| {
+        object
+            .get(field)
+            .map(|value| field_digest(field, &chat, value))
+    });
     Some(ChatFrameShare {
         chat,
         full,

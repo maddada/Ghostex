@@ -286,40 +286,43 @@ impl NativeChatView {
                 // the reports between them behind one closed line ("2 earlier replies · 1 report",
                 // gx-chat-core `turns::earlier_label`).
                 let earlier_key = format!("summary-earlier:{id}");
-                let earlier_line = (!earlier_label.is_empty() && !earlier.is_empty()).then(|| {
-                    let open = self.is_expanded(&earlier_key, false);
-                    let frame = self.disclosure_frame(&earlier_key, open, cx);
-                    let mut part = div().flex().flex_col().w_full().gap(px(part_gap)).child(
-                        self.disclosure(
-                            earlier_key.clone(),
-                            earlier_label.clone().into(),
-                            open,
-                            None,
-                            &p,
-                            cx,
-                        ),
-                    );
-                    if open || frame.is_some() {
-                        let mut body = div().flex().flex_col().w_full().gap(px(part_gap));
-                        for message in &earlier {
-                            body = body.child(self.message_row(message, &p, window, cx));
+                let earlier_line =
+                    (!earlier_label.is_empty() && !earlier.is_empty()).then(|| {
+                        let open = self.is_expanded(&earlier_key, false);
+                        let frame = self.disclosure_frame(&earlier_key, open, cx);
+                        let mut part = div().flex().flex_col().w_full().gap(px(part_gap)).child(
+                            self.disclosure(
+                                earlier_key.clone(),
+                                earlier_label.clone().into(),
+                                open,
+                                None,
+                                &p,
+                                cx,
+                            ),
+                        );
+                        if open || frame.is_some() {
+                            let mut body = div().flex().flex_col().w_full().gap(px(part_gap));
+                            for message in &earlier {
+                                body = body.child(self.message_row(message, &p, window, cx));
+                            }
+                            part = part.child(self.disclosure_body_motion(
+                                &earlier_key,
+                                frame,
+                                part_gap,
+                                body.into_any_element(),
+                            ));
                         }
-                        part = part.child(self.disclosure_body_motion(
-                            &earlier_key,
-                            frame,
-                            part_gap,
-                            body.into_any_element(),
-                        ));
-                    }
-                    part.into_any_element()
-                });
+                        part.into_any_element()
+                    });
                 let (earlier_line, earlier_in_fold) = match (earlier_line, reply.is_some()) {
                     // Above a running turn's "Active work".
                     (Some(line), false) => (Some(line), None),
                     (line, _) => (None, line),
                 };
                 let fold_rows: Vec<&std::sync::Arc<serde_json::Value>> = match reply {
-                    Some(_) if earlier_in_fold.is_some() => final_message.iter().filter(folded).collect(),
+                    Some(_) if earlier_in_fold.is_some() => {
+                        final_message.iter().filter(folded).collect()
+                    }
                     Some(_) => earlier
                         .iter()
                         .copied()
@@ -330,7 +333,9 @@ impl NativeChatView {
                 if let Some(line) = earlier_line {
                     row = row.child(line);
                 }
-                if (reply.is_some() || *active) && (!fold_rows.is_empty() || earlier_in_fold.is_some()) {
+                if (reply.is_some() || *active)
+                    && (!fold_rows.is_empty() || earlier_in_fold.is_some())
+                {
                     row = row.child(
                         self.disclosure(
                             key.clone(),
@@ -388,9 +393,8 @@ impl NativeChatView {
                                     }
                                     None => {
                                         if folded(&&work[at]) {
-                                            body = body.child(
-                                                self.message_row(&work[at], &p, window, cx),
-                                            );
+                                            body = body
+                                                .child(self.message_row(&work[at], &p, window, cx));
                                         }
                                         at += 1;
                                     }

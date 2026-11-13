@@ -743,11 +743,17 @@ pub fn refresh_coordinator_panels(
     // for every coordinator.
     let mut threads_of: HashMap<SessionKey, Vec<&Arc<ThreadRecord>>> = HashMap::new();
     for thread in threads.iter().copied() {
-        threads_of.entry(thread.coordinator_key()).or_default().push(thread);
+        threads_of
+            .entry(thread.coordinator_key())
+            .or_default()
+            .push(thread);
     }
     let mut remote_of: HashMap<SessionKey, Vec<&RemoteThreadRecord>> = HashMap::new();
     for thread in &remote_threads {
-        remote_of.entry(thread.coordinator_key()).or_default().push(thread);
+        remote_of
+            .entry(thread.coordinator_key())
+            .or_default()
+            .push(thread);
     }
     let mut built: Vec<(
         SessionKey,
@@ -833,7 +839,9 @@ pub fn refresh_coordinator_panels(
                 now,
             );
             let generation = row_generation(
-                previous.as_ref().map(|(generation, row)| (*generation, row)),
+                previous
+                    .as_ref()
+                    .map(|(generation, row)| (*generation, row)),
                 &row,
             );
             row_ids.push((thread_key.clone(), generation));

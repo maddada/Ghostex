@@ -152,9 +152,7 @@ pub(super) fn chat_settings() -> ChatSettings {
         // The core builds the card for Tool call lines (Extensions > Experimental), which draws it
         // as one quiet line. The Tool call cards switch is retired (Q2775, settings catalog
         // `migrate_retired_chat_looks`).
-        tool_cards: object
-            .get("chatToolCallLines")
-            .and_then(Value::as_bool),
+        tool_cards: object.get("chatToolCallLines").and_then(Value::as_bool),
         detailed_default: object
             .get("sessionChatDetailedView")
             .and_then(Value::as_bool),

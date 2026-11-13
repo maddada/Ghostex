@@ -1279,9 +1279,7 @@ fn sweep(state: &AppState) {
             return;
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-        repository
-            .running_sessions()
-            .unwrap_or_default()
+        repository.running_sessions().unwrap_or_default()
     };
     let mut active = HashSet::new();
     for session in sessions.iter() {

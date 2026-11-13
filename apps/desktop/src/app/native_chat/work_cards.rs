@@ -64,11 +64,16 @@ pub(super) fn pill_widths(pills: &[Value], p: &ChatAppearance, cx: &gpui::App) -
     let full: f32 = pills
         .iter()
         .map(|pill| {
-            PILL_PAD * 2.0 + PILL_DOT + 4.0 + dock_text_width(&text(pill, "id"), PROSE_SIZE, p, cx) + 2.0
+            PILL_PAD * 2.0
+                + PILL_DOT
+                + 4.0
+                + dock_text_width(&text(pill, "id"), PROSE_SIZE, p, cx)
+                + 2.0
         })
         .sum();
     let dots = (PILL_PAD * 2.0 + PILL_DOT + 2.0) * pills.len() as f32;
-    let plus = PILL_PAD * 2.0 + dock_text_width(&format!("+{}", pills.len()), PROSE_SIZE, p, cx) + 2.0;
+    let plus =
+        PILL_PAD * 2.0 + dock_text_width(&format!("+{}", pills.len()), PROSE_SIZE, p, cx) + 2.0;
     (full + gaps, dots + gaps, plus + 6.0)
 }
 
@@ -751,7 +756,12 @@ impl NativeChatView {
         // separate bar like u show here". So it is always on this bar while the chat has a dock.
         let status_card = self.dock_status_card();
         let status_width = status_card.as_ref().map_or(0.0, |card| {
-            24.0 + dock_text_width(card["label"].as_str().unwrap_or_default(), PROSE_SIZE, p, cx) + 12.0
+            24.0 + dock_text_width(
+                card["label"].as_str().unwrap_or_default(),
+                PROSE_SIZE,
+                p,
+                cx,
+            ) + 12.0
         });
         let named = named_width + status_width <= room;
         let marks: Vec<AnyElement> = counts
@@ -1329,18 +1339,17 @@ impl NativeChatView {
         // alone: each thread of a line of work is its agent's logo at the left of the Done /
         // Reply line, its name in a tooltip, a click opening the thread. The title, the text and
         // the answers are then 6 px apart (two lines of text) and 12 px before the answers.
-        let (thread_chips, other_chips): (Vec<Value>, Vec<Value>) = if open
-            && !row["waitedBy"].is_array()
-        {
-            row["chips"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .partition(|chip| chip["kind"] == "thread")
-        } else {
-            (Vec::new(), Vec::new())
-        };
+        let (thread_chips, other_chips): (Vec<Value>, Vec<Value>) =
+            if open && !row["waitedBy"].is_array() {
+                row["chips"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .partition(|chip| chip["kind"] == "thread")
+            } else {
+                (Vec::new(), Vec::new())
+            };
         let thread_logos: Vec<AnyElement> = thread_chips
             .iter()
             .enumerate()
@@ -1409,17 +1418,15 @@ impl NativeChatView {
             let body_lead = if has_line { OPENED_ROW_GAP - 2.0 } else { 4.0 };
             if !detail.is_empty() {
                 first_body = false;
-                column = column.child(div().mt(px(body_lead * s)).child(
-                    self.ask_markdown(
-                        &format!("detail:{key}"),
-                        &detail,
-                        p.card_muted,
-                        PROSE_SIZE,
-                        PROSE_LINE_HEIGHT,
-                        p,
-                        cx,
-                    ),
-                ));
+                column = column.child(div().mt(px(body_lead * s)).child(self.ask_markdown(
+                    &format!("detail:{key}"),
+                    &detail,
+                    p.card_muted,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                )));
             }
             // Where a line of work stands, on lines of its own: no dot can be left at a line's end.
             for line in row["detail"]

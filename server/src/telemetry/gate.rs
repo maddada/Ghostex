@@ -11,8 +11,8 @@ design exists to make impossible.
 
 use std::{
     sync::{
-        Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
+        Mutex, OnceLock,
     },
     time::{Duration, Instant, SystemTime},
 };
@@ -90,7 +90,10 @@ analytics OFF; nothing a client sends can turn them back on.
 */
 pub fn opt_out_until_exit() {
     if !CLIENT_LAUNCH_OPT_OUT.swap(true, Ordering::SeqCst) {
-        super::debug_log("a client launched with analytics off; analytics are off until gxserver exits".to_string());
+        super::debug_log(
+            "a client launched with analytics off; analytics are off until gxserver exits"
+                .to_string(),
+        );
     }
 }
 

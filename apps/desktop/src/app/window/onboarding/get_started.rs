@@ -454,9 +454,8 @@ impl GpuiOnboardingWindow {
                         // CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 2), picked "Say it is starting, and mention usage data once": analytics are on by default, so setup says so once, here.
                         // 2026-11-13 (Q2799, PR #588): there is no Settings switch for analytics; the user opts people out with a launch option instead (server/src/telemetry/gate.rs), so this line no longer points at Settings > About.
                         .child(
-                            sans(s, 13.0, 400.0, hex(0x8e97a8)).child(
-                                "Ghostex sends anonymous usage analytics to get better.",
-                            ),
+                            sans(s, 13.0, 400.0, hex(0x8e97a8))
+                                .child("Ghostex sends anonymous usage analytics to get better."),
                         ),
                 )
                 .into_any_element(),

@@ -194,12 +194,14 @@ pub(crate) fn record_gpui_surface_opened_telemetry(
 fn gpui_analytics_off_at_launch() -> bool {
     static OFF: OnceLock<bool> = OnceLock::new();
     *OFF.get_or_init(|| {
-        ["GHOSTEX_TELEMETRY_DISABLED", "DO_NOT_TRACK"].iter().any(|name| {
-            std::env::var(name).is_ok_and(|value| {
-                let value = value.trim();
-                value == "1" || value.eq_ignore_ascii_case("true")
+        ["GHOSTEX_TELEMETRY_DISABLED", "DO_NOT_TRACK"]
+            .iter()
+            .any(|name| {
+                std::env::var(name).is_ok_and(|value| {
+                    let value = value.trim();
+                    value == "1" || value.eq_ignore_ascii_case("true")
+                })
             })
-        })
     })
 }
 
