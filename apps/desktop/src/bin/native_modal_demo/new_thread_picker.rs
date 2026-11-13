@@ -149,7 +149,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let agents = if state == "many" {
         let mut agents = agents;
-        for name in ["Gemini", "Copilot", "Kiro", "Qoder", "Amp", "Droid"] {
+        for name in ["Copilot", "Kiro", "Qoder", "Amp", "Droid", "Kimi"] {
             agents.push(agent(light, &name.to_lowercase(), name, None));
         }
         agents

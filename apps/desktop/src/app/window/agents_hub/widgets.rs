@@ -175,7 +175,6 @@ pub(crate) fn agent_logo_color(icon: &str, hp: &HubPalette) -> Rgba {
         "dsh" => 0x4d6bfe,
         "empryo" => 0x1fa31d,
         "factory-droid" => 0xff7a1a,
-        "gemini" => 0x8b9aff,
         "hermes-agent" => 0xf3c46b,
         "kimi" => 0x7b6cf6,
         "kiro" => 0xa6e3ff,
@@ -197,7 +196,7 @@ pub(crate) fn agent_logo_color(icon: &str, hp: &HubPalette) -> Rgba {
     rgb(brand)
 }
 
-const AGENT_ICONS: [&str; 27] = [
+const AGENT_ICONS: [&str; 26] = [
     "amp-cli",
     "antigravity-cli",
     "browser",
@@ -212,7 +211,6 @@ const AGENT_ICONS: [&str; 27] = [
     "empryo",
     "factory-droid",
     "freebuff",
-    "gemini",
     "grok-build",
     "hermes-agent",
     "mastra",

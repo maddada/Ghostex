@@ -158,7 +158,7 @@ export type GxserverAgentActivityEvent =
 
 export interface GxserverAgentActivityState {
   activity: 'attention' | 'idle' | 'working';
-  agentName?: 'antigravity' | 'claude' | 'codex' | 'copilot' | 'cursor' | 'gemini' | 'opencode' | 'pi';
+  agentName?: 'antigravity' | 'claude' | 'codex' | 'copilot' | 'cursor' | 'opencode' | 'pi';
   attentionEventId?: string;
   attentionSuppressedUntil?: string;
   hasSeenWorking?: boolean;

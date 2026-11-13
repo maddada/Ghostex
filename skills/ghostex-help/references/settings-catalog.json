@@ -9684,10 +9684,6 @@
           "value": "OpenCode"
         },
         {
-          "label": "Gemini",
-          "value": "Gemini"
-        },
-        {
           "label": "Copilot",
           "value": "Copilot"
         },
@@ -10044,10 +10040,6 @@
         {
           "label": "OpenCode",
           "value": "OpenCode"
-        },
-        {
-          "label": "Gemini",
-          "value": "Gemini"
         },
         {
           "label": "Copilot",

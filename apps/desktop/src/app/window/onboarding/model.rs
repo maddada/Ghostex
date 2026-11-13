@@ -910,15 +910,15 @@ mod tests {
     #[test]
     fn a_launcher_only_agent_reads_as_not_installed() {
         let payload = serde_json::json!({ "agents": [
-            { "agentId": "gemini", "cliInstalled": false, "cliInstallsOnDemand": true, "status": "cliMissing" },
+            { "agentId": "qoder", "cliInstalled": false, "cliInstallsOnDemand": true, "status": "cliMissing" },
             { "agentId": "claude", "cliInstalled": true, "hookInstalled": true, "status": "installed" },
         ]});
         let agents = detected_agents_from_hook_status(&payload, &[]);
-        let gemini = agents
+        let qoder = agents
             .iter()
-            .find(|agent| agent.agent_id == "gemini")
+            .find(|agent| agent.agent_id == "qoder")
             .unwrap();
-        assert!(!gemini.installed && gemini.installs_on_demand);
+        assert!(!qoder.installed && qoder.installs_on_demand);
         let claude = agents
             .iter()
             .find(|agent| agent.agent_id == "claude")

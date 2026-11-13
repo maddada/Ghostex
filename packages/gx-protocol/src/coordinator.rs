@@ -5,7 +5,7 @@
 /// prefers them when no agent is named.
 ///
 /// CDXC:Coordinators 2026-10-20 WHY:
-/// An orchestrator must read a skill, run the `ghostex` CLI and take Ghostex's chat sends (the user's messages and its threads' reports). These are the chat agents that load skills from a folder Ghostex can install into; OpenCode 2 joined once its chat landed (sends go through its server API, it reads `~/.agents/skills` itself). Left out: Empryo (no skill folder Ghostex knows of; its older orchestrators keep the `/agent` profile), Hermes (its replies and queued sends never reach the chat, agent flow tests 2026-10-17), Freebuff (no skill folder), and agents without a chat (Command Code, Gemini and the rest: no transcript reader and no input-box reading, so the first message and every report would be typed blind and the Threads panel has no chat to live in). Supersedes the 2026-10-17 WHY that left OpenCode out for having no chat.
+/// An orchestrator must read a skill, run the `ghostex` CLI and take Ghostex's chat sends (the user's messages and its threads' reports). These are the chat agents that load skills from a folder Ghostex can install into; OpenCode 2 joined once its chat landed (sends go through its server API, it reads `~/.agents/skills` itself). Left out: Empryo (no skill folder Ghostex knows of; its older orchestrators keep the `/agent` profile), Hermes (its replies and queued sends never reach the chat, agent flow tests 2026-10-17), Freebuff (no skill folder), and agents without a chat (Command Code and the rest: no transcript reader and no input-box reading, so the first message and every report would be typed blind and the Threads panel has no chat to live in). Supersedes the 2026-10-17 WHY that left OpenCode out for having no chat.
 ///
 /// CDXC:Coordinators 2026-11-07 WHY:
 /// Issue #480: DeepSeek Harness (`dsh`) does all three, so it joined last in the order. It reads `~/.agents/skills` itself (dsh-skill-filesystem's `agentsHome/skills` root), so no per-agent skill link is needed, and chat sends reach it through dsh-tui's inject socket (server/src/session_chat_queue_runtime/dsh_channel_send.rs). Its launch takes no model or effort (gxserver refuses both for a dsh session), so its New Coordinator form shows neither and it starts on its configured model.
@@ -213,7 +213,7 @@ mod tests {
         assert!(coordinator_agent_family_supported("dsh"));
         assert_eq!(coordinator_agent_family_name("dsh"), "DeepSeek Harness");
         assert!(coordinator_agent_families_text().ends_with("OpenCode or DeepSeek Harness"));
-        assert!(coordinator_agent_family_supported("gemini"));
+        assert!(coordinator_agent_family_supported("kiro"));
     }
 
     #[test]

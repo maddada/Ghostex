@@ -26,7 +26,6 @@ pub(crate) fn format_identifier(value: &str) -> String {
         "codex" => Some("Codex"),
         "copilot" => Some("Copilot"),
         "cursor-cli" => Some("Cursor CLI"),
-        "gemini" => Some("Gemini"),
         "opencode" => Some("OpenCode"),
         "pi" => Some("Pi"),
         "terminal" => Some("Terminal"),

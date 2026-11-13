@@ -1,5 +1,5 @@
 //! Preview host for the Install Hooks prompt. States: `claude` (default),
-//! `codex` (white logo), `gemini`, `omp` (multicolor logo), `unknown` (no logo).
+//! `codex` (white logo), `copilot`, `omp` (multicolor logo), `unknown` (no logo).
 use super::agent_hooks_required_modal::*;
 use gpui::{App, AppContext as _};
 use std::rc::Rc;
@@ -7,7 +7,7 @@ use std::rc::Rc;
 pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let (agent_name, hook_agent_id) = match demo.state.as_str() {
         "codex" => ("Codex", "codex"),
-        "gemini" => ("Gemini", "gemini"),
+        "copilot" => ("Copilot", "copilot"),
         "omp" => ("OMP", "omp"),
         "unknown" => ("My Agent", "my-agent"),
         _ => ("Claude", "claude"),

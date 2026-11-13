@@ -443,7 +443,7 @@ pub fn format_tool_input(input: &Value) -> String {
     }
 }
 
-/// The one line the agent wrote to say what a call does (Claude's, OpenCode's and Gemini's
+/// The one line the agent wrote to say what a call does (Claude's and OpenCode's
 /// `description`), which a tool row shows in place of the tool's name and its command preview in
 /// every mode; empty when the call has none, and opening the row still shows the full command.
 ///

@@ -7,7 +7,7 @@
 //!
 //! States: `agents` (the Agents story), `agents-hooks` (the `agentHooks` deep link),
 //! `agents-expanded` (Codex and Claude open), `agents-clis` (ZCode, Claude, Pi and Grok open),
-//! `agents-cli-running` (Gemini installing), `agents-cli-failed` (Grok's failed update),
+//! `agents-cli-running` (Qoder installing), `agents-cli-failed` (Grok's failed update),
 //! `agents-editor-new`, `agents-editor-edit` (Claude), `agents-skip-confirm`, `agents-loading`
 //! (hook status never answers), `agents-empty` (no launchers), `agents-search` ("approval"),
 //! `agents-no-match` ("tailscale"), `agents-home` (scrolled to the Home folder card),
@@ -47,7 +47,6 @@ fn default_agent_buttons() -> Value {
         { "agentId": "cursor", "command": "cursor-agent", "icon": "cursor-cli", "isDefault": true, "name": "Cursor CLI" },
         { "agentId": "pi", "command": "pi", "icon": "pi", "isDefault": true, "name": "Pi Agent" },
         { "agentId": "opencode", "command": "opencode", "icon": "opencode", "isDefault": true, "name": "OpenCode" },
-        { "agentId": "gemini", "command": "gemini", "icon": "gemini", "isDefault": true, "name": "Gemini" },
         { "agentId": "copilot", "command": "copilot", "icon": "copilot", "isDefault": true, "name": "Copilot" },
         { "agentId": "droid", "command": "droid", "icon": "factory-droid", "isDefault": true, "name": "Factory Droid" },
         { "agentId": "grok", "command": "grok", "icon": "grok-build", "isDefault": true, "name": "Grok Build" },
@@ -186,12 +185,12 @@ fn cli_state(agent_id: &str) -> Value {
                 npm("zcode-app-cli")
             ],
         }),
-        "gemini" if state() == "agents-cli-running" => json!({
-            "agentId": "gemini", "platform": "windows",
-            "methods": [npm("@google/gemini-cli")],
+        "qoder" if state() == "agents-cli-running" => json!({
+            "agentId": "qoder", "platform": "windows",
+            "methods": [npm("@qoder-ai/qodercli")],
             "job": {
-                "id": "gemini-install", "status": "running", "operation": "install",
-                "command": "npm install -g @google/gemini-cli@latest",
+                "id": "qoder-install", "status": "running", "operation": "install",
+                "command": "npm install -g @qoder-ai/qodercli@latest",
                 "output": "Downloading CLI package…\n\u{1b}[32madded 312 packages\u{1b}[0m in 9s\n",
             },
         }),
@@ -216,7 +215,6 @@ pub(super) fn rpc(params: &Value) -> Result<Value, String> {
                 "cursor",
                 "pi",
                 "opencode",
-                "gemini",
                 "copilot",
                 "droid",
                 "grok",

@@ -378,7 +378,7 @@ impl AgentsTab {
             "agents-clis" => {
                 self.expanded = vec!["zcode".into(), "claude".into(), "pi".into(), "grok".into()]
             }
-            "agents-cli-running" => self.expanded = vec!["gemini".into()],
+            "agents-cli-running" => self.expanded = vec!["qoder".into()],
             "agents-cli-failed" => self.expanded = vec!["grok".into()],
             "agents-editor-new" => self.open_editor(None, window, cx),
             "agents-editor-edit" => self.expanded = vec!["codex".into()],

@@ -261,7 +261,6 @@ pub(crate) fn agent_logo_color(icon: &str) -> u32 {
         "dsh" => 0x4d6bfe,
         "empryo" => 0x1fa31d,
         "factory-droid" => 0xff7a1a,
-        "gemini" => 0x8b9aff,
         "hermes-agent" => 0xf3c46b,
         "kimi" => 0x7b6cf6,
         "kiro" => 0xa6e3ff,
@@ -276,7 +275,7 @@ pub(crate) fn agent_logo_color(icon: &str) -> u32 {
 }
 
 /// The three agents the prototype shows inside the "Other agents" cluster.
-pub(crate) const OTHER_AGENT_SAMPLE_IDS: [&str; 3] = ["gemini", "opencode", "pi"];
+pub(crate) const OTHER_AGENT_SAMPLE_IDS: [&str; 3] = ["copilot", "opencode", "pi"];
 
 fn other_agents_cluster(s: S, catalog: &[CatalogAgent], cluster_size: f32) -> AnyElement {
     let cell = (cluster_size * 0.47).round();

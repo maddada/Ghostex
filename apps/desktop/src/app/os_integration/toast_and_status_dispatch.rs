@@ -457,17 +457,17 @@ mod tests {
     fn a_rescan_asked_for_during_a_walk_is_kept_not_dropped() {
         assert_eq!(merge(None, None), None);
         assert_eq!(
-            merge(None, Some(vec!["gemini".into()])),
-            Some(vec!["gemini".into()])
+            merge(None, Some(vec!["kiro".into()])),
+            Some(vec!["kiro".into()])
         );
-        assert_eq!(merge(Some(Some(vec!["gemini".into()])), None), None);
-        assert_eq!(merge(Some(None), Some(vec!["gemini".into()])), None);
+        assert_eq!(merge(Some(Some(vec!["kiro".into()])), None), None);
+        assert_eq!(merge(Some(None), Some(vec!["kiro".into()])), None);
         assert_eq!(
             merge(
-                Some(Some(vec!["gemini".into()])),
-                Some(vec!["amp".into(), "gemini".into()])
+                Some(Some(vec!["kiro".into()])),
+                Some(vec!["amp".into(), "kiro".into()])
             ),
-            Some(vec!["gemini".into(), "amp".into()])
+            Some(vec!["kiro".into(), "amp".into()])
         );
     }
 }

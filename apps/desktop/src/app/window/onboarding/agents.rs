@@ -555,7 +555,7 @@ impl GpuiOnboardingWindow {
                         format!("Other agents (+{})", other_missing.len())
                     }))
                     .child(ss(s, 12.5).child(if other_names.is_empty() {
-                        "Pi Agent, OpenCode, Gemini, and more.".to_string()
+                        "Pi Agent, OpenCode, Copilot, and more.".to_string()
                     } else {
                         format!("{}, and more.", other_names.join(", "))
                     })),

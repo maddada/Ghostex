@@ -694,7 +694,7 @@ fn open_export_transcript(demo: &DemoEnv, cx: &mut App) {
     let agents = if demo.state == "noagents" {
         Vec::new()
     } else {
-        ["codex", "claude", "gemini"]
+        ["codex", "claude", "copilot"]
             .into_iter()
             .map(|id| ExportTranscriptAgent {
                 agent_id: id.to_string(),

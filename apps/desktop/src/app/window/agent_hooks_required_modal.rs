@@ -96,7 +96,6 @@ pub(crate) fn agent_hooks_logo_for_agent_id(agent_id: &str) -> Option<AgentHooks
         "cursor" => logo("agent-icons/cursor-cli.svg", 0xedecec),
         "pi" => logo("agent-icons/pi.svg", 0xc8ff62),
         "opencode" => logo("agent-icons/opencode.svg", 0x6d96c0),
-        "gemini" => logo("agent-icons/gemini.svg", 0x8b9aff),
         "copilot" => logo("agent-icons/copilot.svg", 0xffffff),
         "droid" => logo("agent-icons/factory-droid.svg", 0xff7a1a),
         "grok" => logo("agent-icons/grok-build.svg", 0xffffff),

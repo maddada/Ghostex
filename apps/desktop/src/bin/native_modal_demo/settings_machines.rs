@@ -104,7 +104,7 @@ fn linux_rpc(state: &str, path: &str, params: &Value) -> Result<Value, String> {
         ("/api/agentCliMaintenance", "list") => Ok(json!({ "agents": [
             { "agentId": "codex", "platform": "linux", "executablePath": "/home/madda/.local/share/mise/shims/codex", "version": "0.40.0", "latestVersion": "0.41.0", "updateAvailable": true, "detectedMethodId": "mise", "methods": [{ "id": "mise", "label": "mise", "command": "mise use -g npm:@openai/codex@latest" }] },
             { "agentId": "claude", "platform": "linux", "executablePath": "/home/madda/.local/bin/claude", "version": "2.1.309", "detectedMethodId": "native", "methods": [{ "id": "native", "label": "Official installer", "command": "curl -fsSL https://claude.ai/install.sh | bash" }] },
-            { "agentId": "gemini", "platform": "linux", "methods": [{ "id": "npm", "label": "npm", "command": "npm install -g @google/gemini-cli", "prerequisite": "node" }] },
+            { "agentId": "qoder", "platform": "linux", "methods": [{ "id": "npm", "label": "npm", "command": "npm install -g @qoder-ai/qodercli", "prerequisite": "node" }] },
             { "agentId": "opencode", "platform": "linux", "methods": [{ "id": "script", "label": "Official installer", "command": "curl -fsSL https://opencode.ai/install | bash" }] }
         ] })),
         ("/api/agentCliMaintenance", _) => Ok(json!({
@@ -154,7 +154,7 @@ fn linux_rpc(state: &str, path: &str, params: &Value) -> Result<Value, String> {
                 "agents": [
                     row("codex", "installed"),
                     row("claude", claude),
-                    row("gemini", "cliMissing"),
+                    row("qoder", "cliMissing"),
                     row("opencode", "cliMissing"),
                 ],
                 "hookStateDirectory": "/home/madda/.local/state/ghostex/agent-hooks",

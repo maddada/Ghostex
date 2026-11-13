@@ -712,8 +712,8 @@ mod tests {
 
     fn row(lazy: bool, state: Option<Value>) -> CliRow {
         CliRow {
-            agent_id: "gemini".into(),
-            name: "Gemini".into(),
+            agent_id: "qoder".into(),
+            name: "Qoder".into(),
             lazy,
             state: state.as_ref().map(CliState::parse),
             loading: false,
@@ -730,7 +730,7 @@ mod tests {
     }
 
     fn job(status: &str, output: &str) -> Value {
-        json!({"agentId": "gemini", "methods": [{"id": "npm", "label": "npm", "command": "npm i -g x"}],
+        json!({"agentId": "qoder", "methods": [{"id": "npm", "label": "npm", "command": "npm i -g x"}],
             "job": {"id": "j1", "command": "npm i -g x", "status": status, "output": output}})
     }
 
@@ -754,7 +754,7 @@ mod tests {
         );
         assert_eq!(cli.progress_line().as_deref(), Some("added 12 packages"));
         let mut done = job("succeeded", "ok");
-        done["executablePath"] = json!("/usr/local/bin/gemini");
+        done["executablePath"] = json!("/usr/local/bin/qodercli");
         cli.state = Some(CliState::parse(&done));
         assert_eq!(
             guide_row_status(Some(&cli), false),
@@ -804,7 +804,7 @@ mod tests {
     fn closing_the_guide_keeps_running_and_installed_rows() {
         let mut rows = CliRows::default();
         let mut installed = job("succeeded", "");
-        installed["executablePath"] = json!("/bin/gemini");
+        installed["executablePath"] = json!("/bin/qodercli");
         rows.rows.insert("guide:a".into(), row(true, None));
         rows.rows
             .insert("guide:b".into(), row(true, Some(job("running", ""))));

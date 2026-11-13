@@ -32,12 +32,6 @@ pub const AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS: J = J::Arr(&[
         ("name", J::Str("OpenCode")),
     ]),
     J::Obj(&[
-        ("agentId", J::Str("gemini")),
-        ("command", J::Str("gemini")),
-        ("icon", J::Str("gemini")),
-        ("name", J::Str("Gemini")),
-    ]),
-    J::Obj(&[
         ("agentId", J::Str("copilot")),
         ("command", J::Str("copilot")),
         ("icon", J::Str("copilot")),
@@ -196,12 +190,6 @@ pub const DEFAULT_SIDEBAR_AGENTS: J = J::Arr(&[
         ("command", J::Str("opencode")),
         ("icon", J::Str("opencode")),
         ("name", J::Str("OpenCode")),
-    ]),
-    J::Obj(&[
-        ("agentId", J::Str("gemini")),
-        ("command", J::Str("gemini")),
-        ("icon", J::Str("gemini")),
-        ("name", J::Str("Gemini")),
     ]),
     J::Obj(&[
         ("agentId", J::Str("copilot")),

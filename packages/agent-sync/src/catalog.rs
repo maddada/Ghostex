@@ -11,9 +11,10 @@
 //!
 //! CDXC:AgentSync 2026-10-14 WHY:
 //! A probe skill placed only in `~/.agents/skills` was listed by Codex 0.162 (and every Codex
-//! profile, which reads `$HOME/.agents/skills` whatever its CODEX_HOME), Gemini CLI 0.41, GitHub
-//! Copilot CLI 1.0.80 and Pi 0.99, so they are universal too: a link in their own folder made
-//! them load each skill twice (Gemini logs a "Skill conflict" for each one). Claude Code 2.1.284
+//! profile, which reads `$HOME/.agents/skills` whatever its CODEX_HOME), Gemini CLI 0.41 (dropped
+//! from Ghostex on 2026-11-13), GitHub Copilot CLI 1.0.80 and Pi 0.99, so they are universal too:
+//! a link in their own folder made them load each skill twice (Gemini logged a "Skill conflict"
+//! for each one). Claude Code 2.1.284
 //! and Hermes Agent 0.21 did not list it, so they keep per-skill links.
 
 use serde::Serialize;
@@ -118,17 +119,6 @@ const ROWS: &[Row] = &[
             ".codex",
             Some(".codex/skills"),
             Some(".codex/AGENTS.md"),
-        )
-    },
-    Row {
-        universal: true,
-        ..row(
-            "gemini-cli",
-            "Gemini CLI",
-            Some("gemini"),
-            ".gemini",
-            Some(".gemini/skills"),
-            Some(".gemini/GEMINI.md"),
         )
     },
     row(

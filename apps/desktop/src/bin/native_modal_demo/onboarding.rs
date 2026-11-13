@@ -27,13 +27,12 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
-const CATALOG: [(&str, &str, &str); 24] = [
+const CATALOG: [(&str, &str, &str); 23] = [
     ("codex", "Codex", "codex"),
     ("claude", "Claude", "claude"),
     ("cursor", "Cursor CLI", "cursor-cli"),
     ("pi", "Pi Agent", "pi"),
     ("opencode", "OpenCode", "opencode"),
-    ("gemini", "Gemini", "gemini"),
     ("copilot", "Copilot", "copilot"),
     ("droid", "Factory Droid", "factory-droid"),
     ("grok", "Grok Build", "grok-build"),

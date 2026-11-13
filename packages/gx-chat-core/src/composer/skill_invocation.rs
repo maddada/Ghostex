@@ -12,11 +12,11 @@ use crate::composer::text::Utf16Text;
 /// How an agent's own input runs a skill.
 ///
 /// CDXC:AgentSkills 2026-11-08 DECISION:
-/// User (Q2012 on the reference syntax page): one Ghostex syntax, `/name`, in the chat box for every agent, and each agent receives its own spelling. Checked 2026-11-08 against each CLI: Claude Code, Copilot, Cursor and Gemini CLI run `/name`; Codex runs `$name` and rejects an unknown `/name` in its own box; Pi runs `/skill:name`; OpenCode loads a skill from `@name`. Every agent not named here keeps the `[$name](…/SKILL.md)` link it had before.
+/// User (Q2012 on the reference syntax page): one Ghostex syntax, `/name`, in the chat box for every agent, and each agent receives its own spelling. Checked 2026-11-08 against each CLI: Claude Code, Copilot and Cursor run `/name` (Gemini CLI did too until it was dropped on 2026-11-13); Codex runs `$name` and rejects an unknown `/name` in its own box; Pi runs `/skill:name`; OpenCode loads a skill from `@name`. Every agent not named here keeps the `[$name](…/SKILL.md)` link it had before.
 /// SEE-ALSO: `server/src/session_chat_skill_invocation.rs` converts the same links on their way to the terminal with this table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SkillSpelling {
-    /// `/name`: Claude Code, OpenClaude, Copilot, Cursor, Gemini CLI.
+    /// `/name`: Claude Code, OpenClaude, Copilot, Cursor.
     Slash,
     /// `/skill:name`: Pi.
     PiSkill,
@@ -32,7 +32,7 @@ pub fn skill_spelling(agent: Option<&str>) -> SkillSpelling {
     match agent.as_deref() {
         Some(
             "claude" | "claude-code" | "openclaude" | "copilot" | "github-copilot" | "cursor"
-            | "cursor-cli" | "cursor-agent" | "gemini" | "gemini-cli",
+            | "cursor-cli" | "cursor-agent",
         ) => SkillSpelling::Slash,
         Some("pi") => SkillSpelling::PiSkill,
         Some("opencode") => SkillSpelling::At,

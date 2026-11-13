@@ -200,11 +200,6 @@ pub(crate) const GPUI_DEFAULT_SIDEBAR_AGENTS: &[GpuiDefaultSidebarAgent] = &[
         name: "OpenCode",
     },
     GpuiDefaultSidebarAgent {
-        agent_id: "gemini",
-        icon: "gemini",
-        name: "Gemini",
-    },
-    GpuiDefaultSidebarAgent {
         agent_id: "copilot",
         icon: "copilot",
         name: "Copilot",

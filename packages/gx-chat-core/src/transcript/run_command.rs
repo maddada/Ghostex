@@ -194,7 +194,6 @@ const COMMAND_WORDS: &[&str] = &[
     "claude",
     "codex",
     "opencode",
-    "gemini",
     "cswap",
     "zmx",
     "agentbox",
