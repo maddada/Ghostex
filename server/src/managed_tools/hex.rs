@@ -133,6 +133,37 @@ pub(crate) fn find_mac(dirs: &[PathBuf]) -> Option<Found> {
     })
 }
 
+/// The `Hex.app` Ghostex can open itself when Dictate needs Hex and it isn't running: Hex 3 on
+/// macOS. Linux and Windows have no app bundle to open in the background, so there the user
+/// opens Hex.
+pub(crate) fn openable(home: &Path) -> Option<PathBuf> {
+    // Hex writes `local-api.json` under the account's own home, so a gxserver with another home
+    // (a test home, an isolated test server) would open a Hex it can never reach.
+    if platform::os() != Os::Mac || home != ghostex_paths::user_home_dir() {
+        return None;
+    }
+    match find(home) {
+        Some(Found::Current { path, .. }) => Some(path),
+        _ => None,
+    }
+}
+
+/// Opens Hex 3 in the background (`open -g`: no window comes to the front). Answers whether macOS
+/// took the request; Hex's local API answers a moment later.
+pub(crate) fn open_in_background(home: &Path) -> bool {
+    let Some(app) = openable(home) else {
+        return false;
+    };
+    crate::platform::process::background_command("/usr/bin/open")
+        .arg("-g")
+        .arg(&app)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 /// One key of an `Info.plist` (XML or binary), read with macOS's `plutil`.
 fn plist_value(plist: &Path, key: &str) -> Option<String> {
     let output = crate::platform::process::background_command("/usr/bin/plutil")

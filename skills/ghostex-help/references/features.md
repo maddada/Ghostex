@@ -1793,9 +1793,12 @@ as not installed. Then open Hex (Open Hex starts it and checks again by itself),
 allow the microphone and download a model in Hex's
 settings (Parakeet v3 for English and 24 European languages, Whisper for the
 rest); Ghostex finds it by itself and the row becomes a picker of the models
-Hex has ready. Turn on Open at login in Hex so dictation keeps working after a
-restart; when Hex isn't running, the row says "Hex isn't running" with Open Hex
-and Check again buttons.
+Hex has ready. On a Mac you don't need to keep Hex open: when you dictate and
+Hex isn't running, Ghostex opens it in the background and waits for it, so the
+recording is transcribed anyway (from the phone too). On Windows and Linux, turn
+on Open at login in Hex so dictation keeps working after a restart. When Hex
+isn't running, the row says "Hex isn't running" with Open Hex and Check again
+buttons.
 A computer that used Ghostex's old built-in model moves to Hex (never to a paid
 engine), and Ghostex deletes the speech models that model downloaded by itself.
 A new install

@@ -104,12 +104,16 @@ fn the_tooltip_names_the_engine_and_model_and_what_is_missing() {
     let mut settings = super::settings::DictateSettings::first_run(false, false);
     assert_eq!(super::dictate::engine_label(&settings), "Hex");
     let not_running = super::hex::State::NotRunning;
+    // A Mac with Hex 3 installed opens it for the transcription, so the mic is ready.
+    let expected = (!super::hex::opens_by_itself(&paths.home_dir)).then(|| {
+        (
+            "hexNotRunning",
+            "Hex isn't running on this computer. Open Hex.".to_string(),
+        )
+    });
     assert_eq!(
         super::dictate::engine_problem(&paths, &settings, Some(&not_running)),
-        Some((
-            "hexNotRunning",
-            "Hex isn't running on this computer. Open Hex.".to_string()
-        ))
+        expected
     );
     settings.engine = super::settings::Engine::Xai;
     assert_eq!(

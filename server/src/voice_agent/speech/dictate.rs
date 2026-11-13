@@ -82,6 +82,10 @@ pub(crate) fn engine_problem(
                 &asked
             }
         };
+        // A closed Hex is opened by the transcription itself (CDXC:Dictate 2026-11-13 in hex.rs).
+        if matches!(state, hex::State::NotRunning) && hex::opens_by_itself(&paths.home_dir) {
+            return None;
+        }
         return hex::problem(state, settings.hex_model.as_deref());
     }
     let provider = provider_of(settings.engine)?;

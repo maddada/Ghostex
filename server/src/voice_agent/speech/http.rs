@@ -2,7 +2,8 @@
 //! (contract: issues-1027/speech-to-text/api-contract.md):
 //!
 //! - `/api/readDictateSettings`, `/api/setDictateSettings` `{patch}`
-//! - `/api/readDictateEngine`: what will transcribe, for the mic's tooltip
+//! - `/api/readDictateEngine` `{prepare?}`: what will transcribe and whether it can, for the mic
+//!   (greyed when it can't); `prepare` (the mic was pressed) opens a closed Hex on macOS
 //! - `hex` in `/api/readDictateSettings`: where the user stands with Hex 3 (`hex.rs`)
 //! - `/api/deleteOldSpeechModels` and `/api/skipDictationPolish` `{id}`: kept for phones at 11.2.1
 //!   and desktops at 11.2.2, which may still call them; gxserver deletes the old models on its own
@@ -74,9 +75,17 @@ async fn route(state: &AppState, path: &str, body: &Value) -> Result<Value, Doma
             read_all(state).await
         }
         "/api/readDictateEngine" => {
+            // Sent when the microphone is pressed: a closed Hex opens while the user speaks.
+            let prepare = params
+                .get("prepare")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let (settings, hex_state) = blocking(move || {
                 let settings = dictate::current_settings(&paths);
                 let hex_state = dictate::hex_state_for(&paths, &settings);
+                if prepare && matches!(hex_state, Some(hex::State::NotRunning)) {
+                    hex::open_in_background(&paths.home_dir);
+                }
                 Ok((settings, hex_state))
             })
             .await?;

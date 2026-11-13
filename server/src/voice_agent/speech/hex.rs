@@ -654,7 +654,52 @@ fn decode_m4a(path: &Path) -> Result<PathBuf, String> {
     Ok(wav)
 }
 
+/// How long a transcription waits for a Hex that Ghostex just opened to answer. Hex 3 answers
+/// `/health` within a second or two of opening; a busy computer gets more.
+const OPEN_WAIT: Duration = Duration::from_secs(20);
+const OPEN_POLL: Duration = Duration::from_millis(250);
+
+const OPENED_BUT_SILENT: &str =
+    "Ghostex opened Hex, but it didn't answer in time. Check that Hex is working, then transcribe again.";
+
+/// Whether Dictate opens Hex by itself when it isn't running (macOS with Hex 3 installed), so a
+/// closed Hex is no reason to keep the microphone from recording.
+pub(crate) fn opens_by_itself(home: &Path) -> bool {
+    install::openable(home).is_some()
+}
+
+/// Opens Hex in the background without waiting (the microphone was pressed: Hex gets ready while
+/// the user speaks). Answers whether it was asked to open.
+pub(crate) fn open_in_background(home: &Path) -> bool {
+    install::open_in_background(home)
+}
+
+/// Opens Hex in the background and waits until its local API answers. `None` when Ghostex can't
+/// open Hex here; `Some(Err)` when it opened but never answered.
+fn open_and_wait(home: &Path) -> Option<Result<Client, Failure>> {
+    if !install::open_in_background(home) {
+        return None;
+    }
+    let deadline = std::time::Instant::now() + OPEN_WAIT;
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(OPEN_POLL);
+        // Until Hex writes a fresh `local-api.json`, the file is missing or points at a dead port.
+        let Ok(discovery) = read_discovery(&discovery_file(home)) else {
+            continue;
+        };
+        let client = Client::new(&discovery);
+        match client.health() {
+            Err(failure) if failure.code == "hexNotRunning" => continue,
+            // Running: a refused token or an unknown version is said by `transcribe_with`.
+            _ => return Some(Ok(client)),
+        }
+    }
+    Some(Err(Failure::final_("hexNotRunning", OPENED_BUT_SILENT)))
+}
+
 /// Transcribes `audio` with Hex. Blocking: run it off the async runtime.
+///
+/// CDXC:Dictate 2026-11-13 DECISION: User, after a 104 s phone dictation failed with "Hex isn't running on this computer. Open Hex. Your recording is kept." while Hex.app sat closed on the Mac: never fail because the transcriber isn't running. On macOS gxserver opens an installed Hex in the background (`open -g`) and waits for its local API, then transcribes; the mic counts Hex as ready meanwhile (`dictate::engine_problem`), and `readDictateEngine {prepare: true}` opens it as soon as the microphone is pressed. Linux and Windows still say to open Hex, and the clients grey the microphone before recording.
 pub(crate) fn transcribe(
     home: &Path,
     saved_model: Option<&str>,
@@ -662,28 +707,35 @@ pub(crate) fn transcribe(
     language: Option<&str>,
     timeout: Duration,
 ) -> Result<String, Failure> {
-    let discovery = match read_discovery(&discovery_file(home)) {
-        Ok(discovery) => discovery,
+    let client = match read_discovery(&discovery_file(home)) {
+        Ok(discovery) => {
+            let client = Client::new(&discovery);
+            match client.health() {
+                // A file left by a Hex that quit points at a dead port.
+                Err(failure) if failure.code == "hexNotRunning" => match open_and_wait(home) {
+                    Some(opened) => opened?,
+                    None => client,
+                },
+                _ => client,
+            }
+        }
         Err(DiscoveryError::UnknownVersion(version)) => {
             return Err(Failure::final_(
                 "hexVersion",
                 unknown_version_message(&version),
             ))
         }
-        Err(DiscoveryError::Missing | DiscoveryError::Invalid) => {
-            let state = state(home);
-            let (code, message) =
-                problem(&state, saved_model).unwrap_or(("hexNotRunning", NOT_RUNNING.to_string()));
-            return Err(Failure::final_(code, message));
-        }
+        Err(DiscoveryError::Missing | DiscoveryError::Invalid) => match open_and_wait(home) {
+            Some(opened) => opened?,
+            None => {
+                let state = state(home);
+                let (code, message) = problem(&state, saved_model)
+                    .unwrap_or(("hexNotRunning", NOT_RUNNING.to_string()));
+                return Err(Failure::final_(code, message));
+            }
+        },
     };
-    transcribe_with(
-        &Client::new(&discovery),
-        saved_model,
-        audio,
-        language,
-        timeout,
-    )
+    transcribe_with(&client, saved_model, audio, language, timeout)
 }
 
 pub(crate) fn transcribe_with(
