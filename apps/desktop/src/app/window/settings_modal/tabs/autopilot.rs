@@ -416,13 +416,7 @@ impl AutopilotTab {
                 false,
             )],
         ));
-        settings_section(
-            p,
-            "Hard limits it may cross",
-            Some("Each stays off until you turn it on.".into()),
-            None,
-            rows,
-        )
+        settings_section(p, "Hard limits it may cross", None, None, rows)
     }
 
     fn supervisor_section(
