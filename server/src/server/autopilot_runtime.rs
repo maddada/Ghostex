@@ -994,8 +994,19 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
             });
         }
         Err(error) => {
-            let did = format!("Tried, but it failed: {}", error_text(&error));
-            log(&state, &plan, &did, Outcome::Failed);
+            let text = error_text(&error);
+            // An agent that refuses a message while its own approval or question card is open is
+            // not a failure: the card waits for the user, so the log says that.
+            let waiting = text.starts_with("Answer the pending ");
+            let (did, outcome) = if waiting {
+                (
+                    "Waiting for you: an approval or question is open, and the agent takes no new message until it is answered.".to_string(),
+                    Outcome::Parked,
+                )
+            } else {
+                (format!("Tried, but it failed: {text}"), Outcome::Failed)
+            };
+            log(&state, &plan, &did, outcome);
             // An interrupt or a reload that failed still counts for the stretch: a round later the
             // next step is judged by whether the agent wrote anything.
             let quiet = plan.quiet_since;

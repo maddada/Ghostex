@@ -312,18 +312,38 @@ fn classify(tool: &str, text: &str, project_path: Option<&str>) -> Class {
 fn deletes_outside(text: &str, project_path: Option<&str>) -> bool {
     let deletes = contains_any(
         text,
-        &["rm ", "rm -", "rmdir ", "trash ", "unlink ", "shred "],
+        &[
+            "rm ",
+            "rm -",
+            "rmdir ",
+            "trash ",
+            "unlink ",
+            "shred ",
+            // PowerShell and cmd, where the same delete has other names.
+            "remove-item",
+            " del ",
+            " erase ",
+            " rd ",
+        ],
     );
     if !deletes {
         return false;
     }
-    let project = project_path.map(|path| path.to_ascii_lowercase());
+    let project = project_path.map(|path| path.to_ascii_lowercase().replace('\\', "/"));
     text.split_whitespace().any(|word| {
-        let word = word.trim_matches(|c| c == '"' || c == '\'');
-        if word.starts_with("~") || word.starts_with("$home") || word.starts_with("..") {
+        let word = word.trim_matches(|c| c == '"' || c == '\'' || c == ',' || c == ';' || c == ')');
+        let word = word.replace('\\', "/");
+        if word.starts_with("~")
+            || word.starts_with("$home")
+            || word.starts_with("$env:userprofile")
+            || word.starts_with("..")
+        {
             return true;
         }
-        word.starts_with('/')
+        // A cmd switch such as `/s` or `/q` is not a path.
+        let absolute = (word.starts_with('/') && word.len() > 2)
+            || word.as_bytes().get(1) == Some(&b':') && word.as_bytes().get(2) == Some(&b'/');
+        absolute
             && !word.starts_with("/tmp")
             && !word.starts_with("/private/tmp")
             && project
