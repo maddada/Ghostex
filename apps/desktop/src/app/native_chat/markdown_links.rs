@@ -234,7 +234,7 @@ fn board_mention_link(
     let item = reference["item"].as_str().unwrap_or_default();
     let current = titles[item].as_str().filter(|title| !title.is_empty());
     let missing = titles.is_object() && current.is_none();
-    let mut link = session_pill_link(reference, appearance, missing);
+    let mut link = session_pill_frame(reference, appearance, missing);
     link.icon = BOARD_ICON.into();
     if let Some(title) = current {
         link.label = title.to_owned().into();
@@ -258,10 +258,29 @@ fn board_mention_link(
 
 /// Another session named in a message (`session` references, gx-chat-core
 /// `transcript/session_mentions.rs`, where the user's decision lives): the working card's pill
-/// shape (a hairline rounded frame, chat_pills.rs) around the agent's logo and `+<title>`, muted
-/// when the session is gone. A click goes to the core as any link does, which switches to it.
-/// A board card's chip (`board_mention_link`) starts from it.
+/// shape (a hairline rounded frame, chat_pills.rs) around the agent's logo and the title, then its
+/// state dot and, for a session on another computer, that computer's icon (`session_card.rs`, read
+/// from the host's list now, CDXC:SessionChat 2026-11-13 on `mention_card`); muted when the
+/// session is gone. Its tooltip is the session's hover card, which the card builder finds by the
+/// Global Ref the title carries. A click goes to the core as any link does, which switches to it.
+/// A board card's chip (`board_mention_link`) starts from it, without the session's extras.
 fn session_pill_link(reference: &Value, appearance: &ChatAppearance, missing: bool) -> InlineLink {
+    let mut link = session_pill_frame(reference, appearance, missing);
+    let href = reference["href"].as_str().unwrap_or_default();
+    if let Some(card) = (!missing)
+        .then(|| super::session_card::card(href))
+        .flatten()
+    {
+        link.title = href.to_owned().into();
+        link.trailing = super::session_card::marks(&card, appearance)
+            .into_iter()
+            .map(super::session_card::PillMark::into_link_mark)
+            .collect();
+    }
+    link
+}
+
+fn session_pill_frame(reference: &Value, appearance: &ChatAppearance, missing: bool) -> InlineLink {
     let s = appearance.scale;
     let (icon, icon_color) = session_pill_icon(
         reference["agentIcon"].as_str().unwrap_or_default(),

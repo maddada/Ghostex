@@ -19,6 +19,9 @@ struct Published {
     /// reads. The other fields are the composer's `+` picker's, live and always moving.
     names_revision: u64,
     sessions: Arc<Vec<KnownSession>>,
+    /// This computer's gxserver id, which a session pill counts as home: one whose ref names
+    /// another draws that computer's icon (`mention_card` in gx-chat-core).
+    home_server: String,
     /// Each machine's daemon revision, row count, name and whether it is connected when the list
     /// was built, so a pump that moved none of them builds nothing.
     built_from: Vec<(String, i64, usize, String, bool)>,
@@ -134,6 +137,10 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
         }
     }
     current.built_from = built_from;
+    current.home_server = store
+        .loaded(&MachineId::Local)
+        .map(|loaded| loaded.server_id.clone())
+        .unwrap_or_default();
     if *current.sessions != sessions || current.revision == 0 {
         if current.revision == 0 || !KnownSession::same_names(&current.sessions, &sessions) {
             current.names_revision += 1;
@@ -163,6 +170,16 @@ pub(super) fn current_named() -> (u64, u64, Arc<Vec<KnownSession>>) {
                 published.sessions.clone(),
             )
         })
+        .unwrap_or_default()
+}
+
+/// This computer's gxserver id, empty before the store has loaded it.
+pub(crate) fn home_server() -> String {
+    PUBLISHED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .map(|published| published.home_server.clone())
         .unwrap_or_default()
 }
 

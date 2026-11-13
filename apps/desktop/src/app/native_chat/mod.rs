@@ -126,6 +126,7 @@ mod markdown_links;
 pub(crate) mod minimized_pages;
 mod pills_strip;
 mod saved_draft_pill;
+pub(crate) mod session_card;
 // Settings' preview uses more of this look than the transcript does.
 #[allow(dead_code)]
 pub(crate) mod chat_text_look;

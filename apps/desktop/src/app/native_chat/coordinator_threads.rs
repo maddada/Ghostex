@@ -64,6 +64,59 @@ pub(super) fn threads_menu_height(panel: &Value) -> f32 {
     super::chat_pills::MENU_HEADER_HEIGHT + super::chat_pills::MENU_SECTION_GAP + list + footer
 }
 
+/// A worker's title as its session's pill: the hairline frame around the agent's logo and the
+/// title, then the computer's icon for a worker on another computer. The row's own dot left of it
+/// is the worker's state, so the pill draws no second one.
+///
+/// CDXC:SessionChat 2026-11-13 SEE-ALSO: the user's answer that session pills spread to the Workers
+/// popover is on `mention_card` in gx-chat-core transcript/session_mentions.rs; the core gives each
+/// row its `agentIcon` and `coordinator` (extras/coordinator_threads.rs `project`).
+fn worker_pill(row: &Value, title: &str, elsewhere: bool, p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let logo = row["agentIcon"].is_string() || row["coordinator"] == true;
+    let (icon, icon_color) = super::markdown_links::session_pill_icon(
+        row["agentIcon"].as_str().unwrap_or_default(),
+        row["coordinator"] == true,
+        p,
+    );
+    div()
+        .flex()
+        .items_center()
+        .flex_shrink_0()
+        .min_w_0()
+        .max_w(px(300.0 * s))
+        .gap(px(4.0 * s))
+        .h(px(20.0 * s))
+        .px(px(6.0 * s))
+        .rounded_full()
+        .border(px(1.0))
+        .border_color(p.foreground.opacity(0.14))
+        .bg(p.foreground.opacity(0.03))
+        .text_color(p.foreground)
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_size(px(12.5 * s))
+        .when(logo, |pill| {
+            pill.child(
+                gpui::svg()
+                    .path(icon)
+                    .size(px(12.0 * s))
+                    .flex_shrink_0()
+                    .text_color(icon_color),
+            )
+        })
+        .child(div().min_w_0().truncate().child(title.to_string()))
+        .when(elsewhere, |pill| {
+            pill.child(
+                gpui::svg()
+                    .path("titlebar/device-desktop.svg")
+                    .size(px(11.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.muted),
+            )
+        })
+        .into_any_element()
+}
+
 impl NativeChatView {
     /// The Workers pill's floating menu: what the Threads panel above the composer listed, with the
     /// same rows and steps. Drawn in the menu's window (`option_menu/pill_menu.rs`) with this
@@ -193,14 +246,19 @@ impl NativeChatView {
         let title = text(row, "title");
         let detail = text(row, "detail");
         let branch = text(row, "branch");
-        let tooltip = [title.as_str(), detail.as_str(), branch.as_str()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
-        // A worker on another computer than the coordinator's: its name, and its server, which
-        // the click opens it on.
+        // A worker on another computer than the coordinator's: its server, which the click opens
+        // it on, and its name, which the tooltip says (the pill shows the computer's icon).
         let computer = text(row, "computer");
+        let tooltip = [
+            title.as_str(),
+            detail.as_str(),
+            computer.as_str(),
+            branch.as_str(),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
         let command = json!({
             "type": "openCoordinatorThread",
             "serverId": row["serverId"],
@@ -232,14 +290,7 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .child(marker),
             )
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .max_w(px(300.0 * s))
-                    .truncate()
-                    .text_color(p.foreground)
-                    .child(title.clone()),
-            )
+            .child(worker_pill(row, &title, !computer.is_empty(), p))
             .when(needs_approval, |this| {
                 this.child(
                     div()
@@ -262,31 +313,6 @@ impl NativeChatView {
                     .text_color(p.card_muted)
                     .child(detail),
             )
-            .when(!computer.is_empty(), |this| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .flex()
-                        .items_center()
-                        .gap(px(3.0 * s))
-                        .max_w(px(140.0 * s))
-                        .child(
-                            gpui::svg()
-                                .path("titlebar/device-desktop.svg")
-                                .flex_shrink_0()
-                                .size(px(13.0 * s))
-                                .text_color(p.muted),
-                        )
-                        .child(
-                            div()
-                                .min_w_0()
-                                .truncate()
-                                .text_size(px(13.0 * s))
-                                .text_color(p.muted)
-                                .child(computer),
-                        ),
-                )
-            })
             .when(!branch.is_empty(), |this| {
                 this.child(
                     div()

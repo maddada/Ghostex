@@ -327,6 +327,8 @@ fn main() {
         #[cfg(target_os = "windows")]
         cef::register_windows_shutdown(cx);
         gpui_component::init(cx);
+        // A session pill's tooltip is its hover card (native_chat/session_card.rs).
+        crate::app::native_chat::session_card::install(cx);
         crate::app::native_docs::grammars::register();
         // CDXC:Clipboard 2026-10-28 WHY: the CUA clipboard keys work in every text field on
         // Windows and Linux as they do in the terminal (Ctrl+Insert / Shift+Insert there).

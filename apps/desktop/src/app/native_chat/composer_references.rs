@@ -108,6 +108,9 @@ pub(super) fn replacements(
             } else {
                 format!("chat-references/{}.svg", reference.kind)
             };
+            if reference.kind == "session" {
+                return Some(session_replacement(reference, &icon, appearance));
+            }
             Some(
                 InlineReplacement::new(reference.range.clone(), reference.pill.clone())
                     .color(color)
@@ -148,6 +151,78 @@ pub(super) fn replacements(
             )
         })
         .collect()
+}
+
+/// A mention of another session in the chat box: the sent pill's look (`session_pill_link` in
+/// markdown_links.rs), a hairline rounded frame around the agent's logo in its colour and the title
+/// in the line's colour at medium weight, then its state dot and, for a session on another
+/// computer, that computer's icon (`session_card.rs`). Hovering it shows the session's hover card,
+/// which the card builder finds by the Global Ref the tooltip carries (CDXC:SessionChat 2026-11-13
+/// on `mention_card` in gx-chat-core, where the user's words live). The frame's padding and the
+/// marks' room are spaces around the core's pill text, because the input lays the replacement out
+/// as text.
+fn session_replacement(
+    reference: &ComposerReference,
+    icon: &str,
+    appearance: &ChatAppearance,
+) -> InlineReplacement {
+    let s = appearance.scale;
+    let known = crate::app::gx_chat::session_directory::find(&reference.path);
+    let (_, icon_color) = markdown_links::session_pill_icon(
+        known.as_ref().map_or("", |session| {
+            ghostex_gx_chat_core::extras::agents::default_agent_by_id(Some(&session.agent_id))
+                .map_or(session.agent_id.as_str(), |(icon, _)| icon)
+        }),
+        known.as_ref().is_some_and(|session| session.coordinator),
+        appearance,
+    );
+    let marks = super::session_card::card(&reference.path)
+        .map(|card| super::session_card::marks(&card, appearance))
+        .unwrap_or_default();
+    // A no-break space is about a quarter of the 14px line: one before the core's room for the
+    // icon makes the frame's 6px left padding, and the room after the title covers the frame's
+    // right padding and each mark with its 4px gap.
+    let trailing_px = 4.0
+        + marks
+            .iter()
+            .map(|mark| match mark {
+                super::session_card::PillMark::Dot { size, .. }
+                | super::session_card::PillMark::Icon { size, .. } => 4.0 + f32::from(*size) / s,
+            })
+            .sum::<f32>();
+    let trailing = "\u{a0}".repeat((trailing_px / 3.6).ceil() as usize);
+    // The hair space after the core's room for the icon opens the gap to the sent pill's 4px.
+    let text = format!(
+        "\u{a0}{}{trailing}",
+        reference.pill.replacen('\u{2009}', "\u{2009}\u{200a}", 1)
+    );
+    InlineReplacement::new(reference.range.clone(), text)
+        .color(appearance.foreground)
+        .icon(
+            icon.to_string(),
+            gpui::px(SESSION_ICON_PX * s),
+            gpui::px(6.0 * s),
+        )
+        .icon_color(icon_color)
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .frame(gpui_component::input::InlineReplacementFrame {
+            border_color: appearance.foreground.opacity(0.14),
+            border_width: gpui::px(1.0),
+            background: Some(appearance.foreground.opacity(0.03)),
+            hover_background: Some(appearance.foreground.opacity(0.06)),
+            radius: gpui::px(999.0),
+            inset_y: gpui::px(1.5 * s),
+            padding_right: gpui::px(6.0 * s),
+            gap: gpui::px(4.0 * s),
+        })
+        .trailing(
+            marks
+                .into_iter()
+                .map(super::session_card::PillMark::into_replacement_mark)
+                .collect(),
+        )
+        .pointer(false)
+        .tooltip(reference.path.clone())
 }
 
 /// The draft with `·` inserted before the reference's destination, and the caret that follows it.

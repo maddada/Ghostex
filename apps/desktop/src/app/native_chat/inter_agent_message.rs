@@ -53,9 +53,6 @@ struct AgentCard<'a> {
     references: &'a Value,
 }
 
-/// How far a card's session name's hover fill reaches past the name on each side; the name's
-/// negative margin takes the same back, so it adds no space at rest.
-const CARD_PILL_PAD: f32 = 3.0;
 /// The width of a word space in the chat font, in ems.
 const WORD_SPACE_EM: f32 = 0.27;
 /// How strong a session name's dotted underline is at rest; under the pointer it is full strength.
@@ -483,11 +480,14 @@ impl NativeChatView {
     }
 
     /// The other session's name on a message card (gx-chat-core `transcript/session_mentions.rs`):
-    /// the session's title in the line's own type, a faint fill under the pointer (the decision
-    /// below) and a faint dotted underline (`session_name_underline`). A pill the core marks `logo: false` sits beside the card's own agent tile and leaves
-    /// the logo to it (CDXC:SessionChat 2026-10-28 on `card_pill`). A click switches to the
-    /// session; a session that is gone draws muted and opens nothing. Its own click never opens or
-    /// closes the card.
+    /// the session pill's frame around the title in the line's own type and colour, then its state
+    /// dot and, for a session on another computer, that computer's icon (`session_card.rs`); its
+    /// tooltip is the session's hover card. A pill the core marks `logo: false` sits beside the
+    /// card's own agent tile and leaves the logo to it (CDXC:SessionChat 2026-10-28 on `card_pill`).
+    /// A click switches to the session; a session that is gone draws muted and opens nothing. Its
+    /// own click never opens or closes the card.
+    ///
+    /// CDXC:SessionChat 2026-11-13 DECISION: User, answering the session-mention design page (Q3063): "the same look spreads to message cards and the Workers popover, where they name a session". The card's session name is the session pill again (its hairline frame, the state dot, the computer icon, the hover card) instead of a frameless name with a dotted underline; it keeps the line's size, weight and colour and leaves the logo to the card's tile, as the 2026-10-29 and 2026-10-28 decisions asked. Supersedes the frameless name of 2026-10-29 on this card's header.
     pub(super) fn session_pill(
         &self,
         key: &str,
@@ -511,20 +511,32 @@ impl NativeChatView {
                 "sessionId": session["sessionId"],
             })
         });
+        let card = (!missing && session.is_object())
+            .then(|| {
+                super::session_card::card_for(
+                    session["projectId"].as_str().unwrap_or_default(),
+                    session["sessionId"].as_str().unwrap_or_default(),
+                )
+            })
+            .flatten();
+        let marks = card
+            .as_ref()
+            .map(|card| super::session_card::marks(card, p))
+            .unwrap_or_default();
         let hint = SharedString::from(text(pill, "title"));
         let hover = p.foreground.opacity(0.06);
-        // CDXC:SessionChat 2026-10-29 DECISION: User, of the "Message from" card's pill (2026-10-28): "make this pill look like [the chat box's session pill] after removing the +", then of "Message to" followed by a wide gap and a smaller grey title: "make font size equal and let's not have this extra space there please. also no need to change the color of text of the session name like that". The card's session name (the header's, and each recipient row's on a "Message to N sessions" card) has no frame and takes the line's own size, weight and colour, so it reads as one title with the words before it, a word space away; it is still a pill: a faint fill under the pointer and a click switches to the session. The fill reaches past the name through a negative margin, so at rest it adds no space. Pills in a message's text and in the chat box keep their own look. The title's `+` went in gx-chat-core `pill_label`. Supersedes the reference colour of the 2026-10-28 decision.
-        let name_left = if shows_logo { 16.0 * s } else { 0.0 } + CARD_PILL_PAD * s;
         div()
             .id(SharedString::from(key.to_string()))
-            .relative()
             .flex()
             .items_center()
             .min_w_0()
             .gap(px(4.0 * s))
-            .px(px(CARD_PILL_PAD * s))
-            .mx(px(-CARD_PILL_PAD * s))
-            .rounded(px(5.0 * s))
+            .px(px(6.0 * s))
+            .py(px(1.0 * s))
+            .rounded_full()
+            .border(px(1.0))
+            .border_color(p.foreground.opacity(0.14))
+            .bg(p.foreground.opacity(0.03))
             .when(missing, |pill| pill.text_color(p.card_muted))
             .whitespace_nowrap()
             .role(gpui::Role::Button)
@@ -533,8 +545,9 @@ impl NativeChatView {
                 text(pill, "label"),
                 text(pill, "title")
             )))
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
+            .tooltip(move |window, cx| match &card {
+                Some(card) => super::session_card::card_view(card, window, cx),
+                None => gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx),
             })
             .when(shows_logo, |pill| {
                 pill.child(
@@ -550,6 +563,11 @@ impl NativeChatView {
                 )
             })
             .child(div().min_w_0().truncate().child(text(pill, "label")))
+            .children(
+                marks
+                    .into_iter()
+                    .map(super::session_card::PillMark::element),
+            )
             .when_some(command, |pill, command| {
                 pill.chat_cursor_pointer()
                     .hover(move |style| style.bg(hover))
@@ -557,13 +575,6 @@ impl NativeChatView {
                         cx.stop_propagation();
                         this.invoke(command.clone(), cx)
                     }))
-                    .child(session_name_underline(
-                        format!("{key}:underline"),
-                        name_left,
-                        CARD_PILL_PAD * s,
-                        p.foreground,
-                        s,
-                    ))
             })
             .when(missing, |pill| {
                 pill.on_click(|_, _, cx| cx.stop_propagation())

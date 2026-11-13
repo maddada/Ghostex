@@ -168,6 +168,8 @@ pub fn run() -> Result<(), JsValue> {
             terminal_element::uses_macos_text_editing(),
         ));
         gpui_component::init(cx);
+        // A session pill's tooltip is its hover card (native_chat/session_card.rs).
+        crate::app::native_chat::session_card::install(cx);
         ui_fonts::register(cx);
         // Match desktop's terminal keymap: Root's focus traversal otherwise
         // consumes Tab/Shift+Tab before the shared terminal encoder sees them.

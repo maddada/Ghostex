@@ -3698,8 +3698,13 @@ sent (thread reports included), Message to <session title> for one this
 session's agent sent with `agents send`, `agents create --task` or
 `coordinator start-thread`. Click the title to switch to that session; click the
 rest of the line to read the whole message. A mention of a session in a message
-(from Copy ID or the `+` list) shows as a pill with the agent's logo and the
-session's current title. A pill whose session is gone is greyed out and opens nothing. One command that sends the same
+(from Copy ID or the `+` list) shows as a pill with the agent's logo, the
+session's current title and a dot for its state (amber while it works, red when
+it needs you, a ring when idle); a session on another computer also shows that
+computer's icon. The chat box draws the same pill (a tinted run of text on the
+phone). Hover a pill (hold it on the phone) to see a card with the session's
+state, agent, project and computer. The "Message from" and "Message to" lines and
+the Workers list draw their sessions the same way. A pill whose session is gone is greyed out and opens nothing. One command that sends the same
 message to several sessions is a single "Message to 2 sessions" line that lists
 each recipient when opened. A session Ghostex cannot find any more reads
 "Message from another agent".

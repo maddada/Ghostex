@@ -584,11 +584,38 @@ pub fn coordinator_threads_panel(
     })
 }
 
-/// The document value, `null` when there is no panel.
-pub fn project(threads: Option<&Value>, step: u32, all: Option<&Value>) -> Value {
-    coordinator_threads_panel(threads, step, all)
+/// The document value, `null` when there is no panel. Each row's title draws as its session's pill
+/// (CDXC:SessionChat 2026-11-13 on `mention_card` in transcript/session_mentions.rs), so a row the
+/// host's list `sessions` knows carries its agent's `agentIcon` and `coordinator`.
+pub fn project(
+    threads: Option<&Value>,
+    step: u32,
+    all: Option<&Value>,
+    sessions: &[crate::event::KnownSession],
+) -> Value {
+    let mut panel = coordinator_threads_panel(threads, step, all)
         .and_then(|panel| serde_json::to_value(panel).ok())
-        .unwrap_or(Value::Null)
+        .unwrap_or(Value::Null);
+    if let Some(rows) = panel.get_mut("rows").and_then(Value::as_array_mut) {
+        for row in rows {
+            let found = sessions.iter().find(|session| {
+                session.project_id == text(row, "projectId")
+                    && session.session_id == text(row, "sessionId")
+                    && match text(row, "serverId") {
+                        server if server.is_empty() => true,
+                        server => session.global_ref.starts_with(&format!("{server}:")),
+                    }
+            });
+            if let Some(session) = found {
+                row["agentIcon"] = crate::transcript::agent_message_card::agent_icon(
+                    &session.agent_id,
+                    &session.agent_name,
+                );
+                row["coordinator"] = session.coordinator.into();
+            }
+        }
+    }
+    panel
 }
 
 #[cfg(test)]
