@@ -199,6 +199,9 @@ pub fn web_build(args: &[String]) -> Res<i32> {
 
 /// The GPUI web crate's tests, built for this computer rather than wasm32 (the shared desktop files pick their web branches by `cfg(ghostex_web)`, apps/gpui-web/build.rs); extra arguments go to `cargo test`.
 pub fn web_test(args: &[String]) -> Res<i32> {
+    if cfg!(windows) {
+        bail!("web-test runs on macOS and Linux: on Windows the web crate's native build has no libghostty-vt (the desktop builds it there with Zig in apps/desktop/build.rs).");
+    }
     let mut test = command("cargo");
     test.current_dir(root().join("apps/gpui-web"))
         .args(["test", "--lib"])

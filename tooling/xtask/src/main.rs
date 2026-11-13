@@ -53,7 +53,7 @@ Web build
   web-build [--debug]     build apps/gpui-web into apps/gpui-web/www/dist
   web-dev [--debug]       build the wasm and run the Vite dev server on :4174
   web-test [<cargo test arguments>]
-                          run apps/gpui-web's tests on this computer (native, not wasm)
+                          macOS and Linux: run apps/gpui-web's tests on this computer (native, not wasm)
   start-web [<ghostex web arguments>]
                           build the web app and serve it with `ghostex web` on :4173
 

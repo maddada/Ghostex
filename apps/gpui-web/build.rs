@@ -41,9 +41,20 @@ fn main() {
         );
         println!("cargo:rustc-link-arg={}", vt_archive.display());
     } else {
-        // The native test target (`cargo xtask web-test`) links the desktop's own native build of the library, made by the desktop's script.
+        // The native test target (`cargo xtask web-test`, macOS and Linux) links the desktop's own native build of the library, made by the desktop's script and rebuilt on the same inputs the desktop watches (apps/desktop/build.rs, emit_libghostty_vt_rerun_hints). Windows builds it with Zig directly in the desktop's build.rs, which this script does not repeat.
+        assert!(
+            env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows"),
+            "the GPUI web crate's native tests (cargo xtask web-test) run on macOS and Linux, not Windows"
+        );
         let script = Path::new(&manifest).join("../desktop/scripts/build-libghostty-vt.sh");
         println!("cargo:rerun-if-changed={}", script.display());
+        let ghostty = Path::new(&manifest).join("../../.dependencies/ghostty");
+        for input in ["build.zig", "build.zig.zon", "src", "include"] {
+            println!("cargo:rerun-if-changed={}", ghostty.join(input).display());
+        }
+        for variable in ["GHOSTEX_ZIG", "ZIG", "MISE_DATA_DIR"] {
+            println!("cargo:rerun-if-env-changed={variable}");
+        }
         let prefix = Path::new(&env::var("OUT_DIR").unwrap()).join("libghostty-vt");
         let status = std::process::Command::new(&script)
             .arg(&prefix)
