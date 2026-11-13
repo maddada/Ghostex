@@ -19,64 +19,53 @@ use crate::GhostexGpuiApp;
 use crate::app::remote_conn::sidebar_rpc::{
     GpuiRemoteSidebarRpcMode, gpui_remote_sidebar_rpc_failure_reason,
 };
-use crate::app::window::{NewCoordinatorAgent, NewCoordinatorModel, NewCoordinatorRefusal};
-use ghostex_gx_chat_core::composer::skill_invocation::coordinator_skill_line;
+use crate::app::window::{
+    DEFAULT_CLAUDE_COORDINATOR_MODEL, NewCoordinatorAgent, NewCoordinatorRefusal,
+};
 use ghostex_gx_chat_core::protocol::{
-    COORDINATOR_AGENT_FAMILIES, coordinator_default_model_label, coordinator_launch_takes_effort,
-    coordinator_launch_takes_model, coordinator_model_label,
+    coordinator_launch_takes_effort, coordinator_quality_concern,
 };
 
-/// The agent families a coordinator can run on (`COORDINATOR_AGENT_FAMILIES` in gx-protocol,
-/// which gxserver checks too).
-fn coordinator_family(agent: &Value) -> Option<&'static str> {
+/// The agent family a launcher row runs as: the coordinator family it is one of
+/// (`COORDINATOR_AGENT_FAMILIES` in gx-protocol, by icon or id), else its built-in agent id, else
+/// its own id. Any agent may run a coordinator (Q2980).
+fn coordinator_family(agent: &Value) -> Option<String> {
     let icon = agent.get("icon").and_then(Value::as_str);
     let id = agent.get("agentId").and_then(Value::as_str);
     let family = default_agent_id_for_icon(icon)
         .or_else(|| default_agent_id_for_icon(id))
         .or(id)?;
-    COORDINATOR_AGENT_FAMILIES
-        .into_iter()
-        .find(|supported| *supported == family)
+    Some(family.to_string())
 }
 
-/// The model lineup a coordinator on this family can pick from in `catalog` (this computer's
-/// newest, which the chat's model pill reads too, or the one another computer serves), each
-/// model with the efforts it accepts. Empty without a catalog, and for an agent whose launch
-/// takes no model (`coordinator_launch_takes_model`): it starts on its configured one; no efforts
-/// for one whose launch takes no effort.
-fn coordinator_models(
-    family: &str,
-    catalog: Option<&AgentModelCatalog>,
-) -> Vec<NewCoordinatorModel> {
-    if !coordinator_launch_takes_model(family) {
-        return Vec::new();
-    }
-    let Some(catalog) = catalog else {
-        return Vec::new();
-    };
-    let Some(agent) = catalog.agents.get(family) else {
-        return Vec::new();
-    };
-    let takes_effort = coordinator_launch_takes_effort(family);
-    // OpenCode's lineup marks no default, so its first row keeps OpenCode's own model.
-    let keep_default = coordinator_default_model_label(family).map(|label| NewCoordinatorModel {
-        value: String::new(),
-        label: label.to_string(),
-        efforts: Vec::new(),
-        default: true,
+/// The model and effort a new coordinator on `family` starts on, as the create sends them:
+/// Opus 5.5 at High on Claude, High where the launch takes an effort; `None` keeps the agent's own.
+fn coordinator_start_options(family: &str) -> (Option<&'static str>, Option<&'static str>) {
+    let model = (family == "claude").then_some(DEFAULT_CLAUDE_COORDINATOR_MODEL);
+    let effort = (coordinator_launch_takes_effort(family)
+        && matches!(family, "claude" | "codex" | "antigravity"))
+    .then_some("high");
+    (model, effort)
+}
+
+/// The agent picker's warning for a coordinator on `family`: by the model it starts on (Claude's
+/// coordinator model, else the agent's default in `catalog`) and its effort. A model Ghostex does
+/// not know warns too.
+fn coordinator_start_warning(family: &str, catalog: Option<&AgentModelCatalog>) -> Option<String> {
+    let (start_model, effort) = coordinator_start_options(family);
+    let lineup = catalog.and_then(|catalog| catalog.agents.get(family));
+    let model = lineup.and_then(|agent| match start_model {
+        Some(value) => agent.models.iter().find(|model| model.value == value),
+        None => agent.models.iter().find(|model| model.default),
     });
-    let models = agent.models.iter().map(|model| NewCoordinatorModel {
-        value: model.value.clone(),
-        label: coordinator_model_label(family, &model.value, &model.label),
-        efforts: model
-            .efforts
-            .iter()
-            .filter(|_| takes_effort)
-            .map(|effort| (effort.clone(), catalog.effort_label(effort)))
-            .collect(),
-        default: model.default,
+    let value = start_model.or(model.map(|model| model.value.as_str()));
+    let label = model.map(|model| model.label.as_str());
+    let effort = effort.or_else(|| {
+        model
+            .and_then(|model| model.default_effort.as_deref())
+            .or_else(|| lineup.and_then(|agent| agent.default_effort.as_deref()))
     });
-    keep_default.into_iter().chain(models).collect()
+    coordinator_quality_concern(value, label, effort).map(|concern| concern.pill_text())
 }
 
 /// The title a coordinator is created with, and its source: an unnamed coordinator is a placeholder
@@ -104,6 +93,7 @@ fn coordinator_params(
         if let Some(effort) = effort.filter(|effort| !effort.is_empty()) {
             object.insert("agentEffort".to_string(), json!(effort));
         }
+
         object.remove("draft");
         object.insert("coordinator".to_string(), json!({}));
         let runtime = object
@@ -116,39 +106,39 @@ fn coordinator_params(
     params
 }
 
-/// The launchers of a sidebar HUD an orchestrator can run on, Claude first, in launcher order,
-/// with their lineups from `catalog`.
+/// The family of the launcher `agent_id` in a sidebar HUD (`coordinator_family`).
+fn coordinator_family_in(hud: Option<&Value>, agent_id: &str) -> Option<String> {
+    hud?.get("agents")?
+        .as_array()?
+        .iter()
+        .find(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
+        .and_then(coordinator_family)
+}
+
+/// Every launcher of a sidebar HUD, in launcher order, with the warning the agent picker shows
+/// for a coordinator on it, by `catalog`'s models. The Claude (cloud) agent is left out: a
+/// coordinator runs the `ghostex` CLI on a computer Ghostex runs on.
 pub(crate) fn coordinator_agents(
     hud: Option<&Value>,
     catalog: Option<&AgentModelCatalog>,
 ) -> Vec<NewCoordinatorAgent> {
-    let rows = hud
-        .and_then(|hud| hud.get("agents"))
+    hud.and_then(|hud| hud.get("agents"))
         .and_then(Value::as_array)
         .map(Vec::as_slice)
-        .unwrap_or_default();
-    let mut agents = rows
+        .unwrap_or_default()
         .iter()
         .filter_map(|row| {
+            let agent_id = row.get("agentId")?.as_str()?.to_string();
+            if ghostex_gx_core::is_claude_cloud_agent(&agent_id) {
+                return None;
+            }
             let family = coordinator_family(row)?;
-            Some((
-                family,
-                NewCoordinatorAgent {
-                    agent_id: row.get("agentId")?.as_str()?.to_string(),
-                    name: row
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .unwrap_or(family)
-                        .to_string(),
-                    family: family.to_string(),
-                    models: coordinator_models(family, catalog),
-                    skill_line: coordinator_skill_line(Some(family)),
-                },
-            ))
+            Some(NewCoordinatorAgent {
+                agent_id,
+                warning: coordinator_start_warning(&family, catalog),
+            })
         })
-        .collect::<Vec<_>>();
-    agents.sort_by_key(|(family, _)| *family != "claude");
-    agents.into_iter().map(|(_, agent)| agent).collect()
+        .collect()
 }
 
 impl GhostexGpuiApp {
@@ -168,6 +158,29 @@ impl GhostexGpuiApp {
     ) -> Option<Vec<NewCoordinatorAgent>> {
         let hud = self.gx_store.hud.remote_sidebar_hud(machine_id)?;
         Some(coordinator_agents(Some(hud), catalog))
+    }
+
+    /// The launcher rows of the sidebar HUD of the copy's computer, which the agent picker lists,
+    /// and whether that computer is another one (its accounts are not this computer's).
+    pub(crate) fn new_coordinator_launchers(
+        &self,
+        group_id: &str,
+    ) -> (Vec<serde_json::Value>, bool) {
+        let remote = ProjectKey::parse_sidebar_group_id(group_id)
+            .and_then(|project| project.machine.remote_id().map(str::to_string));
+        let rows = |hud: Option<&serde_json::Value>| {
+            hud.and_then(|hud| hud.get("agents"))
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        };
+        match remote {
+            None => (rows(self.gx_store_launch_hud().as_deref()), false),
+            Some(machine_id) => (
+                rows(self.gx_store.hud.remote_sidebar_hud(&machine_id)),
+                true,
+            ),
+        }
     }
 
     /// Opens the New Coordinator dialog for the project a group id names, read from the machine
@@ -196,18 +209,18 @@ impl GhostexGpuiApp {
         self.open_app_modal_from_bridge(new_coordinator_modal_payload(group_id, &project_name), cx);
     }
 
-    /// Creates the coordinator in the project a group id names (this computer or a remote one) and
-    /// opens it in chat. gxserver queues its first message (the skill line) before it answers.
-    /// `done` hears whether it was created (before it opens) or why not; a remote computer's
-    /// `agent_id` is that computer's own launcher (the dialog lists its agents), sent as it is.
-    #[allow(clippy::too_many_arguments)]
+    /// Creates the coordinator in the project a group id names (this computer or a remote one) on
+    /// the agent and account the agent picker gave, and opens it in chat. gxserver queues its
+    /// first message (the skill line) before it answers. Its model and effort are the agent's
+    /// coordinator start (`coordinator_start_options`). `done` hears whether it was created
+    /// (before it opens) or why not; a remote computer's `agent_id` is that computer's own
+    /// launcher (the picker lists its agents), sent as it is.
     pub(crate) fn gx_store_create_coordinator(
         &mut self,
         group_id: &str,
         agent_id: &str,
+        account_id: Option<&str>,
         name: &str,
-        model: Option<&str>,
-        effort: Option<&str>,
         done: impl FnOnce(&mut Self, Result<(), NewCoordinatorRefusal>, &mut gpui::Context<Self>)
         + 'static,
         cx: &mut gpui::Context<Self>,
@@ -225,8 +238,18 @@ impl GhostexGpuiApp {
         let hud = self.gx_store_launch_hud();
         let (name, title_source) = coordinator_title(name);
         if let Some(machine_id) = project.machine.remote_id().map(str::to_string) {
+            let family =
+                coordinator_family_in(self.gx_store.hud.remote_sidebar_hud(&machine_id), agent_id)
+                    .unwrap_or_default();
+            let (model, effort) = coordinator_start_options(&family);
             let params = coordinator_params(
-                remote_agent_launch_params(agent_id, &project.project_id, Map::new(), None, name),
+                remote_agent_launch_params(
+                    agent_id,
+                    &project.project_id,
+                    Map::new(),
+                    account_id,
+                    name,
+                ),
                 title_source,
                 model,
                 effort,
@@ -297,8 +320,10 @@ impl GhostexGpuiApp {
             );
             return;
         };
+        let family = coordinator_family_in(hud.as_deref(), agent_id).unwrap_or_default();
+        let (model, effort) = coordinator_start_options(&family);
         let params = coordinator_params(
-            local_agent_launch_params(&agent, &project_id, Map::new(), None, name),
+            local_agent_launch_params(&agent, &project_id, Map::new(), account_id, name),
             title_source,
             model,
             effort,

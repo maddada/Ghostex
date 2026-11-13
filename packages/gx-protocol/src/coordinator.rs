@@ -105,7 +105,7 @@ pub fn coordinator_agent_families_text() -> String {
 ///
 /// CDXC:Coordinators 2026-11-13 DECISION:
 /// User (Q2980 "Build it: auto-send + remind on drift"): any agent, account and model may run a coordinator, but when its model is not Opus, Fable, GPT Sol or GPT Astra (any version), its effort is below medium, or Ghostex does not know its model, Ghostex warns: its guide gets a line telling it to tell the user once that a coordinator needs Opus 5.5 at medium or high, or GPT 6.1 Sol at high, its chat shows "Coordinator quality may be degraded on <model>" (dismissible per session, live as the model or effort changes), and the agent picker step shows the same warning for such a model. An effort Ghostex does not know is no reason on its own.
-/// SEE-ALSO: server/src/coordinators/playbook.rs (the guide line), packages/gx-chat-core (the pill), apps/desktop/src/app/window/new_thread_picker.rs (the picker step), apps/mobile/app/src/sessions/coordinatorQuality.ts (the phone's copy, which cannot link this crate).
+/// SEE-ALSO: server/src/coordinators/playbook.rs (the guide line), packages/gx-chat-core (the pill), apps/desktop/src/app/window/new_thread_picker.rs (the picker step), apps/mobile/app/src/chat/native/cards/ChatPills.tsx (the phone draws the pill the wasm chat core decides).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoordinatorQualityConcern {
     /// The model as the user knows it (its label, else its value); `None` when it is unknown.

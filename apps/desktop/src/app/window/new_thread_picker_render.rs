@@ -600,6 +600,7 @@ impl Render for GpuiNewThreadPickerWindow {
             .capture_action(cx.listener(Self::on_move_home))
             .capture_action(cx.listener(Self::on_move_end))
             .capture_key_down(cx.listener(Self::on_run_on_key_down))
+            .children(self.render_coordinator_title())
             .children(place)
             .child(self.render_search(cx))
             .when(
@@ -638,5 +639,72 @@ impl Render for GpuiNewThreadPickerWindow {
                             .thickness(px(SCROLLBAR_WIDTH)),
                     ),
             )
+            .children(self.render_coordinator_warning())
+    }
+}
+
+impl GpuiNewThreadPickerWindow {
+    /// The coordinator step's title: "Pick the coordinator's agent", left-aligned like the
+    /// dialogs' titles.
+    fn render_coordinator_title(&self) -> Option<AnyElement> {
+        self.coordinator.as_ref()?;
+        Some(
+            div()
+                .flex_shrink_0()
+                .h(px(COORDINATOR_TITLE_HEIGHT))
+                .px(px(14.0))
+                .pt(px(10.0))
+                .text_size(px(13.0))
+                .line_height(px(18.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(hsla(self.colors.foreground))
+                .child(TITLE_COORDINATOR_STEP)
+                .into_any_element(),
+        )
+    }
+
+    /// The coordinator step's warning line for the highlighted agent; the line keeps its room
+    /// while there is none.
+    fn render_coordinator_warning(&self) -> Option<AnyElement> {
+        self.coordinator.as_ref()?;
+        let warning = self.coordinator_warning().map(str::to_string);
+        let color = if self.colors.light {
+            rgb(0xb45309)
+        } else {
+            rgb(0xf5b84a)
+        };
+        Some(
+            h_flex()
+                .id("new-thread-coordinator-warning")
+                .flex_shrink_0()
+                .h(px(COORDINATOR_WARNING_HEIGHT))
+                .px(px(14.0))
+                .gap(px(8.0))
+                .items_center()
+                .border_t_1()
+                .border_color(hsla(self.colors.divider))
+                .when_some(warning, |line, warning| {
+                    line.child(
+                        gpui::svg()
+                            .path(ICON_WARNING)
+                            .flex_shrink_0()
+                            .size(px(14.0))
+                            .text_color(hsla(color)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(12.0))
+                            .line_height(px(16.0))
+                            .text_color(hsla(color))
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(warning),
+                    )
+                })
+                .into_any_element(),
+        )
     }
 }

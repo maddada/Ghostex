@@ -370,7 +370,7 @@ impl GpuiNewThreadPickerWindow {
         self.choosing_project = false;
         self.project_cursor = false;
         self.clear_query(window, cx);
-        self.set_placeholder(PLACEHOLDER_AGENTS, window, cx);
+        self.set_placeholder(self.agents_placeholder(), window, cx);
         self.selected = 0;
         self.scroll.scroll_to_item(0);
         self.fit_window_height(window);

@@ -1,6 +1,7 @@
 //! Open, close, and create for the native New Coordinator dialog: the copies of the project it
 //! can run in (gx-core `SidebarView::project_copies`), each computer's agents and models, the
-//! playbook of the picked copy, and the checks before Create.
+//! playbook of the picked copy, the agent picker its Next opens, and the checks before the
+//! coordinator is created on the picked agent.
 //! SEE-ALSO: apps/desktop/src/app/window/new_coordinator_modal.rs (the window), apps/desktop/src/app/window/new_coordinator_computer.rs (the Computer field), apps/desktop/src/app/gx_store/create/coordinator.rs (the create), packages/gx-core/src/sidebar_actions/open.rs (the `coordinator` project action that opens it).
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -89,74 +90,35 @@ impl GhostexGpuiApp {
             project_name: text("projectName").unwrap_or_else(|| "this project".to_string()),
             copies,
             selected_copy,
-            selected_agent: 0,
             playbook: None,
             palette: self.gpui_native_dialog_palette(),
-            all_efforts: crate::shared_settings::shared_sidebar_settings_snapshot()
-                .object()
-                .get("orchestratorAllEfforts")
-                .and_then(serde_json::Value::as_bool)
-                == Some(true),
         };
         let dialog: DialogSlot = Default::default();
         let host_dialog = dialog.clone();
         let host_state = state.clone();
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             match command {
-                NewCoordinatorModalCommand::Create {
-                    group_id,
-                    agent_id,
-                    name,
-                    model,
-                    effort,
-                    reply,
-                } => {
+                // Next: the dialog closes and the agent picker opens on the copy's agents.
+                NewCoordinatorModalCommand::PickAgent { group_id, name } => {
+                    app.release_native_app_modal_window(GpuiAppModalKind::NewCoordinator, cx);
                     if let Some(reason) =
-                        app.gx_store_new_coordinator_refusal(&host_state, &group_id, &agent_id)
+                        app.gx_store_new_coordinator_refusal(&host_state, &group_id)
                     {
-                        app.refresh_new_coordinator_copies(&host_dialog, &host_state, cx);
-                        reply.finish(Err(NewCoordinatorRefusal::plain(reason)), cx);
+                        app.new_coordinator_not_created(&NewCoordinatorRefusal::plain(reason), cx);
                         return;
                     }
-                    app.gx_store_create_coordinator(
-                        &group_id,
-                        &agent_id,
-                        &name,
-                        model.as_deref(),
-                        effort.as_deref(),
-                        move |app, result, cx| {
-                            let refused = result.as_ref().err().cloned();
-                            let delivered = reply.finish(result, cx);
-                            match refused {
-                                None if delivered => app.release_native_app_modal_window(
-                                    GpuiAppModalKind::NewCoordinator,
-                                    cx,
-                                ),
-                                // The dialog was closed while it waited: say it here instead,
-                                // with no picker to point at and no guess at why (a refusal, a
-                                // timeout, a lost connection), the words behind Copy details.
-                                Some(refusal) if !delivered => {
-                                    let description = if refusal.details.is_some() {
-                                        "Ghostex couldn't create it. Open New Coordinator to try again."
-                                    } else {
-                                        refusal.message.as_str()
-                                    };
-                                    let mut toast = serde_json::json!({
-                                        "type": "toast",
-                                        "level": "warning",
-                                        "title": "Coordinator not created",
-                                        "description": description,
-                                    });
-                                    if let Some(details) = &refusal.details {
-                                        toast["copyText"] = serde_json::json!(details);
-                                    }
-                                    app.receive_gpui_app_toast_bridge_message(&toast, cx);
-                                }
-                                _ => {}
-                            }
-                        },
-                        cx,
-                    );
+                    let (rows, remote) = app.new_coordinator_launchers(&group_id);
+                    let warnings = app
+                        .new_coordinator_copy_agents(&host_state, &group_id)
+                        .into_iter()
+                        .filter_map(|agent| Some((agent.agent_id, agent.warning?)))
+                        .collect();
+                    let step = NewThreadPickerCoordinatorStep {
+                        group_id,
+                        name,
+                        warnings,
+                    };
+                    app.open_coordinator_agent_picker(step, rows, remote, cx);
                     return;
                 }
                 // The dialog stays open until gxserver answers the save.
@@ -394,15 +356,14 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Why Create must not run in the copy `group_id` names, checked just before it: the project
-    /// must still be open on its computer (the store's own inventory, so a project the list
-    /// does not merge, or a worktree, passes), still be one of the copies when the dialog listed
-    /// several, its computer connected, and the agent still set up there.
+    /// Why the coordinator must not be created in the copy `group_id` names, checked when Next
+    /// opens the agent picker: the project must still be open on its computer (the store's own
+    /// inventory, so a project the list does not merge, or a worktree, passes), still be one of
+    /// the copies when the dialog listed several, and its computer connected.
     fn gx_store_new_coordinator_refusal(
         &self,
         state: &CopiesState,
         group_id: &str,
-        agent_id: &str,
     ) -> Option<String> {
         const GONE: &str = "That copy is no longer open. Pick another.";
         let Some(project) = ProjectKey::parse_sidebar_group_id(group_id) else {
@@ -418,24 +379,77 @@ impl GhostexGpuiApp {
         {
             return Some(GONE.to_string());
         }
-        let agents = match project.machine.remote_id() {
-            None => Some(self.gx_store_coordinator_agents()),
-            Some(machine_id) => {
-                if self
-                    .gpui_remote_gxserver_request_target(machine_id)
-                    .is_none()
-                {
-                    return Some(
-                        "That computer isn't connected. Pick another computer.".to_string(),
-                    );
-                }
-                self.gx_store_remote_coordinator_agents(machine_id, None)
-            }
-        };
-        if agents.is_some_and(|agents| !agents.iter().any(|agent| agent.agent_id == agent_id)) {
-            return Some("That agent isn't set up there anymore. Pick another.".to_string());
+        if let Some(machine_id) = project.machine.remote_id()
+            && self
+                .gpui_remote_gxserver_request_target(machine_id)
+                .is_none()
+        {
+            return Some("That computer isn't connected. Pick another computer.".to_string());
         }
         None
+    }
+
+    /// The copy's computer's agents with their warnings, by that computer's models as this dialog
+    /// read them.
+    fn new_coordinator_copy_agents(
+        &self,
+        state: &CopiesState,
+        group_id: &str,
+    ) -> Vec<NewCoordinatorAgent> {
+        let machine_id = machine_id_of(group_id);
+        if machine_id == LOCAL_MACHINE_ID {
+            return self.gx_store_coordinator_agents();
+        }
+        let catalogs = state.catalogs.borrow();
+        let catalog = catalogs.get(&machine_id).and_then(Option::as_ref);
+        self.gx_store_remote_coordinator_agents(&machine_id, catalog)
+            .unwrap_or_default()
+    }
+
+    /// The agent picker's pick: creates the coordinator, or says why not in a notice (the dialog
+    /// is closed by now).
+    pub(crate) fn create_coordinator_from_pick(
+        &mut self,
+        step: NewThreadPickerCoordinatorStep,
+        agent_id: String,
+        account_id: Option<String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.gx_store_create_coordinator(
+            &step.group_id,
+            &agent_id,
+            account_id.as_deref(),
+            &step.name,
+            |app, result, cx| {
+                if let Err(refusal) = result {
+                    app.new_coordinator_not_created(&refusal, cx);
+                }
+            },
+            cx,
+        );
+    }
+
+    /// "Coordinator not created" with the reason, the computer's own words behind Copy details.
+    fn new_coordinator_not_created(
+        &mut self,
+        refusal: &NewCoordinatorRefusal,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let description = if refusal.details.is_some() {
+            "Ghostex couldn't create it. Open New Coordinator to try again."
+        } else {
+            refusal.message.as_str()
+        };
+        let mut toast = serde_json::json!({
+            "type": "toast",
+            "level": "warning",
+            "title": "Coordinator not created",
+            "description": description,
+        });
+        if let Some(details) = &refusal.details {
+            toast["copyText"] = serde_json::json!(details);
+        }
+        self.receive_gpui_app_toast_bridge_message(&toast, cx);
     }
 
     /// Where the playbook of the copy `group_id` names is read and saved: its computer's

@@ -247,7 +247,8 @@ impl GhostexGpuiApp {
         if self.new_thread_picker_window.is_some() {
             return;
         }
-        self.create_gpui_new_thread_picker_window(false, cx);
+        let config = self.new_thread_picker_config();
+        self.create_gpui_new_thread_picker_window(config, false, cx);
     }
 
     /// The recycle a main-window move or resize asks for, run once the frame has been still for
@@ -317,6 +318,7 @@ impl GhostexGpuiApp {
                 .agentbox_default_location(),
             cloud_box: self.new_thread_picker_offers_cloud_box(),
             room: Some(self.main_window_bounds),
+            coordinator: None,
             close_when_inactive: true,
             cloud_default_account: self
                 .gx_store
@@ -358,22 +360,23 @@ impl GhostexGpuiApp {
 
     fn create_gpui_new_thread_picker_window(
         &mut self,
+        config: NewThreadPickerConfig,
         visible: bool,
         cx: &mut gpui::Context<Self>,
     ) {
-        let config = self.new_thread_picker_config();
         let agent_count = config.agents.len();
+        let height = if config.coordinator.is_some() {
+            new_thread_picker_coordinator_height(agent_count)
+        } else {
+            new_thread_picker_window_height(
+                agent_count,
+                config.place.is_some(),
+                config.place.is_none() && (config.boxes.shows_run_on() || config.cloud_box),
+            )
+        };
         let window_size = size(
             px(NEW_THREAD_PICKER_WIDTH),
-            px(new_thread_picker_capped_height(
-                new_thread_picker_window_height(
-                    agent_count,
-                    config.place.is_some(),
-                    config.place.is_none() && (config.boxes.shows_run_on() || config.cloud_box),
-                ),
-                config.room,
-                None,
-            )),
+            px(new_thread_picker_capped_height(height, config.room, None)),
         );
         let window_bounds =
             gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size);
@@ -451,36 +454,90 @@ impl GhostexGpuiApp {
             return;
         }
         let config = self.new_thread_picker_config();
+        self.show_gpui_new_thread_picker(config, cx);
+        self.refresh_gpui_new_thread_picker_agents(cx);
+        self.refresh_gpui_new_thread_picker_accounts(cx);
+        self.refresh_agentbox_locations(crate::app::gx_store::AGENTBOX_STATUS_ON_OPEN, cx);
+        self.refresh_new_thread_picker_cloud_providers(cx);
+    }
+
+    /// The picker as the New Coordinator form's agent step: the copy's computer's launchers
+    /// (`rows`), without Claude (cloud), and no account lists for another computer's agents (its
+    /// accounts are not this computer's). Nothing else is offered or read.
+    pub(crate) fn open_coordinator_agent_picker(
+        &mut self,
+        step: NewThreadPickerCoordinatorStep,
+        rows: Vec<Value>,
+        remote: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.new_thread_picker_visible {
+            self.close_gpui_new_thread_picker(cx);
+        }
+        let primary = (!remote)
+            .then(|| self.active_project_agent_id(&rows))
+            .flatten();
+        let agents = order_new_thread_picker_agents(&rows, primary.as_deref())
+            .into_iter()
+            .filter(|agent| !ghostex_gx_core::is_claude_cloud_agent(&agent.agent_id))
+            .map(|mut agent| {
+                agent.uses_own_login |= remote;
+                agent
+            })
+            .collect();
+        let config = NewThreadPickerConfig {
+            place: None,
+            agents,
+            agents_loaded: true,
+            boxes: NewThreadPickerBoxes::Unknown,
+            cloud_box: false,
+            cloud_default_account: None,
+            coordinator: Some(step),
+            ..self.new_thread_picker_config()
+        };
+        self.show_gpui_new_thread_picker(config, cx);
+        if !remote {
+            self.refresh_gpui_new_thread_picker_accounts(cx);
+        }
+    }
+
+    /// Shows the picker with `config`: the preloaded window reset to it, or a new one when the
+    /// preload is stale.
+    fn show_gpui_new_thread_picker(
+        &mut self,
+        config: NewThreadPickerConfig,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let recycle_pending = self.new_thread_picker_recycle_task.take().is_some();
         let stale = recycle_pending
             || self.new_thread_picker_window.is_none()
             || self.new_thread_picker_preloaded_agent_count != config.agents.len();
         if stale {
             self.remove_gpui_new_thread_picker_window(cx);
-            self.create_gpui_new_thread_picker_window(true, cx);
+            self.create_gpui_new_thread_picker_window(config, true, cx);
         } else {
             let picker = self.new_thread_picker.clone();
             if let (Some(handle), Some(picker)) = (self.new_thread_picker_window, picker) {
+                let mut config = Some(config);
                 let shown = handle
                     .update(cx, |_root, window, cx| {
-                        picker.update(cx, |picker, cx| {
-                            picker.reset(config, window, cx);
-                        });
+                        if let Some(config) = config.take() {
+                            picker.update(cx, |picker, cx| {
+                                picker.reset(config, window, cx);
+                            });
+                        }
                         window.activate_window();
                     })
                     .is_ok();
                 if shown {
                     self.new_thread_picker_visible = true;
                 } else {
+                    let config = config.unwrap_or_else(|| self.new_thread_picker_config());
                     self.remove_gpui_new_thread_picker_window(cx);
-                    self.create_gpui_new_thread_picker_window(true, cx);
+                    self.create_gpui_new_thread_picker_window(config, true, cx);
                 }
             }
         }
-        self.refresh_gpui_new_thread_picker_agents(cx);
-        self.refresh_gpui_new_thread_picker_accounts(cx);
-        self.refresh_agentbox_locations(crate::app::gx_store::AGENTBOX_STATUS_ON_OPEN, cx);
-        self.refresh_new_thread_picker_cloud_providers(cx);
     }
 
     /// Closes from the main window (hotkey toggle): removes the visible window
@@ -550,6 +607,15 @@ impl GhostexGpuiApp {
                 } else {
                     self.launch_agent_in_active_project(agent_id, account_id, run_location, cx);
                 }
+            }
+            NewThreadPickerCommand::PickCoordinatorAgent {
+                step,
+                agent_id,
+                account_id,
+            } => {
+                self.gx_store.unified_sidebar.picker_target = None;
+                self.release_gpui_new_thread_picker_window(cx);
+                self.create_coordinator_from_pick(step, agent_id, account_id, cx);
             }
             // The launcher's "New Coordinator…" action, so the dialog opens the way it does there.
             NewThreadPickerCommand::NewCoordinator { target } => {

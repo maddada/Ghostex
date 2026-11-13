@@ -54,6 +54,11 @@ pub(crate) const NEW_THREAD_PICKER_SEARCH_HEIGHT: f32 = 36.0;
 pub(crate) const NEW_THREAD_PICKER_ROW_HEIGHT: f32 = 36.0;
 pub(crate) const NEW_THREAD_PICKER_MAX_AGENT_ROWS: usize = 12;
 pub(crate) const NEW_THREAD_PICKER_CHROME_HEIGHT: f32 = 201.0;
+/// The coordinator step's title row above the search field.
+const COORDINATOR_TITLE_HEIGHT: f32 = 34.0;
+/// The coordinator step's warning line under the list, kept even while it is empty so the frame
+/// does not jump as the highlight moves.
+const COORDINATOR_WARNING_HEIGHT: f32 = 40.0;
 
 /// `.quick-access-surface`: Inter at 14px over 20px.
 const PICKER_FONT: &str = crate::ui_fonts::UI_FONT;
@@ -62,6 +67,7 @@ const ROW_LINE_HEIGHT: f32 = 20.0;
 const SCROLLBAR_WIDTH: f32 = 5.0;
 
 const PLACEHOLDER_AGENTS: &str = "Search agents, coordinator, browser, terminal...";
+const PLACEHOLDER_COORDINATOR_AGENTS: &str = "Search agents...";
 const PLACEHOLDER_ACCOUNTS: &str = "Search accounts...";
 /// Above a Claude (cloud) account list.
 const CLOUD_ACCOUNT_NOTE: &str =
@@ -72,6 +78,8 @@ const HINT_BACK: &str = "Back";
 const HINT_ACCOUNTS: &str = "Accounts";
 const HINT_CLOSE: &str = "Close";
 const ROW_COORDINATOR: &str = "Coordinator";
+const TITLE_COORDINATOR_STEP: &str = "Pick the coordinator's agent";
+const ICON_WARNING: &str = "titlebar/alert-triangle.svg";
 const ROW_BROWSER: &str = "Browser";
 const ROW_TERMINAL: &str = "Terminal";
 const ROW_CLI_LOGIN: &str = "Current CLI login";
@@ -115,6 +123,32 @@ pub(crate) fn new_thread_picker_window_height(
             0.0
         }
         + agent_count.min(NEW_THREAD_PICKER_MAX_AGENT_ROWS) as f32 * NEW_THREAD_PICKER_ROW_HEIGHT
+}
+
+/// The coordinator step's frame: the title row and the warning line instead of the divider and the
+/// Coordinator, Browser and Terminal rows, and no project or Run on row.
+pub(crate) fn new_thread_picker_coordinator_height(agent_count: usize) -> f32 {
+    NEW_THREAD_PICKER_CHROME_HEIGHT - 3.0 * NEW_THREAD_PICKER_ROW_HEIGHT - 9.0
+        + COORDINATOR_TITLE_HEIGHT
+        + COORDINATOR_WARNING_HEIGHT
+        + agent_count.min(NEW_THREAD_PICKER_MAX_AGENT_ROWS) as f32 * NEW_THREAD_PICKER_ROW_HEIGHT
+}
+
+/// The picker as the New Coordinator form's second step: the agent (and account) the coordinator
+/// runs on, in the copy the form picked.
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// User (Q2980 "Build it: auto-send + remind on drift"): the New Coordinator form drops its agent and model fields; when it is done, the normal New Thread picker opens titled "Pick the coordinator's agent", with every agent and its accounts on Tab, and the pick starts the coordinator and sends its first message. It shows only agents (no Coordinator, Browser or Terminal row, no project list, no Run on row: the form picked where it runs), and a warning line under the list when the highlighted agent would start on a model a coordinator works worse on (gx-protocol `coordinator_quality_concern`).
+/// SEE-ALSO: apps/desktop/src/app/new_coordinator_modal_lifecycle.rs (opens it, creates the pick), apps/gpui-web/src/app/web_host/new_thread_picker.rs (the page's picker).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct NewThreadPickerCoordinatorStep {
+    /// The sidebar group of the copy the coordinator runs in.
+    pub(crate) group_id: String,
+    /// The name the form was given (empty: the placeholder "Coordinator").
+    pub(crate) name: String,
+    /// "Coordinator quality may be degraded on <model>" by agent id, for the agents whose start
+    /// model or effort gives a concern.
+    pub(crate) warnings: std::collections::BTreeMap<String, String>,
 }
 
 /// The picker never covers more than this share of the window it opens over.
@@ -348,6 +382,8 @@ pub(crate) struct NewThreadPickerConfig {
     /// The window the picker opens over, which caps its height; `None` (the preview) leaves the
     /// height uncapped.
     pub(crate) room: Option<gpui::Bounds<gpui::Pixels>>,
+    /// The New Coordinator form's agent step; `None` is the ordinary picker.
+    pub(crate) coordinator: Option<NewThreadPickerCoordinatorStep>,
 }
 
 /// What the picker asks its host to do. The picker removes its own window
@@ -361,6 +397,12 @@ pub(crate) enum NewThreadPickerCommand {
         run_location: Option<String>,
         /// The picked project and machine; `None` is the active project.
         target: Option<NewThreadPickerTarget>,
+    },
+    /// The coordinator step's pick: create the coordinator on this agent and account.
+    PickCoordinatorAgent {
+        step: NewThreadPickerCoordinatorStep,
+        agent_id: String,
+        account_id: Option<String>,
     },
     /// The New Coordinator dialog (`projectAction` `coordinator`).
     NewCoordinator {
@@ -451,6 +493,8 @@ pub(crate) struct GpuiNewThreadPickerWindow {
     project_cursor: bool,
     /// A place picked with Left or Right on a project row, by project.
     row_places: std::collections::BTreeMap<usize, usize>,
+    /// See `NewThreadPickerConfig::coordinator`.
+    coordinator: Option<NewThreadPickerCoordinatorStep>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -466,7 +510,12 @@ impl GpuiNewThreadPickerWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder(PLACEHOLDER_AGENTS));
+        let placeholder = if config.coordinator.is_some() {
+            PLACEHOLDER_COORDINATOR_AGENTS
+        } else {
+            PLACEHOLDER_AGENTS
+        };
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
         let change_subscription = cx.subscribe_in(
             &input,
             window,
@@ -536,6 +585,7 @@ impl GpuiNewThreadPickerWindow {
             choosing_project: false,
             project_cursor: false,
             row_places: Default::default(),
+            coordinator: config.coordinator,
             _subscriptions: vec![
                 change_subscription,
                 activation_subscription,
@@ -571,8 +621,9 @@ impl GpuiNewThreadPickerWindow {
         let start_machine = config.place.as_ref().map(|place| place.machine);
         self.place = config.place;
         self.room = config.room;
+        self.coordinator = config.coordinator;
         self.choosing_project = false;
-        self.set_placeholder(PLACEHOLDER_AGENTS, window, cx);
+        self.set_placeholder(self.agents_placeholder(), window, cx);
         if let Some(machine) = start_machine {
             self.apply_place_machines(machine);
         }
@@ -592,6 +643,10 @@ impl GpuiNewThreadPickerWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The coordinator step lists the agents of the copy's computer it opened with.
+        if self.coordinator.is_some() {
+            return;
+        }
         let selected_agent_id = self
             .scope
             .or(match self.rows().get(self.selected) {
@@ -627,6 +682,8 @@ impl GpuiNewThreadPickerWindow {
     pub(super) fn fit_window_height(&self, window: &mut Window) {
         let height = if self.choosing_project {
             self.project_list_height()
+        } else if self.coordinator.is_some() {
+            new_thread_picker_coordinator_height(self.agents.len())
         } else {
             new_thread_picker_window_height(
                 self.agents.len(),
@@ -730,6 +787,10 @@ impl GpuiNewThreadPickerWindow {
                     .filter(|(_, agent)| matches_query(&agent.name, &query))
                     .map(|(index, _)| PickerRow::Agent(index))
                     .collect();
+                // The coordinator step picks an agent only.
+                if self.coordinator.is_some() {
+                    return rows;
+                }
                 if !in_box && matches_query(ROW_COORDINATOR, &query) {
                     rows.push(PickerRow::Coordinator);
                 }
@@ -767,6 +828,28 @@ impl GpuiNewThreadPickerWindow {
                     .collect()
             }
         }
+    }
+
+    /// The search field's words over the agent list: the coordinator step lists agents only.
+    fn agents_placeholder(&self) -> &'static str {
+        if self.coordinator.is_some() {
+            PLACEHOLDER_COORDINATOR_AGENTS
+        } else {
+            PLACEHOLDER_AGENTS
+        }
+    }
+
+    /// The coordinator step's warning for the highlighted agent, or the one whose accounts show.
+    fn coordinator_warning(&self) -> Option<&str> {
+        let step = self.coordinator.as_ref()?;
+        let agent = match self.scope_agent() {
+            Some(agent) => agent,
+            None => match self.selected_row()? {
+                PickerRow::Agent(index) => self.agents.get(index)?,
+                _ => return None,
+            },
+        };
+        step.warnings.get(&agent.agent_id).map(String::as_str)
     }
 
     fn selected_row(&self) -> Option<PickerRow> {

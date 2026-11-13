@@ -6,7 +6,9 @@
 //! (the Run on row with Docker, Hetzner, an SSH host and Daytona ready, Docker
 //! picked), `boxes-ssh` (the same, the SSH host picked: the chips scroll to it),
 //! `noboxes` (agentbox installed, no box ready: the Settings link), `many`
-//! (sixteen agents, so the list scrolls). Every other state has no Run on row.
+//! (sixteen agents, so the list scrolls), `coordinator` (the New Coordinator form's agent step:
+//! titled, agents only, Grok highlighted with its weak-model warning). Every other state has no
+//! Run on row.
 use super::new_thread_picker::*;
 use ghostex_gx_core::unified_sidebar::{UnifiedChoiceMachine, UnifiedProjectChoice};
 use gpui::{App, AppContext as _, Bounds, Entity, WindowHandle, point, px, size};
@@ -131,6 +133,20 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             agent(light, "zcode", "ZCode", Some("zcode")),
         ]
     };
+    // The coordinator step leaves out Claude (cloud) and leads with the agent that warns.
+    let agents = if state == "coordinator" {
+        let mut agents: Vec<NewThreadPickerAgent> = agents
+            .into_iter()
+            .filter(|agent| agent.agent_id != "claude-cloud")
+            .collect();
+        if let Some(index) = agents.iter().position(|agent| agent.agent_id == "grok") {
+            let grok = agents.remove(index);
+            agents.insert(0, grok);
+        }
+        agents
+    } else {
+        agents
+    };
     let agents = if state == "many" {
         let mut agents = agents;
         for name in ["Gemini", "Copilot", "Kiro", "Qoder", "Amp", "Droid"] {
@@ -161,6 +177,17 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         }
         NewThreadPickerCommand::NewCoordinator { .. } => {
             eprintln!("new coordinator");
+            cx.quit();
+        }
+        NewThreadPickerCommand::PickCoordinatorAgent {
+            step,
+            agent_id,
+            account_id,
+        } => {
+            eprintln!(
+                "coordinator {:?} on {agent_id} with account {account_id:?}",
+                step.name
+            );
             cx.quit();
         }
         NewThreadPickerCommand::OpenBrowser { .. } => {
@@ -221,7 +248,29 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     // `places` and `projects` draw the project row and machine chips (`projects` opens the list).
     let place = state.starts_with("places") || state.starts_with("projects");
     let run_on_shown = !place && (boxes.shows_run_on() || cloud_box);
+    let coordinator = (state == "coordinator").then(|| NewThreadPickerCoordinatorStep {
+        group_id: "local:demo".to_string(),
+        name: "Checkout redesign".to_string(),
+        warnings: [
+            ("grok", "Grok 4.3"),
+            ("hermes", "an unknown model"),
+            ("pi", "an unknown model"),
+            ("zcode", "GLM-5"),
+        ]
+        .into_iter()
+        .map(|(agent, model)| {
+            (
+                agent.to_string(),
+                format!("Coordinator quality may be degraded on {model}"),
+            )
+        })
+        .collect(),
+    });
+    let coordinator_height = coordinator
+        .as_ref()
+        .map(|_| new_thread_picker_coordinator_height(agents.len()));
     let config = NewThreadPickerConfig {
+        coordinator,
         place: place.then(|| demo_place(state == "projects-long")),
         palette: demo.palette,
         agents: agents.clone(),
@@ -246,7 +295,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let (window, view) = super::open_modal_window(
         NEW_THREAD_PICKER_WIDTH,
         new_thread_picker_capped_height(
-            new_thread_picker_window_height(agents.len(), place, run_on_shown),
+            coordinator_height.unwrap_or_else(|| {
+                new_thread_picker_window_height(agents.len(), place, run_on_shown)
+            }),
             config.room,
             None,
         ),

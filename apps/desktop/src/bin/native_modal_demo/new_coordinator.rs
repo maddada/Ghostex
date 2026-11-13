@@ -1,133 +1,44 @@
-//! New Orchestrator preview. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default (Claude
-//! selected, Opus 5.5 at High), `codex`, `cursor` (an agent whose launch takes no model),
-//! `antigravity` (no XHigh: Medium and High), `none` (no agent an orchestrator can run on),
+//! New Coordinator preview (Next opens the agent picker, the `coordinator` state of the New Thread
+//! picker preview). States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default, `none` (no agent set up),
 //! `overrides` (the user wrote playbook overrides), `overrides-long` (long ones, over 20,000
 //! characters), `overrides-edit` (their editor open),
 //! `old-playbook` (an edited full playbook saved before overrides is still in use, editor open),
 //! `view` (the read-only playbook page, no overrides), `overrides-view` (the page with overrides),
 //! `overrides-view-end` (that page scrolled to the overrides),
-//! `effort-menu` (the Effort menu open), `all-efforts` (Show all effort levels on, the Effort menu
-//! open on every level of the model). A project on several computers: `computers` (two clones
+//! A project on several computers: `computers` (two clones
 //! here with the same folder name, mini with other launchers, mbpro not connected), `computer-menu`
 //! (its list open), `computer-unavailable` (opened on mbpro, which is not connected),
-//! `computer-no-agents` (picked a computer with no coordinator agent), `computer-loading` (mini's
+//! `computer-no-agents` (picked a computer with no agent set up), `computer-loading` (mini's
 //! models still being read), `computer-stale-playbook` (mini picked while this computer's
 //! playbook read is still on its way: the late answer is dropped).
 use super::new_coordinator_modal::*;
 use gpui::{App, AppContext as _};
 use std::rc::Rc;
 
-fn efforts(values: &[&str]) -> Vec<(String, String)> {
-    values
-        .iter()
-        .map(|value| {
-            let label = match *value {
-                "xhigh" => "XHigh".to_string(),
-                other => {
-                    let mut chars = other.chars();
-                    chars.next().map_or_else(String::new, |first| {
-                        first.to_uppercase().collect::<String>() + chars.as_str()
-                    })
-                }
-            };
-            (value.to_string(), label)
-        })
-        .collect()
-}
-
-fn model(value: &str, label: &str, levels: &[&str], default: bool) -> NewCoordinatorModel {
-    NewCoordinatorModel {
-        value: value.to_string(),
-        label: label.to_string(),
-        efforts: efforts(levels),
-        default,
-    }
-}
-
-fn agent(id: &str, name: &str, models: Vec<NewCoordinatorModel>) -> NewCoordinatorAgent {
-    let family = id.split('-').next().unwrap_or(id);
+fn agent(id: &str, warning: Option<&str>) -> NewCoordinatorAgent {
     NewCoordinatorAgent {
         agent_id: id.to_string(),
-        name: name.to_string(),
-        family: family.to_string(),
-        models,
-        skill_line: ghostex_gx_chat_core::composer::skill_invocation::coordinator_skill_line(Some(
-            family,
-        )),
+        warning: warning.map(|model| format!("Coordinator quality may be degraded on {model}")),
     }
 }
 
 pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
-    let claude_levels = ["low", "medium", "high", "xhigh", "max", "ultracode"];
     let agents = if demo.state == "none" {
         Vec::new()
     } else {
         vec![
-            agent(
-                "claude",
-                "Claude",
-                vec![
-                    model("fable", "Fable 5.1", &claude_levels, false),
-                    model("opus[1m]", "Opus 5.5", &claude_levels, true),
-                    model("sonnet", "Sonnet 5.5", &claude_levels, false),
-                ],
-            ),
-            agent(
-                "codex",
-                "Codex",
-                vec![model(
-                    "gpt-6.1-sol",
-                    "GPT-6.1 Sol",
-                    &["low", "medium", "high", "xhigh", "max", "ultra"],
-                    true,
-                )],
-            ),
-            agent(
-                "zcode",
-                "ZCode",
-                vec![model("zai/glm-5.3", "GLM 5.3", &[], true)],
-            ),
-            agent("cursor", "Cursor CLI", Vec::new()),
-            agent("grok", "Grok Build", Vec::new()),
-            agent(
-                "antigravity",
-                "Antigravity CLI",
-                vec![model(
-                    "gemini-4-argon",
-                    "Gemini 4 Argon",
-                    &["low", "medium", "high"],
-                    true,
-                )],
-            ),
-            agent("pi", "Pi Agent", Vec::new()),
-            agent("omp", "OMP", Vec::new()),
+            agent("claude", None),
+            agent("codex", None),
+            agent("cursor", Some("an unknown model")),
+            agent("grok", Some("Grok 4.3")),
         ]
-    };
-    let selected_agent = match demo.state.as_str() {
-        "codex" => 1,
-        "cursor" => 3,
-        "antigravity" => 5,
-        _ => 0,
     };
     let demo_state = demo.state.clone();
     let computers = demo.state.starts_with("computer");
     let host: NewCoordinatorModalHost = Rc::new(move |command, cx: &mut App| {
         match command {
-            NewCoordinatorModalCommand::Create {
-                group_id,
-                agent_id,
-                name,
-                model,
-                effort,
-                reply,
-            } => {
-                eprintln!("create: {group_id} {agent_id} {name:?} {model:?} {effort:?}");
-                // The app's host answers after the dialog's own update, as here.
-                cx.defer(move |cx| {
-                    reply.finish(Ok(()), cx);
-                    cx.quit();
-                });
-                return;
+            NewCoordinatorModalCommand::PickAgent { group_id, name } => {
+                eprintln!("pick agent for: {group_id} {name:?}");
             }
             NewCoordinatorModalCommand::ChooseCopy {
                 group_id,
@@ -196,12 +107,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         project_name: "Ghostex".to_string(),
         copies,
         selected_copy,
-        selected_agent,
         playbook: OrchestratorPlaybookInfo::from_view(&demo_playbook_view(&demo.state)),
         palette: demo.palette,
-        all_efforts: demo.state == "all-efforts",
     };
-    let open_effort_menu = matches!(demo.state.as_str(), "effort-menu" | "all-efforts");
     let open_editor = matches!(demo.state.as_str(), "overrides-edit" | "old-playbook");
     let open_view = demo.state.ends_with("view") || demo.state.ends_with("view-end");
     let view_end = demo.state.ends_with("view-end");
@@ -216,9 +124,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         move |window, cx| {
             cx.new(|cx| {
                 let mut modal = GpuiNewCoordinatorModalWindow::new(config, host, window, cx);
-                if open_effort_menu {
-                    modal.toggle_effort_menu(window, cx);
-                }
                 if let Some(index) = pick_copy {
                     modal.demo_choose_copy(index, cx);
                 }
@@ -264,24 +169,7 @@ fn demo_copies(state: &str, here: Vec<NewCoordinatorAgent>) -> Vec<NewCoordinato
         agents: Some(here.clone()),
         lineup: CopyLineup::Held,
     };
-    let claude_levels = ["low", "medium", "high", "xhigh", "max"];
-    let mini_agents = vec![
-        agent(
-            "claude-work",
-            "Claude (work account)",
-            vec![model("sonnet", "Sonnet 5.5", &claude_levels, true)],
-        ),
-        agent(
-            "codex",
-            "Codex",
-            vec![model(
-                "gpt-6.1-sol",
-                "GPT-6.1 Sol",
-                &["low", "medium", "high"],
-                true,
-            )],
-        ),
-    ];
+    let mini_agents = vec![agent("claude-work", None), agent("codex", None)];
     let loading = state == "computer-loading";
     let no_agents = state == "computer-no-agents";
     vec![
@@ -298,18 +186,7 @@ fn demo_copies(state: &str, here: Vec<NewCoordinatorAgent>) -> Vec<NewCoordinato
             true,
         ),
         NewCoordinatorCopy {
-            agents: Some(if loading {
-                mini_agents
-                    .iter()
-                    .cloned()
-                    .map(|agent| NewCoordinatorAgent {
-                        models: Vec::new(),
-                        ..agent
-                    })
-                    .collect()
-            } else {
-                mini_agents
-            }),
+            agents: Some(mini_agents),
             lineup: if loading {
                 CopyLineup::Loading
             } else {

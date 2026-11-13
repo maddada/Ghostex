@@ -78,7 +78,7 @@ impl GpuiNewThreadPickerWindow {
             return;
         };
         self.clear_query(window, cx);
-        self.set_placeholder(PLACEHOLDER_AGENTS, window, cx);
+        self.set_placeholder(self.agents_placeholder(), window, cx);
         let rows = self.rows();
         self.selected = rows
             .iter()
@@ -105,6 +105,22 @@ impl GpuiNewThreadPickerWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The coordinator step's pick of an agent or an account starts the coordinator.
+        let command = match (command, self.coordinator.clone()) {
+            (
+                NewThreadPickerCommand::LaunchAgent {
+                    agent_id,
+                    account_id,
+                    ..
+                },
+                Some(step),
+            ) => NewThreadPickerCommand::PickCoordinatorAgent {
+                step,
+                agent_id,
+                account_id,
+            },
+            (command, _) => command,
+        };
         self.remove_window(window);
         (self.host)(command, cx);
     }
