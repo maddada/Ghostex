@@ -536,11 +536,22 @@ impl NativeChatView {
         let switch = pill["switch"].as_bool();
         let row_menu = opens_row_menu(pill);
         let warning = id == QUALITY_PILL;
-        let tone = if warning {
-            rgb(ATTENTION_COLOR).into()
+        // CDXC:Coordinators 2026-11-13 WHY:
+        // GitHub #597: "While a real relayed card was waiting, the card showed under the thread's
+        // report in the coordinator's chat, but the red Approvals pill above the chat box never
+        // appeared." The pill was there, but drawn grey with a red dot like Workers beside it, so
+        // nothing marked it; the core has always meant it "red like the sidebar's approval dot"
+        // (gx-chat-core `relayed_approvals::pill`). While it shows (a card waits on the user) its
+        // border, icon and label take that red, as the model warning's pill takes amber. The
+        // phone does the same in ChatPills.tsx.
+        let alert = if warning {
+            Some(gpui::Hsla::from(rgb(ATTENTION_COLOR)))
+        } else if id == super::relayed_approval::APPROVALS_MENU {
+            waiting_color(&text(pill, "waiting"))
         } else {
-            p.card_muted
+            None
         };
+        let tone = alert.unwrap_or(p.card_muted);
         let tooltip = if row_menu || (collapsed && !name.is_empty()) {
             Some(text(pill, "ariaLabel"))
         } else {
@@ -560,10 +571,9 @@ impl NativeChatView {
             .py(px(2.0 * s))
             .rounded_full()
             .border(px(s))
-            .border_color(if warning {
-                gpui::Hsla::from(rgb(ATTENTION_COLOR)).opacity(0.45)
-            } else {
-                p.foreground.opacity(0.1)
+            .border_color(match alert {
+                Some(alert) => alert.opacity(0.45),
+                None => p.foreground.opacity(0.1),
             })
             .text_size(px(13.0 * s))
             .line_height(px(19.0 * s))
