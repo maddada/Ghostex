@@ -35,7 +35,7 @@ pub(crate) mod menus;
 pub(crate) mod model;
 pub(crate) mod navigation;
 mod new_session_row;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 mod pointer;
 mod project_header;
 pub(crate) mod project_hover;

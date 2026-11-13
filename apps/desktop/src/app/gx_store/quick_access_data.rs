@@ -82,9 +82,9 @@ impl GhostexGpuiApp {
             })
             .collect();
         // A page cannot open terminal panes or extension surfaces.
-        #[cfg(not(target_family = "wasm"))]
+        #[cfg(not(ghostex_web))]
         let extensions = self.quick_access_extensions();
-        #[cfg(target_family = "wasm")]
+        #[cfg(ghostex_web)]
         let extensions = Vec::new();
         QuickAccessData {
             hud: store
@@ -106,7 +106,7 @@ impl GhostexGpuiApp {
                 HotkeyPlatformWire::Linux
             },
             // The web build compiles this file too, and a page cannot update, restart or quit the app.
-            app_lifecycle: cfg!(not(target_family = "wasm")),
+            app_lifecycle: cfg!(not(ghostex_web)),
         }
     }
 }

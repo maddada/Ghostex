@@ -51,6 +51,8 @@ Testing
 Web build
   web-build [--debug]     build apps/gpui-web into apps/gpui-web/www/dist
   web-dev [--debug]       build the wasm and run the Vite dev server on :4174
+  web-test [<cargo test arguments>]
+                          run apps/gpui-web's tests on this computer (native, not wasm)
   start-web [<ghostex web arguments>]
                           build the web app and serve it with `ghostex web` on :4173
 
@@ -113,6 +115,7 @@ fn main() {
         "setup-worktree" => setup_worktree::run(&args),
         "web-build" => tasks::web_build(&args),
         "web-dev" => tasks::web_dev(&args),
+        "web-test" => tasks::web_test(&args),
         "start-web" => tasks::start_web(&args),
         "typecheck" => tasks::typecheck(&args),
         "format" => format::run(&args),

@@ -375,7 +375,7 @@ pub(in crate::app::native_chat) fn only_selection_moved(
             .all(|(key, value)| key == "suggestions" || old.get(key) == Some(value))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn attach_suggestion_window(window: &mut gpui::Window, parent: *mut std::ffi::c_void) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     unsafe extern "C" {
@@ -393,7 +393,7 @@ fn attach_suggestion_window(window: &mut gpui::Window, parent: *mut std::ffi::c_
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", not(ghostex_web))))]
 fn attach_suggestion_window(_: &mut gpui::Window, _: *mut std::ffi::c_void) {}
 
 /// Each edge on its nearest device pixel, all four taken from the same rect.

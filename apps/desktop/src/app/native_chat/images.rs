@@ -86,19 +86,19 @@ const THUMBNAIL_MAX_SOURCE_PIXELS: u64 = 64 * 1024 * 1024;
 const CHAT_IMAGE_BUDGET_BYTES: usize = 32 * 1024 * 1024;
 /// What a chat whose pane has been off screen for `HIDDEN_TRIM_DELAY` keeps: the pictures it drew
 /// last, so coming back to it shows them at once.
-#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+#[cfg_attr(ghostex_web, allow(dead_code))] // the web page never hides a chat pane
 const HIDDEN_CHAT_IMAGE_BUDGET_BYTES: usize = 8 * 1024 * 1024;
 /// A picture drawn this recently is never let go: it is on screen, or was a moment ago, and a
 /// cached transcript can paint it again without asking the cache.
 const RECENTLY_DRAWN: std::time::Duration = std::time::Duration::from_secs(30);
 /// Clicking through sessions and back keeps every picture; a chat left for longer is trimmed. At
 /// least `RECENTLY_DRAWN`, so the trim spares only what was drawn after the pane went away.
-#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+#[cfg_attr(ghostex_web, allow(dead_code))] // the web page never hides a chat pane
 const HIDDEN_TRIM_DELAY: std::time::Duration = RECENTLY_DRAWN;
 /// CDXC:Memory 2026-11-12 WHY: up to 24 chat views stay warm (`session_chat_prewarm.rs`, the 2026-09-19 DECISION that clicking back must not show a skeleton), and each hidden one kept up to `HIDDEN_CHAT_IMAGE_BUDGET_BYTES` of pictures however long it stayed hidden, up to about 190 MB across the pool. A chat hidden for `LONG_HIDDEN_TRIM_DELAY` keeps `LONG_HIDDEN_CHAT_IMAGE_BUDGET_BYTES`: its rows and transcript stay as they are (no skeleton), only pictures drawn longest ago are read and shrunk again when shown, as scrolling back to one already does. Clicking through chats within a few minutes keeps the 8 MB tier.
-#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+#[cfg_attr(ghostex_web, allow(dead_code))] // the web page never hides a chat pane
 const LONG_HIDDEN_TRIM_DELAY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+#[cfg_attr(ghostex_web, allow(dead_code))] // the web page never hides a chat pane
 const LONG_HIDDEN_CHAT_IMAGE_BUDGET_BYTES: usize = 1024 * 1024;
 
 enum ChatImageEntry {
@@ -252,7 +252,7 @@ pub(crate) struct ChatImageCache {
     strip: RefCell<HashMap<(u64, u32, u32), Kept<ChatStripPicture>>>,
     /// The trim a pane that went off screen waits for (`schedule_hidden_image_trim`); the web
     /// page never hides a chat pane.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     hidden_trim: Option<gpui::Task<()>>,
     /// When the transcript's rows were last drawn. The transcript is a cached view
     /// (transcript_host.rs) that can show the same rows for minutes without drawing them again,
@@ -463,7 +463,7 @@ const LOCAL_PICTURE_MAX_BYTES: u64 = 32 * 1024 * 1024;
 /// else, which the chat core's read then decides about (`chat_image`). Nothing in a browser,
 /// where the file is not the page's to read.
 fn read_local_picture(path: &str) -> Option<gpui::Image> {
-    if cfg!(target_family = "wasm") {
+    if cfg!(ghostex_web) {
         return None;
     }
     let path = std::path::Path::new(path);
@@ -904,7 +904,7 @@ impl NativeChatView {
     /// The pane went off screen: once it has stayed off screen for `HIDDEN_TRIM_DELAY`, the cache
     /// keeps only what it drew last, up to `HIDDEN_CHAT_IMAGE_BUDGET_BYTES`, and once it has stayed
     /// off screen for `LONG_HIDDEN_TRIM_DELAY`, up to `LONG_HIDDEN_CHAT_IMAGE_BUDGET_BYTES`.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+    #[cfg_attr(ghostex_web, allow(dead_code))] // the web page never hides a chat pane
     pub(super) fn schedule_hidden_image_trim(&mut self, cx: &mut Context<Self>) {
         self.images.hidden_trim = Some(cx.spawn(async move |this, cx| {
             let tiers = [
@@ -940,7 +940,7 @@ impl NativeChatView {
         }));
     }
 
-    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page never hides a chat pane
+    #[cfg_attr(ghostex_web, allow(dead_code))] // the web page never hides a chat pane
     pub(super) fn cancel_hidden_image_trim(&mut self) {
         self.images.hidden_trim = None;
     }
@@ -1737,6 +1737,8 @@ mod local_picture_tests {
     /// A picture file on this computer is read as the picture it is, by its bytes; anything else
     /// is left to the chat core's read (CDXC:SessionChat 2026-11-11 on `chat_image`).
     #[test]
+    // Desktop only: a page cannot read a local file (the GPUI web build runs this file's tests too).
+    #[cfg(not(ghostex_web))]
     fn a_local_picture_file_is_read_by_its_bytes() {
         let folder =
             std::env::temp_dir().join(format!("ghostex-local-picture-{}", std::process::id()));

@@ -228,7 +228,7 @@ impl GhostexGpuiApp {
 
     /// CDXC:ProjectBoard 2026-11-11 DECISION:
     /// User: someone who had the Kanban tab saved opens the Beads view on Board; everyone else starts on Tree. Read once, the first time this Ghostex starts without a saved `beadsViewLayout`: the restored view tabs say whether the Kanban tab was saved, and the answer is written so later starts (and a Beads tab opened since) never move it again.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     pub(crate) fn migrate_beads_layout_setting(&mut self) {
         let saved: Option<serde_json::Map<String, Value>> =
             std::fs::read_to_string(shared_settings::shared_sidebar_settings_path())
@@ -260,7 +260,7 @@ impl GhostexGpuiApp {
         });
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn save_beads_layout(&mut self, layout: BeadsLayout) {
         let mut settings = shared_settings::shared_sidebar_settings_snapshot()
             .object()
@@ -273,15 +273,15 @@ impl GhostexGpuiApp {
     }
 
     /// The page cannot save settings: the choice lasts while the page is open.
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     fn save_beads_layout(&mut self, _layout: BeadsLayout) {}
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn beads_install(&mut self, cx: &mut Context<Self>) {
         self.native_kanban_install_beads(cx);
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     fn beads_install(&mut self, cx: &mut Context<Self>) {
         self.native_kanban_toast(
             "Install Beads from the desktop app",

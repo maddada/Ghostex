@@ -20,12 +20,12 @@ fn set_window_drag_press(press: Option<gpui::Point<gpui::Pixels>>) {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn window_drag_is_app_owned(_window: &gpui::Window) -> bool {
     true
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
 fn window_drag_is_app_owned(window: &gpui::Window) -> bool {
     matches!(
         window.window_decorations(),
@@ -34,7 +34,7 @@ fn window_drag_is_app_owned(window: &gpui::Window) -> bool {
 }
 
 // The browser build (apps/gpui-web) compiles this file too; a page has no window to drag.
-#[cfg(any(target_os = "windows", target_family = "wasm"))]
+#[cfg(any(all(target_os = "windows", not(ghostex_web)), ghostex_web))]
 fn window_drag_is_app_owned(_window: &gpui::Window) -> bool {
     false
 }
@@ -52,17 +52,17 @@ honours the user's NSGlobalDomain AppleActionOnDoubleClick preference (Maximize/
 Do Nothing). Linux compositors leave the same gesture to the client, so zoom directly there;
 Windows already resolves it from the WindowControlArea::Drag hit test in the platform layer.
 */
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn window_drag_double_click_action(window: &gpui::Window) {
     window.titlebar_double_click();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
 fn window_drag_double_click_action(window: &gpui::Window) {
     window.zoom_window();
 }
 
-#[cfg(any(target_os = "windows", target_family = "wasm"))]
+#[cfg(any(all(target_os = "windows", not(ghostex_web)), ghostex_web))]
 fn window_drag_double_click_action(_window: &gpui::Window) {}
 
 /// CDXC:Titlebar 2026-09-21 WHY:

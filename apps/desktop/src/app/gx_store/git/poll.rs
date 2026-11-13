@@ -86,7 +86,7 @@ impl GhostexGpuiApp {
     }
 
     /// The window was presented or stopped being presented (`WindowVisibility`).
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     fn git_window_visibility_changed(&mut self, visible: bool, cx: &mut gpui::Context<Self>) {
         let hidden = !visible;
         if self.gx_store.git.window_hidden == hidden {
@@ -99,7 +99,7 @@ impl GhostexGpuiApp {
     }
 
     /// Follows this window's visibility once its handle is known (the first render records it).
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn git_watch_window_visibility(&mut self, cx: &mut gpui::Context<Self>) {
         if self.gx_store.git.visibility_watch.is_some() {
             return;
@@ -123,7 +123,7 @@ impl GhostexGpuiApp {
     }
 
     /// The page's tab visibility is not followed; the web build polls as before.
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     fn git_watch_window_visibility(&mut self, _cx: &mut gpui::Context<Self>) {}
 
     /// The projects whose header the sidebar draws right now: this computer's projects with a

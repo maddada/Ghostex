@@ -172,9 +172,9 @@ impl GhostexGpuiApp {
                 self.release_native_app_modal_window(kind, cx);
             }
             // A page has no copy sound; the dialog's own button says Path Copied.
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(ghostex_web))]
             ExportTranscriptModalCommand::PathCopied => gpui_copy_feedback(cx),
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(ghostex_web)]
             ExportTranscriptModalCommand::PathCopied => {}
             ExportTranscriptModalCommand::TargetChanged(target) => {
                 self.git_export_read_branches(target, cx);

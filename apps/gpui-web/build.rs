@@ -2,6 +2,9 @@
 use std::{collections::BTreeMap, env, fs, path::Path};
 
 fn main() {
+    // CDXC:WebGpui 2026-11-13 WHY: the shared desktop files chose their web branches with `cfg(target_arch = "wasm32")`, so this crate's native test target (`cargo xtask web-test`) took their desktop branches and failed on desktop-only items. `ghostex_web` names this crate whatever the target is; the desktop declares it (apps/desktop/build.rs) and never sets it.
+    println!("cargo::rustc-check-cfg=cfg(ghostex_web)");
+    println!("cargo:rustc-cfg=ghostex_web");
     let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
     let desktop = Path::new(&manifest).join("../desktop/src");
     let list_path = Path::new(&manifest).join("extracted-items.txt");
@@ -37,6 +40,24 @@ fn main() {
             vt_archive.display()
         );
         println!("cargo:rustc-link-arg={}", vt_archive.display());
+    } else {
+        // The native test target (`cargo xtask web-test`) links the desktop's own native build of the library, made by the desktop's script.
+        let script = Path::new(&manifest).join("../desktop/scripts/build-libghostty-vt.sh");
+        println!("cargo:rerun-if-changed={}", script.display());
+        let prefix = Path::new(&env::var("OUT_DIR").unwrap()).join("libghostty-vt");
+        let status = std::process::Command::new(&script)
+            .arg(&prefix)
+            .status()
+            .unwrap_or_else(|e| panic!("{}: {e}", script.display()));
+        assert!(
+            status.success(),
+            "{} failed with {status}",
+            script.display()
+        );
+        println!(
+            "cargo:rustc-link-arg={}",
+            prefix.join("lib/libghostty-vt.a").display()
+        );
     }
 
     let out_dir = env::var("OUT_DIR").unwrap();

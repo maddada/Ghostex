@@ -38,6 +38,8 @@ Each `ghostex web` run makes a random key and prints its link as `http://127.0.0
 
 `cargo xtask web-build --debug` (or `web-dev --debug`) builds the wasm without optimization: it works but is 100 MB and slow.
 
+`cargo xtask web-test` builds this crate for the computer you are on, not wasm32, and runs the tests of every file it compiles (it builds a native libghostty-vt with the desktop's script on its first run). That works because the shared desktop files choose their web branches with `cfg(ghostex_web)`, which `build.rs` sets for every target; a branch that has to stay desktop-only on macOS reads `all(target_os = "macos", not(ghostex_web))`.
+
 On Windows, run `cargo xtask web-build` from PowerShell with Zig 0.17, Rust 1.99.1's `wasm32-unknown-unknown` target and wasm-bindgen-cli 0.2.129 installed. The build restores this crate's tracked symlinks when Git checked them out as text; Windows Developer Mode or symlink privileges are required. It invokes Rust directly on Windows because the web-sys feature list exceeds the command-line limit through a rustc wrapper (measured with sccache). Serve the result against the running Windows gxserver with `ghostex web --dist-dir C:/dev/Ghostex/apps/gpui-web/www/dist --no-open` (adjust the checkout path).
 
 - `http://localhost:4174/?session=<projectId>:<sessionId>&surface=terminal` opens a session directly (ids as in its zmx name, `S90-<projectId>-<sessionId>`).

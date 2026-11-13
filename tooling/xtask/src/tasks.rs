@@ -197,6 +197,15 @@ pub fn web_build(args: &[String]) -> Res<i32> {
     ))
 }
 
+/// The GPUI web crate's tests, built for this computer rather than wasm32 (the shared desktop files pick their web branches by `cfg(ghostex_web)`, apps/gpui-web/build.rs); extra arguments go to `cargo test`.
+pub fn web_test(args: &[String]) -> Res<i32> {
+    let mut test = command("cargo");
+    test.current_dir(root().join("apps/gpui-web"))
+        .args(["test", "--lib"])
+        .args(args);
+    status_code(&mut test)
+}
+
 pub fn web_dev(args: &[String]) -> Res<i32> {
     let release = web_wasm_mode("web-dev", args)?;
     build_wasm(release)?;

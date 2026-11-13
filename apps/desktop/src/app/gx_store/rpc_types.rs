@@ -36,7 +36,7 @@ impl GxRpcError {
     }
 
     /// A call that got no answer from gxserver at all.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web transport cannot tell
+    #[cfg_attr(ghostex_web, allow(dead_code))] // the web transport cannot tell
     pub(crate) fn unanswered(path: &str, message: impl Into<String>) -> Self {
         Self {
             unanswered: true,
@@ -46,7 +46,7 @@ impl GxRpcError {
 
     /// Reads a `{ok, result, error, message}` envelope: the result when `ok` is true and the HTTP
     /// status (when there is one) is a success, the daemon's error otherwise.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))] // the web transport reads its own envelope
+    #[cfg_attr(ghostex_web, allow(dead_code))] // the web transport reads its own envelope
     pub(crate) fn from_envelope(
         path: &str,
         status: Option<u16>,
