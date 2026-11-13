@@ -206,8 +206,17 @@ fn attention_row_alerts(
     session_id: &str,
 ) -> bool {
     let now = crate::presentation::now_iso();
-    let attention = crate::presentation::attention_state(session, &now);
+    let mut attention = crate::presentation::attention_state(session, &now);
     let role = crate::presentation::recorded_alert_role(db, project_id, session_id);
+    // A coordinator's finished turn alerts only when its board gained something for the user
+    // (CDXC:Notifications 2026-11-13 in coordinators/work.rs `raised_for_user_since`).
+    if role == ghostex_gx_core::alert_rule::AlertRole::Coordinator {
+        crate::coordinators::set_coordinator_turn_needs_you(
+            &mut attention,
+            db,
+            &(project_id.to_string(), session_id.to_string()),
+        );
+    }
     let awaiting_approval = crate::session_approval::session_awaits_approval(session, &now);
     crate::presentation::attention_state_alerts(
         role,

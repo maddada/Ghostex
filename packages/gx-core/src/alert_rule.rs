@@ -29,6 +29,16 @@
 //! - Every other session keeps its finished-turn alert, under Alert me for (All, or Needs you only).
 //! Supersedes the parts of the 2026-11-07 Alert me for decision (attention.rs) that let a thread's
 //! or a coordinator's finished turn alert under All.
+//!
+//! CDXC:Notifications 2026-11-13 DECISION:
+//! User: "we're getting way too many notifications from the coordinator when it finishes. I don't
+//! think anyone cares about when the coordinator finishes. Please disable those. Just show for new
+//! needs-you, blocked or approval: those need user attention." A coordinator's handover ends with a
+//! Needs you section nearly every turn, so for a coordinator gxserver no longer reads it: its
+//! `handover_needs_you` means the turn put something new on its board for the user (an item ask,
+//! an item moved into Needs you or Blocked; server/src/coordinators/work.rs
+//! `raised_for_user_since`). A plain finished turn never alerts, whatever its handover says. Its
+//! open question forms, approvals and red dots alert as before (they are not `Finished`).
 //! SEE-ALSO: server/src/presentation/attention_alerts.rs (the stamps), server/src/notification_feed/producer.rs
 //! (rows and pushes), apps/desktop/src/app/gx_store/attention/host.rs (sound and banner),
 //! apps/mobile/app/src/notifications/attentionAlerts.ts (the phone).
@@ -52,7 +62,8 @@ pub enum AlertRole {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AlertTrigger {
     /// A turn ended with nothing waiting on the user. `handover_needs_you`: its handover has a
-    /// Blocked or Needs you section.
+    /// Blocked or Needs you section; for a coordinator, the turn raised a new ask, Needs you item
+    /// or Blocked item on its board (CDXC:Notifications 2026-11-13).
     Finished { handover_needs_you: bool },
     /// A question card, open question, bell, connector card or other wait: the pink dot.
     NeedsInput,

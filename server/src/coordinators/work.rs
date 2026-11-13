@@ -298,6 +298,46 @@ fn to_json<T: Serialize>(value: &T) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "[]".to_string())
 }
 
+/// Whether a coordinator's turn that started at `since` put something new on the user: an ask it
+/// opened (an item ask, Blocked while it `holds`), or an item it moved into Needs you or Blocked
+/// that is still there. A finished or dropped item never counts.
+///
+/// CDXC:Notifications 2026-11-13 DECISION:
+/// User: "we're getting way too many notifications from the coordinator when it finishes. I
+/// don't think anyone cares about when the coordinator finishes. Please disable those. Just show
+/// for new needs-you, blocked or approval: those need user attention." A coordinator's handover
+/// ends with a ❓ Needs you section nearly every turn, repeating what already waits, so its text no
+/// longer decides; its board does (`turn_raised_for_user` in presentation.rs).
+pub fn raised_for_user_since(items: &[WorkItem], since: DateTime<Utc>) -> bool {
+    let after =
+        |at: &str| DateTime::parse_from_rfc3339(at).is_ok_and(|at| at.with_timezone(&Utc) >= since);
+    items
+        .iter()
+        .filter(|item| item.finished_at.is_none() && item.dropped_at.is_none())
+        .any(|item| {
+            if item
+                .asks
+                .iter()
+                .any(|ask| ask.is_open() && !ask.withdrawn && after(&ask.asked_at))
+            {
+                return true;
+            }
+            if !matches!(item.status.as_str(), "needs" | "blocked") {
+                return false;
+            }
+            // When it last entered its current status (the event whose status changed to it).
+            let mut previous: Option<&str> = None;
+            let mut entered: Option<&str> = None;
+            for event in &item.history {
+                if event.status == item.status && previous != Some(item.status.as_str()) {
+                    entered = Some(event.at.as_str());
+                }
+                previous = Some(event.status.as_str());
+            }
+            after(entered.unwrap_or(item.created_at.as_str()))
+        })
+}
+
 pub(crate) fn write_work_item(
     db: &Connection,
     key: &SessionKey,
