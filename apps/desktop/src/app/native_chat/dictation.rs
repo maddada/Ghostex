@@ -261,6 +261,9 @@ pub(crate) struct DictationControl {
     /// The question form box (its `form_inputs` key) the running dictation types into; `None` is
     /// the chat box (`aim_dictation`).
     target: Option<String>,
+    /// The target's text and selection when the run was aimed (`aim_dictation`): its words go
+    /// there while the text is the same when they arrive.
+    anchor: Option<(String, Option<std::ops::Range<usize>>)>,
 }
 
 pub(crate) type Dictation = Option<DictationControl>;
@@ -296,6 +299,7 @@ impl NativeChatView {
             pill: Default::default(),
             placed: Rc::new(Cell::new((px(0.0), px(0.0)))),
             target: None,
+            anchor: None,
         });
         dictate
     }
@@ -308,13 +312,36 @@ impl NativeChatView {
     ///
     /// CDXC:Dictate 2026-11-10 WHY: Dictate typed into the chat box even when the caret was in a question form's note, text answer or "Anything else?" box, so the words had to be cut from the draft and pasted into the box. The box that has the keyboard when the recording starts gets them, at its caret with the chat box's spacing; if its form was sent or answered meanwhile they go to the chat box, so a dictation is never lost. This widens "typed into the draft" of the SessionChat 2026-10-08 DECISION and follows the VoiceMode 2026-10-20 one on the caret showing where the words will land (both in this file's head).
     /// CDXC:Dictate 2026-11-10 SEE-ALSO: the chat core writes the words and decides whether the box still takes them (`insert` in packages/gx-chat-core/src/questions/dictation.rs); the phone's rule is `apps/mobile/app/src/chat/native/composer/dictationTarget.ts`; the box shows it is the target in `question_form.rs` `note_box`.
+    ///
+    /// CDXC:Dictate 2026-11-13 DECISION: User: "when we dictate with the caret in the middle or some text selected, we should enter the text to replace what's selected or insert it at the caret." The target's selection (or caret) is kept here with its text when the recording starts, and the words go over it while the text is the same when they arrive: moving the caret while it records or transcribes does not move them, typing in the box does (they then go where the caret is, as the text they were aimed into is gone). Same rule on the phone (`dictationAnchor` in apps/mobile/app/src/chat/rust/host.ts, `placeIn` in dictationTarget.ts).
     fn aim_dictation(&mut self, dictate: &Entity<Dictate>, target: Option<String>, cx: &App) {
         let dictate = dictate.read(cx);
         if dictate.recording() || dictate.transcribing() {
             return;
         }
+        let anchor = match target.as_deref() {
+            Some(key) => self.form_inputs.get(key).map(|entry| {
+                let input = entry.input.read(cx);
+                (input.value().to_string(), Some(input.selected_range()))
+            }),
+            None => Some((self.draft.clone(), self.composer_selection(cx))),
+        };
         if let Some(control) = self.dictation.as_mut() {
             control.target = target;
+            control.anchor = anchor;
+        }
+    }
+
+    /// Where the words go in `text` (UTF-16 offsets): the aimed selection while `text` is what it
+    /// was when the run was aimed, else `now`.
+    fn dictation_place(
+        anchor: &Option<(String, Option<std::ops::Range<usize>>)>,
+        text: &str,
+        now: Option<std::ops::Range<usize>>,
+    ) -> (usize, usize) {
+        match anchor {
+            Some((aimed, range)) if aimed == text => utf16_selection(text, range.clone()),
+            _ => utf16_selection(text, now),
         }
     }
 
@@ -887,15 +914,22 @@ impl NativeChatView {
     /// says which box and where each caret is; the core answers with `dictation_inserted`.
     fn insert_dictation(&mut self, text: &str, cx: &mut Context<Self>) {
         let text = text.trim();
-        let target = self
+        let (target, anchor) = self
             .dictation
             .as_mut()
-            .and_then(|control| control.target.take());
+            .map(|control| (control.target.take(), control.anchor.take()))
+            .unwrap_or_default();
         cx.notify();
         if text.is_empty() {
             return;
         }
-        let (start, end) = utf16_selection(&self.draft, self.composer_selection(cx));
+        let chat_anchor = if target.is_none() {
+            anchor.clone()
+        } else {
+            None
+        };
+        let (start, end) =
+            Self::dictation_place(&chat_anchor, &self.draft, self.composer_selection(cx));
         let mut action = json!({
             "type": "insertDictation",
             "text": text,
@@ -915,7 +949,8 @@ impl NativeChatView {
             if let Some(entry) = self.form_inputs.get(key) {
                 let input = entry.input.read(cx);
                 let shown = input.value().to_string();
-                let (start, end) = utf16_selection(&shown, Some(input.selected_range()));
+                let (start, end) =
+                    Self::dictation_place(&anchor, &shown, Some(input.selected_range()));
                 action["shown"] = json!(shown);
                 action["shownStart"] = json!(start);
                 action["shownEnd"] = json!(end);
