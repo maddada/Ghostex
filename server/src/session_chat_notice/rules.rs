@@ -178,6 +178,15 @@ const CODEX_RULES: &[NoticeRule] = &[
                 parts: &[NoticePart::Text("Unable to restore Codex session")],
                 corroborators: &[],
             },
+            // CDXC:AgentScreenDetection 2026-11-13 WHY: GitHub #595: a Codex that quits before
+            // its thread was saved (before or right after its first message) prints only
+            // "Session ID: <id>" (codex-rs tui exit_summary.rs, no resume hint), and on Windows
+            // the chat kept waiting for an input box that was never coming back.
+            NoticeSignature {
+                scope: NoticeScope::Exit,
+                parts: &[NoticePart::Text("Session ID: ")],
+                corroborators: &[],
+            },
             // Codex 0.15x prints "To continue this session, run:" and the command on its own line.
             NoticeSignature {
                 scope: NoticeScope::Exit,

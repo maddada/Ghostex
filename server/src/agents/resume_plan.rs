@@ -215,7 +215,16 @@ pub(crate) fn agent_conversation_written(
             Some(claude_transcript_written(&input, &id))
         }
         "codex" => {
-            let id = get_codex_session_reference(&input)?;
+            // CDXC:SessionIdentity 2026-11-13 WHY: GitHub #595: a Codex that quit before
+            // Ghostex learned its thread id has no id and, never prompted, no trusted title to
+            // look one up by, so a wake starts it fresh (session_glue.rs falls back to its launch
+            // command) and there is nothing to lose. Answering `None` here made the send heal
+            // refuse with "the agent has no conversation to resume" and the chat stayed stuck.
+            let Some(id) = get_codex_session_reference(&input) else {
+                return agent_resume_title("codex", &input)
+                    .is_none()
+                    .then_some(false);
+            };
             Some(codex_rollout_written(&input, &id))
         }
         _ => None,

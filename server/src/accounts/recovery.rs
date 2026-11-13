@@ -710,6 +710,23 @@ pub(crate) fn plan_session(
         }
         return Ok(None);
     }
+    // CDXC:AgentProviders 2026-11-13 WHY: GitHub #595: a Codex that quit before its first message
+    // has no conversation, so recovery could only withhold its Continue (recovery_conversation.rs,
+    // GitHub #366), yet its "waiting" record held the queue: on a throwaway Windows server the
+    // message the user sent after the quit sat queued behind it although the send had already
+    // restarted Codex. No recovery starts for such an exit; the card's Restart and the send heal
+    // (send_heal.rs) bring the agent back.
+    if notice.kind == "agentExited"
+        && recovery.is_null()
+        && super::recovery_conversation::withhold_continue(
+            &mut Value::Null,
+            &project,
+            &session,
+            &crate::agents::read_agent_settings(db)?,
+        )
+    {
+        return Ok(None);
+    }
     let connection_error =
         notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_STREAM_ERROR;
     // The last continuation was answered: what still looks like a failure is the old one.
