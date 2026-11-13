@@ -160,28 +160,26 @@ pub(crate) fn observe_main_window_press<T: 'static>(
     }
 }
 
-/// How long an app modal's focus loss waits before reading who took focus: the lost and the
-/// gained activation arrive as separate platform events.
-#[cfg(any(target_os = "windows", target_os = "macos"))]
-const MODAL_FOCUS_SETTLE: std::time::Duration = std::time::Duration::from_millis(120);
+/// How long a popup's focus loss waits before reading who took focus: the lost and the gained
+/// activation arrive as separate platform events.
+pub(crate) const APP_SWITCH_SETTLE: std::time::Duration = std::time::Duration::from_millis(120);
 
-/// The latest time a workspace window became the active window, and which one (macOS, Windows).
+/// Set each time a workspace window becomes the active window (macOS, Windows).
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 #[derive(Clone, Copy)]
-struct WorkspaceWindowActivation {
-    window: gpui::WindowId,
-}
+struct WorkspaceWindowActivation;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 impl gpui::Global for WorkspaceWindowActivation {}
 
-/// Records that workspace window `window` became active, which closes a Settings window left open
-/// while the user was in another app (`close_app_modal_on_click_in_ghostex`).
+/// Records that workspace window `window` became active, which hands the keyboard back to a popup
+/// left open while the user was in another app (`keep_open_across_app_switch`).
 pub(crate) fn note_workspace_window_activation(window: gpui::WindowId, cx: &mut gpui::App) {
+    let _ = window;
     #[cfg(any(target_os = "windows", target_os = "macos"))]
-    cx.set_global(WorkspaceWindowActivation { window });
+    cx.set_global(WorkspaceWindowActivation);
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let _ = (window, cx);
+    let _ = cx;
 }
 
 /// Makes an app modal close on a click away, the way its Escape or corner X closes it
@@ -189,7 +187,7 @@ pub(crate) fn note_workspace_window_activation(window: gpui::WindowId, cx: &mut 
 /// unsaved input. Call once from the modal's constructor and keep the subscriptions.
 ///
 /// CDXC:AppModal 2026-10-09 DECISION:
-/// User (2026-10-08): "also close settings and find by prompt when i click on the main app window or click away outside them pls", then, picking from a list, the viewers (Browser History, the Markdown table viewer, the Mermaid diagram viewer, the Git file diff, the Export transcript result) and the Agents Hub; and (2026-10-09) "please when i click on the main app while the rename modal is shown then close the rename modal". These modals call this: Search by Prompt, the viewers above, Export Transcript once its export finished or failed, the Agents Hub, and Rename Session and Rename Worktree; every Settings page kind calls `close_app_modal_on_click_in_ghostex` instead (CDXC:AppModal 2026-10-16 there). They stay open while they hold unsaved input (`keeps_open_on_click_away`), except the two rename dialogs, which the user asked to close anyway: a click away cancels the rename, as Escape does. The notice modals (Update available, Missing project folder, Agent hooks required) and Add Project keep the 2026-09-30 "let's not make the modals close when i click away anymore" rule (window/modal_window_frame.rs). Quick Access has its own click-away close (window/quick_access/window.rs).
+/// User (2026-10-08): "also close settings and find by prompt when i click on the main app window or click away outside them pls", then, picking from a list, the viewers (Browser History, the Markdown table viewer, the Mermaid diagram viewer, the Git file diff, the Export transcript result) and the Agents Hub; and (2026-10-09) "please when i click on the main app while the rename modal is shown then close the rename modal". These modals call this: Search by Prompt, the viewers above, Export Transcript once its export finished or failed, the Agents Hub, and Rename Session and Rename Worktree; every Settings page kind and the floating page window call `close_app_modal_on_click_in_ghostex` instead (CDXC:AppModal 2026-10-16 and 2026-11-13 there). They stay open while they hold unsaved input (`keeps_open_on_click_away`), except the two rename dialogs, which the user asked to close anyway: a click away cancels the rename, as Escape does. The notice modals (Update available, Missing project folder, Agent hooks required) and Add Project keep the 2026-09-30 "let's not make the modals close when i click away anymore" rule (window/modal_window_frame.rs). Quick Access has its own click-away close (window/quick_access/window.rs).
 ///
 /// CDXC:AppModal 2026-10-08 WHY:
 /// A dialog the modal opens itself (a file or folder picker, the system colour dialog, a confirm box, a UAC prompt) also takes focus from it, and must not count as a click away. So on macOS and Windows a focus loss closes the modal only when another Ghostex window took focus (the main window was clicked) or another app did; a window of this process that is not a GPUI window (the OS dialogs above) or no foreground window at all (the UAC secure desktop) keeps it open. Linux keeps the focus-follows-mouse rule above and closes only on a press in the main window, since its file pickers are portal dialogs in another process, indistinguishable from another app.
@@ -200,14 +198,14 @@ pub(crate) fn close_app_modal_on_click_away<V: super::native_modal_kit::ModalCor
     close_app_modal_when_clicked_away(window, cx, true)
 }
 
-/// `close_app_modal_on_click_away` for Settings: switching to another app keeps it open, and only
-/// a click in another Ghostex window closes it.
+/// `close_app_modal_on_click_away` for Settings and the floating page window: switching to
+/// another app and back keeps it open, and only a click in another Ghostex window closes it.
 ///
 /// CDXC:AppModal 2026-10-16 DECISION:
-/// User, asked what should close Settings on a click away, picked "Only a click in Ghostex closes it": the Settings window (all its page kinds: Settings, Hotkeys, Configure Agents, Configure Actions, Open Targets) no longer closes when focus goes to another app on macOS and Windows, only when another Ghostex window takes focus, as on Linux. Coming back by clicking the main window still closes it: the modal remembers that focus left the app, and the main window becoming active afterwards is that click. The other click-away modals keep the 2026-10-09 rule above.
+/// User, asked what should close Settings on a click away, picked "Only a click in Ghostex closes it": the Settings window (all its page kinds: Settings, Hotkeys, Configure Agents, Configure Actions, Open Targets) no longer closes when focus goes to another app on macOS and Windows, only when another Ghostex window takes focus, as on Linux. The other click-away modals keep the 2026-10-09 rule above.
 ///
-/// CDXC:AppModal 2026-10-17 DECISION:
-/// User: "we need to keep settings open when this page is open when i alt tab away and back" (Settings › Connectors, whose sign-ins send them to the browser). While a modal says `keeps_open_after_leaving_app` (Settings on the Connectors page), the main window becoming active after focus left the app does not close it, since an app switch back looks the same; a press in the main window still does.
+/// CDXC:AppModal 2026-11-13 DECISION:
+/// User: "please let's not close the settings or the inline html or the ghostex form pop up when i open another app's window like we do now. it should stay on screen so i can paste from my clipboard app's window." Coming back to Ghostex no longer closes Settings (before, the main window becoming active after an app switch did, unless Settings was on Connectors, CDXC:AppModal 2026-10-17), and the floating page window (a page or a Ghostex form) now follows this rule too instead of hiding when another app took focus. Coming back without a click (an app switcher, a clipboard app pasting) hands the keyboard back to the popup so the paste lands in the field that had focus; coming back by a click in another Ghostex window is a click away and closes it as before (`keep_open_across_app_switch`).
 pub(crate) fn close_app_modal_on_click_in_ghostex<V: super::native_modal_kit::ModalCornerClose>(
     window: &mut Window,
     cx: &mut Context<V>,
@@ -230,28 +228,22 @@ fn close_app_modal_when_clicked_away<V: super::native_modal_kit::ModalCornerClos
     {
         let modal = window.window_handle();
         let was_active = std::rc::Rc::new(std::cell::Cell::new(window.is_window_active()));
-        // Focus went to another app while this modal was the active window.
-        let left_app = std::rc::Rc::new(std::cell::Cell::new(false));
-        let observed_left_app = left_app.clone();
         subscriptions.push(cx.observe_window_activation(window, move |_, window, cx| {
             if window.is_window_active() {
                 was_active.set(true);
-                observed_left_app.set(false);
                 return;
             }
             // The inactive report a window gets before it is first shown is not a click away.
             if !was_active.get() {
                 return;
             }
-            let left_app = observed_left_app.clone();
             cx.spawn_in(window, async move |this, cx| {
-                cx.background_executor().timer(MODAL_FOCUS_SETTLE).await;
+                cx.background_executor().timer(APP_SWITCH_SETTLE).await;
                 let _ = this.update_in(cx, |this, window, cx| {
                     if window.is_window_active() {
                         return;
                     }
                     let left = focus_left_app();
-                    left_app.set(left);
                     let clicked_away = match cx.active_window() {
                         Some(active) => {
                             active != modal
@@ -268,24 +260,129 @@ fn close_app_modal_when_clicked_away<V: super::native_modal_kit::ModalCornerClos
             .detach();
         }));
         if !other_apps_close {
-            let own_window = modal.window_id();
-            subscriptions.push(cx.observe_global_in::<WorkspaceWindowActivation>(
-                window,
-                move |this, window, cx| {
-                    let activated = cx.global::<WorkspaceWindowActivation>().window;
-                    if left_app.get() && activated != own_window && !window.is_window_active() {
-                        left_app.set(false);
-                        if !this.keeps_open_after_leaving_app(window, cx) {
-                            close_unless_kept(this, window, cx);
-                        }
-                    }
-                },
-            ));
+            subscriptions.extend(keep_open_across_app_switch(window, cx, close_unless_kept));
         }
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let _ = other_apps_close;
     subscriptions
+}
+
+/// For a popup that stays open while the user is in another app (CDXC:AppModal 2026-11-13 on
+/// `close_app_modal_on_click_in_ghostex`): when Ghostex comes back with a workspace window active
+/// instead of the popup, runs `dismiss` if a click in Ghostex brought it back, and otherwise makes
+/// the popup the key window again, so the keyboard (and a clipboard app's paste) reaches the field
+/// that had focus. macOS and Windows; Linux popups never see the app switch as a click away.
+pub(crate) fn keep_open_across_app_switch<T: 'static>(
+    window: &mut Window,
+    cx: &mut Context<T>,
+    dismiss: impl Fn(&mut T, &mut Window, &mut Context<T>) + 'static,
+) -> Vec<Subscription> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        use std::{cell::Cell, rc::Rc, time::Instant};
+        let own_window = window.window_handle().window_id();
+        let was_active = Rc::new(Cell::new(window.is_window_active()));
+        // When focus left the app while this popup was the active window.
+        let left_at: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
+        let dismiss = Rc::new(dismiss);
+        let activation = {
+            let left_at = left_at.clone();
+            cx.observe_window_activation(window, move |_, window, cx| {
+                if window.is_window_active() {
+                    was_active.set(true);
+                    left_at.set(None);
+                    return;
+                }
+                if !was_active.get() {
+                    return;
+                }
+                let at = Instant::now();
+                let left_at = left_at.clone();
+                cx.spawn_in(window, async move |_, cx| {
+                    cx.background_executor().timer(APP_SWITCH_SETTLE).await;
+                    let _ = cx.update(|window, _| {
+                        if !window.is_window_active() && focus_left_app() {
+                            left_at.set(Some(at));
+                        }
+                    });
+                })
+                .detach();
+            })
+        };
+        let comeback =
+            cx.observe_global_in::<WorkspaceWindowActivation>(window, move |_, window, cx| {
+                if left_at.get().is_none() || window.is_window_active() {
+                    return;
+                }
+                let left_at = left_at.clone();
+                let dismiss = dismiss.clone();
+                cx.spawn_in(window, async move |this, cx| {
+                    cx.background_executor().timer(APP_SWITCH_SETTLE).await;
+                    let _ = this.update_in(cx, |this, window, cx| {
+                        let Some(at) = left_at.get() else {
+                            return;
+                        };
+                        if window.is_window_active() || focus_left_app() {
+                            return;
+                        }
+                        left_at.set(None);
+                        if came_back_by_click(at, own_window, cx) {
+                            dismiss(this, window, cx);
+                        } else {
+                            window.activate_window();
+                        }
+                    });
+                })
+                .detach();
+            });
+        vec![activation, comeback]
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = (window, cx, dismiss);
+        Vec::new()
+    }
+}
+
+/// Whether Ghostex came back by a press in a window other than `own_window` after `left_at`: a
+/// GPUI press in a workspace window, or (macOS) any press in the app just now, which also sees a
+/// press in an embedded web page.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn came_back_by_click(
+    left_at: std::time::Instant,
+    own_window: gpui::WindowId,
+    cx: &gpui::App,
+) -> bool {
+    if latest_main_window_press(cx)
+        .is_some_and(|press| press.at > left_at && press.window != own_window)
+    {
+        return true;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        unsafe extern "C" {
+            fn GhostexGpuiPointerPressedRecently() -> bool;
+        }
+        unsafe { GhostexGpuiPointerPressedRecently() }
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+}
+
+/// Whether focus is now in another app, after `APP_SWITCH_SETTLE`: on Linux, where a popup's
+/// focus loss reaches its dismissal only once no Ghostex window holds focus
+/// (`dismiss_on_focus_loss`), that is no Ghostex window being active.
+pub(crate) fn focus_went_to_another_app(cx: &gpui::App) -> bool {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        let _ = cx;
+        focus_left_app()
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        cx.active_window().is_none()
+    }
 }
 
 fn close_unless_kept<V: super::native_modal_kit::ModalCornerClose>(

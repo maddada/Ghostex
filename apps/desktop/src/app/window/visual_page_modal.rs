@@ -187,7 +187,10 @@ impl GpuiVisualPageModalWindow {
         });
         let frame_watch =
             cx.observe_window_bounds(window, |this, window, cx| this.keep_frame(window, cx));
-        let mut click_away = super::popup_dismissal::close_app_modal_on_click_away(window, cx);
+        // Another app taking focus leaves the page up (CDXC:AppModal 2026-11-13 on
+        // `close_app_modal_on_click_in_ghostex`); a click in Ghostex still hides it.
+        let mut click_away =
+            super::popup_dismissal::close_app_modal_on_click_in_ghostex(window, cx);
         click_away.push(observe_presses_elsewhere(window, cx));
         // CDXC:SessionChat 2026-11-05 WHY: an app quit (`cargo xtask rebuild` relaunches the app)
         // shuts Chromium down with the page still open, so the page never sees `pagehide` and
@@ -905,7 +908,7 @@ fn observe_presses_elsewhere(
 
 impl ModalCornerClose for GpuiVisualPageModalWindow {
     /// The window draws its own close button and Escape closes it directly, so the shared
-    /// click-away rule (`close_app_modal_on_click_away`) is the only caller: a click away, which
+    /// click-away rule (`close_app_modal_on_click_in_ghostex`) is the only caller: a click away, which
     /// only arms the window the first time.
     fn close_from_corner(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let pressed_just_now = super::popup_dismissal::latest_main_window_press(cx)

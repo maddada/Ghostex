@@ -504,10 +504,4 @@ impl ModalCornerClose for GpuiSettingsModalWindow {
             .values()
             .any(|view| super::tabs::settings_tab_holds_unsaved_input(view, cx))
     }
-
-    /// The Connectors page sends the user to the browser to sign in, so coming back to Ghostex
-    /// keeps it open (CDXC:AppModal 2026-10-17 in window/popup_dismissal.rs).
-    fn keeps_open_after_leaving_app(&self, _window: &Window, cx: &App) -> bool {
-        self.store.read(cx).active_tab() == super::model::SettingsTabId::Connectors
-    }
 }

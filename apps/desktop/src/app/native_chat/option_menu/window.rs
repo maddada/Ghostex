@@ -126,6 +126,8 @@ pub(super) struct ChatOptionMenuPanel {
     was_active: bool,
     _activation: Subscription,
     _press: Subscription,
+    /// Keeps the Chat Resources modal open across an app switch (`keeps_open_in_other_apps`).
+    _app_switch: Vec<Subscription>,
     _chat_subscription: Option<Subscription>,
 }
 
@@ -343,10 +345,46 @@ impl ChatOptionMenu {
         if self.opening || self.closed || self.any_window_active(cx) {
             return;
         }
+        if self.keeps_open_in_other_apps() {
+            // Who took focus is only known once the platform's activation events settled.
+            cx.spawn(async move |menu, cx| {
+                cx.background_executor()
+                    .timer(crate::app::window::popup_dismissal::APP_SWITCH_SETTLE)
+                    .await;
+                let _ = menu.update(cx, |menu, cx| menu.check_active_settled(cx));
+            })
+            .detach();
+            return;
+        }
+        self.check_active_settled(cx);
+    }
+
+    fn check_active_settled(&mut self, cx: &mut Context<Self>) {
+        if self.opening || self.closed || self.any_window_active(cx) {
+            return;
+        }
+        if self.keeps_open_in_other_apps()
+            && crate::app::window::popup_dismissal::focus_went_to_another_app(cx)
+        {
+            return;
+        }
         if self.retake_key(cx) {
             return;
         }
         self.dismiss(cx);
+    }
+
+    /// The Chat Resources modal (a question form floating over the chat) stays open while the
+    /// user is in another app, and takes the keyboard back when they return without a click in
+    /// Ghostex; a click in Ghostex still closes it.
+    ///
+    /// CDXC:AppModal 2026-11-13 DECISION: User: "please let's not close the settings or the inline
+    /// html or the ghostex form pop up when i open another app's window like we do now. it should
+    /// stay on screen so i can paste from my clipboard app's window." (window/popup_dismissal.rs
+    /// `close_app_modal_on_click_in_ghostex`). The other chat menus keep closing when the app
+    /// loses focus, as native menus do.
+    fn keeps_open_in_other_apps(&self) -> bool {
+        self.pill == Some(super::super::resource_modal::RESOURCE_MODAL_TRIGGER)
     }
 
     /// Closes the menu the user clicked away from, leaving focus where the click put it.
@@ -666,6 +704,20 @@ impl ChatOptionMenu {
                                     }
                                 },
                             );
+                            let app_switch = if menu.read(cx).keeps_open_in_other_apps() {
+                                crate::app::window::popup_dismissal::keep_open_across_app_switch(
+                                    window,
+                                    cx,
+                                    |panel: &mut ChatOptionMenuPanel, _, cx| {
+                                        let menu = panel.menu.clone();
+                                        cx.defer(move |cx| {
+                                            menu.update(cx, |menu, cx| menu.dismiss(cx))
+                                        });
+                                    },
+                                )
+                            } else {
+                                Vec::new()
+                            };
                             let press =
                                 crate::app::window::popup_dismissal::observe_main_window_press(
                                     window,
@@ -809,6 +861,7 @@ impl ChatOptionMenu {
                                 was_active: window.is_window_active(),
                                 _activation: activation,
                                 _press: press,
+                                _app_switch: app_switch,
                                 _chat_subscription: chat_subscription,
                             }
                         });

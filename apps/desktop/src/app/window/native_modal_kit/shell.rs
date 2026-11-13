@@ -460,11 +460,4 @@ pub(crate) trait ModalCornerClose: Render {
     fn keeps_open_on_click_away(&self, _window: &Window, _cx: &App) -> bool {
         false
     }
-
-    /// True while coming back from another app must leave the modal open even though the main
-    /// window becomes active (Settings on a page that sends the user to the browser). Read only by
-    /// `popup_dismissal::close_app_modal_on_click_in_ghostex`.
-    fn keeps_open_after_leaving_app(&self, _window: &Window, _cx: &App) -> bool {
-        false
-    }
 }
