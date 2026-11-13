@@ -5083,8 +5083,9 @@ sessions, so any client can control agents on any machine.
   sheet (AirDrop, Files, Mail) with the same personal details replaced as Send
   to developer. When a computer is busy (it refused the phone another channel)
   its line says "Ghostex is busy on <computer>" and Ghostex tries again by
-  itself; its Reset connection button starts the connection over, which
-  restarts any open terminal that isn't an agent. Send to developer,
+  itself; its Reset connection button starts the connection over, which ends
+  programs running in open terminals that aren't agents (open those again).
+  Send to developer,
   beside Copy, first opens a review step that says what the report holds (the
   phone's connection and status events, the app version and phone system,
   routes and timings), what is replaced (IP addresses, user names, computer and
