@@ -70,6 +70,16 @@ pub(crate) async fn run_beads_action_in_workspace(
         return run_beads_action_direct(action, params, context).await;
     };
     let entry = cache::entry(&info.path);
+    // CDXC:ProjectBoard 2026-11-13 WHY: a client that read one workspace can send a write after the project's Beads folder setting moved it to another; an id that exists in both would change the wrong bead. The Beads view sends the workspace key it last read, and a write for another workspace is refused. Older clients send none and keep today's behaviour.
+    if let Some(expected) = params
+        .get("expectedWorkspaceKey")
+        .and_then(Value::as_str)
+        .filter(|key| !key.is_empty())
+    {
+        if expected != entry.key {
+            return Ok(workspace_changed_reply(action));
+        }
+    }
     if matches!(action, "doltPull" | "doltPush") {
         return super::sync::start_sync(entry, info, action, context.clone());
     }
@@ -85,6 +95,19 @@ pub(crate) async fn run_beads_action_in_workspace(
         entry.forget_reads();
     }
     result
+}
+
+fn workspace_changed_reply(action: &str) -> Value {
+    json!({
+        "action": action,
+        "error": {
+            "code": "workspaceChanged",
+            "message": "The project's Beads workspace changed since the view last read it.",
+        },
+        "exitCode": 1,
+        "stderr": "",
+        "stdout": "",
+    })
 }
 
 fn busy_reply(action: &str) -> Value {
