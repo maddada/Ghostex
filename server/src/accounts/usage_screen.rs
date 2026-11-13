@@ -23,7 +23,7 @@ use std::{
     io::{Read, Write},
     path::Path,
     process::Stdio,
-    sync::Mutex,
+    sync::{mpsc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -62,25 +62,27 @@ struct ScreenWindow {
 }
 
 /// Reads the account's usage off its `/usage` screen and gives it to Claude Swap, after a reset
-/// was claimed for it, without holding up the claim's answer. A failed read is logged and the
-/// usual usage refresh stays in charge.
+/// was claimed for it, on a thread of its own. The receiver hears once the read is over: `true` when
+/// it worked and gxserver's account reading has it, so a caller may wait for it for a while. A
+/// failed read is logged and the usual usage refresh stays in charge.
 pub(crate) fn refresh_in_background(
     state: &AppState,
     account: &SavedAccount,
     reason: &'static str,
-) {
+) -> mpsc::Receiver<bool> {
+    let (done, finished) = mpsc::channel();
     if account.provider != Provider::Claude {
-        return;
+        let _ = done.send(false);
+        return finished;
     }
     let (state, account) = (state.clone(), account.clone());
     std::thread::spawn(move || {
         let started = Instant::now();
         let result = refresh(&state, &account);
         log(&state, &account, reason, started, &result);
-        if result.is_ok() {
-            state.accounts.refresh_since(&state.paths.home_dir, started);
-        }
+        let _ = done.send(result.is_ok());
     });
+    finished
 }
 
 /// `readUsageNow`: the usage panel's Refresh now. A Claude account is read off its `/usage`
@@ -111,7 +113,9 @@ pub(crate) fn read_now(
     }
     let result = refresh(state, &account);
     log(state, &account, "refreshNow", started, &result);
-    state.accounts.refresh_since(home, started);
+    if result.is_err() {
+        state.accounts.refresh_since(home, started);
+    }
     Ok(match result {
         Ok(_) => json!({"ok": true, "source": "screen"}),
         Err(reason) => json!({"ok": false, "source": "usage", "message": reason}),
@@ -152,8 +156,8 @@ fn log(
     });
 }
 
-/// Reads the screen and hands the reading over; `Ok` carries Claude Swap's answer ("adopted", or
-/// "kept" when it already held a newer reading).
+/// Reads the screen, hands the reading over and reads every account again; `Ok` carries Claude
+/// Swap's answer ("adopted", or "kept" when it already held a newer reading).
 fn refresh(state: &AppState, account: &SavedAccount) -> Result<String, String> {
     let _in_flight = {
         let mut set = IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner());
@@ -183,7 +187,12 @@ fn refresh(state: &AppState, account: &SavedAccount) -> Result<String, String> {
         &row["lastGoodUsage"]
     };
     let usage = usage_json(&windows, previous, Timestamp::now());
-    import(home, &row, usage, read_at.elapsed().as_secs_f64())
+    let outcome = import(home, &row, usage, read_at.elapsed().as_secs_f64())?;
+    // From the moment Claude Swap holds the reading: a discovery that began while the screen was
+    // being read (a client's poll) predates it, and standing in for a new one it kept the old
+    // limits on account 5's popover after its reset on 2026-11-13.
+    state.accounts.refresh_since(home, Instant::now());
+    Ok(outcome)
 }
 
 /// The account's `cswap list --json` row, refused when the slot holds another login now.

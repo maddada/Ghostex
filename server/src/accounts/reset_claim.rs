@@ -5,7 +5,11 @@ use super::{
 };
 use crate::{domain::DomainStateError, server::AppState};
 use serde_json::{json, Map, Value};
-use std::{collections::HashSet, sync::Mutex, time::Instant};
+use std::{
+    collections::HashSet,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 /// A claim result as the usage panel renders it: `success` spent the reset, `nothingToReset` and `noCredit` spent nothing, and `failed` may need a check before retrying.
 pub(crate) struct Outcome {
@@ -47,6 +51,10 @@ impl Outcome {
 }
 
 static IN_FLIGHT: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
+/// How long a claim's answer waits for the account's usage screen to be read (a read takes about
+/// 10 seconds; the desktop gives the whole claim 90).
+const SCREEN_READ_WAIT: Duration = Duration::from_secs(40);
 
 struct InFlight(String);
 impl Drop for InFlight {
@@ -145,10 +153,15 @@ pub(crate) fn claim_for_account(
             claude_resets::claim(home, &slot, credit_id, request_id)
         }
     };
-    state.accounts.refresh_since(home, started);
-    // Claude Swap's own reading may still be from before the claim (usage_screen.rs).
-    if outcome.kind() == "success" {
-        super::usage_screen::refresh_in_background(state, account, "resetClaimed");
+    // CDXC:AgentProviders 2026-11-13 WHY:
+    // Claude Swap's own reading may still be from before the claim, so a Claude reset is followed by a read of the account's own usage screen (usage_screen.rs). The answer waits for it, up to `SCREEN_READ_WAIT`, so "Reset used" arrives over the new limits: answering first left account 5's popover on 7d 95% and Fable 100% after its reset until the next account poll. A read that takes longer finishes on its own, and the usual refresh answers meanwhile.
+    let screen_read = (outcome.kind() == "success" && account.provider == Provider::Claude)
+        .then(|| super::usage_screen::refresh_in_background(state, account, "resetClaimed"));
+    match screen_read {
+        Some(finished) if finished.recv_timeout(SCREEN_READ_WAIT) == Ok(true) => {}
+        _ => {
+            state.accounts.refresh_since(home, started);
+        }
     }
     Ok(outcome)
 }
