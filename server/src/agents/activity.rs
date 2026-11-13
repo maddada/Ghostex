@@ -154,6 +154,16 @@ pub(crate) fn ingest_agent_hook_event(
             "session": current,
         }));
     }
+    // A Codex approval its own reviewer decides is no user approval: no card, no attention
+    // (GitHub #597, session_chat_approval_call.rs `codex_reviewer_decides`).
+    if crate::session_chat_approval_call::codex_reviewer_decides(params, &current) {
+        return Ok(json!({
+            "changed": false,
+            "enteredAttention": false,
+            "reason": "codex-auto-review",
+            "session": current,
+        }));
+    }
     let hook_activity = normalize_agent_hook_event_activity(params);
     // The agent's own hook, or the hook-free observer posting the same event for it.
     let _identity_source = crate::session_identity_log::identity_write_source(format!(
