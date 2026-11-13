@@ -793,7 +793,9 @@ pub(super) fn grok_mode_choice(segments: &[String]) -> SessionChatDetectedChoice
 // becomes state.
 // ---------------------------------------------------------------------------
 
-const ANTIGRAVITY_EFFORTS: &[&str] = &["low", "medium", "high"];
+/// CDXC:AgentScreenDetection 2026-11-13 WHY:
+/// Antigravity 1.5.6's Gemini 4 Hydrogen adds an Extra High stop (`gemini-4-hydrogen-xhigh`, footer `· xhigh`).
+const ANTIGRAVITY_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
 
 /// The footer names a non-default mode in front of the model (`plan · Gemini 3.8 Flash · high`).
 /// The values match the mode pill's choices in `packages/gx-chat-core/src/menus/option_catalog.rs`.

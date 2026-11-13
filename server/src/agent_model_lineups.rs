@@ -30,17 +30,8 @@ const EFFORT_RANK: [&str; 8] = [
     "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
 ];
 
-/// CDXC:AgentProviders 2026-10-17 DECISION:
-/// User: GPT-5.6 Terra stays out of Codex's list ("Nobody is going to use that one"), and Cursor's Opus 5 and Sonnet 5 stay out now that Opus 5.5 and Sonnet 5.5 replace them, even though the CLIs still list all three.
-const EXCLUDED: [(&str, &str); 3] = [
-    ("codex", "gpt-5.6-terra"),
-    ("cursor", "claude-opus-5"),
-    ("cursor", "claude-sonnet-5"),
-];
-
-fn excluded(agent: &str, value: &str) -> bool {
-    EXCLUDED.contains(&(agent, value))
-}
+/// CDXC:AgentProviders 2026-11-13 DECISION:
+/// User (Q2984): GPT-5.6 Terra (Codex) and Opus 5 and Sonnet 5 (Cursor), kept out since 2026-10-17, are listed again, under Legacy models, so the menu matches the CLI's own /model row for row. Nothing is excluded any more.
 
 fn rank(effort: &str) -> usize {
     EFFORT_RANK
@@ -302,9 +293,6 @@ fn codex_lineup(output: &str) -> Option<Value> {
         .into_iter()
         .filter_map(|model| {
             let value = model.get("slug")?.as_str()?;
-            if excluded("codex", value) {
-                return None;
-            }
             let efforts: Vec<String> = model
                 .get("supported_reasoning_levels")
                 .and_then(Value::as_array)
@@ -549,7 +537,6 @@ fn cursor_lineup(output: &str) -> Option<Value> {
     }
     let rows = models
         .into_iter()
-        .filter(|model| !excluded("cursor", &model.base))
         .map(|model| {
             let has_efforts = model
                 .variants

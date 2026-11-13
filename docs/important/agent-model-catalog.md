@@ -143,9 +143,11 @@ Grok (2) stays flat: a group header would cost more than it saves.
 
 1. Edit `agent-model-catalog.json` at the repo root.
 2. Set `updatedAt` to the current UTC time (`date -u +%Y-%m-%dT%H:%M:%SZ`).
-3. Validate: `bun run test -- packages/core-ui/chat/session-chat-session-options.test.ts`
-   and `bun run typecheck` (the bundled import fails the build if the document
-   does not parse).
+3. Validate with the chat core's own parser, which loads the bundled file:
+   `cd packages/gx-chat-core && cargo test --test opencode --test opencode_model_tab`
+   (`the_bundled_catalog_offers_deepseek_harness_routes_and_levels` fails if the
+   document does not parse). gxserver embeds the same file with `include_str!`,
+   so `cd server && cargo check` catches a file that is not JSON.
 4. gxserver maps a footer name onto a `value` through the row's `label`,
    `pickerLabel` and `terminalLabels`, from the live catalog, so a new model
    needs no code change as long as the CLI prints one of those. Only a new

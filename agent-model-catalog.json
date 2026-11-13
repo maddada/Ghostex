@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-11-13T08:31:38Z",
+  "updatedAt": "2026-11-13T08:43:46Z",
   "effortLabels": {
     "none": "None",
     "off": "Off",
@@ -198,6 +198,15 @@
           "value": "gpt-5.6-sol",
           "label": "GPT 5.6 Sol",
           "description": "Older generation workhorse model.",
+          "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "defaultEffort": "medium",
+          "fastMode": true,
+          "group": "legacy"
+        },
+        {
+          "value": "gpt-5.6-terra",
+          "label": "GPT 5.6 Terra",
+          "description": "Older balanced model for straightforward work.",
           "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
           "defaultEffort": "medium",
           "fastMode": true,
@@ -460,6 +469,15 @@
           "group": "legacy"
         },
         {
+          "value": "claude-opus-5",
+          "label": "Opus 5",
+          "pickerLabel": "Claude Opus 5",
+          "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
+          "fastMode": true,
+          "group": "legacy"
+        },
+        {
           "value": "claude-opus-4-8",
           "label": "Opus 4.8",
           "pickerLabel": "Claude Opus 4.8",
@@ -501,6 +519,15 @@
           "fastMode": true,
           "group": "legacy",
           "terminalLabels": ["Cursor Grok 4.5"]
+        },
+        {
+          "value": "claude-sonnet-5",
+          "label": "Sonnet 5",
+          "pickerLabel": "Claude Sonnet 5",
+          "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "defaultEffort": "high",
+          "fastMode": false,
+          "group": "legacy"
         },
         {
           "value": "claude-4.6-sonnet",
@@ -759,6 +786,12 @@
           "description": "Medium reasoning",
           "efforts": [],
           "fastMode": false
+        },
+        {
+          "value": "gemini-4-carbon",
+          "label": "Gemini 4 Carbon",
+          "pickerLabel": "Gemini 4 Carbon",
+          "efforts": ["low", "medium", "high"]
         }
       ]
     },
