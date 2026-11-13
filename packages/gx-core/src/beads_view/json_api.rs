@@ -26,8 +26,10 @@ use super::tree::{
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 struct Options {
-    filter: String,
-    sort: String,
+    /// Omitted means All; a key the core doesn't know is an argument error.
+    filter: Option<String>,
+    /// Omitted means Priority; anything but `priority` or `lastChanged` is an argument error.
+    sort: Option<String>,
     show_done: bool,
     query: String,
     open_done: Vec<String>,
@@ -39,7 +41,7 @@ struct Options {
 struct Arguments {
     #[serde(default)]
     beads: Vec<BeadsViewRow>,
-    #[serde(default)]
+    /// Required: without bd's readiness answer the tree can't say what is ready.
     readiness: BeadsReadiness,
     #[serde(default)]
     options: Options,
@@ -60,11 +62,26 @@ fn filter_key(filter: BeadsFilter) -> &'static str {
     }
 }
 
-fn filter_from(key: &str) -> BeadsFilter {
+fn filter_from(key: Option<&str>) -> Result<BeadsFilter, String> {
+    let Some(key) = key else {
+        return Ok(BeadsFilter::All);
+    };
     BeadsFilter::ALL
         .into_iter()
         .find(|filter| filter_key(*filter) == key)
-        .unwrap_or_default()
+        .ok_or_else(|| format!("Unknown beadsTree filter: {key}"))
+}
+
+fn sort_from(key: Option<&str>) -> Result<BeadsSort, String> {
+    match key {
+        None | Some("priority") => Ok(BeadsSort::Priority),
+        Some("lastChanged") => Ok(BeadsSort::LastChanged),
+        Some(other) => Err(format!("Unknown beadsTree sort: {other}")),
+    }
+}
+
+fn argument_error(message: String) -> String {
+    json!({ "error": { "message": message } }).to_string()
 }
 
 fn glyph_key(glyph: BeadGlyph) -> &'static str {
@@ -127,14 +144,17 @@ pub fn tree(arguments: &str) -> String {
                 .to_string()
         }
     };
-    let requested = filter_from(&arguments.options.filter);
+    let requested = match filter_from(arguments.options.filter.as_deref()) {
+        Ok(filter) => filter,
+        Err(message) => return argument_error(message),
+    };
+    let sort = match sort_from(arguments.options.sort.as_deref()) {
+        Ok(sort) => sort,
+        Err(message) => return argument_error(message),
+    };
     let options = BeadsTreeOptions {
         filter: requested,
-        sort: if arguments.options.sort == "lastChanged" {
-            BeadsSort::LastChanged
-        } else {
-            BeadsSort::Priority
-        },
+        sort,
         show_done: arguments.options.show_done,
         query: arguments.options.query,
         open_done: arguments
@@ -215,7 +235,7 @@ pub fn tree(arguments: &str) -> String {
 struct BeadArguments {
     #[serde(default)]
     beads: Vec<BeadsViewRow>,
-    #[serde(default)]
+    /// Required: without bd's readiness answer the tree can't say what is ready.
     readiness: BeadsReadiness,
     id: String,
     #[serde(default)]
