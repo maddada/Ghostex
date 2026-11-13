@@ -1726,9 +1726,9 @@ session of the same project: the list shows each session's logo, title and
 whether it is working, newest first, and narrows as you type. A picked session
 goes in as a mention, `[<title>](<Global Ref>)`, which the agent can pass to
 `ghostex agents send`. The skills list holds the skills that agent's own CLI loads: its
-home skills folders (Codex, Pi, Cursor, Gemini CLI and GitHub Copilot also read
+home skills folders (Codex, Pi, Cursor and GitHub Copilot also read
 `~/.agents/skills`, and Cursor lists its own built-in skills too) and the skills folders inside the session's project. For Claude Code it also holds the skills and commands of its enabled plugins, named `plugin:name`, under Custom commands. A picked skill shows as a `/skill-name` pill with every agent, and each agent receives it the way it runs skills itself:
-`/skill-name` for Claude Code, Copilot, Cursor and Gemini CLI, `$skill-name` for
+`/skill-name` for Claude Code, Copilot and Cursor, `$skill-name` for
 Codex, `/skill:skill-name` for Pi and `@skill-name` for OpenCode. A skill name
 you type yourself (`/skill-name` or `$skill-name`, without picking it) becomes
 the same pill when you send, as long as the list has that skill.
@@ -2541,7 +2541,7 @@ open on the agent's screen wait until it's answered.
 Ghostex trusts each project and worktree folder for you before it starts an
 agent there, so sessions never stop at the agent's own "Do you trust this
 folder?" question. It marks the folder trusted the way the agent would if you
-answered yes (Claude Code, Codex, Cursor, Gemini, Copilot, Grok Build,
+answered yes (Claude Code, Codex, Cursor, Copilot, Grok Build,
 Antigravity, Pi and Factory Droid have such a question; OMP, OpenCode and Hermes
 don't). If an agent asks anyway (one that never ran on this computer has no
 record to mark yet), Ghostex answers yes for you when the session runs in a
@@ -2739,7 +2739,7 @@ Ghostex pages, Ghostex forms and Ghostex visuals in the chat, open pages the age
 builds in its own browser, run other agents and install Ghostex skills. The
 agent uses it only when you ask for one of those things, and then reads the
 details from `ghostex agent-guide`. It reaches Claude Code, Codex, ZCode, Pi
-and Factory Droid at launch; other agents (OpenCode, Gemini CLI, Cursor and
+and Factory Droid at launch; other agents (OpenCode, Cursor, Copilot and
 the rest) get the same note from the Ghostex Agent Guide skill (`ghostex
 agent-guide install-skill`). A change applies to sessions started or resumed
 afterwards. Agents can also ask Ghostex Help themselves with `ghostex help ask
@@ -3470,8 +3470,11 @@ Settings > Interface > UI Scale), `terminalGhosttyTheme`, `terminalColorScheme`,
 
 ## Agents, actions, and orchestration
 
-Agents are the launch buttons per project: Claude Code, Codex, Gemini CLI,
-OpenCode, Pi, and more are built in. In Settings > Agents every agent has a
+Agents are the launch buttons per project: Claude Code, Codex, Cursor,
+OpenCode, Pi, Antigravity CLI and more are built in. Gemini CLI is no longer
+supported (Google refuses its sign-in for individuals); Antigravity CLI runs
+Google's Gemini models instead. An older Gemini CLI session stays in the
+sidebar, but Ghostex no longer resumes its conversation or tracks its activity. In Settings > Agents every agent has a
 switch: turn on the agents you use and they appear in the New session menu, the
 sidebar's Select Agent and on your phone; drag the rows to set their order.
 Turning an agent off keeps its settings and its place, so turning it back on
@@ -3644,7 +3647,7 @@ anything in the way is moved to
 `~/.local/state/ghostex/agent-sync-backups/<stamp>/`, at the same path it had
 under your home folder, so agents never mistake a backup for a skill. Tidying
 leftover lock file entries is opt-in (the Optional cleanup switch, or the plan's
-last group). Agents that read `~/.agents/skills` directly (Codex, Gemini CLI,
+last group). Agents that read `~/.agents/skills` directly (Codex,
 GitHub Copilot, Pi, Amp, Cursor, OpenCode) get no links, and links already in
 their folders are removed so they do not load each skill twice; Claude Code and
 the others get one link per skill. Old `<name>.pre-sync-<stamp>.bak` backup
@@ -3727,7 +3730,7 @@ Cross-agent orchestration also works through the `$ghostex-cli` skill. For
    `ghostex wait-for-text`.
    To pick the worker's model and effort, add `--model <model> --effort <level>`
    to `create-agent` or `board start-work` (Claude, Codex, Pi, OMP, Copilot,
-   Grok Build, Hermes Agent, Empryo and Antigravity CLI, or the model alone for Cursor CLI and Gemini; for Pi and Empryo the model is `<provider>/<model>`, as in
+   Grok Build, Hermes Agent, Empryo and Antigravity CLI, or the model alone for Cursor CLI; for Pi and Empryo the model is `<provider>/<model>`, as in
    Pi's `/model`, and Pi's effort is its thinking level, such as `high`). The choice
    applies to that session only, survives a resume, and leaves your default
    model unchanged. For `board start-work`, these flags apply only when a new
@@ -4084,7 +4087,7 @@ version of the Projects features in Cursor and Claude Code.
   starts it: Opus 5.5 at high effort for substantial work, Opus 5.5 at medium
   for hard but small changes, Sonnet 5.5 at high for small contained fixes. A
   coordinator on another agent starts its threads on its own agent and model,
-  at high effort for substantial work and medium otherwise (Cursor and Gemini
+  at high effort for substantial work and medium otherwise (Cursor
   threads take the model but keep their own effort; OpenCode, ZCode and DeepSeek
   Harness threads start on the agent's configured model).
   It never switches a running thread's model (that throws away its prompt cache);

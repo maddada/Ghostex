@@ -1,7 +1,7 @@
 # Ghostex overview
 
 Ghostex is a desktop workspace for running AI coding agents (Claude Code, Codex,
-Gemini CLI, OpenCode, Pi, and other agent CLIs) side by side across many
+Cursor, OpenCode, Pi, Antigravity CLI, and other agent CLIs) side by side across many
 projects. Every agent runs in a real, persistent terminal session; Ghostex adds
 the sidebar, the chat view, the browser, the editor, the board, and the
 automation and remote-access layers around those sessions.

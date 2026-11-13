@@ -144,8 +144,8 @@ gx board start-work <bead-id> [--agent <agentId>] [--model <model>] [--effort <l
   starting another worker. Calling it and then starting your own worker puts
   two workers on the same card.
 - **Pick the worker's model with `--model` and `--effort`** (Claude, Codex, Pi, OMP,
-  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI workers, plus `--model` alone for Cursor CLI
-  and Gemini, when `start-work` creates a new worker; a Pi or
+  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI workers, plus `--model` alone for Cursor CLI,
+  when `start-work` creates a new worker; a Pi or
   Empryo model is `<provider>/<model>`, a Pi effort is a thinking level such as `high`, and
   Ghostex releases before October 2026 refuse a Pi model). A reused linked worker
   keeps its existing model and effort. The choice applies to the new worker
