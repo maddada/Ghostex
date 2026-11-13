@@ -56,7 +56,11 @@ enum Block {
     },
     Recovery {
         reason: String,
+        /// Why no account can take the session and when it continues (the limit card's words).
+        detail: Option<String>,
         next: Option<String>,
+        /// "Continue with Opus 5.5 on ST" and its `agentAccounts` request.
+        action: Option<(String, Value)>,
         busy: bool,
     },
     Current {
@@ -235,9 +239,14 @@ fn blocks(panel: &Value, customize: bool) -> Vec<Block> {
         return out;
     }
     if session["recovery"].is_object() {
+        let recovery = &session["recovery"];
         out.push(Recovery {
-            reason: text(&session["recovery"], "reason"),
-            next: session["recovery"]["next"].as_str().map(str::to_owned),
+            reason: text(recovery, "reason"),
+            detail: recovery["detail"].as_str().map(str::to_owned),
+            next: recovery["next"].as_str().map(str::to_owned),
+            action: recovery["action"]["label"]
+                .as_str()
+                .map(|label| (label.to_owned(), recovery["action"]["request"].clone())),
             busy,
         });
         out.push(Gap(8.0));
@@ -407,12 +416,21 @@ impl Block {
             Text { text, strong, .. } => {
                 measure.lines(text, if *strong { STRONG } else { PARAGRAPH }, width)?
             }
-            Recovery { reason, next, .. } => {
+            Recovery {
+                reason,
+                detail,
+                next,
+                ..
+            } => {
                 let next = match next {
                     Some(next) => 12.0 + measure.lines(next, PARAGRAPH, width - 26.0)?,
                     None => 0.0,
                 };
-                26.0 + measure.lines(reason, STRONG, width - 26.0)? + next + 12.0 + 28.0
+                let detail = match detail {
+                    Some(detail) => 4.0 + measure.lines(detail, PARAGRAPH, width - 26.0)?,
+                    None => 0.0,
+                };
+                26.0 + measure.lines(reason, STRONG, width - 26.0)? + detail + next + 12.0 + 28.0
             }
             Current { .. } => 20.0,
             Usage(columns) => usage_height(columns.len()),
@@ -823,7 +841,7 @@ impl ChatOptionMenuPanel {
     fn button(
         &self,
         id: impl Into<gpui::ElementId>,
-        label: &'static str,
+        label: impl Into<gpui::SharedString>,
         icon_path: Option<&'static str>,
         disabled: bool,
         action: Action,
@@ -831,13 +849,14 @@ impl ChatOptionMenuPanel {
         s: f32,
         cx: &Context<Self>,
     ) -> AnyElement {
+        let label: gpui::SharedString = label.into();
         div()
             .flex()
             .child(
                 div()
                     .id(id.into())
                     .role(gpui::Role::Button)
-                    .aria_label(label)
+                    .aria_label(label.clone())
                     .h(px(28.0 * s))
                     .px(px(10.0 * s))
                     .flex()
@@ -981,7 +1000,16 @@ impl ChatOptionMenuPanel {
             } => strong(text).into_any_element(),
             Block::Text { text, dim, .. } => paragraph(text, dim).into_any_element(),
             // CDXC:AgentProviders 2026-09-12 DECISION: Give the recovery message and Stop automatic recovery button clear spacing, and keep that button rounded.
-            Block::Recovery { reason, next, busy } => div()
+            // CDXC:AgentProviders 2026-11-13 DECISION: User picked "one sentence" (Q2977 A): while
+            // every account is full the box says what the limit card says, the title over the
+            // sentence naming why, and offers the card's "Continue with … on …" beside Stop.
+            Block::Recovery {
+                reason,
+                detail,
+                next,
+                action,
+                busy,
+            } => div()
                 .id("account-recovery")
                 .role(gpui::Role::Status)
                 .flex()
@@ -991,18 +1019,45 @@ impl ChatOptionMenuPanel {
                 .border_1()
                 .border_color(colors.border)
                 .rounded(px(8.0 * s))
-                .child(strong(reason))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(4.0 * s))
+                        .child(strong(reason))
+                        .when_some(detail, |this, detail| this.child(paragraph(detail, false))),
+                )
                 .when_some(next, |this, next| this.child(paragraph(next, false)))
-                .child(self.button(
-                    "account-stop-recovery",
-                    "Stop automatic recovery",
-                    None,
-                    busy,
-                    Action::Keep(json!({"type":"accounts","request":{"operation":"stopRecovery"}})),
-                    colors,
-                    s,
-                    cx,
-                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap(px(8.0 * s))
+                        .when_some(action, |this, (label, request)| {
+                            this.child(self.button(
+                                "account-continue-with-model",
+                                label,
+                                None,
+                                busy,
+                                Action::Close(json!({"type":"accounts","request":request})),
+                                colors,
+                                s,
+                                cx,
+                            ))
+                        })
+                        .child(self.button(
+                            "account-stop-recovery",
+                            "Stop automatic recovery",
+                            None,
+                            busy,
+                            Action::Keep(
+                                json!({"type":"accounts","request":{"operation":"stopRecovery"}}),
+                            ),
+                            colors,
+                            s,
+                            cx,
+                        )),
+                )
                 .into_any_element(),
             Block::Current {
                 identity: account,

@@ -142,6 +142,9 @@ pub struct AccountRecovery {
     pub reason: String,
     pub attempt: i64,
     pub next_attempt_at: Option<String>,
+    /// gxserver's facts while every account is full (`accountWait`, limit_wait.rs), which the
+    /// waiting box words the way the limit card does.
+    pub account_wait: Option<serde_json::Map<String, Value>>,
 }
 
 /// The whole answer.
@@ -198,6 +201,10 @@ impl AccountsState {
                             .get("nextAttemptAt")
                             .and_then(Value::as_str)
                             .map(str::to_string),
+                        account_wait: recovery
+                            .get("accountWait")
+                            .and_then(Value::as_object)
+                            .cloned(),
                     }),
             });
         Self {

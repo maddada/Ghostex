@@ -233,7 +233,76 @@ fn limited_windows(account: &Account, now_ms: i64) -> Vec<String> {
 #[serde(rename_all = "camelCase")]
 pub struct PanelRecovery {
     pub reason: String,
+    /// The sentence under `reason` while every account is full: why each other account is out
+    /// and when work continues, as the limit card says it (questions/account_wait.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
     pub next: Option<String>,
+    /// "Continue with Opus 5.5 on ST": its label and the `agentAccounts` request it sends.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<PanelRecoveryAction>,
+}
+
+/// The waiting box's button that continues on another model (server/src/accounts/model_fallback.rs).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelRecoveryAction {
+    pub label: String,
+    pub request: Value,
+}
+
+/// The waiting box's words: the limit card's while gxserver names the model it waits for.
+fn panel_recovery(
+    recovery: &crate::menus::accounts_data::AccountRecovery,
+    hide_account_emails: bool,
+    chat_context: &crate::ChatContext,
+) -> PanelRecovery {
+    let next = recovery.next_attempt_at.as_deref().map(|at| {
+        format!(
+            "Next attempt: {} \u{b7} Attempt {}",
+            locale_date_time(at, chat_context),
+            recovery.attempt + 1
+        )
+    });
+    let words = recovery
+        .account_wait
+        .as_ref()
+        .filter(|wait| wait.get("model").and_then(Value::as_str).is_some())
+        .map(|wait| {
+            crate::questions::account_wait::wait_words(
+                wait,
+                hide_account_emails,
+                chat_context.now_ms,
+                chat_context.utc_offset_minutes,
+            )
+        });
+    match words {
+        Some(words) => PanelRecovery {
+            reason: format!("{}.", words.title),
+            detail: Some(words.detail),
+            next,
+            action: words.action.map(|action| {
+                let mut request = action.answer;
+                if let Some(fields) = request.as_object_mut() {
+                    fields.remove("kind");
+                    fields.insert(
+                        "operation".to_string(),
+                        serde_json::json!("continueWithModel"),
+                    );
+                }
+                PanelRecoveryAction {
+                    label: action.label,
+                    request,
+                }
+            }),
+        },
+        None => PanelRecovery {
+            reason: account_text(hide_account_emails, &recovery.reason),
+            detail: None,
+            next,
+            action: None,
+        },
+    }
 }
 
 /// One row of the Switch account list.
@@ -446,16 +515,10 @@ pub fn native_account_panel(
     body(
         None,
         Some(PanelSession {
-            recovery: session.recovery.as_ref().map(|recovery| PanelRecovery {
-                reason: text(&recovery.reason),
-                next: recovery.next_attempt_at.as_deref().map(|at| {
-                    format!(
-                        "Next attempt: {} \u{b7} Attempt {}",
-                        locale_date_time(at, chat_context),
-                        recovery.attempt + 1
-                    )
-                }),
-            }),
+            recovery: session
+                .recovery
+                .as_ref()
+                .map(|recovery| panel_recovery(recovery, hide_account_emails, chat_context)),
             current: current.map(identity),
             name: text(
                 current

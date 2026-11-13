@@ -428,6 +428,37 @@ impl NativeChatView {
                 body.push(tail.into_any_element());
             }
         }
+        // CDXC:AgentProviders 2026-11-13 DECISION: User picked the main button (Q2978 A): an action
+        // the chat core marks `primary` ("Continue with Opus 5.5 on ST", questions/account_wait.rs)
+        // leads the footer filled, and Switch account sits beside it as a secondary button.
+        let lead = (!collapsed)
+            .then(|| {
+                notice["actions"]
+                    .as_array()
+                    .and_then(|list| list.iter().find(|action| action["primary"] == true))
+                    .cloned()
+            })
+            .flatten();
+        if let Some(action) = lead.as_ref() {
+            let answer = json!({"type":"answer","answer":action["answer"].clone()});
+            actions.push(
+                self.tone_button(
+                    gpui::SharedString::from(format!("notice-action:{}", text(action, "id"))),
+                    &text(action, "label"),
+                    None,
+                    ToneButton::Primary,
+                    None,
+                    held,
+                    p,
+                )
+                .when(!held, |button| {
+                    button.on_click(
+                        cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
+                    )
+                })
+                .into_any_element(),
+            );
+        }
         // CDXC:AgentProviders 2026-09-13 DECISION: User approved restricting Switch account to relevant notices after it appeared on a queued reply. Only sign-in and usage-limit notices offer the existing account picker beside Open terminal, superseding the September 12 rule for all terminal notices.
         if !collapsed
             && snapshot["accountPanel"].is_object()
@@ -438,7 +469,11 @@ impl NativeChatView {
                     "notice-switch-account",
                     "Switch account",
                     Some("titlebar/switch-horizontal.svg"),
-                    ToneButton::Primary,
+                    if lead.is_some() {
+                        ToneButton::Secondary
+                    } else {
+                        ToneButton::Primary
+                    },
                     None,
                     false,
                     p,
@@ -456,6 +491,7 @@ impl NativeChatView {
             .into_iter()
             .flatten()
             .filter(|action| !collapsed || action["kind"] == "trustAndRemember")
+            .filter(|action| action["primary"] != true)
         {
             if action["kind"] == "switchToTerminal" {
                 actions.push(

@@ -753,6 +753,17 @@ pub(crate) fn plan_session(
         .and_then(|o| o.selection.model.as_ref())
         .map(|m| m.value.clone())
         .unwrap_or_default();
+    let selection = detection.options.as_ref().map(|o| &o.selection);
+    let effort = selection
+        .and_then(|s| s.effort.as_ref())
+        .map(|e| e.value.clone())
+        .unwrap_or_default();
+    let model_label = super::model_fallback::model_label(
+        &model,
+        selection
+            .and_then(|s| s.model.as_ref())
+            .map(|m| m.label.as_str()),
+    );
     // A session on its own login keeps waiting for its limit to reset instead of moving to an account (CDXC:AgentProviders 2026-10-09 in launch.rs).
     let target = if notice.kind == "usageLimit"
         && policy.at_limit == LimitAction::Switch
@@ -774,6 +785,32 @@ pub(crate) fn plan_session(
         SwitchTarget::Move(id) => Some(id.clone()),
         _ => None,
     };
+    // No account has room for the session's Fable: the strongest Opus on an account with room for
+    // it, which the session continues on by itself when the setting allows and the card offers as
+    // its button otherwise (model_fallback.rs). A model change already waiting is that same step
+    // still on its way, so it is not taken twice.
+    let alternative = (matches!(target, SwitchTarget::None)
+        && notice.kind == "usageLimit"
+        && policy.at_limit == LimitAction::Switch
+        && !launch::session_uses_own_login(provider, &session))
+    .then(|| {
+        super::model_fallback::alternative(
+            &registry,
+            snapshot,
+            provider,
+            current_id.as_deref(),
+            &model,
+            &effort,
+            policy.priority,
+            &session,
+        )
+    })
+    .flatten();
+    let fall_back = alternative.as_ref().filter(|_| {
+        super::model_fallback::enabled(state)
+            && crate::session_chat_model_selection::read_pending(db, pid, sid)
+                .is_none_or(|pending| pending.state == "failed")
+    });
     if recovery.is_null() || recovery["status"].as_str() != Some("waiting") {
         let last_attempt_at = recovery["lastAttemptAt"].clone();
         recovery = json!({"status":"waiting","reason":notice.title,"trigger":notice.kind,"attempt":attempts,"nextAttemptAt":(now+delay).to_rfc3339(),"updatedAt":now.to_rfc3339(),"lastAttemptAt":last_attempt_at,"errorText":notice.detail});
@@ -863,6 +900,27 @@ pub(crate) fn plan_session(
             // The switch owns its one-shot dot; do not also send the generic recovery prompt.
             endpoint::publish(state, repo, &session)?;
             return Ok(None);
+        } else if let Some(alternative) = fall_back {
+            if let Err(error) = super::model_fallback::continue_with(
+                state,
+                repo,
+                &registry,
+                snapshot,
+                &project,
+                &session,
+                alternative,
+                model_label.as_deref(),
+                super::continuation::SwitchSource::Automatic,
+            ) {
+                session = repo.get_session(pid, sid)?.unwrap_or(session);
+                recovery["reason"] = json!(error.message);
+                recovery["nextAttemptAt"] = json!((now + backoff(attempts)).to_rfc3339());
+                recovery["attempt"] = json!(attempts + 1);
+                save(state, repo, &session, recovery)?;
+                return Ok(None);
+            }
+            endpoint::publish(state, repo, &session)?;
+            return Ok(None);
         } else if !current.is_some_and(|a| has_room(a, &model, now)) {
             let reset = current.and_then(|a| {
                 a.usage
@@ -946,6 +1004,8 @@ pub(crate) fn plan_session(
                         provider,
                         current_id.as_deref(),
                         &model,
+                        model_label.as_deref(),
+                        alternative.as_ref(),
                         now,
                     );
                     super::limit_wait::enter(state, repo, &session, &mut recovery, wait);
@@ -1020,7 +1080,7 @@ pub(super) fn relevant(window: &UsageWindow, model: &str) -> bool {
             || m.to_lowercase().contains(&model.to_lowercase())
     })
 }
-fn reading_time(account: &DiscoveredAccount) -> Option<DateTime<Utc>> {
+pub(super) fn reading_time(account: &DiscoveredAccount) -> Option<DateTime<Utc>> {
     account
         .usage_updated_at
         .as_ref()
@@ -1030,7 +1090,7 @@ fn reading_time(account: &DiscoveredAccount) -> Option<DateTime<Utc>> {
 /// CDXC:AgentProviders 2026-10-11 WHY:
 /// A switch target used to also need a usage reading under 5 minutes old, but cswap polls an idle account only every 5 to 10 minutes (`poll_policy.py`, kept under the usage endpoint's hourly budget), so a session at its limit sat on "Waiting for an eligible account to have capacity" until cswap next polled the target: G9ow7 waited 2m10s for slot 2's 11:54:15 reading although slot 2 was at 11% and 3%.
 /// cswap already judges whether a reading is trustworthy enough for a switch and reports `unavailable` (which sets `usage_error`) when it is not, so a candidate goes on that judgment alone. The current account keeps the 5-minute rule in `has_room`, because the limit notice is newer evidence than any older reading of it.
-fn trusted_room(account: &DiscoveredAccount, model: &str) -> bool {
+pub(super) fn trusted_room(account: &DiscoveredAccount, model: &str) -> bool {
     account.status == "ready"
         && account.usage_error.is_none()
         && reading_time(account).is_some()

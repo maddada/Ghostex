@@ -101,8 +101,18 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
             let blocked = detection.notice.as_ref().is_some_and(|notice| {
                 notice.blocks_queued_delivery() && !super::recovery::retryable(notice)
             });
+            // A model change queued with the switch (model_fallback.rs) goes first, so the "."
+            // runs on the new model; one that failed holds nothing back.
+            let model_pending = {
+                let db = crate::storage::open_gxserver_database(&state.paths).ok();
+                db.and_then(|db| {
+                    crate::session_chat_model_selection::read_pending(&db, &project, &session_id)
+                })
+                .is_some_and(|pending| pending.state != "failed")
+            };
             if detection.captured
                 && !blocked
+                && !model_pending
                 && detection.prompt.is_none()
                 && detection.composer.state
                     == crate::session_chat_composer::SessionChatComposerState::Ready

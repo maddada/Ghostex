@@ -24,6 +24,7 @@ pub(crate) mod launch;
 pub(crate) mod limit_wait;
 pub(crate) mod login_expired;
 pub(crate) mod model;
+pub(crate) mod model_fallback;
 mod process_login;
 pub(crate) use process_login::process_launch;
 pub(crate) mod recovery;

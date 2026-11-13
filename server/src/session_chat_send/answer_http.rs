@@ -230,6 +230,33 @@ async fn answer_session_chat_prompt(
         .get("kind")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    // The limit card's "Continue with Opus 5.5 on ST" (server/src/accounts/model_fallback.rs):
+    // the same step as `agentAccounts` `continueWithModel`, so it runs where account switches run.
+    if kind == "continueWithModel" {
+        let mut request = params.clone();
+        request.insert("operation".to_string(), json!("continueWithModel"));
+        let state = state.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            crate::accounts::endpoint::dispatch(&state, &request)
+        })
+        .await;
+        return match result {
+            Ok(Ok(_)) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "queued": false })),
+            ),
+            Ok(Err(error)) => domain_error_response(endpoint_path, request_id, error),
+            Err(_) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "Could not continue on the other model.".to_string(),
+                },
+            ),
+        };
+    }
     // "For later" and removing a question form or page without answering it are the chat's own
     // bookkeeping: nothing reaches the agent (session_chat_open_questions.rs, `set_later` and
     // `set_removed`).

@@ -31,41 +31,157 @@ pub fn decorate(
     else {
         return;
     };
+    let words = wait_words(&wait, hide_account_emails, now_ms, utc_offset_minutes);
+    object.insert("title".to_string(), json!(words.title));
+    object.insert("detail".to_string(), json!(words.detail));
+    object.insert("tone".to_string(), json!("warning"));
+    // The card's main button (Q2977/Q2978 in model_fallback.rs): ahead of the notice's own
+    // actions, and `primary` so the renderers draw it filled and Switch account beside it.
+    if let Some(action) = words.action {
+        let mut actions = object
+            .get("actions")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        actions.insert(
+            0,
+            json!({
+                "id": "continueWithModel",
+                "label": action.label,
+                "kind": "continueWithModel",
+                "primary": true,
+                "answer": action.answer,
+            }),
+        );
+        object.insert("actions".to_string(), Value::Array(actions));
+    }
+}
+
+/// What the card and the Accounts & limits panel's waiting box say while every account is full.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WaitWords {
+    pub title: String,
+    pub detail: String,
+    pub action: Option<ContinueAction>,
+}
+
+/// "Continue with Opus 5.5 on ST": the model and account gxserver found room on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContinueAction {
+    pub label: String,
+    /// `answerSessionChatPrompt`'s answer; with `operation` set, `agentAccounts`' request.
+    pub answer: Value,
+}
+
+/// CDXC:AgentProviders 2026-11-13 DECISION:
+/// User picked "one sentence" (Q2977 A) and the main button (Q2978 A) after a Fable 5.2 chat said
+/// "7d limit reached on every account" while ST showed 86% (its Fable window was full and SP was
+/// manual only): the title names the model no account has room for, one sentence names why each
+/// other account is out, the next says when work continues, and a model with room on an account
+/// becomes the card's main button. Facts from a gxserver that predates `model` keep the old words.
+/// SEE-ALSO: server/src/accounts/model_fallback.rs, server/src/accounts/limit_wait.rs (`describe`).
+pub fn wait_words(
+    wait: &Map<String, Value>,
+    hide_account_emails: bool,
+    now_ms: f64,
+    utc_offset_minutes: i32,
+) -> WaitWords {
     let text = |key: &str| {
         wait.get(key)
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
     };
+    let name = |value: &str| {
+        if hide_account_emails {
+            mask_account_text(value)
+        } else {
+            value.to_string()
+        }
+    };
+    let model = text("model");
     let limit = text("limit").unwrap_or("Usage limit");
     let reset = text("resetsAt")
         .and_then(|at| parse_iso_millis(at, utc_offset_minutes))
         .filter(|at| *at > now_ms);
-    let when = match (reset, text("account")) {
-        (Some(at), Some(account)) => {
-            let account = if hide_account_emails {
-                mask_account_text(account)
-            } else {
-                account.to_string()
-            };
-            format!(
-                "It continues automatically {}, when {account}\u{2019}s limit resets.",
-                local_time(at, now_ms, utc_offset_minutes)
-            )
-        }
+    let when = match (reset, text("account"), model) {
+        (Some(at), Some(account), Some(_)) => format!(
+            "It continues {}, when {}\u{2019}s {}resets.",
+            local_time(at, now_ms, utc_offset_minutes),
+            name(account),
+            text("accountLimit")
+                .map_or_else(|| "limit ".to_string(), |limit| format!("{limit} limit "))
+        ),
+        (Some(at), Some(account), None) => format!(
+            "It continues automatically {}, when {}\u{2019}s limit resets.",
+            local_time(at, now_ms, utc_offset_minutes),
+            name(account)
+        ),
+        (_, _, Some(_)) => "It continues as soon as an account has room.".to_string(),
         _ => "It continues automatically as soon as an account has room.".to_string(),
     };
-    object.insert(
-        "title".to_string(),
-        json!(format!("{limit} reached on every account")),
-    );
-    object.insert(
-        "detail".to_string(),
-        json!(format!(
-            "Every account this session can switch to is full, so it waits instead of switching. {when}"
-        )),
-    );
-    object.insert("tone".to_string(), json!("warning"));
+    let Some(model) = model else {
+        return WaitWords {
+            title: format!("{limit} reached on every account"),
+            detail: format!(
+                "Every account this session can switch to is full, so it waits instead of switching. {when}"
+            ),
+            action: None,
+        };
+    };
+    let reasons: Vec<String> = wait
+        .get("blocked")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let account = name(entry.get("account")?.as_str()?.trim());
+            match entry.get("why")?.as_str()? {
+                "manual" => Some(format!("{account} is manual only")),
+                "signIn" => Some(format!("{account} needs to sign in again")),
+                "full" => Some(match entry.get("limit").and_then(Value::as_str) {
+                    Some(limit) => format!("{account}\u{2019}s {limit} limit is full"),
+                    None => format!("{account} is full"),
+                }),
+                _ => None,
+            }
+        })
+        .collect();
+    let why = match reasons.as_slice() {
+        [] => "No other account can take it.".to_string(),
+        [only] => format!("{only}."),
+        [rest @ .., last] => format!("{} and {last}.", rest.join(", ")),
+    };
+    let action = wait
+        .get("alternative")
+        .and_then(Value::as_object)
+        .and_then(|alternative| {
+            let field = |key: &str| {
+                alternative
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+            };
+            let label = field("modelLabel")?;
+            let account = field("account")?;
+            Some(ContinueAction {
+                label: format!("Continue with {label} on {}", name(account)),
+                answer: json!({
+                    "kind": "continueWithModel",
+                    "accountId": field("accountId")?,
+                    "model": field("model")?,
+                    "effort": field("effort").unwrap_or_default(),
+                    "modelLabel": label,
+                    "fromModel": model,
+                }),
+            })
+        });
+    WaitWords {
+        title: format!("No account has room for {model}"),
+        detail: format!("{why} {when}"),
+        action,
+    }
 }
 
 /// `at 12:00 PM`, `tomorrow at 12:00 PM` or `on Oct 18 at 2:00 PM`, in the user's own timezone.

@@ -113,7 +113,7 @@ pub(crate) fn dispatch(
     }
     let mut snapshot = if matches!(
         operation,
-        "select" | "setTitlebar" | "dismissSwitch" | "retryNow"
+        "select" | "setTitlebar" | "dismissSwitch" | "retryNow" | "continueWithModel"
     ) || !titlebar_has_accounts
         || cached_titlebar
         || cached_list
@@ -495,6 +495,24 @@ pub(crate) fn dispatch(
             ) {
                 selected?;
             }
+        }
+        // The limit card's "Continue with Opus 5.5 on ST" (model_fallback.rs): the model and
+        // account it offered, which the session switches to together and continues on.
+        "continueWithModel" => {
+            let session = get_session(&repository, params)?;
+            let project = repository
+                .get_project(required(params, "projectId")?)?
+                .ok_or_else(|| DomainStateError::not_found("Project not found."))?;
+            super::model_fallback::chosen(
+                state,
+                &repository,
+                &registry,
+                &snapshot,
+                &project,
+                &session,
+                params,
+            )?;
+            changed_sessions.push(session);
         }
         "sessionPolicy" | "select" | "stopRecovery" => {
             let session = get_session(&repository, params)?;

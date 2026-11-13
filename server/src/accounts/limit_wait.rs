@@ -46,11 +46,15 @@ pub(super) fn waiting_sessions() -> Vec<(String, String)> {
 pub(crate) fn notice_wait(project: &str, session: &str) -> Option<Value> {
     let waits = waits().lock().unwrap_or_else(|e| e.into_inner());
     let wait = waits.get(&key(project, session))?;
-    Some(json!({
-        "limit": wait["limit"],
-        "resetsAt": wait["resetsAt"],
-        "account": wait["account"],
-    }))
+    // Everything but the bell row's bookkeeping: `model`, `accountLimit`, `blocked` and
+    // `alternative` joined the first three on 2026-11-13 (model_fallback.rs); a client that
+    // predates them reads the first three as before.
+    let mut facts = wait.clone();
+    if let Some(fields) = facts.as_object_mut() {
+        fields.remove("notificationId");
+        fields.remove("since");
+    }
+    Some(facts)
 }
 
 /// The facts of a wait: the limit the current account hit, and the eligible account (the current one included) whose full windows reset soonest.
@@ -60,6 +64,8 @@ pub(super) fn describe(
     provider: Provider,
     current: Option<&str>,
     model: &str,
+    model_label: Option<&str>,
+    alternative: Option<&super::model_fallback::Alternative>,
     now: DateTime<Utc>,
 ) -> Value {
     let reading = |id: &str| {
@@ -103,14 +109,50 @@ pub(super) fn describe(
                 .collect::<Option<Vec<_>>>()?
                 .into_iter()
                 .max()?;
-            (free_at > now).then_some((free_at, a.name.clone()))
+            let last = windows.iter().max_by_key(|w| resets(w))?;
+            (free_at > now).then_some((free_at, a.name.clone(), window_name(last)))
         })
-        .min_by_key(|(at, _)| *at);
+        .min_by_key(|(at, _, _)| *at);
+    // Why each other account of this provider cannot take the session: set to manual only, signed
+    // out, or a window this model counts against used up. The card names them in one sentence.
+    let blocked: Vec<Value> = registry
+        .accounts
+        .iter()
+        .filter(|a| a.provider == provider && !a.user_disabled && Some(a.id.as_str()) != current)
+        .filter_map(|a| {
+            if !a.eligible {
+                return Some(json!({ "account": a.name, "why": "manual" }));
+            }
+            if a.login_expired_at.is_some() || a.selector.is_empty() {
+                return Some(json!({ "account": a.name, "why": "signIn" }));
+            }
+            let windows = full(reading(&a.id)?);
+            let window = windows
+                .iter()
+                .find(|w| w.model.is_some())
+                .or_else(|| windows.first())?;
+            Some(json!({ "account": a.name, "why": "full", "limit": window_name(window) }))
+        })
+        .collect();
     json!({
         "limit": limit,
-        "resetsAt": soonest.as_ref().map(|(at, _)| at.to_rfc3339()),
-        "account": soonest.map(|(_, name)| name),
+        "resetsAt": soonest.as_ref().map(|(at, _, _)| at.to_rfc3339()),
+        "account": soonest.as_ref().map(|(_, name, _)| name.clone()),
+        "accountLimit": soonest.map(|(_, _, limit)| limit),
+        "model": model_label,
+        "blocked": blocked,
+        "alternative": alternative.map(super::model_fallback::Alternative::to_json),
     })
+}
+
+/// A window as the card names it: a model's own window by the model ("Fable"), others by their
+/// label ("7d").
+fn window_name(window: &UsageWindow) -> String {
+    window
+        .model
+        .clone()
+        .filter(|model| !model.trim().is_empty())
+        .unwrap_or_else(|| window.label.clone())
 }
 
 /// Enters or refreshes the wait on `recovery` (saved by the caller). The first entry of a wait posts its bell row; later passes keep that row.
@@ -321,7 +363,10 @@ fn bell_body(wait: &Value) -> String {
         ),
         _ => "It continues automatically as soon as an account has room.".to_string(),
     };
-    format!("Hit its {limit}, and every account is full. {when}")
+    match wait["model"].as_str().filter(|model| !model.is_empty()) {
+        Some(model) => format!("No account has room for {model}. {when}"),
+        None => format!("Hit its {limit}, and every account is full. {when}"),
+    }
 }
 
 fn local_time(at: DateTime<Utc>) -> String {

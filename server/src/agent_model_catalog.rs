@@ -311,6 +311,15 @@ fn agent_models(catalog: &Value, agent: &str) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+/// One agent's catalog rows, in the catalog's order, plus the agent's own `efforts` and
+/// `defaultEffort` for rows that name none.
+pub fn catalog_agent(agent: &str) -> Option<Value> {
+    current()
+        .get("agents")
+        .and_then(|agents| agents.get(agent))
+        .cloned()
+}
+
 /// One agent's catalog row by its dispatch value.
 pub fn catalog_model(agent: &str, value: &str) -> Option<Value> {
     agent_models(&current(), agent)

@@ -288,6 +288,10 @@ pub struct SwitchProgress {
     /// The agent would not exit to its shell, so gxserver restarted the session on the new account
     /// the way Full Reload does (server/src/accounts/restart.rs).
     pub reloaded: bool,
+    /// The model the session moves to with this switch ("Opus 5.5"), and the one it leaves
+    /// ("Fable 5.2"), when no account had room for that one (server/src/accounts/model_fallback.rs).
+    pub model: Option<String>,
+    pub from_model: Option<String>,
 }
 
 impl SwitchProgress {
@@ -313,6 +317,8 @@ impl SwitchProgress {
             updated_at: text("updatedAt").unwrap_or_default(),
             reason: text("reason").filter(|reason| !reason.is_empty()),
             reloaded: object.get("reloaded").and_then(serde_json::Value::as_bool) == Some(true),
+            model: text("model").filter(|model| !model.is_empty()),
+            from_model: text("fromModel").filter(|model| !model.is_empty()),
         })
     }
 }
@@ -442,8 +448,16 @@ pub fn switch_card_presentation(
     } else {
         "Codex"
     };
+    // A switch that only changes the model stays on the same account (model_fallback.rs).
+    let same_account =
+        progress.from_account_id.is_some() && progress.from_account_id == progress.to_account_id;
     let mut labels = vec![
-        "Switch account".to_string(),
+        if same_account {
+            "Switch model"
+        } else {
+            "Switch account"
+        }
+        .to_string(),
         "Resume conversation".to_string(),
     ];
     if progress.source == "automatic" {
@@ -465,6 +479,8 @@ pub fn switch_card_presentation(
             "Couldn\u{2019}t complete the switch"
         }
         .to_string()
+    } else if let Some(model) = progress.model.as_deref() {
+        format!("Continuing on {model}")
     } else if settled {
         "Account switched".to_string()
     } else {
@@ -488,6 +504,22 @@ pub fn switch_card_presentation(
         true,
         now_ms,
     );
+    // CDXC:AgentProviders 2026-11-13 DECISION: User: when Fable runs out on every account the
+    // session continues on Opus by itself and "the chat shows a calm one-line notice that it did
+    // so": the switch card's one line names both models (server/src/accounts/model_fallback.rs).
+    let model_note = progress.model.as_deref().map(|model| {
+        let on = if same_account {
+            String::new()
+        } else {
+            format!(" on {}", to.label)
+        };
+        match progress.from_model.as_deref() {
+            Some(from) => {
+                format!("{from} is out on every account, so it continues on {model}{on}.")
+            }
+            None => format!("No account had room for this model, so it continues on {model}{on}."),
+        }
+    });
     let lede = if phase == "failed" {
         if verified {
             "The account is ready, but continuation needs attention."
@@ -505,6 +537,8 @@ pub fn switch_card_presentation(
         } else {
             note
         }
+    } else if let Some(note) = model_note {
+        note
     } else if settled {
         if progress.source == "automatic" {
             "Your task is continuing on the new account."
