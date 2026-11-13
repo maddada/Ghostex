@@ -116,6 +116,109 @@ fn page_row_menu(row: &Value) -> Vec<Value> {
     rows
 }
 
+/// What a dock row's Copy as Markdown copies, "" for a row that has none: a work item ask's or a
+/// one-click question's title as a heading, its detail, and its answers line ("Answers: A, B
+/// (recommended: A)"); a form's title and each question it still asks (`questionForms`, its
+/// waiting tags from `reply.tag`), each with its detail and answers; a page's title (a link to
+/// it when its mention carries one) and the tags it still asks. The phone's `rowMarkdown`
+/// (apps/mobile/app/src/chat/native/cards/workItemParts.tsx) copies the same.
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// User: a work item ask in the dock needs "Copy as Markdown" in its ⋯ and right-click menu,
+/// copying its title and full detail as Markdown plus its answers; form and page rows copy their
+/// title and each open question.
+fn row_markdown(row: &Value, forms: &Value) -> String {
+    let answers = |choices: &[Value]| {
+        let labels: Vec<&str> = choices
+            .iter()
+            .filter_map(|choice| choice["label"].as_str())
+            .filter(|label| !label.is_empty())
+            .collect();
+        if labels.is_empty() {
+            return String::new();
+        }
+        let recommended: Vec<&str> = choices
+            .iter()
+            .filter(|choice| choice["recommended"] == true)
+            .filter_map(|choice| choice["label"].as_str())
+            .collect();
+        let mut line = format!("Answers: {}", labels.join(", "));
+        if !recommended.is_empty() {
+            line.push_str(&format!(" (recommended: {})", recommended.join(", ")));
+        }
+        line
+    };
+    let join = |parts: Vec<String>| {
+        parts
+            .into_iter()
+            .map(|part| part.trim().to_string())
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    };
+    let str_of = |value: &Value, key: &str| value[key].as_str().unwrap_or_default().to_string();
+    let title = str_of(row, "title");
+    let title = title.trim();
+    let buttons = row["buttons"].as_array().cloned().unwrap_or_default();
+    match str_of(row, "kind").as_str() {
+        "ask" | "question" => join(vec![
+            format!("## {title}"),
+            text(row, "body").to_string(),
+            answers(&buttons),
+        ]),
+        "form" if row["page"] == true => {
+            // Its mention is `[Name](url) Q12 Q13` (gx-chat-core `questions_mention`), or the
+            // name in quotes when the page has no address: the heading is the link, else the title.
+            let tags = str_of(&row["reply"], "tag");
+            let mention = str_of(row, "mention");
+            let link = mention
+                .strip_suffix(tags.as_str())
+                .unwrap_or(&mention)
+                .trim_end();
+            let heading = if link.starts_with('[') && link.ends_with(')') {
+                link
+            } else {
+                title
+            };
+            join(vec![
+                format!("## {heading}"),
+                if tags.is_empty() {
+                    String::new()
+                } else {
+                    format!("Open questions: {tags}")
+                },
+            ])
+        }
+        "form" => {
+            let form = &forms[str_of(&row["reply"], "questions").as_str()];
+            let tags = str_of(&row["reply"], "tag");
+            let waiting: Vec<&str> = tags.split_whitespace().collect();
+            let mut parts = vec![format!("## {title}")];
+            for question in form["questions"].as_array().into_iter().flatten() {
+                let tag = str_of(question, "tag");
+                if !waiting.is_empty() && !waiting.contains(&tag.as_str()) {
+                    continue;
+                }
+                let name = str_of(question, "title");
+                let name = name.trim();
+                let heading = if tag.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{tag} {name}")
+                };
+                let choices = question["choices"].as_array().cloned().unwrap_or_default();
+                parts.push(join(vec![
+                    format!("### {heading}"),
+                    text(question, "detail").to_string(),
+                    answers(&choices),
+                ]));
+            }
+            join(parts)
+        }
+        _ => String::new(),
+    }
+}
+
 /// A dock row's mark: a Ghostex page that needs him is a plain page in the need-you pink (`page`
 /// on the row, from gx-chat-core), a question form that needs him the checklist in that pink;
 /// everything else its status's mark (`status_look`). Every row
@@ -1405,8 +1508,10 @@ impl NativeChatView {
             }
             return div().w_full().child(head).into_any_element();
         }
-        let press = Self::dock_row_press(&key, open, head.child(age_menu), p).on_click(
-            cx.listener(move |this, _, _, cx| {
+        // A right-click on its title line opens the ⋯ menu too, as a page row's does.
+        let right_row = row.clone();
+        let press = Self::dock_row_press(&key, open, head.child(age_menu), p)
+            .on_click(cx.listener(move |this, _, _, cx| {
                 // One row open at a time: opening this one shuts the one that was open.
                 if this.expanded.remove(&toggle) {
                     this.board.dock_reveal = None;
@@ -1417,8 +1522,15 @@ impl NativeChatView {
                     this.board.dock_reveal = Some((toggle.clone(), web_time::Instant::now()));
                 }
                 cx.notify();
-            }),
-        );
+            }))
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    let rows = this.row_menu(&right_row, cx);
+                    this.show_dock_row_menu(rows, event.position, window, cx);
+                }),
+            );
         // Opened, only the title line opens and shuts the row: what sits under it takes a press
         // as text, so a drag selects, a double-click picks a word and Cmd+C copies.
         //
@@ -1532,11 +1644,19 @@ impl NativeChatView {
             .child(line)
     }
 
-    /// A row's ⋯ (and a page row's right-click) menu: Show in chat, Dismiss and Snooze
-    /// (`page_row_menu`), then Mention in chat box, which puts the item's, form's or page's
-    /// reference in the chat box where the caret is now.
+    /// A row's ⋯ (and right-click) menu: Show in chat, Dismiss and Snooze (`page_row_menu`), Copy
+    /// as Markdown for an ask, a question, a form or a page (`row_markdown`), then Mention in chat
+    /// box, which puts the item's, form's or page's reference in the chat box where the caret is
+    /// now.
     fn row_menu(&self, row: &Value, cx: &Context<Self>) -> Vec<Value> {
         let mut rows = page_row_menu(row);
+        let markdown = row_markdown(row, &self.snapshot["questionForms"]);
+        if !markdown.is_empty() {
+            rows.push(json!({
+                "label": "Copy as Markdown",
+                "command": { "type": "copyText", "text": markdown },
+            }));
+        }
         let mention = text(row, "mention");
         if !mention.is_empty() {
             let selection = self
