@@ -131,7 +131,7 @@ pub fn path_size_bytes(path: &Path) -> Result<u64, String> {
 impl ComponentStore {
     pub fn from_manifest(manifest: OnDemandManifest) -> Result<Self, String> {
         let root = component_store_root()?;
-        prune_other_versions(&legacy_asset_cache_root()?, &manifest.version)?;
+        prune_other_versions(&legacy_asset_cache_root()?, &manifest.version);
         Ok(Self { manifest, root })
     }
 
@@ -404,7 +404,7 @@ impl ComponentStore {
             self.query_for_platform(&component.name, &component.component_version, platform)?;
         if current.installed {
             prune_temporary_install_artifacts(&version_root);
-            prune_other_versions(&component_root, &version_dir_name)?;
+            prune_other_versions(&component_root, &version_dir_name);
             emit(
                 progress,
                 component,
@@ -418,7 +418,7 @@ impl ComponentStore {
             self.adopt_previous_install(component, platform, asset, &version_root)
         {
             prune_temporary_install_artifacts(&version_root);
-            prune_other_versions(&component_root, &version_dir_name)?;
+            prune_other_versions(&component_root, &version_dir_name);
             emit(
                 progress,
                 component,
@@ -558,7 +558,7 @@ impl ComponentStore {
             asset.size_bytes,
             ComponentStoreProgressPhase::Pruning,
         );
-        prune_other_versions(&component_root, &version_dir_name)?;
+        prune_other_versions(&component_root, &version_dir_name);
         emit(
             progress,
             component,

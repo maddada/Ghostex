@@ -192,37 +192,36 @@ pub(crate) fn prune_temporary_install_artifacts(version_root: &Path) {
     }
 }
 
-pub(crate) fn prune_other_versions(
-    component_root: &Path,
-    retained_version: &str,
-) -> Result<(), String> {
+/// Removes every version folder under `component_root` but `retained_version`, as far as it can.
+///
+/// CDXC:Components 2026-11-13 WHY:
+/// GitHub #581 (Q2787): on Windows an old web runtime's files can still be open (a CEF helper still running, an antivirus scan, the search indexer), so removing its folder failed with "Access is denied" and that failure stopped the whole ensure: web pages and the in-app feedback form said "The web runtime needs another try" although the current version was installed and fine. Pruning is housekeeping, so a folder it can't remove is logged and left for the next ensure, which runs at every launch and tries again; the other old folders are still removed.
+pub(crate) fn prune_other_versions(component_root: &Path, retained_version: &str) {
     let entries = match fs::read_dir(component_root) {
         Ok(entries) => entries,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return,
         Err(error) => {
-            return Err(format!(
+            log::warn!(
                 "Could not prune component versions under {}: {error}",
                 component_root.display()
-            ));
+            );
+            return;
         }
     };
-    for entry in entries {
-        let entry =
-            entry.map_err(|error| format!("Could not inspect component version: {error}"))?;
+    for entry in entries.flatten() {
         let name = entry.file_name();
         if name.to_string_lossy() == retained_version
             || !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false)
         {
             continue;
         }
-        fs::remove_dir_all(entry.path()).map_err(|error| {
-            format!(
-                "Could not prune old component version {}: {error}",
+        if let Err(error) = fs::remove_dir_all(entry.path()) {
+            log::warn!(
+                "Could not prune old component version {} (trying again next time): {error}",
                 entry.path().display()
-            )
-        })?;
+            );
+        }
     }
-    Ok(())
 }
 
 /// CDXC:CodeEditor 2026-10-20 WHY: code-server component versions are 84 characters, and under `%LOCALAPPDATA%\GhostexData\components\code-server\<version>\windows-native-x64\` the native editor's deepest files reached about 295 characters, past the 260 Windows still enforces on PowerShell and DLL loads. On Windows its version folder is a 16-character digest of the version instead (about 225 then); other components and platforms keep the plain version.
