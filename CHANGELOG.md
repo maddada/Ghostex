@@ -2,19 +2,109 @@
 
 ## Unreleased
 
-### 🩹 Fixes and polish
+## 11.6.0 - 2026-11-13
 
-- **A Ghostex page no longer shrinks for a moment after it opens:** about a second after an answered or new page opened, it was drawn at about two thirds of its size in the window's top-left corner and then grew back. That came from the picture taken for the page's chat card, which now leaves the page on screen as it is.
+**Ghostex 11.6.0 is out.** Quiet View for every chat and a new Summary view, Session details in Overview and Limits tabs, Ghostex pages you can export and answer anywhere, Snooze for pages and forms, a voice agent that waits for "reply", calmer dictation that opens Hex by itself, accounts of your other computers managed from here, agents that run without Ghostex's hooks, read-only threads for coordinators, long messages that always arrive, Claude on Windows PowerShell 5.1, and a lighter phone app.
+
+### 👁️ Chat views
+
+- **Quiet View is on for every chat:** every chat now reads as the conversation, with the work between two replies folded into one line, and the newest turn opens by itself. An opened line's header says what it holds ("Working", "Worked for 2m 5s", "Previous turn") instead of its counts. Settings > Chat > Advanced still turns it off. On the computer and the phone.
+- **Summary view shows your messages and the newest reply:** earlier replies and reports sit behind one "N earlier replies · N reports" line, only pages, charts and questions still waiting on you stay in full, and work that comes after a reply in the same turn (a thread's report, a background task) shows under Active work instead of hiding until the turn ends. On the computer and the phone.
+- **Detailed view is Quiet View with every line open,** so switching views only opens or shuts lines and nothing jumps.
+- **Agent work Reduced and Quiet, and the Tool call cards preview, are retired:** Quiet View replaces them, and anyone who used one of them starts in Quiet View.
+
+### 📄 Pages and forms
+
+- **Export a Ghostex page and get its answers back:** any page downloads as one HTML file that works in any browser, where its Send becomes Export answers (JSON to copy or download). Drop or paste that JSON into a chat, or use Import answers, and it reaches the agent as the page's own answers. On the computer and the phone.
+- **Snooze for pages and forms:** a form card and the page window get Snooze, with 1 hour, 6 hours and 24 hours, which puts the form off For later until then. On the computer and the phone.
+- **The page window has a ⋯ menu:** Snooze, Export page, Import answers and Open in browser sit under one ⋯ beside Hide and Close, in a light glass that reads over the page.
+- **Popups stay open when you switch apps:** Settings, the page window and the chat's form popup no longer close when you go to another app, so you can paste from a clipboard app.
+- **A form popup fades out once its answers are sent,** and stays open on them when the send fails; the page window fades out the same way.
+- **Reply and Mention for forms and pages in the work list:** a form's or page's row has Reply beside Open, whose words go to the agent tagged with the questions it still asks, and Mention in chat box in its ⋯ menu. A question form's row is marked with a pink checklist. On the computer and the phone.
+- **Copy as Markdown from the work list:** a row's ⋯ menu (now also on a right-click of its title) copies a question with its details and answers, or a form with each question, as Markdown.
+- **A Ghostex page no longer shrinks for a moment after it opens:** about a second after an answered or new page opened, it was drawn at about two thirds of its size in the window's corner and then grew back.
+
+### 🧾 Session details
+
+- **Session details has Overview and Limits tabs:** Overview holds Environment (with the agent's version), Changes, Context with Compact context under it, Tasks, Connectors, Skills, Memory files, Background tasks and the agent's other settings; Limits holds your plan limits with their reset times, Cost and time, and Cache. On the computer, in the browser and on the phone.
+- **The Context card shows its usage when folded:** it opens folded with its usage line and bar under its title, and unfolds for the breakdown; a card with nothing more to show has no fold.
+- **The status line under the phone's chat box follows the computer:** it shows the pins you saved for each agent in the Ghostex app on the chat's computer, and Context details says so.
+
+### 🎙️ Voice and dictation
+
+- **The voice agent waits until you say "reply":** with Settings > Voice Agent > Answer when I say "reply" (on by default for Regular calls), the agent answers a spoken turn only once it ends with "reply", "over" or "go ahead", so a pause to think no longer gets an answer. On the computer and the phone.
+- **Dictation opens Hex by itself:** on a Mac, dictating while Hex is closed opens it in the background and transcribes once it is ready, instead of failing.
+- **A live waveform while you dictate:** the recording pill shows your voice as it records, with ✕ to cancel on the left (the microphone's Stop finishes), and says "Can't hear you" after 3 seconds of near-silence. While dictation can't transcribe yet, the microphone is greyed and says why. On the computer and the phone.
+- **Calm dictation cards:** a problem shows in a small Dictate card that says what to do, and your recording is always safe in Past recordings. A refused microphone, no words heard and nothing waiting are cards too, not toasts. On the computer and the phone.
+- **Dictated words go where you were typing:** they replace the selection, or go in at the caret, that the chat box or question form box had when you started recording, even if you clicked elsewhere meanwhile. On the computer and the phone.
+
+### 🔐 Accounts and privacy
+
+- **Manage another computer's accounts from here:** Settings > Accounts has a computer picker that shows a connected computer's saved Claude and Codex accounts and usage. Adding or reconnecting one signs in on that computer while the sign-in page opens on yours, and a remote session's Reconnect opens Accounts on its computer. On the computer and the phone.
+- **A Claude login waiting to renew stays ready:** it no longer says "The saved login expired. Reconnect this account." while its access token is only due for renewal.
+- **Turn usage analytics off with a launch option:** start Ghostex or its server with `--no-analytics`, or set `GHOSTEX_TELEMETRY_DISABLED=1` or `DO_NOT_TRACK=1`, and no usage analytics are sent; setup no longer points to a Settings switch that did not exist, thanks to @lardissone for raising it.
+- **Reset all settings asks first:** one click on Reset all settings to defaults in Settings > About no longer puts every setting and the app icon back with no way back, and a key typed while a Settings confirmation is open stays in it (#589), thanks to @lardissone.
 
 ### 🤖 Agents
 
-- **Coordinators mark their replies again by default:** Settings > Chat > Marked handovers is now one choice, Off, Coordinators only (the default) or Every session, so your coordinators answer with ✅ Done, 🔄 In progress, ❓ Needs you and the other sections without you turning anything on, while other sessions write as before. If you had Marked handovers in every session on, it is now Every session; if you had only Coordinators answer without markers on (it is gone), it is now Off. A coordinator picks up a change with the next message it gets.
-- **Agents install the way their makers say:** first-run setup, Settings > Agents and Install buttons now install an agent with its official method (Claude Code's, Codex's, OpenCode's, Grok's, Antigravity's and Hermes Agent's own install scripts, PowerShell on Windows, or npm, Homebrew or WinGet where that is how an agent ships), not with mise, even on a computer that has mise. An agent mise already manages keeps updating through mise.
-- **DeepSeek Harness installs with npm:** Install runs its documented `npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui` (plus pnpm when it is missing), then `dsh-tui update`; Ghostex no longer downloads mise for it.
-- **Pi installs with its official installer:** Install runs `curl -fsSL https://pi.dev/install.sh | sh` (PowerShell's `install.ps1` on Windows), installing Node.js first when npm is missing, and Update runs `pi update`; npm stays as another choice.
-- **Claude Code installs on Windows without Git for Windows,** as its docs say.
-- **OpenCode's Homebrew choice installs OpenCode 2** (`anomalyco/tap/opencode-v2`) instead of Homebrew's older `opencode`.
-- **Antigravity's Update says it updates itself:** Antigravity updates itself while it runs, so Settings > Agents and the Updates list say so instead of re-running an installer that does nothing.
+- **Claude, Codex and OpenCode run without Ghostex's hooks:** Ghostex follows them from their own files on every computer and removes only the hooks it had installed. If an agent goes unseen for 90 seconds, Ghostex installs its hook for that session and says so in the chat; Settings > Agents > Use agent hooks brings the hooks back for good. Without hooks, a Claude question with several questions shows them all in the chat card.
+- **Agents install the way their makers say:** first-run setup, Settings > Agents and Install buttons use each agent's official installer (its own install script, PowerShell on Windows, or npm, Homebrew or WinGet where that is how it ships) instead of mise, unless mise already manages it. DeepSeek Harness installs with npm, Pi with its own installer, Claude Code on Windows without Git for Windows, and OpenCode's Homebrew choice installs OpenCode 2.
+- **Antigravity's Update says it updates itself,** in Settings > Agents and the Updates list, instead of running an installer that does nothing.
+
+### 🧭 Coordinators
+
+- **Read-only threads:** `ghostex coordinator start-thread --read-only` starts a thread that can look but not change anything (Claude in Plan mode, Codex in its read-only sandbox), and it stays read-only across restarts and wakes. ([#554](https://github.com/maddada/Ghostex/issues/554))
+- **Coordinators read their playbook once:** the playbook ships in Ghostex, and `ghostex coordinator guide --changes` shows a coordinator only what changed since it last read it (#580), thanks to @lardissone.
+- **Playbook overrides have room to grow:** an override can be up to 100,000 characters (was 20,000), and past 20,000 every save says how long it is. ([#584](https://github.com/maddada/Ghostex/issues/584))
+- **The work list reads evenly and moves smoothly:** every text in it is one size, an opened row eases open and shut, scrolls just enough to show its answers when the list is full, and shows its threads as their agents' logos beside the answers.
+- **Coordinators mark their replies again by default:** Marked handovers is now one setting with three choices, Off, Coordinators only (the default) and Every session, so coordinators answer in marked sections without you changing anything; threads always mark their reports. Anyone who had it on for every session keeps Every session.
+
+### 💬 Chat
+
+- **Long messages always arrive:** a message over 256 KB (a pasted crash report, for example) now reaches the agent in pieces instead of failing with "The agent's terminal didn't take your message".
+- **A held message no longer holds up the queue:** a message Ghostex held for a moment goes out as soon as a working agent's input box is ready, instead of waiting for its whole turn. ([#591](https://github.com/maddada/Ghostex/issues/591))
+- **Leaving a session keeps its draft:** a draft another client wrote (for example with `ghostex set-session-chat-draft`) is no longer wiped when you leave the session. ([#587](https://github.com/maddada/Ghostex/issues/587))
+- **Drop a session on the chat box to link it:** dragging a session row from the sidebar onto a chat box types its link at the caret, as Copy ID copies it, instead of splitting the pane.
+- **A tidier More actions menu:** the chat box's More actions lists the everyday actions first, then Agent (Rename, Sleep, Fork Session, Switch Account and more) and More. On the computer and the phone.
+- **A pasted picture whose path has spaces shows as a picture,** on the computer and the phone.
+- **Legacy models open under their row:** in the model picker, opening Legacy models lists them below it with no gap. On the computer and the phone.
+- **A message that could not be sent says so calmly:** a failed or waiting message gets a small card right under it with its icon, "Not sent" (or "Waiting to send", "Still not sent"), the reason in one sentence, and Retry and Terminal view as buttons, with Fix it, Start fresh, Edit and Remove in its ⋯ menu. Every notice card in the chat is calmer too, with only its icon in colour. On the computer and the phone.
+
+### 📱 On the phone
+
+- **The phone uses far less data:** long tool outputs come cut to what a card shows (the full text loads when you open it), the link to your computer is compressed, the sessions list is pushed as it changes instead of polled every 5 seconds, a chat picks up where it left off after a reconnect, and a hidden terminal tab sends nothing.
+- **Tabs switch instantly and can be dragged:** your last 4 chats stay ready, a held tab drags to a new place (the strip scrolls near its end), and on a tablet or an unfolded phone you can drop a tab on the right half to show two sessions side by side.
+- **See how each computer connects:** Settings > Connection lists every computer with its status and route (Tailscale, or Easy Connect through Private Relay, Global Relay, Direct or Same network), the Sessions screen stays quiet while everything works, and a computer added over Tailscale also pairs for Easy Connect and switches between the two by itself.
+- **Search Settings:** a search box at the top of Settings finds a setting on any page.
+- **Send logs to the developer:** Logs has Send to developer, with a review step that says what the report holds.
+- **The terminal view has a bottom bar** with the mode button and the chat box's other controls, on iPhone and Android.
+- **Spaces are icon tiles like the desktop's,** led by the Active projects star, and the work list shares one bar with the working status above the chat box.
+- **Show session names is on by default,** so alerts, the Live Activity and the widgets lead with the session's name.
+- **Android: the keyboard comes back** when you tap the chat box after closing it with the back gesture, and the chat box sits right above the keyboard instead of over an empty band.
+- **The questions sheet scrolls,** so every question and its buttons are reachable.
+
+### 🪟 Windows
+
+- **Claude starts on PCs that only have Windows PowerShell 5.1.** ([#582](https://github.com/maddada/Ghostex/issues/582))
+- **Web pages and the feedback form keep working after an update** when Windows will not let go of an old runtime folder. ([#581](https://github.com/maddada/Ghostex/issues/581))
+- **Emoji and characters like Hangul reach Windows apps whole,** long input is no longer cut, and repeated characters stay, thanks to @yossifyahya17-bit.
+- **A queued message stuck on an unreadable input box gets a repaint** and goes out, instead of waiting for the agent to reload.
+- **Autopilot recognises PowerShell and cmd deletes** (Remove-Item, del, erase, rd) and Windows paths when it checks for deletes outside the project, and an agent's refusal while its approval card is open logs as Waiting for you, not failed. ([#590](https://github.com/maddada/Ghostex/issues/590))
+
+### ⚡ Faster and lighter
+
+- **Less GPU and memory use:** hidden menus, tooltips and popups no longer hold up to 64 MB of GPU memory each, the app gives back graphics memory after a heavy frame, and a chat hidden for five minutes keeps 1 MB of pictures instead of 8 MB.
+- **Big coordinators stay light:** a coordinator with over a thousand threads no longer rebuilds its work list and panel every 2 seconds, and Ghostex's server reads running sessions once instead of in every check.
+
+### 🩹 Fixes and polish
+
+- **Closing a page no longer crashes the Mac app** after the window it was last shown in went away.
+- **A file link in the chat of a session on another computer always opens:** it opens in Files in the window you clicked it in, or a toast says why it can't, instead of showing "Opening file in Files view" and then nothing.
+- **A session's computer icon sits in one column** down the sidebar, with its status and time lined up at the right.
+- **Copy ID is its own row** in a session's context menu, above Tag As, and a session from another computer names that computer in Copy ID, Copy Link and a drop on a chat box. On the computer and the phone.
+- **A session reference that names the wrong computer says where the session is** instead of saying the chat was closed.
+- **Notifications are simpler:** the panel has one ⋯ menu with Mark all read and Clear all (for every row), each notification shows its computer's icon, Next unread is gone (its hotkey stays), and a phone added for Easy Connect without a click can be removed from its row. On the computer and the phone.
+- **Ask Ghostex AI, Join Discord and Send Bug / Feedback are in the main menu,** below Keep Awake, instead of a Help submenu.
 
 ## 11.5.0 - 2026-11-12
 
