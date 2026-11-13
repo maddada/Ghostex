@@ -698,6 +698,13 @@ pub const TERMINAL_VIEW_WIDTH_MODE_OPTIONS: &[Opt] = &[
     opt("Custom", "custom"),
 ];
 
+/// Which sessions mark their handovers (`markedHandovers`), in the Settings control's order.
+pub const MARKED_HANDOVERS_OPTIONS: &[Opt] = &[
+    opt("Off", "off"),
+    opt("Coordinators only", "coordinators"),
+    opt("Every session", "all"),
+];
+
 /// How the chat colours the sections an agent marks (Marked handovers), in the Settings dropdown's order.
 pub const MARKED_HANDOVERS_STYLE_OPTIONS: &[Opt] = &[
     opt("Coloured labels", "labels"),

@@ -494,6 +494,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
             ),
             ("THEME_PRESETS", THEME_PRESETS.to_json()),
             (
+                "MARKED_HANDOVERS_OPTIONS",
+                MARKED_HANDOVERS_OPTIONS.to_json(),
+            ),
+            (
                 "MARKED_HANDOVERS_STYLE_OPTIONS",
                 MARKED_HANDOVERS_STYLE_OPTIONS.to_json(),
             ),

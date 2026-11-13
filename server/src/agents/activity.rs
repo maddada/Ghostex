@@ -512,12 +512,12 @@ CDXC:Coordinators 2026-10-03 WHY:
 ZCode has no system-prompt or config flag its launch command could carry, so a ZCode coordinator's
 guide pointer rides the SessionStart hook: this endpoint answers the ingest with `additionalContext`
 and the hook prints it for zcode to fold into context. Only a ZCode SessionStart on a session with
-a coordinators row, of a thread, or any ZCode SessionStart while Marked handovers is on (its note
+a coordinators row, of a thread, or any ZCode SessionStart while Marked handovers is Every session (its note
 follows the pointer; agents/marked_handovers.rs), is answered, so every other hook response stays
 unchanged. Every ZCode SessionStart also gets the Ghostex note while Tell agents about Ghostex is on
 (agents/ghostex_note.rs). Since 2026-10-17 a new coordinator takes its role from the `ghostex-coordinator` skill
 (coordinators/role.rs), so only coordinators made before then get the pointer; every coordinator
-still gets the Marked handovers note unless coordinators answer without markers.
+still gets the Marked handovers note unless Marked handovers is Off (CDXC:MarkedHandovers 2026-11-13).
 */
 fn coordinator_session_start_context(
     repository: &DomainRepository<'_>,

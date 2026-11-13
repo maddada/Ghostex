@@ -72,11 +72,7 @@ pub const SIDEBAR_ORGANIZATION_KEYS: &[&str] = &[
     "sidebarSessionTagListItems",
 ];
 
-const COORDINATOR_KEYS: &[&str] = &[
-    "orchestratorPlainReplies",
-    "orchestratorAllEfforts",
-    "coordinatorBoardView",
-];
+const COORDINATOR_KEYS: &[&str] = &["orchestratorAllEfforts", "coordinatorBoardView"];
 
 /// This computer's system, as the Keybindings keys name it.
 fn os_name() -> &'static str {

@@ -180,6 +180,8 @@ pub(super) fn read_settings_file() -> CliResult<Map<String, Value>> {
     // 2026-11-09 in the settings catalog), as the app and gxserver read them.
     ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
     ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
+    // Marked handovers is Off, Coordinators only or Every session (CDXC:MarkedHandovers 2026-11-13).
+    ghostex_settings_catalog::migrate_marked_handovers(&mut object);
     Ok(object)
 }
 

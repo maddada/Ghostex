@@ -142,7 +142,7 @@ pub fn run() -> Result<(), JsValue> {
 
     // `?settings=<url-encoded JSON object>` stands in for the settings the page has no source for
     // (README, "Settings are empty"), so a setting-driven look can be tested in a browser, for
-    // example `?settings={"markedHandovers":true,"markedHandoversStyle":"badge"}`.
+    // example `?settings={"markedHandovers":"all","markedHandoversStyle":"badge"}`.
     if let Some(settings) = web_sys::window()
         .and_then(|window| window.location().search().ok())
         .and_then(|search| {

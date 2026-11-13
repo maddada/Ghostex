@@ -2692,31 +2692,33 @@ Chat look (Settings > Chat > Advanced) has five opt-in settings for a quieter, S
 
 Quiet View makes a chat read as the conversation: your messages, the agent's replies, Ghostex pages and forms, questions and your answers, approvals waiting on you, errors and messages that were not sent stay in view, and everything between two of them (reports from threads, messages sent to them, tool calls, the line that says which work items changed, turns that ended without a reply) folds into one quiet line that counts it, for example "3 reports · 1 message sent · 3 tool calls · 1 item updated". Click the line to see all of it in order, as the full chat shows it; an open line drops its counts and says only "Working", how long the agent worked, or "Reports", since what it holds is in view. Click it again to shut it. While the agent works the line counts up instead of the cards piling up. Every chat opens in Quiet View; More actions > View > Quiet View turns it on or off for any chat, and the chat remembers that choice. When a chat's view differs from its default, a small Quiet view or Full view chip at the left of the chat box's pill row switches it back in one click. Summary view, which folds more, wins while it is on, and Detailed view is Quiet View with every line open. Agent work Reduced and Quiet and the Tool call cards preview are gone: Quiet View replaced them, and a chat that used one of them opens in Quiet View. Settings > Chat > Advanced has the defaults: Coordinators open in Quiet View (on), Other chats open in Quiet View (on; turn it off to have other chats open in the full Normal view), and Expand the last turn in Quiet View (on), which shows the work after the newest reply, or the running turn, open until a newer reply comes. Quiet View is on the computer, in Ghostex in a browser and on the phone, which follows the computer's three settings and has the same Quiet View row in its chat box's More actions > View; with a computer on an older Ghostex the phone shows the full chat (`chatQuietViewCoordinators`, `chatQuietViewChats`, `chatQuietViewExpandLast`).
 
-Marked handovers: a coordinator's threads begin each part of the report
-they hand back with a marker (a coordinator itself replies with a few sentences of news
-until you turn the setting below on; its work items show above the chat box and in the Work panel either way, see Coordinators). What happened comes first: ✅ Done, 🚀 Shipped,
+Marked handovers: your coordinators and their threads begin each part of the reply
+they hand back with a marker (a coordinator's work items show above the chat box and in the Work panel either way, see Coordinators). What happened comes first: ✅ Done, 🚀 Shipped,
 📣 Comms (replies sent outside, such as GitHub or Discord), 🛫 Kicked off (work started this turn), 🔄 In progress (running now),
 📦 Held for release and 🧪 Untested. What needs your attention comes last, so it is the
 last thing you read: ⚠️ Read this, 🛑 Blocked, 💡 Suggestions and, at the very end, ❓ Needs you. A section shows only
-when it has something, and every bullet under a marker starts with a capital letter; a thread's report to its coordinator is marked too. Turn on
-Marked handovers in every session (Settings > Chat, off by default) to have
-your coordinators and every other agent session do the same. A coordinator then
-writes each reply as these sections with bullets under them, with no Needs you
-section for a question that already waits above the chat box. The agent otherwise writes as usual. It
-reaches Claude Code, Codex and ZCode (and every coordinator, through its guide). A change applies
+when it has something, and every bullet under a marker starts with a capital letter; a thread's report to its coordinator is marked too.
+Settings > Chat > Marked handovers picks who does it: Coordinators only (the default), Every session
+(every other agent session Ghostex starts too) or Off (coordinators answer with a few sentences of
+news). A coordinator writes each reply as these sections with bullets under them, with no Needs you
+section for a question that already waits above the chat box. A thread marks its report to its
+coordinator under all three. An agent the setting does not cover writes as usual. Every session
+reaches Claude Code, Codex and ZCode; coordinators get it through their guide. This used to be
+a switch, Marked handovers in every session, plus the advanced Coordinators answer without markers:
+the switch on is now Every session, off is Coordinators only, and coordinators that answered without
+markers are now Off. A change applies
 to sessions started or resumed afterwards, and to a coordinator from the next message it gets; a running agent keeps the
 instructions it started with until it is resumed. The chat colours each marked section by
 its kind, in the style picked under Marked sections style right below the
-switch (shown while it is on): coloured labels (the default), a thin left rule, or a coloured
+setting (shown unless it is Off): coloured labels (the default), a thin left rule, or a coloured
 badge naming the kind; the eye button next to it previews all three side by
 side. Show marker emojis, under it and off by default (an advanced setting, not recommended), adds the marker emoji
 to every style; while it is off the colour and the label show the kind.
 Copying a message still gives the agent's own text. The phone app sets both in
 its own Settings > Chat > Marked sections, which also offers Plain text.
 Heading colour strength (Settings > Chat > Marked handovers, under the style, an advanced setting, 0% to 100%, default 100%) sets how strongly the coloured headings stand out: lower values fade them toward the normal text colour, and 0% leaves plain bold text; the phone follows the computer's value.
-Coordinators answer without markers (Settings > Chat, an advanced setting, off by default and not recommended) keeps coordinators answering in plain prose while Marked handovers in every session is on, while their threads still mark the reports they send them.
-Settings: `markedHandovers`, `markedHandoversStyle` (`labels`, `rule`,
-`badge`), `markedHandoversEmoji`, `markedHandoversHeadingStrength`, `orchestratorPlainReplies`.
+Settings: `markedHandovers` (`off`, `coordinators`, `all`), `markedHandoversStyle` (`labels`, `rule`,
+`badge`), `markedHandoversEmoji`, `markedHandoversHeadingStrength`.
 
 Tell agents about Ghostex (Settings > Agents > Defaults, on by default) gives every agent
 session Ghostex starts a short note that it runs in Ghostex: Ghostex can show
@@ -3926,8 +3928,8 @@ version of the Projects features in Cursor and Claude Code.
   another item, a question or something outside), **Later** and **Finished**.
   Threads, steps and what it asks you belong to the item, and a wait on another
   item or question clears itself once that's done. A coordinator's reply is a
-  couple of sentences of news, or marked sections with bullets while Marked
-  handovers in every session is on. On the computer, each work item the turn
+  set of marked sections with bullets, or a couple of sentences of news while
+  Settings > Chat > Marked handovers is Off. On the computer, each work item the turn
   changed gets a small card under the reply, like a "Message from" card: "Work
   item updated" (or added, finished, dropped, needs you, asked you, now
   waiting), the item's title, the line that changed, the time and the item's

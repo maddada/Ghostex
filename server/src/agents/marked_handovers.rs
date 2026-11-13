@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use serde_json::Value;
+use ghostex_settings_catalog::MarkedHandovers;
 
 use super::*;
 use crate::paths::{get_gxserver_paths, GxserverPaths};
@@ -23,7 +23,9 @@ use crate::paths::{get_gxserver_paths, GxserverPaths};
 /// User (Q1232, Q1233): four more sections, 💡 Suggestions, ⏸️ Parked (so In progress lists only running work), 📦 Held for release and 📣 Comms (the user renamed "Posted" to "Comms"); "we should only send the ones that the user needs to see": a section appears only when it has something; and "move Suggestions, Needs you, Blocked and other ones like that that I must pay attention to at the bottom of the messages u send so i don't miss them". Status sections (✅ 🚀 📣 🛫 🔄 📦 🧪) come first and actionable ones (⚠️ 🛑 💡 ❓) last, with ❓ Needs you the very last. ⚠️ Read this sits with the actionable ones because it is something the user must take in before acting, not a report of what happened.
 /// CDXC:MarkedHandovers 2026-11-05 DECISION:
 /// User: "I REALLY don't care if u keep a thread open please don't share this." The ⏸️ Parked section is gone: whether a thread is kept open is the agent's bookkeeping, not news, so a handover never lists idle or kept-open threads. Older messages that used it still draw it.
-/// SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (`markedHandovers`), server/src/coordinators/role.rs (the orchestrator's role carries the note), server/src/coordinators/brief.rs (`thread_brief`), server/src/agents/activity.rs (ZCode's SessionStart context).
+/// CDXC:MarkedHandovers 2026-11-13 DECISION:
+/// User (Q2963 "A"): Marked handovers is Off, Coordinators only (the default) or Every session, and Coordinators answer without markers is gone (Off is that now). Threads always get this note; coordinators get it unless the setting is Off; every other session gets it only under Every session. Supersedes the 2026-10-17 decision above and the 2026-11-11 one in coordinators/role.rs.
+/// SEE-ALSO: packages/settings-catalog/src/data/defaults.rs (`markedHandovers`), packages/settings-catalog/src/lib.rs (`MarkedHandovers`, `migrate_marked_handovers`), server/src/coordinators/role.rs (the orchestrator's role carries the note), server/src/coordinators/brief.rs (`thread_brief`), server/src/agents/activity.rs (ZCode's SessionStart context).
 pub const MARKED_HANDOVERS_NOTE: &str = "Marked handovers: a format rule the user turned on in Ghostex. It applies in every project, on top of any CLAUDE.md or AGENTS.md, and allows these emoji even where you would otherwise avoid them.
 In the final message of each turn (the one that hands back to the user), put the matching marker first, before any bold, in front of every section, heading or bold label that is one of these.
 Status sections, at the top, in this order:
@@ -48,43 +50,46 @@ A section that asks the user anything always gets ❓, and one about what you di
 Before you send that final message, check that every matching section starts with its marker on a line of its own and that the actionable ones come last. Leave the markers out of your other messages.";
 
 const SETTING_KEY: &str = "markedHandovers";
-const ORCHESTRATOR_PLAIN_SETTING_KEY: &str = "orchestratorPlainReplies";
 
-/// Whether the Marked handovers setting is on, read fresh from the shared settings file so a
-/// change reaches the next launch or resume without a gxserver restart.
-pub(crate) fn marked_handovers_enabled(paths: &GxserverPaths) -> bool {
-    bool_setting(paths, SETTING_KEY)
-}
-
-/// Whether Coordinators answer without markers is on, read fresh like
-/// [`marked_handovers_enabled`]. It only matters while Marked handovers is on (see
-/// [`coordinator_marks_replies`]).
-pub(crate) fn orchestrator_plain_replies(paths: &GxserverPaths) -> bool {
-    bool_setting(paths, ORCHESTRATOR_PLAIN_SETTING_KEY)
-}
-
-/// Whether a coordinator writes its replies as marked sections: Marked handovers is on and
-/// Coordinators answer without markers is off. Since 2026-11-11 a coordinator follows the Marked
-/// handovers setting like every other session (CDXC:Coordinators 2026-11-11 DECISION in
-/// coordinators/role.rs `coordinator_guide_for`), which supersedes "orchestrators get it unless
-/// Orchestrators answer without markers is on" in the 2026-10-17 decision above; threads still
-/// mark their reports whatever the settings say.
-pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
-    marked_handovers_enabled(paths) && !orchestrator_plain_replies(paths)
-}
-
-fn bool_setting(paths: &GxserverPaths, key: &str) -> bool {
-    // Unit tests assert exact commands, which must not depend on the user's settings.
+/// The Marked handovers setting (Off, Coordinators only or Every session), read fresh from the
+/// shared settings file so a change reaches the next launch, resume or coordinator message without a
+/// gxserver restart. An older file's switch reads as the settings catalog migrates it
+/// (`MarkedHandovers::from_setting`; CDXC:MarkedHandovers 2026-11-13 in its defaults.rs).
+pub(crate) fn marked_handovers_setting(paths: &GxserverPaths) -> MarkedHandovers {
+    // Unit tests assert exact commands and guides, which must not depend on the user's settings;
+    // Off is what they were written against (no note for sessions, prose for coordinators).
     if cfg!(test) {
-        return false;
+        return MarkedHandovers::Off;
     }
-    crate::shared_settings_file::read_shared_settings(paths)
-        .and_then(|settings| settings.get(key).and_then(Value::as_bool))
-        .unwrap_or(false)
+    let settings = crate::shared_settings_file::read_shared_settings(paths);
+    MarkedHandovers::from_setting(
+        settings
+            .as_ref()
+            .and_then(|settings| settings.get(SETTING_KEY)),
+    )
+}
+
+/// Whether every agent session Ghostex starts gets the note: Marked handovers is Every session.
+pub(crate) fn marked_handovers_enabled(paths: &GxserverPaths) -> bool {
+    marked_handovers_setting(paths).every_session()
+}
+
+/// Whether a coordinator writes its replies as marked sections: Marked handovers is Coordinators
+/// only (the default) or Every session.
+///
+/// CDXC:MarkedHandovers 2026-11-13 DECISION: User (Q2963 "A"): coordinators mark their replies by
+/// default again, as they did before 11.4.0 made them follow the old switch (off by default), which
+/// took them away from someone who never changed a setting. Off is the only value that keeps
+/// coordinators on prose, and it replaces Coordinators answer without markers
+/// (`orchestratorPlainReplies`). Supersedes CDXC:Coordinators 2026-11-11 in coordinators/role.rs,
+/// where coordinators followed the switch, and the 2026-10-17 decision above. Threads still mark their reports whatever
+/// the setting says.
+pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
+    marked_handovers_setting(paths).coordinators()
 }
 
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
-/// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless they answer without markers; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-coordinator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
+/// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless Marked handovers is Off; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-coordinator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
 /// CDXC:AgentGuide 2026-11-02 WHY:
 /// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file) and Droid (`--append-system-prompt-file`) get the joined text through their own flags; OpenCode, Gemini, Cursor, Copilot, Amp and the rest have no flag Ghostex can use and get the note as the `ghostex-agent-guide` skill instead.
 /// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with), server/src/agents/ghostex_note.rs.
@@ -104,7 +109,7 @@ pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &st
         let role_file = crate::coordinators::coordinator_role_file(&paths);
         if command.contains(role_file.to_string_lossy().as_ref()) {
             // A Claude orchestrator reads its role file at every start and resume, so it is
-            // rewritten here to follow the Marked handovers settings; its note is the role's.
+            // rewritten here to follow the Marked handovers setting; its note is the role's.
             let _ = crate::coordinators::ensure_coordinator_role_file(&paths);
             return command.to_string();
         }

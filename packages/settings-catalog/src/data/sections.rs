@@ -138,7 +138,6 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "markedHandoversStyle",
     "markedHandoversEmoji",
     "markedHandoversHeadingStrength",
-    "orchestratorPlainReplies",
     "orchestratorAllEfforts",
     "sidebarSpaceFollowActiveSession",
     "projectSwitchKeepAliveMinutes",
@@ -162,8 +161,9 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
 
 /// CDXC:MarkedHandovers 2026-10-17 DECISION:
 /// User: "allow launching an orchestrator without the reply style ... but put "Not recommended" and make it an advanced setting, same for emojis setting". These rows are advanced and carry a visible "Not recommended" label: turning them on works against the marked handovers Ghostex recommends.
-pub const NOT_RECOMMENDED_SETTING_KEYS: &[&str] =
-    &["markedHandoversEmoji", "orchestratorPlainReplies"];
+/// Coordinators answer without markers (`orchestratorPlainReplies`) left with the 2026-11-13 Marked
+/// handovers choice (Off is that now; CDXC:MarkedHandovers 2026-11-13 in defaults.rs).
+pub const NOT_RECOMMENDED_SETTING_KEYS: &[&str] = &["markedHandoversEmoji"];
 
 pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
     J::Obj(&[
@@ -467,7 +467,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "markedHandoversEmoji",
             "markedHandoversStyle",
             "markedHandoversHeadingStrength",
-            "orchestratorPlainReplies",
         ],
     ),
     (
@@ -916,7 +915,6 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "markedHandoversEmoji",
             "markedHandoversStyle",
             "markedHandoversHeadingStrength",
-            "orchestratorPlainReplies",
         ],
     ),
     (

@@ -140,7 +140,9 @@ pub fn migrate_chat_view_default(settings: &mut serde_json::Map<String, serde_js
 /// after that, so the look they wanted wins. The desktop saves this once at start
 /// (shared_settings/experimental_switches.rs) and every reader applies it, as for
 /// `migrate_experimental_features_switch`.
-pub fn migrate_retired_chat_looks(settings: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+pub fn migrate_retired_chat_looks(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
     let work = settings.remove("chatAgentWorkStyle");
     let cards = settings.remove("chatToolCallCards");
     if work.is_none() && cards.is_none() {
@@ -157,6 +159,83 @@ pub fn migrate_retired_chat_looks(settings: &mut serde_json::Map<String, serde_j
         );
     }
     true
+}
+
+/// Which sessions mark their handovers (`markedHandovers`): the coordinators (the default), every
+/// session, or none. A coordinator's threads mark their reports under all three.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarkedHandovers {
+    Off,
+    Coordinators,
+    Every,
+}
+
+impl MarkedHandovers {
+    /// The saved value, read the way `migrate_marked_handovers` turns the old switch into it: true is
+    /// Every session, false Coordinators only. Anything else (nothing saved, an unknown word) is the
+    /// default, Coordinators only.
+    pub fn from_setting(value: Option<&serde_json::Value>) -> Self {
+        match value {
+            Some(serde_json::Value::String(word)) if word == "off" => Self::Off,
+            Some(serde_json::Value::String(word)) if word == "all" => Self::Every,
+            Some(serde_json::Value::Bool(true)) => Self::Every,
+            _ => Self::Coordinators,
+        }
+    }
+
+    /// Whether coordinators write their replies as marked sections.
+    pub fn coordinators(self) -> bool {
+        self != Self::Off
+    }
+
+    /// Whether every other agent session Ghostex starts gets the note.
+    pub fn every_session(self) -> bool {
+        self == Self::Every
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Coordinators => "coordinators",
+            Self::Every => "all",
+        }
+    }
+}
+
+/// Turns the old Marked handovers in every session switch (`markedHandovers` true or false) and
+/// Coordinators answer without markers (`orchestratorPlainReplies`) into the three-value Marked
+/// handovers: true is Every session; false or nothing is Coordinators only, or Off when coordinators
+/// answered without markers. Returns whether it changed anything; a file that already holds a word
+/// and no old key is left alone, so it runs once per file (and again only for an older computer's
+/// synced switch).
+///
+/// CDXC:MarkedHandovers 2026-11-13 DECISION: User (Q2963 "A"): one setting, Off / Coordinators only /
+/// Every session, default Coordinators only; an explicit true becomes Every session, false or unset
+/// Coordinators only. The settings file stores every default, so `false` is what almost every file
+/// holds and says nothing about a choice. Coordinators answer without markers only ever kept
+/// coordinators on prose, so with the switch off it is Off; with the switch on, the explicit Every
+/// session wins (the three values have no "everyone but coordinators"). The desktop saves this once
+/// at start (shared_settings/experimental_switches.rs) and every reader applies it, as for
+/// `migrate_experimental_features_switch`.
+pub fn migrate_marked_handovers(settings: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    let plain = settings.remove("orchestratorPlainReplies");
+    let current = settings.get("markedHandovers");
+    let next = match current {
+        Some(serde_json::Value::String(_)) => None,
+        Some(serde_json::Value::Bool(true)) => Some(MarkedHandovers::Every),
+        Some(_) | None if plain.as_ref().and_then(serde_json::Value::as_bool) == Some(true) => {
+            Some(MarkedHandovers::Off)
+        }
+        Some(_) => Some(MarkedHandovers::Coordinators),
+        None => None,
+    };
+    if let Some(next) = next {
+        settings.insert(
+            "markedHandovers".to_string(),
+            serde_json::Value::String(next.as_str().to_string()),
+        );
+    }
+    plain.is_some() || next.is_some()
 }
 
 /// The switches Enable Experimental Features (`showBetaFeatures`) used to open, with the value of

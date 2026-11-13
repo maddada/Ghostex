@@ -8,6 +8,7 @@
 
 ### 🤖 Agents
 
+- **Coordinators mark their replies again by default:** Settings > Chat > Marked handovers is now one choice, Off, Coordinators only (the default) or Every session, so your coordinators answer with ✅ Done, 🔄 In progress, ❓ Needs you and the other sections without you turning anything on, while other sessions write as before. If you had Marked handovers in every session on, it is now Every session; if you had only Coordinators answer without markers on (it is gone), it is now Off. A coordinator picks up a change with the next message it gets.
 - **Agents install the way their makers say:** first-run setup, Settings > Agents and Install buttons now install an agent with its official method (Claude Code's, Codex's, OpenCode's, Grok's, Antigravity's and Hermes Agent's own install scripts, PowerShell on Windows, or npm, Homebrew or WinGet where that is how an agent ships), not with mise, even on a computer that has mise. An agent mise already manages keeps updating through mise.
 - **DeepSeek Harness installs with npm:** Install runs its documented `npm install -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui` (plus pnpm when it is missing), then `dsh-tui update`; Ghostex no longer downloads mise for it.
 - **Pi installs with its official installer:** Install runs `curl -fsSL https://pi.dev/install.sh | sh` (PowerShell's `install.ps1` on Windows), installing Node.js first when npm is missing, and Update runs `pi update`; npm stays as another choice.

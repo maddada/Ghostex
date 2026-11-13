@@ -815,7 +815,7 @@ pub(super) fn chat_sections(
 
 /// CDXC:Settings 2026-10-29 DECISION (wording Q25): the five marked-handover rows sat loose in the
 /// Chat list; they are their own Marked handovers section (packages/settings-catalog
-/// general/chat.rs `marked_handovers`). The switch is an everyday row, the other four advanced.
+/// general/chat.rs `marked_handovers`). Marked handovers is an everyday row, the other three advanced.
 fn marked_handovers_section(
     page: &mut GeneralTab,
     g: &GeneralCx,
@@ -830,9 +830,22 @@ fn marked_handovers_section(
     }
     let s = "markedHandovers";
     let mut rows: Vec<AnyElement> = Vec::new();
-    rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "A coordinator's threads start each part of the report they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have your coordinators and every other agent session do the same. A coordinator follows a change from the next message it gets, other sessions once they are started or resumed.", false, cx));
+    // CDXC:MarkedHandovers 2026-11-13 DECISION: User (Q2963 "A"): Off / Coordinators only / Every
+    // session in one control, Coordinators only by default; it replaces the switch and Coordinators
+    // answer without markers (packages/settings-catalog lib.rs `migrate_marked_handovers`).
+    if g.visible(s, "markedHandovers") {
+        let spec = g.spec("markedHandovers", "Marked handovers", "Which agents start each part of the reply they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Coordinators only: your coordinators do. Every session: every other agent session too. Off: coordinators answer in plain prose. A coordinator's threads mark the reports they send it under all three. A coordinator follows a change from the next message it gets, other sessions once they are started or resumed.");
+        rows.extend(page.segmented(
+            g,
+            s,
+            "markedHandovers",
+            spec,
+            Some(reset_key::<GeneralTab>("markedHandovers")),
+            g.options("MARKED_HANDOVERS_OPTIONS"),
+            cx,
+        ));
+    }
     rows.extend(page.marked_sections_style_row(g, s, window, cx));
-    rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Coordinators answer without markers", "While Marked handovers is on, coordinators still answer in plain prose, without sections or markers. Their threads still mark the reports they send to the coordinator. A coordinator follows a change from the next message it gets.", false, cx));
     settings_section(
         &g.p,
         g.section_title("markedHandovers", "Marked handovers"),

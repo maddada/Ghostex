@@ -30,7 +30,10 @@ pub fn migrate_experimental_features_switch_once() {
     // Agent work and Tool call cards are retired the same way (CDXC:SessionChat 2026-11-13 in the
     // settings catalog `migrate_retired_chat_looks`).
     let retired = ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
-    if !experimental && !retired {
+    // Marked handovers becomes Off, Coordinators only or Every session (CDXC:MarkedHandovers
+    // 2026-11-13 in the settings catalog `migrate_marked_handovers`).
+    let marked = ghostex_settings_catalog::migrate_marked_handovers(&mut object);
+    if !experimental && !retired && !marked {
         return;
     }
     let saved = serde_json::to_vec_pretty(&Value::Object(object))

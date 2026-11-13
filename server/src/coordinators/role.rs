@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::domain::DomainStateError;
 use crate::paths::GxserverPaths;
+use ghostex_settings_catalog::MarkedHandovers;
 
 /// CDXC:Coordinators 2026-10-17 DECISION:
 /// User: "we should just include a line that can't be removed saying: "Read and adhere to this skill: /ghostex-orchestrator" and we should install this orchestrator skill when user picks the orchstrator option so no need to inject things the other way." The playbook comes through the bundled skill `skills/ghostex-coordinator/SKILL.md` (since 2026-11-11 a pointer to `ghostex coordinator guide`, which prints server/src/coordinators/playbook.md; see `COORDINATOR_PLAYBOOK_MD`); creating or promoting an orchestrator installs it for that agent ([`ensure_coordinator_skill_installed`]) and queues [`orchestrator_first_message`], which always starts with [`coordinator_skill_line`] in the agent's own skill spelling. Nothing is added to the agent's command any more. Supersedes the 2026-09-30 WHY that carried the role as a system prompt flag (Claude's role file, Codex `developer_instructions`, ZCode's SessionStart context, Empryo's `/agent` profile): those channels now serve only orchestrators created before this change, whose saved commands or records still name them, so they keep their role on resume, sleep and wake, and account switches.
@@ -118,14 +119,25 @@ pub const PLAYBOOK_OVERRIDES_PRECEDENCE: &str = "The user wrote these overrides 
 ///
 /// CDXC:Coordinators 2026-11-07 DECISION:
 /// User: "Let us actually make people override parts of the original playbook, not edit it ok? So they have a section for overriding any part of the playbook so this way updates still work and all that. we need to add a note that what the user mentions in the override below takes higher precedence than the playbook instructions since the playbook instructions are general while the overrides are specific to the actual current user". Ghostex's playbook is never edited any more; the user's overrides (one text for every coordinator) follow it under their own heading with that precedence line.
-/// The reply format a coordinator's guide ends with while Marked handovers is off, or while
-/// Coordinators answer without markers is on (see `coordinator_guide_for`): news in prose.
-pub const COORDINATOR_REPLY_FORMAT: &str = "Reply format: your work items are your status. Each reply is a couple of sentences of news, then only what the dock and the Work panel cannot hold (a cause or diagnosis, a caveat or risk, a draft to paste, the reasoning behind a recommendation), short and in plain prose; Ghostex adds one line of what you changed this turn under it and docks what needs the user above their chat box (see \"Work items\"). An answer or Reply arriving as \"W<n> Q<n>: ...\" is already recorded and a Dismiss withdraws the ask: never ask either again. Write no status sections (Done, Kicked off, In progress, Needs you and the rest) and no section marker emoji (✅, 🔄, ❓ and the others), even where a \"Marked handovers\" note elsewhere in your instructions asks for them: that note is for the user's other sessions, not for coordinators.";
+/// The reply format a coordinator's guide ends with while Marked handovers is Off (see
+/// `coordinator_guide_for`): news in prose.
+pub const COORDINATOR_REPLY_FORMAT: &str = "Reply format: your work items are your status. Each reply is a couple of sentences of news, then only what the dock and the Work panel cannot hold (a cause or diagnosis, a caveat or risk, a draft to paste, the reasoning behind a recommendation), short and in plain prose; Ghostex adds one line of what you changed this turn under it and docks what needs the user above their chat box (see \"Work items\"). An answer or Reply arriving as \"W<n> Q<n>: ...\" is already recorded and a Dismiss withdraws the ask: never ask either again. Write no status sections (Done, Kicked off, In progress, Needs you and the rest) and no section marker emoji (✅, 🔄, ❓ and the others), even where a \"Marked handovers\" note elsewhere in your instructions asks for them: the user set Marked handovers to Off, so coordinators answer in prose.";
 
-/// The reply format a coordinator's guide ends with while Marked handovers is on: what a
-/// coordinator does differently, then the note every other session gets under that setting
+/// The reply format a coordinator's guide ends with while Marked handovers is Coordinators only or
+/// Every session, after the line that names the value ([`coordinator_marked_reply_format`]): what a
+/// coordinator does differently, then the note every other session gets under Every session
 /// (`MARKED_HANDOVERS_NOTE`), so the two never drift apart.
-pub const COORDINATOR_MARKED_REPLY_FORMAT: &str = "Reply format: the user turned Marked handovers on, so write the reply that ends each turn as marked sections: each section's marker and title alone on a line, its content in short bullets below. The Marked handovers note below lists the sections and their order. For a coordinator, four points go with it:\n- Your work items stay the record of the work (see \"Work items\"): keep them current as before. The sections are how you tell the user what this turn changed.\n- Write no ❓ Needs you section for something that is already an ask in the dock (`item ask`): an ask shows only there. Anything else the user must know or do that has no ask still gets its section.\n- Write no line about an item that did not change this turn, and keep every bullet short.\n- An answer or Reply arriving as \"W<n> Q<n>: ...\" is already recorded and a Dismiss withdraws the ask: never ask either again.";
+pub const COORDINATOR_MARKED_REPLY_FORMAT: &str = "Write the reply that ends each turn as marked sections: each section's marker and title alone on a line, its content in short bullets below. The Marked handovers note below lists the sections and their order. For a coordinator, four points go with it:\n- Your work items stay the record of the work (see \"Work items\"): keep them current as before. The sections are how you tell the user what this turn changed.\n- Write no ❓ Needs you section for something that is already an ask in the dock (`item ask`): an ask shows only there. Anything else the user must know or do that has no ask still gets its section.\n- Write no line about an item that did not change this turn, and keep every bullet short.\n- An answer or Reply arriving as \"W<n> Q<n>: ...\" is already recorded and a Dismiss withdraws the ask: never ask either again.";
+
+/// The marked reply format with its opening, which says what the user picked: the guide changes
+/// with the setting, so a coordinator re-reads it after a change (playbook.rs `playbook_update_note`).
+pub fn coordinator_marked_reply_format(setting: MarkedHandovers) -> String {
+    let picked = match setting {
+        MarkedHandovers::Every => "Every session",
+        _ => "Coordinators only",
+    };
+    format!("Reply format: the user's Marked handovers setting is {picked}, so you mark your replies. {COORDINATOR_MARKED_REPLY_FORMAT}")
+}
 
 pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPaths) -> String {
     let playbook = playbook.trim();
@@ -150,12 +162,20 @@ pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPa
     // coordinators mark whatever the setting says. The guide's version follows its text, so a
     // changed setting reaches every coordinator with its next message (playbook.rs
     // `playbook_update_note`).
+    //
+    // CDXC:MarkedHandovers 2026-11-13 DECISION:
+    // User (Q2963 "A"): Marked handovers is Off, Coordinators only or Every session, Coordinators
+    // only by default, so a coordinator marks its replies unless the user picks Off; Coordinators
+    // answer without markers is gone (Off is that now). The marked format's opening names the value.
+    // Supersedes the 2026-11-11 reading where coordinators followed the old switch, off by default.
     // SEE-ALSO: server/src/agents/marked_handovers.rs (`coordinator_marks_replies`, the note),
     // server/src/coordinators/playbook.md "Your reply" (says the guide's reply format decides).
-    let mut guide = if crate::agents::coordinator_marks_replies(paths) {
+    let setting = crate::agents::marked_handovers_setting(paths);
+    let mut guide = if setting.coordinators() {
         format!(
-            "{playbook}\n\n{}\n\n{COORDINATOR_MARKED_REPLY_FORMAT}\n\n{}\n",
+            "{playbook}\n\n{}\n\n{}\n\n{}\n",
             coordinator_skill_renamed_line(),
+            coordinator_marked_reply_format(setting),
             crate::agents::MARKED_HANDOVERS_NOTE
         )
     } else {
@@ -355,7 +375,7 @@ pub fn coordinator_role_file(paths: &GxserverPaths) -> PathBuf {
 }
 
 /// Writes the older Claude coordinators' role file when it is missing or out of date, so an
-/// upgrade or a change to Orchestrators answer without markers reaches each of them at its next
+/// upgrade or a change to Marked handovers reaches each of them at its next
 /// launch or resume.
 pub fn ensure_coordinator_role_file(paths: &GxserverPaths) -> std::io::Result<PathBuf> {
     let path = coordinator_role_file(paths);

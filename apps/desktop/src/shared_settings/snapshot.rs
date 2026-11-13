@@ -32,6 +32,8 @@ impl SharedSidebarSettingsSnapshot {
         // Agent work and Tool call cards are retired (CDXC:SessionChat 2026-11-13 in the settings
         // catalog); saved once at start by experimental_switches.rs.
         ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
+        // Marked handovers is Off, Coordinators only or Every session (CDXC:MarkedHandovers 2026-11-13).
+        ghostex_settings_catalog::migrate_marked_handovers(&mut object);
         let content_hash = hash_settings_object(&object);
         Self {
             revision: 0,
@@ -52,6 +54,8 @@ impl SharedSidebarSettingsSnapshot {
         // Agent work and Tool call cards are retired (CDXC:SessionChat 2026-11-13 in the settings
         // catalog); saved once at start by experimental_switches.rs.
         ghostex_settings_catalog::migrate_retired_chat_looks(&mut object);
+        // Marked handovers is Off, Coordinators only or Every session (CDXC:MarkedHandovers 2026-11-13).
+        ghostex_settings_catalog::migrate_marked_handovers(&mut object);
         Self {
             revision,
             content_hash,

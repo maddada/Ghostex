@@ -78,7 +78,7 @@ pub(crate) fn ghostex_note_text(browser: PreviewBrowser) -> String {
 }
 
 /// What a session's launch adds to its agent's prompt: the Ghostex note while it is on, then the
-/// Marked handovers note while that is on, as one text, since Claude keeps only its last
+/// Marked handovers note while that is Every session, as one text, since Claude keeps only its last
 /// `--append-system-prompt-file` and Codex reads one `developer_instructions`.
 pub(crate) fn launch_note_text(
     ghostex_note: Option<&str>,

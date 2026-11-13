@@ -31,7 +31,7 @@ const EMOJI_KEY: &str = "markedHandoversEmoji";
 const STRENGTH_KEY: &str = "markedHandoversHeadingStrength";
 
 impl GeneralTab {
-    /// The style row and the emoji switch under it, while Marked handovers is on.
+    /// The style row and the emoji switch under it, while Marked handovers is not Off.
     pub(super) fn marked_sections_style_row(
         &mut self,
         g: &GeneralCx,
@@ -39,7 +39,11 @@ impl GeneralTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
-        if !g.values.bool("markedHandovers") {
+        // Hidden only while Marked handovers is Off: coordinators mark under the other two values.
+        let marked = ghostex_settings_catalog::MarkedHandovers::from_setting(
+            g.values.map().get("markedHandovers"),
+        );
+        if !marked.coordinators() {
             return Vec::new();
         }
         let mut rows: Vec<AnyElement> = Vec::new();
