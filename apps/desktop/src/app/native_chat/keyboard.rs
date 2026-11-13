@@ -487,27 +487,18 @@ impl NativeChatView {
             window.prevent_default();
             return;
         }
-        // Claude Code's own key for its queue: Up in an empty composer takes the newest message the
-        // agent queued back into it (CDXC:SessionChat 2026-10-11 in
-        // packages/gx-chat-core/src/composer/queue_take_back.rs). History browsing keeps Up.
-        if key.key == "up"
-            && !key.modifiers.shift
-            && !key.modifiers.alt
-            && !key.modifiers.control
-            && !key.modifiers.platform
-            && this.draft.trim().is_empty()
-            && this.snapshot["historyActive"] != true
-            && this.snapshot["queueTakeBackIds"]
-                .as_array()
-                .is_some_and(|ids| !ids.is_empty())
-        {
-            this.invoke(json!({"type":"takeBackQueued"}), cx);
-            cx.stop_propagation();
-            window.prevent_default();
-            return;
-        }
+        // Up recalls this chat's sent messages (CDXC:SessionChat 2026-11-13 in
+        // packages/gx-chat-core/src/composer/history.rs): in an empty box, with the caret at the
+        // very start of a draft, or while a recalled message shows. It never takes a queued
+        // message back any more; that is the queued bubble's Back to composer button.
+        let caret_at_start = {
+            let range = input.read(cx).selected_range();
+            range.start == 0 && range.end == 0
+        };
         if (key.key == "up"
-            && (this.draft.trim().is_empty() || this.snapshot["historyActive"] == true)
+            && (this.draft.trim().is_empty()
+                || this.snapshot["historyActive"] == true
+                || caret_at_start && !key.modifiers.alt)
             || key.key == "down" && this.snapshot["historyActive"] == true)
             && !key.modifiers.shift
             && !key.modifiers.control

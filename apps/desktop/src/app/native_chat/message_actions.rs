@@ -413,8 +413,7 @@ impl NativeChatView {
         let editable = waiting_prompt.is_some() && queue_capabilities["canEdit"] == true;
         let removable = waiting_prompt.is_some() && queue_capabilities["canRemove"] == true;
         // A message the agent itself queued comes back to the composer (CDXC:SessionChat 2026-10-11
-        // in packages/gx-chat-core/src/composer/queue_take_back.rs); the composer's Up key takes the
-        // newest one back (keyboard.rs).
+        // in packages/gx-chat-core/src/composer/queue_take_back.rs).
         let takeable = !self.in_subagent
             && self.snapshot["queueTakeBackIds"]
                 .as_array()
@@ -458,7 +457,6 @@ impl NativeChatView {
             rows.push(json!({
                 "label": if taking_back { "Taking the message back\u{2026}" } else { "Back to composer" },
                 "iconPath": if taking_back { "titlebar/loader2.svg" } else { "titlebar/arrow-back-up.svg" },
-                "detail": text(&self.snapshot, "queueTakeBackHotkey"),
                 "disabled": taking_back,
                 "command":{"type":"takeBackQueued","messageId":id},
             }));

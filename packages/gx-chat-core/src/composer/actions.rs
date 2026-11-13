@@ -597,7 +597,7 @@ fn save_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     vec![crate::composer::draft_sync::push(state, content, version)]
 }
 
-/// `recallHistory`: Up walks back through what this machine has sent, Down walks forward.
+/// `recallHistory`: Up walks back through what this session has sent, Down walks forward.
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
 /// The ring is read lazily, on the FIRST Up with no entry showing, and the arm awaits that read
@@ -607,6 +607,8 @@ fn recall_history(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let up = action.param("direction").and_then(Value::as_str) == Some("up");
     if up && state.composer.history.index.is_none() {
         state.composer.history.loading = true;
+        // Down past the newest entry gives this back (a draft Up started from at its start).
+        state.composer.history.draft = state.composer.text.clone();
         return vec![Effect::ReadStorage {
             key: crate::composer::storage::composer_history_key(&state.identity.session_key),
         }];

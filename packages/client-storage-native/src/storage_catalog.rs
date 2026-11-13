@@ -250,6 +250,12 @@ pub const CATALOG: &[CatalogStore] = &[
         true,
         Records,
     ),
+    store(
+        "sessionSentLog",
+        "ghostex.sessionChat.sentLog.",
+        true,
+        Records,
+    ),
     store("drafts", "ghostex.sessionChat.draft.", true, Records),
     store("recovery", "ghostex.sessionChat.recovery.", true, Records),
     store(

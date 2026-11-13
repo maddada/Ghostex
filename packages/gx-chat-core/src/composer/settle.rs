@@ -227,10 +227,18 @@ fn settle_history_read(
     {
         return Vec::new();
     }
+    let draft = std::mem::take(&mut state.composer.history.draft);
+    let transcript = crate::composer::history::transcript_user_messages(
+        crate::state::messages_of(&state.messages.list),
+    );
     state
         .composer
         .history
-        .adopt(crate::composer::storage::decode_composer_history(value));
+        .adopt(crate::composer::history::merge_transcript(
+            crate::composer::storage::decode_composer_history(value),
+            transcript,
+        ));
+    state.composer.history.draft = draft;
     crate::composer::actions::apply_recall(state, true)
 }
 

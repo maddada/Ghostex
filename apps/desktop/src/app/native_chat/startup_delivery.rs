@@ -407,11 +407,7 @@ impl NativeChatView {
         let label: gpui::SharedString = if busy {
             "Taking the message back…".into()
         } else {
-            format!(
-                "Back to composer ({})",
-                text(&self.snapshot, "queueTakeBackHotkey")
-            )
-            .into()
+            "Back to composer".into()
         };
         let tooltip = label.clone();
         let slot = div()

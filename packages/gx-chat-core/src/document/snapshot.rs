@@ -119,12 +119,11 @@ pub struct Document {
 
     // ---- composer ---------------------------------------------------------
     pub queue: Queue,
-    /// The queued messages Back to composer is offered on, oldest first; the last is the one the
-    /// composer's Up key takes back. Family d.
+    /// The queued messages Back to composer is offered on, oldest first. Family d.
     pub queue_take_back_ids: Vec<String>,
     /// The message a Back to composer is taking back right now, drawn busy. Family d.
     pub queue_take_back_busy: Option<String>,
-    /// The key Back to composer's tooltip names.
+    /// The key Back to composer.s tooltip names; empty since Up recalls sent messages.
     pub queue_take_back_hotkey: String,
     /// Your messages still waiting for pictures on their way into the chat box: loading tiles in
     /// the bubble, and after a moment the spinner and Back to composer beside it

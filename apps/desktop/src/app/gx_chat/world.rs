@@ -1080,24 +1080,19 @@ fn perform(
 
 /// One stored read, or the one store the core names that is a QUERY rather than a record.
 ///
-/// CDXC:SavedPrompts 2026-09-22 WHY:
-/// `composerHistory` has no row anywhere: it is `composer('history')`, which
-/// `native-composer.ts` answered with `listSentSessionChatMessages().map(m => m.content)
-/// .reverse()`, a scan of the whole `sentHistory` store across every session rather than a read of
-/// one key. The suffix it arrives with is the session it was asked from and is deliberately not
-/// used, because Up-arrow recall reaches what every composer on this computer sent. Left to the
-/// catalog the read answers `unregistered`, which the core reads as an empty ring: Up and Down
-/// would do nothing and `historyActive` would be false for ever.
-///
-/// The array is OLDEST FIRST, which is what `.reverse()` of a newest-first list produces and what
-/// `recall_previous` walks backwards from.
+/// CDXC:SessionChat 2026-11-13 WHY:
+/// `composerHistory` is `composer('history')`, not a row: the suffix it arrives with is the session
+/// it was asked from, and the answer is that chat's own sent log (`host_records.rs`,
+/// `session_sent_contents`). Left to the catalog the read answers `unregistered`, which the core
+/// reads as an empty ring. The array is OLDEST FIRST, which is what `recall_previous` walks
+/// backwards from.
 fn read_storage(
     world: &mut World,
     storage_key: &ghostex_gx_chat_core::StorageKey,
     now_ms: i64,
 ) -> Option<String> {
     if storage_key.store == ghostex_gx_chat_core::composer::storage::COMPOSER_HISTORY_STORE {
-        let entries = host_records::sent_history_contents(now_ms);
+        let entries = host_records::session_sent_contents(&storage_key.suffix, now_ms);
         return serde_json::to_string(&entries).ok();
     }
     match storage::read(storage_key, now_ms) {

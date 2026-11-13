@@ -290,6 +290,12 @@ const STORES: &[ChatStore] = &[
         collection: true,
         backend: protected_disk("deliveryReceipts"),
     },
+    ChatStore {
+        id: "sessionSentLog",
+        prefix: "ghostex.sessionChat.sentLog.",
+        collection: true,
+        backend: protected_disk("sessionSentLog"),
+    },
     // The retained transcript cache (`persistence.ts` (deleted 2026-10-01)), keyed by the retention key rather than by
     // the storage session key. Its catalog `retainedAt` reads the record's own `savedAt`, which is
     // also when the record is written, so the write stamp this door keeps instead means the same

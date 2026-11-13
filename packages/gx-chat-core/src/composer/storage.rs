@@ -54,18 +54,16 @@ pub const DRAFT_SUBMITTED_STORE: &str = "draftSubmitted";
 /// `composer('park', {text, version})`: the draft was handed to the terminal, so it is kept under
 /// its revision and marked parked. The value carries `{text, version}`.
 pub const DRAFT_PARK_STORE: &str = "draftPark";
-/// `composer('history')`: what this machine's composers have sent, oldest first.
+/// `composer('history')`: what this chat has sent, oldest first.
 ///
-/// A store of its own rather than a record, because the host answers it with a SCAN rather than a
-/// key: `listSentSessionChatMessages().map(message => message.content).reverse()`
-/// (`native-composer.ts:121`), which is the last 50 prompts across every session, newest-first
-/// sorted and then reversed. The `sentHistory` store itself stays the host's, written by
-/// [`DRAFT_SUBMITTED_STORE`]; the core only ever reads this projection of it, lazily, on the first
-/// Up arrow.
+/// A store id rather than a record, because the host answers it from a log it owns: the chat's own
+/// sent log, which [`DRAFT_SUBMITTED_STORE`] appends to (`gx_chat/host_records.rs` on the desktop
+/// and the web; the phone's `src/chat/rust/host-records.ts` still answers the shared 50). The core
+/// reads it lazily, on the first Up of a walk, and puts the transcript's user messages in front
+/// (`history.rs`).
 ///
 /// CDXC:SavedPrompts 2026-09-08 DECISION:
-/// User: retain the last 50 sent messages across all sessions for Up-arrow recall and the Saved
-/// prompts Sent tab.
+/// User: retain the last 50 sent messages across all sessions for the Saved prompts Sent tab. Up-arrow recall used that list too until CDXC:SessionChat 2026-11-13 (`history.rs`) made it this chat's own messages.
 pub const COMPOSER_HISTORY_STORE: &str = "composerHistory";
 
 /// `composer('receive', {text, version, current})`: a draft arrived from another client. The host
@@ -291,8 +289,7 @@ pub fn simple_key(session_key: &str) -> crate::event::StorageKey {
     }
 }
 
-/// The recall ring's read. Per session, because the host scopes the scan by the session it is
-/// asked from, even though the rows themselves come from every composer.
+/// The recall ring's read, for the session it is asked from.
 pub fn composer_history_key(session_key: &str) -> crate::event::StorageKey {
     crate::event::StorageKey {
         store: COMPOSER_HISTORY_STORE.to_string(),

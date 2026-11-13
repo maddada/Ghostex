@@ -340,6 +340,14 @@ export const storageCatalog = Object.freeze({
     stringListCodec,
     protectedDisk
   ),
+  sessionSentLog: define(
+    'sessionSentLog',
+    "A chat's sent messages for Up-arrow recall",
+    desktop + 'src/app/gx_chat/host_records.rs',
+    'ghostex.sessionChat.sentLog.',
+    stringListCodec,
+    protectedDisk
+  ),
   drafts: define(
     'drafts',
     'Unsent chat drafts',

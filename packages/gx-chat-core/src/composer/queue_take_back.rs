@@ -5,7 +5,7 @@
 //! and answers with its text; the core then reads the composer and appends that text to it.
 //!
 //! CDXC:SessionChat 2026-10-11 DECISION:
-//! User: "when a message is still queued while the agent is working i want a button (and a hotkey when i hover on it) that lets me return it to the chat composer please (does the hotkey that does this in the claude code cli". The button sits in a queued bubble's actions on the desktop and the phone; the hotkey is Claude Code's own, Up in an empty composer, which takes back the newest queued message. The text and its pictures are appended to whatever draft the composer holds, never replacing it.
+//! User: "when a message is still queued while the agent is working i want a button [...] that lets me return it to the chat composer please". The button sits in a queued bubble's actions on the desktop and the phone. The text and its pictures are appended to whatever draft the composer holds, never replacing it. Its Up hotkey was removed on 2026-11-13: Up recalls sent messages instead (history.rs), because Up on a message the agent had already taken did nothing and then failed with "The agent already took this message".
 
 use serde_json::{json, Value};
 
@@ -20,8 +20,9 @@ use crate::session::sends;
 use crate::state::{ChatContext, ChatState};
 use crate::wire::{ChatRpcMethod, RpcOutcome};
 
-/// The key the composer takes a queued message back with, as tooltips name it.
-pub const TAKE_BACK_HOTKEY_LABEL: &str = "↑";
+/// The key the composer takes a queued message back with, as tooltips name it: none since Up
+/// recalls sent messages. Kept in the document, empty, for the clients that read it.
+pub const TAKE_BACK_HOTKEY_LABEL: &str = "";
 
 /// The step a take-back is waiting on.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,8 +60,8 @@ fn is_takeable(message: &ChatMessage) -> bool {
         && !message_text(message).trim().is_empty()
 }
 
-/// Every message Back to composer is offered on, oldest first; the last is the one the hotkey
-/// takes back. Empty when the agent's queue cannot give messages back.
+/// Every message Back to composer is offered on, oldest first; the last is the one a
+/// `takeBackQueued` with no message id takes back. Empty when the agent's queue cannot give messages back.
 pub fn takeable_ids(state: &ChatState) -> Vec<String> {
     // A message still waiting for its pictures never left, whatever the agent (attaching.rs).
     let attaching = crate::composer::attaching::takeable_ids(state);

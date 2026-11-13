@@ -216,6 +216,10 @@ pub(super) fn record_sent_prompt(
     if text.trim().is_empty() {
         return Ok(false);
     }
+    // Up-arrow recall's own log; its refusal must not turn a delivered send into a failed one.
+    if let Some(session_key) = session_key {
+        let _ = append_session_sent(session_key, text, now_ms);
+    }
     let parts: Vec<&str> = session_key
         .map(|key| key.split(':').collect())
         .unwrap_or_default();
@@ -335,29 +339,68 @@ fn prune_sent_history(keep: usize, now_ms: i64) {
     }
 }
 
-/// `composer('history')`: the last 50 sent prompts as plain text, OLDEST first.
+/// How many sent messages one chat's Up-arrow log keeps.
+const MAX_SESSION_SENT: usize = 500;
+/// The log's own size cap, under the store's 2 MiB a row: the oldest messages go first.
+const MAX_SESSION_SENT_BYTES: usize = 1536 * 1024;
+
+fn session_sent_key(session_key: &str) -> StorageKey {
+    StorageKey {
+        store: "sessionSentLog".to_string(),
+        suffix: session_key.to_string(),
+    }
+}
+
+/// `composer('history')` for one chat: everything it sent, OLDEST first.
 ///
-/// CDXC:SavedPrompts 2026-09-22 WHY:
-/// This is a SCAN of a host-owned store, not a record read, which is why the core cannot answer it
-/// from anything the boot read carries. The deleted `native-composer.ts` was
-/// `listSentSessionChatMessages().map(message => message.content).reverse()`, and all three steps
-/// are load bearing: the list is sorted newest first and capped at 50, the `reverse()` is what makes
-/// the ring oldest-first so `recallPreviousSessionChatDraft` walks backwards from the end, and the
-/// listing PRUNES as a side effect, so the first Up-arrow of a session is also what trims a history
-/// that grew past the cap. A prompt with no `content` reads as the empty string, which is what
-/// `message.content` does for a record written before that field existed.
-///
-/// The host reads it lazily, exactly like `native-host.ts:1210` did: the TypeScript asked only on
-/// the first Up of a chat, so a session that never recalls never touches the store.
-pub(super) fn sent_history_contents(now_ms: i64) -> Vec<String> {
-    let mut contents: Vec<String> = sorted_sent_prompts(now_ms)
+/// CDXC:SessionChat 2026-11-13 WHY:
+/// Up-arrow recall walks this chat's own messages (the user's decision is in
+/// packages/gx-chat-core/src/composer/history.rs), and keeps the ones a rewind took out of the
+/// transcript and the ones from before a restart, so it is a log of its own rather than the
+/// 50-prompt `sentHistory` every chat shares. A chat with no log yet starts from its rows in that
+/// shared history; the core puts the transcript's user messages in front of what this answers.
+pub(super) fn session_sent_contents(session_key: &str, now_ms: i64) -> Vec<String> {
+    match storage::read(&session_sent_key(session_key), now_ms) {
+        Ok(Some(raw)) if !raw.is_empty() => serde_json::from_str(&raw).unwrap_or_default(),
+        _ => shared_history_for(session_key, now_ms),
+    }
+}
+
+/// This chat's rows in the shared `sentHistory`, oldest first.
+fn shared_history_for(session_key: &str, now_ms: i64) -> Vec<String> {
+    let mut parts = session_key.rsplit(':');
+    let (Some(session_id), Some(project_id)) = (parts.next(), parts.next()) else {
+        return Vec::new();
+    };
+    let Ok(rows) = storage::scan("sentHistory", "", now_ms) else {
+        return Vec::new();
+    };
+    let mut prompts: Vec<(String, String)> = rows
         .into_iter()
-        .take(MAX_SENT_MESSAGES)
-        .map(|row| row.content)
+        .filter_map(|(_, raw)| {
+            let prompt: SentPrompt = serde_json::from_str(&raw).ok()?;
+            (prompt.session_id.as_deref() == Some(session_id)
+                && prompt.project_id.as_deref() == Some(project_id))
+            .then_some((prompt.created_at, prompt.content))
+        })
         .collect();
-    prune_sent_history(MAX_SENT_MESSAGES, now_ms);
-    contents.reverse();
-    contents
+    prompts.sort();
+    prompts.into_iter().map(|(_, content)| content).collect()
+}
+
+/// Adds one sent message to this chat's Up-arrow log.
+fn append_session_sent(session_key: &str, text: &str, now_ms: i64) -> Result<(), &'static str> {
+    let mut entries = session_sent_contents(session_key, now_ms);
+    entries.push(text.to_string());
+    if entries.len() > MAX_SESSION_SENT {
+        entries.drain(..entries.len() - MAX_SESSION_SENT);
+    }
+    let mut raw = serde_json::to_string(&entries).map_err(|_| "schema")?;
+    while raw.len() > MAX_SESSION_SENT_BYTES && entries.len() > 1 {
+        entries.remove(0);
+        raw = serde_json::to_string(&entries).map_err(|_| "schema")?;
+    }
+    storage::write(&session_sent_key(session_key), Some(&raw), now_ms)
 }
 
 /// Records a delivery the daemon reported, once.
