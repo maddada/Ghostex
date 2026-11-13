@@ -107,7 +107,8 @@ pub(crate) fn settings_tab_holds_unsaved_input(view: &AnyView, cx: &App) -> bool
             .downcast::<T>()
             .is_ok_and(|page| page.read(cx).holds_unsaved_input(cx))
     }
-    holds::<accounts::AccountsTab>(view, cx)
+    holds::<about::AboutTab>(view, cx)
+        || holds::<accounts::AccountsTab>(view, cx)
         || holds::<actions::ActionsTab>(view, cx)
         || holds::<agents::AgentsTab>(view, cx)
         || holds::<cloud_boxes::CloudBoxesTab>(view, cx)
