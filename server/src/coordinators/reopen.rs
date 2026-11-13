@@ -109,18 +109,18 @@ pub fn apply_reopen(
             set_thread_resolved(db, project_id, session_id, false)?;
             set_parked(repository, &plan.thread_key, false)?;
             if let Some((message, send_id, sent_ms)) = watch {
-                let excerpt = super::delivery::pending_message_excerpt(message);
-                // WHY: a message with no text (images only) gets no watch, as before: there is
-                // nothing in it to find in the transcript, so a reply to it too fast for a
-                // supervisor tick to see is not reported.
-                if !super::delivery::delivery_needles(&excerpt).is_empty() {
-                    let sent_at = chrono::DateTime::from_timestamp_millis(sent_ms)
-                        .unwrap_or_else(Utc::now)
-                        .to_rfc3339_opts(SecondsFormat::Millis, true);
-                    set_thread_pending_message(
-                        db, project_id, session_id, &excerpt, &sent_at, send_id,
-                    )?;
+                let mut excerpt = super::delivery::pending_message_excerpt(message);
+                // A message with no text (images only) is watched too, found in the transcript
+                // by time (CDXC:Coordinators 2026-11-13 in delivery.rs).
+                if super::delivery::delivery_needles(&excerpt).is_empty() {
+                    excerpt = super::delivery::IMAGES_ONLY_PENDING_MESSAGE.to_string();
                 }
+                let sent_at = chrono::DateTime::from_timestamp_millis(sent_ms)
+                    .unwrap_or_else(Utc::now)
+                    .to_rfc3339_opts(SecondsFormat::Millis, true);
+                set_thread_pending_message(
+                    db, project_id, session_id, &excerpt, &sent_at, send_id,
+                )?;
             }
             true
         }

@@ -1650,9 +1650,14 @@ fn pending_delivery(
     }
     memory.delivery_checked_at.insert(key.clone(), now);
     let sent_ms = parse_iso_ms_opt(sent_at).unwrap_or(now);
-    let needles = coordinators::delivery_needles(excerpt);
+    let needles = coordinators::pending_message_needles(excerpt);
     let mut path = memory.transcript_paths.remove(&key);
-    let recorded = coordinators::transcript_records_message(session, &needles, sent_ms, &mut path);
+    // A message of only images is found by time, not text (delivery.rs `IMAGES_ONLY_PENDING_MESSAGE`).
+    let recorded = if excerpt == coordinators::IMAGES_ONLY_PENDING_MESSAGE {
+        coordinators::transcript_records_images_only_message(session, sent_ms, &mut path)
+    } else {
+        coordinators::transcript_records_message(session, &needles, sent_ms, &mut path)
+    };
     if let Some(path) = path {
         memory.transcript_paths.insert(key.clone(), path);
     }

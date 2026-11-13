@@ -20,6 +20,27 @@ const DELIVERY_MAX_PAGES: usize = 20;
 
 pub use ghostex_gx_protocol::agent_message_delivery::{delivery_needles, normalize_delivery_text};
 
+/// The pending message a thread keeps for a message with no text (images only): what an
+/// "undelivered" report quotes. It is never matched as text (`pending_message_needles`).
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// GitHub #554 ("An image-only message to a done thread gets no delivery watch"): the watch found
+/// a message by its text, so a message of only images got none, and a reply to it too fast for a
+/// supervisor tick was not reported. The user picked "Build the 2 left now". Agents record such a
+/// message differently (Claude writes a user row with an image, Codex writes no user row at all),
+/// so it is found by time instead (`transcript_records_images_only_message`): a user row with an
+/// image from the send on, or any row the agent itself wrote after the send. The thread was done
+/// (idle) when the message reopened it, so a row after the send is that message's turn.
+pub const IMAGES_ONLY_PENDING_MESSAGE: &str = "(images only)";
+
+/// The needles of a thread's pending message: none for an images-only one.
+pub fn pending_message_needles(excerpt: &str) -> Vec<String> {
+    if excerpt == IMAGES_ONLY_PENDING_MESSAGE {
+        return Vec::new();
+    }
+    delivery_needles(excerpt)
+}
+
 /// Whether normalized transcript text carries every needle of a message.
 pub fn holds_message(normalized_text: &str, needles: &[String]) -> bool {
     !needles.is_empty()
@@ -78,6 +99,52 @@ pub fn transcript_records_message(
     if needles.is_empty() {
         return None;
     }
+    let earliest = since_ms - DELIVERY_CLOCK_SLACK_MS;
+    transcript_has_row(session, since_ms, path, |message| {
+        records_message(message, needles, earliest)
+    })
+}
+
+/// BLOCKING, as `transcript_records_message`, for a message of only images sent at `since_ms`:
+/// `Some(true)` once the transcript has a user row with an image from the send on, or a row the
+/// agent wrote after it (see `IMAGES_ONLY_PENDING_MESSAGE`).
+pub fn transcript_records_images_only_message(
+    session: &Value,
+    since_ms: i64,
+    path: &mut Option<PathBuf>,
+) -> Option<bool> {
+    let earliest = since_ms - DELIVERY_CLOCK_SLACK_MS;
+    transcript_has_row(session, since_ms, path, |message| {
+        message.source == SessionChatSource::Transcript
+            && match message.role {
+                SessionChatRole::User => {
+                    message
+                        .timestamp
+                        .is_some_and(|timestamp| timestamp >= earliest)
+                        && message
+                            .blocks
+                            .iter()
+                            .any(|block| matches!(block, SessionChatBlock::ImageRef { .. }))
+                }
+                SessionChatRole::Assistant | SessionChatRole::Reasoning | SessionChatRole::Tool => {
+                    message
+                        .timestamp
+                        .is_some_and(|timestamp| timestamp >= since_ms)
+                }
+                SessionChatRole::System => false,
+            }
+    })
+}
+
+/// BLOCKING. Whether the thread's transcript has a row `matches` accepts, paging back from the
+/// newest row until rows older than the send (`since_ms`, with the clock slack); `None` when there
+/// is no transcript to read yet.
+fn transcript_has_row(
+    session: &Value,
+    since_ms: i64,
+    path: &mut Option<PathBuf>,
+    matches: impl Fn(&crate::session_chat::SessionChatMessage) -> bool,
+) -> Option<bool> {
     let transcript_agent = resolve_thread_transcript(session, path)?;
     let path = path.as_ref()?;
     let earliest = since_ms - DELIVERY_CLOCK_SLACK_MS;
@@ -100,10 +167,7 @@ pub fn transcript_records_message(
         else {
             return None;
         };
-        if messages
-            .iter()
-            .any(|message| records_message(message, needles, earliest))
-        {
+        if messages.iter().any(&matches) {
             return Some(true);
         }
         let reached_send = messages
