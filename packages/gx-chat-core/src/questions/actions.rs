@@ -144,6 +144,13 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         }
         ActionKind::QuestionListMore => crate::questions::open_questions::more(state),
         ActionKind::QuestionListReset => crate::questions::open_questions::reset_pages(state),
+        ActionKind::ExportPage => {
+            let page_id = action
+                .param("pageId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            effects.extend(crate::questions::page_export::export(state, page_id));
+        }
         ActionKind::ImportPageAnswers => {
             let text = action
                 .param("text")

@@ -102,6 +102,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::ReadVisualPageThumbnail => "readVisualPageThumbnail",
         ChatRpcMethod::ReadVisualPageSource => "readVisualPageSource",
         ChatRpcMethod::ImportVisualPageAnswers => "importVisualPageAnswers",
+        ChatRpcMethod::ExportVisualPage => "exportVisualPage",
         ChatRpcMethod::SendSessionChatMessage => "sendSessionChatMessage",
         ChatRpcMethod::InterruptSessionChat => "interruptSessionChat",
         ChatRpcMethod::AnswerSessionChatPrompt => "answerSessionChatPrompt",

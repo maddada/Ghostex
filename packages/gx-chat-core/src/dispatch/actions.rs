@@ -82,6 +82,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::JumpToQuestion
         | ActionKind::QuestionForLater
         | ActionKind::ImportPageAnswers
+        | ActionKind::ExportPage
         | ActionKind::QuestionRemove
         | ActionKind::SnoozeQuestion
         | ActionKind::CancelQuestion

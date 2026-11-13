@@ -112,6 +112,9 @@ pub struct QuestionsState {
     /// Exported pages' answers on their way to gxserver, by request id, with the text that brought
     /// them (`crate::questions::page_import`).
     pub page_imports: std::collections::BTreeMap<u64, String>,
+    /// Exported files being made for the phone's Export, by request id, with the page's id
+    /// (`crate::questions::page_export`).
+    pub page_exports: std::collections::BTreeMap<u64, String>,
     /// The For later marks set here that gxserver has not confirmed yet (`crate::questions::later`).
     pub later: crate::state::Stamped<crate::questions::later::LaterState>,
     /// The pages that ask nothing and the charts the ? pill's list names (`crate::questions::content`).

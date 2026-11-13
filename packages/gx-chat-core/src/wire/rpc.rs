@@ -33,6 +33,8 @@ pub enum ChatRpcMethod {
     ReadVisualPageSource,
     /// Answers brought back from an exported page (`questions/page_import.rs`).
     ImportVisualPageAnswers,
+    /// A page as its exported file, for the phone's Export (`questions/page_export.rs`).
+    ExportVisualPage,
     SendSessionChatMessage,
     InterruptSessionChat,
     AnswerSessionChatPrompt,
@@ -121,6 +123,7 @@ impl ChatRpcMethod {
             Self::ReadVisualPageThumbnail => "readVisualPageThumbnail",
             Self::ReadVisualPageSource => "readVisualPageSource",
             Self::ImportVisualPageAnswers => "importVisualPageAnswers",
+            Self::ExportVisualPage => "exportVisualPage",
             Self::SendSessionChatMessage => "sendSessionChatMessage",
             Self::InterruptSessionChat => "interruptSessionChat",
             Self::AnswerSessionChatPrompt => "answerSessionChatPrompt",
@@ -182,6 +185,7 @@ impl ChatRpcMethod {
             "readVisualPageThumbnail" => Self::ReadVisualPageThumbnail,
             "readVisualPageSource" => Self::ReadVisualPageSource,
             "importVisualPageAnswers" => Self::ImportVisualPageAnswers,
+            "exportVisualPage" => Self::ExportVisualPage,
             "sendSessionChatMessage" => Self::SendSessionChatMessage,
             "interruptSessionChat" => Self::InterruptSessionChat,
             "answerSessionChatPrompt" => Self::AnswerSessionChatPrompt,

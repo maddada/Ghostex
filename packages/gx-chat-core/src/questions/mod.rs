@@ -29,6 +29,7 @@ pub mod notice_state;
 pub mod notice_tail;
 pub mod notice_tone;
 pub mod open_questions;
+pub mod page_export;
 pub mod page_import;
 pub mod pending_approval;
 pub mod permission_card;
