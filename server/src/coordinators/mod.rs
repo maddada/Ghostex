@@ -8,6 +8,7 @@ mod close;
 mod create;
 mod delivery;
 mod endpoint;
+mod guide_changes;
 mod idle_progress;
 mod idle_wait;
 mod intro;

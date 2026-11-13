@@ -57,7 +57,7 @@ USAGE
   ghostex coordinator set-instructions (<text> | --body-file <path>) [--coordinator <ref>]
   ghostex coordinator edit [--goal=<text>] [--instructions=<text>] [--notes-json=<json>]
                               [--coordinator <ref>] [--json]
-  ghostex coordinator guide [--project-id <id>]
+  ghostex coordinator guide [--project-id <id>] [--changes]
   ghostex coordinator playbook [--project-id <id> | --this-project]
                               [--overrides | --text | --default] [--json]
   ghostex coordinator playbook --set-overrides (<text> | --body-file <path>) [--json]
@@ -95,7 +95,10 @@ WHAT A COORDINATOR IS
   the conversation still has them). `ghostex coordinator guide` prints the
   playbook in effect for the coordinator's project (see COORDINATOR
   PLAYBOOK) with the reply format the user chose for coordinators and the
-  user's playbook overrides.
+  user's playbook overrides. guide --changes prints only what changed since
+  the calling coordinator last read it (the full guide when it never read
+  one or most of it changed); a coordinator runs it when the line Ghostex
+  adds under its next message, or status, says its playbook changed.
 
 CREATE
   create starts a coordinator in your project (--project-id picks another;
@@ -339,8 +342,9 @@ MEMORY AND INSTRUCTIONS
   a coordinator's sidebar menu save.
 
 COORDINATOR PLAYBOOK
-  The coordinator playbook is the ghostex-coordinator skill's text: how every
-  coordinator works. Ghostex's playbook is never edited, so its updates keep
+  The coordinator playbook is how every coordinator works. It ships inside
+  Ghostex and `guide` prints it; the ghostex-coordinator skill only sends a
+  coordinator to `guide`. Ghostex's playbook is never edited, so its updates keep
   arriving. The user changes how coordinators work with playbook overrides:
   one plain text for every coordinator ("Never push without asking", "Ignore
   the board rules"). `guide` prints the playbook, the reply format, and then

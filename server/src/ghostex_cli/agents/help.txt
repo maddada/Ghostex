@@ -90,7 +90,10 @@ IDENTITY AND RECIPIENTS
   Remote create also requires --project-id or --path. Global references route
   to their server through configured connections; sender identity remains
   your own.
-  create, send, and close return JSON; --json is also accepted for errors.
+  create and close return JSON; --json is also accepted for errors. send prints
+  one line of JSON: the delivery status (delivered, pending, accepted or queued),
+  the recipient, the request id and the message, with a note while it is not
+  delivered yet; --json prints the full answer (sender, receipt ids and flags).
 
 OTHER COMPUTERS
   When the user has connected another computer (Settings > Remote > Remote

@@ -4,7 +4,7 @@
 //! CDXC:Coordinators 2026-11-11 DECISION:
 //! User, with 18 items under In progress of which 4 were being worked on ("why do i see 18 in progress???", then "the user should have accurate statuses in the work board/list always!"): the coordinator kept finished, delivered work open "until the user had looked at it". In progress now holds only an item with a thread working, waiting on the user or still owing work, or one the coordinator itself changed in its current or last turn. Any other open item the coordinator calls In progress is "Not being worked on" (`idle`): its own quiet group under In progress, out of every "in progress" count, with its last line, until the coordinator finishes it, parks it, asks about it, says what it waits on or changes it again. It is never finished by Ghostex. `ghostex coordinator item list` and `status` name such items and ask the coordinator to finish them or say what they wait on.
 //! A turn is one working stint of the coordinator's session (`workingStartedAt`), read on every panel refresh (panel.rs), so the record needs no change to the chat send or the hooks. A stint the refresh misses (a turn of a few seconds) only makes the window longer, never shorter. Until two turns are known (a coordinator that has not worked since the update), the window is the last `NO_TURNS_WINDOW_HOURS`.
-//! SEE-ALSO: server/src/coordinators/work.rs (`derive`), packages/gx-chat-core/src/extras/work_panel.rs (the group), skills/ghostex-coordinator/SKILL.md ("Work items").
+//! SEE-ALSO: server/src/coordinators/work.rs (`derive`), packages/gx-chat-core/src/extras/work_panel.rs (the group), server/src/coordinators/playbook.md ("Work items").
 
 use std::collections::HashMap;
 

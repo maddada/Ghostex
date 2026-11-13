@@ -73,11 +73,16 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 }
             }
         }
-        "send" if args.main_coordinator => {
-            print_json(&main_coordinator::send(&args)?);
-        }
         "send" => {
-            print_json(&delivery::send(&args)?);
+            let result = if args.main_coordinator {
+                main_coordinator::send(&args)?
+            } else {
+                delivery::send(&args)?
+            };
+            match delivery::send_answer_line(&result).filter(|_| !args.json) {
+                Some(line) => println!("{line}"),
+                None => print_json(&result),
+            }
         }
         "create" => {
             print_json(&lifecycle::create(&args)?);
