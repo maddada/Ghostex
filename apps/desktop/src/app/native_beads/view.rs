@@ -75,6 +75,10 @@ pub(crate) struct BeadsTarget {
     /// The computer that owns the project.
     pub(crate) machine: MachineId,
     pub(crate) remote: Option<GpuiRemoteGxserverRequestTarget>,
+    /// A remote project whose computer has no connection right now. Its `remote` is `None`, which
+    /// would otherwise mean "this computer", so such a target is never used for a call
+    /// (`BeadsView::rpc_target`) and the view says the computer is not connected.
+    pub(crate) offline: bool,
 }
 
 impl std::fmt::Debug for BeadsTarget {
@@ -97,7 +101,8 @@ impl BeadsTarget {
     }
 }
 
-/// Machine, project, folder and the route to that computer: a change in any of them is another
+/// Machine, project, folder, whether that computer is reachable, and the route to it (its tunnel's
+/// port and token): a change in any of them is another
 /// target, so the view starts over and menus opened for the old one never run.
 impl PartialEq for BeadsTarget {
     fn eq(&self, other: &Self) -> bool {
@@ -105,8 +110,15 @@ impl PartialEq for BeadsTarget {
             && self.rpc_project_id == other.rpc_project_id
             && self.project_path == other.project_path
             && self.machine == other.machine
-            && self.remote.as_ref().map(|remote| remote.local_port)
-                == other.remote.as_ref().map(|remote| remote.local_port)
+            && self.offline == other.offline
+            && self
+                .remote
+                .as_ref()
+                .map(|remote| (remote.local_port, remote.token.as_str()))
+                == other
+                    .remote
+                    .as_ref()
+                    .map(|remote| (remote.local_port, remote.token.as_str()))
     }
 }
 
@@ -132,6 +144,8 @@ pub(crate) enum BeadsRequest {
         session_id: String,
     },
     SaveLayout(BeadsLayout),
+    /// The details / New bead column's divider was dragged to this width.
+    SaveSideWidth(f32),
     /// The header's search, which the Board filters by too.
     Search(String),
     /// A write landed while the Board is shown: it reads Beads again (without its setup writes).
@@ -338,6 +352,12 @@ impl BeadsView {
         }
     }
 
+    /// The target calls may go to: `None` while there is none or its computer is not connected,
+    /// so a disconnected remote project never falls through to this computer's gxserver.
+    pub(crate) fn rpc_target(&self) -> Option<BeadsTarget> {
+        self.target.clone().filter(|target| !target.offline)
+    }
+
     pub(crate) fn workspace_state(&self) -> Option<BeadsWorkspaceState> {
         self.snapshot
             .as_ref()
@@ -434,7 +454,7 @@ impl BeadsView {
     /// One `/api/beadsView` read (and the project records when they are due). `refresh` asks
     /// gxserver to look for the workspace again (the header's Refresh).
     pub(crate) fn fetch_now(&mut self, refresh: bool, cx: &mut Context<Self>) -> Option<Task<()>> {
-        let target = self.target.clone()?;
+        let target = self.rpc_target()?;
         let generation = self.generation;
         let known_revision = if refresh {
             None
@@ -624,7 +644,7 @@ impl BeadsView {
         cx: &mut Context<Self>,
         done: impl FnOnce(&mut Self, &Value, &mut Window, &mut Context<Self>) + 'static,
     ) {
-        let Some(target) = self.target.clone() else {
+        let Some(target) = self.rpc_target() else {
             return;
         };
         let generation = self.generation;

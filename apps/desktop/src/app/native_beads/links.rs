@@ -182,10 +182,13 @@ impl BeadsView {
         for (kind, link) in &links {
             let (kind, link) = (*kind, link.clone());
             let open = link.clone();
+            // The chip shrinks to the row's width and cuts its text with an ellipsis, so the ✕
+            // stays inside the panel however long the link is; clicking still opens the whole link.
             let mut chip = div()
                 .id(SharedString::from(format!("beads-link-{}", kind.slug())))
                 .flex()
-                .flex_none()
+                .max_w_full()
+                .min_w_0()
                 .items_center()
                 .gap(px(4.0))
                 .px(px(6.0))
@@ -202,7 +205,14 @@ impl BeadsView {
                     11.0,
                     p.faint,
                 ))
-                .child(chip_text(&link));
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .child(chip_text(&link)),
+                );
             if openable(&link) {
                 chip = chip
                     .cursor_pointer()
@@ -213,6 +223,7 @@ impl BeadsView {
                 chip = chip.child(
                     div()
                         .id(SharedString::from(format!("beads-link-x-{}", kind.slug())))
+                        .flex_none()
                         .cursor_pointer()
                         .child(titlebar_svg_icon("titlebar/x.svg", 11.0, p.faint))
                         .on_click(cx.listener(move |this, _, window, cx| {
@@ -224,7 +235,12 @@ impl BeadsView {
             row = row.child(chip);
         }
         if let Some((_, input)) = editing.as_ref() {
-            row = row.child(div().w(px(220.0)).child(text_field(input, p, window, cx)));
+            row = row.child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .child(text_field(input, p, window, cx)),
+            );
         } else if editable {
             for kind in [LinkKind::External, LinkKind::Spec] {
                 if links.iter().any(|(have, _)| *have == kind) {

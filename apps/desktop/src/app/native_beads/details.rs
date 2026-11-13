@@ -84,7 +84,8 @@ impl BeadsView {
 
     /// Reads the bead's description and comments (`show`).
     pub(crate) fn load_details(&mut self, cx: &mut Context<Self>) {
-        let (Some(details), Some(target)) = (self.details.as_mut(), self.target.clone()) else {
+        let target = self.rpc_target();
+        let (Some(details), Some(target)) = (self.details.as_mut(), target) else {
             return;
         };
         details.stale = false;

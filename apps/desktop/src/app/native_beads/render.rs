@@ -128,6 +128,9 @@ impl BeadsView {
         let can_create = ready || self.legacy;
         let narrow = self.is_narrow();
         let search_collapsed = self.search_collapsed(focused);
+        // CDXC:ProjectBoard 2026-11-13 WHY: at the panel's narrow width an open search field could not fit beside the title, the Tree/Board switch and the actions, and ran over them. While it is open in a narrow panel it replaces the title and the switch, takes the row's free room, and has its own ✕ that clears it and brings them back.
+        let searching = narrow && !search_collapsed;
+        let search_for_clear = self.search.clone();
         if !focused && self.options.query.trim().is_empty() {
             self.search_open = false;
         }
@@ -142,42 +145,46 @@ impl BeadsView {
             .flex_shrink(1.0)
             .flex_basis(px(if narrow { 0.0 } else { 380.0 }))
             .min_w_0()
-            .child(
-                div()
-                    .flex_none()
-                    .text_size(px(16.0))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Beads"),
-            )
-            .child(
-                div()
-                    .flex_none()
-                    .w(px(if narrow { 164.0 } else { 190.0 }))
-                    .child(modal_segmented_control(
-                        &modal,
-                        "beads-layout",
-                        &[
-                            ModalSegmentedItem {
-                                icon: Some("titlebar/sitemap.svg"),
-                                label: "Tree",
+            .when(!searching, |this| {
+                this.child(
+                    div()
+                        .flex_none()
+                        .text_size(px(16.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child("Beads"),
+                )
+            })
+            .when(!searching, |this| {
+                this.child(
+                    div()
+                        .flex_none()
+                        .w(px(if narrow { 164.0 } else { 190.0 }))
+                        .child(modal_segmented_control(
+                            &modal,
+                            "beads-layout",
+                            &[
+                                ModalSegmentedItem {
+                                    icon: Some("titlebar/sitemap.svg"),
+                                    label: "Tree",
+                                },
+                                ModalSegmentedItem {
+                                    icon: Some("titlebar/layout-board-split.svg"),
+                                    label: "Board",
+                                },
+                            ],
+                            if tree { 0 } else { 1 },
+                            |this: &mut Self, index, window, cx| {
+                                let layout = if index == 0 {
+                                    BeadsLayout::Tree
+                                } else {
+                                    BeadsLayout::Board
+                                };
+                                this.set_layout(layout, window, cx)
                             },
-                            ModalSegmentedItem {
-                                icon: Some("titlebar/layout-board-split.svg"),
-                                label: "Board",
-                            },
-                        ],
-                        if tree { 0 } else { 1 },
-                        |this: &mut Self, index, window, cx| {
-                            let layout = if index == 0 {
-                                BeadsLayout::Tree
-                            } else {
-                                BeadsLayout::Board
-                            };
-                            this.set_layout(layout, window, cx)
-                        },
-                        cx,
-                    )),
-            )
+                            cx,
+                        )),
+                )
+            })
             .when(search_collapsed, |this| {
                 this.child(self.render_search_icon(p, cx))
             })
@@ -187,8 +194,8 @@ impl BeadsView {
                         .flex()
                         .items_center()
                         .gap(px(6.0))
-                        .w(px(260.0))
-                        .flex_shrink(1.0)
+                        .when(searching, |this| this.flex_1())
+                        .when(!searching, |this| this.w(px(260.0)).flex_shrink(1.0))
                         .min_w(px(120.0))
                         .h(px(CONTROL_HEIGHT))
                         .px(px(10.0))
@@ -210,7 +217,24 @@ impl BeadsView {
                                     .text_size(px(13.0))
                                     .text_color(p.foreground),
                             ),
-                        ),
+                        )
+                        .when(searching, |this| {
+                            this.child(
+                                div()
+                                    .id("beads-search-close")
+                                    .flex_none()
+                                    .cursor_pointer()
+                                    .child(titlebar_svg_icon("titlebar/x.svg", 13.0, p.muted))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.search_open = false;
+                                        search_for_clear.update(cx, |input, cx| {
+                                            input.set_value("", window, cx)
+                                        });
+                                        this.focus.focus(window, cx);
+                                        cx.notify();
+                                    })),
+                            )
+                        }),
                 )
             });
         let right = div()
@@ -552,11 +576,11 @@ impl Render for BeadsView {
             }))
             .on_mouse_up(
                 gpui::MouseButton::Left,
-                cx.listener(|this, _, _, cx| this.end_side_drag(cx)),
+                cx.listener(|this, _, window, cx| this.end_side_drag(window, cx)),
             )
             .on_mouse_up_out(
                 gpui::MouseButton::Left,
-                cx.listener(|this, _, _, cx| this.end_side_drag(cx)),
+                cx.listener(|this, _, window, cx| this.end_side_drag(window, cx)),
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "escape" {

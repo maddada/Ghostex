@@ -394,6 +394,18 @@ impl BeadsView {
         cx: &mut Context<Self>,
     ) {
         let serial = command["serial"].as_u64();
+        // A late click from an earlier opening must not use up the menu open now.
+        if let Some(open) = self
+            .menu
+            .as_ref()
+            .filter(|menu| Some(menu.serial) != serial)
+        {
+            menu_log(
+                "beadsView.menuDispatch",
+                json!({ "serial": serial, "open": open.serial, "outcome": "otherMenu" }),
+            );
+            return;
+        }
         let Some(menu) = self.menu.take() else {
             // The view started over (another project or workspace) while the menu was open.
             let stale = serial.is_some_and(|serial| serial == self.menu_serial);
@@ -408,13 +420,6 @@ impl BeadsView {
             }
             return;
         };
-        if serial != Some(menu.serial) {
-            menu_log(
-                "beadsView.menuDispatch",
-                json!({ "serial": serial, "open": menu.serial, "outcome": "otherMenu" }),
-            );
-            return;
-        }
         if menu.generation != self.generation || menu.target != self.target {
             menu_log(
                 "beadsView.menuDispatch",

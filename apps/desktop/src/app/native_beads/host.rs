@@ -26,6 +26,47 @@ fn saved_layout() -> Option<BeadsLayout> {
         .and_then(BeadsLayout::from_setting)
 }
 
+/// The width the details / New bead column was last dragged to, kept with the sidebar's own width
+/// in the desktop's native settings file (`sidebarWidth` beside it), so it survives a restart.
+#[cfg(not(target_arch = "wasm32"))]
+fn saved_side_width() -> Option<f32> {
+    crate::app::helpers::read_json_number_field(
+        &crate::app::helpers::native_chrome_settings_path(),
+        BEADS_SIDE_WIDTH_SETTING,
+    )
+    .filter(|width| width.is_finite() && *width > 0.0)
+}
+
+/// The page keeps no settings file: the width lasts while the page is open.
+#[cfg(target_arch = "wasm32")]
+fn saved_side_width() -> Option<f32> {
+    None
+}
+
+/// CDXC:ProjectBoard 2026-11-13 WHY: the divider's width is the user's preference, so it is saved only when they drag; a panel that is narrower for a while clamps what is shown (`side_width_now`) without rewriting it.
+#[cfg(not(target_arch = "wasm32"))]
+fn save_side_width(width: f32) {
+    let path = crate::app::helpers::native_chrome_settings_path();
+    let mut settings = crate::app::helpers::read_json_object(&path).unwrap_or_default();
+    let Some(number) = serde_json::Number::from_f64(f64::from(width.round())) else {
+        return;
+    };
+    settings.insert(BEADS_SIDE_WIDTH_SETTING.to_string(), Value::Number(number));
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(data) = serde_json::to_vec_pretty(&Value::Object(settings)) {
+        let _ = std::fs::write(path, data);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn save_side_width(_width: f32) {}
+
+/// The native settings key of the details column's dragged width.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+const BEADS_SIDE_WIDTH_SETTING: &str = "beadsDetailsWidth";
+
 impl GhostexGpuiApp {
     /// The active project, as the Beads view reads it: the Board's own context (id, folder,
     /// remote route), so Tree and Board never ask about two different projects.
@@ -39,12 +80,17 @@ impl GhostexGpuiApp {
             .clone()
             .map(MachineId::Remote)
             .unwrap_or(MachineId::Local);
+        // The Board refuses a remote project whose computer has no route (`gxserver_target` in
+        // native_kanban/beads.rs); the Tree keeps the target but marks it, so it says so and calls
+        // nothing instead of asking this computer's gxserver.
+        let offline = !machine.is_local() && context.remote_target.is_none();
         Some(BeadsTarget {
             project_key,
             rpc_project_id: context.project_id?,
             project_path: context.project_path,
             machine,
             remote: context.remote_target,
+            offline,
         })
     }
 
@@ -82,7 +128,13 @@ impl GhostexGpuiApp {
         let host: super::view::BeadsHostFn = std::rc::Rc::new(move |request, window, cx| {
             let _ = app.update(cx, |app, cx| app.handle_beads_request(request, window, cx));
         });
-        let view = cx.new(|cx| BeadsView::new(host, window, cx));
+        let view = cx.new(|cx| {
+            let mut view = BeadsView::new(host, window, cx);
+            if let Some(width) = saved_side_width() {
+                view.side_width = width;
+            }
+            view
+        });
         self.native_beads = Some(view.clone());
         view
     }
@@ -166,6 +218,7 @@ impl GhostexGpuiApp {
                 );
             }
             BeadsRequest::SaveLayout(layout) => self.save_beads_layout(layout),
+            BeadsRequest::SaveSideWidth(width) => save_side_width(width),
             BeadsRequest::Search(query) => self.native_kanban_set_search_query(query, cx),
             BeadsRequest::Changed => self.native_kanban_refresh_quietly(cx),
             BeadsRequest::Refresh => self.native_kanban_refresh_now(cx),

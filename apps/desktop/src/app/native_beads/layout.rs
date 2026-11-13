@@ -22,7 +22,8 @@ pub(crate) const SIDE_DEFAULT_WIDTH: f32 = 420.0;
 const SIDE_MIN_WIDTH: f32 = 340.0;
 /// What the tree keeps beside the column, however far the divider is dragged.
 const TREE_MIN_WIDTH: f32 = 340.0;
-/// The divider's own width: the visible rail is the whole grab target.
+/// The divider's own width: a 1px line in the middle of a 7px strip of its own, a sibling of the
+/// tree and the column, so the strip covers neither; the pointer turns to a resize cursor over it.
 const DIVIDER_WIDTH: f32 = 7.0;
 /// Below this tree width the filter row uses its compact form.
 const COMPACT_FILTERS_TREE_WIDTH: f32 = 660.0;
@@ -147,10 +148,18 @@ impl BeadsView {
         cx.notify();
     }
 
-    pub(crate) fn end_side_drag(&mut self, cx: &mut Context<Self>) {
-        if self.side_drag.take().is_some() {
-            cx.notify();
+    pub(crate) fn end_side_drag(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        let Some((_, start_width)) = self.side_drag.take() else {
+            return;
+        };
+        if (self.side_width - start_width).abs() >= 1.0 {
+            (self.host.clone())(
+                super::view::BeadsRequest::SaveSideWidth(self.side_width),
+                window,
+                cx,
+            );
         }
+        cx.notify();
     }
 
     /// The narrow header's search: an icon until it is pressed or holds a query.
@@ -246,12 +255,12 @@ pub(crate) fn short_filter_label(filter: ghostex_gx_core::beads_view::BeadsFilte
 
 /// The sync status shortened for the narrow header ("Synced 4 min ago" → "4 min").
 pub(crate) fn short_sync_label(label: &str) -> String {
-    let label = label.trim();
-    if let Some(rest) = label.strip_prefix("Synced ") {
-        return rest.trim_end_matches(" ago").to_string();
-    }
-    match label {
-        "Not synced yet" => String::new(),
-        other => other.to_string(),
-    }
+    // Anything longer than an age (in progress, failed, not synced yet) shows as the icon alone,
+    // whose colour and the Sync menu say the rest, so the header's actions always fit.
+    label
+        .trim()
+        .strip_prefix("Synced ")
+        .map(|rest| rest.trim_end_matches(" ago").to_string())
+        .filter(|age| age.chars().count() <= 8)
+        .unwrap_or_default()
 }
