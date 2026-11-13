@@ -253,6 +253,10 @@ pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &Tailc
     let Ok(db) = open_gxserver_database(paths) else {
         return;
     };
+    // In turn with the writes, so a reload that read "on" can't start the helpers after an Off.
+    let _writes = TAILCAT_STATE_WRITES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let Ok(state) = read_tailcat_state_or_default(&TailcatRepository::new(&db)) else {
         return;
     };

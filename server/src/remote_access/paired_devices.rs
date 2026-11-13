@@ -457,21 +457,6 @@ pub fn touch_paired_device_seen(
     repository.touch_device_seen(device_id)
 }
 
-/// Adds a newly paired phone's `client_key` to the tailcat allow-list. Since an empty list means
-/// closed (CDXC:RemotePairing 2026-11-08 in tailcat/supervisor.rs) the key always goes on, and a
-/// `none` placeholder makes way for it. Returns whether the list changed.
-pub fn add_tailcat_client_key_when_allow_listed(
-    paths: &GxserverPaths,
-    db: &Connection,
-    tailcat_runtime: &TailcatRuntime,
-    client_key: &str,
-) -> Result<bool> {
-    change_tailcat_client_keys(paths, db, tailcat_runtime, |current| {
-        Ok(allow_list_with_client_key(current.to_vec(), client_key)
-            .unwrap_or_else(|| current.to_vec()))
-    })
-}
-
 /// Where a paired device registers its own Easy Connect key for this computer.
 pub const EASY_CONNECT_CLIENT_KEY_ENDPOINT: &str = "/api/registerEasyConnectClientKey";
 
@@ -761,19 +746,29 @@ fn allow_list_without_client_key(allowed: Vec<String>, client_key: &str) -> Opti
     Some(allowed_client_keys)
 }
 
+/// `allowed` with `client_key` on it (and `none` dropped), for a write already under the tailcat
+/// lock (`with_tailcat_state`).
+pub(crate) fn allow_list_adding(allowed: &[String], client_key: &str) -> Vec<String> {
+    normalize_tailcat_client_keys(
+        allow_list_with_client_key(allowed.to_vec(), client_key)
+            .unwrap_or_else(|| allowed.to_vec()),
+    )
+}
+
 /// Takes `client_key` off the allow-list once the device with `owner_device_key` no longer holds
-/// it (`key_still_needed`).
-fn remove_tailcat_client_key(
+/// it (`key_still_needed`), checked under the same lock and transaction as the removal, so a key
+/// another entry of the device registers meanwhile stays on.
+pub(crate) fn remove_tailcat_client_key(
     paths: &GxserverPaths,
     db: &Connection,
     tailcat_runtime: &TailcatRuntime,
     client_key: &str,
     owner_device_key: Option<&str>,
 ) -> Result<bool> {
-    if key_still_needed(db, client_key, owner_device_key)? {
-        return Ok(false);
-    }
     change_tailcat_client_keys(paths, db, tailcat_runtime, |current| {
+        if key_still_needed(db, client_key, owner_device_key)? {
+            return Ok(current.to_vec());
+        }
         Ok(allow_list_without_client_key(current.to_vec(), client_key)
             .unwrap_or_else(|| current.to_vec()))
     })
