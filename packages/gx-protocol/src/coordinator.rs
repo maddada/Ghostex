@@ -97,6 +97,110 @@ pub fn coordinator_agent_families_text() -> String {
     }
 }
 
+/// Why a coordinator's model may make it work worse: what its chat's warning pill, the agent
+/// picker's step and its guide line say.
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// User (Q2980 "Build it: auto-send + remind on drift"): any agent, account and model may run a coordinator, but when its model is not Opus, Fable, GPT Sol or GPT Astra (any version), its effort is below medium, or Ghostex does not know its model, Ghostex warns: its guide gets a line telling it to tell the user once that a coordinator needs Opus 5.5 at medium or high, or GPT 6.1 Sol at high, its chat shows "Coordinator quality may be degraded on <model>" (dismissible per session, live as the model or effort changes), and the agent picker step shows the same warning for such a model. An effort Ghostex does not know is no reason on its own.
+/// SEE-ALSO: server/src/coordinators/playbook.rs (the guide line), packages/gx-chat-core (the pill), apps/desktop/src/app/window/new_thread_picker.rs (the picker step), apps/mobile/app/src/sessions/coordinatorQuality.ts (the phone's copy, which cannot link this crate).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CoordinatorQualityConcern {
+    /// The model as the user knows it (its label, else its value); `None` when it is unknown.
+    pub model: Option<String>,
+    /// The effort, when it is known.
+    pub effort: Option<String>,
+    /// The effort is below medium.
+    pub low_effort: bool,
+}
+
+/// The words of a model value or label, lowercased: `claude-opus-5-5` reads `claude opus 5 5`.
+fn model_words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect()
+}
+
+/// True for a model a coordinator works well on: Opus, Fable, GPT Sol or GPT Astra, any version
+/// (`opus[1m]`, `claude-opus-5-5`, `Fable 5`, `gpt-6.1-sol`, `GPT-6.1 Astra`).
+pub fn coordinator_model_is_strong(model: &str) -> bool {
+    let words = model_words(model);
+    let has = |word: &str| words.iter().any(|candidate| candidate == word);
+    has("opus") || has("fable") || (has("gpt") && (has("sol") || has("astra")))
+}
+
+/// True for an effort below medium (`low`, `minimal`, `none`).
+pub fn coordinator_effort_is_low(effort: &str) -> bool {
+    matches!(
+        effort.trim().to_ascii_lowercase().as_str(),
+        "low" | "minimal" | "none" | "min"
+    )
+}
+
+/// The concern about a coordinator on `model` (its value and label, either may be empty) at
+/// `effort`, or `None` when it runs on a model it works well on at medium or above.
+pub fn coordinator_quality_concern(
+    model_value: Option<&str>,
+    model_label: Option<&str>,
+    effort: Option<&str>,
+) -> Option<CoordinatorQualityConcern> {
+    let present = |text: Option<&str>| {
+        text.map(str::trim)
+            .filter(|text| !text.is_empty() && !text.eq_ignore_ascii_case("default"))
+            .map(str::to_string)
+    };
+    let value = present(model_value);
+    let label = present(model_label);
+    let effort = present(effort);
+    let strong = [value.as_deref(), label.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(coordinator_model_is_strong);
+    let low_effort = effort.as_deref().is_some_and(coordinator_effort_is_low);
+    if strong && !low_effort {
+        return None;
+    }
+    Some(CoordinatorQualityConcern {
+        model: label.or(value),
+        effort,
+        low_effort,
+    })
+}
+
+impl CoordinatorQualityConcern {
+    /// What it runs on, for the pill: "Sonnet 5.5", "Opus 5.5 at low effort", "an unknown model".
+    pub fn runs_on(&self) -> String {
+        let model = self
+            .model
+            .clone()
+            .unwrap_or_else(|| "an unknown model".to_string());
+        match (&self.effort, self.low_effort) {
+            (Some(effort), true) => format!("{model} at {effort} effort"),
+            _ => model,
+        }
+    }
+
+    /// The warning pill's words: "Coordinator quality may be degraded on Sonnet 5.5".
+    pub fn pill_text(&self) -> String {
+        format!("Coordinator quality may be degraded on {}", self.runs_on())
+    }
+
+    /// The line a coordinator's guide gets.
+    pub fn guide_line(&self) -> String {
+        let model = self
+            .model
+            .clone()
+            .unwrap_or_else(|| "a model Ghostex can't identify".to_string());
+        let runs_on = match &self.effort {
+            Some(effort) => format!("{model} at {effort} effort"),
+            None => model,
+        };
+        format!(
+            "You run on {runs_on}. Tell the user once that a coordinator needs Opus 5.5 at medium or high, or GPT 6.1 Sol at high, to work well."
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
