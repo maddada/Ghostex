@@ -15,6 +15,7 @@ pub mod chat_pills;
 pub mod collab;
 pub mod coordinator_board;
 pub mod coordinator_intro;
+pub mod coordinator_quality;
 pub mod coordinator_threads;
 pub mod document;
 pub mod minimap;

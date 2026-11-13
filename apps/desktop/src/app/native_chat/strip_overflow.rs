@@ -128,7 +128,8 @@ impl NativeChatView {
             .gap(px(ROW_GAP * s));
         for pill in &hidden {
             let id = text(pill, "id");
-            let switch = pill["switch"].as_bool().is_some();
+            // A switch pill and a pill with its own rows (the model warning) open their row menu.
+            let switch = super::chat_pills::opens_row_menu(pill);
             let name = Some(text(pill, "label"))
                 .filter(|name| !name.is_empty())
                 .unwrap_or_else(|| text(pill, "ariaLabel"));

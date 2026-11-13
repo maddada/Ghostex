@@ -122,6 +122,17 @@ pub(super) fn inline_dots(dots: &[(gpui::Hsla, String)], p: &ChatAppearance) -> 
     row
 }
 
+/// The coordinator model warning (gx-chat-core extras/coordinator_quality.rs), drawn in the
+/// attention amber; its click opens its own rows, like a switch pill's.
+const QUALITY_PILL: &str = ghostex_gx_chat_core::extras::coordinator_quality::QUALITY_PILL;
+
+/// Whether a click on `pill` opens its own `menu` rows: a switch pill (Autopilot) or the model
+/// warning.
+pub(super) fn opens_row_menu(pill: &Value) -> bool {
+    pill["switch"].as_bool().is_some()
+        || pill["menu"].as_array().is_some_and(|rows| !rows.is_empty())
+}
+
 /// The dot of a switch pill that is on (Autopilot): green, apart from the status dots' tones.
 pub(super) const AUTOPILOT_ON_COLOR: u32 = 0x22c55e;
 
@@ -176,6 +187,7 @@ pub(super) fn pill_icon(id: &str) -> &'static str {
         super::relayed_approval::APPROVALS_MENU => "titlebar/shield-check.svg",
         super::coordinator_intro::INTRO_MENU => "titlebar/bulb.svg",
         ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => "titlebar/plane.svg",
+        QUALITY_PILL => "titlebar/alert-triangle.svg",
         _ => "titlebar/users.svg",
     }
 }
@@ -522,10 +534,17 @@ impl NativeChatView {
         };
         // A switch pill (Autopilot) opens its small menu; its tooltip says where it stands.
         let switch = pill["switch"].as_bool();
-        let tooltip = match switch {
-            Some(_) => Some(text(pill, "ariaLabel")),
-            None if collapsed && !name.is_empty() => Some(text(pill, "ariaLabel")),
-            None => Some(text(pill, "meta")).filter(|meta| label.is_empty() && !meta.is_empty()),
+        let row_menu = opens_row_menu(pill);
+        let warning = id == QUALITY_PILL;
+        let tone = if warning {
+            rgb(ATTENTION_COLOR).into()
+        } else {
+            p.card_muted
+        };
+        let tooltip = if row_menu || (collapsed && !name.is_empty()) {
+            Some(text(pill, "ariaLabel"))
+        } else {
+            Some(text(pill, "meta")).filter(|meta| label.is_empty() && !meta.is_empty())
         };
         div()
             .id(trigger)
@@ -541,11 +560,15 @@ impl NativeChatView {
             .py(px(2.0 * s))
             .rounded_full()
             .border(px(s))
-            .border_color(p.foreground.opacity(0.1))
+            .border_color(if warning {
+                gpui::Hsla::from(rgb(ATTENTION_COLOR)).opacity(0.45)
+            } else {
+                p.foreground.opacity(0.1)
+            })
             .text_size(px(13.0 * s))
             .line_height(px(19.0 * s))
             .whitespace_nowrap()
-            .text_color(p.card_muted)
+            .text_color(tone)
             .chat_cursor_pointer()
             .when_some(tooltip, |pill, tooltip| {
                 pill.tooltip(move |window, cx| {
@@ -559,7 +582,7 @@ impl NativeChatView {
                     .path(pill_icon(&id))
                     .size(px(14.0 * s))
                     .flex_shrink_0()
-                    .text_color(p.card_muted),
+                    .text_color(tone),
             )
             .when(!label.is_empty(), |pill| pill.child(label))
             .when(switch == Some(true), |pill| {
@@ -580,7 +603,7 @@ impl NativeChatView {
                         .child(count),
                 )
             })
-            .when(switch.is_some(), |pill| {
+            .when(row_menu, |pill| {
                 // A right-click opens the same menu, at the pointer.
                 let id = id.clone();
                 pill.on_mouse_down(
@@ -593,7 +616,7 @@ impl NativeChatView {
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
-                this.activate_chat_pill(&id, switch.is_some(), bounds.get(), window, cx);
+                this.activate_chat_pill(&id, row_menu, bounds.get(), window, cx);
             }))
             .child(
                 // The pill's own border box, which its menu lines up with

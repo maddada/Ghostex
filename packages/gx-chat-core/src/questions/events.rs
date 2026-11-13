@@ -253,6 +253,8 @@ pub fn storage_loaded(state: &mut ChatState, key: &StorageKey, value: Option<&st
             state.core.request_publish();
             true
         }
+        // The coordinator model warning's hide shares the store under its own key.
+        NOTICES_STORE if crate::extras::coordinator_quality::is_hidden_key(key) => false,
         NOTICES_STORE => {
             state.questions.dismissed_notice = value.and_then(decode_dismissed_notice);
             refresh_gates(state);

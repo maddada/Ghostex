@@ -108,6 +108,9 @@ pub fn document_with_board(
     if let Some(pill) = side_chats::pill(&side_chats_panel) {
         into.chat_pills.insert(0, pill);
     }
+    // The model warning goes first, after the Approvals pill (coordinator_quality.rs).
+    into.chat_pills
+        .splice(0..0, crate::extras::coordinator_quality::pill(state));
     // The Approvals pill leads the strip while a thread's relayed card waits on the user.
     let approvals = relayed_approvals::project(state);
     if let Some(pill) = relayed_approvals::pill(&approvals) {

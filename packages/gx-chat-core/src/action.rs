@@ -95,6 +95,7 @@ action_kinds! {
     InsertBoardReference => "insertBoardReference",
     HideCoordinatorIntro => "hideCoordinatorIntro",
     ToggleAutopilot => "toggleAutopilot",
+    DismissCoordinatorQuality => "dismissCoordinatorQuality",
     SetCollabGuest => "setCollabGuest",
     ResolveCollabMessage => "resolveCollabMessage",
     UseCoordinatorIntroExample => "useCoordinatorIntroExample",

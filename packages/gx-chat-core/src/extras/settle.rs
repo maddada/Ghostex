@@ -201,6 +201,11 @@ fn settle_with_ids(
                 key: panels::tasks_collapsed_key(),
             }]);
         }
+        Event::StorageLoaded { key, value }
+            if crate::extras::coordinator_quality::is_hidden_key(key) =>
+        {
+            crate::extras::coordinator_quality::hidden_loaded(state, key, value.as_deref());
+        }
         Event::StorageLoaded { key, value } if *key == panels::tasks_collapsed_key() => {
             state.extras.panels.tasks_collapsed = panels::read_tasks_collapsed(value.as_deref());
         }
@@ -212,6 +217,7 @@ fn settle_with_ids(
         _ => {}
     }
     crate::extras::session_details::settle::prune_stopping(state);
+    effects.extend(crate::extras::coordinator_quality::read_hidden(state));
     // The open "N more" list follows the threads: a new revision on a frame reads it again.
     effects.extend(coordinator_threads::read_all_threads(
         &mut state.extras.panels,

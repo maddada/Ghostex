@@ -911,8 +911,17 @@ pub fn handle_coordinator_playbook_endpoint(
                 None => None,
             };
             let changes_only = changes.is_some();
+            // Added after the version and the read record are taken, so it never reads as a
+            // changed guide (model_quality.rs).
+            let mut guide = changes.unwrap_or(guide);
+            if let Some(line) = reader
+                .as_ref()
+                .and_then(|key| super::coordinator_quality_guide_line(repository, key))
+            {
+                guide = format!("{}\n\n{line}\n", guide.trim_end());
+            }
             Ok(json!({
-                "guide": changes.unwrap_or(guide),
+                "guide": guide,
                 "version": version,
                 "source": source.as_str(),
                 "changesOnly": changes_only,
