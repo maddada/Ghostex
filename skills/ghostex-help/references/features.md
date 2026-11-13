@@ -7022,38 +7022,44 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Grok Build (an Add to PATH button when an installed CLI is not on PATH; a
   command that is only a launcher installing the agent the first time it runs,
   like Omarchy's, shows as not installed yet), an Install guide that installs
-  any other supported agent, the Ghostex helper (agent hooks), which setup
-  installs for every installed agent when you go on, and a line that checks the
-  chosen agent is signed in (Claude Code, Codex and Cursor; a saved account in
-  Settings > Accounts counts) with a Sign in button that opens the agent's own
-  sign-in in your browser (starting an agent that was installed after setup
-  asks once to connect it, and Not now there is remembered for that agent);
-  which views
-  to show (Browser and Files are on by default on a first run), the browser
-  skill, Spaces (on for a first run, the same switch as Settings > Sidebar &
-  Sessions > Spaces), the Unified sidebar (the same choice as Settings >
-  Sidebar) and Fast Computer & Browser use (Computer Use: off until you turn
-  it on, and on a Mac it then asks for Accessibility and Screen Recording),
-  with a pointer to the other extensions in Settings > Extensions; how your
-  phone and other computers connect (Connect a Device), with one switch that
-  opens Connect a Device after your first agent reply; and the default session view and
-  Agent approvals (Keep default or Skip permissions, the same setting as
-  Settings > Agents, `agentAcceptAllEnabled`), next to the look: Appearance,
-  the theme colour squares (Dark and Light tabs), Colourfulness and one
-  Transparency row (the simple choices from Settings > Interface), with a
-  "More theme options in Settings > Interface" link that opens the Interface
-  page. Turning transparency on there also switches Appearance to Dark. The
-  last panel also says that Ghostex sends anonymous usage analytics (see
-  "Usage analytics" below for the launch option that turns them off). Setup
-  asks for no project folder: Open Ghostex ends it and goes straight to the
-  app, and when there is no project yet, Add Project opens. Advanced settings
-  later ends it and opens Settings. Closing the window instead (with no project
-  yet) leaves setup unfinished and opens Add Project; it comes back on the next
-  launch only if there is still no project. The very first run opens on a
-  short intro video before the panels: press Play to watch it there (on Linux
-  it opens in your web browser, and says so), it shows once, and Continue (or
-  Enter) skips it and goes on to setup at any time; the video is also at
-  https://youtu.be/QzjFB4J6-8E. Reopen the setup any time from Quick
+  any other supported agent, and how Ghostex follows each agent: Built in for
+  Claude Code, Codex and OpenCode (read from their own transcripts), and a
+  small Ghostex helper for agents that need one, like Cursor Agent, which setup
+  adds when you go on (the button names it, "Connect Cursor Agent & continue";
+  it says Next when nothing needs a helper). A line checks the chosen agent is
+  signed in (Claude Code, Codex and Cursor; a saved account in Settings >
+  Accounts counts) with a Sign in button that opens the agent's own sign-in in
+  your browser (starting an agent that needs a helper and was installed after
+  setup asks once to connect it, and Not now there is remembered for that
+  agent). Then the workspace: Files and VS Code, Spaces (on for a first run,
+  the same switch as Settings > Sidebar & Sessions > Spaces), the Unified
+  sidebar (the same choice as Settings > Sidebar) and Fast Computer & Browser
+  use (Computer Use: off until you turn it on, it also gives agents the
+  Browser's skill, and on a Mac it then asks for Accessibility and Screen
+  Recording), with a pointer to the other extensions in Settings > Extensions;
+  the Browser is always there. Then your devices: your phone, your other
+  computers and Cloud Boxes, how they connect (Easy Connect by default,
+  Tailscale for devices already on a tailnet), and two switches, both off
+  until you turn them on: Pair my phone after setup (opens Connect a Device)
+  and Add another computer after setup (opens Settings > Remote on Add a
+  computer), each after your first agent reply. Last, the default session view
+  and Agent approvals (Keep default or Skip permissions, the same setting as
+  Settings > Agents, `agentAcceptAllEnabled`), with a small preview window
+  that shows your picks at once, next to the look: Appearance, the theme
+  colour squares (Dark and Light tabs), Colourfulness and one Transparency row
+  (the simple choices from Settings > Interface), with a "More theme options
+  in Settings > Interface" link that opens the Interface page. Turning
+  transparency on there also switches Appearance to Dark. The last panel also
+  says that Ghostex sends anonymous usage analytics (see "Usage analytics"
+  below for the launch option that turns them off). Setup asks for no project
+  folder: Open Ghostex ends it and goes straight to the app, and when there is
+  no project yet, Add Project opens. Closing the window instead (with no
+  project yet) leaves setup unfinished and opens Add Project; it comes back on
+  the next launch only if there is still no project. The very first run opens
+  on a short intro video before the panels: press Play to watch it there (on
+  Linux it opens in your web browser, and says so), it shows once, and
+  Continue (or Enter) skips it and goes on to setup at any time; the video is
+  also at https://youtu.be/QzjFB4J6-8E. Reopen the setup any time from Quick
   Access > Commands > Setup.
 - The `ghostex` and `gx` commands are linked into a folder on your PATH, or
   into `~/.local/bin` when no other folder is writable (the usual case on

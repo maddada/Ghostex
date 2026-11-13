@@ -245,6 +245,10 @@ pub(crate) struct GpuiFirstRunOnboardingState {
     /// Setup's "Pair my phone after setup" was on: Connect a Device opens once the first agent
     /// reply has arrived (os_integration/first_run_onboarding.rs).
     pub(crate) connect_device_after_first_reply: bool,
+    /// Setup's "Add another computer after setup" was on: Settings > Remote opens on its Add a
+    /// computer dialog once the first agent reply has arrived (after Connect a Device, when both
+    /// were on).
+    pub(crate) add_computer_after_first_reply: bool,
 }
 
 /// CDXC:Onboarding 2026-08-18: the markers whose surfaces are
@@ -310,6 +314,10 @@ pub(crate) fn load_gpui_first_run_onboarding_state() -> GpuiFirstRunOnboardingSt
             .get("connectDeviceAfterFirstReply")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
+        add_computer_after_first_reply: value
+            .get("addComputerAfterFirstReply")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
     }
 }
 
@@ -328,6 +336,7 @@ pub(crate) fn persist_gpui_first_run_onboarding_state(state: &GpuiFirstRunOnboar
         "introVideoSeen": state.intro_video_seen,
         "agentHooksDeclined": state.agent_hooks_declined,
         "connectDeviceAfterFirstReply": state.connect_device_after_first_reply,
+        "addComputerAfterFirstReply": state.add_computer_after_first_reply,
     });
     let _ = fs::write(path, payload.to_string());
 }

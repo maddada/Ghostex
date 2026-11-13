@@ -10,8 +10,8 @@ use super::stage::*;
 use super::welcome::foot_actions;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled as _, div, linear_color_stop, linear_gradient,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    Styled as _, div, linear_color_stop, linear_gradient,
 };
 use std::time::{Duration, Instant};
 
@@ -62,27 +62,35 @@ impl WorkspaceState {
 
 /// CDXC:Onboarding 2026-11-11 DECISION:
 /// User, on the first-run page (step 8, Workspace): "keep this but make spaces enabled by default and add unified sidebar as an optoin and remove kanban and automate mentino 25+ extensions that can be installed from settings later", and (step 7) "move computer use to the workspace page. call it Fast Computer & Browse use" (Browser, as the coordinator read it). Kanban and Automate leave the list (a first run still starts with them off; the view picker and Settings > Extensions turn them on); Spaces (on for a first run, mod.rs), the Unified sidebar and Fast Computer & Browser use take their rows, and one line under them points to the other extensions.
+/// CDXC:Onboarding 2026-11-13 DECISION:
+/// User, on the first-run showcase page (Q3047, the Workspace page), kept "one flat list" and said:
+/// "Remove the Browser and Browser skill switches at the top: the browser is always installed. If
+/// the user turns on Fast computer and browser use, install the embedded browser skill too." The
+/// page is now five rows (Files, VS Code, Spaces, Unified sidebar, Fast Computer & Browser use) with
+/// no Recommended chip (it only turned Browser and Files on); the Browser view stays as a first run
+/// leaves it (on), and the browser skill comes with Fast Computer & Browser use
+/// (`ws_toggle_computer_use`). This supersedes the browser skill switch of CDXC:Onboarding 2026-10-28.
+const ROW_TOPS: [f32; 5] = [300.0, 376.0, 452.0, 528.0, 604.0];
 const VIEW_ROWS: [(ViewKey, &str, &str, &str, f32); 2] = [
     (
         ViewKey::Docs,
         "list",
         "Files",
         "Markdown, mockups, diagrams and annotations.",
-        464.0,
+        ROW_TOPS[0],
     ),
     (
         ViewKey::Code,
         "code",
         "VS Code",
         "VS Code, built in: source, diffs and review.",
-        532.0,
+        ROW_TOPS[1],
     ),
 ];
 /// Extensions Settings > Extensions offers beyond these rows: 47 built in and 10 in the Store on
 /// 2026-11-11, so "25+" stays true however many a user already has on.
 const EXTENSIONS_LINE: &str =
     "25+ more extensions can be turned on or installed later in Settings > Extensions.";
-const RECOMMENDED: [ViewKey; 2] = [ViewKey::Docs, ViewKey::Browser];
 const TAB_ORDER: [ViewKey; 5] = [
     ViewKey::Code,
     ViewKey::Browser,
@@ -175,6 +183,14 @@ impl GpuiOnboardingWindow {
             .and_then(serde_json::Value::as_bool)
             != Some(true);
         self.send(OnboardingCommand::InstallComputerUse { install_driver }, cx);
+        // The embedded Browser's skill comes with it (CDXC:Onboarding 2026-11-13 above `ROW_TOPS`).
+        if !self.browser_skill_installed() && self.browser_skill_pending.is_none() {
+            self.browser_skill_pending = Some(super::BrowserSkillPending {
+                target: true,
+                deadline: Instant::now() + Duration::from_secs(120),
+            });
+            self.send(OnboardingCommand::InstallBrowserSkill, cx);
+        }
         self.after_computer_use_changed(before, cx);
         self.show_toast(
             super::model::computer_use_copy(super::model::ComputerUseDesktop::current()).turned_on,
@@ -208,51 +224,6 @@ impl GpuiOnboardingWindow {
         }
     }
 
-    fn ws_apply_recommended(&mut self, cx: &mut Context<Self>) {
-        let missing: Vec<ViewKey> = RECOMMENDED
-            .iter()
-            .copied()
-            .filter(|key| !self.settings.is_view_on(*key))
-            .collect();
-        if missing.is_empty() {
-            return;
-        }
-        let changes: Vec<(ViewKey, bool)> = missing.iter().map(|key| (*key, true)).collect();
-        self.update_settings(views_patch(&changes), cx);
-        self.workspace.recent.retain(|item| !missing.contains(item));
-        self.workspace.recent.extend(missing.iter().copied());
-        if let Some(last) = missing.last() {
-            self.ws_show_tab(WsTab::View(*last));
-        }
-    }
-
-    /// CDXC:Onboarding 2026-10-28 WHY:
-    /// The switch followed only the installed status, which arrives after the install finishes, so
-    /// the first click looked dead, a second click uninstalled what the first had just installed,
-    /// and the two app toasts contradicted each other. The switch now moves at once, says it is
-    /// adding or removing the skill, ignores clicks until the status confirms it, and reports the
-    /// outcome in its own toast.
-    fn ws_toggle_browser_skill(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.is_view_on(ViewKey::Browser) || self.browser_skill_busy() {
-            return;
-        }
-        let target = !self.browser_skill_installed();
-        self.browser_skill_pending = Some(super::BrowserSkillPending {
-            target,
-            deadline: Instant::now() + std::time::Duration::from_secs(120),
-        });
-        self.send(
-            if target {
-                OnboardingCommand::InstallBrowserSkill
-            } else {
-                OnboardingCommand::UninstallBrowserSkill
-            },
-            cx,
-        );
-        self.ws_show_tab(WsTab::View(ViewKey::Browser));
-        cx.notify();
-    }
-
     pub(super) fn render_workspace(
         &mut self,
         s: S,
@@ -262,12 +233,10 @@ impl GpuiOnboardingWindow {
         let views = self.views();
         let browser_on = views[ViewKey::Browser.index()];
         let drive = browser_on && self.browser_skill_shown_on();
-        let skill_busy = self.browser_skill_busy();
         if drive != self.workspace.drive {
             self.workspace.drive = drive;
             self.workspace.drive_since = now;
         }
-        let recommended_on = RECOMMENDED.iter().all(|key| views[key.index()]);
         let current = self.ws_current();
         if self.workspace.shown != Some(current) {
             self.workspace.shown = Some(current);
@@ -293,195 +262,6 @@ impl GpuiOnboardingWindow {
         out.push(
             sub(s, 60.0, 250.0, 632.0, 16.0, false)
                 .child("Start lean; anything you hide stays available in Settings.")
-                .into_any_element(),
-        );
-        // `.rec-chip { transition: border-color 0.2s }`; `:hover` is declared after `.on` and wins.
-        let chip_border = interact::tween_color(
-            "ws-rec-chip",
-            "border",
-            if interact::hovered("ws-rec-chip") {
-                white(0.26)
-            } else if recommended_on {
-                rgba(90, 130, 255, 0.4)
-            } else {
-                white(0.1)
-            },
-            200,
-        );
-        let chip = abs(s, 60.0, 290.0, None, Some(38.0))
-            .id("ws-rec-chip")
-            .flex()
-            .items_center()
-            .gap(s.px(12.0))
-            .px(s.px(20.0))
-            .whitespace_nowrap()
-            .rounded(s.px(20.0))
-            .border_1()
-            .border_color(chip_border)
-            .bg(rgba(12, 14, 20, 0.6))
-            .cursor_pointer()
-            .child(icon(
-                s,
-                "checkCircle",
-                18.0,
-                1.6,
-                if recommended_on {
-                    hex(0x6d93ff)
-                } else {
-                    hex(0x2f4fae)
-                },
-            ))
-            .child(sans(s, 15.0, 400.0, hex(0xe8ecf4)).child("Recommended · Browser + Files"));
-        out.push(
-            self.control(
-                s,
-                chip,
-                "ws-rec-chip",
-                interact::Ring::new(20.0, 1.0),
-                interact::Keys::EnterSpace,
-                cx,
-                |this, _, cx| this.ws_apply_recommended(cx),
-            )
-            .into_any_element(),
-        );
-        let browser_thumb = self.thumb("ws-browser", browser_on, now);
-        let drive_thumb = self.thumb("ws-drive", drive, now);
-        let browser_toggle = self.control(
-            s,
-            toggle(
-                s,
-                "ws-toggle-browser",
-                browser_on,
-                browser_thumb,
-                ToggleSize::Lg,
-                false,
-            ),
-            "ws-toggle-browser",
-            interact::Ring::new(17.0, 1.0),
-            interact::Keys::EnterSpace,
-            cx,
-            move |this, _, cx| {
-                cx.stop_propagation();
-                this.ws_set_view(ViewKey::Browser, !browser_on, cx);
-            },
-        );
-        let browser_row = self.control(
-            s,
-            view_row_inner(s, "ws-row-browser", 55.0)
-                .child(icon(s, "target", 22.0, 1.6, hex(0xd6dbe5)))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(nm(s, 17.0, 500.0).child("Browser"))
-                        .child(
-                            ss(s, 12.5)
-                                .child("Preview and inspect the app your agent is building."),
-                        ),
-                )
-                .child(browser_toggle),
-            "ws-row-browser",
-            interact::Ring::new(0.0, 0.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| {
-                this.ws_preview(WsTab::View(ViewKey::Browser));
-                cx.notify();
-            },
-        );
-        let skill_toggle = toggle(
-            s,
-            "ws-toggle-skill",
-            drive,
-            drive_thumb,
-            ToggleSize::Lg,
-            !browser_on,
-        );
-        // A disabled switch is out of the tab order.
-        let skill_toggle = if browser_on {
-            self.control(
-                s,
-                skill_toggle,
-                "ws-toggle-skill",
-                interact::Ring::new(17.0, 1.0),
-                interact::Keys::EnterSpace,
-                cx,
-                |this, _, cx| {
-                    cx.stop_propagation();
-                    this.ws_toggle_browser_skill(cx);
-                },
-            )
-        } else {
-            skill_toggle
-        };
-        // `.vsub.off { opacity: 0.35 }` with `transition: opacity 0.25s`.
-        let skill_opacity = interact::tween_value(
-            "ws-row-skill",
-            "opacity",
-            if browser_on { 1.0 } else { 0.35 },
-            250,
-        );
-        let skill_row = self.control(
-            s,
-            div()
-                .id("ws-row-skill")
-                .relative()
-                .flex()
-                .items_center()
-                .gap(s.px(14.0))
-                .h(s.px(56.0))
-                .pl(s.px(34.0))
-                .pr(s.px(20.0))
-                .border_t_1()
-                .border_color(white(0.05))
-                .opacity(skill_opacity)
-                .when(browser_on, |this| this.cursor_pointer())
-                .child(div().ml(s.px(-1.0)).mr(s.px(16.0)).child(icon(
-                    s,
-                    "wrench",
-                    16.0,
-                    1.6,
-                    hex(0xaab2c1),
-                )))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(s.px(3.0))
-                        .child(
-                            sans(s, 14.0, 500.0, hex(0xe2e6ee))
-                                .child("Give agents the browser skill"),
-                        )
-                        .child(sans(s, 12.0, 400.0, hex(0x9ea7b6)).child(
-                            match (skill_busy, drive) {
-                                (true, true) => "Adding the browser skill for your agents…",
-                                (true, false) => "Removing the browser skill…",
-                                _ => "Agents can open, click, type and screenshot pages in this browser.",
-                            },
-                        )),
-                )
-                .child(skill_toggle),
-            "ws-row-skill",
-            interact::Ring::new(0.0, 0.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| {
-                this.ws_preview(WsTab::View(ViewKey::Browser));
-                cx.notify();
-            },
-        );
-        out.push(
-            glass(s)
-                .absolute()
-                .left(s.px(60.0))
-                .top(s.px(340.0))
-                .w(s.px(632.0))
-                .h(s.px(112.0))
-                .overflow_hidden()
-                .child(browser_row)
-                .child(skill_row)
                 .into_any_element(),
         );
         for (key, icon_name, title, detail, top) in VIEW_ROWS {
@@ -561,7 +341,7 @@ impl GpuiOnboardingWindow {
             "Spaces",
             "layers",
             "Group projects in the sidebar into Spaces.",
-            600.0,
+            ROW_TOPS[2],
             spaces_on,
             cx,
             move |this, cx| {
@@ -582,7 +362,7 @@ impl GpuiOnboardingWindow {
             "Unified sidebar",
             "sidebar",
             "Every session in one list, the ones that need you on top.",
-            668.0,
+            ROW_TOPS[3],
             unified,
             cx,
             move |this, cx| {
@@ -598,7 +378,7 @@ impl GpuiOnboardingWindow {
         ));
         out.push(self.ws_computer_use_row(s, now, cx));
         out.push(
-            abs(s, 60.0, 806.0, Some(632.0), None)
+            abs(s, 60.0, ROW_TOPS[4] + 90.0, Some(632.0), None)
                 .flex()
                 .items_center()
                 .gap(s.px(10.0))
@@ -768,7 +548,7 @@ impl GpuiOnboardingWindow {
         let row = glass(s)
             .absolute()
             .left(s.px(60.0))
-            .top(s.px(736.0))
+            .top(s.px(ROW_TOPS[4]))
             .w(s.px(632.0))
             .h(s.px(58.0))
             .flex()
@@ -1181,16 +961,4 @@ impl GpuiOnboardingWindow {
             .into_any_element()
         }
     }
-}
-
-fn view_row_inner(s: S, id: &'static str, height: f32) -> gpui::Stateful<Div> {
-    div()
-        .id(id)
-        .flex()
-        .items_center()
-        .gap(s.px(26.0))
-        .h(s.px(height))
-        .pl(s.px(30.0))
-        .pr(s.px(20.0))
-        .cursor_pointer()
 }

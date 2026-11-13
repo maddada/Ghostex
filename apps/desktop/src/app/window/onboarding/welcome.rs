@@ -3,12 +3,13 @@
 use super::GpuiOnboardingWindow;
 use super::fonts::PLEX_MONO;
 use super::interact;
+use super::model::agent_count_label;
 use super::primitives::*;
 use super::stage::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
-    Styled as _, StyledImage as _, div, linear_color_stop, linear_gradient,
+    Styled as _, div, linear_color_stop, linear_gradient,
 };
 use std::time::{Duration, Instant};
 
@@ -42,7 +43,10 @@ const TABS: [(WelcomeTab, &str, &str, &str); 3] = [
         "One agent can launch and hand work to another.",
     ),
     // CDXC:Onboarding 2026-11-11 DECISION:
-    // User, on the first-run page (step 6, Welcome): "the terminal one NO ONE cares about so let's change it to something else about coordinators because that's the coolest feature of ghostex. see README.md for details about coordinators. i want also nice graphic same style about this". The Chat + terminal tab is now Coordinators, with the captain's hat and the coordinators picture (assets/onboarding/welcome-coordinators.webp, from the first-run art thread).
+    // User, on the first-run page (step 6, Welcome): "the terminal one NO ONE cares about so let's change it to something else about coordinators because that's the coolest feature of ghostex. see README.md for details about coordinators. i want also nice graphic same style about this". The Chat + terminal tab is now Coordinators, with the coordinator's crown.
+    // 2026-11-13 (Q3045 on the first-run showcase page, "Animate Coordinators"): the still picture
+    // (which still showed the old hat and a Gemini thread) is now a demo like the other two tabs:
+    // you, the coordinator and three threads filling in (`coordinators_demo`).
     (
         WelcomeTab::Coordinators,
         COORDINATOR_ICON,
@@ -59,6 +63,7 @@ const TABS: [(WelcomeTab, &str, &str, &str); 3] = [
 
 /// The tab icon that is the app's coordinator mark (the outline crown) instead of a line icon.
 const COORDINATOR_ICON: &str = "coordinator";
+const COORDINATOR_CROWN: &str = "titlebar/coordinator-crown-points.svg";
 
 /// `<FootActions panel>`: the panel's forward action on the footer row, right-aligned to the copy column.
 /// CDXC:Onboarding 2026-09-12 DECISION:
@@ -197,6 +202,24 @@ const SUB_LOG: [LogLine; 3] = [
     (5, "ok", "6 of 6 pass"),
 ];
 
+const YOU_LOG: [LogLine; 2] = [
+    (0, "me", "Ship the billing page."),
+    (7, "ok", "Billing page ready. Tests pass."),
+];
+const COORDINATOR_LOG: [LogLine; 5] = [
+    (1, "", "Planning it as three threads"),
+    (2, "acc", "Claude Code: the API"),
+    (3, "acc", "Codex: the tests"),
+    (4, "acc", "Cursor Agent: the page"),
+    (6, "ok", "All three done. Reporting back."),
+];
+/// The coordinator's threads: agent, name, session, the frame it starts and the frame it is done.
+const THREADS: [(&str, &str, &str, usize, usize); 3] = [
+    ("claude", "Claude Code", "billing-api", 2, 5),
+    ("codex", "Codex", "billing-tests", 3, 5),
+    ("cursor", "Cursor Agent", "billing-page", 4, 6),
+];
+
 const MONITOR_SESSIONS: [(&str, &str); 3] = [
     ("claude", "refactor-auth"),
     ("codex", "port-legacy-tests"),
@@ -225,9 +248,15 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element(),
         );
+        // CDXC:Onboarding 2026-11-13 DECISION: User, on the first-run showcase page (Q3045), took
+        // "Fix the copy": two sentences instead of a comma splice, and the agent count read from the
+        // catalog like every other count on the page (`agent_count_label`).
         out.push(
             sub(s, 46.0, 264.0, 640.0, 15.0, false)
-                .child("Use your own subscriptions or API keys with 20+ supported agents, Ghostex is the workspace around them.")
+                .child(format!(
+                    "Bring your own subscriptions or API keys. Ghostex is the workspace around {} coding agents.",
+                    agent_count_label(&self.catalog)
+                ))
                 .into_any_element(),
         );
         let tab = self.welcome.tab;
@@ -295,7 +324,7 @@ impl GpuiOnboardingWindow {
                         .child(
                             ibox(s, 44.0, 11.0).child(if *icon_name == COORDINATOR_ICON {
                                 gpui::svg()
-                                    .path("titlebar/coordinator-crown-points.svg")
+                                    .path(COORDINATOR_CROWN)
                                     .size(s.px(24.0))
                                     .text_color(hex(0xdfe4ee))
                                     .into_any_element()
@@ -352,18 +381,19 @@ impl GpuiOnboardingWindow {
         let mounted = self.welcome.tab_since;
         match tab {
             WelcomeTab::Together => out.extend(self.agents_together_demo(s, mounted, now)),
-            WelcomeTab::Coordinators => out.push(coordinators_picture(s, mounted, now)),
+            WelcomeTab::Coordinators => out.extend(self.coordinators_demo(s, mounted, now)),
             WelcomeTab::Mobile => out.extend(self.desktop_mobile_demo(s, mounted, now)),
         }
         out
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn demo_card(
         &self,
         s: S,
         (left, top, width, height): (f32, f32, f32, f32),
-        (agent_id, name, role): (&str, &str, String),
-        status: (PillKind, &str),
+        (logo, name, role): (AnyElement, &str, String),
+        status: Option<(PillKind, &str)>,
         log: &[LogLine],
         cycle: &Cycle,
         lit: bool,
@@ -395,12 +425,7 @@ impl GpuiOnboardingWindow {
                     .pb(s.px(16.0))
                     .border_b_1()
                     .border_color(white(0.06))
-                    .child(abox(s, 40.0, 10.0, 12.0).child(agent_logo(
-                        s,
-                        &self.catalog,
-                        agent_id,
-                        24.0,
-                    )))
+                    .child(abox(s, 40.0, 10.0, 12.0).child(logo))
                     .child(
                         div()
                             .flex_1()
@@ -413,14 +438,9 @@ impl GpuiOnboardingWindow {
                                     .child(role),
                             ),
                     )
-                    .child(status_pill(
-                        s,
-                        status.0,
-                        status.1,
-                        self.opened_at,
-                        now,
-                        PILL_DEFAULT,
-                    )),
+                    .children(status.map(|(kind, text)| {
+                        status_pill(s, kind, text, self.opened_at, now, PILL_DEFAULT)
+                    })),
             )
             .child(
                 div()
@@ -485,12 +505,16 @@ impl GpuiOnboardingWindow {
         let mut out = vec![self.demo_card(
             s,
             (812.0, 300.0, 300.0, 320.0),
-            ("claude", "Claude Code", "Lead agent".to_string()),
-            if frame >= 6 {
+            (
+                agent_logo(s, &self.catalog, "claude", 24.0),
+                "Claude Code",
+                "Lead agent".to_string(),
+            ),
+            Some(if frame >= 6 {
                 (PillKind::Done, "Done")
             } else {
                 (PillKind::Run, "Working")
-            },
+            }),
             &LEAD_LOG,
             &cycle,
             !(3..6).contains(&frame),
@@ -530,7 +554,7 @@ impl GpuiOnboardingWindow {
             s,
             (1318.0, 300.0, 300.0, 320.0),
             (
-                "codex",
+                agent_logo(s, &self.catalog, "codex", 24.0),
                 "Codex",
                 if frame >= 3 {
                     "Started by Claude".to_string()
@@ -538,19 +562,165 @@ impl GpuiOnboardingWindow {
                     "Sub-agent".to_string()
                 },
             ),
-            if frame >= 5 {
+            Some(if frame >= 5 {
                 (PillKind::Done, "Done")
             } else if frame >= 3 {
                 (PillKind::Run, "Working")
             } else {
                 (PillKind::Idle, "Waiting")
-            },
+            }),
             &SUB_LOG,
             &cycle,
             (3..6).contains(&frame),
             mounted,
             now,
         ));
+        out
+    }
+
+    /// The Coordinators tab: you ask once, the coordinator plans the work, hands it to three
+    /// threads, and reports back when they are done.
+    fn coordinators_demo(&self, s: S, mounted: Instant, now: Instant) -> Vec<AnyElement> {
+        let cycle = cycle(mounted, now, 8, 1150, 3);
+        let frame = cycle.frame;
+        let mut out = vec![self.demo_card(
+            s,
+            (812.0, 340.0, 200.0, 240.0),
+            (
+                icon(s, "chat", 20.0, 1.6, hex(0xdfe4ee)).into_any_element(),
+                "You",
+                "One message".to_string(),
+            ),
+            None,
+            &YOU_LOG,
+            &cycle,
+            frame == 0 || frame == 7,
+            mounted,
+            now,
+        )];
+        let send = match frame {
+            1 => Some((true, cycle.frame_started)),
+            7 => Some((false, cycle.frame_started)),
+            _ => None,
+        };
+        out.extend(demo_link(s, 1012.0, 460.0, 50.0, send, None, now));
+        out.push(
+            self.demo_card(
+                s,
+                (1062.0, 290.0, 290.0, 350.0),
+                (
+                    gpui::svg()
+                        .path(COORDINATOR_CROWN)
+                        .size(s.px(24.0))
+                        .text_color(hex(0xdfe4ee))
+                        .into_any_element(),
+                    "Coordinator",
+                    "Plans the work".to_string(),
+                ),
+                Some(match frame {
+                    0 => (PillKind::Idle, "Waiting"),
+                    7 => (PillKind::Done, "Done"),
+                    _ => (PillKind::Run, "Working"),
+                }),
+                &COORDINATOR_LOG,
+                &cycle,
+                (1..7).contains(&frame),
+                mounted,
+                now,
+            ),
+        );
+        for (index, (agent_id, name, task, started, done)) in THREADS.iter().enumerate() {
+            let top = 300.0 + index as f32 * 116.0;
+            let send = if frame == *started {
+                Some((true, cycle.frame_started))
+            } else if frame == *done && index == 0 {
+                Some((false, cycle.frame_started))
+            } else {
+                None
+            };
+            out.extend(demo_link(s, 1352.0, top + 44.0, 40.0, send, None, now));
+            let status = if frame >= *done {
+                (PillKind::Done, "Done")
+            } else if frame >= *started {
+                (PillKind::Run, "Working")
+            } else {
+                (PillKind::Idle, "Waiting")
+            };
+            let lit = frame >= *started && frame < *done;
+            let fade = progress(mounted, now, Duration::from_millis(350), Ease::Ease);
+            out.push(
+                glass_card(s)
+                    .absolute()
+                    .left(s.px(1392.0))
+                    .top(s.px(top))
+                    .w(s.px(228.0))
+                    .h(s.px(88.0))
+                    .flex()
+                    .flex_col()
+                    .justify_center()
+                    .gap(s.px(10.0))
+                    .px(s.px(14.0))
+                    .opacity(fade * if frame >= *started { 1.0 } else { 0.55 })
+                    .when(lit, |this| {
+                        this.border_color(rgba(125, 162, 255, 0.75))
+                            .shadow(vec![shadow(
+                                rgba(60, 100, 255, 0.25),
+                                0.0,
+                                0.0,
+                                30.0,
+                                0.0,
+                                s,
+                            )])
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(s.px(9.0))
+                            .child(agent_logo(s, &self.catalog, agent_id, 18.0))
+                            .child(
+                                sans(s, 14.0, 600.0, hex(0xeef1f7))
+                                    .flex_1()
+                                    .min_w_0()
+                                    .whitespace_nowrap()
+                                    .child(name.to_string()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(s.px(8.0))
+                            .child(
+                                mono(s, 11.5, 400.0, hex(0xaab2c1))
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .whitespace_nowrap()
+                                    .child(task.to_string()),
+                            )
+                            .child(status_pill(
+                                s,
+                                status.0,
+                                status.1,
+                                self.opened_at,
+                                now,
+                                (20.0, 7.0, 10.5, 5.0),
+                            )),
+                    )
+                    .into_any_element(),
+            );
+        }
+        out.push(demo_caption(s, 812.0, 600.0, 200.0, "You ask once"));
+        out.push(demo_caption(
+            s,
+            1062.0,
+            660.0,
+            290.0,
+            "It plans and reports",
+        ));
+        out.push(demo_caption(s, 1392.0, 660.0, 228.0, "Threads do the work"));
         out
     }
 
@@ -940,20 +1110,6 @@ impl GpuiOnboardingWindow {
             .children(banner)
             .into_any_element()
     }
-}
-
-/// The Coordinators tab's picture: you, the coordinator, its threads and a result coming back,
-/// 810x440 on the stage where the two demo panes of the old Chat + terminal tab stood.
-fn coordinators_picture(s: S, mounted: Instant, now: Instant) -> AnyElement {
-    let fade = progress(mounted, now, Duration::from_millis(350), Ease::Ease);
-    abs(s, 810.0, 250.0, Some(810.0), Some(440.0))
-        .opacity(fade)
-        .child(
-            gpui::img("onboarding/welcome-coordinators.webp")
-                .size_full()
-                .object_fit(gpui::ObjectFit::Contain),
-        )
-        .into_any_element()
 }
 
 /// `.dcard` surface.

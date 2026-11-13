@@ -580,6 +580,17 @@ fn connect_device_after_first_reply() -> &'static std::sync::atomic::AtomicBool 
     })
 }
 
+/// Whether Settings > Remote's Add a computer waits for the first agent reply (or for Connect a
+/// Device to close, when both were queued), read once from the first-run state.
+fn add_computer_after_first_reply() -> &'static std::sync::atomic::AtomicBool {
+    static PENDING: std::sync::OnceLock<std::sync::atomic::AtomicBool> = std::sync::OnceLock::new();
+    PENDING.get_or_init(|| {
+        std::sync::atomic::AtomicBool::new(
+            load_gpui_first_run_onboarding_state().add_computer_after_first_reply,
+        )
+    })
+}
+
 fn set_connect_device_after_first_reply(pending: bool) {
     connect_device_after_first_reply().store(pending, std::sync::atomic::Ordering::Relaxed);
     let mut state = load_gpui_first_run_onboarding_state();
@@ -589,31 +600,74 @@ fn set_connect_device_after_first_reply(pending: bool) {
     }
 }
 
+fn set_add_computer_after_first_reply(pending: bool) {
+    add_computer_after_first_reply().store(pending, std::sync::atomic::Ordering::Relaxed);
+    let mut state = load_gpui_first_run_onboarding_state();
+    if state.add_computer_after_first_reply != pending {
+        state.add_computer_after_first_reply = pending;
+        persist_gpui_first_run_onboarding_state(&state);
+    }
+}
+
 impl GhostexGpuiApp {
     /// CDXC:Onboarding 2026-11-11 DECISION:
     /// User, on the first-run page (step 18, windows that open by themselves after setup), picked "Wait until after the first reply": setup's "Pair my phone after setup" no longer opens Connect a Device over the first session the moment setup closes; it opens once an agent first finishes a turn or needs the user (its session goes into attention), and the wait survives a restart until then.
-    pub(crate) fn queue_connect_device_after_first_reply(&mut self) {
-        set_connect_device_after_first_reply(true);
+    /// 2026-11-13 (Q3055 on the first-run showcase page): setup's devices page has a second switch,
+    /// "Add another computer after setup", which opens Settings > Remote on its Add a computer
+    /// dialog. It waits the same way; with both on, Connect a Device opens first and Add a computer
+    /// follows when that window closes.
+    pub(crate) fn queue_after_setup_devices(
+        &mut self,
+        after: crate::app::window::onboarding::AfterSetup,
+    ) {
+        if after.pair_phone {
+            set_connect_device_after_first_reply(true);
+        }
+        if after.add_computer {
+            set_add_computer_after_first_reply(true);
+        }
     }
 
     /// Called with the sessions that just went into attention: the first time one does after setup
-    /// queued the phone, Connect a Device opens.
+    /// queued the phone or another computer, Connect a Device (or Add a computer) opens.
     pub(crate) fn open_queued_connect_device_after_reply(
         &mut self,
         sessions_into_attention: usize,
         cx: &mut gpui::Context<Self>,
     ) {
-        if sessions_into_attention == 0
-            || !connect_device_after_first_reply().load(std::sync::atomic::Ordering::Relaxed)
-            || !self.is_lead_window()
-        {
+        let relaxed = std::sync::atomic::Ordering::Relaxed;
+        let phone = connect_device_after_first_reply().load(relaxed);
+        let computer = add_computer_after_first_reply().load(relaxed);
+        if sessions_into_attention == 0 || !(phone || computer) || !self.is_lead_window() {
             return;
         }
-        set_connect_device_after_first_reply(false);
-        self.open_app_modal_from_bridge(
-            serde_json::json!({ "modal": "remoteSetup", "type": "open" }),
-            cx,
-        );
+        if phone {
+            set_connect_device_after_first_reply(false);
+            self.open_app_modal_from_bridge(
+                serde_json::json!({ "modal": "remoteSetup", "type": "open" }),
+                cx,
+            );
+            // Add a computer waits for Connect a Device to close.
+            return;
+        }
+        self.open_queued_add_computer(cx);
+    }
+
+    /// Connect a Device just closed: Add a computer, when setup queued it and the phone went first.
+    pub(crate) fn open_add_computer_queued_after_connect_device(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if add_computer_after_first_reply().load(std::sync::atomic::Ordering::Relaxed)
+            && !connect_device_after_first_reply().load(std::sync::atomic::Ordering::Relaxed)
+        {
+            self.open_queued_add_computer(cx);
+        }
+    }
+
+    fn open_queued_add_computer(&mut self, cx: &mut gpui::Context<Self>) {
+        set_add_computer_after_first_reply(false);
+        self.open_gpui_settings_remote_section(Some("addComputer"), cx);
     }
 
     /// CDXC:Onboarding 2026-11-11 WHY:

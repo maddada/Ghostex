@@ -495,10 +495,12 @@ impl GhostexGpuiApp {
     pub(crate) fn connect_device_window_closed(&mut self, cx: &mut gpui::Context<Self>) {
         self.release_native_app_modal_window(GpuiAppModalKind::RemoteSetup, cx);
         self.owner_security_show_pending_pairing_requests(cx);
+        self.open_add_computer_queued_after_connect_device(cx);
     }
 
-    /// Settings on the Remote page, with `section` (`tailscale`) open when one is given.
-    fn open_gpui_settings_remote_section(
+    /// Settings on the Remote page, with `section` (`tailscale`, or `addComputer` for the empty Add
+    /// a computer dialog) open when one is given.
+    pub(crate) fn open_gpui_settings_remote_section(
         &mut self,
         section: Option<&str>,
         cx: &mut gpui::Context<Self>,

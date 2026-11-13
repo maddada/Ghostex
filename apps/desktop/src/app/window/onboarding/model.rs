@@ -70,6 +70,11 @@ pub(crate) struct DetectedAgent {
     /// Only an install-on-first-run launcher is on PATH (gxserver's `cliInstallsOnDemand`, e.g.
     /// Omarchy's `mise use -g …` wrappers): not installed yet.
     pub(crate) installs_on_demand: bool,
+    /// Ghostex follows this agent from its own transcript, with no helper in its settings
+    /// (`notRequired`: Claude Code, Codex and OpenCode while Use agent hooks is off).
+    pub(crate) built_in: bool,
+    /// The settings file a helper goes into, home folder written as `~` (the row's first `paths`).
+    pub(crate) helper_file: Option<String>,
 }
 
 /// A sidebar catalog agent: id, display name and logo (`DEFAULT_SIDEBAR_AGENTS`).
@@ -142,12 +147,42 @@ pub(crate) fn detected_agents_from_hook_status(
                     == Some("updateRequired"),
                 installs_on_demand: row.get("cliInstallsOnDemand").and_then(Value::as_bool)
                     == Some(true),
+                built_in: row.get("status").and_then(Value::as_str) == Some("notRequired"),
+                helper_file: row
+                    .get("paths")
+                    .and_then(Value::as_array)
+                    .and_then(|paths| paths.first())
+                    .and_then(Value::as_str)
+                    .map(home_relative),
                 agent_id,
                 name,
                 detail,
             })
         })
         .collect()
+}
+
+/// A path with the home folder written as `~`, the way the page names settings files.
+pub(crate) fn home_relative(path: &str) -> String {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    match path.strip_prefix(home.as_str()) {
+        Some(rest) if !home.is_empty() && (rest.starts_with('/') || rest.starts_with('\\')) => {
+            format!("~{rest}")
+        }
+        _ => path.to_string(),
+    }
+}
+
+/// CDXC:Onboarding 2026-11-13 DECISION:
+/// User, on the first-run showcase page (Q3045, the Welcome page), took every change shown there,
+/// including "One number everywhere": Welcome and the Workspace preview name the same agent count,
+/// read from the sidebar catalog and rounded down to a five ("20+" for 23 agents), so it stays true
+/// as agents come and go.
+pub(crate) fn agent_count_label(catalog: &[CatalogAgent]) -> String {
+    let count = catalog.len().max(5);
+    format!("{}+", count / 5 * 5)
 }
 
 /// `deriveOnboardingComputerUseState`: installed and granted, installed and waiting for a grant,
@@ -459,6 +494,8 @@ pub(crate) struct FlowState {
     /// CDXC:Onboarding 2026-09-11 WHY:
     /// "Pair this computer" used to open Settings -> Remote at once, which replaces the onboarding window and ends the flow before the Get started panel. The click now only queues the phone step and `finish` opens the Connect a Device window right before closing.
     pub(crate) phone_queued: bool,
+    /// "Add another computer after setup": Settings > Remote opens on its Add a computer dialog.
+    pub(crate) computer_queued: bool,
 }
 
 impl Default for FlowState {
@@ -466,6 +503,7 @@ impl Default for FlowState {
         Self {
             hooks_requested: false,
             phone_queued: false,
+            computer_queued: false,
         }
     }
 }
@@ -931,6 +969,42 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["claude"]
         );
+    }
+
+    #[test]
+    fn built_in_agents_and_helper_files_read_from_the_hook_status() {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/you".to_string());
+        let payload = serde_json::json!({ "agents": [
+            { "agentId": "claude", "cliInstalled": true, "hookInstalled": false, "status": "notRequired",
+              "paths": [format!("{home}/.claude/settings.json")] },
+            { "agentId": "cursor", "cliInstalled": true, "hookInstalled": false, "status": "missing",
+              "paths": [format!("{home}/.cursor/hooks.json")] },
+        ]});
+        let agents = detected_agents_from_hook_status(&payload, &[]);
+        let claude = &agents[0];
+        assert!(claude.built_in && claude.hooks_installed);
+        let cursor = &agents[1];
+        assert!(!cursor.built_in && !cursor.hooks_installed);
+        assert_eq!(cursor.helper_file.as_deref(), Some("~/.cursor/hooks.json"));
+        assert_eq!(home_relative("/etc/hooks.json"), "/etc/hooks.json");
+    }
+
+    #[test]
+    fn the_agent_count_rounds_down_to_a_five() {
+        let agent = |id: usize| CatalogAgent {
+            agent_id: id.to_string(),
+            name: id.to_string(),
+            icon: String::new(),
+        };
+        assert_eq!(
+            agent_count_label(&(0..23).map(agent).collect::<Vec<_>>()),
+            "20+"
+        );
+        assert_eq!(
+            agent_count_label(&(0..25).map(agent).collect::<Vec<_>>()),
+            "25+"
+        );
+        assert_eq!(agent_count_label(&[]), "5+");
     }
 
     #[test]

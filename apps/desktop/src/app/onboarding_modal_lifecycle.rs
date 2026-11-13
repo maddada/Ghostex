@@ -352,14 +352,6 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            OnboardingCommand::UninstallBrowserSkill => {
-                if let Some(skill_name) = gpui_bundled_agent_skill_name("browserUse") {
-                    self.run_gpui_ghostex_cli_settings_action_quietly(
-                        GpuiGhostexCliSettingsAction::UninstallBundledAgentSkill(skill_name),
-                        cx,
-                    );
-                }
-            }
             OnboardingCommand::OpenExternalUrl(url) => {
                 if let Err(error) = gpui_open_external_http_url(url.trim()) {
                     self.show_gpui_onboarding_app_toast(
@@ -380,10 +372,14 @@ impl GhostexGpuiApp {
                 self.close_gpui_onboarding_window(cx);
                 self.open_app_modal_from_bridge(GpuiAppModalKind::AddProject.open_message(), cx);
             }
-            OnboardingCommand::Finish(target) => {
+            OnboardingCommand::Finish(target, after) => {
                 let has_projects = self.gpui_onboarding_has_projects(cx);
                 self.complete_first_launch_setup();
                 self.close_gpui_onboarding_window(cx);
+                // The devices page's switches: Connect a Device (CDXC:RemotePairing 2026-11-10 in
+                // window/connect_device_modal.rs) and Settings > Remote's Add a computer, each waiting
+                // for the first reply (os_integration/first_run_onboarding.rs).
+                self.queue_after_setup_devices(after);
                 match target {
                     FinishTarget::Settings(tab) => {
                         let mut message =
@@ -397,12 +393,7 @@ impl GhostexGpuiApp {
                             self.queue_add_project_after_settings();
                         }
                     }
-                    FinishTarget::None | FinishTarget::RemoteSettings => {
-                        // "Pair my phone after setup": the Connect a Device window (CDXC:RemotePairing
-                        // 2026-11-10 in window/connect_device_modal.rs) waits for the first reply.
-                        if target == FinishTarget::RemoteSettings {
-                            self.queue_connect_device_after_first_reply();
-                        }
+                    FinishTarget::None => {
                         // CDXC:Onboarding 2026-11-11 WHY: setup no longer asks for a folder (DECISION in window/onboarding/get_started.rs), so it can end with no project; Add Project opens then, so the app is never an empty shell.
                         if !has_projects {
                             self.open_app_modal_from_bridge(

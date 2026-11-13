@@ -23,6 +23,15 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
+/// "Cursor Agent", "Cursor Agent and Grok Build", "A, B and C".
+fn join_names(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 /// How long "Connected" stays lit before the panel advances on its own.
 const CONNECTED_HOLD: Duration = Duration::from_millis(900);
 
@@ -437,18 +446,31 @@ impl GpuiOnboardingWindow {
             .overflow_y_scroll();
         for agent in &installed {
             let selected = default_agent.as_deref() == Some(agent.agent_id.as_str());
+            // CDXC:Onboarding 2026-11-13 DECISION:
+            // User, on the first-run showcase page (Q3046), picked "Built in for most, a helper only
+            // where needed": each row says how Ghostex follows that agent. One it follows from its own
+            // transcript reads Built in; one that needs Ghostex's helper names the file it goes into,
+            // and reads Connected once the helper is there.
             let (pill_tone, pill_text) = if scanning {
                 (DetTone::Wait, "Scanning…")
+            } else if agent.built_in {
+                (DetTone::Detected, "Built in")
             } else if agent.hooks_installed {
                 (DetTone::On, "Connected")
             } else {
-                (DetTone::Detected, "Detected")
+                (DetTone::Wait, "Helper")
             };
             let agent_id = agent.agent_id.clone();
             let detail = agent.detail.clone();
-            let subtitle = match &agent.account_label {
-                Some(label) => format!("Installed • {label}"),
-                None => "Installed".to_string(),
+            let subtitle = if agent.built_in {
+                "Followed from its own transcript".to_string()
+            } else if agent.hooks_installed {
+                "Followed through its Ghostex helper".to_string()
+            } else {
+                match &agent.helper_file {
+                    Some(file) => format!("Needs a small helper in {file}"),
+                    None => "Needs a small helper in its settings".to_string(),
+                }
             };
             let key = format!("agent-row-{}", agent.agent_id);
             let row = agent_row(s, &key, selected, scanning, compact, row_height)
@@ -579,20 +601,55 @@ impl GpuiOnboardingWindow {
         );
         // CDXC:Onboarding 2026-11-11 DECISION:
         // User, on the first-run page (step 13, Connect Ghostex to the agent), picked "Install in setup; ask here only for agents added later". Setup connects every installed agent when the user goes on (no switch, no Skip for now), so the Connect dialog at an agent's start is left for an agent installed after setup, and its Not now is remembered for that agent (gx_store/create/agent.rs).
-        let integration_row = switch_row(s, "agents-integration", 576.0, 72.0, (20.0, 30.0), 26.0, None)
-                .child(icon(s, "pulse", 22.0, 1.6, hex(0xd6dbe5)))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(nm(s, 17.0, 500.0).child("Ghostex integration"))
-                        .child(ss(s, 12.5).child(
-                            "Connect & continue adds a small Ghostex helper to each agent's own settings, so you see its live status and can resume it.",
-                        )),
-                )
-                .when(connected, |this| {
-                    this.child(detpill(s, "Connected", DetTone::On, DETPILL_DEFAULT))
-                });
+        // The agents that still need Ghostex's helper, in list order.
+        let needs_helper: Vec<String> = installed
+            .iter()
+            .filter(|agent| !agent.hooks_installed)
+            .map(|agent| agent.name.clone())
+            .collect();
+        let any_helper = installed.iter().any(|agent| !agent.built_in);
+        let integration_detail = if needs_helper.is_empty() {
+            if any_helper {
+                "Built in for most agents; the ones that need it have their small Ghostex helper."
+                    .to_string()
+            } else {
+                "Built in: Ghostex follows each agent here from its own transcript.".to_string()
+            }
+        } else {
+            format!(
+                "Built in for most agents. {} {} a small Ghostex helper in its own settings when you go on.",
+                join_names(&needs_helper),
+                if needs_helper.len() == 1 {
+                    "gets"
+                } else {
+                    "each get"
+                },
+            )
+        };
+        let integration_row = switch_row(
+            s,
+            "agents-integration",
+            576.0,
+            72.0,
+            (20.0, 30.0),
+            26.0,
+            None,
+        )
+        .child(icon(s, "pulse", 22.0, 1.6, hex(0xd6dbe5)))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(nm(s, 17.0, 500.0).child("Ghostex integration"))
+                .child(ss(s, 12.5).child(integration_detail)),
+        )
+        .when(connected && !installed.is_empty(), |this| {
+            this.child(if any_helper {
+                detpill(s, "Connected", DetTone::On, DETPILL_DEFAULT)
+            } else {
+                detpill(s, "Built in", DetTone::Detected, DETPILL_DEFAULT)
+            })
+        });
         out.push(
             self.control(
                 s,
@@ -608,12 +665,15 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element(),
         );
+        // Named after what it does: Next when nothing needs a helper, else the agent it connects.
         let next_label = if connected || installed.is_empty() {
-            "Next"
+            "Next".to_string()
         } else if connecting {
-            "Connecting…"
+            "Connecting…".to_string()
+        } else if needs_helper.len() == 1 {
+            format!("Connect {} & continue", needs_helper[0])
         } else {
-            "Connect & continue"
+            format!("Connect {} agents & continue", needs_helper.len())
         };
         out.extend(self.render_sign_in_line(s, now, cx));
         out.push(
@@ -622,7 +682,7 @@ impl GpuiOnboardingWindow {
                     let next = cta(
                         s,
                         "agents-next",
-                        next_label,
+                        next_label.clone(),
                         true,
                         true,
                         scanning || connecting,
@@ -729,12 +789,14 @@ impl GpuiOnboardingWindow {
         } else {
             "idle"
         };
-        let phases = [
-            ("Searching", phase_search),
-            ("Found", phase_found),
-            ("Connected", phase_connected),
-        ];
-        let mut track = abs(s, 900.0, 772.0, Some(670.0), Some(60.0))
+        // Agents Ghostex follows from their own transcripts have nothing to connect, so their
+        // tracker ends at Found.
+        let mut phases = vec![("Searching", phase_search), ("Found", phase_found)];
+        if any_helper || installed.is_empty() {
+            phases.push(("Connected", phase_connected));
+        }
+        let track_width = if phases.len() == 3 { 670.0 } else { 440.0 };
+        let mut track = abs(s, 900.0, 772.0, Some(track_width), Some(60.0))
             .flex()
             .items_center();
         for (index, (label, phase)) in phases.into_iter().enumerate() {

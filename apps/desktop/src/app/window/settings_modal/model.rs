@@ -344,7 +344,7 @@ pub(crate) struct SettingsOpenRequest {
     pub(crate) initial_sidebar_tags_action: Option<String>,
     pub(crate) initial_search_query: Option<String>,
     pub(crate) initial_remote_machine_id: Option<String>,
-    /// `easyConnect` or `tailscale`.
+    /// `easyConnect`, `tailscale` or `addComputer` (the empty Add a computer dialog).
     pub(crate) initial_remote_section: Option<String>,
     /// `agentHooks`.
     pub(crate) initial_agents_section: Option<String>,

@@ -1,30 +1,30 @@
-//! Panel 4, Mobile: how Ghostex reaches your phone and other computers, the one "pair my phone"
-//! switch, and the looping Easy Connect pairing demo
-//! (panels/mobile.tsx (deleted 2026-10-01), previews/phone-pairing.tsx (deleted 2026-10-01), styles/mobile.css).
+//! Panel 4, Your devices: what can reach this computer (your phone, your other computers, Cloud
+//! Boxes), how they connect (Easy Connect, Tailscale), and the two switches that start pairing a
+//! phone or adding a computer after setup (panels/mobile.tsx (deleted 2026-10-01), styles/mobile.css).
 //!
-//! CDXC:Onboarding 2026-09-28 WHY:
-//! The React phone mockup leans back in 3D (`perspective(1400px) rotateY(-6deg) rotateX(2deg)
-//! rotateZ(1deg)`) and its camera frame is rotated -4deg. GPUI cannot transform a subtree of
-//! elements, so each moment of the phone is the page's own rendering, captured from the React story
-//! at 2x with a transparent background (apps/desktop/assets/onboarding/phone/), and only what moves
-//! (spinner, scan line, pop, breathing dots, banner fade, hover, the card's click) is drawn on top at
-//! the measured positions. The page also tilted the phone a few degrees toward the pointer; the
-//! captured images hold its resting pose.
+//! CDXC:Onboarding 2026-11-13 DECISION:
+//! User, on the first-run showcase page (Part 3: Q3052 to Q3055), picked "One page, as drawn",
+//! "Easy Connect as the default, Tailscale beside it", "Cloud Boxes: one row with a line of
+//! explanation" and "Two switches: pair my phone, add another computer, both off unless picked".
+//! The left side names the three kinds of device and holds the two switches; the right side shows
+//! this computer with what connects to it and the two ways they meet, Easy Connect lit as the
+//! default. This replaces the looping phone pairing demo (CDXC:Onboarding 2026-09-28 WHY, whose
+//! captured phone pictures stay in assets/onboarding/phone/ unused) and the single phone switch of
+//! the 2026-11-11 DECISION below.
 use super::GpuiOnboardingWindow;
-use super::agents::switch_row;
-use super::fonts::PLEX_MONO;
 use super::interact;
 use super::primitives::*;
 use super::stage::*;
-use super::welcome::{demo_link, foot_actions};
+use super::welcome::foot_actions;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ObjectFit,
-    ParentElement as _, SharedString, Styled as _, StyledImage as _, canvas, div, img,
+    AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, Styled as _, canvas, div, linear_color_stop, linear_gradient,
 };
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 pub(crate) struct MobileState {
+    /// When the page mounted: the diagram's links flow from here.
     started: Instant,
 }
 
@@ -34,22 +34,62 @@ impl MobileState {
     }
 }
 
-/// Timeline of the looping pairing demo, in ms.
-const EASY: u64 = 2000;
-const TOGGLE: u64 = 2400;
-const PROMPT: u64 = 2700;
-const ALLOW: u64 = 4300;
-const QR: u64 = 4500;
-const SCAN: u64 = 5300;
-const PAIRED: u64 = 6800;
-const END: u64 = 8400;
-const LOOP: u64 = 12400;
+/// The diagram's box on the stage.
+const DIAGRAM: (f32, f32, f32, f32) = (820.0, 96.0, 790.0, 330.0);
+/// Its links, in the box's own px, from this computer's edge to each card's edge (the cards are
+/// translucent, so a link must not run under them): two curves up to the phone and the other
+/// computer, one line down to the Cloud Box.
+const LINKS: [[(f32, f32); 4]; 3] = [
+    [
+        (285.0, 178.0),
+        (255.0, 178.0),
+        (250.0, 108.0),
+        (220.0, 108.0),
+    ],
+    [
+        (505.0, 178.0),
+        (535.0, 178.0),
+        (540.0, 108.0),
+        (570.0, 108.0),
+    ],
+    [
+        (395.0, 216.0),
+        (395.0, 231.0),
+        (395.0, 247.0),
+        (395.0, 262.0),
+    ],
+];
+
+/// What can reach this computer: icon, name, what it is.
+const DEVICES: [(&str, &str, &str); 3] = [
+    (
+        "phone",
+        "Your phone",
+        "Scan one code with the Ghostex app for iPhone or Android. Reply, approve and get an alert when an agent needs you.",
+    ),
+    (
+        "laptop",
+        "Your other computers",
+        "Add a Mac, Windows or Linux machine over SSH, or one that already runs Ghostex. Its projects join this sidebar.",
+    ),
+    (
+        "cloud",
+        "Cloud Boxes",
+        "Start a session on a machine in the cloud that keeps working while this computer sleeps.",
+    ),
+];
 
 impl GpuiOnboardingWindow {
     /// CDXC:Onboarding 2026-09-15 DECISION:
     /// User: "in the take ghostex with you section, we need to not download the app. We should just have a toggle saying 'Configure my phone with ghostex after this flow' and all that does is it opens the sidebar menu -> remote screen for the user after the flow". There are no install or pair steps and no APK link; the toggle sets `phone_queued`, which opens the Connect a Device window once the flow closes.
     fn toggle_phone(&mut self, cx: &mut Context<Self>) {
         self.flow.phone_queued = !self.flow.phone_queued;
+        cx.notify();
+    }
+
+    /// "Add another computer after setup": Settings > Remote opens on its Add a computer dialog.
+    fn toggle_computer(&mut self, cx: &mut Context<Self>) {
+        self.flow.computer_queued = !self.flow.computer_queued;
         cx.notify();
     }
 
@@ -61,15 +101,14 @@ impl GpuiOnboardingWindow {
     ) -> Vec<AnyElement> {
         // CDXC:Onboarding 2026-11-11 DECISION:
         // User, on the first-run page (step 9, Mobile), picked "Only the phone question" and wrote "make this page about explaining how ghostex can connect to other devices and can be controlled by your phone by just scanning a qr". The panel explains Connect a Device (the phone app for iPhone and Android, other computers) and asks one thing, whether to open Connect a Device after setup. Agent alerts stay on by default (Settings > Notifications), and Floating Capture leaves setup for Settings, superseding CDXC:GhostexCapture 2026-09-30's "add Floating Capture to the setup toggles": its first capture is what asks for Screen Recording, so it waits until someone turns it on there.
-        let notify = self.settings.notify;
-        let phone_queued = self.flow.phone_queued;
+        // 2026-11-13: the second switch (another computer) joins it, per the DECISION at the top.
         let mut out = Vec::new();
-        out.push(eyebrow(s, 46.0, 146.0, None, "Optional · Your devices").into_any_element());
+        out.push(eyebrow(s, 46.0, 112.0, None, "Optional · Your devices").into_any_element());
         out.push(
             heading(
                 s,
                 46.0,
-                174.0,
+                138.0,
                 700.0,
                 52.0,
                 "Your agents, on every device.",
@@ -79,37 +118,20 @@ impl GpuiOnboardingWindow {
             .into_any_element(),
         );
         out.push(
-            sub(s, 46.0, 250.0, 660.0, 16.0, false)
-                .child("Sessions keep running on this computer. Your phone and your other computers connect to it and see the same sessions.")
+            sub(s, 46.0, 214.0, 670.0, 16.0, false)
+                .child("Sessions run on the computer that holds them. Your phone and your other computers connect to it and see the same sidebar.")
                 .into_any_element(),
         );
         // Alerts stay on without a switch here, so a computer that cannot show them says why
-        // in the line about them (Linux without notify-send, Windows with them turned off).
+        // under the phone (Linux without notify-send, Windows with them turned off).
         let alert_problem = self.notification_problem.clone();
-        let points: [(&str, &str, &str); 3] = [
-            (
-                "phone",
-                "Scan one code with your phone",
-                "Open Connect a Device from the Ghostex menu and scan its code in the Ghostex app for iPhone or Android.",
-            ),
-            (
-                "bell",
-                "Answer from anywhere",
-                "Reply, approve and steer from your phone; it tells you when an agent needs you.",
-            ),
-            (
-                "monitor",
-                "Your other computers too",
-                "Connect a laptop the same way and its sessions sit in the same sidebar.",
-            ),
-        ];
         out.push(
-            abs(s, 46.0, 330.0, Some(660.0), None)
+            abs(s, 46.0, 296.0, Some(670.0), None)
                 .flex()
                 .flex_col()
-                .gap(s.px(22.0))
-                .children(points.into_iter().map(|(icon_name, title, detail)| {
-                    let problem = alert_problem.clone().filter(|_| icon_name == "bell");
+                .gap(s.px(20.0))
+                .children(DEVICES.into_iter().map(|(icon_name, title, detail)| {
+                    let problem = alert_problem.clone().filter(|_| icon_name == "phone");
                     div()
                         .flex()
                         .items_center()
@@ -126,73 +148,65 @@ impl GpuiOnboardingWindow {
                                 .flex_1()
                                 .min_w_0()
                                 .child(nm(s, 17.0, 500.0).child(title))
-                                .child(match problem {
-                                    Some(problem) => ss(s, 13.0)
-                                        .mt(s.px(4.0))
+                                .child(ss(s, 13.0).mt(s.px(4.0)).child(detail))
+                                .children(problem.map(|problem| {
+                                    ss(s, 13.0)
+                                        .mt(s.px(2.0))
                                         .text_color(hex(0xffc46b))
-                                        .child(problem),
-                                    None => ss(s, 13.0).mt(s.px(4.0)).child(detail),
-                                }),
+                                        .child(problem)
+                                })),
                         )
                 }))
                 .into_any_element(),
         );
-        let phone_thumb = self.thumb("mobile-phone", phone_queued, now);
-        let phone_toggle = self.control(
+        let phone_queued = self.flow.phone_queued;
+        let computer_queued = self.flow.computer_queued;
+        let phone_row = self.after_setup_row(
             s,
-            toggle(
-                s,
-                "mobile-phone-toggle",
-                phone_queued,
-                phone_thumb,
-                ToggleSize::Lg,
-                false,
-            ),
-            "mobile-phone-toggle",
-            interact::Ring::new(17.0, 1.0),
-            interact::Keys::EnterSpace,
+            now,
+            "mobile-phone",
+            "phone",
+            "Pair my phone after setup",
+            "Opens Connect a Device after your first agent reply.",
+            phone_queued,
+            false,
             cx,
-            |this, _, cx| {
-                cx.stop_propagation();
-                this.toggle_phone(cx);
-            },
+            |this, cx| this.toggle_phone(cx),
         );
-        let phone_row = switch_row(s, "mobile-phone-row", 590.0, 84.0, (20.0, 30.0), 26.0, None)
+        let computer_row = self.after_setup_row(
+            s,
+            now,
+            "mobile-computer",
+            "laptop",
+            "Add another computer after setup",
+            "Opens Add a computer after your first reply: SSH or an Easy Connect code.",
+            computer_queued,
+            true,
+            cx,
+            |this, cx| this.toggle_computer(cx),
+        );
+        out.push(
+            glass(s)
+                .absolute()
                 .left(s.px(46.0))
-                .w(s.px(660.0))
-                .child(icon(s, "signal", 22.0, 1.6, hex(0xd6dbe5)))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(nm(s, 17.0, 500.0).child("Pair my phone after setup"))
-                        .child(ss(s, 12.5).child(if phone_queued {
-                            "Connect a Device opens when setup ends: scan its code with the Ghostex app."
-                        } else {
-                            "Opens Connect a Device when setup ends."
-                        })),
-                )
-                .child(phone_toggle);
-        out.push(
-            self.control(
-                s,
-                phone_row,
-                "mobile-phone-row",
-                interact::Ring::new(14.0, 1.0),
-                interact::Keys::EnterSpace,
-                cx,
-                |this, _, cx| this.toggle_phone(cx),
-            )
-            .into_any_element(),
+                .top(s.px(578.0))
+                .w(s.px(670.0))
+                .h(s.px(150.0))
+                .overflow_hidden()
+                .flex()
+                .flex_col()
+                .child(phone_row)
+                .child(computer_row)
+                .into_any_element(),
         );
         out.push(
-            abs(s, 46.0, 704.0, None, None)
+            abs(s, 46.0, 756.0, None, None)
                 .flex()
-                .child(
-                    sans(s, 16.0, 400.0, hex(0xaeb6c4)).child("You can do this anytime from the "),
-                )
-                .child(sans(s, 16.0, 600.0, hex(0xeef1f7)).child("Ghostex menu → Connect a Device"))
-                .child(sans(s, 16.0, 400.0, hex(0xaeb6c4)).child("."))
+                .child(sans(s, 15.5, 400.0, hex(0xaeb6c4)).child("Anytime later: "))
+                .child(sans(s, 15.5, 600.0, hex(0xeef1f7)).child("Ghostex menu → Connect a Device"))
+                .child(sans(s, 15.5, 400.0, hex(0xaeb6c4)).child(", or "))
+                .child(sans(s, 15.5, 600.0, hex(0xeef1f7)).child("Settings → Remote"))
+                .child(sans(s, 15.5, 400.0, hex(0xaeb6c4)).child("."))
                 .into_any_element(),
         );
         out.push(
@@ -208,556 +222,326 @@ impl GpuiOnboardingWindow {
                 ))
                 .into_any_element(),
         );
-        out.extend(self.render_pairing_preview(s, now, notify, cx));
+        out.push(self.render_device_diagram(s, now));
+        out.extend(render_connect_ways(s));
         out
     }
 
-    fn render_pairing_preview(
-        &self,
+    /// One switch row inside the after-setup card; the whole row toggles it.
+    #[allow(clippy::too_many_arguments)]
+    fn after_setup_row(
+        &mut self,
         s: S,
         now: Instant,
-        notify: bool,
+        id: &'static str,
+        icon_name: &'static str,
+        title: &'static str,
+        detail: &'static str,
+        on: bool,
+        divided: bool,
         cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let elapsed = now
-            .saturating_duration_since(self.mobile.started)
-            .as_millis() as u64;
-        let t = elapsed % LOOP;
-        let loop_started = self.mobile.started + Duration::from_millis(elapsed - t);
-        let at = |ms: u64| loop_started + Duration::from_millis(ms);
-        let mut out = vec![self.computer_card(s, now, t, notify, &at)];
-        if t >= END && notify {
-            let p = progress(
-                at(END),
-                now,
-                Duration::from_millis(300),
-                Ease::Bezier(0.2, 0.8, 0.2, 1.0),
-            );
-            out.push(
-                abs(s, 926.0 + 40.0 * (1.0 - p), 178.0, Some(300.0), None)
-                    .opacity(p)
-                    .flex()
-                    .items_center()
-                    .gap(s.px(11.0))
-                    .py(s.px(10.0))
-                    .px(s.px(13.0))
-                    .rounded(s.px(12.0))
-                    .bg(rgba(30, 36, 52, 0.97))
-                    .border_1()
-                    .border_color(white(0.12))
-                    .shadow(vec![shadow(black(0.55), 0.0, 14.0, 36.0, 0.0, s)])
-                    .child(agent_logo(s, &self.catalog, "codex", 20.0))
-                    .child(
-                        sans(s, 11.0, 400.0, hex(0xc9d0dc))
-                            .line_height(s.px(11.0 * 1.35))
-                            .flex_1()
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_end()
-                                    .justify_between()
-                                    .gap(s.px(8.0))
-                                    .child(
-                                        sans(s, 12.0, 700.0, gpui::white())
-                                            .child("Codex needs you"),
-                                    )
-                                    .child(sans(s, 10.0, 400.0, hex(0x7f8aa0)).child("now")),
-                            )
-                            .child("Keep the global fixtures, or inline them?"),
-                    )
-                    .into_any_element(),
-            );
-        }
-        let send = if (SCAN..SCAN + 1000).contains(&t) {
-            Some((false, at(SCAN)))
-        } else if (PAIRED..PAIRED + 1000).contains(&t) {
-            Some((true, at(PAIRED)))
-        } else {
-            None
-        };
-        let label = if (SCAN..PAIRED).contains(&t) {
-            Some(("Scanning", at(SCAN)))
-        } else if t >= PAIRED {
-            Some(("Paired", at(PAIRED)))
-        } else {
-            None
-        };
-        out.extend(demo_link(s, 1226.0, 470.0, 90.0, send, label, now));
-        out.extend(self.phone_mockup(s, now, t, notify, &at, cx));
-        out
-    }
-
-    fn computer_card(
-        &self,
-        s: S,
-        now: Instant,
-        t: u64,
-        notify: bool,
-        at: &dyn Fn(u64) -> Instant,
+        flip: impl Fn(&mut Self, &mut Context<Self>) + Clone + 'static,
     ) -> AnyElement {
-        let toggled = t >= TOGGLE;
-        let allowed = t >= ALLOW;
-        let qr_shown = t >= QR;
-        let paired = t >= PAIRED;
-        let done = t >= END;
-        let typed = ((t as i64 - PROMPT as i64 - 300) / 140).clamp(0, 8) as usize;
-        let thumb = self.transitions.value(
-            "pairing-easy-connect",
-            if toggled { 1.0 } else { 0.0 },
-            (Duration::from_millis(220), Ease::Bezier(0.3, 0.8, 0.3, 1.0)),
-            now,
+        let row_key = format!("{id}-row");
+        let toggle_key = format!("{id}-toggle");
+        let thumb = self.thumb(id, on, now);
+        let toggle_flip = flip.clone();
+        let switch = self.control(
+            s,
+            toggle(s, toggle_key.clone(), on, thumb, ToggleSize::Lg, false),
+            toggle_key,
+            interact::Ring::new(17.0, 1.0),
+            interact::Keys::EnterSpace,
+            cx,
+            move |this, _, cx| {
+                cx.stop_propagation();
+                toggle_flip(this, cx);
+            },
         );
-        let divider = || div().w_full().h(s.px(1.0)).bg(white(0.06));
-        let qr: AnyElement = if qr_shown {
-            let p = progress(
-                at(QR),
-                now,
-                Duration::from_millis(400),
-                Ease::Bezier(0.3, 1.6, 0.5, 1.0),
-            );
-            let size_px = (128.0 * p).max(0.0);
-            div()
-                .size(s.px(128.0))
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(qr_code(s, size_px))
-                .into_any_element()
-        } else {
-            div()
-                .size(s.px(128.0))
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(s.px(8.0))
-                .border_1()
-                .border_dashed()
-                .border_color(white(0.15))
-                .child(icon(s, "lock", 22.0, 1.6, hex(0x5a6272)))
-                .into_any_element()
-        };
-        let sheet = (PROMPT..ALLOW).contains(&t).then(|| {
-            let fade = progress(at(PROMPT), now, Duration::from_millis(200), Ease::Ease);
-            let tapped = t > ALLOW - 400;
-            div()
-                .absolute()
-                .left_0()
-                .top_0()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(
-                    div()
-                        .w(s.px(300.0))
-                        .p(s.px(20.0))
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .gap(s.px(8.0))
-                        .rounded(s.px(14.0))
-                        .bg(hex(0x161a26))
-                        .border_1()
-                        .border_color(white(0.14))
-                        .shadow(vec![shadow(black(0.7), 0.0, 24.0, 60.0, 0.0, s)])
-                        .opacity(fade)
-                        .child(icon(s, "lock", 22.0, 1.6, hex(0xeef1f7)))
-                        .child(
-                            sans(s, 14.0, 700.0, hex(0xeef1f7))
-                                .text_center()
-                                .child("Ghostex wants to turn on remote access."),
-                        )
-                        .child(
-                            sans(s, 12.5, 400.0, hex(0xaab2c1))
-                                .text_center()
-                                .child("Enter your password to allow this."),
-                        )
-                        .child(
-                            div()
-                                .w_full()
-                                .h(s.px(36.0))
-                                .mt(s.px(6.0))
-                                .flex()
-                                .items_center()
-                                .px(s.px(12.0))
-                                .rounded(s.px(8.0))
-                                .border_1()
-                                .border_color(rgba(110, 150, 255, 0.5))
-                                .bg(black(0.3))
-                                .child(tracked_text(
-                                    s,
-                                    "•".repeat(typed),
-                                    PLEX_MONO,
-                                    400.0,
-                                    16.0,
-                                    20.0,
-                                    0.2,
-                                    hex(0xeef1f7),
-                                ))
-                                .child(
-                                    div()
-                                        .ml(s.px(2.0))
-                                        .w(s.px(1.5))
-                                        .h(s.px(16.0))
-                                        .bg(hex(0x8fabff))
-                                        .opacity(if blink(self.opened_at, now) {
-                                            1.0
-                                        } else {
-                                            0.0
-                                        }),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .self_end()
-                                .mt(s.px(6.0))
-                                .h(s.px(32.0))
-                                .px(s.px(16.0))
-                                .flex()
-                                .items_center()
-                                .rounded(s.px(8.0))
-                                .bg(if tapped { hex(0x2e5af5) } else { hex(0x2548c4) })
-                                .child(sans(s, 13.0, 500.0, hex(0xeef1f7)).child("Allow")),
-                        ),
-                )
-        });
-        glass(s)
-            .absolute()
-            .left(s.px(806.0))
-            .top(s.px(246.0))
-            .w(s.px(420.0))
-            .h(s.px(448.0))
+        let row = div()
+            .id(SharedString::from(row_key.clone()))
+            .relative()
             .flex()
-            .flex_col()
-            .overflow_hidden()
-            .child(
-                div()
-                    .flex()
-                    .flex_none()
-                    .items_center()
-                    .gap(s.px(10.0))
-                    .h(s.px(42.0))
-                    .px(s.px(16.0))
-                    .border_b_1()
-                    .border_color(white(0.06))
-                    .child(lights(s, true).mr(s.px(6.0)))
-                    // The Connect a Device window the panel points to (CDXC:RemotePairing in
-                    // window/connect_device_modal.rs), not the Settings > Remote page it replaced.
-                    .child(sans(s, 13.0, 700.0, hex(0xeef1f7)).child("Connect a device"))
-                    .child(div().flex_1())
-                    .when(done && !notify, |this| {
-                        this.child(tracked_text(s, "NOTIFICATIONS OFF", PLEX_MONO, 500.0, 8.5, 8.5, 0.12, hex(0x6c7688)))
-                    })
-                    .child(mono(s, 11.0, 400.0, hex(0x7f8aa0)).child("This computer")),
-            )
+            .items_center()
+            .gap(s.px(20.0))
+            .h(s.px(75.0))
+            .pl(s.px(26.0))
+            .pr(s.px(26.0))
+            .cursor_pointer()
+            .when(divided, |this| this.border_t_1().border_color(white(0.06)))
+            .child(icon(s, icon_name, 22.0, 1.6, hex(0xd6dbe5)))
             .child(
                 div()
                     .flex_1()
-                    .flex()
-                    .flex_col()
-                    .gap(s.px(12.0))
-                    .py(s.px(18.0))
-                    .px(s.px(20.0))
-                    .child(sans(s, 17.0, 600.0, hex(0xeef1f7)).child("Connect your phone"))
-                    .child(
-                        sans(s, 13.0, 400.0, hex(0xaab2c1))
-                            .line_height(s.px(13.0 * 1.45))
-                            .child("Easy Connect is the simplest way to reach this computer from your phone."),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .child(divider())
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(s.px(10.0))
-                                    .pt(s.px(12.0))
-                                    .child(sans(s, 14.0, 600.0, hex(0xeef1f7)).child("Easy Connect"))
-                                    .child(
-                                        sans(s, 10.0, 400.0, hex(0x8fabff))
-                                            .h(s.px(20.0))
-                                            .px(s.px(7.0))
-                                            .flex()
-                                            .items_center()
-                                            .rounded(s.px(5.0))
-                                            .border_1()
-                                            .border_color(rgba(90, 130, 255, 0.35))
-                                            .child("Recommended"),
-                                    )
-                                    .child(div().flex_1())
-                                    .child(toggle(s, "pairing-toggle", toggled, thumb, ToggleSize::Sm, false)),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .justify_between()
-                            .items_center()
-                            .child(sans(s, 13.0, 400.0, hex(0xc9d0dc)).child("Remote access"))
-                            .child(
-                                mono(s, 13.0, 400.0, if allowed { hex(0x3be3a2) } else { hex(0x8e97a8) })
-                                    .child(if allowed { "on" } else { "off" }),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .mt(s.px(4.0))
-                            .flex()
-                            .flex_col()
-                            .child(divider())
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(s.px(18.0))
-                                    .pt(s.px(14.0))
-                                    .child(qr)
-                                    .child(
-                                        sans(s, 13.0, 400.0, hex(0xc9d0dc))
-                                            .line_height(s.px(13.0 * 1.45))
-                                            .flex()
-                                            .flex_col()
-                                            .gap(s.px(5.0))
-                                            .map(|this| {
-                                                if paired {
-                                                    this.child(
-                                                        div()
-                                                            .flex()
-                                                            .items_center()
-                                                            .gap(s.px(6.0))
-                                                            .text_color(hex(0x3be3a2))
-                                                            .font_weight(FontWeight(500.0))
-                                                            .child(icon(s, "checkCircle", 16.0, 1.6, hex(0x3be3a2)))
-                                                            .child("Paired with your phone"),
-                                                    )
-                                                } else if qr_shown {
-                                                    this.child("Scan it in the Ghostex app.")
-                                                } else {
-                                                    this.child("Turn on Easy Connect to show the code.")
-                                                }
-                                            }),
-                                    ),
-                            ),
-                    ),
+                    .min_w_0()
+                    .child(nm(s, 17.0, 500.0).child(title))
+                    .child(ss(s, 12.5).mt(s.px(2.0)).child(detail)),
             )
-            .children(sheet)
-            .into_any_element()
+            .child(switch);
+        self.control(
+            s,
+            row,
+            row_key,
+            interact::Ring::new(0.0, 0.0),
+            interact::Keys::EnterSpace,
+            cx,
+            move |this, _, cx| flip(this, cx),
+        )
+        .into_any_element()
     }
 
-    /// The tilted phone: the page's own rendering of each moment of the demo (images captured from
-    /// the React phone), with the parts that move drawn on top where the page drew them.
-    fn phone_mockup(
-        &self,
-        s: S,
-        now: Instant,
-        t: u64,
-        notify: bool,
-        at: &dyn Fn(u64) -> Instant,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let (clip_x, clip_y, clip_w, clip_h) = PHONE_CLIP;
-        let layer = |name: &str, opacity: f32| {
-            img(SharedString::from(format!("onboarding/phone/{name}.webp")))
+    /// This computer in the middle, with your phone, another computer and a Cloud Box joined to
+    /// it by links whose dashes flow toward it.
+    fn render_device_diagram(&self, s: S, now: Instant) -> AnyElement {
+        let (left, top, width, height) = DIAGRAM;
+        let flow = now
+            .saturating_duration_since(self.mobile.started)
+            .as_secs_f32()
+            * 14.0;
+        let node = |x: f32, y: f32, w: f32, h: f32, icon_name: &str, name: &str, via: &str| {
+            glass(s)
                 .absolute()
-                .left(s.px(clip_x))
-                .top(s.px(clip_y))
-                .w(s.px(clip_w))
-                .h(s.px(clip_h))
-                .object_fit(ObjectFit::Fill)
-                .opacity(opacity)
-                .into_any_element()
-        };
-        // The phone's outer shadows (`0 30px 80px`, `0 0 50px`), under its untilted box.
-        let mut out = vec![
-            abs(s, 1316.0, 150.0, Some(292.0), Some(612.0))
-                .rounded(s.px(46.0))
-                .bg(hex(0x05070c))
-                .shadow(vec![
-                    shadow(black(0.7), 0.0, 30.0, 80.0, 0.0, s),
-                    shadow(rgba(40, 80, 220, 0.16), 0.0, 0.0, 50.0, 0.0, s),
-                ])
-                .into_any_element(),
-        ];
-        // A point on the captured phone, in stage px.
-        let point_at = |(x, y): (f32, f32)| (clip_x + x, clip_y + y);
-        if t < END {
-            // `.pd` fades in when the demo (re)starts; its later phases reuse the same element.
-            let fade = progress(at(0), now, Duration::from_millis(300), Ease::Ease);
-            let phase = match t {
-                t if t < 900 => "get",
-                t if t < 1600 => "loading",
-                t if t < EASY => "open",
-                t if t < SCAN => "connect",
-                t if t < PAIRED => "cam",
-                _ => "paired",
-            };
-            out.push(layer("shell", 1.0));
-            out.push(layer(phase, fade));
-            // `.pd-btn.tap`: `transition: transform 0.15s, filter 0.15s`.
-            if phase == "connect" && t >= QR + 400 {
-                let tap = progress(at(QR + 400), now, Duration::from_millis(150), Ease::Ease);
-                out.push(layer("connect-tap", tap * fade));
-            }
-            if phase == "loading" {
-                let (x, y) = point_at(PHONE_SPINNER);
-                out.push(
-                    abs(s, x - 9.0, y - 9.0, Some(18.0), Some(18.0))
-                        .child(spinner(s, 18.0, 2.0, at(900), now))
-                        .into_any_element(),
-                );
-            }
-            if phase == "cam" {
-                out.push(self.phone_scanline(s, now, at(SCAN)));
-            }
-            if phase == "paired" {
-                // `.pd-ok`: `gxob-pop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1)` from `scale(0)`.
-                let pop = progress(
-                    at(PAIRED),
-                    now,
-                    Duration::from_millis(450),
-                    Ease::Bezier(0.3, 1.6, 0.5, 1.0),
-                );
-                let size = 64.0 * pop.max(0.0);
-                let (x, y) = point_at(PHONE_OK);
-                out.push(
-                    abs(s, x - size / 2.0, y - size / 2.0, Some(size), Some(size))
-                        .rounded_full()
-                        .bg(hex(0x16b877))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(icon(s, "check", 30.0 * pop.max(0.0), 2.4, gpui::white()))
-                        .into_any_element(),
-                );
-            }
-            return out;
-        }
-        if notify {
-            // `.ph-banner`: `gxob-drop 0.3s` in.
-            let drop = progress(
-                at(END),
-                now,
-                Duration::from_millis(300),
-                Ease::Bezier(0.2, 0.8, 0.2, 1.0),
-            );
-            out.push(layer("home-notify-nobanner", 1.0));
-            out.push(layer("home-notify", drop));
-        } else {
-            out.push(layer("home-quiet", 1.0));
-        }
-        // The breathing status dots (`gxob-breathe`: 1.8s running, 0.9s working).
-        for ((x, y), period, color) in PHONE_PILL_DOTS {
-            let (x, y) = point_at((x, y));
-            out.push(
-                abs(s, x - 3.0, y - 3.0, Some(6.0), Some(6.0))
-                    .rounded_full()
-                    .bg(hex(color))
-                    .opacity(breathe(at(END), now, period, 0.0))
-                    .into_any_element(),
-            );
-        }
-        let (x, y) = point_at(PHONE_CONNECTED_DOT);
-        out.push(
-            abs(s, x - 3.0, y - 3.0, Some(6.0), Some(6.0))
-                .rounded_full()
-                .bg(hex(0x3be3a2))
-                .into_any_element(),
-        );
-        // `.ph-row:hover { background: rgba(255, 255, 255, 0.04) }`, no transition.
-        for (index, (x, y, w, h)) in PHONE_ROWS.into_iter().enumerate() {
-            let (x, y) = point_at((x, y));
-            let key = format!("phone-row-{index}");
-            let hovered = interact::hovered(&key);
-            out.push(
-                interact::watch_hover(
-                    abs(s, x, y, Some(w), Some(h))
-                        .id(SharedString::from(key.clone()))
-                        .rounded(s.px(9.0))
-                        .when(hovered, |this| this.bg(white(0.04))),
-                    key,
+                .left(s.px(x))
+                .top(s.px(y))
+                .w(s.px(w))
+                .h(s.px(h))
+                .flex()
+                .items_center()
+                .gap(s.px(14.0))
+                .px(s.px(16.0))
+                .child(ibox(s, 40.0, 10.0).child(icon(s, icon_name, 19.0, 1.6, hex(0xdfe4ee))))
+                .child(
+                    div()
+                        .min_w_0()
+                        .child(nm(s, 16.0, 500.0).child(name.to_string()))
+                        .child(ss(s, 12.5).child(via.to_string())),
                 )
-                .into_any_element(),
-            );
-        }
-        // `.ph-card` is the phone's one button.
-        let (x, y, w, h) = PHONE_CARD;
-        let (x, y) = point_at((x, y));
-        out.push(
-            self.control(
-                s,
-                abs(s, x, y, Some(w), Some(h))
-                    .id("phone-card")
-                    .cursor_pointer(),
-                "phone-card",
-                interact::Ring::new(12.0, 0.0),
-                interact::Keys::EnterSpace,
-                cx,
-                |this, _, cx| this.show_toast("Your computer · 18 ms · 4 sessions", cx),
-            )
-            .into_any_element(),
-        );
-        out
-    }
-
-    /// `.pd-scanline`: a 2px #6d93ff bar with a 12px glow, `gxob-scanline 1.1s ease-in-out infinite
-    /// alternate` down the tilted camera frame.
-    fn phone_scanline(&self, s: S, now: Instant, mounted: Instant) -> AnyElement {
-        let cycles = now.saturating_duration_since(mounted).as_secs_f32() / 1.1;
-        let phase = cycles.fract();
-        let forward = (cycles as u32).is_multiple_of(2);
-        let f = Ease::EaseInOut.apply(if forward { phase } else { 1.0 - phase });
-        let lerp = |a: (f32, f32), b: (f32, f32)| (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f);
-        let left = lerp(PHONE_SCAN_TOP.0, PHONE_SCAN_BOTTOM.0);
-        let right = lerp(PHONE_SCAN_TOP.1, PHONE_SCAN_BOTTOM.1);
-        let (clip_x, clip_y, clip_w, clip_h) = PHONE_CLIP;
-        abs(s, clip_x, clip_y, Some(clip_w), Some(clip_h))
+        };
+        abs(s, left, top, Some(width), Some(height))
             .child(
                 canvas(
                     |_, _, _| {},
                     move |bounds, _, window, _| {
-                        let to_px = |(x, y): (f32, f32)| {
-                            gpui::point(bounds.origin.x + s.px(x), bounds.origin.y + s.px(y))
-                        };
-                        // The glow as widening, fading bands, then the bar itself.
-                        for (half, alpha) in [(7.0, 0.07), (4.5, 0.14), (2.5, 0.3), (1.0, 1.0)] {
-                            let mut path = gpui::Path::new(to_px((left.0, left.1 - half)));
-                            path.line_to(to_px((right.0, right.1 - half)));
-                            path.line_to(to_px((right.0, right.1 + half)));
-                            path.line_to(to_px((left.0, left.1 + half)));
-                            window.paint_path(path, rgba(109, 147, 255, alpha));
+                        for link in LINKS {
+                            paint_dashed_curve(window, bounds.origin, s, link, flow);
                         }
                     },
                 )
+                .absolute()
+                .left_0()
+                .top_0()
                 .size_full(),
+            )
+            .child(node(
+                20.0,
+                70.0,
+                200.0,
+                76.0,
+                "phone",
+                "Your phone",
+                "Easy Connect",
+            ))
+            .child(node(
+                570.0,
+                70.0,
+                200.0,
+                76.0,
+                "laptop",
+                "Work laptop",
+                "SSH",
+            ))
+            .child(node(
+                295.0,
+                262.0,
+                200.0,
+                68.0,
+                "cloud",
+                "Cloud Box",
+                "Instabox · Boat",
+            ))
+            .child(
+                lit_card(node(
+                    285.0,
+                    140.0,
+                    220.0,
+                    76.0,
+                    "monitor",
+                    "This computer",
+                    "Holds your sessions",
+                ))
+                .shadow(vec![shadow(
+                    rgba(60, 100, 255, 0.22),
+                    0.0,
+                    0.0,
+                    30.0,
+                    0.0,
+                    s,
+                )]),
             )
             .into_any_element()
     }
 }
 
-/// Where the captured phone images sit on the stage (stage px): the tilted phone's bounds.
-const PHONE_CLIP: (f32, f32, f32, f32) = (1308.0, 149.0, 309.0, 624.0);
-/// Points on the captured phone (px from its top-left), measured on the React page.
-const PHONE_SPINNER: (f32, f32) = (152.1, 398.8);
-const PHONE_OK: (f32, f32) = (154.3, 297.4);
-const PHONE_SCAN_TOP: ((f32, f32), (f32, f32)) = ((82.4, 251.1), (219.6, 243.4));
-const PHONE_SCAN_BOTTOM: ((f32, f32), (f32, f32)) = ((88.6, 382.7), (226.3, 376.3));
-const PHONE_PILL_DOTS: [((f32, f32), f32, u32); 4] = [
-    ((203.4, 248.8), 1.8, 0x3be3a2),
-    ((201.9, 286.8), 0.9, 0x6d93ff),
-    ((201.9, 324.9), 1.8, 0x3be3a2),
-    ((194.6, 362.9), 1.8, 0x3be3a2),
-];
-const PHONE_CONNECTED_DOT: (f32, f32) = (89.7, 174.5);
-const PHONE_ROWS: [(f32, f32, f32, f32); 4] = [
-    (28.9, 227.7, 255.0, 41.2),
-    (28.0, 265.2, 255.2, 42.0),
-    (27.1, 302.8, 255.5, 42.8),
-    (26.2, 340.4, 255.7, 43.6),
-];
-const PHONE_CARD: (f32, f32, f32, f32) = (32.6, 126.4, 251.2, 67.1);
+/// The selected look the page uses for what is on by default: a blue wash and border.
+fn lit_card(card: Div) -> Div {
+    card.bg(linear_gradient(
+        90.0,
+        linear_color_stop(rgba(60, 90, 200, 0.26), 0.0),
+        linear_color_stop(rgba(60, 90, 200, 0.1), 1.0),
+    ))
+    .border_color(rgba(110, 140, 240, 0.45))
+}
+
+/// "How they connect": Easy Connect, lit as the default, and Tailscale beside it.
+fn render_connect_ways(s: S) -> Vec<AnyElement> {
+    let way = |icon_name: &str,
+               name: &str,
+               pill: &str,
+               lead: &str,
+               points: [(bool, &str); 3],
+               lit: bool| {
+        let card = glass(s)
+            .flex_1()
+            .min_w_0()
+            .h(s.px(232.0))
+            .p(s.px(22.0))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(s.px(12.0))
+                    .child(icon(s, icon_name, 22.0, 1.6, hex(0xdfe4ee)))
+                    .child(sans(s, 18.0, 600.0, hex(0xeef1f7)).child(name.to_string()))
+                    .child(div().flex_1())
+                    .child(
+                        sans(
+                            s,
+                            11.5,
+                            500.0,
+                            if lit { hex(0x9db4ff) } else { hex(0xaeb6c4) },
+                        )
+                        .h(s.px(24.0))
+                        .px(s.px(9.0))
+                        .flex()
+                        .items_center()
+                        .rounded(s.px(7.0))
+                        .border_1()
+                        .border_color(if lit {
+                            rgba(110, 150, 255, 0.4)
+                        } else {
+                            white(0.12)
+                        })
+                        .child(pill.to_string()),
+                    ),
+            )
+            .child(
+                sans(s, 14.5, 400.0, hex(0xc9d0dc))
+                    .mt(s.px(14.0))
+                    .line_height(s.px(14.5 * 1.5))
+                    .child(lead.to_string()),
+            )
+            .child(
+                div()
+                    .mt(s.px(18.0))
+                    .flex()
+                    .flex_col()
+                    .gap(s.px(10.0))
+                    .children(points.into_iter().map(|(good, text)| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(s.px(9.0))
+                            .child(if good {
+                                icon(s, "check", 15.0, 2.0, hex(0x3be3a2))
+                            } else {
+                                icon(s, "plus", 15.0, 1.6, hex(0x8b93a6))
+                            })
+                            .child(
+                                sans(
+                                    s,
+                                    13.5,
+                                    400.0,
+                                    if good { hex(0xc9d0dc) } else { hex(0x9ea7b6) },
+                                )
+                                .child(text.to_string()),
+                            )
+                    })),
+            );
+        if lit { lit_card(card) } else { card }
+    };
+    vec![
+        abs(s, 830.0, 470.0, None, None)
+            .child(label(s, "How they connect"))
+            .into_any_element(),
+        abs(s, 830.0, 500.0, Some(770.0), None)
+            .flex()
+            .gap(s.px(18.0))
+            .child(way(
+                "qr",
+                "Easy Connect",
+                "Recommended",
+                "One code, nothing else to install. Works from any network.",
+                [
+                    (true, "Phones and computers"),
+                    (true, "Behind any router"),
+                    (false, "Sets up a small helper here once"),
+                ],
+                true,
+            ))
+            .child(way(
+                "globe",
+                "Tailscale",
+                "Already on it?",
+                "Your devices reach this computer inside your own tailnet.",
+                [
+                    (true, "Your private network"),
+                    (true, "No code to expire"),
+                    (false, "Tailscale app on every device"),
+                ],
+                false,
+            ))
+            .into_any_element(),
+    ]
+}
+
+/// A cubic link drawn as 6px dashes with 6px gaps, `flow` px along so the dashes travel toward
+/// this computer.
+fn paint_dashed_curve(
+    window: &mut gpui::Window,
+    origin: gpui::Point<gpui::Pixels>,
+    s: S,
+    [p0, p1, p2, p3]: [(f32, f32); 4],
+    flow: f32,
+) {
+    const STEPS: usize = 160;
+    const DASH: f32 = 6.0;
+    let at = |t: f32| {
+        let u = 1.0 - t;
+        let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+        (
+            a * p0.0 + b * p1.0 + c * p2.0 + d * p3.0,
+            a * p0.1 + b * p1.1 + c * p2.1 + d * p3.1,
+        )
+    };
+    let to_px = |(x, y): (f32, f32)| gpui::point(origin.x + s.px(x), origin.y + s.px(y));
+    let color = rgba(109, 147, 255, 0.55);
+    let mut travelled = flow % (DASH * 2.0);
+    let mut previous = at(0.0);
+    for step in 1..=STEPS {
+        let point = at(step as f32 / STEPS as f32);
+        let (dx, dy) = (point.0 - previous.0, point.1 - previous.1);
+        let length = (dx * dx + dy * dy).sqrt();
+        if length > 0.0 && travelled % (DASH * 2.0) < DASH {
+            let (nx, ny) = (-dy / length, dx / length);
+            let mut path = gpui::Path::new(to_px((previous.0 + nx, previous.1 + ny)));
+            path.line_to(to_px((point.0 + nx, point.1 + ny)));
+            path.line_to(to_px((point.0 - nx, point.1 - ny)));
+            path.line_to(to_px((previous.0 - nx, previous.1 - ny)));
+            window.paint_path(path, color);
+        }
+        travelled += length;
+        previous = point;
+    }
+}

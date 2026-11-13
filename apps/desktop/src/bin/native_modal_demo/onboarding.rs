@@ -8,7 +8,9 @@
 //! `workspace`, `workspace-no-browser-skill`, `workspace-agents`, `workspace-docs`,
 //! `workspace-code`, `workspace-kanban`, `workspace-automate`, the Workspace panel's Fast Computer &
 //! Browser use preview `computer-use` (off), `computer-use-installing`, `computer-use-permissions`,
-//! `computer-use-on`, `mobile`, `mobile-no-notify-send`, `get-started`, `get-started-with-projects`,
+//! `computer-use-on`, `mobile`, `mobile-no-notify-send`, `mobile-after-setup` (both after-setup
+//! switches on), `get-started`, `get-started-with-projects`, `get-started-light` (Light with Teal,
+//! for the live preview), `get-started-terminal-glass` (Terminal, Indigo, transparency on),
 //! and the first-run intro video page: `intro-video` (the still with a play button),
 //! `intro-video-play` (presses Play after 1s: the real player in the system web view),
 //! `intro-video-offline`, `intro-video-no-web-view` (what Linux shows), `intro-video-continue`
@@ -139,17 +141,32 @@ fn theme_table() -> ThemeTable {
 }
 
 /// The story's `mockAgents` as the host's `agentHookStatus` payload.
+/// Claude Code, Codex and OpenCode are followed without a hook (`notRequired`), as gxserver
+/// reports them while Use agent hooks is off; every other agent needs its helper.
 fn hook_status(installed: &HashSet<String>, hooks: bool, complete: bool) -> Value {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/you".to_string());
     json!({
         "type": "agentHookStatus",
         "complete": complete,
         "agents": CATALOG.iter().map(|(agent_id, _, _)| {
             let is_installed = installed.contains(*agent_id);
+            let hook_free = matches!(*agent_id, "claude" | "codex" | "opencode");
+            let status = if !is_installed {
+                "cliMissing"
+            } else if hook_free {
+                "notRequired"
+            } else if hooks {
+                "installed"
+            } else {
+                "missing"
+            };
             json!({
                 "agentId": agent_id,
                 "cliInstalled": is_installed,
-                "hookInstalled": is_installed && hooks,
-                "status": if is_installed && hooks { "installed" } else { "missing" },
+                "hookInstalled": is_installed && hooks && !hook_free,
+                "hookFree": hook_free,
+                "status": status,
+                "paths": [format!("{home}/.{agent_id}/hooks.json")],
                 "detail": if is_installed { format!("/opt/homebrew/bin/{agent_id}") } else { "CLI was not found on PATH.".to_string() },
             })
         }).collect::<Vec<_>>(),
@@ -384,7 +401,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
                 false,
             ),
-            "mobile" | "mobile-no-notify-send" => (
+            "mobile" | "mobile-no-notify-send" | "mobile-after-setup" => (
                 InitialPanel::Panel(4),
                 three,
                 false,
@@ -394,7 +411,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 false,
                 false,
             ),
-            "get-started" => (
+            "get-started" | "get-started-light" | "get-started-terminal-glass" => (
                 InitialPanel::Panel(5),
                 three,
                 false,
@@ -583,11 +600,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     })
                 });
             }
-            OnboardingCommand::InstallBrowserSkill | OnboardingCommand::UninstallBrowserSkill => {
-                let installed = matches!(command, OnboardingCommand::InstallBrowserSkill);
+            OnboardingCommand::InstallBrowserSkill => {
                 let payload = {
                     let mut state = host.borrow_mut();
-                    state.cli_status["browserSkillInstalled"] = json!(installed);
+                    state.cli_status["browserSkillInstalled"] = json!(true);
                     state.cli_status.clone()
                 };
                 cx.defer(move |cx| {
@@ -598,8 +614,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             }
             OnboardingCommand::OpenExternalUrl(url) => eprintln!("open {url}"),
             OnboardingCommand::IntroVideoSeen => eprintln!("introVideoSeen"),
-            OnboardingCommand::Finish(target) => {
-                eprintln!("finish -> {target:?}");
+            OnboardingCommand::Finish(target, after) => {
+                eprintln!("finish -> {target:?}, after setup {after:?}");
                 cx.quit();
             }
             // Sign-in starts finish 4s later; a status answers at once.
@@ -791,6 +807,23 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             })
         }
         "agents-guide" => with_view(&host, cx, |view, cx| view.preview_open_install_guide(cx)),
+        "mobile-after-setup" => with_view(&host, cx, |view, cx| view.preview_queue_devices(cx)),
+        "get-started-light" => with_view(&host, cx, |view, cx| {
+            let mut patch = serde_json::Map::new();
+            patch.insert("sidebarTheme".into(), json!("plain-light"));
+            patch.insert("lightThemePreset".into(), json!("teal"));
+            view.preview_settings_patch(patch, cx)
+        }),
+        "get-started-terminal-glass" => with_view(&host, cx, |view, cx| {
+            let mut patch = serde_json::Map::new();
+            patch.insert("sidebarTheme".into(), json!("dark-2"));
+            patch.insert("darkThemePreset".into(), json!("indigo"));
+            patch.insert("preferredAgentInterface".into(), json!("terminal"));
+            patch.insert("windowGlass".into(), json!("frosted"));
+            patch.insert("windowGlassSidebarOpacityDark".into(), json!(60));
+            patch.insert("windowGlassWorkAreaTintDark".into(), json!(70));
+            view.preview_settings_patch(patch, cx)
+        }),
         "agents-integration" => with_view(&host, cx, |view, cx| view.preview_right_tab(1, cx)),
         "welcome-coordinators" => with_view(&host, cx, |view, cx| view.preview_welcome_tab(1, cx)),
         "welcome-mobile" => with_view(&host, cx, |view, cx| view.preview_welcome_tab(2, cx)),

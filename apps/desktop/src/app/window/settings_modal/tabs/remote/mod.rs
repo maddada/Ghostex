@@ -1040,7 +1040,8 @@ impl RemoteTab {
 
     // ---- deep links and preview states --------------------------------------------------------------
 
-    /// `initialRemoteSection` scrolls to the top card or opens Tailscale, `initialRemoteMachineId` opens that
+    /// `initialRemoteSection` scrolls to the top card, opens Tailscale or the empty Add a computer
+    /// dialog, `initialRemoteMachineId` opens that
     /// machine's edit dialog; each applies once per visit to the page.
     fn apply_deep_links(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.is_active(cx) {
@@ -1053,6 +1054,15 @@ impl RemoteTab {
                 request.initial_remote_machine_id.clone(),
             )
         };
+        // `addComputer` (setup's "Add another computer after setup") opens the empty Add a
+        // computer dialog.
+        if section.as_deref() == Some("addComputer")
+            && self.targeted_section.as_deref() != Some("addComputer")
+        {
+            self.targeted_section = section.clone();
+            self.open_machine_dialog(None, window, cx);
+            self.pending_scroll = Some(ScrollTarget::Machines);
+        }
         // `easyConnect` is the top of the page; `tailscale` opens its row.
         if let Some(section) = section
             && self.targeted_section.as_deref() != Some(section.as_str())
