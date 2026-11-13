@@ -83,7 +83,7 @@ pub fn apply_tailcat_state_update(
     runtime: &TailcatRuntime,
     update: TailcatStateUpdate,
 ) -> Result<TailcatStateRecord> {
-    change_tailcat_state(paths, db, runtime, |state| {
+    change_tailcat_state(paths, db, Some(runtime), |state| {
         match update {
             TailcatStateUpdate::SetEnabled { enabled } => state.enabled = enabled,
             TailcatStateUpdate::SetPorts { ports } => {
@@ -129,7 +129,7 @@ pub fn change_tailcat_client_keys(
     runtime: &TailcatRuntime,
     change: impl FnOnce(&[String]) -> Result<Vec<String>>,
 ) -> Result<bool> {
-    change_tailcat_state(paths, db, runtime, |state| {
+    change_tailcat_state(paths, db, Some(runtime), |state| {
         let next = normalize_tailcat_client_keys(change(&state.allowed_client_keys)?);
         let changed = next != state.allowed_client_keys;
         state.allowed_client_keys = next;
@@ -144,12 +144,12 @@ static TAILCAT_STATE_WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /*
 CDXC:RemotePairing 2026-11-13 WHY:
-Review of the Easy Connect opt-in fix (finding 1): the off check read `enabled` from one read and the write saved the whole state, so an add that read "on" just before the user turned Easy Connect off wrote "on" back with its key. Every write now reads, checks and saves inside one IMMEDIATE transaction under one lock, and the helpers are reconciled before the next write starts, so the user's Off cannot be undone and no key lands after it.
+The off check once read `enabled` from one read and the write saved the whole state, so an add that read "on" just before the user turned Easy Connect off wrote "on" back with its key. Every write now reads, checks and saves inside one IMMEDIATE transaction under one lock, and the helpers are reconciled before the next write starts, so the user's Off cannot be undone and no key lands after it.
 */
 fn change_tailcat_state<T>(
     paths: &GxserverPaths,
     db: &Connection,
-    runtime: &TailcatRuntime,
+    runtime: Option<&TailcatRuntime>,
     change: impl FnOnce(&mut TailcatState) -> Result<T>,
 ) -> Result<(TailcatStateRecord, T)> {
     let _writes = TAILCAT_STATE_WRITES
@@ -175,8 +175,37 @@ fn change_tailcat_state<T>(
     if let Some(transaction) = transaction {
         transaction.commit()?;
     }
-    runtime.apply(paths, &record.state);
+    if let Some(runtime) = runtime {
+        runtime.apply(paths, &record.state);
+    }
     Ok((record, out))
+}
+
+/// Runs `change` against the saved state with the same lock and transaction as every other write,
+/// so other rows written through `db` inside it (a device's key, say) are saved together with the
+/// allow-list or not at all. The off rule holds as for any write. With `runtime`, the helpers are
+/// reconciled right after; without it, the caller does so later with [`reconcile_tailcat_runtime`].
+pub fn with_tailcat_state<T>(
+    paths: &GxserverPaths,
+    db: &Connection,
+    runtime: Option<&TailcatRuntime>,
+    change: impl FnOnce(&mut TailcatState) -> Result<T>,
+) -> Result<T> {
+    change_tailcat_state(paths, db, runtime, change).map(|(_, out)| out)
+}
+
+/// Brings the helpers in line with the state as saved now, in turn with the writes.
+pub fn reconcile_tailcat_runtime(
+    paths: &GxserverPaths,
+    db: &Connection,
+    runtime: &TailcatRuntime,
+) -> Result<()> {
+    let _writes = TAILCAT_STATE_WRITES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let state = read_tailcat_state_or_default(&TailcatRepository::new(db))?;
+    runtime.apply(paths, &state);
+    Ok(())
 }
 
 /*
