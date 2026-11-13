@@ -23,7 +23,7 @@ fn agent(light: bool, agent_id: &str, name: &str, icon: Option<&str>) -> NewThre
         Some("claude") => (Some("agent-icons/claude.svg"), 11.0, 0xd97757),
         Some("claude-cloud") => (Some("agent-icons/claude-cloud.svg"), 13.0, 0xd67556),
         Some("cursor-cli") => (Some("agent-icons/cursor-cli.svg"), 11.5, 0xedecec),
-        Some("grok-build") => (Some("agent-icons/grok-build.svg"), 11.5, 0xffffff),
+        Some("grok-build") => (Some("agent-icons/grok-build.svg"), 11.0, 0xffffff),
         Some("hermes-agent") => (Some("agent-icons/hermes-agent.svg"), 11.5, 0xf3c46b),
         Some("pi") => (Some("agent-icons/pi.svg"), 10.5, 0xc8ff62),
         Some("omp") => (Some("agent-icons/omp.svg"), 11.5, 0xc8ff62),
