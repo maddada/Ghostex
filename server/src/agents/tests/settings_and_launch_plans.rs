@@ -279,8 +279,8 @@ fn accept_all_specs_match_typescript_aliases_and_icon_mapping() {
         "cursor-agent"
     );
     assert_eq!(
-        resolve_agent_launch_command("gemini", "gemini --allow-all", None, true, None),
-        "gemini --allow-all --yolo"
+        resolve_agent_launch_command("cursor", "cursor-agent --allow-all", None, true, None),
+        "cursor-agent --allow-all --yolo"
     );
     assert_eq!(
         resolve_agent_launch_command("copilot", "copilot -y", None, true, None),
@@ -692,7 +692,7 @@ fn a_coordinator_offered_low_gets_it_in_every_agents_launch_command() {
         "copilot --reasoning-effort xhigh"
     );
     assert_eq!(
-        with_agent_model_options("gemini -m a", "gemini", Some("b"), None).unwrap(),
-        "gemini --model b"
+        with_agent_model_options("grok -m a", "grok", Some("b"), None).unwrap(),
+        "grok --model b"
     );
 }

@@ -13,7 +13,7 @@ fn agent_id(agent: Option<&str>) -> Option<String> {
     crate::agents::identity::normalize_agent_id(agent)
 }
 
-/// How the agent's own input runs a skill: `/name` (Claude, Copilot, Cursor, Gemini), `$name`
+/// How the agent's own input runs a skill: `/name` (Claude, Copilot, Cursor), `$name`
 /// (Codex and every agent not listed), `/skill:name` (Pi) or `@name` (OpenCode). The table is the
 /// core's, so the two sides cannot spell a skill differently.
 pub(crate) fn skill_invocation(agent: Option<&str>, name: &str) -> String {

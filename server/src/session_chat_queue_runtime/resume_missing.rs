@@ -191,7 +191,7 @@ PS C:\\Users\\me\\proj> \n\n";
     #[test]
     fn other_agents_words_and_old_errors_are_not_read_as_omps() {
         // Another agent's screen with the same words is not OMP's error.
-        assert_eq!(missing_resume_on_screen(Some("gemini"), OMP_SCREEN), None);
+        assert_eq!(missing_resume_on_screen(Some("kiro"), OMP_SCREEN), None);
         assert_eq!(missing_resume_on_screen(None, OMP_SCREEN), None);
         // An error that scrolled above a later run of the agent is not the last start's.
         let later_run = format!(

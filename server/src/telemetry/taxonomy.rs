@@ -47,7 +47,6 @@ pub const KNOWN_AGENT_IDS: &[&str] = &[
     "dsh",
     "empryo",
     "freebuff",
-    "gemini",
     "grok",
     "hermes-agent",
     "kimi",

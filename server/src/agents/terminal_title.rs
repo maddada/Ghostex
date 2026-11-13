@@ -143,7 +143,6 @@ pub(crate) fn is_ignored_placeholder_session_title_text(lower: &str) -> bool {
             | "freebuff session"
             | "deepseek harness session"
             | "dsh session"
-            | "gemini session"
             | "grok build session"
             | "grok session"
             | "hermes agent session"
@@ -219,7 +218,7 @@ pub(crate) fn is_leading_title_marker(ch: char) -> bool {
     /*
     CDXC:SessionTitles 2026-06-29-01:21:
     Factory Droid terminal titles can prefix visible session names with the U+26EC status marker.
-    Strip it at the same boundary as Claude, Codex, Cursor, Gemini, and Copilot title chrome so copied details and sidebar rows show the semantic title instead of provider decoration.
+    Strip it at the same boundary as Claude, Codex, Cursor, and Copilot title chrome so copied details and sidebar rows show the semantic title instead of provider decoration.
     */
     ch.is_whitespace()
         || ('\u{2800}'..='\u{28ff}').contains(&ch)
@@ -688,7 +687,6 @@ pub(crate) fn is_agent_command_executable_name(value: &str) -> bool {
             | "empryo"
             | "freebuff"
             | "dsh-tui"
-            | "gemini"
             | "grok"
             | "hermes"
             | "kimi"
@@ -723,18 +721,10 @@ pub(crate) fn is_agent_command_subcommand_name(value: &str) -> bool {
 
 pub(crate) fn get_terminal_title_detected_agent_name(title: &str) -> Option<String> {
     let normalized = normalize_spaces(title);
-    [
-        "antigravity",
-        "claude",
-        "codex",
-        "copilot",
-        "cursor",
-        "gemini",
-        "pi",
-    ]
-    .into_iter()
-    .find(|agent| is_explicit_agent_program_terminal_title(&normalized, agent))
-    .map(str::to_string)
+    ["antigravity", "claude", "codex", "copilot", "cursor", "pi"]
+        .into_iter()
+        .find(|agent| is_explicit_agent_program_terminal_title(&normalized, agent))
+        .map(str::to_string)
 }
 
 pub(crate) fn is_explicit_agent_program_terminal_title(title: &str, agent_name: &str) -> bool {
@@ -759,12 +749,6 @@ pub(crate) fn is_explicit_agent_program_terminal_title(title: &str, agent_name: 
         "cursor" => matches!(
             normalize_spaces(title).to_ascii_lowercase().as_str(),
             "cursor agent" | "cursor agent - \u{2705} ready"
-        ),
-        "gemini" => matches!(
-            strip_specific_prefix_markers(title, &['\u{2726}', '\u{25c7}'])
-                .to_ascii_lowercase()
-                .as_str(),
-            "gemini" | "gemini cli"
         ),
         "pi" => {
             let stripped = title.trim_start_matches(is_leading_title_marker).trim();

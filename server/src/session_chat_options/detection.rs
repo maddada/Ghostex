@@ -362,8 +362,8 @@ pub fn detect_session_chat_terminal_state(
     CDXC:SessionChat 2026-08-26:
     Two independent reasons to spend a capture on this session now. The
     statusline grammar covers three agents; the composer signature table covers
-    nine, so an agent with only the latter (cursor, copilot, opencode, gemini,
-    omp) reaches the funnel through this second door and gets every reading the
+    more, so an agent with only the latter (cursor, copilot, opencode, omp)
+    reaches the funnel through this second door and gets every reading the
     capture can support — which for it is composer readiness alone, since the
     notice, activity and fleet classifiers are all keyed on the option agent.
     */

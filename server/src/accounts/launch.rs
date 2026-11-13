@@ -1077,10 +1077,10 @@ mod tests {
             Provider::Claude,
             &json!({ "runtimeSettings": {} })
         ));
-        assert!(!agent_uses_own_login("gemini", None, "claude-personal"));
+        assert!(!agent_uses_own_login("kiro", None, "claude-personal"));
         assert!(!agent_uses_own_login(
             "custom-1",
-            Some("gemini"),
+            Some("kiro"),
             "CLAUDE_CONFIG_DIR=/x claude"
         ));
     }

@@ -157,10 +157,6 @@ pub fn agent_target(agent: &str) -> Option<String> {
     let (base_url_env, host) = match agent {
         "claude" => ("ANTHROPIC_BASE_URL", "api.anthropic.com"),
         "codex" => ("OPENAI_BASE_URL", "chatgpt.com"),
-        "gemini" => (
-            "GOOGLE_GEMINI_BASE_URL",
-            "generativelanguage.googleapis.com",
-        ),
         _ => return None,
     };
     if let Some(proxy) = proxy_target() {

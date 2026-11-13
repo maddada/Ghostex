@@ -667,7 +667,7 @@ fn empryo_cwd(
 /// The flags live in the session's saved base command, which resume, fork and account wrapping all rebuild from.
 /// Sven extended it to Empryo on 2026-10-06 (Empryo harness spec). Empryo's terminal app ignores launch flags, so the model goes into a session folder Ghostex seeds and launches with `--session`, and the effort is typed with `/effort` once Empryo is up; neither changes Empryo's default. A resume keeps the model (it reopens that tab), but Empryo 3.9.0-beta drops a tab's effort when it resumes it (seen 2026-10-06), so the effort lasts until the session restarts (session_chat_empryo_launch_selection.rs).
 /// Antigravity CLI joined on 2026-10-13 (user: port the launch flags after checking agy still accepts `--effort`): agy 1.2.14 takes `--model <id>` and `--effort low|medium|high|max` for that CLI session only.
-/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) and Gemini 0.41.2 take a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
+/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (server/src/coordinators/playbook.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) takes a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
 /// SEE-ALSO: server/src/ghostex_cli/actions/create.rs (create-agent), server/src/ghostex_cli/board.rs and server/src/board_start_work.rs (board start-work).
 fn apply_requested_agent_model(
     project: &Value,
@@ -695,7 +695,6 @@ fn apply_requested_agent_model(
                     | "grok"
                     | "hermes-agent"
                     | "cursor"
-                    | "gemini"
                     | "zcode"
                     | "empryo"
                     | "antigravity"
@@ -704,7 +703,7 @@ fn apply_requested_agent_model(
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI and Gemini take a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI takes a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
             )
         })?;
     if effort.is_some() {
@@ -807,7 +806,6 @@ fn model_only_effort_refusal(family: &str) -> Option<&'static str> {
         "cursor" => Some(
             "Cursor CLI takes a launch model but no effort: Cursor keeps the effort with each model, so pick a model id that names it, such as gpt-5.3-codex-high.",
         ),
-        "gemini" => Some("Gemini takes a launch model but no effort: Gemini CLI has no effort flag."),
         _ => None,
     }
 }
@@ -1001,7 +999,6 @@ pub(crate) fn default_agent_session_title_name(agent_id: &str) -> Option<&'stati
         "dsh" => Some("DeepSeek Harness"),
         "empryo" => Some("Empryo"),
         "freebuff" => Some("Freebuff"),
-        "gemini" => Some("Gemini"),
         "grok" => Some("Grok Build"),
         "hermes-agent" => Some("Hermes Agent"),
         "kimi" => Some("Kimi Code"),
@@ -1265,32 +1262,25 @@ mod launch_choice_tests {
             .as_deref(),
             Some("hermes --model anthropic/claude-sonnet-4.6 --reasoning high")
         );
-        for (agent, command) in [
-            ("cursor", "cursor-agent --model grok-4.7"),
-            ("gemini", "gemini --model grok-4.7"),
-        ] {
-            assert_eq!(
-                launch(agent, Some("grok-4.7"), None).unwrap().as_deref(),
-                Some(command)
-            );
-        }
+        assert_eq!(
+            launch("cursor", Some("grok-4.7"), None).unwrap().as_deref(),
+            Some("cursor-agent --model grok-4.7")
+        );
     }
 
     #[test]
     fn an_agent_without_an_effort_flag_refuses_only_the_effort() {
-        for agent in ["cursor", "gemini"] {
-            let refusal = launch(agent, Some("m"), Some("high")).unwrap_err();
-            assert!(
-                refusal.contains("takes a launch model but no effort"),
-                "{agent}: {refusal}"
-            );
-        }
+        let refusal = launch("cursor", Some("m"), Some("high")).unwrap_err();
+        assert!(
+            refusal.contains("takes a launch model but no effort"),
+            "{refusal}"
+        );
         assert!(launch("opencode", Some("opencode/big-pickle"), None)
             .unwrap_err()
             .contains("An OpenCode thread keeps its configured model"));
         assert!(launch("dsh", Some("deepseek-v4"), None)
             .unwrap_err()
-            .contains("Cursor CLI and Gemini take a model only"));
+            .contains("Cursor CLI takes a model only"));
         assert!(launch("copilot", None, Some("hgih"))
             .unwrap_err()
             .contains("A Copilot effort is one of"));

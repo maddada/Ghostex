@@ -77,7 +77,7 @@ impl ToolId {
 
     pub(crate) fn description(self) -> &'static str {
         match self {
-            ToolId::Node => "Runs agent CLIs that install with npm, such as Gemini, Pi and Qoder.",
+            ToolId::Node => "Runs agent CLIs that install with npm, such as Pi and Qoder.",
             ToolId::Uv => {
                 "Python package installer from Astral. Ghostex uses it to install Claude Swap for switching Claude accounts, and it downloads the Python Claude Swap needs. uv and uvx also work in your terminals."
             }

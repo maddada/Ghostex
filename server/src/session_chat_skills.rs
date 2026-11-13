@@ -310,7 +310,6 @@ fn normalize_agent_id(agent_id: &str) -> String {
     match agent_id.trim().to_ascii_lowercase().as_str() {
         "openclaude" | "claude-code" => "claude".to_string(),
         "cursor-cli" => "cursor".to_string(),
-        "gemini-cli" => "gemini".to_string(),
         "github-copilot" => "copilot".to_string(),
         "factory-droid" => "droid".to_string(),
         "antigravity-cli" => "antigravity".to_string(),
@@ -324,7 +323,7 @@ fn normalize_agent_id(agent_id: &str) -> String {
 /// The home folders each agent's own CLI loads skills from, nearest-first as the CLI ranks them.
 ///
 /// CDXC:AgentSkills 2026-10-17 WHY:
-/// The `$` picker lists what the session's agent can actually run, so every row mirrors the CLI's own loader (agent flow tests, 2026-10-17: Pi 1.3 loads all of its skills from `~/.agents/skills`, which the picker never read, so it showed "No skills available"). Sources: Pi `core/package-manager.js` and omp `src/discovery/`; Codex `ext/skills/src/host_roots.rs`; OpenCode `config/discovery.ts`; gemini-cli `config/storage.ts`; Claude Code, Cursor, Copilot, Droid, agy, Amp, CodeBuddy and Qoder from their shipped bundles and docs. Claude Code reads no `.agents/skills` folder (cswap account folders link their `skills` to `~/.claude/skills`), and no agent reads `~/agents/skills`.
+/// The `$` picker lists what the session's agent can actually run, so every row mirrors the CLI's own loader (agent flow tests, 2026-10-17: Pi 1.3 loads all of its skills from `~/.agents/skills`, which the picker never read, so it showed "No skills available"). Sources: Pi `core/package-manager.js` and omp `src/discovery/`; Codex `ext/skills/src/host_roots.rs`; OpenCode `config/discovery.ts`; Claude Code, Cursor, Copilot, Droid, agy, Amp, CodeBuddy and Qoder from their shipped bundles and docs. Claude Code reads no `.agents/skills` folder (cswap account folders link their `skills` to `~/.claude/skills`), and no agent reads `~/agents/skills`.
 /// SEE-ALSO: `project_skill_roots` below.
 fn provider_skill_roots(agent_id: &str) -> &'static [&'static [&'static str]] {
     match agent_id {
@@ -352,7 +351,6 @@ fn provider_skill_roots(agent_id: &str) -> &'static [&'static [&'static str]] {
             &[".agents", "skills"],
             &[".agent", "skills"],
         ],
-        "gemini" => &[&[".gemini", "skills"], &[".agents", "skills"]],
         "copilot" => &[&[".copilot", "skills"], &[".agents", "skills"]],
         "droid" => &[
             &[".factory", "skills"],
@@ -437,7 +435,6 @@ fn project_skill_roots(agent_id: &str) -> (&'static [&'static [&'static str]], P
             ],
             RepositoryRoot,
         ),
-        "gemini" => (&[&[".gemini", "skills"], &[".agents", "skills"]], Folder),
         "copilot" => (
             &[
                 &[".github", "skills"],

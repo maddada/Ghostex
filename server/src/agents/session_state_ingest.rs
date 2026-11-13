@@ -887,7 +887,6 @@ pub(crate) fn supports_terminal_title_session_sync(agent_name: Option<&str>) -> 
             | "codex"
             | "copilot"
             | "cursor"
-            | "gemini"
             | "hermes-agent"
             | "opencode"
             | "pi"

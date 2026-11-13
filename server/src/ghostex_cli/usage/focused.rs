@@ -295,7 +295,7 @@ Behavior:
   unless --allow-hidden is passed.
   --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity CLI worker
   on that model and effort for this session only (a Pi, OMP or Empryo model is <provider>/<model>, a Pi or OMP effort a
-  thinking level; Cursor CLI and Gemini take --model only); your default
+  thinking level; Cursor CLI takes --model only); your default
   model is unchanged, and a resumed worker keeps them. A reused worker keeps
   whatever it already runs.
   Pass --project-path <repo> (or --project-id) to start the worker in the project the card is

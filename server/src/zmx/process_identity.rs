@@ -803,7 +803,6 @@ fn infer_agent_id_from_process_executable(
             "empryo" | "em" => "empryo",
             "freebuff" => "freebuff",
             "dsh-tui" | "dst" => "dsh",
-            "gemini" => "gemini",
             "grok" => "grok",
             "hermes" => "hermes-agent",
             "kimi" => "kimi",

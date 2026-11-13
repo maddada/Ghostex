@@ -76,9 +76,7 @@ pub(crate) fn omp_composer_top_row(lines: &[String]) -> Option<usize> {
 }
 
 /// Non-blank lines kept from the bottom of a capture. Wide enough to hold
-/// opencode's mid-screen composer plus the banner above it on an 80x24 pane,
-/// and to hold gemini's full-height dialogs without the composer scan running
-/// off the top of them.
+/// opencode's mid-screen composer plus the banner above it on an 80x24 pane.
 const SESSION_CHAT_COMPOSER_SCAN_LINES: usize = 120;
 
 /// Screen tail attached to a readiness verdict, so a client can show WHAT is in
@@ -305,10 +303,6 @@ enum ComposerSignature {
     ///
     /// Height is the discriminator: omp's dialogs are full-screen boxes.
     TrailingRoundedFoot,
-    /// A THREE-line rounded box holding a marker line: `╭─╮ / │ > … │ / ╰─╯`.
-    /// gemini draws dialogs and the composer with the same rounded chrome, so
-    /// only the composer's exact height admits a match.
-    ShortRoundedBoxMarker { marker: char },
     /// The last rounded box above a fixed footer, holding no nested box (Freebuff).
     FooteredRoundedBox,
     /// The lowest rounded box on screen, its first row opening with Empryo's prompt glyph or
@@ -378,8 +372,6 @@ fn composer_signature(agent: &str) -> Option<ComposerSignature> {
         // Two-line rounded box at the bottom with the statusline in its border;
         // readiness reads every `composer.shape` through `omp_input_region`.
         "omp" => ComposerSignature::TrailingRoundedFoot,
-        // Three-line rounded box with a `>` input marker.
-        "gemini" => ComposerSignature::ShortRoundedBoxMarker { marker: '>' },
         // Rounded box over `<model> · <folder> · /model to change` and `← for history · ? for
         // help`. Measured 2026-10-04, Freebuff 0.2.12.
         "freebuff" => ComposerSignature::FooteredRoundedBox,
@@ -793,13 +785,6 @@ fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
             lines[head..foot]
                 .iter()
                 .any(|line| line.trim_start().starts_with('\u{256d}'))
-        }
-        ComposerSignature::ShortRoundedBoxMarker { marker } => {
-            (0..lines.len().saturating_sub(2)).rev().any(|index| {
-                lines[index].trim_start().starts_with('\u{256d}')
-                    && is_boxed_marker_line(&lines[index + 1], marker)
-                    && lines[index + 2].trim_start().starts_with('\u{2570}')
-            })
         }
         ComposerSignature::FooteredRoundedBox => input::freebuff_input_region(lines).is_some(),
         ComposerSignature::EmpryoInputBox => input::empryo_input_region(lines).is_some(),

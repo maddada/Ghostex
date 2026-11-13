@@ -31,8 +31,8 @@ What it does:
   every agent's global skills folder, converts whole-folder links into folders
   of per-skill links, writes the one-line instruction pointer file each agent
   reads, and links the hooks folder and lock file into Claude Code and Codex.
-  Agents that read ~/.agents/skills themselves (Codex, Gemini CLI, GitHub
-  Copilot, Pi, Cursor, OpenCode, Amp) get no links, and links already in their
+  Agents that read ~/.agents/skills themselves (Codex, GitHub Copilot, Pi,
+  Cursor, OpenCode, Amp) get no links, and links already in their
   folders are removed so they do not load each skill twice.
   Nothing is deleted: anything in the way of a link, and any leftover
   <name>.pre-sync-<stamp>.bak folder in a skills folder, is moved to Ghostex's

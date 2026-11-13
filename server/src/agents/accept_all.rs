@@ -184,10 +184,6 @@ pub(crate) fn accept_all_spec(agent_id: &str) -> Option<AcceptAllSpec> {
             aliases: vec!["--force".to_string(), "--yolo".to_string()],
             canonical: "--yolo",
         },
-        "gemini" => AcceptAllSpec::Flag {
-            aliases: vec!["-y".to_string(), "--yolo".to_string()],
-            canonical: "--yolo",
-        },
         "grok" => AcceptAllSpec::Flag {
             aliases: vec!["--always-approve".to_string()],
             canonical: "--always-approve",

@@ -161,7 +161,7 @@ THREADS
   in Settings > Agents is refused unless --allow-hidden is passed. --worktree gives the
   thread its own git worktree and branch (from --base-branch, or the default
   branch). --model and --effort apply to this thread only (Claude, Codex, Pi, OMP,
-  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI; Cursor and Gemini take
+  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI; Cursor takes
   --model only, and an OpenCode, ZCode or DeepSeek Harness thread keeps its configured model).
   --account starts a Claude or Codex thread on that saved account (its number or email, as
   `ghostex accounts` lists them) instead of the Account for new sessions rule; an account that

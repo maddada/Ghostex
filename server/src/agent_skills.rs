@@ -42,7 +42,7 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-secrets",
     /*
     CDXC:AgentGuide 2026-11-02 WHY:
-    `$ghostex-agent-guide` carries the Ghostex note (agents/ghostex_note.rs) as its description, for agents Ghostex can't hand a system prompt at launch (OpenCode, Gemini, Cursor, Copilot, Amp and the rest), so it is the second bundled skill agents may pick up on their own. Its body only sends the agent to `ghostex agent-guide`, so it stays current with the CLI.
+    `$ghostex-agent-guide` carries the Ghostex note (agents/ghostex_note.rs) as its description, for agents Ghostex can't hand a system prompt at launch (OpenCode, Cursor, Copilot, Amp and the rest), so it is the second bundled skill agents may pick up on their own. Its body only sends the agent to `ghostex agent-guide`, so it stays current with the CLI.
     */
     "ghostex-agent-guide",
     /*
@@ -83,7 +83,6 @@ pub const GHOSTEX_SKILLS_CLI_AGENT_IDS: &[&str] = &[
     "claude-code",
     "codex",
     "cursor",
-    "gemini-cli",
     "opencode",
     "pi",
     "antigravity",
@@ -324,7 +323,6 @@ pub fn agent_skill_global_dir(home_dir: &Path, agent_id: &str) -> Option<PathBuf
         "codex" => {
             return Some(ghostex_paths::agent_homes::codex_default_home(home_dir).join("skills"))
         }
-        "gemini-cli" => ".gemini/skills",
         "pi" => ".pi/agent/skills",
         "antigravity" => ".gemini/antigravity/skills",
         "antigravity-cli" => ".gemini/antigravity-cli/skills",

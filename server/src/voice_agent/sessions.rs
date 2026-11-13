@@ -182,7 +182,6 @@ fn agent_label(agent: &str) -> String {
         ("codex", "Codex"),
         ("opencode", "OpenCode"),
         ("cursor", "Cursor"),
-        ("gemini", "Gemini"),
         ("grok", "Grok"),
         ("copilot", "Copilot"),
         ("hermes", "Hermes"),

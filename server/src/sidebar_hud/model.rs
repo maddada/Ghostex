@@ -150,13 +150,6 @@ pub(super) const DEFAULT_SIDEBAR_AGENTS: &[DefaultSidebarAgent] = &[
         name: "OpenCode",
     },
     DefaultSidebarAgent {
-        agent_id: "gemini",
-        command: "gemini",
-        hidden_by_default: false,
-        icon: "gemini",
-        name: "Gemini",
-    },
-    DefaultSidebarAgent {
         agent_id: "copilot",
         command: "copilot",
         hidden_by_default: false,

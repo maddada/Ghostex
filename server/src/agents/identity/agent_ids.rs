@@ -53,7 +53,7 @@ pub(crate) fn normalize_status_agent_name(value: Option<&str>) -> Option<String>
     let agent = normalize_agent_id(value)?;
     matches!(
         agent.as_str(),
-        "antigravity" | "claude" | "codex" | "copilot" | "cursor" | "gemini" | "opencode" | "pi"
+        "antigravity" | "claude" | "codex" | "copilot" | "cursor" | "opencode" | "pi"
     )
     .then_some(agent)
 }
@@ -218,7 +218,6 @@ pub(crate) fn infer_agent_id_from_command(command: &str) -> Option<String> {
             "kiro-cli" => "kiro",
             "claude" | "cswap" => "claude",
             "copilot" => "copilot",
-            "gemini" => "gemini",
             "codex" | "xswap" => "codex",
             "zcode" | "zcode-cli" => "zcode",
             "droid" => "droid",

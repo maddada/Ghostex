@@ -234,8 +234,8 @@ pub(crate) fn option_takes_value(agent: &str, word: &str) -> bool {
                 | "--prompt-interactive"
         ),
         // CDXC:AgentProviders 2026-11-01: the value options each CLI's `--help` lists (OMP
-        // 18.13.2, Copilot 1.0.103, Grok Build 1.0.70, Hermes Agent 0.22.5, Gemini
-        // 0.41.2), so a model or effort override never mistakes another option's value
+        // 18.13.2, Copilot 1.0.103, Grok Build 1.0.70 and Hermes Agent
+        // 0.22.5), so a model or effort override never mistakes another option's value
         // for a flag.
         "omp" => matches!(
             word,
@@ -347,23 +347,6 @@ pub(crate) fn option_takes_value(agent: &str, word: &str) -> bool {
                 | "--resume"
                 | "--in"
         ),
-        "gemini" => matches!(
-            word,
-            "-m" | "--model"
-                | "-p"
-                | "--prompt"
-                | "-i"
-                | "--prompt-interactive"
-                | "--approval-mode"
-                | "-e"
-                | "--extensions"
-                | "-r"
-                | "--resume"
-                | "--session-id"
-                | "--include-directories"
-                | "-o"
-                | "--output-format"
-        ),
         _ => false,
     }
 }
@@ -397,18 +380,16 @@ pub(crate) fn with_agent_model_options(
         let (remove, takes_value) = match (agent, word.as_str()) {
             _ if !is_flag => (false, false),
             (
-                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent"
-                | "gemini",
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent",
                 "--model",
             )
-            | ("codex" | "grok" | "hermes-agent" | "gemini", "-m")
+            | ("codex" | "grok" | "hermes-agent", "-m")
                 if model.is_some() =>
             {
                 (true, true)
             }
             (
-                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent"
-                | "gemini",
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent",
                 value,
             ) if model.is_some() && value.starts_with("--model=") => (true, false),
             ("claude" | "antigravity" | "grok", "--effort")
@@ -496,8 +477,8 @@ pub(crate) fn with_agent_model_options(
                 result.push_str(&format!(" --reasoning-effort {}", shell_word(effort)))
             }
             "hermes-agent" => result.push_str(&format!(" --reasoning {}", shell_word(effort))),
-            // These take no effort flag; the launch plan refuses an effort for them before here.
-            "cursor" | "gemini" => {}
+            // Cursor takes no effort flag; the launch plan refuses an effort for it before here.
+            "cursor" => {}
             _ => result.push_str(&format!(" --effort {}", shell_word(effort))),
         }
     }

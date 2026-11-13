@@ -62,10 +62,6 @@ pub(crate) const HOOK_DEFINITIONS: &[HookDefinition] = &[
         cli_command: "cursor-agent",
     },
     HookDefinition {
-        agent_id: "gemini",
-        cli_command: "gemini",
-    },
-    HookDefinition {
         agent_id: "kiro",
         cli_command: "kiro-cli",
     },
@@ -230,7 +226,6 @@ pub(crate) fn command_agent(agent_id: &str) -> Option<&'static str> {
         "zcode" => Some("zcode"),
         "claude" => Some("claude"),
         "cursor" => Some("cursor"),
-        "gemini" => Some("gemini"),
         "kiro" => Some("kiro"),
         "copilot" => Some("copilot"),
         "droid" => Some("factory"),
@@ -268,7 +263,6 @@ pub(crate) fn nested_timeout(agent_id: &str) -> Option<i64> {
         "codex" | "grok" | "claude" | "openclaude" if cfg!(windows) => Some(30),
         "codex" | "grok" | "claude" | "openclaude" | "zcode" | "empryo" => Some(5),
         "command-code" | "devin" => Some(10),
-        "gemini" => Some(10000),
         _ => None,
     }
 }
@@ -357,16 +351,6 @@ pub(crate) fn all_hook_events(agent_id: &str) -> Vec<&'static str> {
             "postToolUse",
             "postToolUseFailure",
             "beforeMCPExecution",
-        ],
-        // Gemini's real pre-tool event is BeforeTool; the PreToolUse name it
-        // used to be registered under was never delivered.
-        "gemini" => &[
-            "SessionStart",
-            "BeforeAgent",
-            "AfterAgent",
-            "SessionEnd",
-            "BeforeTool",
-            "AfterTool",
         ],
         "kiro" => &[
             "agentSpawn",
