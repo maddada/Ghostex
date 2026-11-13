@@ -88,6 +88,9 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
 fn watched(session: &Value, key: &SessionKey, now_iso: &str) -> bool {
     if effective_lifecycle_state(session) != "running"
         || presentation_activity(session, now_iso) != "working"
+        // A turn that ended with a background shell still running is not stuck: nothing runs in
+        // the turn (CDXC:Coordinators 2026-11-13 in session_status/model.rs).
+        || crate::presentation::working_only_in_background(session, now_iso)
         || waits_on_the_user(session, now_iso)
     {
         return false;

@@ -124,6 +124,9 @@ struct TurnReading {
     last_words: Option<String>,
     /// What started the open turn, in a few words, for a turn with no words of its own yet.
     started_by: Option<String>,
+    /// The newest prompt it took is Ghostex's stall nudge: with the turn ended, it answered the
+    /// nudge and nothing new came after.
+    answered_stall_nudge: bool,
 }
 
 /// BLOCKING (a transcript tail read, only when the file changed since the last one).
@@ -184,11 +187,31 @@ fn read_turn(gate: &mut SessionChatTranscriptGate, session: &Value) -> TurnReadi
             format!("Picked up: {}", coordinators::report_headline(line, 120))
         })
     });
+    let answered_stall_nudge = !open
+        && tail
+            .messages
+            .iter()
+            .rev()
+            .filter(|message| message.role == SessionChatRole::User && !message.queued)
+            .filter(|message| {
+                !message
+                    .blocks
+                    .iter()
+                    .any(|block| matches!(block, SessionChatBlock::ToolResult { .. }))
+            })
+            .find_map(|message| {
+                message.blocks.iter().find_map(|block| match block {
+                    SessionChatBlock::Text { text } if !text.trim().is_empty() => Some(text),
+                    _ => None,
+                })
+            })
+            .is_some_and(|text| coordinators::is_stall_nudge_text(text));
     TurnReading {
         open,
         started_ms,
         last_words,
         started_by,
+        answered_stall_nudge,
     }
 }
 
@@ -673,6 +696,24 @@ fn supervise(
             memory.turns.insert(key.clone(), reading);
             if new_turn {
                 ThreadState::Working
+            } else {
+                hook_state
+            }
+        } else if hook_state == ThreadState::Working
+            && coordinators::thread_prompt(&session).is_none()
+        {
+            /*
+            CDXC:Coordinators 2026-11-13 DECISION:
+            Coordinator, after G2z88 was nudged again and again while idle (see CDXC:Coordinators 2026-11-13 in session_status/model.rs): "Never nudge the same session again after it answered a nudge with no new work, until something new happens (new output, a new message, its turn starts again)." A thread whose hooks still say working, but whose transcript's newest turn was started by Ghostex's stall nudge and has ended, answered the nudge and took nothing new since, so it is finished, not quiet: no second nudge and no second "no new output" report. Any new prompt (a message, a task notification) opens a new turn and makes it working again. The read is cached until the transcript changes.
+            */
+            let reading = read_turn(
+                memory.transcript_gates.entry(key.clone()).or_default(),
+                &session,
+            );
+            let answered = reading.answered_stall_nudge;
+            memory.turns.insert(key.clone(), reading);
+            if answered {
+                ThreadState::Finished
             } else {
                 hook_state
             }

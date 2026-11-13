@@ -1163,6 +1163,8 @@ pub(crate) fn persistable_agent_activity_snapshot(value: Option<&Value>) -> Valu
         "suppressedUntil",
         "workingSource",
         "workingStartedAt",
+        // The working stint is only background work after the turn ended (session_status).
+        "backgroundOnlySince",
     ] {
         if let Some(value) = activity.get(key) {
             snapshot.insert(key.to_string(), value.clone());

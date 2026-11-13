@@ -78,6 +78,9 @@ pub(super) struct ActivityState {
     pub(super) suppressed_until: Option<String>,
     pub(super) working_source: Option<String>,
     pub(super) working_started_at: Option<String>,
+    /// Since when this working state has been only background work the agent left running after
+    /// its turn ended (`backgroundOnlySince`, see `turn_end_keeps_working`).
+    pub(super) background_only_since: Option<String>,
 }
 
 impl ActivityState {
@@ -165,7 +168,7 @@ pub fn compute_activity_update(
         return activity_update_from(session, previous_state, next, now_ms_value);
     }
     let run_detection = |previous: ActivityState| -> ActivityState {
-        let next = apply_agent_activity_transition(ActivityInput {
+        let mut next = apply_agent_activity_transition(ActivityInput {
             activity: params
                 .get("activity")
                 .and_then(Value::as_str)
@@ -185,6 +188,13 @@ pub fn compute_activity_update(
             program_status_activity: program_status_activity.clone(),
             reuse_attention_event_id: read_text(params, "reuseAttentionEventId"),
         });
+        if next.activity == "working" && turn_end_keeps_working(params) {
+            next.background_only_since = previous
+                .background_only_since
+                .clone()
+                .filter(|_| previous.activity == "working")
+                .or_else(|| Some(iso_from_ms(now_ms_value)));
+        }
         /*
         Sessions that predate the meaningful-activity clock seed it from their
         durable lastActiveAt so recency sorting stays stable across the migration,
@@ -305,6 +315,32 @@ pub fn is_turn_complete_attention(value: Option<&Value>) -> bool {
 }
 
 /*
+CDXC:Coordinators 2026-11-13 WHY:
+A Claude thread ("Status line follows computer", G2z88, 2026-11-12) ended its turn at 13:23 with "1 shell still running" in its footer. Its Stop listed that shell in `background_tasks`, which keeps the session working so it rings only once the work is done (CDXC:Notifications 2026-09-15 in agent_hooks/event_mapping.rs), and the coordinator's stall watch took that working for a turn still running: it typed "no new output from you for 8 minutes. Still working?" into an idle agent, which answered "Nothing is running and I'm not waiting on anything", and the coordinator's thread reports repeated it. The turn had ended; only a background job remained, which is not work for the watchdogs (CDXC:SessionStatus 2026-09-22 in presentation/session_attributes.rs: a background shell after the turn is not working). So a turn-end hook (Claude's, OpenClaude's or Empryo's Stop with background tasks, Antigravity's Stop or turn completion that background work will wake) that leaves the session working marks the stint `backgroundOnlySince`, and any other working event (a prompt, a tool call, the program's own working) clears it. Notifications and Auto Sleep keep reading the working state as before; the stall watches and the coordinator's thread state skip such a stint (`working_only_in_background`), and the idle watch (coordinators/idle_wait.rs) covers a thread that waits on a job.
+*/
+/// Whether the hook event behind `params` is a turn end that left the session working: the agent
+/// ended its turn and only background work it started keeps the session working.
+fn turn_end_keeps_working(params: &Map<String, Value>) -> bool {
+    params.get("activity").and_then(Value::as_str) == Some("working")
+        && ["eventName", "rawEventName"].iter().any(|key| {
+            params
+                .get(*key)
+                .and_then(Value::as_str)
+                .is_some_and(|event| {
+                    let event = event.trim().to_ascii_lowercase().replace(['_', '-'], "");
+                    matches!(event.as_str(), "stop" | "turncompletion")
+                })
+        })
+}
+
+/// Whether a stored `agentActivity` is working only through background work its agent left
+/// running after its turn ended (`backgroundOnlySince`).
+pub fn is_background_only_working(value: Option<&Value>) -> bool {
+    let state = normalize_agent_activity_state(value, "idle");
+    state.activity == "working" && state.background_only_since.is_some()
+}
+
+/*
 CDXC:SessionStatus 2026-06-21-19:26:
 Rust presentation must use the same effective activity projection as TypeScript gxserver: title-derived spinner working is allowed to expire on read without rewriting durable session state, and a timed presentation refresh emits the idle transition when no later terminal title arrives.
 */
@@ -407,6 +443,11 @@ impl ActivityState {
             &mut output,
             "workingStartedAt",
             self.working_started_at.clone(),
+        );
+        insert_optional_string(
+            &mut output,
+            "backgroundOnlySince",
+            self.background_only_since.clone(),
         );
         Value::Object(output)
     }

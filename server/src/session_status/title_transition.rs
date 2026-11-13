@@ -293,6 +293,7 @@ pub(super) fn normalize_agent_activity_state(
         working_source: read_text_from_map(&record, "workingSource")
             .filter(|value| matches!(value.as_str(), "explicit" | "title")),
         working_started_at: read_text_from_map(&record, "workingStartedAt"),
+        background_only_since: read_text_from_map(&record, "backgroundOnlySince"),
     }
 }
 
