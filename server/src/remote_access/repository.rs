@@ -398,6 +398,17 @@ impl<'a> RemotePairingRepository<'a> {
             .with_context(|| "read paired device purpose keys")
     }
 
+    /// Drops a device's key for `purpose`.
+    pub fn remove_device_purpose_key(&self, device_id: &str, purpose: &str) -> Result<()> {
+        self.db
+            .execute(
+                "DELETE FROM remote_paired_device_purpose_keys WHERE deviceId = ?1 AND purpose = ?2",
+                params![device_id, purpose],
+            )
+            .with_context(|| "remove paired device purpose key")?;
+        Ok(())
+    }
+
     /// Drops every purpose key of a device and returns them.
     pub fn remove_device_purpose_keys(&self, device_id: &str) -> Result<Vec<(String, String)>> {
         let keys = self.device_purpose_keys(device_id)?;

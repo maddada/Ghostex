@@ -291,7 +291,13 @@ pub(crate) async fn handle_remote_access_http(
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 let doors =
                     crate::tailcat::known_door_addresses(&paths, status.relay.host.as_deref());
-                Ok(json!({ "addresses": easy_connect_addresses_with_doors(&status, doors) }))
+                // `enabled`: the user's Easy Connect switch, so a phone tells Off from a helper that
+                // is restarting (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs); older phones
+                // read only `addresses`.
+                Ok(json!({
+                    "addresses": easy_connect_addresses_with_doors(&status, doors),
+                    "enabled": status.enabled,
+                }))
             })
             .await
         }
@@ -385,6 +391,9 @@ pub(crate) async fn handle_remote_access_http(
                         "clientKey must be a nodekey: public key.",
                     )),
                     Err(LinkKeyError::NotPaired) => Err(RemoteAccessHttpError::unknown_device(&device_id)),
+                    Err(LinkKeyError::EasyConnectOff) => Err(RemoteAccessHttpError::bad_request(
+                        crate::tailcat::EASY_CONNECT_OFF_REFUSAL,
+                    )),
                     Err(LinkKeyError::HeldByAnotherDevice { name, paired }) => {
                         Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired }.into())
                     }

@@ -5,9 +5,7 @@ use serde_json::{json, Value};
 use crate::auth::{DeviceApiTokens, DeviceTokenEntry};
 use crate::paths::GxserverPaths;
 use crate::security::{Principal, SecurityEvent, SecurityState};
-use crate::tailcat::{
-    apply_tailcat_state_update, read_tailcat_status_payload, TailcatRuntime, TailcatStateUpdate,
-};
+use crate::tailcat::{change_tailcat_client_keys, read_tailcat_status_payload, TailcatRuntime};
 
 use super::authorized_keys::{remove_authorized_key, AdministratorApprovalDeclined};
 use super::repository::{PairedDeviceStatus, RemotePairedDeviceRecord, RemotePairingRepository};
@@ -465,19 +463,10 @@ pub fn add_tailcat_client_key_when_allow_listed(
     tailcat_runtime: &TailcatRuntime,
     client_key: &str,
 ) -> Result<bool> {
-    let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
-    let Some(allowed_client_keys) = allow_list_with_client_key(allowed, client_key) else {
-        return Ok(false);
-    };
-    apply_tailcat_state_update(
-        paths,
-        db,
-        tailcat_runtime,
-        TailcatStateUpdate::SetAllowedClientKeys {
-            allowed_client_keys,
-        },
-    )?;
-    Ok(true)
+    change_tailcat_client_keys(paths, db, tailcat_runtime, |current| {
+        Ok(allow_list_with_client_key(current.to_vec(), client_key)
+            .unwrap_or_else(|| current.to_vec()))
+    })
 }
 
 /// Where a paired device registers its own Easy Connect key for this computer.
@@ -496,6 +485,8 @@ pub enum LinkKeyError {
     /// Another device's paired entry holds the key; `name` and `paired` say which (as the pairing
     /// refusal does, `PairDeviceError::KeyHeldByAnotherDevice`). Only a paired device gets this.
     HeldByAnotherDevice { name: String, paired: String },
+    /// Easy Connect is off on this computer (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs).
+    EasyConnectOff,
 }
 
 impl LinkKeyError {
@@ -563,9 +554,29 @@ pub fn register_device_link_key(
     if previous.as_deref() == Some(client_key) && listed {
         return Ok(Ok(false));
     }
+    // Refused before anything is written (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs), so
+    // the device keeps the key it had and removing it still takes that key off.
+    if !crate::tailcat::easy_connect_turned_on(db)? {
+        return Ok(Err(LinkKeyError::EasyConnectOff));
+    }
     repository.set_device_link_key(device_id, client_key)?;
     transaction.commit()?;
-    add_tailcat_client_key_when_allow_listed(paths, db, tailcat_runtime, client_key)?;
+    if let Err(error) =
+        add_tailcat_client_key_when_allow_listed(paths, db, tailcat_runtime, client_key)
+    {
+        // Turned off meanwhile: the device's key goes back to the one still on the list.
+        match previous.as_deref() {
+            Some(previous) => repository.set_device_link_key(device_id, previous)?,
+            None => {
+                repository.remove_device_link_key(device_id)?;
+            }
+        }
+        return if crate::tailcat::easy_connect_turned_on(db)? {
+            Err(error)
+        } else {
+            Ok(Err(LinkKeyError::EasyConnectOff))
+        };
+    }
     if let Some(previous) = previous.filter(|previous| previous != client_key) {
         remove_tailcat_client_key(paths, db, tailcat_runtime, &previous, Some(&owner))?;
     }
@@ -615,17 +626,25 @@ pub fn register_device_purpose_keys(
             return Ok(Err(LinkKeyError::held_by(&holder)));
         }
     }
+    // Refused before anything is written or acknowledged (CDXC:RemotePairing 2026-11-13 in
+    // tailcat/status.rs).
+    if !crate::tailcat::easy_connect_turned_on(db)? {
+        return Ok(Err(LinkKeyError::EasyConnectOff));
+    }
     let mut added = Vec::new();
     let mut replaced = Vec::new();
+    let mut before = Vec::new();
     for (purpose, key) in keys {
         let previous = repository.device_purpose_key(device_id, purpose)?;
         repository.set_device_purpose_key(device_id, purpose, key)?;
         added.push(key.clone());
+        before.push((purpose.clone(), previous.clone()));
         if let Some(previous) = previous.filter(|previous| previous != key) {
             replaced.push(previous);
         }
     }
     transaction.commit()?;
+    let device_id = device_id.to_string();
     let current = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
     if purpose_keys_allow_list(db, current.clone(), &added, &replaced, &owner)? == current {
         return Ok(Ok(false));
@@ -641,21 +660,23 @@ pub fn register_device_purpose_keys(
     std::thread::spawn(move || {
         std::thread::sleep(PURPOSE_KEYS_APPLY_AFTER);
         let applied = crate::storage::open_gxserver_database(&paths).and_then(|db| {
-            let current =
-                read_tailcat_status_payload(&paths, &db, &tailcat_runtime).allowed_client_keys;
-            let next = purpose_keys_allow_list(&db, current.clone(), &added, &replaced, &owner)?;
-            if next == current {
-                return Ok(());
+            let changed = change_tailcat_client_keys(&paths, &db, &tailcat_runtime, |current| {
+                purpose_keys_allow_list(&db, current.to_vec(), &added, &replaced, &owner)
+            });
+            if changed.is_err() {
+                // Turned off meanwhile: the device keeps the keys still on the list, so removing
+                // it takes them off.
+                let repository = RemotePairingRepository::new(&db);
+                for (purpose, previous) in &before {
+                    match previous {
+                        Some(previous) => {
+                            repository.set_device_purpose_key(&device_id, purpose, previous)?
+                        }
+                        None => repository.remove_device_purpose_key(&device_id, purpose)?,
+                    }
+                }
             }
-            apply_tailcat_state_update(
-                &paths,
-                &db,
-                &tailcat_runtime,
-                TailcatStateUpdate::SetAllowedClientKeys {
-                    allowed_client_keys: next,
-                },
-            )
-            .map(|_| ())
+            changed.map(|_| ())
         });
         if let Err(error) = applied {
             eprintln!("[gxserver] could not add a paired computer's Easy Connect keys: {error:#}");
@@ -753,19 +774,10 @@ fn remove_tailcat_client_key(
     if key_still_needed(db, client_key, owner_device_key)? {
         return Ok(false);
     }
-    let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
-    let Some(allowed_client_keys) = allow_list_without_client_key(allowed, client_key) else {
-        return Ok(false);
-    };
-    apply_tailcat_state_update(
-        paths,
-        db,
-        tailcat_runtime,
-        TailcatStateUpdate::SetAllowedClientKeys {
-            allowed_client_keys,
-        },
-    )?;
-    Ok(true)
+    change_tailcat_client_keys(paths, db, tailcat_runtime, |current| {
+        Ok(allow_list_without_client_key(current.to_vec(), client_key)
+            .unwrap_or_else(|| current.to_vec()))
+    })
 }
 
 #[cfg(test)]

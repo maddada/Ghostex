@@ -83,53 +83,105 @@ pub fn apply_tailcat_state_update(
     runtime: &TailcatRuntime,
     update: TailcatStateUpdate,
 ) -> Result<TailcatStateRecord> {
+    change_tailcat_state(paths, db, runtime, |state| {
+        match update {
+            TailcatStateUpdate::SetEnabled { enabled } => state.enabled = enabled,
+            TailcatStateUpdate::SetPorts { ports } => {
+                if let Some(port) = ports.iter().find(|port| !tailcat_port_allowed(**port)) {
+                    anyhow::bail!(
+                        "Easy Connect serves only SSH (port {}) and Ghostex (port {}); port {port} can't be added.",
+                        crate::remote_access::ssh_status::DEFAULT_SSH_PORT,
+                        tailcat_gxserver_api_port()
+                    );
+                }
+                state.ports = normalize_tailcat_ports(ports)
+            }
+            TailcatStateUpdate::SetAllowedClientKeys {
+                allowed_client_keys,
+            } => state.allowed_client_keys = normalize_tailcat_client_keys(allowed_client_keys),
+            TailcatStateUpdate::SetRelay { mode, custom_host } => {
+                let custom_host = custom_host.trim().to_string();
+                // An empty field keeps the last hostname, so the switch back to Custom restores it.
+                let custom_host = if custom_host.is_empty() {
+                    state.relay.custom_host.clone()
+                } else {
+                    custom_host
+                };
+                if mode == TailcatRelayMode::Custom
+                    && normalize_tailcat_relay_host(&custom_host).is_none()
+                {
+                    anyhow::bail!("Enter a relay hostname such as relay.example.com.");
+                }
+                state.relay = TailcatRelaySetting { mode, custom_host };
+            }
+        }
+        Ok(())
+    })
+    .map(|(record, ())| record)
+}
+
+/// Changes the allow-list from the list as it stands when the change runs (never from a copy read
+/// earlier, which would bring back a key taken off meanwhile). `change` gets the current list and
+/// returns the next one. Returns whether the list changed.
+pub fn change_tailcat_client_keys(
+    paths: &GxserverPaths,
+    db: &Connection,
+    runtime: &TailcatRuntime,
+    change: impl FnOnce(&[String]) -> Result<Vec<String>>,
+) -> Result<bool> {
+    change_tailcat_state(paths, db, runtime, |state| {
+        let next = normalize_tailcat_client_keys(change(&state.allowed_client_keys)?);
+        let changed = next != state.allowed_client_keys;
+        state.allowed_client_keys = next;
+        Ok(changed)
+    })
+    .map(|(_, changed)| changed)
+}
+
+/// Every tailcat state write in this process, so each one reads, checks, writes and reconciles the
+/// helpers as one step, in the order the writes land.
+static TAILCAT_STATE_WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/*
+CDXC:RemotePairing 2026-11-13 WHY:
+Review of the Easy Connect opt-in fix (finding 1): the off check read `enabled` from one read and the write saved the whole state, so an add that read "on" just before the user turned Easy Connect off wrote "on" back with its key. Every write now reads, checks and saves inside one IMMEDIATE transaction under one lock, and the helpers are reconciled before the next write starts, so the user's Off cannot be undone and no key lands after it.
+*/
+fn change_tailcat_state<T>(
+    paths: &GxserverPaths,
+    db: &Connection,
+    runtime: &TailcatRuntime,
+    change: impl FnOnce(&mut TailcatState) -> Result<T>,
+) -> Result<(TailcatStateRecord, T)> {
+    let _writes = TAILCAT_STATE_WRITES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // A caller already inside a transaction keeps it; otherwise this write takes SQLite's lock.
+    let transaction = if db.is_autocommit() {
+        Some(rusqlite::Transaction::new_unchecked(
+            db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?)
+    } else {
+        None
+    };
     let repository = TailcatRepository::new(db);
-    let mut state = read_tailcat_state_or_default(&repository)?;
-    match update {
-        TailcatStateUpdate::SetEnabled { enabled } => state.enabled = enabled,
-        TailcatStateUpdate::SetPorts { ports } => {
-            if let Some(port) = ports.iter().find(|port| !tailcat_port_allowed(**port)) {
-                anyhow::bail!(
-                    "Easy Connect serves only SSH (port {}) and Ghostex (port {}); port {port} can't be added.",
-                    crate::remote_access::ssh_status::DEFAULT_SSH_PORT,
-                    tailcat_gxserver_api_port()
-                );
-            }
-            state.ports = normalize_tailcat_ports(ports)
-        }
-        TailcatStateUpdate::SetAllowedClientKeys {
-            allowed_client_keys,
-        } => {
-            let next = normalize_tailcat_client_keys(allowed_client_keys);
-            if !state.enabled && adds_client_key(&state.allowed_client_keys, &next) {
-                anyhow::bail!(EASY_CONNECT_OFF_REFUSAL);
-            }
-            state.allowed_client_keys = next;
-        }
-        TailcatStateUpdate::SetRelay { mode, custom_host } => {
-            let custom_host = custom_host.trim().to_string();
-            // An empty field keeps the last hostname, so the switch back to Custom restores it.
-            let custom_host = if custom_host.is_empty() {
-                state.relay.custom_host
-            } else {
-                custom_host
-            };
-            if mode == TailcatRelayMode::Custom
-                && normalize_tailcat_relay_host(&custom_host).is_none()
-            {
-                anyhow::bail!("Enter a relay hostname such as relay.example.com.");
-            }
-            state.relay = TailcatRelaySetting { mode, custom_host };
-        }
+    let before = read_tailcat_state_or_default(&repository)?;
+    let mut state = before.clone();
+    let out = change(&mut state)?;
+    if !state.enabled && adds_client_key(&before.allowed_client_keys, &state.allowed_client_keys) {
+        anyhow::bail!(EASY_CONNECT_OFF_REFUSAL);
     }
     let record = repository.upsert_state(state)?;
+    if let Some(transaction) = transaction {
+        transaction.commit()?;
+    }
     runtime.apply(paths, &record.state);
-    Ok(record)
+    Ok((record, out))
 }
 
 /*
 CDXC:RemotePairing 2026-11-13 DECISION:
-User (Sebastian, after 11.6.0 put his SSH-only iPhone on a computer's Easy Connect allow-list with no click): "Remove ALL. Do not auto force Easy Connect ever. ... We cannot auto promote this from the phone without the users approval ... Just use whatever the user asked to use", and as a hard rule: while Easy Connect is off on a computer, no key can be added to its allow-list by any path (pairing, a phone's request, the API, the CLI); it is refused. Every allow-list write goes through `apply_tailcat_state_update`, so the refusal lives there; taking keys off always works.
+User (Sebastian, after 11.6.0 put his SSH-only iPhone on a computer's Easy Connect allow-list with no click): "Remove ALL. Do not auto force Easy Connect ever. ... We cannot auto promote this from the phone without the users approval ... Just use whatever the user asked to use", and as a hard rule: while Easy Connect is off on a computer, no key can be added to its allow-list by any path (pairing, a phone's request, the API, the CLI); it is refused. Every tailcat state write goes through `change_tailcat_state`, so the refusal lives there; taking keys off always works.
 SEE-ALSO: remote_access/pair_device.rs (`finish_pairing`, `/api/pairOverSsh` refuse before anything is written), apps/mobile/app/src/machines/sshPairing.ts.
 */
 /// The refusal for a key added while Easy Connect is off.

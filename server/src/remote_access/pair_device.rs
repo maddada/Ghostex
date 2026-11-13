@@ -1345,6 +1345,9 @@ pub fn register_computer_keys_signed(
         Err(super::paired_devices::LinkKeyError::HeldByAnotherDevice { name, paired }) => {
             Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired })
         }
+        Err(super::paired_devices::LinkKeyError::EasyConnectOff) => Err(
+            PairDeviceError::BadRequest(crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string()),
+        ),
         Err(_) => Err(PairDeviceError::BadRequest(
             "keys must name app or server, each with a nodekey: public key.".to_string(),
         )),
