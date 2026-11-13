@@ -3983,7 +3983,19 @@ version of the Projects features in Cursor and Claude Code.
   pill. In any
   agent's chat, a question from a reply that you haven't answered shows here
   too: a one-click question as a row with its answers on it, a form or page as
-  "N questions open" with Open. The ? pill counts only questions too old to be
+  "N questions open" with Open. A form's or page's row has **Reply** beside
+  Open: your words go to the agent tagged with the questions it still asks
+  ("Q2759 Q2760: your words"), and the chat box is left as it was. Its ⋯ and
+  right-click menus have **Mention in chat box**, which puts the form's name (a
+  page's as a link to it) and those tags in the chat box where the cursor is; a
+  work item row's Mention reads Mention in chat box too. A question form's row is
+  marked with a pink checklist. Every row's ⋯ menu, which a right-click on its
+  title line also opens, has **Copy as Markdown** (from 11.6.0): a work item ask
+  or one-click question copies its title as a heading, its full text and its
+  answers ("Answers: A, B (recommended: A)"); a form copies its title and each
+  question it still asks with its text and answers; a page copies its title as a
+  link and the tags it still asks. The phone has Reply, Mention in chat box and
+  Copy as Markdown in the same rows. The ? pill counts only questions too old to be
   shown here. On the computer, the list steps aside while the Work panel is open
   beside the chat and while you type a long message.
 - **Nothing you click moves the chat**: the ? pill, a Q12 tag in a message, a
@@ -4159,7 +4171,7 @@ file in place. From a terminal or another agent: `ghostex coordinator create --t
 promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's Advanced > Make Coordinator on its rows: that computer installs the coordinator skill and keeps the coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
-[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>]` (`--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
+[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>] [--read-only]` (`--read-only`, from 11.6.0, starts a thread that can read but not change anything: Claude in Plan mode, Codex in its read-only sandbox with approval on request, with accept-all taken off its command; it stays read-only whenever it is resumed, restarted, woken or started in a worktree, an agent without a read-only mode is refused before any session exists, and a thread on another computer whose Ghostex is too old to honour it is ended before its brief instead of running with full rights; `--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
 <thread> [--keep-open]` (mark done and close its session), `ghostex coordinator
 reopen <thread>` (resume a closed thread), `ghostex coordinator unlink <thread>` (take a
 thread out of the coordinator's tree: it stays running as an ordinary session of its
@@ -7096,6 +7108,13 @@ that item's next update. An item only the page can finish (Needs you) opens
 Settings > Updates.
 
 ## Appearance and app
+
+Reset all settings to defaults (Settings > About) puts every setting and the app
+icon back to their defaults. It asks first, in a "Reset all settings?" dialog
+that needs a second click (from 11.6.0; before, one click reset everything with no
+way back). While a Settings confirmation such as this one, Skip permissions? or
+Install Hex? is open, the keys you type stay in it instead of going into the
+Settings search behind it.
 
 Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
