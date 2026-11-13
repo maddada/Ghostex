@@ -1,6 +1,6 @@
 //! `cargo xtask format` (the full formatting pass) and the format check at the end of `cargo xtask typecheck`.
 //! Both cover the app-owned files in tooling/format/scope.json: `cargo fmt` per crate, each from inside its own folder so it
-//! uses that crate's pinned toolchain and edition, and prettier over the globs. Agents' edits are formatted as they happen by
+//! uses that crate's pinned toolchain and edition, and oxfmt (pinned in package.json) over the globs. Agents' edits are formatted as they happen by
 //! tooling/format/format-edited-file.mjs; this is the pass for everything else and the gate that nothing slipped through.
 
 use std::process::{Command, Output};
@@ -11,7 +11,7 @@ use crate::util::{bun_x, command, describe, root, spawn_error, Res};
 
 struct Scope {
     crates: Vec<String>,
-    prettier_globs: Vec<String>,
+    oxfmt_globs: Vec<String>,
 }
 
 fn scope() -> Res<Scope> {
@@ -30,7 +30,7 @@ fn scope() -> Res<Scope> {
     };
     Ok(Scope {
         crates: list("rustCrates")?,
-        prettier_globs: list("prettierGlobs")?,
+        oxfmt_globs: list("oxfmtGlobs")?,
     })
 }
 
@@ -40,10 +40,25 @@ fn cargo_fmt(krate: &str, extra: &[&str]) -> Command {
     cargo
 }
 
-fn prettier(scope: &Scope, mode: &str) -> Command {
-    let mut prettier = bun_x("prettier", [mode]);
-    prettier.args(&scope.prettier_globs);
-    prettier
+/// oxfmt over the globs. oxfmt matches a glob without a slash (`*.md`) at any depth, unlike prettier, so those root-level
+/// globs run on their own with `!*/**` (which would otherwise exclude every other glob's files too).
+fn oxfmt(scope: &Scope, mode: &str) -> Vec<Command> {
+    let (root_globs, nested_globs): (Vec<&String>, Vec<&String>) = scope
+        .oxfmt_globs
+        .iter()
+        .partition(|glob| !glob.contains('/'));
+    let mut commands = Vec::new();
+    if !nested_globs.is_empty() {
+        let mut nested = bun_x("oxfmt", [mode]);
+        nested.args(nested_globs);
+        commands.push(nested);
+    }
+    if !root_globs.is_empty() {
+        let mut root = bun_x("oxfmt", [mode]);
+        root.args(root_globs).arg("!*/**");
+        commands.push(root);
+    }
+    commands
 }
 
 /// Every formatter at once, each on its own thread, so the slowest crate sets the time.
@@ -73,7 +88,7 @@ pub fn run(args: &[String]) -> Res<i32> {
         .iter()
         .map(|krate| cargo_fmt(krate, &[]))
         .collect();
-    commands.push(prettier(&scope, "--write"));
+    commands.extend(oxfmt(&scope, "--write"));
     let mut failed = 0;
     for handle in run_all(commands) {
         let (name, output) = handle.join().map_err(|_| "a formatter thread panicked")??;
@@ -86,9 +101,9 @@ pub fn run(args: &[String]) -> Res<i32> {
         }
     }
     if failed == 0 {
-        // prettier --write lists every file it read; the summary is enough.
+        // The summary is enough.
         println!(
-            "Formatted {} Rust crates and the prettier globs in tooling/format/scope.json.",
+            "Formatted {} Rust crates and the oxfmt globs in tooling/format/scope.json.",
             scope.crates.len()
         );
     }
@@ -105,7 +120,7 @@ pub fn start_check() -> Res<PendingCheck> {
         .iter()
         .map(|krate| cargo_fmt(krate, &["--check", "--", "--files-with-diff"]))
         .collect();
-    commands.push(prettier(&scope, "--list-different"));
+    commands.extend(oxfmt(&scope, "--list-different"));
     Ok(PendingCheck(run_all(commands)))
 }
 
