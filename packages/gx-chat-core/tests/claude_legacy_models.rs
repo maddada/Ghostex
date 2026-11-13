@@ -89,7 +89,7 @@ fn a_starred_or_running_older_fable_stays_in_legacy_models() {
             "Fable 5.2 ⌥2",
             "Sonnet 5.5 ⌥3",
             "Haiku 5.5 ⌥4",
-            "Legacy models (1)",
+            "Legacy models (9)",
         ]
     );
     assert_eq!(
@@ -99,7 +99,7 @@ fn a_starred_or_running_older_fable_stays_in_legacy_models() {
             "Opus 5.5 ⌥2",
             "Sonnet 5.5 ⌥3",
             "Haiku 5.5 ⌥4",
-            "Legacy models (1)",
+            "Legacy models (9)",
         ]
     );
     assert_eq!(
@@ -110,7 +110,15 @@ fn a_starred_or_running_older_fable_stays_in_legacy_models() {
             "Sonnet 5.5 ⌥3",
             "Haiku 5.5 ⌥4",
             "Fable 5.1 ⌥5 ★ legacy",
-            "Legacy models (1)",
+            "Fable 5 ⌥6 legacy",
+            "Opus 5 ⌥7 legacy",
+            "Opus 4.8 ⌥8 legacy",
+            "Opus 4.7 ⌥9 legacy",
+            "Opus 4.6 legacy",
+            "Sonnet 5 legacy",
+            "Sonnet 4.6 legacy",
+            "Haiku 4.5 legacy",
+            "Legacy models (9)",
         ]
     );
 }
@@ -135,7 +143,15 @@ fn a_new_fable_moves_the_last_one_into_legacy_models() {
             "Haiku 5.5 ⌥4",
             "Fable 5.2 ⌥5 legacy",
             "Fable 5.1 ⌥6 legacy",
-            "Legacy models (2)",
+            "Fable 5 ⌥7 legacy",
+            "Opus 5 ⌥8 legacy",
+            "Opus 4.8 ⌥9 legacy",
+            "Opus 4.7 legacy",
+            "Opus 4.6 legacy",
+            "Sonnet 5 legacy",
+            "Sonnet 4.6 legacy",
+            "Haiku 4.5 legacy",
+            "Legacy models (10)",
         ]
     );
 }
