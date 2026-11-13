@@ -12,7 +12,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(key) = self.agents_chat_remote_key_for_session(session_id) else {
+        let Some(key) = self.remote_chat_file_key(session_id) else {
             return;
         };
         self.open_remote_session_chat_file_for_key(
@@ -24,6 +24,19 @@ impl GhostexGpuiApp {
             window,
             cx,
         );
+    }
+
+    /// The session on another computer whose chat `session_id` shows: an Agents tab of the remote
+    /// project on screen, or a side chat in the view panel (a coordinator kept beside any project),
+    /// whose links were looked up on this computer before and failed as a missing project folder.
+    pub(crate) fn remote_chat_file_key(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<GpuiRemoteAttachSessionKey> {
+        match self.workspace_terminal_key_for_shell_session(session_id)? {
+            GpuiWorkspaceTerminalSessionKey::Remote(key) => Some(key),
+            GpuiWorkspaceTerminalSessionKey::Local(_) => None,
+        }
     }
 
     /// CDXC:SessionChat 2026-09-23 WHY:
@@ -57,7 +70,7 @@ impl GhostexGpuiApp {
             })
         else {
             self.report_session_chat_file_open_failure(
-                "That remote session's project is no longer active.",
+                "Files shows the project on screen. Open this chat's project, then click the link again.",
                 cx,
             );
             return;
@@ -160,7 +173,7 @@ impl GhostexGpuiApp {
         key: &GpuiRemoteAttachSessionKey,
         path: &str,
         project_path: Option<&str>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(target) = self.gpui_remote_gxserver_request_target(&key.remote_machine_id) else {
@@ -194,6 +207,10 @@ impl GhostexGpuiApp {
                 browser_favicon_percent_decode(url_path, GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS)
                     .and_then(|bytes| String::from_utf8(bytes).ok())
             else {
+                self.report_session_chat_file_open_failure(
+                    "That file link is not a path Files can open.",
+                    cx,
+                );
                 return;
             };
             decoded
@@ -239,10 +256,21 @@ impl GhostexGpuiApp {
         // CDXC:Docs 2026-11-11 WHY: the remote check reads the chat's whole Files and links list,
         // a few seconds on a long chat, and nothing showed meanwhile, so a click looked like it did
         // nothing. The opening toast shows at once, and the failure replaces it with the reason.
-        self.report_session_chat_file_opening("Files view", Path::new(&path), cx);
+        self.report_remote_chat_file_waiting(Path::new(&path), cx);
         let key = key.clone();
+        let display_path = path.clone();
         let background = cx.background_executor().clone();
-        cx.spawn(async move |this, cx| {
+        /*
+        CDXC:Docs 2026-11-13 WHY: on a Mac, a link in the chat of a coordinator on the user's Windows
+        PC showed "Opening file in Files view" and then nothing, while the PC answered the same check
+        in under a second through the same tunnel. The answer was handled through `cx.spawn` and
+        `update_in`, which looks the app up in whichever window last drew it (a menu or tooltip
+        window can be that window, and a closed one leaves none) and dropped the failure with
+        `let _`, and a project switch meanwhile ended it without a word. The answer now comes back
+        in the window the link was clicked in, and every way it can end says so: Files shows the
+        file, or a toast says why it didn't.
+        */
+        cx.spawn_in(window, async move |this, cx| {
             let result = background
                 .spawn(async move {
                     gpui_remote_gxserver_rpc_result(
@@ -253,14 +281,28 @@ impl GhostexGpuiApp {
                     )
                 })
                 .await;
-            let _ = this.update_in(cx, |this, window, cx| {
+            let shown = this.update_in(cx, |this, window, cx| {
                 let active = gpui_remote_scoped_project_id(&key.remote_machine_id, &key.project_id);
                 if this.active_sidebar_project_id().as_deref() != Some(active.as_str()) {
                     this.remove_gpui_app_toast(GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID, cx);
+                    this.report_session_chat_file_open_failure(
+                        "Another project was opened before the file was ready. Go back to this chat and click the link again.",
+                        cx,
+                    );
                     return;
                 }
                 match result {
                     Ok(value) if value.get("error").is_none() && value.get("file").is_some() => {
+                        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Manage)
+                            || !this.titlebar_mode_available(TitlebarMode::Manage)
+                        {
+                            this.remove_gpui_app_toast(GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID, cx);
+                            this.report_session_chat_file_open_failure(
+                                "Files view is not available for this project.",
+                                cx,
+                            );
+                            return;
+                        }
                         if outside {
                             this.native_docs
                                 .remote_chat_files
@@ -268,6 +310,20 @@ impl GhostexGpuiApp {
                         }
                         this.pending_docs_file_open = Some(relative);
                         this.switch_workarea_from_hotkey(TitlebarMode::Manage, window, cx);
+                        if this.active_mode != TitlebarMode::Manage {
+                            this.pending_docs_file_open = None;
+                            this.remove_gpui_app_toast(GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID, cx);
+                            this.report_session_chat_file_open_failure(
+                                "Files view couldn't be opened here. Try the link again.",
+                                cx,
+                            );
+                            return;
+                        }
+                        this.report_session_chat_file_opening(
+                            "Files view",
+                            Path::new(&display_path),
+                            cx,
+                        );
                         this.mark_project_editor_mode_awake(TitlebarMode::Manage, cx);
                         this.focus_project_editor_surface(TitlebarMode::Manage, window, cx);
                         if !this.deliver_pending_docs_file_open(cx) {
@@ -282,8 +338,38 @@ impl GhostexGpuiApp {
                     }
                 }
             });
+            // The window the link was clicked in closed meanwhile: the waiting toast must not stay.
+            if shown.is_err() {
+                let _ = this.update(cx, |this, cx| {
+                    this.remove_gpui_app_toast(GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID, cx);
+                    this.report_session_chat_file_open_failure(
+                        "The window closed before the file was ready. Click the link again.",
+                        cx,
+                    );
+                });
+            }
         })
         .detach();
+    }
+
+    /// The opening toast while the session's computer checks the file: it spins and stays until
+    /// the answer replaces it, so a slow check never looks like a click that did nothing.
+    fn report_remote_chat_file_waiting(&mut self, file_path: &Path, cx: &mut gpui::Context<Self>) {
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                copy_text: None,
+                id: GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID.to_string(),
+                level: GpuiAppToastLevel::from_raw(None),
+                title: "Opening file in Files view".to_string(),
+                description: Some(file_path.to_string_lossy().into_owned()),
+                loading: true,
+                persistent: true,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                action: None,
+                epoch: 0,
+            },
+            cx,
+        );
     }
 }
 

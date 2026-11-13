@@ -117,10 +117,7 @@ impl GhostexGpuiApp {
         if trimmed.is_empty() || trimmed.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
             return;
         }
-        if self
-            .agents_chat_remote_key_for_session(session_id)
-            .is_some()
-        {
+        if self.remote_chat_file_key(session_id).is_some() {
             self.open_remote_session_chat_file(
                 session_id,
                 trimmed,
@@ -181,10 +178,7 @@ impl GhostexGpuiApp {
         if trimmed.is_empty() || trimmed.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
             return;
         }
-        if self
-            .agents_chat_remote_key_for_session(session_id)
-            .is_some()
-        {
+        if self.remote_chat_file_key(session_id).is_some() {
             self.report_session_chat_file_open_failure(
                 "That file is on the session's computer, so this computer's Browser cannot open it.",
                 cx,
