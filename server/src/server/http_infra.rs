@@ -134,19 +134,29 @@ pub(crate) async fn read_json_body(
             size_bytes: Some(length),
         });
     }
-    let bytes = to_bytes(body, limit_bytes + 1).await.map_err(|error| {
-        // A declared length within the limit, or any error but the limit's, is a body that
-        // stopped before its end (the client's link dropped while it sent).
-        if declared.is_none() && hit_length_limit(&error) {
-            ReadBodyError::TooLarge { size_bytes: None }
-        } else {
-            ReadBodyError::Incomplete
+    let idle = std::time::Duration::from_secs(crate::constants::GXSERVER_BODY_IDLE_TIMEOUT_SECS);
+    let mut stream = body.into_data_stream();
+    let mut bytes = Vec::with_capacity(
+        declared
+            .unwrap_or(0)
+            .min(GXSERVER_JSON_BODY_LIMIT_BYTES as u64) as usize,
+    );
+    loop {
+        match tokio::time::timeout(idle, stream.next()).await {
+            Ok(None) => break,
+            Ok(Some(Ok(chunk))) => {
+                if bytes.len() + chunk.len() > limit_bytes {
+                    return Err(ReadBodyError::TooLarge { size_bytes: None });
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            // The link stalled or dropped while the client sent the body.
+            Err(_) | Ok(Some(Err(_))) => {
+                return Err(ReadBodyError::Incomplete {
+                    received_bytes: bytes.len() as u64,
+                })
+            }
         }
-    })?;
-    if bytes.len() > limit_bytes {
-        return Err(ReadBodyError::TooLarge {
-            size_bytes: Some(bytes.len() as u64),
-        });
     }
     let text = std::str::from_utf8(&bytes)
         .map_err(|_| ReadBodyError::InvalidJson)?
@@ -166,27 +176,24 @@ pub(crate) enum ReadBodyError {
     TooLarge {
         size_bytes: Option<u64>,
     },
-    /// The body ended before its end: the connection dropped while the client sent it.
-    Incomplete,
-}
-
-/// Whether `to_bytes` stopped at its size limit (`http_body_util::LengthLimitError`, which
-/// gxserver can only name by what it says) rather than at a body that broke off.
-fn hit_length_limit(error: &axum::Error) -> bool {
-    let mut cause: Option<&(dyn std::error::Error + 'static)> = Some(error);
-    while let Some(current) = cause {
-        if current.to_string().contains("length limit exceeded") {
-            return true;
-        }
-        cause = current.source();
-    }
-    false
+    /// The body ended before its end: the connection dropped or stalled while the client sent it.
+    Incomplete {
+        received_bytes: u64,
+    },
 }
 
 #[derive(Clone)]
 pub(crate) struct BodySizeLimit {
     pub(crate) size_bytes: Option<u64>,
     pub(crate) limit_bytes: usize,
+}
+
+/// Why a request body could not be read, for the `apiRequest` log line.
+#[derive(Clone)]
+pub(crate) struct BodyReadFailure {
+    pub(crate) code: &'static str,
+    pub(crate) received_bytes: Option<u64>,
+    pub(crate) declared_bytes: Option<u64>,
 }
 
 #[derive(Clone)]

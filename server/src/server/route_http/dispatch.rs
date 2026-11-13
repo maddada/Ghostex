@@ -410,10 +410,15 @@ pub(in crate::server) async fn route_http(
                     size_bytes,
                     limit_bytes: body_limit_bytes,
                 });
+                response.response.extensions_mut().insert(BodyReadFailure {
+                    code: "payloadTooLarge",
+                    received_bytes: None,
+                    declared_bytes: content_length(&parts.headers),
+                });
                 return response;
             }
             Err(ReadBodyError::InvalidJson) => {
-                return routed_json(
+                let mut response = routed_json(
                     Some(endpoint.path),
                     StatusCode::BAD_REQUEST,
                     rpc_error(
@@ -422,9 +427,15 @@ pub(in crate::server) async fn route_http(
                         Some(request_id),
                     ),
                 );
+                response.response.extensions_mut().insert(BodyReadFailure {
+                    code: "badRequest",
+                    received_bytes: None,
+                    declared_bytes: content_length(&parts.headers),
+                });
+                return response;
             }
-            Err(ReadBodyError::Incomplete) => {
-                return routed_json(
+            Err(ReadBodyError::Incomplete { received_bytes }) => {
+                let mut response = routed_json(
                     Some(endpoint.path),
                     StatusCode::BAD_REQUEST,
                     rpc_error(
@@ -433,6 +444,12 @@ pub(in crate::server) async fn route_http(
                         Some(request_id),
                     ),
                 );
+                response.response.extensions_mut().insert(BodyReadFailure {
+                    code: "incompleteRequest",
+                    received_bytes: Some(received_bytes),
+                    declared_bytes: content_length(&parts.headers),
+                });
+                return response;
             }
         }
     } else {
