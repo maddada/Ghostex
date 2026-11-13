@@ -46,18 +46,10 @@ fn saved_side_width() -> Option<f32> {
 /// CDXC:ProjectBoard 2026-11-13 WHY: the divider's width is the user's preference, so it is saved only when they drag; a panel that is narrower for a while clamps what is shown (`side_width_now`) without rewriting it.
 #[cfg(not(target_arch = "wasm32"))]
 fn save_side_width(width: f32) {
-    let path = crate::app::helpers::native_chrome_settings_path();
-    let mut settings = crate::app::helpers::read_json_object(&path).unwrap_or_default();
     let Some(number) = serde_json::Number::from_f64(f64::from(width.round())) else {
         return;
     };
-    settings.insert(BEADS_SIDE_WIDTH_SETTING.to_string(), Value::Number(number));
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(data) = serde_json::to_vec_pretty(&Value::Object(settings)) {
-        let _ = std::fs::write(path, data);
-    }
+    crate::app::helpers::write_native_chrome_number_setting(BEADS_SIDE_WIDTH_SETTING, number);
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -74,6 +66,13 @@ impl GhostexGpuiApp {
     /// CDXC:ProjectBoard 2026-11-13 WHY: the Tree resolved its project through the git scope and sent only the project id, while the Board used the sidebar's board context with the folder and remote route, so the two could ask about different folders or computers and the Tree could show a setup card while the Board showed beads.
     pub(crate) fn beads_target(&self) -> Option<BeadsTarget> {
         let project_key = self.git_active_scoped_project_id()?;
+        // A projectless scope has no Beads workspace of its own (the check this had before PR #599).
+        if self
+            .git_scope_for_project(&project_key)
+            .is_ok_and(|scope| scope.projectless)
+        {
+            return None;
+        }
         let context = self.native_kanban_bridge_context()?;
         let machine = context
             .remote_machine_id

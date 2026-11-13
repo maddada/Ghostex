@@ -332,21 +332,25 @@ pub(crate) fn persist_sidebar_width_setting(width: f32) {
     CDXC:Telemetry 2026-06-23-13:18:
     The GPUI settings write is limited to merging the finite numeric sidebarWidth into the existing native settings JSON object. Do not add project/session/browser/runtime fields here, and do not persist paths, names, command text, URLs, page titles, terminal content, tokens, cookies, secrets, stdout/stderr, or raw CEF/sidebar payloads from GPUI state.
     */
+    let Some(number) = serde_json::Number::from_f64(width as f64) else {
+        return;
+    };
+    write_native_chrome_number_setting("sidebarWidth", number);
+}
+
+/// Merges one number into the native settings file (`sidebarWidth`, the Beads view's
+/// `beadsDetailsWidth`) and replaces the file in one step.
+///
+/// CDXC:Settings 2026-11-13 WHY: PR #599 added a second width to this file and saved it with a
+/// plain `fs::write`, like `sidebarWidth`; a crash or a second save in the middle of that write left
+/// a half-written file that reads as no settings at all, losing every saved width. Both now write a
+/// temporary file and rename it over the old one (`write_durably`).
+pub(crate) fn write_native_chrome_number_setting(key: &str, number: serde_json::Number) {
     let path = native_chrome_settings_path();
     let mut settings = read_json_object(&path).unwrap_or_default();
-    settings.insert(
-        "sidebarWidth".to_string(),
-        serde_json::Value::Number(
-            serde_json::Number::from_f64(width as f64)
-                .expect("clamped sidebar width should be finite"),
-        ),
-    );
-
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
+    settings.insert(key.to_string(), serde_json::Value::Number(number));
     if let Ok(data) = serde_json::to_vec_pretty(&serde_json::Value::Object(settings)) {
-        let _ = fs::write(path, data);
+        let _ = ghostex_paths::durable_file::write_durably(&path, &data);
     }
 }
 
