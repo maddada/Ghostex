@@ -1669,6 +1669,13 @@ image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session (with
 the Session notes extension on).
+**Quote or reply to part of the chat**: select any text in the chat (a reply,
+your own message, tool output or code) and a small bar of buttons shows by
+where you let go: Copy, Add to Chat (puts the text in the chat box as a quote)
+and Reply (opens a small box for your answer, which goes in under the quote).
+The bar goes away when you click elsewhere, scroll or press Escape. The same
+three are in the right-click menu. On the computer, pointing at a command in a
+reply shows Copy and Paste in terminal at the command's bottom right.
 **Tips on new chats**: a new chat shows a card of tips under "What should we
 build with …?", one tip at a time: first how to report a bug (Send Bug /
 Feedback with Collect more data with an agent), split the view by dragging a

@@ -4,8 +4,8 @@
 //! each runs, is decided in packages/gx-chat-core/src/transcript/run_command.rs. A fence's arrives
 //! as `run` on its header JSON and gets an icon-only Run in terminal button beside wrap and copy (`code_block.rs`). An
 //! inline span's arrives as a `ghostex-run:` link drawn here as the span itself, with a small bar
-//! above it on hover holding Copy and Paste in terminal, which never covers the span's text. The
-//! presses are the core's `runInTerminal` and `pasteInTerminal` actions, which the host performs
+//! at its bottom right corner on hover holding Copy and Paste in terminal, which never covers the
+//! span's text. The presses are the core's `runInTerminal` and `pasteInTerminal` actions, which the host performs
 //! (apps/desktop/src/app/session_chat/run_in_terminal.rs).
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
@@ -43,8 +43,11 @@ pub(super) fn run_button(
 }
 
 /// The look an inline command span keeps once it is a link: the transcript's inline code chip, and
-/// the bar of Copy and Paste in terminal above it while the pointer is on it, in the sidebar
-/// tooltip bubble's look (`in_window_bubble`, CDXC:Tooltips 2026-10-25). `None` for any other link.
+/// the bar of Copy and Paste in terminal at its bottom right corner while the pointer is on it, in
+/// the sidebar tooltip bubble's look (`in_window_bubble`, CDXC:Tooltips 2026-10-25). `None` for any
+/// other link.
+///
+/// CDXC:SessionChat 2026-11-13 DECISION: User: "For the ones we show next to a command, please make those appear on the bottom right of the terminal command box, not the top left like we do now." The bar hangs below the span, right-aligned to its right edge (above it, still right-aligned, only when the transcript has no room below); the gpui-component fork places it (`text/inline_link.rs`, `text/inline_flow.rs`).
 ///
 /// CDXC:Tooltips 2026-10-25 WHY: The bar is drawn by the transcript's text element inside the chat's own window, whose hover moves between the span and the bar; a frosted host window would take the pointer off the span and drop the bar, so it takes the bubble's in-window fill instead of the frosted host.
 pub(super) fn inline_presentation(
@@ -55,8 +58,6 @@ pub(super) fn inline_presentation(
     command_from_href(href)?;
     let encoded = href.strip_prefix(RUN_COMMAND_HREF_PREFIX)?;
     let code = super::markdown_style::inline_code(p);
-    let s = p.scale;
-    let bubble = crate::app::native_sidebar::link_chips::in_window_bubble(p.window_glass);
     Some(InlineLink {
         label: label.to_owned().into(),
         color: p.prose,
@@ -82,23 +83,30 @@ pub(super) fn inline_presentation(
                 icon: RUN_ICON.into(),
             },
         ],
-        hover_bar: Some(InlineLinkBar {
-            background: bubble.fill,
-            border_color: bubble.border,
-            border_width: px(1.0),
-            radius: px(gpui_component::tooltip::TOOLTIP_RADIUS * s),
-            padding: px(2.0 * s),
-            gap: px(2.0 * s),
-            spacing: px(2.0 * s),
-            button_size: px(22.0 * s),
-            button_radius: px(6.0 * s),
-            button_hover_background: crate::app::helpers::titlebar_popup_menu_foreground()
-                .opacity(0.1),
-            icon_size: px(14.0 * s),
-            icon_color: bubble.secondary,
-        }),
+        hover_bar: Some(hover_bar_look(p)),
         ..Default::default()
     })
+}
+
+/// The look of an inline command's hover bar, which the transcript selection's bar shares
+/// (`selection_bar.rs`): the sidebar tooltip bubble's in-window fill and edge, and icon buttons.
+pub(super) fn hover_bar_look(p: &ChatAppearance) -> InlineLinkBar {
+    let s = p.scale;
+    let bubble = crate::app::native_sidebar::link_chips::in_window_bubble(p.window_glass);
+    InlineLinkBar {
+        background: bubble.fill,
+        border_color: bubble.border,
+        border_width: px(1.0),
+        radius: px(gpui_component::tooltip::TOOLTIP_RADIUS * s),
+        padding: px(2.0 * s),
+        gap: px(2.0 * s),
+        spacing: px(2.0 * s),
+        button_size: px(22.0 * s),
+        button_radius: px(6.0 * s),
+        button_hover_background: crate::app::helpers::titlebar_popup_menu_foreground().opacity(0.1),
+        icon_size: px(14.0 * s),
+        icon_color: bubble.secondary,
+    }
 }
 
 /// A press on a link that belongs to an inline command, answered here: Copy copies the command,

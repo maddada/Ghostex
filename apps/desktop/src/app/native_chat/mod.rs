@@ -146,6 +146,7 @@ mod reply_arrival;
 mod reply_popover;
 mod rich_markdown;
 mod row_details;
+mod selection_bar;
 mod send_control;
 mod send_watch;
 mod tone_card;

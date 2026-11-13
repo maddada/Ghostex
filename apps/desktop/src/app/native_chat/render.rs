@@ -265,6 +265,14 @@ impl Render for NativeChatView {
         let board_dock = self.render_coordinator_board_dock(&p, cx);
         // A side chat says whose it is, with Bring back and Delete (side_chats.rs).
         let side_chat_bar = self.side_chat_bar(&p, cx);
+        // Copy, Add to Chat and Reply by a transcript selection (selection_bar.rs).
+        let selection_bar = if covered {
+            self.close_selection_bar(cx);
+            None
+        } else {
+            self.render_selection_bar(&p, window, cx)
+        };
+        let selection_bar_listeners = self.selection_bar_listeners(cx);
         let pane_bounds = self.session_details_pane_bounds();
         let chat = div()
             .id("native-session-chat")
@@ -305,6 +313,9 @@ impl Render for NativeChatView {
             .capture_action(cx.listener(Self::chat_zoom_in_action))
             .capture_action(cx.listener(Self::chat_zoom_out_action))
             .capture_action(cx.listener(Self::chat_zoom_reset_action))
+            .capture_key_down(cx.listener(|chat, event: &gpui::KeyDownEvent, _, cx| {
+                chat.selection_bar_key_down(event, cx)
+            }))
             .capture_key_down(cx.listener(Self::composer_key_down))
             .composer_input_actions(cx)
             .capture_key_up(cx.listener(|chat, _, _, _| chat.composer_held_key = None))
@@ -355,6 +366,8 @@ impl Render for NativeChatView {
             .children(body)
             .child(composer)
             .children(suggestion_shadow)
+            .child(selection_bar_listeners)
+            .children(selection_bar)
             .child(
                 gpui::canvas(
                     move |rect, window, cx| {

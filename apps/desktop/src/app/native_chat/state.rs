@@ -144,6 +144,8 @@ pub(crate) struct NativeChatView {
     pub(super) save_markdown_window: super::save_markdown::SaveMarkdownWindowState,
     /// The transcript menu's Reply popover (reply_popover.rs).
     pub(super) reply_popover: super::reply_popover::ReplyPopoverState,
+    /// The bar by a transcript selection (selection_bar.rs).
+    pub(super) selection_bar: super::selection_bar::SelectionBarState,
     pub(super) rewind_window: super::rewind::RewindWindowState,
     pub(super) image_viewer: super::image_viewer::ImageViewerState,
     /// The larger preview of one transcript table (table_preview/).
@@ -577,6 +579,7 @@ impl NativeChatView {
             context_editor_window: Default::default(),
             save_markdown_window: Default::default(),
             reply_popover: Default::default(),
+            selection_bar: Default::default(),
             rewind_window: Default::default(),
             image_viewer: Default::default(),
             table_preview: Default::default(),
