@@ -102,6 +102,11 @@
 
   // Calls a text-answering export with string arguments (each passed as pointer, length).
   function callText(name, leading, strings) {
+    // A page newer than its wasm (an export the build lacks) answers like an unknown op instead of
+    // throwing inside the shared page.
+    if (typeof wasm[name] !== 'function') {
+      return JSON.stringify({ error: { code: 'unknownOp', message: 'This core has no ' + name + '.' } });
+    }
     var args = strings.map(put);
     try {
       var flat = leading.slice();
