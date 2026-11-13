@@ -98,7 +98,9 @@ pub fn run(args: &[String]) -> Res<i32> {
                 bail!("Usage: cargo xtask test-server network <name> online|offline|probe");
             };
             validate_name(name)?;
+            let _lock = lock()?;
             let server = Server::load(name)?;
+            require_network_flag(&server)?;
             set_network(&server, state)?;
             println!("Test server {name}'s online check now sees: {state}.");
             warn_if_other_build(&server);
@@ -469,6 +471,7 @@ fn start(args: &[String]) -> Res<i32> {
                 eprintln!("Warning: it was started before test servers had their own zmx folder and server id check. Run `cargo xtask test-server stop {0}` and start it again.", existing.name);
             }
             if let Some(state) = &network {
+                require_network_flag(existing)?;
                 set_network(existing, state)?;
                 println!("Its online check now sees: {state}.");
                 warn_if_other_build(existing);
@@ -939,6 +942,23 @@ fn set_network(server: &Server, state: &str) -> Res {
         let staged = file.with_extension("new");
         fs::write(&staged, format!("{state}\n"))?;
         fs::rename(&staged, &file)?;
+    }
+    Ok(())
+}
+
+/// A server that runs was started before `--network-status-file` existed when its command line lacks it; it would keep the real check whatever the file says, so the change is refused with the restart that fixes it.
+fn require_network_flag(server: &Server) -> Res {
+    let Some(pid) = server.pid().filter(|_| server.health().is_some()) else {
+        return Ok(());
+    };
+    let command_line =
+        stdout_if_ok(Command::new("ps").args(["-o", "command=", "-p", &pid.to_string()]))
+            .unwrap_or_default();
+    if !command_line.contains("--network-status-file") {
+        bail!(
+            "Test server {0} was started without the network switch (before it existed). Restart it: cargo xtask test-server stop {0}, then start --name {0} again.",
+            server.name
+        );
     }
     Ok(())
 }

@@ -164,14 +164,8 @@ fn checkout_submodule(name: &str, path: &str, main: Option<&Path>) -> Res {
         .filter(|source| has_commit(source, &pin));
     if checkout.join(".git").exists() {
         // The checkout's own HEAD decides, never `git submodule status`: a module this command set up is not registered in the shared config, and status prints such a module as uninitialized whatever its HEAD is.
-        let head = stdout_if_ok(command("git").args([
-            "-C",
-            path,
-            "rev-parse",
-            "--verify",
-            "--quiet",
-            "HEAD",
-        ]));
+        let head =
+            stdout_if_ok(git().args(["-C", path, "rev-parse", "--verify", "--quiet", "HEAD"]));
         match head.as_deref().map(str::trim) {
             Some(head) if head == pin => println!("==> {path}: already checked out at its pin"),
             Some(head) => {
@@ -208,18 +202,18 @@ fn checkout_submodule(name: &str, path: &str, main: Option<&Path>) -> Res {
     }
     fs::create_dir_all(git_dir.parent().expect("a module folder has a parent"))?;
     check(
-        command("git")
+        git()
             .args(["init", "--quiet", "--separate-git-dir"])
             .arg(&git_dir)
             .arg(path),
     )?;
-    check(command("git").args(["-C", path, "remote", "add", "origin", &url]))?;
+    check(git().args(["-C", path, "remote", "add", "origin", &url]))?;
     fetch_pin(path, &pin, &url, local.as_deref())?;
     check_out_pin(path, &pin, &git_dir, &checkout)
 }
 
 fn fetch_pin(path: &str, pin: &str, url: &str, local: Option<&Path>) -> Res {
-    let mut fetch = command("git");
+    let mut fetch = git();
     fetch.args(["-C", path]);
     if let Some(source) = local {
         // The main checkout's copy may be shallow and its pin need not be a branch tip, so its upload-pack (started by this fetch, which is all these settings reach) may serve any commit it has.
@@ -238,18 +232,18 @@ fn fetch_pin(path: &str, pin: &str, url: &str, local: Option<&Path>) -> Res {
 
 fn check_out_pin(path: &str, pin: &str, git_dir: &Path, checkout: &Path) -> Res {
     check(
-        command("git")
+        git()
             .arg("--git-dir")
             .arg(git_dir)
             .args(["config", "core.worktree"])
             .arg(fs::canonicalize(checkout)?),
     )?;
-    check(command("git").args(["-C", path, "checkout", "--quiet", "--detach", pin]))
+    check(git().args(["-C", path, "checkout", "--quiet", "--detach", pin]))
 }
 
 fn has_commit(repository: &Path, commit: &str) -> bool {
     repository.join(".git").exists()
-        && stdout_if_ok(Command::new("git").arg("-C").arg(repository).args([
+        && stdout_if_ok(git().arg("-C").arg(repository).args([
             "cat-file",
             "-e",
             &format!("{commit}^{{commit}}"),
@@ -294,7 +288,9 @@ fn build_zmx_release() -> Res {
             command("bash")
                 .arg(root().join("apps/desktop/scripts/prepare-macos-runtime.sh"))
                 .env("GHOSTEX_LOCAL_START", "1")
-                .env("GHOSTEX_MACOS_ZMX_ONLY", "1"),
+                .env("GHOSTEX_MACOS_ZMX_ONLY", "1")
+                // An inherited ZMX_ROOT would build some other checkout's zmx, while test-server looks only in this one.
+                .env("ZMX_ROOT", root().join(".dependencies/zmx")),
         )
     } else {
         let zig = util::find_zig()?;
@@ -306,8 +302,24 @@ fn build_zmx_release() -> Res {
     }
 }
 
+/// Git run from the repository root, without the repository-location variables a Git hook or an agent's shell may carry: with `GIT_DIR` set, `git -C <submodule>` would read the outer repository instead.
+fn git() -> Command {
+    let mut git = command("git");
+    for variable in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    ] {
+        git.env_remove(variable);
+    }
+    git
+}
+
 fn git_stdout(dir: &Path, args: &[&str]) -> Res<String> {
-    let out = output(Command::new("git").arg("-C").arg(dir).args(args))?;
+    let out = output(git().arg("-C").arg(dir).args(args))?;
     if !out.status.success() {
         bail!(
             "git {} failed: {}",

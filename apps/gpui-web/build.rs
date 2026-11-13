@@ -32,8 +32,9 @@ fn main() {
     }
     // libghostty-vt as a static wasm32 archive, built by `cargo xtask web-build` with the same Zig and the same flags the desktop uses (apps/desktop/scripts/build-libghostty-vt.sh) plus `-Dtarget=wasm32-freestanding`. Linked whole so `src/ghostty_vt/`, the desktop's FFI wrapper, resolves.
     let vt_archive = Path::new(&manifest).join("target/libghostty-vt-wasm/lib/libghostty-vt.a");
-    println!("cargo:rerun-if-changed={}", vt_archive.display());
     if env::var("CARGO_CFG_TARGET_FAMILY").is_ok_and(|family| family.contains("wasm")) {
+        // Watched only here: a native build never makes this archive, and a watched missing file reruns this script (and Zig) on every build.
+        println!("cargo:rerun-if-changed={}", vt_archive.display());
         assert!(
             vt_archive.exists(),
             "run `cargo xtask web-build`, which builds {}",
