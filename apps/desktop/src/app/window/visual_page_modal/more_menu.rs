@@ -41,13 +41,20 @@ enum MoreAction {
     Snooze,
 }
 
-/// The menu's actions, in the order of the panel's rows (`more_menu_panel::menu_rows`).
-const ACTIONS: [MoreAction; 4] = [
-    MoreAction::Export,
-    MoreAction::Import,
-    MoreAction::OpenInBrowser,
-    MoreAction::Snooze,
-];
+/// The menu's actions, in the order of the panel's rows (`more_menu_panel::menu_rows`): Snooze
+/// first while the page waits for answers.
+fn actions(snooze: bool) -> Vec<MoreAction> {
+    let mut actions = Vec::with_capacity(4);
+    if snooze {
+        actions.push(MoreAction::Snooze);
+    }
+    actions.extend([
+        MoreAction::Export,
+        MoreAction::Import,
+        MoreAction::OpenInBrowser,
+    ]);
+    actions
+}
 
 /// The open menu: where it is, its window, and whether its Snooze lengths show beside it.
 #[derive(Clone, Copy)]
@@ -94,6 +101,7 @@ impl GpuiVisualPageModalWindow {
             return;
         };
         let snooze = self.can_snooze();
+        let light = self.glass.light;
         let view = cx.entity();
         show_frosted_host(
             FrostedHostKind::PageWindowMenu,
@@ -104,11 +112,11 @@ impl GpuiVisualPageModalWindow {
                 let view = view.clone();
                 panel(
                     "visual-page-more-menu",
-                    menu_ink(),
+                    menu_ink(light),
                     menu_rows(snooze),
-                    menu.snooze.then_some(ACTIONS.len() - 1),
+                    menu.snooze.then_some(0),
                     Rc::new(move |index, cx| {
-                        let Some(action) = ACTIONS.get(index).copied() else {
+                        let Some(action) = actions(snooze).get(index).copied() else {
                             return;
                         };
                         view.update(cx, |this, cx| this.run_more_action(action, cx));
@@ -124,8 +132,8 @@ impl GpuiVisualPageModalWindow {
         }
         // Beside the menu's Snooze row, on the side toward the page: the menu sits at the window's
         // right, so its lengths open to its left.
-        let row_top = menu.frame.top()
-            + px(6.0 + 1.0 + (ACTIONS.len() - 1) as f32 * SIDEBAR_MENU_ROW_HEIGHT - 6.0);
+        // Snooze is the menu's first row: the lengths' first row lines up with it.
+        let row_top = menu.frame.top() + px(1.0);
         let sub = Bounds::new(
             point(
                 (menu.frame.left() - px(SUBMENU_WIDTH + SUBMENU_GAP)).max(px(8.0)),
@@ -146,7 +154,7 @@ impl GpuiVisualPageModalWindow {
                 let view = view.clone();
                 panel(
                     "visual-page-snooze-menu",
-                    menu_ink(),
+                    menu_ink(light),
                     snooze_rows(),
                     None,
                     Rc::new(move |index, cx| {
@@ -311,23 +319,38 @@ impl GpuiVisualPageModalWindow {
     }
 }
 
-/// The app's menu colours: frosted under window glass, the sidebar menu's solid fill otherwise.
-fn menu_ink() -> MenuInk {
-    use crate::app::helpers::{
-        popup_menu_surface, titlebar_popup_menu_background, titlebar_popup_menu_border_color,
-        titlebar_popup_menu_foreground, titlebar_popup_menu_hover_color,
-    };
-    let foreground = titlebar_popup_menu_foreground();
-    MenuInk {
-        foreground,
-        muted: foreground.opacity(0.55),
-        hover: titlebar_popup_menu_hover_color(),
-        border: titlebar_popup_menu_border_color(),
-        fill: if frosted_hosting_active() {
-            popup_menu_surface()
-        } else {
-            titlebar_popup_menu_background()
-        },
-        row_height: SIDEBAR_MENU_ROW_HEIGHT,
+/// The menus' colours: the page's own light-gray glass, as the window's round controls wear it
+/// (`ControlGlass` in visual_page_modal.rs), white glass in light mode; solid without window glass.
+///
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// User, of the ⋯ menu and its Snooze lengths drawn in the app's dark menu fill over the page's dusk: the user hates black on the glass design, so both take a frosted light-gray glass (white in light mode) like the page's own controls. Same day, "put snooze as top option here": Snooze is the menu's first row (`more_menu_panel::menu_rows`).
+fn menu_ink(light: bool) -> MenuInk {
+    let frosted = frosted_hosting_active();
+    if light {
+        MenuInk {
+            foreground: gpui::rgb(0x18181b).into(),
+            muted: gpui::rgb(0x71717b).into(),
+            hover: gpui::rgba(0x0000000f).into(),
+            border: gpui::rgba(0x4343432e).into(),
+            fill: if frosted {
+                gpui::rgba(0xffffffd6).into()
+            } else {
+                gpui::rgb(0xf7f7f8).into()
+            },
+            row_height: SIDEBAR_MENU_ROW_HEIGHT,
+        }
+    } else {
+        MenuInk {
+            foreground: gpui::rgb(0xf4f4f5).into(),
+            muted: gpui::rgb(0xb4b4bb).into(),
+            hover: gpui::rgba(0xffffff1c).into(),
+            border: gpui::rgba(0xffffff2e).into(),
+            fill: if frosted {
+                gpui::rgba(0x52525acc).into()
+            } else {
+                gpui::rgb(0x4a4a50).into()
+            },
+            row_height: SIDEBAR_MENU_ROW_HEIGHT,
+        }
     }
 }

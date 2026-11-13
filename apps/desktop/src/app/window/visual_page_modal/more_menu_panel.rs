@@ -23,18 +23,15 @@ pub(crate) struct MenuRow {
     pub(crate) submenu: bool,
 }
 
-/// The menu's rows, in order; Snooze shows only while the page waits for answers.
+/// The menu's rows, in order: Snooze first, shown only while the page waits for answers.
 pub(crate) fn menu_rows(snooze: bool) -> Vec<MenuRow> {
     let row = |label, icon| MenuRow {
         label,
         icon: Some(icon),
         submenu: false,
     };
-    let mut rows = vec![
-        row("Export page", "titlebar/download.svg"),
-        row("Import answers", "titlebar/upload.svg"),
-        row("Open in browser", "titlebar/external-link.svg"),
-    ];
+    // Snooze first, always (User: "put snooze as top option here").
+    let mut rows = Vec::with_capacity(4);
     if snooze {
         rows.push(MenuRow {
             label: "Snooze",
@@ -42,6 +39,11 @@ pub(crate) fn menu_rows(snooze: bool) -> Vec<MenuRow> {
             submenu: true,
         });
     }
+    rows.extend([
+        row("Export page", "titlebar/download.svg"),
+        row("Import answers", "titlebar/upload.svg"),
+        row("Open in browser", "titlebar/external-link.svg"),
+    ]);
     rows
 }
 

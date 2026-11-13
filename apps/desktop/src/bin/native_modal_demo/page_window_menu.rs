@@ -37,11 +37,11 @@ fn control(icon: &'static str, pressed: bool) -> impl IntoElement {
 impl Render for PageWindowMenuDemo {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let ink = MenuInk {
-            foreground: rgb(0xfcfcfc).into(),
-            hover: rgb(0xffffff).opacity(0.08).into(),
-            border: rgb(0xffffff).opacity(0.12).into(),
-            fill: rgb(0x2b2c30).into(),
-            muted: rgb(0xfcfcfc).opacity(0.55).into(),
+            foreground: rgb(0xf4f4f5).into(),
+            muted: rgb(0xb4b4bb).into(),
+            hover: rgba(0xffffff1c).into(),
+            border: rgba(0xffffff2e).into(),
+            fill: rgba(0x52525acc).into(),
             row_height: 34.0,
         };
         // The ⋯ button is the first of the three on the right: its right edge sits two buttons
@@ -104,7 +104,7 @@ impl Render for PageWindowMenuDemo {
                         "visual-page-more-menu",
                         ink,
                         menu_rows(true),
-                        Some(3),
+                        Some(0),
                         std::rc::Rc::new(|_, _| {}),
                     )),
             )
@@ -113,7 +113,7 @@ impl Render for PageWindowMenuDemo {
                 div()
                     .absolute()
                     .left(px(menu_left - SUBMENU_WIDTH - 4.0))
-                    .top(px(menu_top + 1.0 + 3.0 * ink.row_height))
+                    .top(px(menu_top + 1.0))
                     .w(px(SUBMENU_WIDTH))
                     .h(px(height(SNOOZE_HOURS.len(), ink.row_height)))
                     .child(panel(
