@@ -303,11 +303,16 @@ pub(crate) fn codex_config_path_for_hooks(hooks_path: &Path) -> PathBuf {
 struct CodexHookSlot {
     label: &'static str,
     key: String,
-    hash: String,
+    /// Codex's `trusted_hash` for the handler; `None` for a handler type Ghostex cannot hash.
+    hash: Option<String>,
+    /// What makes two slots the same hook: the hash, or for a handler Ghostex cannot hash, its
+    /// event, matcher and whole definition as written.
+    identity: String,
+    /// A Ghostex-owned command hook (always hashable).
     ghostex: bool,
 }
 
-/// Every command handler in `data`. Group and handler indexes are positions in the file, so a
+/// Every handler in `data`. Group and handler indexes are positions in the file, so a
 /// hook's key changes whenever a group before it in the same event comes or goes.
 fn codex_hook_slots(data: &Value, key_source: &str, command: &str) -> Vec<CodexHookSlot> {
     let Some(events) = data.get("hooks").and_then(Value::as_object) else {
@@ -327,14 +332,17 @@ fn codex_hook_slots(data: &Value, key_source: &str, command: &str) -> Vec<CodexH
                 continue;
             };
             for (handler_index, hook) in hooks.iter().enumerate() {
-                let Some(hash) = codex_hook_trust_hash(event_name, matcher, hook) else {
-                    continue;
-                };
+                let hash = codex_hook_trust_hash(event_name, matcher, hook);
+                let identity = hash.clone().unwrap_or_else(|| {
+                    let written = json!({ "event": label, "matcher": matcher, "handler": hook });
+                    format!("raw:{}", canonical_json(&written))
+                });
                 slots.push(CodexHookSlot {
                     label,
                     key: format!("{key_source}:{label}:{group_index}:{handler_index}"),
+                    ghostex: hash.is_some() && is_ghostex_owned_hook_command(hook, command),
                     hash,
-                    ghostex: is_ghostex_owned_hook_command(hook, command),
+                    identity,
                 });
             }
         }
@@ -354,9 +362,11 @@ pub(crate) fn ghostex_codex_hook_trust_entries(
     codex_hook_slots(&data, &key_source, command)
         .into_iter()
         .filter(|slot| slot.ghostex)
-        .map(|slot| CodexHookTrustEntry {
-            key: slot.key,
-            hash: slot.hash,
+        .filter_map(|slot| {
+            Some(CodexHookTrustEntry {
+                key: slot.key,
+                hash: slot.hash?,
+            })
         })
         .collect()
 }
@@ -456,7 +466,7 @@ fn write_config_document(
 
 /*
 CDXC:AgentHooks 2026-11-13 WHY:
-Codex keys trust by position (`<file>:<event>:<group>:<handler>`), and Ghostex shares `hooks.json` with other writers (bd's hooks, the user's own). Every Ghostex edit removes its groups and appends them again (install, startup repair), and the hook-free cleanup and Uninstall remove them outright, so a hook written after Ghostex's moved to an earlier slot while its trust record stayed behind: after the 11.6.0 update the hook-free cleanup dropped Ghostex's SessionStart, UserPromptSubmit and Stop groups from slot 0, the bd hooks behind them became slot 0 with no record, and every new Codex session stopped on "Hooks need review: 3 hooks are new or changed" (which also starved the hook-free tracking, whose fallback put Ghostex's hooks back at slot 1, writing Ghostex's hash over bd's old slot-1 record). So every edit is followed by this pass: a hook another writer added keeps the record Codex already holds for it, moved to its new slot, but only when that record's hash is exactly the hook's own (the user approved that hook; Ghostex adds trust for nothing it does not own). Ghostex's own records move with its hooks the same way, and a repair refreshes only a Ghostex hook whose own record existed before the edit, never a slot whose record belonged to someone else.
+Codex keys trust by position (`<file>:<event>:<group>:<handler>`), and Ghostex shares `hooks.json` with other writers (bd's hooks, the user's own). Every Ghostex edit removes its groups and appends them again (install, startup repair), and the hook-free cleanup and Uninstall remove them outright, so a hook written after Ghostex's moved to an earlier slot while its trust record stayed behind: after the 11.6.0 update the hook-free cleanup dropped Ghostex's SessionStart, UserPromptSubmit and Stop groups from slot 0, the bd hooks behind them became slot 0 with no record, and every new Codex session stopped on "Hooks need review: 3 hooks are new or changed" (which also starved the hook-free tracking, whose fallback put Ghostex's hooks back at slot 1, writing Ghostex's hash over bd's old slot-1 record). So every edit is followed by this pass: a hook another writer added keeps the record Codex already holds for it, moved to its new slot, but only when that record's hash is exactly the hook's own (the user approved that hook; Ghostex adds trust for nothing it does not own). Ghostex's own records move with its hooks under the same exact-hash rule, and a repair refreshes only a Ghostex hook whose own record matched its definition before the edit, never a slot whose record was left by an earlier occupant. A handler type Ghostex cannot hash (Codex's MCP-tool hooks) keeps its record by moving it to the same definition's new slot unchanged.
 SEE-ALSO: install/install_hook.rs and install/uninstall.rs (each edit reads the file before it changes it).
 */
 /// Brings `[hooks.state]` in line with an edit Ghostex just made to `hooks_path`, given the file's
@@ -496,62 +506,99 @@ pub(crate) fn follow_codex_hook_trust(
             .map(|hash| hash.trim().to_string())
     };
 
-    // Another writer's hook is the same hook after the edit when its event and hash match (the
-    // hash holds the matcher and the whole handler); repeats pair up in file order. Ghostex's own
-    // hooks pair by event in file order, since a repair may have changed their command.
-    let mut foreign_after: HashMap<(&str, &str), VecDeque<&str>> = HashMap::new();
-    let mut ghostex_after: HashMap<&str, VecDeque<&str>> = HashMap::new();
-    for slot in &after_slots {
-        if slot.ghostex {
-            ghostex_after
-                .entry(slot.label)
-                .or_default()
-                .push_back(&slot.key);
-        } else {
-            foreign_after
-                .entry((slot.label, slot.hash.as_str()))
-                .or_default()
-                .push_back(&slot.key);
-        }
-    }
+    let disabled = |key: &str| {
+        records
+            .get(key)
+            .and_then(Item::as_table_like)
+            .and_then(|record| record.get("enabled"))
+            .and_then(Item::as_bool)
+            == Some(false)
+    };
+    // A record speaks for the hook in its slot before the edit only when its hash is exactly that
+    // hook's: a record left at a slot by an earlier occupant proves nothing, so it is never moved,
+    // removed or refreshed.
+    let approved = |slot: &CodexHookSlot| match &slot.hash {
+        Some(hash) => recorded_hash(&slot.key).as_deref() == Some(hash.as_str()),
+        // A handler type Ghostex cannot hash: its record is carried to the same definition's new
+        // slot as it is, which can never make it match anything it did not match before.
+        None => records.contains_key(&slot.key),
+    };
+
     let mut moves: Vec<(String, String)> = Vec::new();
     let mut removals: Vec<String> = Vec::new();
     let mut ghostex_recorded: HashSet<String> = HashSet::new();
-    for slot in &before_slots {
-        if slot.ghostex {
-            let destination = ghostex_after
-                .get_mut(slot.label)
-                .and_then(VecDeque::pop_front);
-            if !records.contains_key(&slot.key) {
-                continue;
-            }
-            match destination {
-                Some(destination) => {
-                    ghostex_recorded.insert(destination.to_string());
-                    if destination != slot.key {
-                        moves.push((slot.key.clone(), destination.to_string()));
-                    }
-                }
-                None => removals.push(slot.key.clone()),
-            }
-        } else {
-            let destination = foreign_after
-                .get_mut(&(slot.label, slot.hash.as_str()))
-                .and_then(VecDeque::pop_front);
-            if let Some(destination) = destination {
-                if destination != slot.key
-                    && recorded_hash(&slot.key).as_deref() == Some(slot.hash.as_str())
-                {
-                    moves.push((slot.key.clone(), destination.to_string()));
-                }
+
+    // Another writer's hook is the same hook after the edit when its identity matches (the hash
+    // holds the matcher and the whole handler); repeats pair up in file order.
+    let mut foreign_after: HashMap<(&str, &str), VecDeque<&str>> = HashMap::new();
+    for slot in after_slots.iter().filter(|slot| !slot.ghostex) {
+        foreign_after
+            .entry((slot.label, slot.identity.as_str()))
+            .or_default()
+            .push_back(&slot.key);
+    }
+    for slot in before_slots.iter().filter(|slot| !slot.ghostex) {
+        let destination = foreign_after
+            .get_mut(&(slot.label, slot.identity.as_str()))
+            .and_then(VecDeque::pop_front);
+        if let Some(destination) = destination {
+            if destination != slot.key && approved(slot) {
+                moves.push((slot.key.clone(), destination.to_string()));
             }
         }
     }
 
+    // Ghostex's own hooks: only an approved record follows, so an unapproved duplicate never takes
+    // the place an approved one needs. Within an event a destination first takes an approved hook
+    // with the same hash (an unchanged hook), then one whose command a repair changed. Where
+    // duplicates collapse into one hook, a record the user disabled is taken first, so
+    // collapsing never turns a disabled hook back on; the records left over go with their hooks.
+    let mut ghostex_sources: HashMap<&str, Vec<&CodexHookSlot>> = HashMap::new();
+    for slot in before_slots
+        .iter()
+        .filter(|slot| slot.ghostex && approved(slot))
+    {
+        ghostex_sources.entry(slot.label).or_default().push(slot);
+    }
+    for sources in ghostex_sources.values_mut() {
+        sources.sort_by_key(|slot| !disabled(&slot.key));
+    }
+    let mut ghostex_pairs: Vec<(&CodexHookSlot, &CodexHookSlot)> = Vec::new();
+    let mut unpaired: Vec<&CodexHookSlot> = Vec::new();
+    for destination in after_slots.iter().filter(|slot| slot.ghostex) {
+        let sources = ghostex_sources.entry(destination.label).or_default();
+        match sources
+            .iter()
+            .position(|source| source.hash == destination.hash)
+        {
+            Some(index) => ghostex_pairs.push((sources.remove(index), destination)),
+            None => unpaired.push(destination),
+        }
+    }
+    for destination in unpaired {
+        let sources = ghostex_sources.entry(destination.label).or_default();
+        if !sources.is_empty() {
+            ghostex_pairs.push((sources.remove(0), destination));
+        }
+    }
+    for (source, destination) in ghostex_pairs {
+        ghostex_recorded.insert(destination.key.clone());
+        if destination.key != source.key {
+            moves.push((source.key.clone(), destination.key.clone()));
+        }
+    }
+    removals.extend(
+        ghostex_sources
+            .values()
+            .flatten()
+            .map(|source| source.key.clone()),
+    );
+
     let targets = after_slots
         .iter()
         .filter(|slot| slot.ghostex)
-        .filter(|slot| match ghostex_trust {
+        .filter_map(|slot| Some((slot, slot.hash.as_deref()?)))
+        .filter(|(slot, _)| match ghostex_trust {
             Some(CodexTrustWriteMode::Explicit) => true,
             Some(CodexTrustWriteMode::RefreshExisting) => ghostex_recorded.contains(&slot.key),
             None => false,
@@ -572,7 +619,7 @@ pub(crate) fn follow_codex_hook_trust(
             changed = true;
         }
     }
-    for slot in targets {
+    for (slot, hash) in targets {
         let record_item = state
             .entry(&slot.key)
             .or_insert_with(|| Item::Table(Table::new()));
@@ -583,8 +630,8 @@ pub(crate) fn follow_codex_hook_trust(
             .get("trusted_hash")
             .and_then(Item::as_str)
             .map(str::to_string);
-        if current_hash.as_deref() != Some(slot.hash.as_str()) {
-            record.insert("trusted_hash", toml_edit::value(slot.hash.clone()));
+        if current_hash.as_deref() != Some(hash) {
+            record.insert("trusted_hash", toml_edit::value(hash));
             changed = true;
         }
         if ghostex_trust == Some(CodexTrustWriteMode::Explicit)
