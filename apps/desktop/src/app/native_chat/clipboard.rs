@@ -115,6 +115,13 @@ impl NativeChatView {
             .map(|path| path.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         if images.is_empty() && external_paths.is_empty() {
+            // Text the field inserts itself; references in it to files on another computer are
+            // copied to the session's (carry_attachments.rs).
+            if matches!(target, PasteInto::Composer) {
+                if let Some(text) = clipboard.text() {
+                    self.carry_pasted_attachments(&text, cx);
+                }
+            }
             return false;
         }
         if matches!(target, PasteInto::Answer(..))

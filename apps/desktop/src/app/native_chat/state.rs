@@ -239,6 +239,9 @@ pub(crate) struct NativeChatView {
     pub(super) held_send: Option<String>,
     /// The timer that looks at a held send again while a clipboard read is pending.
     pub(super) held_send_recheck: Option<gpui::Task<()>>,
+    /// Attachment references whose file is on another computer than the session's, copied over
+    /// (carry_attachments.rs).
+    pub(super) carry: super::carry_attachments::CarryState,
     /// The chat box's height tween and the arrival fade of the controls an expansion brings back.
     pub(super) composer_animation: super::composer_animation::ComposerAnimation,
     /// Whether this session's status line holds its row of space, remembered across view
@@ -630,6 +633,7 @@ impl NativeChatView {
             paste_tiles: Default::default(),
             held_send: None,
             held_send_recheck: None,
+            carry: Default::default(),
             composer_animation: Default::default(),
             context_status_scroll: Default::default(),
             bounds: Default::default(),

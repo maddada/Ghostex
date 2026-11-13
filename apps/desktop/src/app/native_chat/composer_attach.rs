@@ -201,6 +201,8 @@ impl NativeChatView {
         } = attached;
         // A send took this paste while it was on its way: its references go to that message.
         let sent = self.paste_tiles.finished(Some(paste), false);
+        self.carry
+            .note_on_session_computer(paths.iter().map(String::as_str));
         for (path, picture) in pictures {
             self.seed_chat_image(&path, picture, cx);
         }
@@ -264,6 +266,11 @@ impl NativeChatView {
         if self.held_send.is_none() {
             return;
         }
+        // A reference's file still being copied to the session's computer
+        // (carry_attachments.rs); its landing repaints.
+        if self.carry.in_flight() {
+            return;
+        }
         if self.paste_reading() {
             // A clipboard read ends without telling the view when it brings nothing (or times
             // out), so a held send looks again shortly.
@@ -293,7 +300,10 @@ impl NativeChatView {
 /// The local pictures behind imported paths, read so their tiles need no read back. Only when the
 /// import answered one path per file, in order, and only for pictures (a missing or unreadable
 /// file, as in the web build, is just skipped).
-fn local_pictures(originals: &[String], imported: &[String]) -> Vec<(String, gpui::Image)> {
+pub(super) fn local_pictures(
+    originals: &[String],
+    imported: &[String],
+) -> Vec<(String, gpui::Image)> {
     if originals.len() != imported.len() {
         return Vec::new();
     }

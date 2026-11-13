@@ -250,6 +250,16 @@ fn numbered_label(label: &str, prefix: &str) -> bool {
     !rest.is_empty() && rest.chars().all(|character| character.is_ascii_digit())
 }
 
+/// A label a paste, drop or attach writes (`Image #1`, `File #2`, `PDF #1`, `Audio #1`,
+/// `Video #1`, `Folder #1`): its path is a file the chat box attached, kept on one computer.
+pub fn is_attachment_label(label: &str) -> bool {
+    [
+        "Image #", "Audio #", "File #", "PDF #", "Video #", "Folder #",
+    ]
+    .iter()
+    .any(|prefix| numbered_label(label, prefix))
+}
+
 fn explicit_reference_kind(label: &str) -> Option<ReferenceKind> {
     if label.ends_with(SESSION_CHAT_REFERENCE_REVEAL_MARKER) {
         return None;

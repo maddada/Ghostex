@@ -68,6 +68,11 @@ impl NativeChatView {
         if self.hold_send_for_attachments(requested, cx) {
             return;
         }
+        // A reference to a file on another computer than the session's goes once its copy is
+        // there (carry_attachments.rs).
+        if self.hold_send_for_carry(requested, cx) {
+            return;
+        }
         // A picture still being saved goes with the message, even one with no words.
         let pictures = self.attachments_on_their_way();
         if self.draft.trim().is_empty() && !pictures {

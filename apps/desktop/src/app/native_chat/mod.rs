@@ -22,6 +22,7 @@ mod background_tasks;
 mod binding;
 mod box_picker;
 mod cards;
+mod carry_attachments;
 mod catch_up;
 mod chat_hotkeys;
 mod chat_pills;

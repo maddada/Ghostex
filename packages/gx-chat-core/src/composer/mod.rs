@@ -6,6 +6,7 @@
 
 pub mod actions;
 pub mod attaching;
+pub mod attachment_moves;
 pub mod catch_up;
 pub mod delivery;
 pub mod delivery_card;
