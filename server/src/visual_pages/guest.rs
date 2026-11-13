@@ -157,8 +157,11 @@ pub(crate) fn guest_page_answers_message(
         .get("title")
         .and_then(Value::as_str)
         .unwrap_or("Ghostex page");
-    Ok(ghostex_gx_visual::questions::page_answers_message(
-        id, title, answers,
+    Ok(super::answers::tagged_answers_message(
+        gxserver_state_dir,
+        id,
+        title,
+        answers,
     ))
 }
 

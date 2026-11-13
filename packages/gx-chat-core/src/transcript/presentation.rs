@@ -305,6 +305,15 @@ pub fn project_message(
                 let form = forms.iter().find(|form| form.id == answers.page_id);
                 let mut card = project_page_answers(answers, form);
                 card["withText"] = Value::Bool(!rest.is_empty());
+                // A page's folded card opens the page again (`answered_page_link`).
+                if form.is_none() {
+                    if let Some(link) = crate::transcript::page_answers::answered_page_link(
+                        crate::state::messages_of(messages),
+                        &answers.page_id,
+                    ) {
+                        card["page"] = link;
+                    }
+                }
                 card
             }),
     );

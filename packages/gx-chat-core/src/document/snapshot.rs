@@ -98,6 +98,10 @@ pub struct Document {
     pub final_ids: Vec<String>,
     /// The published pages (`ghostex show`) whose answers arrived, so their cards read Answered.
     pub answered_pages: Vec<String>,
+    /// The forms and pages whose answers card is the next row after the reply asking them, so
+    /// their own Answered line is left out (`transcript::page_answers::answers_below`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answers_below: Vec<String>,
     /// The question pages not answered whose questions were withdrawn, some or all, by page id,
     /// so their cards say so (`transcript::open_questions::withdrawn_pages`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

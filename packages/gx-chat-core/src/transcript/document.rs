@@ -75,18 +75,28 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.simple_override = view.simple_override;
     // The projection's askers are only read for the withdrawn pages, so the held ones are not
     // copied for it.
-    (into.final_ids, into.answered_pages, into.withdrawn_pages) = if view.items.is_empty() {
+    (
+        into.final_ids,
+        into.answered_pages,
+        into.withdrawn_pages,
+        into.answers_below,
+    ) = if view.items.is_empty() {
         let projection = presentation::build(state, context);
         (
             projection.final_ids,
             projection.answered_pages,
             crate::transcript::open_questions::withdrawn_pages(&projection.askers),
+            crate::transcript::page_answers::answers_below(
+                projection.items.iter(),
+                &projection.askers,
+            ),
         )
     } else {
         (
             view.final_ids.clone(),
             view.answered_pages.clone(),
             crate::transcript::open_questions::withdrawn_pages(&view.askers),
+            crate::transcript::page_answers::answers_below(view.items.iter(), &view.askers),
         )
     };
     into.deferred_work = crate::document::Shared(std::sync::Arc::clone(&view.deferred_work));

@@ -112,7 +112,7 @@ pub(crate) async fn submit(
         .and_then(Value::as_str)
         .unwrap_or("Ghostex page")
         .to_string();
-    let message = answers_message(&id, &title, &answers);
+    let message = tagged_answers_message(&state_dir, &id, &title, &answers);
     let (error, wait_for_idle) = deliver(
         &state,
         project_id,
@@ -209,6 +209,26 @@ pub(super) async fn deliver(
 /// The envelope is parsed by packages/gx-chat-core/src/transcript/page_answers.rs (the answers card and the page card's Answered state) and described to agents in skills/ghostex-visuals/SKILL.md. Change them together.
 pub(super) fn answers_message(id: &str, title: &str, answers: &Value) -> String {
     ghostex_gx_visual::questions::page_answers_message(id, title, answers)
+}
+
+/// [`answers_message`] with each question's tag, read from the page's `<gx-questions>` markup
+/// (`questions.rs`), so the chat's answers card can show the tags (CDXC:SessionChat 2026-11-13
+/// in packages/gx-visual/src/questions.rs `page_answers_message_tagged`).
+pub(crate) fn tagged_answers_message(
+    state_dir: &std::path::Path,
+    id: &str,
+    title: &str,
+    answers: &Value,
+) -> String {
+    let keys: Vec<(String, String)> = super::questions::page_questions(state_dir, id)
+        .map(|(_, questions)| {
+            questions
+                .into_iter()
+                .map(|question| (question.key, question.tag))
+                .collect()
+        })
+        .unwrap_or_default();
+    ghostex_gx_visual::questions::page_answers_message_tagged(id, title, answers, &keys)
 }
 
 pub(super) fn reply(status: StatusCode, body: Value) -> RoutedResponse {

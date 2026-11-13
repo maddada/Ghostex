@@ -663,9 +663,15 @@ impl NativeChatView {
                 .into_any_element();
         }
         if message["role"] == "user" && message["pageAnswers"].is_object() {
+            // Under Quiet View's own line the card opens straight onto its rows (quiet_view.rs).
+            let body_only = !self.in_subagent
+                && message["id"]
+                    .as_str()
+                    .is_some_and(|id| self.quiet_answers(id).is_some());
             row = row.child(self.page_answers_card(
                 &message["pageAnswers"],
                 &message["startupDelivery"],
+                body_only,
                 p,
                 cx,
             ));

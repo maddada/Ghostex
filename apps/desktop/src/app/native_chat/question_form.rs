@@ -450,6 +450,10 @@ impl NativeChatView {
         if form["coveredByCard"] == true {
             return gpui::div().into_any_element();
         }
+        // Answered, with the reader's answers card right under it: that card names it (Q2995).
+        if form["state"] == "answered" && self.answers_right_below(id) {
+            return gpui::div().into_any_element();
+        }
         if !form.is_object() {
             return self.text_view(
                 format!("question-form-source:{id}"),

@@ -51,12 +51,11 @@ pub(super) const QUESTION_GLYPH: &str = "titlebar/chat-card-question.svg";
 /// questions form (the SessionChat 2026-10-18 DECISION on `SINGLE_LINE_CARD`).
 pub(super) const CHECKLIST_GLYPH: &str = "titlebar/chat-card-checklist.svg";
 
-/// What the question tile's badge says: nothing, a question waiting on the reader, or answered.
+/// What the question tile's badge says: nothing, or a question waiting on the reader.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum QuestionBadge {
     None,
     Asking,
-    Answered,
 }
 
 /// The one-line cards' question tile on a question card's panel, the badge's ring in that panel.
@@ -67,7 +66,6 @@ fn question_tile(glyph: &'static str, badge: QuestionBadge, p: &ChatAppearance) 
     match badge {
         QuestionBadge::None => tile,
         QuestionBadge::Asking => tile.child(shape.ask_badge(p).border_color(ring)),
-        QuestionBadge::Answered => tile.child(shape.check_badge(p).border_color(ring)),
     }
     .into_any_element()
 }
@@ -89,22 +87,6 @@ pub(super) fn question_ask_head(
         trailing,
         14.0,
         FontWeight::SEMIBOLD,
-        p,
-    )
-}
-
-/// The header of an answered card that never folds (the page answers): the question tile with the
-/// green check, its tile and title at the one-line cards' x and in their title weight
-/// (`lined_ask_card` keeps the body on the same edge).
-pub(super) fn answered_ask_head(title: String, p: &ChatAppearance) -> Div {
-    let shape = &*SINGLE_LINE_CARD;
-    ask_head_led(
-        question_tile(QUESTION_GLYPH, QuestionBadge::Answered, p),
-        title,
-        String::new(),
-        Vec::new(),
-        shape.padding_x,
-        FontWeight(shape.title_weight),
         p,
     )
 }

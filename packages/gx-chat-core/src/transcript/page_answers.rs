@@ -37,6 +37,10 @@ pub struct PageAnswers {
     pub page_id: String,
     pub title: String,
     pub answers: Value,
+    /// The envelope's `tags`, one per answer row key (`-` where none), when gxserver knew the
+    /// page's questions (`ghostex_gx_visual::questions::page_answers_message_tagged`); empty for
+    /// a form (its tags are on the form) and for answers sent before tags were written.
+    pub tags: Vec<String>,
 }
 
 fn attribute(head: &str, name: &str) -> Option<String> {
@@ -99,10 +103,14 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
         .unwrap_or_else(|| "Ghostex page".to_string());
     let body = js_trim(body);
     let answers = serde_json::from_str(body).unwrap_or_else(|_| Value::String(body.to_string()));
+    let tags = attribute(head, "tags")
+        .map(|tags| tags.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default();
     Some(PageAnswers {
         page_id,
         title,
         answers,
+        tags,
     })
 }
 
@@ -260,6 +268,18 @@ fn note_owner<'a>(
 /// question kit sends a question's note as `"<key> (note)"`; it is shown under that question's
 /// answer instead of as a row of its own.
 pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) -> Value {
+    // A page's tags, by answer key, lined up with the keys gxserver tagged.
+    let page_tags: Vec<(&str, &str)> = {
+        let keys = ghostex_gx_visual::questions::answer_row_keys(&answers.answers);
+        if keys.len() == answers.tags.len() {
+            keys.into_iter()
+                .zip(answers.tags.iter().map(String::as_str))
+                .filter(|(_, tag)| *tag != "-")
+                .collect()
+        } else {
+            Vec::new()
+        }
+    };
     let rows: Vec<Value> = match &answers.answers {
         Value::Object(fields) => fields
             .iter()
@@ -276,6 +296,25 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
                     .get(&format!("{key}{NOTE_SUFFIX}"))
                     .filter(|note| note.as_str().is_some_and(|note| !note.trim().is_empty()));
                 let note_as_answer = unpicked.then_some(own_note).flatten();
+                let tag = asked
+                    .map(|asked| asked.tag.as_str())
+                    .filter(|tag| !tag.is_empty())
+                    .or_else(|| {
+                        page_tags
+                            .iter()
+                            .find(|(tagged, _)| *tagged == key.as_str())
+                            .map(|(_, tag)| *tag)
+                    })
+                    .unwrap_or_default();
+                let skipped = note_as_answer.is_none()
+                    && (value.is_null()
+                        || value.as_array().is_some_and(Vec::is_empty)
+                        || value.as_str()
+                            == Some(crate::transcript::question_forms::SKIPPED));
+                // The reader's own notes box ("Anything else?"), not a question.
+                let extra = asked.is_none()
+                    && tag.is_empty()
+                    && key.starts_with(ghostex_gx_visual::questions::NOTES_KEY);
                 let mut row = json!({
                     "label": plain_words(&label),
                     "value": plain_words(&match note_as_answer {
@@ -283,6 +322,15 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
                         None => display_answer(value, asked),
                     }),
                 });
+                if !tag.is_empty() {
+                    row["tag"] = json!(tag);
+                }
+                if skipped {
+                    row["skipped"] = json!(true);
+                }
+                if extra {
+                    row["extra"] = json!(true);
+                }
                 // The question's links, drawn as links (`questions/form_links.rs`).
                 if let Some(runs) = word_runs(&label) {
                     row["labelRuns"] = runs;
@@ -312,12 +360,98 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
         other => vec![json!({"label": "", "value": display_value(other)})],
     };
     let more = rows.len().saturating_sub(MAX_ROWS);
+    let summary = answers_summary(&rows);
     json!({
         "pageId": answers.page_id,
         "title": plain_words(&answers.title),
+        "summary": summary,
         "rows": rows.into_iter().take(MAX_ROWS).collect::<Vec<_>>(),
         "more": more,
     })
+}
+
+/// The folded card's count: "3 answered · 1 skipped", "3 answered", "4 skipped" (the reader's
+/// own notes box is not a question and is not counted).
+fn answers_summary(rows: &[Value]) -> String {
+    let questions = rows.iter().filter(|row| row["extra"] != true);
+    let (skipped, answered): (Vec<&Value>, Vec<&Value>) =
+        questions.partition(|row| row["skipped"] == true);
+    match (answered.len(), skipped.len()) {
+        (0, 0) => String::new(),
+        (0, skipped) => format!("{skipped} skipped"),
+        (answered, 0) => format!("{answered} answered"),
+        (answered, skipped) => format!("{answered} answered \u{b7} {skipped} skipped"),
+    }
+}
+
+/// The page the answers came from, as the agent's ```visual block points at it (`{url, title,
+/// file?}`), so the folded card can open it again; `None` for a form, which lives in the chat.
+pub fn answered_page_link<'a>(
+    messages: impl IntoIterator<Item = &'a ghostex_gx_protocol::ChatMessage>,
+    page_id: &str,
+) -> Option<Value> {
+    messages
+        .into_iter()
+        .filter(|message| message.role == ChatRole::Assistant)
+        .flat_map(|message| {
+            crate::transcript::question_forms::content_fences(&prose_markdown(&message.blocks))
+        })
+        .filter(|fence| fence.kind == crate::transcript::question_forms::ContentKind::Page)
+        .filter_map(|fence| ghostex_gx_visual::page_reference(&fence.body))
+        .find(|page| page.page_id() == Some(page_id))
+        .map(|page| {
+            let mut link = json!({"url": page.url, "title": page.title});
+            if let Some(file) = page.file {
+                link["file"] = json!(file);
+            }
+            link
+        })
+}
+
+/// The forms and pages whose answers card is the very next row the transcript draws after the
+/// reply that asks them: their own Answered line is left out, since the card under it names the
+/// same form or page (the document's `answersBelow`).
+///
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// User (Q2995, sent answers page): "Hide the form's line when your answers sit right under it; keep it when other messages came between". Answers folded into a "Worked for" row (`folded_cards.rs`) are not right under it, so that line stays.
+pub fn answers_below<'a>(
+    items: impl IntoIterator<Item = &'a crate::document::TranscriptItem>,
+    askers: &[crate::transcript::open_questions::Asker],
+) -> Vec<String> {
+    use crate::document::TranscriptItem;
+    let mut below = Vec::new();
+    let mut last_reply: Option<&Value> = None;
+    for item in items {
+        let opener: Option<&Value> = match item {
+            TranscriptItem::Message { message } => Some(message),
+            TranscriptItem::Summary { user, .. } => Some(user),
+            _ => None,
+        };
+        if let (Some(reply), Some(row)) = (last_reply, opener) {
+            let card = &row["pageAnswers"];
+            if row["role"] == "user"
+                && card.is_object()
+                && card["withText"] != true
+                && row[crate::transcript::folded_cards::FOLDED_INTO_WORK] != true
+            {
+                let page_id = card["pageId"].as_str().unwrap_or_default();
+                let reply_id = reply["id"].as_str().unwrap_or_default();
+                if askers
+                    .iter()
+                    .any(|asker| asker.id == page_id && asker.message_id == reply_id)
+                {
+                    below.push(page_id.to_string());
+                }
+            }
+        }
+        last_reply = match item {
+            TranscriptItem::Message { message } if message["role"] == "assistant" => Some(message),
+            TranscriptItem::CompletedWork { final_message, .. } => final_message.as_deref(),
+            TranscriptItem::Summary { final_message, .. } => final_message.as_deref(),
+            _ => None,
+        };
+    }
+    below
 }
 
 #[cfg(test)]
@@ -333,6 +467,7 @@ mod tests {
                 "randomsand's asks ([Discord](https://discord.com/c/2)): what now?": "Fix all 4",
                 "Plain one?": "Yes",
             }),
+            tags: Vec::new(),
         };
         let card = project_page_answers(&answers, None);
         assert_eq!(card["title"], "About the picker");

@@ -799,6 +799,7 @@ mod tests {
                 page_id: old.clone(),
                 title: old_form.title.clone(),
                 answers: json!({"Q1652": "Yes, build iOS too"}),
+                tags: Vec::new(),
             });
         *state.transcript_view.askers =
             crate::transcript::open_questions::askers(&state.messages.composed, &[old.clone()]);
@@ -845,6 +846,7 @@ mod tests {
                 page_id: form.id.clone(),
                 title: form.title.clone(),
                 answers: json!({ key: "No" }),
+                tags: Vec::new(),
             });
         *state.transcript_view.askers =
             crate::transcript::open_questions::askers(&state.messages.composed, &[form.id.clone()]);
@@ -882,6 +884,7 @@ mod tests {
                 page_id: old.clone(),
                 title: old_form.title.clone(),
                 answers: json!({"Q55": "Yes"}),
+                tags: Vec::new(),
             });
         *state.transcript_view.askers =
             crate::transcript::open_questions::askers(&state.messages.composed, &[old.clone()]);

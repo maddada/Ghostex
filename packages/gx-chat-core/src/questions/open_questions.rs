@@ -662,6 +662,7 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
                 page_id: id.clone(),
                 title: String::new(),
                 answers: answers.clone(),
+                tags: Vec::new(),
             })
         })
         .collect();

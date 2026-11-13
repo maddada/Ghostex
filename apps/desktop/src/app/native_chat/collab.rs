@@ -147,6 +147,7 @@ impl NativeChatView {
                             slot.child(self.page_answers_card(
                                 &card["answers"],
                                 &Value::Null,
+                                false,
                                 p,
                                 cx,
                             ))
@@ -209,6 +210,7 @@ impl NativeChatView {
                 column.child(div().w_full().child(self.page_answers_card(
                     &row["answers"],
                     &Value::Null,
+                    false,
                     p,
                     cx,
                 )))

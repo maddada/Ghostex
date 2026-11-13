@@ -214,6 +214,11 @@ impl NativeChatView {
                 .as_array()
                 .is_some_and(|ids| ids.iter().any(|id| id == page_id))
         });
+        // Answered, with the reader's answers card right under it, which names the page and opens
+        // it again (Q2995).
+        if answered && page_id.as_deref().is_some_and(|id| self.answers_right_below(id)) {
+            return div().into_any_element();
+        }
         // Its questions a later block withdrew, some or all (`withdrawnPages`, the core's
         // open_questions.rs): the card says so where an answered page says Answered.
         let withdrawn = page_id

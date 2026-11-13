@@ -1331,6 +1331,7 @@ mod canceled_tests {
                 page_id: id.clone(),
                 title: String::new(),
                 answers,
+                tags: Vec::new(),
             });
         assert_eq!(project(&state)[&id]["state"], "queued");
         assert_eq!(project(&state)[&id]["canSend"], false);
