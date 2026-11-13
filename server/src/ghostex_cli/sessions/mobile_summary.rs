@@ -424,10 +424,18 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
 /// CDXC:VoiceMode 2026-10-21 WHY: the phone reads no settings of the computer, and Read aloud is a built-in extension of the computer the chat lives on, so the phone learns its switch here, in the one poll it already makes per computer. One generic list serves every future built-in feature; a computer too old to send it means every one is off. The rule is the settings catalog's (`enabled_features_with`), so the phone, the desktop and `ghostex settings` agree.
 /// SEE-ALSO: packages/settings-catalog/src/data/official_extensions.rs (`readAloud`), docs/2026-10-20/voice-mode/read-aloud-client-contract.md.
 pub(super) fn insert_built_in_features(map: &mut Map<String, Value>) {
-    map.insert(
-        "builtInFeatures".to_string(),
-        json!(crate::ghostex_cli::built_in_extensions::enabled_built_in_features()),
-    );
+    let mut features = crate::ghostex_cli::built_in_extensions::enabled_built_in_features();
+    /*
+    CDXC:ProjectBoard 2026-11-13 DECISION:
+    User: "don't show on phone if beads disabled on pc and skip this code, don't run it unless beads extension is enabled on that pc". The Beads view is a view, not a whole-feature entry, so its id (`kanban`) joins `builtInFeatures` here only while its switch (Settings > Extensions > Beads, `kanbanViewTabHidden`) is on. The phone shows its Beads rows and makes Beads calls only for a computer that lists it, so a computer too old to send it counts as off. Older phones ignore ids they do not know.
+    SEE-ALSO: apps/mobile/app/src/beads/featureSwitch.ts, server/src/ghostex_cli/session_chat_rpc.rs (the bridge refuses Beads calls while it is off).
+    */
+    if crate::ghostex_cli::built_in_extensions::built_in_extension_enabled(
+        ghostex_settings_catalog::built_in_extensions::BEADS,
+    ) {
+        features.push(ghostex_settings_catalog::built_in_extensions::BEADS);
+    }
+    map.insert("builtInFeatures".to_string(), json!(features));
     // CDXC:VoiceMode 2026-10-25 WHY: a feature that is on by default (the voice agent) cannot be read from `builtInFeatures`, where a computer too old to know its switch leaves it out; `builtInFeaturesOff` names it only when this computer has it switched off (`disabled_features_with`).
     map.insert(
         "builtInFeaturesOff".to_string(),

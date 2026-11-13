@@ -63,6 +63,11 @@ pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
 pub const SESSION_NOTES: &str = "sessionNotes";
 /// OS Integration (Settings > OS Integration). Experimental, off by default.
 pub const OS_INTEGRATION: &str = "osIntegration";
+/// The Beads view (the view panel's Beads tab, Tree and Board). A view, not a whole feature, so
+/// it is not in [`enabled_features_with`]; gxserver adds it to the phone's `builtInFeatures` while
+/// it is on, and the `ghostex session-chat-rpc` bridge refuses the Beads calls while it is off
+/// (server/src/ghostex_cli/sessions/mobile_summary.rs, session_chat_rpc.rs).
+pub const BEADS: &str = "kanban";
 /// Debugging (Settings > Debugging). Listed while its switch is on; never gated.
 pub const DEBUGGING: &str = "debugging";
 

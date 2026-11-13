@@ -124,6 +124,9 @@ const BEADS_VIEW_ACTIONS: [&str; 18] = [
     "doltPush",
 ];
 
+/// The bridge's Beads view calls, refused while this computer's Beads extension is off.
+const BEADS_VIEW_METHODS: [&str; 3] = ["beadsView", "beadsGenerateTitle", "runBeadsAction"];
+
 /// The request timeout when the caller names none: the desktop chat's own (`native_chat/rpc.rs`).
 const DEFAULT_TIMEOUT_MS: f64 = 60_000.0;
 /// How much longer than a long-poll's `waitMs` the HTTP request may take.
@@ -161,6 +164,12 @@ pub fn session_chat_rpc_command(args: &[String]) -> CliResult<()> {
                 READ_ONLY_GIT_ACTIONS.join(", ")
             )));
         }
+    }
+    // CDXC:ProjectBoard 2026-11-13 SEE-ALSO: the user's decision in sessions/mobile_summary.rs (`insert_built_in_features`): no Beads work runs for a phone while this computer's Beads extension is off.
+    if BEADS_VIEW_METHODS.contains(&method) {
+        crate::ghostex_cli::built_in_extensions::require_built_in_extension(
+            ghostex_settings_catalog::built_in_extensions::BEADS,
+        )?;
     }
     if method == "runBeadsAction" {
         let action = params.get("action").and_then(Value::as_str).unwrap_or("");
