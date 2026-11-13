@@ -5146,8 +5146,11 @@ sessions, so any client can control agents on any machine.
   lets the agents on both computers reach each other at once. With the
   computer's Agent access off they don't. Such a phone never gets Easy Connect
   by itself: only Add Easy Connect on the computer's page in the phone app asks
-  for it, and only while Easy Connect is on there. While Easy Connect is off,
-  no phone or computer can be added to it in any way.
+  for it, and only while Easy Connect is on there. The tap asks for Face ID,
+  the fingerprint or the screen lock when the computer's Require Face ID to
+  approve is on, as an approval does. While Easy Connect is off, no phone or
+  computer can be added to it in any way, and the phone connects to that
+  computer only the way you set it up (SSH over Tailscale, say).
   Paired devices are listed and can be removed with one tap, on the computer or
   on any paired phone (on the phone, Machines > the computer lists them under
   Devices that can reach this computer).
