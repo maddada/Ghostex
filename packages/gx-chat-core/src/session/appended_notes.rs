@@ -29,12 +29,88 @@ const PLAYBOOK_CHANGED_BY_UPDATE_NOTE_NAMING_WORK_ITEMS: &str = "Ghostex was upd
 pub const PLAYBOOK_CHANGED_NOTE: &str =
     "Your playbook changed: run `ghostex coordinator guide` now and follow it from here on.";
 
-/// Every note gxserver may add under a message the user sent from the chat.
-pub const APPENDED_NOTES: [&str; 3] = [
+/// Under a coordinator's next message after its context was compacted, for the agents whose hooks
+/// cannot hand it its role again (coordinators/role.rs `coordinator_role_again` covers Claude and
+/// Codex).
+pub const CONTEXT_COMPACTED_NOTE: &str =
+    "Your context was compacted: run `ghostex coordinator guide` now and follow it from here on.";
+
+/// Every fixed note gxserver may add under a message the user sent from the chat (the drift
+/// reminder, built from its slips, is recognised by [`is_drift_reminder`]).
+pub const APPENDED_NOTES: [&str; 4] = [
     PLAYBOOK_CHANGED_BY_UPDATE_NOTE,
     PLAYBOOK_CHANGED_NOTE,
     PLAYBOOK_CHANGED_BY_UPDATE_NOTE_NAMING_WORK_ITEMS,
+    CONTEXT_COMPACTED_NOTE,
 ];
+
+/// The slips a coordinator's reply can drift into, in the order its reminder names them
+/// (server/src/coordinators/drift.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DriftSlip {
+    /// It asked the user a question in its reply's text.
+    AskedInText,
+    /// It did the work itself (edited the project's files, ran builds or tests) and started no
+    /// thread.
+    WorkedItself,
+    /// Its reply has no marked sections while Marked handovers asks coordinators for them.
+    Unmarked,
+}
+
+impl DriftSlip {
+    pub const ALL: [DriftSlip; 3] = [Self::AskedInText, Self::WorkedItself, Self::Unmarked];
+
+    fn words(self) -> &'static str {
+        match self {
+            Self::AskedInText => "ask that as a form or an item ask, not in plain text",
+            Self::WorkedItself => "hand real work to a thread with start-thread",
+            Self::Unmarked => "end with the marked sections",
+        }
+    }
+}
+
+const DRIFT_REMINDER_OPENING: &str = "Reminder: ";
+
+/// The one-line reminder under a coordinator's next message naming its `slips` ("Reminder: ask
+/// that as a form or an item ask, not in plain text; end with the marked sections."), `None` for
+/// none.
+pub fn drift_reminder(slips: &[DriftSlip]) -> Option<String> {
+    let words: Vec<&str> = DriftSlip::ALL
+        .into_iter()
+        .filter(|slip| slips.contains(slip))
+        .map(DriftSlip::words)
+        .collect();
+    (!words.is_empty()).then(|| format!("{DRIFT_REMINDER_OPENING}{}.", words.join("; ")))
+}
+
+/// Whether `paragraph` is a drift reminder gxserver wrote, for any set of slips.
+fn is_drift_reminder(paragraph: &str) -> bool {
+    let Some(body) = paragraph
+        .strip_prefix(DRIFT_REMINDER_OPENING)
+        .and_then(|rest| rest.strip_suffix('.'))
+    else {
+        return false;
+    };
+    let mut parts = body.split("; ").peekable();
+    let mut order = DriftSlip::ALL.iter().map(|slip| slip.words());
+    parts.peek().is_some() && parts.all(|part| order.by_ref().any(|words| words == part))
+}
+
+/// `rest` without the note gxserver added last: the fixed notes, or a drift reminder.
+fn strip_last_note(rest: &str) -> Option<&str> {
+    let drift = rest
+        .rsplit_once('\n')
+        .filter(|(_, last)| is_drift_reminder(last))
+        .map(|(head, _)| &rest[..head.len() + 1]);
+    let head = APPENDED_NOTES
+        .iter()
+        .find_map(|note| rest.strip_suffix(note))
+        .or(drift)?;
+    let body = head.trim_end();
+    // The note must start its own line, after some text.
+    (head.len() > body.len() && head[body.len()..].contains('\n') && !body.is_empty())
+        .then_some(body)
+}
 
 /// `text` with `note` under it, a blank line apart: the shape gxserver types.
 pub fn with_note(text: &str, note: &str) -> String {
@@ -48,14 +124,7 @@ pub fn with_note(text: &str, note: &str) -> String {
 pub fn without_appended_notes(text: &str) -> &str {
     let mut rest = text.trim_end();
     loop {
-        let stripped = APPENDED_NOTES.iter().find_map(|note| {
-            let head = rest.strip_suffix(note)?;
-            let body = head.trim_end();
-            // The note must start its own line, after some text.
-            (head.len() > body.len() && head[body.len()..].contains('\n') && !body.is_empty())
-                .then_some(body)
-        });
-        match stripped {
+        match strip_last_note(rest) {
             Some(body) => rest = body,
             None => return rest,
         }

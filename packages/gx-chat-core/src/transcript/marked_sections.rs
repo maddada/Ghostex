@@ -108,7 +108,9 @@ fn leading_marker(text: &str) -> Option<(&'static Marker, &str)> {
     })
 }
 
-fn has_any_marker(markdown: &str) -> bool {
+/// Whether `markdown` holds any section marker emoji: gxserver's cheap check that a coordinator's
+/// reply has its marked sections (server/src/coordinators/drift.rs).
+pub fn has_any_marker(markdown: &str) -> bool {
     MARKERS
         .iter()
         .any(|marker| markdown.contains(marker.emoji.trim_end_matches('\u{fe0f}')))

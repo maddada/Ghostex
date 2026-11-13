@@ -153,17 +153,25 @@ pub(super) async fn paste_already_recorded(session: &Value, text: &str, since_ms
         == Some(true)
 }
 
-/// The note to re-read its playbook that goes under this message to an orchestrator, with the
-/// guide version it is about (CDXC:Coordinators 2026-11-05 in coordinators/playbook.rs). Only
+/// The notes that go under a message to a coordinator: the playbook note with the guide version it
+/// is about, and the drift reminder or compaction note (coordinators/drift.rs) with the record to
+/// keep once the message is delivered.
+struct CoordinatorNotes {
+    playbook: Option<(String, String)>,
+    drift: Option<crate::coordinators::DriftDelivery>,
+}
+
+/// The notes that go under this message to an orchestrator (CDXC:Coordinators 2026-11-05 in
+/// coordinators/playbook.rs, CDXC:Coordinators 2026-11-13 in coordinators/drift.rs). Only
 /// messages someone sent (the chat box, thread reports, `ghostex agents send`, queued rows) carry
-/// it, never a slash or shell command, whose text the agent runs instead of reading.
+/// them, never a slash or shell command, whose text the agent runs instead of reading.
 fn coordinator_playbook_note(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     text: &str,
     source: SessionChatMessageSource,
-) -> Option<(String, String)> {
+) -> Option<CoordinatorNotes> {
     if !matches!(
         source,
         SessionChatMessageSource::Composer
@@ -178,39 +186,55 @@ fn coordinator_playbook_note(
     }
     let db = open_gxserver_database(&state.paths).ok()?;
     let repository = crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
-    crate::coordinators::playbook_update_note(
-        &db,
-        &repository,
-        &(project_id.to_string(), session_id.to_string()),
-    )
-    .ok()
-    .flatten()
+    let key = (project_id.to_string(), session_id.to_string());
+    let playbook = crate::coordinators::playbook_update_note(&db, &repository, &key)
+        .ok()
+        .flatten();
+    let drift = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()
+        .and_then(|session| {
+            crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, &session)
+        });
+    (playbook.is_some() || drift.is_some()).then_some(CoordinatorNotes { playbook, drift })
 }
 
 fn record_coordinator_playbook_note(
     state: &AppState,
     project_id: &str,
     session_id: &str,
-    note: Option<&(String, String)>,
+    notes: Option<&CoordinatorNotes>,
 ) {
-    let Some((_, version)) = note else {
+    let Some(notes) = notes else {
         return;
     };
     if let Ok(db) = open_gxserver_database(&state.paths) {
-        let _ = crate::coordinators::record_playbook_update_note(
-            &db,
-            &(project_id.to_string(), session_id.to_string()),
-            version,
-        );
+        let key = (project_id.to_string(), session_id.to_string());
+        if let Some((_, version)) = &notes.playbook {
+            let _ = crate::coordinators::record_playbook_update_note(&db, &key, version);
+        }
+        if let Some(drift) = &notes.drift {
+            crate::coordinators::record_coordinator_drift(&db, &key, drift);
+        }
     }
 }
 
-fn with_playbook_note(text: &str, note: Option<&(String, String)>) -> String {
-    match note {
-        // The chat core reads the recorded turn without it again, so the user's echo still matches.
-        Some((note, _)) => ghostex_gx_chat_core::session::appended_notes::with_note(text, note),
-        None => text.to_string(),
+fn with_playbook_note(text: &str, notes: Option<&CoordinatorNotes>) -> String {
+    let Some(notes) = notes else {
+        return text.to_string();
+    };
+    // The chat core reads the recorded turn without them again, so the user's echo still matches.
+    let mut noted = text.to_string();
+    for note in notes.playbook.iter().map(|(note, _)| note.as_str()).chain(
+        notes
+            .drift
+            .iter()
+            .flat_map(|drift| drift.notes.iter().map(String::as_str)),
+    ) {
+        noted = ghostex_gx_chat_core::session::appended_notes::with_note(&noted, note);
     }
+    noted
 }
 
 /// One lock per session, held by a chat message send from its screen read to its last retype.
