@@ -218,6 +218,7 @@ fn attention_row_alerts(
         );
     }
     let awaiting_approval = crate::session_approval::session_awaits_approval(session, &now);
+    crate::autopilot::note_read_only_thread(project_id, session_id, session);
     crate::presentation::attention_state_alerts(
         role,
         &attention,

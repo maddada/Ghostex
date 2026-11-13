@@ -382,7 +382,7 @@ impl AutopilotTab {
             p,
             "autopilotApprovals",
             RowSpec::new("Answer approval cards").description(
-                "Permission prompts, Connectors cards and folder trust, within what it may do. While this is off, only your click answers them.",
+                "Permission prompts, Connectors cards and folder trust, within what it may do. A read-only thread's cards always wait for you; while this is off, only your click answers them.",
             ),
             config["answerApprovals"].as_bool() == Some(true),
             None,

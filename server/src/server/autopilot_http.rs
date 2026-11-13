@@ -169,7 +169,10 @@ fn autopilot_widening(before: &AutopilotConfig, after: &AutopilotConfig) -> Opti
     if after.enabled && !before.enabled {
         changes.push("turned on Autopilot".to_string());
     }
-    if after.answer_approvals && !before.answer_approvals {
+    // Turning Autopilot on with approvals already on (their default) widens it to them too.
+    if after.answer_approvals
+        && (!before.answer_approvals || (after.enabled && !before.enabled))
+    {
         changes.push("Autopilot may answer approvals".to_string());
     }
     if after.tier != before.tier {

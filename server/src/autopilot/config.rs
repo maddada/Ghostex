@@ -110,7 +110,13 @@ pub struct AutopilotConfig {
     pub limits: HardLimits,
     pub answer_questions: bool,
     pub answer_after_minutes: u64,
+    /// On unless the user turned it off ([`AutopilotConfig::answer_approvals_set`]).
     pub answer_approvals: bool,
+    /// The user set "Answer approval cards" themselves; until then it is on.
+    ///
+    /// CDXC:Autopilot 2026-11-13 DECISION:
+    /// User: "Make this enabled by default when Autopilot is enabled" for "Answer approval cards", which the 2026-11-07 decision had off by default; anyone who set the switch keeps their choice. A file written before this marker existed always held `answerApprovals: false`, whether or not the user touched it, so its `false` reads as never set (only `true` there was surely a choice). The hard limits keep their own switches, all off, and a read-only thread's cards are never approved (server/src/server/autopilot_answers.rs).
+    pub answer_approvals_set: bool,
     pub supervisor: SupervisorModel,
     pub sweep_seconds: u64,
     /// By project id; a worktree follows its main project.
@@ -129,7 +135,8 @@ impl Default for AutopilotConfig {
             limits: HardLimits::default(),
             answer_questions: false,
             answer_after_minutes: 10,
-            answer_approvals: false,
+            answer_approvals: true,
+            answer_approvals_set: false,
             supervisor: SupervisorModel::OpusMedium,
             sweep_seconds: SWEEP_DEFAULT_SECS,
             projects: BTreeMap::new(),
@@ -147,6 +154,9 @@ impl AutopilotConfig {
         self.sweep_seconds = self.sweep_seconds.clamp(SWEEP_MIN_SECS, SWEEP_MAX_SECS);
         if !ANSWER_WAITS.contains(&self.answer_after_minutes) {
             self.answer_after_minutes = 10;
+        }
+        if !self.answer_approvals_set {
+            self.answer_approvals = true;
         }
         self
     }
@@ -292,7 +302,10 @@ pub fn apply_patch(config: &mut AutopilotConfig, patch: &Value) {
     };
     let mut merged = serde_json::to_value(&*config).unwrap_or_default();
     for (key, value) in patch {
-        if matches!(key.as_str(), "projects" | "sessions" | "enabledAt") {
+        if matches!(
+            key.as_str(),
+            "projects" | "sessions" | "enabledAt" | "answerApprovalsSet"
+        ) {
             continue;
         }
         if key == "limits" {
@@ -312,7 +325,10 @@ pub fn apply_patch(config: &mut AutopilotConfig, patch: &Value) {
             *slot = value.clone();
         }
     }
-    if let Ok(next) = serde_json::from_value::<AutopilotConfig>(merged) {
+    if let Ok(mut next) = serde_json::from_value::<AutopilotConfig>(merged) {
+        if patch.get("answerApprovals").is_some_and(Value::is_boolean) {
+            next.answer_approvals_set = true;
+        }
         *config = next;
     }
 }

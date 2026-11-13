@@ -29,7 +29,7 @@ fn allowed() -> Section {
             row("autopilotTier", "What it may do on its own", "Heal (carry on, interrupt, reload, switch account), Heal and decide (also answer with the recommended choice), or Everything (also approve any prompt that is not a hard limit)."),
             row("autopilotHardLimits", "Hard limits it may cross", "Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done."),
             row("autopilotAnswerQuestions", "Answer questions for me", "After waiting 5, 10 or 15 minutes for you, pick each question's recommended choice. Off by default."),
-            row("autopilotApprovals", "Answer approval cards", "Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. Off by default: only your click answers them."),
+            row("autopilotApprovals", "Answer approval cards", "Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. On by default; a read-only thread's cards always wait for you, and while it is off only your click answers them."),
         ],
     )
 }

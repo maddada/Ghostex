@@ -347,6 +347,7 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
             text_field(session, "projectId"),
             text_field(session, "sessionId"),
         );
+        autopilot::note_read_only_thread(&key.0, &key.1, session);
         let Some(project) = projects.get(&key.0) else {
             continue;
         };

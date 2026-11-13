@@ -202,13 +202,44 @@ pub fn heals_stuck(project_id: &str, session_id: &str) -> bool {
         )
 }
 
+fn read_only_marks() -> &'static Mutex<HashSet<(String, String)>> {
+    static READ_ONLY: OnceLock<Mutex<HashSet<(String, String)>>> = OnceLock::new();
+    READ_ONLY.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Remembers whether a session is a read-only thread (its runtime settings say so), for readers
+/// that hold only its ids: Autopilot never approves such a thread's cards, so they alert.
+pub fn note_read_only_thread(project_id: &str, session_id: &str, session: &Value) {
+    let read_only = crate::coordinators::is_read_only_thread(
+        session.get("runtimeSettings").and_then(Value::as_object),
+    );
+    let key = (project_id.to_string(), session_id.to_string());
+    let mut marks = read_only_marks()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if read_only {
+        marks.insert(key);
+    } else {
+        marks.remove(&key);
+    }
+}
+
+fn is_read_only_thread(project_id: &str, session_id: &str) -> bool {
+    read_only_marks()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .contains(&(project_id.to_string(), session_id.to_string()))
+}
+
 /// Whether Autopilot answers this session's approval cards itself: it covers the session, may
 /// answer approvals, and on Everything settles every one (approves it, or declines a hard limit),
-/// where Heal and decide leaves some for the user. Not while the user took the session back.
+/// where Heal and decide leaves some for the user. Not while the user took the session back, and
+/// never for a read-only thread, whose cards wait for the user (server/src/server/autopilot_answers.rs).
 pub fn answers_approvals(project_id: &str, session_id: &str) -> bool {
     let config = current();
     config.answer_approvals
         && config.tier == Tier::Everything
+        && !is_read_only_thread(project_id, session_id)
         && config.covers(
             project_id,
             remembered_main_project(project_id).as_deref(),

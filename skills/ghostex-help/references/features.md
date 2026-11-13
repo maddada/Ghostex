@@ -4294,12 +4294,14 @@ then:
   default): after you leave a question unanswered for 5, 10 or 15 minutes, it
   picks each question's recommended choice, for an agent's own question and for
   a question form in its chat alike.
-- **Answers approval cards** when **Answer approval cards** is on (off by
+- **Answers approval cards** when **Answer approval cards** is on (on by
   default; while it is off only your click answers them): permission prompts,
   Connectors cards and folder trust, within its tier. **Heal** answers none,
   **Heal and decide** approves only what is on its allow list (reads, builds,
   tests, edits and local commits inside the project), and **Everything** (the
-  default) approves anything that crosses no hard limit.
+  default) approves anything that crosses no hard limit. A read-only thread's
+  cards (leaving Plan mode, or a step out of Codex's read-only sandbox) always
+  wait for you.
 
 **Hard limits it may cross** are each a switch, off until you turn it on: push
 a branch, finish a release you asked for, push main, merge pull requests,

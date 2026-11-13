@@ -360,7 +360,7 @@ How to use this file:
 - **What it may do on its own** `autopilotTier` (Settings UI row without a settings key; use `ghostex settings open`): Heal (carry on, interrupt, reload, switch account), Heal and decide (also answer with the recommended choice), or Everything (also approve any prompt that is not a hard limit).
 - **Hard limits it may cross** `autopilotHardLimits` (Settings UI row without a settings key; use `ghostex settings open`): Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done.
 - **Answer questions for me** `autopilotAnswerQuestions` (Settings UI row without a settings key; use `ghostex settings open`): After waiting 5, 10 or 15 minutes for you, pick each question's recommended choice. Off by default.
-- **Answer approval cards** `autopilotApprovals` (Settings UI row without a settings key; use `ghostex settings open`): Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. Off by default: only your click answers them.
+- **Answer approval cards** `autopilotApprovals` (Settings UI row without a settings key; use `ghostex settings open`): Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. On by default; a read-only thread's cards always wait for you, and while it is off only your click answers them.
 ### Supervisor
 
 - **Supervisor model** `autopilotSupervisor` (Settings UI row without a settings key; use `ghostex settings open`): The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.

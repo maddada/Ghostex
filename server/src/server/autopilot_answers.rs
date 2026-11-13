@@ -360,8 +360,12 @@ enum Verdict {
     Wait,
 }
 
-/// What the user's choices make of one approval.
-fn verdict(config: &AutopilotConfig, class: Class) -> Verdict {
+/// What the user's choices make of one approval. `read_only` is a read-only thread's card (not
+/// its folder trust): Autopilot may decline it, never approve it.
+///
+/// CDXC:Autopilot 2026-11-13 DECISION:
+/// The coordinator, for the user, when "Answer approval cards" became on by default: "Autopilot must never approve leaving read-only/Plan mode for a read-only thread" (`start-thread --read-only`, CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs). Every approval such a thread asks for is a step out of its mode (Claude's "Ready to code?" plan exit, an edit or command in Plan mode, a Codex sandbox escalation), and its plan text would sort as an ordinary prompt that Everything approves, so the whole card waits for the user and Autopilot's log says why.
+fn verdict(config: &AutopilotConfig, class: Class, read_only: bool) -> Verdict {
     if !config.answer_approvals || config.tier == Tier::Heal {
         return Verdict::Wait;
     }
@@ -377,6 +381,7 @@ fn verdict(config: &AutopilotConfig, class: Class) -> Verdict {
             ),
             format!("{} is a hard limit the user hasn't allowed", limit.words()),
         ),
+        _ if read_only => Verdict::Leave(READ_ONLY_NOTE.to_string()),
         Class::Limit(_) | Class::Safe => Verdict::Approve,
         Class::Plain if config.tier == Tier::Everything => Verdict::Approve,
         Class::Plain => Verdict::Leave(
@@ -417,6 +422,9 @@ fn recommended_index(
         })
 }
 
+const READ_ONLY_NOTE: &str =
+    "It's a read-only thread, so its approvals wait for you: approving one would take it out of read-only.";
+
 const DECLINE_MESSAGE: &str = "Ghostex: [Autopilot] I declined that request: {why}. It's noted for them in Autopilot's log. Carry on with the rest of your task without it, and say at the end what's left for them.";
 
 /// What to do about the session's waiting prompt, if any: `None` when nothing waits (the other
@@ -431,6 +439,9 @@ pub(super) fn decide_prompt(
     now: i64,
 ) -> Option<PromptDecision> {
     let stored = crate::agents::session_chat_prompt_setting(session);
+    let read_only = crate::coordinators::is_read_only_thread(
+        session.get("runtimeSettings").and_then(Value::as_object),
+    );
     let notice =
         crate::session_chat_options::cached_session_chat_terminal_notice(state, &key.0, &key.1)
             .filter(|notice| {
@@ -505,7 +516,11 @@ pub(super) fn decide_prompt(
                             "selections": [{ "indices": [index], "other": null }],
                         })
                     };
-                    return match verdict(config, classify("connector", &text, project_path)) {
+                    return match verdict(
+                        config,
+                        classify("connector", &text, project_path),
+                        read_only,
+                    ) {
                         Verdict::Wait => wait(),
                         Verdict::Approve => decision(
                             "approval",
@@ -605,7 +620,7 @@ pub(super) fn decide_prompt(
             } => {
                 let text = summary.clone().unwrap_or_default();
                 let saw = format!("It asked to run {tool}: {}", short(&text, 160));
-                return match verdict(config, classify(&tool, &text, project_path)) {
+                return match verdict(config, classify(&tool, &text, project_path), read_only) {
                     Verdict::Wait => wait(),
                     Verdict::Approve => decision(
                         "approval",
@@ -715,7 +730,8 @@ pub(super) fn decide_prompt(
                 json!({ "kind": "terminalChoice", "choiceIndex": index, "noticeDetectedAt": notice.detected_at })
             }
         };
-        return match verdict(config, class) {
+        // Trusting the project folder lets the agent start; it is not a step out of read-only.
+        return match verdict(config, class, read_only && !trust) {
             Verdict::Wait => wait(),
             Verdict::Approve => match yes {
                 Some(index) => decision(
