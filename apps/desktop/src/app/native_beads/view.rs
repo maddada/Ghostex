@@ -653,6 +653,16 @@ impl BeadsView {
         {
             params.extend(scope);
         }
+        // The workspace this write is meant for; gxserver refuses it if the project now points
+        // at another one (an older gxserver ignores the field).
+        if let Some(key) = self
+            .snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.workspace.key.clone())
+            .filter(|key| !key.is_empty())
+        {
+            params["expectedWorkspaceKey"] = json!(key);
+        }
         let action = params
             .get("action")
             .and_then(Value::as_str)

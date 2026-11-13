@@ -182,6 +182,7 @@ impl BeadsView {
         for (kind, link) in &links {
             let (kind, link) = (*kind, link.clone());
             let open = link.clone();
+            let full = link.clone();
             // The chip shrinks to the row's width and cuts its text with an ellipsis, so the ✕
             // stays inside the panel however long the link is; clicking still opens the whole link.
             let mut chip = div()
@@ -205,6 +206,10 @@ impl BeadsView {
                     11.0,
                     p.faint,
                 ))
+                // The chip may shorten the link; hovering shows it whole.
+                .tooltip(move |window, cx| {
+                    crate::app::helpers::titlebar_tooltip(full.clone(), window, cx)
+                })
                 .child(
                     div()
                         .min_w_0()

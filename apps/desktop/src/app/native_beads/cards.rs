@@ -33,7 +33,13 @@ pub(crate) fn write_failure(title: &str, reply: &Value) -> BeadsNotice {
         .collect::<Vec<_>>()
         .join("\n");
     let lower = output.to_lowercase();
-    let message = if lower.contains("already claimed") {
+    let error_code = reply
+        .get("error")
+        .and_then(|error| error.get("code"))
+        .and_then(Value::as_str);
+    let message = if error_code == Some("workspaceChanged") {
+        "This project now uses another Beads folder, so nothing was changed. Try again on the refreshed list."
+    } else if lower.contains("already claimed") {
         "Someone else has claimed it. Refresh to see who."
     } else if lower.contains("no issue found") || lower.contains("not found") {
         "It was deleted or renamed elsewhere. Refresh to see the current list."

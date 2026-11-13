@@ -39,6 +39,8 @@ pub(crate) struct BeadsMenu {
     /// still hold, so it never writes to another project or workspace.
     pub(crate) target: Option<BeadsTarget>,
     pub(crate) generation: u64,
+    /// The Beads workspace the view showed when the menu opened.
+    pub(crate) workspace_key: Option<String>,
 }
 
 impl BeadsMenu {
@@ -50,6 +52,7 @@ impl BeadsMenu {
             serial: 0,
             target: None,
             generation: 0,
+            workspace_key: None,
         }
     }
 }
@@ -322,6 +325,10 @@ impl BeadsView {
         menu.serial = self.menu_serial;
         menu.target = self.target.clone();
         menu.generation = self.generation;
+        menu.workspace_key = self
+            .snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.workspace.key.clone());
         let menu = menu.clone();
         menu_log(
             "beadsView.menuOpen",
@@ -420,7 +427,14 @@ impl BeadsView {
             }
             return;
         };
-        if menu.generation != self.generation || menu.target != self.target {
+        let workspace_key = self
+            .snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.workspace.key.clone());
+        if menu.generation != self.generation
+            || menu.target != self.target
+            || menu.workspace_key != workspace_key
+        {
             menu_log(
                 "beadsView.menuDispatch",
                 json!({ "serial": serial, "outcome": "targetChanged" }),
