@@ -658,13 +658,37 @@ fn find_row<'a>(rows: &'a [Value], label: &str) -> Option<&'a Value> {
 }
 
 /// `Opus 4.8` ⇒ `claude-opus-4-8`; `GLM 5.3 Flash` ⇒ `glm-5.3-flash` (a name the catalog never had).
+///
+/// CDXC:AgentProviders 2026-11-13 WHY: Claude Code 2.1.323's picker lists bare families ("Opus",
+/// "Fable", the version only in the description), and `claude-opus` is no model Claude knows:
+/// `/model claude-opus` answered "Model 'claude-opus' not found" in the user's session (G7zwb) on
+/// every retry. A bare family is Claude's own alias (`opus`), which `/model` takes.
 fn derived_value(agent: &str, label: &str) -> String {
     let slug = label.to_ascii_lowercase().replace(' ', "-");
     if agent == "claude" {
+        if !slug.is_empty() && slug.chars().all(|c| c.is_ascii_alphabetic()) {
+            return slug;
+        }
         format!("claude-{}", slug.replace('.', "-"))
     } else {
         slug
     }
+}
+
+/// The model a Claude picker row names: its label ("Opus 5.5"), or for a bare family row
+/// ("Opus") the description's first part ("Opus 5.5 · Best for everyday, complex tasks").
+fn claude_row_names(row: &PickerRow) -> Vec<String> {
+    let mut names = vec![row.label.clone()];
+    if let Some(first) = row
+        .description
+        .as_deref()
+        .and_then(|description| description.split(" \u{b7} ").next())
+        .map(str::trim)
+        .filter(|first| !first.is_empty() && *first != row.label)
+    {
+        names.push(first.to_string());
+    }
+    names
 }
 
 /// Puts a list command's lineup in the picker's order and adds the rows only the picker shows,
@@ -695,17 +719,15 @@ pub(crate) fn order_by_picker(
             let name = words[..count].join(" ");
             find_row(&listed, &name).or_else(|| find_row(&published_rows, &name))
         });
-        let mut model = known
-            .cloned()
-            .unwrap_or_else(|| {
-                json!({
-                    "value": derived_value(agent, &row.label),
-                    "label": row.label,
-                    "pickerLabel": row.label,
-                    "efforts": [],
-                    "fastMode": false,
-                })
-            });
+        let mut model = known.cloned().unwrap_or_else(|| {
+            json!({
+                "value": derived_value(agent, &row.label),
+                "label": row.label,
+                "pickerLabel": row.label,
+                "efforts": [],
+                "fastMode": false,
+            })
+        });
         if let Some(object) = model.as_object_mut() {
             object.remove("group");
         }
@@ -734,7 +756,9 @@ pub(crate) fn claude_lineup(picker: &[PickerRow], published: &Value) -> Option<V
         .unwrap_or_default();
     let mut models: Vec<Value> = Vec::new();
     for row in picker {
-        let mut model = find_row(&published_rows, &row.label)
+        let mut model = claude_row_names(row)
+            .iter()
+            .find_map(|name| find_row(&published_rows, name))
             .cloned()
             .unwrap_or_else(|| {
                 json!({
@@ -771,6 +795,15 @@ pub(crate) fn claude_lineup(picker: &[PickerRow], published: &Value) -> Option<V
     }
     if models.is_empty() {
         return None;
+    }
+    // A current catalog model the picker read did not show stays offered: the read runs Claude
+    // signed in as the computer's own login, which may not list a model the user's accounts run
+    // (Claude Code 2.1.323 listed Fable 5.1 alone while the user's sessions ran Fable 5.2).
+    for row in &published_rows {
+        let value = row.get("value");
+        if row.get("group").is_none() && !models.iter().any(|known| known.get("value") == value) {
+            models.push(row.clone());
+        }
     }
     let mut entry = published.clone();
     let object = entry.as_object_mut()?;

@@ -141,6 +141,10 @@ fn dialog_mismatch(step: &str, detail: &str) -> DomainStateError {
 /// One catalog entry that Claude Code does not list for an account retried 181 times before this.
 /// SEE-ALSO: server/src/session_chat_model_selection.rs sender treats this code as final.
 pub(crate) const UNSUPPORTED_SELECTION_CODE: &str = "unsupportedSelection";
+/// Claude answered the typed `/model <name>` with "Model '<name>' not found": the name is no model
+/// it knows, so typing it again can never work (session_chat_model_selection.rs tries Claude's
+/// other form of the name once, then stops).
+pub(crate) const MODEL_NOT_FOUND_CODE: &str = "modelNotFound";
 
 pub(crate) fn unsupported_selection(message: impl Into<String>) -> DomainStateError {
     DomainStateError {
@@ -512,6 +516,22 @@ fn claude_switch_confirmation(
     matches.then_some(picker)
 }
 
+/// Claude's refusal of the typed `/{field} {value}`, the reply under its last echo ("Model
+/// 'claude-opus' not found"), when that reply is one.
+fn claude_option_refused(screen: &str, field: &str, value: &str) -> Option<String> {
+    let lines = screen_lines(screen);
+    let command = format!("❯ /{field} {value}");
+    let command_index = lines.iter().rposition(|line| line == &command)?;
+    let reply = lines[command_index + 1..]
+        .iter()
+        .find(|line| !line.is_empty())?;
+    let reply = reply.strip_prefix('⎿').unwrap_or(reply).trim();
+    reply
+        .to_ascii_lowercase()
+        .contains("not found")
+        .then(|| reply.to_string())
+}
+
 fn claude_option_applied(screen: &str, field: &str, value: &str) -> bool {
     if crate::session_chat_composer::detect_session_chat_composer_readiness(
         Some("claude"),
@@ -876,11 +896,21 @@ impl PickerDriver<'_> {
                         .iter()
                         .position(|row| row.label.starts_with("Yes, switch to "))
                         .and_then(|index| picker.answer_key(index))
-                        .map(Some);
+                        .map(|key| Ok(Some(key)));
                 }
-                claude_option_applied(screen, field, value).then_some(None)
+                if let Some(refusal) = claude_option_refused(screen, field, value) {
+                    return Some(Err(refusal));
+                }
+                claude_option_applied(screen, field, value).then_some(Ok(None))
             })
             .await?;
+        // CDXC:SessionChat 2026-11-13 WHY: a name Claude does not know was retyped until the
+        // retries ran out ("Model 'claude-opus' not found" nine times in G7zwb), because only a
+        // confirmation ended the wait. Claude's refusal ends it now, with its own words.
+        let answer = answer.map_err(|refusal| DomainStateError {
+            code: MODEL_NOT_FOUND_CODE,
+            message: format!("Claude Code answered \u{201c}{refusal}\u{201d}."),
+        })?;
         if let Some(answer) = answer {
             self.write(&answer).await?;
             self.wait_for("applied Claude option", |screen| {

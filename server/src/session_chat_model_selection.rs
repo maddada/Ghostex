@@ -423,6 +423,65 @@ fn missing_input_box_exhausted(selection_id: &str, error: &DomainStateError, now
     now_ms - first >= MISSING_INPUT_BOX_LIMIT_MS
 }
 
+/// The names each pick has tried after Claude refused one, so a refused name is never typed again.
+fn tried_model_forms() -> &'static Mutex<HashMap<String, Vec<String>>> {
+    static TRIED: OnceLock<Mutex<HashMap<String, Vec<String>>>> = OnceLock::new();
+    TRIED.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// CDXC:SessionChat 2026-11-13 DECISION:
+/// The coordinator, for the user (G7zwb typed `/model claude-opus` nine times): when Claude
+/// refuses a model name, Ghostex tries the next valid form of it once (Claude's alias, then the full
+/// id), and when that is refused too it stops, leaves the session on its model, and the failure
+/// shows in the chat. The forms of `claude-opus` or `opus[1m]` are `opus`, then the full id of the
+/// catalog's current Opus (`claude-opus-5-5`); a full id with a version has no other form.
+fn next_model_form(selection_id: &str, model: &str) -> Option<String> {
+    let mut tried = tried_model_forms().lock().ok()?;
+    let names = tried.entry(selection_id.to_string()).or_default();
+    if !names.iter().any(|name| name == model) {
+        names.push(model.to_string());
+    }
+    let next = claude_model_forms(model)
+        .into_iter()
+        .find(|form| !names.contains(form))?;
+    names.push(next.clone());
+    Some(next)
+}
+
+/// Claude's other names for `model`, in the order to try them: its alias, then its full id.
+fn claude_model_forms(model: &str) -> Vec<String> {
+    let base = model.strip_suffix("[1m]").unwrap_or(model);
+    let family = base.strip_prefix("claude-").unwrap_or(base);
+    if family.is_empty() || !family.chars().all(|c| c.is_ascii_alphabetic()) {
+        return Vec::new();
+    }
+    let mut forms = vec![family.to_string()];
+    // The full id of the catalog's current row of that family ("Opus 5.5" => claude-opus-5-5).
+    if let Some(label) = crate::agent_model_catalog::catalog_agent("claude")
+        .and_then(|agent| agent.get("models").and_then(Value::as_array).cloned())
+        .into_iter()
+        .flatten()
+        .filter(|row| row.get("group").is_none())
+        .filter_map(|row| row.get("label").and_then(Value::as_str).map(str::to_string))
+        .find(|label| {
+            label
+                .to_ascii_lowercase()
+                .strip_prefix(family)
+                .is_some_and(|rest| rest.starts_with(' '))
+        })
+    {
+        forms.push(format!(
+            "claude-{}",
+            label
+                .to_ascii_lowercase()
+                .replace(' ', "-")
+                .replace('.', "-")
+        ));
+    }
+    forms.retain(|form| form != model);
+    forms
+}
+
 fn unconfirmed_attempts() -> &'static Mutex<HashMap<String, u32>> {
     static ATTEMPTS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
     ATTEMPTS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -470,6 +529,43 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
             )
             .await;
             let now_ms = chrono::Utc::now().timestamp_millis();
+            // Claude refused the name: its other form once, then a final failure (never the same
+            // name again).
+            let result = match result {
+                Err(error) if error.code == crate::session_chat_codex_picker::MODEL_NOT_FOUND_CODE => {
+                    match next_model_form(&pending.id, &pending.model) {
+                        Some(next) => {
+                            if let Ok(db) = open_gxserver_database(&state.paths) {
+                                let _ = db.execute(
+                                    "UPDATE session_chat_model_selections SET model = ?4, state = 'queued', errorMessage = ?5, retryAt = 0 WHERE projectId = ?1 AND sessionId = ?2 AND selectionId = ?3",
+                                    params![project, session, pending.id, next, error.message],
+                                );
+                            }
+                            SELECTION_REQUESTED.notify_one();
+                            crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                                &state, &project, &session,
+                            );
+                            return;
+                        }
+                        None => Err(crate::session_chat_codex_picker::unsupported_selection(
+                            format!(
+                                "{} The session stays on the model it was on. Pick another model, or switch account.",
+                                error.message
+                            ),
+                        )),
+                    }
+                }
+                other => other,
+            };
+            if result.is_ok()
+                || result.as_ref().is_err_and(|error| {
+                    error.code == crate::session_chat_codex_picker::UNSUPPORTED_SELECTION_CODE
+                })
+            {
+                if let Ok(mut tried) = tried_model_forms().lock() {
+                    tried.remove(&pending.id);
+                }
+            }
             let result = result.map_err(|error| {
                 if unconfirmed_attempts_exhausted(&pending.id, &error) {
                     crate::session_chat_codex_picker::unsupported_selection(format!(
