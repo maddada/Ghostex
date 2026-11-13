@@ -214,14 +214,27 @@ fn is_structured_request_user_input(lines: &[String], selected_index: usize) -> 
 }
 
 /// Whether a Codex dialog holds the screen with positive evidence of its own: a blocking screen
-/// this detector names, plus the key-hint footer only a live dialog draws in its last rows. Text
-/// that merely quotes a dialog's words (a draft, transcript prose) has no such footer.
+/// this detector names, plus the key-hint footer only a live dialog draws in its last rows, and no
+/// draft in Codex's input box. Text that merely quotes a dialog's words has no such footer, and a
+/// draft that quotes the footer too still sits in the input box (seen on the VT-styled capture),
+/// which a dialog that holds the screen has replaced. A dialog's highlighted row draws the same
+/// bold `›` as the input box ("› 1. Review hooks"), so an "input" that is a numbered choice is
+/// that row, not a draft.
 pub(crate) fn codex_dialog_holds_screen(text: &str) -> bool {
-    if detect_codex_blocking_screen(text).is_none() {
+    let draft = crate::session_chat_composer::session_chat_composer_input("codex", text)
+        .is_some_and(|input| !is_numbered_choice_text(&input.text));
+    if draft || detect_codex_blocking_screen(text).is_none() {
         return false;
     }
     let lines = scan_lines(text);
     latest_modal_footer(&lines).is_some() || onboarding_continue_footer(&lines)
+}
+
+/// A menu row's words after its marker: digits, then `.` or `)`.
+fn is_numbered_choice_text(text: &str) -> bool {
+    let text = text.trim_start();
+    let digits = text.chars().take_while(char::is_ascii_digit).count();
+    digits > 0 && matches!(text[digits..].chars().next(), Some('.' | ')'))
 }
 
 /// CDXC:AgentScreenDetection 2026-11-13 WHY:
