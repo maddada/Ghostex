@@ -280,7 +280,7 @@ pub struct TerminalViewSettings {
     /// Carry the resolved terminal appearance so these controls follow the terminal's override independently of the app theme.
     pub light_theme: bool,
     pub cursor_shape: TerminalCursorShape,
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
     pub shaders: Option<crate::terminal_shaders::TerminalShaderSettings>,
     pub background_image: Option<TerminalBackgroundImage>,
     /// How much of the default background the pane paints itself; window glass sets it to 0 so the
@@ -310,7 +310,7 @@ impl Default for TerminalViewSettings {
         Self {
             light_theme: false,
             cursor_shape: TerminalCursorShape::Block,
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", not(ghostex_web)))]
             shaders: None,
             background_image: None,
             background_alpha: 1.0,
@@ -608,7 +608,7 @@ pub struct TerminalView {
     exit: Option<TerminalExit>,
     pub cursor_shape: TerminalCursorShape,
     settings: TerminalViewSettings,
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
     shader_state: crate::terminal_shaders::TerminalShaderState,
     /// Selection over viewport cells, driven by the mouse handlers below.
     pub selection: Option<TerminalSelection>,
@@ -790,7 +790,7 @@ impl TerminalView {
             exit: None,
             cursor_shape: TerminalCursorShape::Block,
             settings: TerminalViewSettings::default(),
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", not(ghostex_web)))]
             shader_state: Default::default(),
             selection: None,
             marked_text: None,
@@ -970,7 +970,7 @@ impl TerminalView {
     }
 
     pub fn apply_settings(&mut self, settings: TerminalViewSettings) {
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", not(ghostex_web)))]
         if self.settings.shaders != settings.shaders {
             // A re-enabled or replaced chain starts with fresh cursor/focus
             // history, so its first frame cannot trail from stale coordinates.
@@ -1333,7 +1333,7 @@ impl TerminalView {
             self.drag = None;
         }
         self.frame = Some(frame);
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", not(ghostex_web)))]
         self.shader_state.invalidate();
         self.recompute_search_matches();
         self.update_scroll_button_visibility();
@@ -1582,7 +1582,7 @@ impl TerminalView {
 
         // The web host receives clipboard data through the browser's trusted
         // paste event. Let Shift+Insert reach that event instead of the PTY.
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         if keystroke.key == "insert"
             && modifiers.shift
             && !modifiers.control
@@ -1622,7 +1622,7 @@ impl TerminalView {
         scrollback in every program; without kitty flags the other keys send
         nothing, as in Ghostty.
         */
-        if cfg!(target_os = "macos")
+        if cfg!(all(target_os = "macos", not(ghostex_web)))
             && modifiers.platform
             && !modifiers.control
             && !modifiers.alt
@@ -1655,7 +1655,7 @@ impl TerminalView {
 
         // Ghostty's `ctrl+insert=copy_to_clipboard` on Windows and Linux, a fixed second key beside
         // the Copy hotkey (`TerminalCopyHotkey`) as Shift+Insert is beside Paste.
-        if !cfg!(target_os = "macos")
+        if !cfg!(all(target_os = "macos", not(ghostex_web)))
             && self.selection.is_some()
             && modifiers.control
             && !modifiers.shift
@@ -1673,7 +1673,7 @@ impl TerminalView {
         // are the Copy and Paste hotkeys (Settings > Hotkeys > Terminal focused), so a key moved
         // or cleared there must not keep copying and pasting here; Windows and Linux keep Super+C
         // and Super+V.
-        if !cfg!(target_os = "macos")
+        if !cfg!(all(target_os = "macos", not(ghostex_web)))
             && modifiers.platform
             && !modifiers.control
             && !modifiers.alt
@@ -1701,7 +1701,7 @@ impl TerminalView {
         clears: on the alternate screen the clear is a no-op and the key
         reaches the running program instead.
         */
-        if cfg!(target_os = "macos")
+        if cfg!(all(target_os = "macos", not(ghostex_web)))
             && modifiers.platform
             && !modifiers.shift
             && !modifiers.control
@@ -1746,7 +1746,7 @@ impl TerminalView {
 
         // macOS: a text key's first press goes to AppKit, so dead keys can
         // compose (see `awaiting_text_key`).
-        if cfg!(target_os = "macos")
+        if cfg!(all(target_os = "macos", not(ghostex_web)))
             && !event.is_held
             && self.marked_text.is_none()
             && !modifiers.control
@@ -1854,7 +1854,7 @@ impl TerminalView {
         self.awaiting_text_key = None;
         // Shift+Insert's press went to the browser paste event, so its release
         // must not reach the PTY either.
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         if keystroke.key == "insert"
             && keystroke.modifiers.shift
             && !keystroke.modifiers.control
@@ -2283,7 +2283,7 @@ impl TerminalView {
         CDXC:Terminal 2026-10-28 WHY:
         On Linux a middle click pastes the primary selection, the text last selected in any app, as every Linux terminal does; Ghostex only pasted its own terminal's selection, and only with Copy on select turned on, so selecting a command in a browser and middle-clicking into a session did nothing. Linux reads the primary selection first and falls back to this terminal's own selection; other systems keep the setting-gated behavior.
         */
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(ghostex_web)))]
         if event.button == MouseButton::Middle {
             let primary = cx
                 .read_from_primary()
@@ -2552,7 +2552,7 @@ impl TerminalView {
             self.reporting_drag = false;
             self.drag = None;
             // The primary selection is what other Linux apps paste on a middle click (see handle_mouse_down).
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(ghostex_web)))]
             if self.selection.is_some()
                 && let Some(text) = self.selection_text().filter(|text| !text.is_empty())
             {
@@ -3223,7 +3223,7 @@ fn layout_images(
 
 impl EventEmitter<TerminalViewEvent> for TerminalView {}
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn hide_mouse_cursor_until_mouse_moves() {
     unsafe extern "C" {
         fn GhostexGpuiTerminalHideMouseCursorUntilMouseMoves();
@@ -3234,7 +3234,7 @@ fn hide_mouse_cursor_until_mouse_moves() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", not(ghostex_web))))]
 fn hide_mouse_cursor_until_mouse_moves() {}
 
 impl Render for TerminalView {
@@ -4053,7 +4053,7 @@ impl Element for TerminalElement {
         cx: &mut App,
     ) {
         self.register_input(bounds, &prepaint.hitbox, window, cx);
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", not(ghostex_web)))]
         if let Some((effect, background_alpha)) =
             self.shader_effect(bounds, &prepaint.layout, window, cx)
         {
@@ -4252,7 +4252,7 @@ impl TerminalElement {
         });
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
     fn shader_effect(
         &self,
         bounds: Bounds<Pixels>,
@@ -4873,12 +4873,12 @@ fn terminal_line_editing_input(keystroke: &Keystroke) -> Option<&'static [u8]> {
 ///
 /// CDXC:Terminal 2026-10-16 WHY:
 /// Ghostty's natural text editing keybinds are macOS-only. The browser build is compiled for wasm32, so it asks the browser whether the keyboard in use is a Mac's (the same test gpui's web platform uses to map Cmd).
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 pub(crate) fn uses_macos_text_editing() -> bool {
-    cfg!(target_os = "macos")
+    cfg!(all(target_os = "macos", not(ghostex_web)))
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 pub(crate) fn uses_macos_text_editing() -> bool {
     thread_local! {
         static IS_MAC: bool = web_sys::window().is_some_and(|window| {

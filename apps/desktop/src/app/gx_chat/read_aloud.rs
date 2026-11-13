@@ -347,7 +347,7 @@ pub(crate) fn read_aloud_on_screen(key: Option<String>) {
 
 /// A voice agent conversation opened or ended (`setVoiceConversation`).
 // The web build has no voice agent, Dictate or Read aloud hotkeys.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 pub(crate) fn read_aloud_voice_conversation(open: bool) {
     {
         let mut sent = sent();
@@ -361,7 +361,7 @@ pub(crate) fn read_aloud_voice_conversation(open: bool) {
 
 /// Dictate's microphone started or stopped recording (`setDictating`).
 // The web build has no voice agent, Dictate or Read aloud hotkeys.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 pub(crate) fn read_aloud_dictating(on: bool) {
     {
         let mut sent = sent();
@@ -380,7 +380,7 @@ pub(crate) fn read_aloud_speech_ended(token: u64, interrupted: bool) {
 
 /// The Stop reading hotkey: whatever Read aloud is saying stops, in whichever chat.
 // The web build has no voice agent, Dictate or Read aloud hotkeys.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 pub(crate) fn read_aloud_stop() {
     super::worker::send_read_aloud(ReadAloudInput::Stop);
 }

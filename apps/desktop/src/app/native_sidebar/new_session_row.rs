@@ -49,7 +49,7 @@ fn label_half_width(sidebar_width: f32, scale: f32) -> f32 {
 /// The shortcut the button shows: the configured New Agent Session key. The browser build has no
 /// such key, so it shows none there.
 fn start_shortcut() -> Option<String> {
-    if cfg!(target_arch = "wasm32") {
+    if cfg!(ghostex_web) {
         return None;
     }
     crate::gpui_configured_hotkey_label("createAgentSession")
@@ -57,7 +57,7 @@ fn start_shortcut() -> Option<String> {
 
 /// What a hover over the arrow half says, with the New Thread key when one is set.
 fn choose_tooltip() -> String {
-    let shortcut = if cfg!(target_arch = "wasm32") {
+    let shortcut = if cfg!(ghostex_web) {
         None
     } else {
         crate::gpui_configured_hotkey_label("openNewThreadPalette")

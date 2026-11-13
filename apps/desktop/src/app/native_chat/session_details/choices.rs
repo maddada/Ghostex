@@ -28,7 +28,7 @@ pub(crate) struct SessionDetailsChoices {
 }
 
 // The web build keeps its choices for the page only, so it never reads or saves them.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 impl SessionDetailsChoices {
     pub(crate) fn new(default_open: bool) -> Self {
         Self {

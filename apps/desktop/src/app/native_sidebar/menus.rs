@@ -486,7 +486,7 @@ impl GhostexGpuiApp {
     /// frosted host window of its own and in the web page, otherwise the sidebar alone.
     fn native_sidebar_submenu_room(&self, window: &Window) -> Bounds<Pixels> {
         use crate::app::window::frosted_host::frosted_hosting_active;
-        if frosted_hosting_active() || cfg!(target_family = "wasm") {
+        if frosted_hosting_active() || cfg!(ghostex_web) {
             Bounds {
                 origin: Point::default(),
                 size: window.viewport_size(),

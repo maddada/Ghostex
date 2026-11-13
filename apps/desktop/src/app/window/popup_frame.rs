@@ -74,7 +74,7 @@ where
                 rising.top(px(popup_open_offset(delta)))
             }),
     );
-    if cfg!(target_os = "macos") {
+    if cfg!(all(target_os = "macos", not(ghostex_web))) {
         frame.into_any_element()
     } else {
         frame
@@ -86,7 +86,7 @@ where
 }
 
 /// Fades a popup's window in as it opens, called from its `open_window` closure (macOS).
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn fade_in_popup_window(window: &Window, reduce_motion: bool) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     unsafe extern "C" {
@@ -142,7 +142,7 @@ pub(crate) fn reveal_popup_window(window: &mut Window, reduce_motion: bool) {
 }
 
 /// See `popup_open_frame`: elsewhere the frame's opacity is the fade.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", not(ghostex_web))))]
 pub(crate) fn fade_in_popup_window(_window: &Window, _reduce_motion: bool) {}
 
 /// Where a popover that fits its window to its content stands in its open: held (drawn
@@ -198,7 +198,7 @@ const POPUP_CLOSE_DURATION: Duration = Duration::from_millis(170);
 
 /// Fades a popup's window out, blur included, and says how long to wait before removing it;
 /// `None` when it should go at once (Reduce Motion, Panel animations None, or the fade refused).
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn fade_out_popup_window(window: &Window, reduce_motion: bool) -> Option<Duration> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     unsafe extern "C" {
@@ -222,7 +222,7 @@ pub(crate) fn fade_out_popup_window(window: &Window, reduce_motion: bool) -> Opt
 }
 
 /// Elsewhere a window's alpha can't be set: the popup goes at once.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", not(ghostex_web))))]
 pub(crate) fn fade_out_popup_window(_window: &Window, _reduce_motion: bool) -> Option<Duration> {
     None
 }
@@ -232,9 +232,9 @@ pub(crate) fn fade_out_popup_window(_window: &Window, _reduce_motion: bool) -> O
 /// CDXC:PlatformSupport 2026-09-24 WHY:
 /// Linux tiling managers need transient ownership before mapping; borderless Normal windows still tile. Floating preserves outside-click dismissal and session switching, which Dialog would block. Each Linux caller supplies x11_parent explicitly.
 pub(crate) fn child_window_kind() -> gpui::WindowKind {
-    if cfg!(target_os = "windows") {
+    if cfg!(all(target_os = "windows", not(ghostex_web))) {
         gpui::WindowKind::PopUp
-    } else if cfg!(target_os = "linux") {
+    } else if cfg!(all(target_os = "linux", not(ghostex_web))) {
         gpui::WindowKind::Floating
     } else {
         gpui::WindowKind::Normal
@@ -244,7 +244,7 @@ pub(crate) fn child_window_kind() -> gpui::WindowKind {
 /// CDXC:PlatformSupport 2026-09-29 WHY:
 /// GPUI gives a Linux window server-side decorations unless it asks otherwise, so KWin drew a title bar with minimize and close buttons on the chat menus, the account popover and the app modals, which all draw their own panel. Child windows opened with `child_window_kind()` and no titlebar ask for client decorations, which on X11 means no window-manager frame, the borderless window they are on macOS and Windows. Their `Root` is built with `bordered(false)`: gpui-component otherwise wraps a client-decorated window in its Linux shadow and resize edges, which shrank the menus and pushed the account popover's Add account button out of its window.
 pub(crate) fn child_window_decorations() -> Option<gpui::WindowDecorations> {
-    cfg!(target_os = "linux").then_some(gpui::WindowDecorations::Client)
+    cfg!(all(target_os = "linux", not(ghostex_web))).then_some(gpui::WindowDecorations::Client)
 }
 
 /// The window a menu, dialog, toast or other child window belongs to: its frame and the display
@@ -299,7 +299,7 @@ impl PopupOwner {
         frame: gpui::Bounds<gpui::Pixels>,
         cx: &gpui::App,
     ) -> Option<gpui::DisplayId> {
-        if cfg!(target_os = "macos") {
+        if cfg!(all(target_os = "macos", not(ghostex_web))) {
             return self.display_id;
         }
         cx.displays()
@@ -337,7 +337,7 @@ impl PopupOwner {
 /// report displays there already; GPUI's macOS displays all start at (0, 0), so their origin comes
 /// from Core Graphics, whose global display space is that same space.
 fn global_shift(display: &dyn gpui::PlatformDisplay) -> gpui::Point<gpui::Pixels> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
     {
         #[repr(C)]
         #[allow(dead_code)]
@@ -368,7 +368,7 @@ fn global_shift(display: &dyn gpui::PlatformDisplay) -> gpui::Point<gpui::Pixels
             gpui::px(rect.origin.y as f32),
         ) - display.bounds().origin
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
     {
         let _ = display;
         gpui::Point::default()
@@ -416,7 +416,7 @@ pub(crate) fn place_global(
 /// Strips the system frame and shadow from a popup's own window (`GpuiChatDialogWindow.m`).
 /// Only for windows with a transparent background whose content draws its own panel.
 pub(crate) fn strip_gpui_popup_window_frame(window: &mut Window) {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
     {
         use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
         unsafe extern "C" {
@@ -428,14 +428,14 @@ pub(crate) fn strip_gpui_popup_window_frame(window: &mut Window) {
             unsafe { GhostexGpuiStripPopupWindowFrame(handle.ns_view.as_ptr()) };
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", not(ghostex_web))))]
     let _ = window;
 }
 
 /// The radius a popup window's own card is drawn with when it asked for `radius`, so the card's
 /// corner and its window's corner are one curve (see `round_popup_window`).
 pub(crate) fn popup_card_radius(radius: gpui::Pixels, blurred: bool) -> gpui::Pixels {
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", not(ghostex_web)))]
     if blurred {
         // The radii DWM gives `DWMWCP_ROUNDSMALL` and `DWMWCP_ROUND`, picked the way
         // gpui_windows' `set_background_corner_radius` picks between them.
@@ -459,7 +459,7 @@ pub(crate) fn popup_card_radius(radius: gpui::Pixels, blurred: bool) -> gpui::Pi
 /// CDXC:PlatformSupport 2026-10-20 WHY:
 /// Windows 11 DWM rounds every popup window itself, at a fixed 8px (4px small), and draws its own 1px border along that curve, while the card inside was drawn at the chat's radius (18px for the `/` list) with a border of its own, so each corner showed two curves that did not meet, with and without window glass. DWM's corner cannot take another radius, and the blur of a blurred window fills the window's rounded rectangle whatever its region (gpui_windows' frosted_backdrop.rs), so under glass the card takes DWM's radius; with glass off the window is transparent, so DWM leaves it square and the card's own corner is the only shape. DWM's border is dropped in both cases: the card draws the border. macOS and Linux round the window to the card's radius, unchanged.
 pub(crate) fn round_popup_window(window: &mut Window, radius: gpui::Pixels, blurred: bool) {
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", not(ghostex_web)))]
     {
         use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
         use windows_sys::Win32::Graphics::Dwm::{DWMWA_BORDER_COLOR, DwmSetWindowAttribute};
@@ -484,7 +484,7 @@ pub(crate) fn round_popup_window(window: &mut Window, radius: gpui::Pixels, blur
             );
         }
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(all(target_os = "windows", not(ghostex_web))))]
     {
         let _ = blurred;
         window.set_background_corner_radius(radius);
@@ -494,7 +494,7 @@ pub(crate) fn round_popup_window(window: &mut Window, radius: gpui::Pixels, blur
 /// CDXC:AppModal 2026-09-25 DECISION:
 /// User: on Windows the modals shown without decoration (Add a project and the like) "blend with the bg of the app", so they need a border. macOS draws a rim and shadow around these borderless windows; a Windows PopUp gets neither, and the modal surface is tinted from the app chrome. Windows 11 DWM gives the modal window rounded corners, its shadow and a border in `border`, the same frame for the React and native modal hosts. Windows 10 ignores both attributes.
 pub(crate) fn frame_app_modal_window(window: &mut Window, border: gpui::Rgba) {
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", not(ghostex_web)))]
     {
         use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
         use windows_sys::Win32::Graphics::Dwm::{
@@ -526,7 +526,7 @@ pub(crate) fn frame_app_modal_window(window: &mut Window, border: gpui::Rgba) {
             );
         }
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(all(target_os = "windows", not(ghostex_web))))]
     let _ = (window, border);
 }
 

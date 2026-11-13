@@ -36,7 +36,7 @@ pub(super) enum Backend {
 /// One `indexeddb` catalog row's bounds, which the desktop's record door enforces itself. The web
 /// build's page storage applies its own copy of the catalog, so it reads only the id.
 #[derive(Clone, Copy, Debug)]
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 pub(super) struct RecordBounds {
     /// The catalog `id`.
     pub(super) id: &'static str,

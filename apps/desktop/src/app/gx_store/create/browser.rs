@@ -28,7 +28,7 @@ use serde_json::json;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::gpui_active_project_id_from_snapshot;
 use crate::app::model::{GpuiBrowserRendererOpenReuse, GpuiSidebarOpenBrowserUrlMessage};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 use crate::app::workspace_windows::ProjectWindowRoute;
 
 /// How long a New Browser Tab waits for the project switch it follows.
@@ -144,7 +144,7 @@ impl GhostexGpuiApp {
 
     /// `message` opens in `project`'s Browser, in the window that shows the project's workspace: at
     /// once when the project is the active one, else once the switch to it has landed.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn gx_store_open_browser_url_in_project(
         &mut self,
         project: ProjectKey,
@@ -181,7 +181,7 @@ impl GhostexGpuiApp {
     }
 
     /// The web page has no per-project Browser: a link opens in a tab of the page's own browser.
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(ghostex_web)]
     fn gx_store_open_browser_url_in_project(
         &mut self,
         _project: ProjectKey,

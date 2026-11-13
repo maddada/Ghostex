@@ -133,7 +133,7 @@ impl GhostexGpuiApp {
             }
             Some("bringBack") => self.bring_claude_cloud_session_back(session, cx),
             // The account chooser is a native prompt, which the web build does not have.
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(ghostex_web))]
             Some("copy") => self.defer_in_main_window(cx, move |this, window, cx| {
                 this.start_claude_cloud_copy(session, window, cx);
             }),

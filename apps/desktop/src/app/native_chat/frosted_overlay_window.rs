@@ -491,7 +491,7 @@ fn window_frame(control: Bounds<Pixels>) -> Bounds<Pixels> {
 
 /// The same child-window attachment the composer's suggestions use: a shadowless panel that stays
 /// above the chat's window and never takes key status from it.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 fn attach_overlay_window(window: &mut Window, parent: *mut std::ffi::c_void) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     unsafe extern "C" {
@@ -509,11 +509,14 @@ fn attach_overlay_window(window: &mut Window, parent: *mut std::ffi::c_void) {
 
 /// A click on the pill must leave the keyboard with the chat's window, as the frosted menu hosts do
 /// (`frosted_host.rs`).
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 fn attach_overlay_window(window: &mut Window, parent: *mut std::ffi::c_void) {
     crate::app::window::make_gpui_popup_window_non_activating(window);
     crate::app::window::own_gpui_popup_window(window, parent);
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 fn attach_overlay_window(_: &mut Window, _: *mut std::ffi::c_void) {}

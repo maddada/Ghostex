@@ -124,7 +124,7 @@ impl GhostexGpuiApp {
                                 bounds[3].bottom() - bounds[0].top(),
                             ),
                         };
-                        #[cfg(target_os = "macos")]
+                        #[cfg(all(target_os = "macos", not(ghostex_web)))]
                         super::pointer::track_bounds(app.native_sidebar.bounds, window);
                     });
                 }

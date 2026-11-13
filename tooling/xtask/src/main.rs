@@ -11,6 +11,8 @@ mod isolated;
 mod mobile_chat_wasm;
 mod rebuild;
 mod remote_build;
+#[cfg(unix)]
+mod setup_worktree;
 mod start;
 mod start_server;
 mod tasks;
@@ -38,6 +40,9 @@ Desktop app
   gx-isolated [--isolated=<variant>] [--print | <ghostex arguments>]
                           run an isolated variant's ghostex CLI
   setup-windows           Windows: install the build prerequisites and prepare sources
+  setup-worktree [--with <submodule path>]... [--no-zmx]
+                          macOS and Linux: prepare a fresh `git worktree` for building: build submodules at their pins (fetched from the
+                          main checkout's copies), its CEF and Zig package caches, bun install, a ReleaseSafe zmx
 
 Testing
   test-server start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] | env <name> | stop <name> | remove <name> | list
@@ -47,6 +52,8 @@ Testing
 Web build
   web-build [--debug]     build apps/gpui-web into apps/gpui-web/www/dist
   web-dev [--debug]       build the wasm and run the Vite dev server on :4174
+  web-test [<cargo test arguments>]
+                          macOS and Linux: run apps/gpui-web's tests on this computer (native, not wasm)
   start-web [<ghostex web arguments>]
                           build the web app and serve it with `ghostex web` on :4173
 
@@ -106,8 +113,16 @@ fn main() {
             Err("test-server runs on macOS and Linux (gxserver's zmx sessions).".into())
         }
         "setup-windows" => tasks::setup_windows(&args),
+        #[cfg(unix)]
+        "setup-worktree" => setup_worktree::run(&args),
+        #[cfg(not(unix))]
+        "setup-worktree" => Err(
+            "setup-worktree runs on macOS and Linux. On Windows, `cargo xtask setup-windows` prepares the sources."
+                .into(),
+        ),
         "web-build" => tasks::web_build(&args),
         "web-dev" => tasks::web_dev(&args),
+        "web-test" => tasks::web_test(&args),
         "start-web" => tasks::start_web(&args),
         "typecheck" => tasks::typecheck(&args),
         "format" => format::run(&args),

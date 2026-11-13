@@ -18,7 +18,7 @@ use super::scroll::reveal_delta;
 use crate::GhostexGpuiApp;
 
 /// Where the keyboard goes back to when it leaves the sidebar.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 pub(crate) enum SidebarKeyboardReturn {
     /// The terminal the Focus Sidebar hotkey took it from.
     Terminal,
@@ -59,7 +59,7 @@ pub(crate) struct SidebarKeyboardState {
 }
 
 impl SidebarKeyboardState {
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(crate) fn set_return(&mut self, to: Option<SidebarKeyboardReturn>) {
         self.return_to = to;
     }
@@ -169,7 +169,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:FocusRouting 2026-11-11 WHY:
     /// The entry used to end only in the sidebar's own prepaint, so a sidebar that stopped being drawn while it waited (the floating panel dismissed, the docked sidebar collapsed) left the keyboard parked on the sidebar's handle with nothing to give it back. A timer ends it after its wait whether or not the sidebar draws again, and each host's render ends it at once when the window it waits in no longer draws the sidebar (`check_native_sidebar_keyboard_entry`).
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(crate) fn start_native_sidebar_keyboard_entry(
         &mut self,
         window: AnyWindowHandle,
@@ -335,7 +335,7 @@ impl GhostexGpuiApp {
     }
 
     /// The window whose sidebar control held focus when its last frame ended.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(crate) fn native_sidebar_focused_window(&self) -> Option<AnyWindowHandle> {
         self.native_sidebar
             .focus_stops

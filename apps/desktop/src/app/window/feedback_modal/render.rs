@@ -14,7 +14,7 @@ impl GpuiFeedbackModalWindow {
         let paste: ModalPasteHandler = Rc::new(Self::paste_handler(cx.entity().downgrade()));
         let paste_chord = crate::hotkey_label::terminal_overlay_hotkey_chord_label("cmd+v");
         // The web build's GPUI platform delivers no file drops, so the page only offers paste.
-        let paste_hint = if cfg!(target_family = "wasm") {
+        let paste_hint = if cfg!(ghostex_web) {
             format!(
                 "You can paste screenshots into this box with {paste_chord}: up to \
                  {FEEDBACK_MAX_IMAGES} PNG, JPEG or WebP images."

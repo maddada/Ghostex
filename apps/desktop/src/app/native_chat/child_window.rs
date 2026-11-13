@@ -225,7 +225,7 @@ pub(crate) fn bounds_inside_content_mask(window: &gpui::Window, bounds: Bounds<P
 /// own windows draw under their titlebar, so there the two are the same.
 pub(crate) fn content_bounds(window: &gpui::Window) -> Bounds<Pixels> {
     let bounds = window.bounds();
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(ghostex_web)))]
     let bounds = Bounds::from_corners(
         bounds.origin
             + gpui::point(
@@ -239,7 +239,7 @@ pub(crate) fn content_bounds(window: &gpui::Window) -> Bounds<Pixels> {
 
 /// The window's root native view (its HWND on Windows), which the chat's child windows attach to
 /// and are moved against. Elsewhere they keep the parent the chat was created with.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn window_native_view(window: &gpui::Window) -> Option<*mut std::ffi::c_void> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     match HasWindowHandle::window_handle(window).ok()?.as_raw() {
@@ -248,7 +248,7 @@ pub(crate) fn window_native_view(window: &gpui::Window) -> Option<*mut std::ffi:
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 pub(crate) fn window_native_view(window: &gpui::Window) -> Option<*mut std::ffi::c_void> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     match HasWindowHandle::window_handle(window).ok()?.as_raw() {
@@ -257,7 +257,10 @@ pub(crate) fn window_native_view(window: &gpui::Window) -> Option<*mut std::ffi:
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 pub(crate) fn window_native_view(_: &gpui::Window) -> Option<*mut std::ffi::c_void> {
     None
 }
@@ -267,7 +270,7 @@ pub(crate) fn window_native_view(_: &gpui::Window) -> Option<*mut std::ffi::c_vo
 ///
 /// CDXC:SessionChat 2026-09-19 WHY:
 /// AppKit reports the new size to GPUI synchronously from `setFrame:`, and GPUI drops that report while the app is borrowed, which left a child window moved from inside an update painting at its old size inside its new frame. The frame is therefore set from a task that runs outside any app update, the way GPUI's own `Window::resize` does.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(ghostex_web)))]
 pub(crate) fn move_child_window(
     handle: gpui::AnyWindowHandle,
     parent: *mut std::ffi::c_void,
@@ -318,7 +321,7 @@ pub(crate) fn move_child_window(
 
 /// CDXC:PlatformSupport 2026-09-24 WHY:
 /// Floating X11 windows are still independent frames; owner-relative placement keeps previews and editors aligned when their chat pane moves. The backend uses the explicit creation-time owner rather than keyboard focus.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
 pub(crate) fn move_child_window(
     handle: gpui::AnyWindowHandle,
     _: *mut std::ffi::c_void,
@@ -332,7 +335,7 @@ pub(crate) fn move_child_window(
 
 /// CDXC:PlatformSupport 2026-10-22 WHY:
 /// This used to answer "cannot move" on Windows, and every caller then closed the window and opened it again (a chat menu that changed height, the `$`/`@`/`/` list, the Docs note composer and format bar, the "Scroll to bottom" pill) or only resized it where it stood (the chat's pane dialogs). Removing an active pop-up handed activation to another app, so clicking the Threads menu's "N more" closed the menu and brought another app's window in front of Ghostex. `parent` is the HWND of the window `frame` is measured in (`window_native_view`), and the move runs from a task: `SetWindowPos` delivers `WM_SIZE` at once and GPUI's resize callback needs the app free (CDXC:ContextMenus 2026-10-02 in frosted_host.rs).
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(ghostex_web)))]
 pub(crate) fn move_child_window(
     handle: gpui::AnyWindowHandle,
     parent: *mut std::ffi::c_void,
@@ -388,7 +391,11 @@ pub(crate) fn move_child_window(
     true
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(not(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "linux", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+)))]
 pub(crate) fn move_child_window(
     _: gpui::AnyWindowHandle,
     _: *mut std::ffi::c_void,
@@ -415,7 +422,7 @@ pub(super) fn pane_dialog_window_background(glass: bool) -> gpui::WindowBackgrou
 /// A pane dialog's window covers the whole chat pane. Blurred over all of it, macOS put GPUI's blur view across the pane, and that view paints a black base under the live blur (gpui_macos `blurred_view_update_layer`, for window snapshots); the dialog also gave the same window a WindowServer background blur (`GhostexGpuiPrepareChatDialogWindow`, now removed). The chat behind Save to Markdown showed as solid black and the frosted card as a near-black slab. The blur is now confined to the card, as the toasts' is, which masks the black base to the card too; the rest of the window draws only the light dim (`pane_dialog_scrim`). Only on macOS: Windows confines a window's blur by clipping the window itself, which would cut away the dim and the click outside the card that closes the dialog.
 pub(super) fn pane_dialog_blur_region(glass: bool, radius: Pixels) -> Option<gpui::AnyElement> {
     use gpui::{IntoElement as _, Styled as _};
-    if !glass || !cfg!(target_os = "macos") {
+    if !glass || !cfg!(all(target_os = "macos", not(ghostex_web))) {
         return None;
     }
     thread_local! {

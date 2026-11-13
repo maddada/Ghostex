@@ -51,11 +51,11 @@ pub(super) const DICTATION: bool = DICTATION_ENABLED
 /// Whether the chat box draws the Dictate button. The web build draws it only under its
 /// `?dictatePreview=` switch, which shows the pill's states without a microphone.
 pub(super) fn dictation_drawn() -> bool {
-    #[cfg(target_family = "wasm")]
+    #[cfg(ghostex_web)]
     {
         crate::app::voice_agent::dictation_preview()
     }
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(not(ghostex_web))]
     {
         DICTATION
     }

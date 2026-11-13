@@ -112,6 +112,14 @@ pub async fn run(args: Vec<String>) -> Result<()> {
     let build_identity = read_current_build_identity(&version)?;
     match command {
         None | Some("--foreground") => {
+            // Hidden test seam (network_status/probe.rs), passed only by `cargo xtask test-server`.
+            if let Some(path) = args
+                .iter()
+                .position(|arg| arg == "--network-status-file")
+                .and_then(|index| args.get(index + 1))
+            {
+                crate::network_status::set_override_file(path.into());
+            }
             #[cfg(windows)]
             crate::platform::process::suppress_helper_error_dialogs();
             let result = run_gxserver_foreground(GxserverForegroundOptions {

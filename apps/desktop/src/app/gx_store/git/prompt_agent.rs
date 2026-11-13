@@ -337,7 +337,7 @@ impl GhostexGpuiApp {
                 if !prompt.trim().is_empty()
                     || rename_command.is_some()
                     || is_coordinator
-                    || cfg!(target_arch = "wasm32")
+                    || cfg!(ghostex_web)
                 {
                     start_and_send(remote, &session, rename_command, &prompt)
                         .await

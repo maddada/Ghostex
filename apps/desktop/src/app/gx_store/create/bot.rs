@@ -168,10 +168,10 @@ impl GhostexGpuiApp {
         project: ghostex_gx_core::ProjectKey,
         cx: &mut gpui::Context<Self>,
     ) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         self.gx_store_focus_project(&project.to_workspace_project_id(), cx);
         // The browser build has no focus publisher; the store's own focus moves the list.
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         {
             let output = self.gx_store.core.handle(
                 ghostex_gx_core::Event::Intent(ghostex_gx_core::Intent::FocusProject { project }),
@@ -215,7 +215,7 @@ impl GhostexGpuiApp {
             // Adding a GBot asks for the owner's approval (server/src/server/security_gates.rs):
             // Touch ID shows while the call is out; when it wasn't used the phone may still
             // approve, and the repeated call then adds it.
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(ghostex_web))]
             if let Some(id) = created
                 .as_ref()
                 .err()

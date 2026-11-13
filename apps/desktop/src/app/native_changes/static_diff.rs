@@ -15,7 +15,7 @@ use crate::app::window::native_modal_kit::{MODAL_MONO_FONT, ModalPalette, hsla};
 
 /// Every hunk of `patch` (one file's unified diff, starting with its `diff --git` line) with both
 /// line numbers, in a scrolling column. `id` names the scroll area.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 pub(crate) fn render_static_diff(
     id: impl Into<SharedString>,
     patch: &str,

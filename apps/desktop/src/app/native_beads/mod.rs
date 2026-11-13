@@ -14,6 +14,6 @@ mod render;
 mod tree;
 mod view;
 
-#[cfg_attr(not(target_arch = "wasm32"), allow(unused_imports))]
+#[cfg_attr(not(ghostex_web), allow(unused_imports))]
 pub(crate) use view::BeadsLayout;
 pub(crate) use view::BeadsView;

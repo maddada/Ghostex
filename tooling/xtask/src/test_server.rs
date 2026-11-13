@@ -19,11 +19,15 @@ use crate::gxserver::health;
 use crate::util::{home_dir, kill_pid, output, root, sleep_ms, stdout_if_ok, xdg_state_root, Res};
 
 const USAGE: &str = "Usage: cargo xtask test-server <command>
-  start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] [--binaries <dir>]
+  start [--name <n>] [--projects <path>...] [--port <p>] [--network online|offline|probe] [--no-build] [--dry-run] [--binaries <dir>]
                 build (or reuse) the debug gxserver, start it on its own GHOSTEX_HOME and port,
                 add the projects, and print the env lines for the ghostex CLI and `ghostex web`;
                 --binaries runs the gxserver and ghostex in <dir> instead (an older release's, to check
-                compatibility)
+                compatibility); --network sets what its online check sees (online by default, probe for
+                the real check)
+  network <name> online|offline|probe
+                switch what a running test server's online check sees: offline holds Autopilot and
+                coordinator reports as a real outage does, online brings them back, probe uses the real check
   env <name>    print those env lines again
   stop <name>   close its sessions, stop it, and remove any LaunchAgent it created
   remove <name> stop it and delete its folder
@@ -87,6 +91,19 @@ pub fn run(args: &[String]) -> Res<i32> {
                 fs::remove_dir_all(&folder)?;
             }
             println!("Removed {}.", folder.display());
+            Ok(0)
+        }
+        "network" => {
+            let [name, state] = rest else {
+                bail!("Usage: cargo xtask test-server network <name> online|offline|probe");
+            };
+            validate_name(name)?;
+            let _lock = lock()?;
+            let server = Server::load(name)?;
+            require_network_flag(&server)?;
+            set_network(&server, state)?;
+            println!("Test server {name}'s online check now sees: {state}.");
+            warn_if_other_build(&server);
             Ok(0)
         }
         "list" => list(),
@@ -362,6 +379,8 @@ fn start(args: &[String]) -> Res<i32> {
     let mut build = true;
     let mut dry_run = false;
     let mut binaries: Option<PathBuf> = None;
+    // Online unless asked: a throwaway server should not depend on the shell reaching the agents' API hosts (the plan's default was the real check; online is deliberate, since the real check is what failed).
+    let mut network: Option<String> = None;
     let mut index = 0;
     while index < args.len() {
         let value = |index: usize| -> Res<&String> {
@@ -386,6 +405,12 @@ fn start(args: &[String]) -> Res<i32> {
                     projects.push(path.clone());
                     index += 1;
                 }
+            }
+            "--network" => {
+                let state = value(index)?.clone();
+                check_network_state(&state)?;
+                network = Some(state);
+                index += 1;
             }
             "--no-build" => build = false,
             "--dry-run" => dry_run = true,
@@ -445,6 +470,12 @@ fn start(args: &[String]) -> Res<i32> {
             if !existing.record_has_own_zmx_dir() {
                 eprintln!("Warning: it was started before test servers had their own zmx folder and server id check. Run `cargo xtask test-server stop {0}` and start it again.", existing.name);
             }
+            if let Some(state) = &network {
+                require_network_flag(existing)?;
+                set_network(existing, state)?;
+                println!("Its online check now sees: {state}.");
+                warn_if_other_build(existing);
+            }
             add_projects(existing, &projects)?;
             print_env(existing);
             return Ok(0);
@@ -472,6 +503,7 @@ fn start(args: &[String]) -> Res<i32> {
         None => Server::new(&name, port),
     };
     prepare_folder(&server, &debug, linked)?;
+    set_network(&server, network.as_deref().unwrap_or("online"))?;
     ensure_isolated(&server)?;
     server.write_env_file()?;
     fs::write(
@@ -885,6 +917,61 @@ fn is_debug_zmx(path: &Path) -> bool {
     fs::read(path).is_ok_and(|bytes| bytes.windows(MARKER.len()).any(|window| window == MARKER))
 }
 
+/// CDXC:OfflineHold 2026-11-13 WHY: a test server started from a sandboxed or proxied shell could not connect straight to the agents' API hosts, so it read as offline and held every report; pointing HTTPS_PROXY at its own port was the workaround. gxserver's hidden `--network-status-file` makes its online check read this file instead while it says `online` or `offline` (server/src/network_status/probe.rs), so a test server is online by default and an outage can be tested by switching it, never by cutting the computer's network.
+fn network_file(server: &Server) -> PathBuf {
+    server.folder.join("network-status")
+}
+
+fn check_network_state(state: &str) -> Res {
+    if !matches!(state, "online" | "offline" | "probe") {
+        bail!("The network state is online, offline or probe (got {state}).");
+    }
+    Ok(())
+}
+
+/// `probe` removes the file, so the server runs the real check.
+fn set_network(server: &Server, state: &str) -> Res {
+    check_network_state(state)?;
+    let file = network_file(server);
+    if state == "probe" {
+        if file.exists() {
+            fs::remove_file(&file)?;
+        }
+    } else {
+        // Written aside and renamed in, so the server never reads a half-written file (which would fall through to the real check for a tick).
+        let staged = file.with_extension("new");
+        fs::write(&staged, format!("{state}\n"))?;
+        fs::rename(&staged, &file)?;
+    }
+    Ok(())
+}
+
+/// A server that runs was started before `--network-status-file` existed when its command line lacks it; it would keep the real check whatever the file says, so the change is refused with the restart that fixes it.
+fn require_network_flag(server: &Server) -> Res {
+    let Some(pid) = server.pid().filter(|_| server.health().is_some()) else {
+        return Ok(());
+    };
+    let command_line =
+        stdout_if_ok(Command::new("ps").args(["-o", "command=", "-p", &pid.to_string()]))
+            .unwrap_or_default();
+    if !command_line.contains("--network-status-file") {
+        bail!(
+            "Test server {0} was started without the network switch (before it existed). Restart it: cargo xtask test-server stop {0}, then start --name {0} again.",
+            server.name
+        );
+    }
+    Ok(())
+}
+
+/// A server started with `--binaries` runs another build's gxserver; one older than the network seam ignores the file, so the switch is only claimed for this checkout's build.
+fn warn_if_other_build(server: &Server) {
+    if fs::symlink_metadata(server.bin().join("gxserver"))
+        .is_ok_and(|meta| meta.file_type().is_symlink())
+    {
+        println!("Note: this server runs the gxserver given with --binaries. A gxserver from 11.6.0 or earlier ignores the network file and keeps the real check.");
+    }
+}
+
 fn launch(server: &Server) -> Res {
     let log = fs::OpenOptions::new()
         .create(true)
@@ -893,6 +980,8 @@ fn launch(server: &Server) -> Res {
     let mut command = server.command(server.bin().join("gxserver"));
     command
         .arg("--foreground")
+        .arg("--network-status-file")
+        .arg(network_file(server))
         .current_dir(&server.folder)
         .stdin(Stdio::null())
         .stdout(log.try_clone()?)

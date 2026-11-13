@@ -700,14 +700,14 @@ impl GhostexGpuiApp {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 const HOOKS_DECLINED_DETAIL: &str = "Ghostex won't ask again when it starts. Install them in Settings > Agents for Chat View, resuming and the working and done indicators.";
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 const HOOKS_DECLINED_DETAIL: &str = "Install and approve the hooks in order for Chat View to work correctly. Resuming and working/done indicators also require hooks.";
 
 /// Whether the Connect dialog for this agent was answered Not now on this computer. The web build
 /// (apps/gpui-web compiles this file) keeps no such memory and always asks.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn agent_hooks_declined(hook_agent_id: &str) -> bool {
     crate::app::helpers::load_gpui_first_run_onboarding_state()
         .agent_hooks_declined
@@ -715,13 +715,13 @@ fn agent_hooks_declined(hook_agent_id: &str) -> bool {
         .any(|id| id == hook_agent_id)
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn agent_hooks_declined(_hook_agent_id: &str) -> bool {
     false
 }
 
 /// Not now in the Connect dialog is remembered for that agent, and installing forgets it.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn remember_agent_hooks_answer(hook_agent_id: &str, install_hooks: bool) {
     use crate::app::helpers::{
         load_gpui_first_run_onboarding_state, persist_gpui_first_run_onboarding_state,
@@ -740,5 +740,5 @@ fn remember_agent_hooks_answer(hook_agent_id: &str, install_hooks: bool) {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn remember_agent_hooks_answer(_hook_agent_id: &str, _install_hooks: bool) {}

@@ -71,12 +71,12 @@ pub(crate) struct NativeSidebarState {
     /// The pointer is on the floating links card.
     pub(crate) links_card_hovered: bool,
     /// Where the web build drew the card last, for telling whether the pointer is on it.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(not(ghostex_web), allow(dead_code))]
     pub(crate) links_card_bounds: std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>,
     /// The card's window on the desktop.
     pub(crate) links_card_window: Option<gpui::AnyWindowHandle>,
     /// The list the card shows (the web build draws it in its own page).
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(not(ghostex_web), allow(dead_code))]
     pub(crate) links_card_list: Option<gpui::Entity<super::links_list::SessionLinksList>>,
     /// The Main Hub row the pointer rests on (its home header's group id, or `chief-row` for the
     /// row under the Spaces bar), and the top of that row in the window when its card opened
@@ -84,7 +84,7 @@ pub(crate) struct NativeSidebarState {
     pub(crate) main_hub_card_pending: Option<String>,
     pub(crate) main_hub_card_open: Option<(String, f32)>,
     /// The card's window on the desktop.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    #[cfg_attr(ghostex_web, allow(dead_code))]
     pub(crate) main_hub_card_window: Option<gpui::AnyWindowHandle>,
     /// The session whose links list is open in the header dropdown (native_sidebar/links_list.rs).
     pub(crate) links_list_session: Option<ghostex_gx_core::SessionKey>,

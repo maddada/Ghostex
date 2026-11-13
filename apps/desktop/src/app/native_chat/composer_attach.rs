@@ -51,7 +51,7 @@ impl NativeChatView {
         paths: Vec<String>,
         cx: &mut Context<Self>,
     ) -> Vec<String> {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             let mut rest = Vec::with_capacity(paths.len());
             for path in paths {
@@ -74,7 +74,7 @@ impl NativeChatView {
             }
             rest
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         {
             let _ = cx;
             paths

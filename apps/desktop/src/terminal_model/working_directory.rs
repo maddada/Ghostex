@@ -71,7 +71,7 @@ pub(crate) fn terminal_local_hostname() -> Option<String> {
     static HOSTNAME: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     HOSTNAME
         .get_or_init(|| {
-            #[cfg(all(unix, not(target_family = "wasm")))]
+            #[cfg(all(unix, not(ghostex_web)))]
             let host = {
                 let mut name = [0u8; 256];
                 // SAFETY: the buffer is writable for its whole length and stays alive for the call.
@@ -87,7 +87,7 @@ pub(crate) fn terminal_local_hostname() -> Option<String> {
             };
             #[cfg(windows)]
             let host = std::env::var("COMPUTERNAME").ok();
-            #[cfg(target_family = "wasm")]
+            #[cfg(ghostex_web)]
             let host: Option<String> = None;
             host.filter(|host| !host.is_empty())
         })
