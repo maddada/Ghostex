@@ -1631,8 +1631,8 @@ when you open it.
   goes; one that's gone, or is the project you're handing off from, goes back to
   this project. Picking another agent's model in the model picker always starts
   from this project on that model's agent. Handing off a coordinator starts the
-  new session as a coordinator with the same Goal and Standing instructions when
-  the chosen agent supports coordinators.
+  new session as a coordinator with the same Goal and Standing instructions, on
+  whichever agent you pick.
   Include also holds History. At first the file keeps the last 20 turns, a turn
   being your message and everything up to your next one, and the slider picks 1,
   2, 3, 5, 10, 20, 50 or 100 of them. The top of the file then lists what you
@@ -3767,24 +3767,26 @@ version of the Projects features in Cursor and Claude Code.
   last used, greys a computer that isn't connected, and lists that computer's
   own agents and models. A project with one copy, or one Separate by machine
   keeps apart, has no such field. On the phone, a project whose clones its
-  list shows as one gets a **Folder** row that picks between them. Name it, pick its agent
-  from the Agent dropdown (Claude, Codex, ZCode, Cursor, Grok, Copilot,
-  Antigravity, Pi, OMP, OpenCode or DeepSeek Harness, whichever you have set up), its model where the agent
-  lets Ghostex choose one (Opus 5.5 on Claude; otherwise each agent starts on its
-  own default) and its effort: Low, Medium, High or XHigh, High by default (an agent without
-  XHigh offers its levels from Low up to its highest). Cursor and ZCode coordinators take no
-  effort choice (Cursor's effort is part of its model). An OpenCode coordinator lists every model
-  your OpenCode has (search the list), starting on OpenCode's default, and its effort is that
-  model's variant; Ghostex switches OpenCode to them before its first message. A DeepSeek Harness
-  coordinator takes no model or effort choice: it starts on the model your DeepSeek Harness is set
-  to. Use a very good
-  model: the coordinator
-  is the agent you talk to all day, and the main way Ghostex itself is built.
+  list shows as one gets a **Folder** row that picks between them. Name it and
+  press **Next**: the agent picker opens, titled **Pick the coordinator's agent**,
+  with every agent set up on that computer (any agent can run a coordinator;
+  press Tab on Claude or Codex to pick an account). Pick one and the coordinator
+  starts with its first message sent. It starts on Opus 5.5 at High on Claude,
+  High effort on Codex and Antigravity, and every other agent on its own
+  default model; change it afterwards in its chat like any session's. Use a very
+  good model: the coordinator is the agent you talk to all day, and the main way
+  Ghostex itself is built. When the highlighted agent would start on a model
+  other than Opus, Fable, GPT Sol or GPT Astra, below medium effort, or on a
+  model Ghostex can't tell, the picker says "Coordinator quality may be degraded
+  on <model>" under the list (on the phone, the agent's row gets an (i) with
+  that line). Claude (cloud) is not offered: a coordinator runs on a computer
+  with Ghostex.
   Its first message is always "Read and adhere to this skill:
-  /ghostex-coordinator" (`$ghostex-coordinator` on agents other than Claude
-  Code and Copilot), shown locked in the dialog: Ghostex installs the
-  ghostex-coordinator skill for that agent, and the skill is the coordinator's
-  playbook. A Claude or Codex coordinator keeps its role after `/clear` or a
+  /ghostex-coordinator", written the way its agent runs a skill
+  (`$ghostex-coordinator` on Codex and most others), shown locked in the
+  dialog: Ghostex installs the ghostex-coordinator skill for that agent, and the
+  skill is the coordinator's playbook. An agent that does not load skills from a
+  folder Ghostex knows is told to run `ghostex coordinator guide` instead. A Claude or Codex coordinator keeps its role after `/clear` or a
   compaction: Ghostex hands it that line again before its next message. Then it opens in chat, where you write your first request. The name
   is what its sidebar row shows, and the coordinator keeps it: unlike other
   sessions it is not renamed from your first message (Rename in the sidebar
@@ -3795,8 +3797,23 @@ version of the Projects features in Cursor and Claude Code.
   **Every effort level in coordinator pickers** (an advanced setting in Settings > Chat);
   a coordinator works best on High or XHigh. From a terminal: `ghostex coordinator
   create [--agent <id>] [--goal <text>] [--task <first request>]`.
-- **Turn a session into a coordinator**: right-click a session of one of
-  those agents in the sidebar, open **Advanced** and choose **Make
+- **Model warning**: while a coordinator runs on a model other than Opus,
+  Fable, GPT Sol or GPT Astra, below medium effort, or on a model Ghostex can't
+  tell, its chat shows an amber "Coordinator quality may be degraded on
+  <model>" pill (on the computer, in Ghostex in a browser and on the phone). It
+  follows the model and effort as you change them; click it and choose **Hide
+  for this chat** to stop seeing it in that chat. The coordinator is told the
+  same in its playbook and says once that a coordinator works best on Opus 5.5
+  at medium or high, or GPT 6.1 Sol at high.
+- **Staying on track**: when a coordinator's reply asks you something in plain
+  text instead of a form or an item ask, does the work itself (editing code or
+  running builds) instead of starting a thread, or leaves out the marked
+  sections Marked handovers asks for, the next message Ghostex delivers to it
+  carries a one-line reminder naming the slip, at most once every few turns.
+  After its conversation is compacted, it is told to read its playbook again
+  (`ghostex coordinator guide`).
+- **Turn a session into a coordinator**: right-click an agent session in the
+  sidebar, open **Advanced** and choose **Make
   Coordinator** (optionally with a goal); on the phone it is in the session's
   menu too. The session keeps its conversation and is never restarted or
   interrupted: it gets the coordinator crown right away, Ghostex installs the

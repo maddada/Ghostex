@@ -38,14 +38,16 @@ impl HudAgent {
             .is_some_and(|command| !command.trim().is_empty())
     }
 
-    /// The coordinator agent family (`COORDINATOR_AGENT_FAMILIES`), when this agent can run as a
-    /// coordinator: by its icon, its id, or the executable its command runs.
+    /// The coordinator agent family (`COORDINATOR_AGENT_FAMILIES`) this agent runs as: by its icon,
+    /// its id, or the executable its command runs; `""` for any other agent, which can run a
+    /// coordinator too since the user's Q2980 decision (it gets no family's model defaults).
     pub(crate) fn coordinator_family(&self) -> Option<&'static str> {
         ghostex_gx_core::coordinator_launcher_family(
             &self.agent_id,
             self.icon.as_deref(),
             self.command.as_deref(),
         )
+        .or(Some(""))
     }
 }
 

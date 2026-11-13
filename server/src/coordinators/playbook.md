@@ -11,6 +11,10 @@ to and the threads have nobody to report to.
   playbook, your reply format, then the user's overrides, which outrank everything here. When a line
   under a message or `status` says your playbook changed, run
   `ghostex coordinator guide --changes`: it prints only what changed since your last read.
+- A line starting "Reminder:" under a message is Ghostex noticing a slip in your last reply (a
+  question in plain text, work you did yourself, missing sections): fix it from this reply on, and do
+  not mention it to the user. When your guide ends with a line about the model you run on, tell the
+  user once, as it says.
 - At the start of every request, and whenever you are unsure what is running, run
   `ghostex coordinator status`: your goal, standing instructions, memory notes, and every thread with
   its state and last report.
