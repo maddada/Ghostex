@@ -36,7 +36,7 @@ pub const TOUCH_COMPOSER_PLACEHOLDER: &str =
     "Tap \u{2191} to send or hold it to queue; use / for skills, @ for files and + for agents.";
 
 /// The title of the toast a blocked Send raises.
-pub const SEND_BLOCKED_TITLE: &str = "Message not sent";
+pub const SEND_BLOCKED_TITLE: &str = "Not sent";
 
 /// Everything that can stop a send, read off the session state.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

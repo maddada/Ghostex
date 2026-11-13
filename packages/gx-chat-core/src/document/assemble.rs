@@ -45,6 +45,14 @@ pub fn assemble_with(
     session::document(state, context, &mut document);
     transcript::document(state, context, &mut document);
     questions::document(state, context, &mut document);
+    // A failed message carries its own card, so the notice that stood for it is not drawn too
+    // (CDXC:SessionChat 2026-11-13 in composer/delivery_card.rs).
+    let (delivery_cards, taken_over) = crate::composer::delivery_card::project(state);
+    if taken_over.is_some() && document.send_failure_card_prompt_id == taken_over {
+        document.notice_visible = false;
+        document.send_failure_card_prompt_id = None;
+    }
+    document.delivery_cards = delivery_cards;
     document.question_forms = crate::questions::forms::project_kept(state, &mut cache.forms);
     // One walk of the chat for everything built from its turns (`work_cards::turns`).
     let turns = crate::extras::work_cards::turns_for_work(state);

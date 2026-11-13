@@ -8,6 +8,7 @@ pub mod actions;
 pub mod attaching;
 pub mod catch_up;
 pub mod delivery;
+pub mod delivery_card;
 pub mod document;
 pub mod draft_sync;
 pub mod files_links;

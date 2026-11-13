@@ -153,20 +153,34 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::RetryQueue
             if crate::composer::delivery::is_unsent(string_param(action, "promptId")) =>
         {
+            crate::composer::delivery_card::note_retry(state, string_param(action, "promptId"));
             crate::composer::delivery::retry_unsent(
                 state,
                 context,
                 string_param(action, "promptId"),
             )
         }
-        ActionKind::RetryQueue => queue_rpc(
-            state,
-            ChatRpcMethod::UpdateSessionChatQueuedPrompt,
-            json!({ "promptId": string_param(action, "promptId"), "retry": true }),
-            state.composer.transport.update_queued_prompt,
-            None,
-        ),
-        ActionKind::RemoveQueue => remove_queue(state, action),
+        ActionKind::RetryQueue => {
+            crate::composer::delivery_card::note_retry(state, string_param(action, "promptId"));
+            queue_rpc(
+                state,
+                ChatRpcMethod::UpdateSessionChatQueuedPrompt,
+                json!({ "promptId": string_param(action, "promptId"), "retry": true }),
+                state.composer.transport.update_queued_prompt,
+                None,
+            )
+        }
+        // Removing a failed message also closes the notice that stood for it, which its card
+        // replaced, so the notice cannot come back once the message is gone (and gxserver drops
+        // the sidebar's dot and the notification with it).
+        ActionKind::RemoveQueue => {
+            let prompt_id = string_param(action, "promptId").to_string();
+            let mut effects = remove_queue(state, action);
+            effects.extend(crate::questions::actions::dismiss_send_failure(
+                state, context, &prompt_id,
+            ));
+            effects
+        }
         ActionKind::TakeBackQueued => {
             crate::composer::queue_take_back::begin(state, context, action)
         }

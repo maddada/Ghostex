@@ -138,6 +138,10 @@ fn approval_ask(tool: &str) -> &'static str {
 fn decorate_notice(raw: &Value, notice: &TerminalNotice, agent: Option<&str>) -> Value {
     let mut object = raw.as_object().cloned().unwrap_or_default();
     object.insert("tone".to_string(), json!(notice_tone::notice_tone(notice)));
+    // One wording for a message that did not go out, on every card (composer/delivery_card.rs).
+    if notice.send_failure.is_some() {
+        object.insert("title".to_string(), json!("Not sent"));
+    }
     object.insert(
         "collapsedChoiceCount".to_string(),
         json!(COLLAPSED_CHOICE_COUNT),

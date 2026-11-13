@@ -136,6 +136,10 @@ pub struct ComposerState {
     /// The messages whose send ended in a failure time cannot fix, which stay in the chat as rows
     /// saying so until Retry, Edit or Remove (`composer/delivery.rs`).
     pub unsent: Vec<UnsentSend>,
+    /// The messages the user asked to go again, newest last, at most
+    /// `delivery_card::RETRIED_LIMIT`: one that fails again says "Still not sent" and leads with
+    /// Fix it (`composer/delivery_card.rs`).
+    pub retried_prompt_ids: Vec<String>,
 }
 
 /// How many taken send ids a core remembers. A host waits on a handful at most.

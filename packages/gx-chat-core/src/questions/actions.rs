@@ -225,6 +225,17 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::Answer => {
             if let Some(answer) = action.param("answer") {
                 let answer = answer.clone();
+                // Retry on a failed message's card goes through its notice: remembered, so a
+                // second failure leads with Fix it (`composer/delivery_card.rs`).
+                if answer.get("actionId").and_then(Value::as_str) == Some("retrySend") {
+                    if let Some(prompt_id) = notice
+                        .as_ref()
+                        .and_then(crate::composer::delivery_card::send_failure_prompt_id)
+                        .map(str::to_string)
+                    {
+                        crate::composer::delivery_card::note_retry(state, &prompt_id);
+                    }
+                }
                 effects.extend(answer_prompt(state, &answer));
             }
         }
@@ -355,6 +366,24 @@ fn async_projection(
         gates::working(state),
         &state.session.retired_async_question_ids,
     )
+}
+
+/// Closes the session's notice when it stands for the failed message `prompt_id`, which its card
+/// under the message replaced (`composer/delivery_card.rs`).
+pub fn dismiss_send_failure(
+    state: &mut ChatState,
+    context: &ChatContext,
+    prompt_id: &str,
+) -> Vec<Effect> {
+    let notice = TerminalNotice::parse(state.session.terminal_notice.as_ref());
+    let stands_for = notice
+        .as_ref()
+        .and_then(crate::composer::delivery_card::send_failure_prompt_id)
+        .is_some_and(|id| !id.is_empty() && id == prompt_id);
+    if !stands_for {
+        return Vec::new();
+    }
+    dismiss_notice(state, notice.as_ref(), context)
 }
 
 /// Closing a notice that only describes a state. A notice with a picker or a dialog has to be

@@ -205,6 +205,12 @@ pub struct Document {
     /// The failed queue row the visible card stands for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_failure_card_prompt_id: Option<String>,
+    /// The card under each waiting or failed message, by its `startupDelivery.promptId`:
+    /// `{ promptId, level, icon, title, sentence, buttons, menu }`, where `level` is `working`,
+    /// `needs` or `failed` and each button or menu row is `{ id, label, icon?, primary?, command }`
+    /// (a core action) or `{ id, label, icon?, host: "terminalView" }` (`composer/delivery_card.rs`).
+    #[serde(default)]
+    pub delivery_cards: BTreeMap<String, Value>,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub notice_error: Tri<String>,
     /// The approval answer the drawn notice or approval card waits on: `{ label, card, sending }`
