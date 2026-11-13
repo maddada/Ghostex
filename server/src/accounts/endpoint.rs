@@ -67,6 +67,9 @@ pub(crate) fn dispatch(
     if operation == "redeemReset" {
         return super::reset_claim::redeem(state, params);
     }
+    if operation == "readUsageNow" {
+        return super::usage_screen::read_now(state, params);
+    }
     if operation == "resetWatch" {
         return super::reset_watch::endpoint(state, params);
     }

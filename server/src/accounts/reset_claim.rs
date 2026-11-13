@@ -146,5 +146,9 @@ pub(crate) fn claim_for_account(
         }
     };
     state.accounts.refresh_since(home, started);
+    // Claude Swap's own reading may still be from before the claim (usage_screen.rs).
+    if outcome.kind() == "success" {
+        super::usage_screen::refresh_in_background(state, account, "resetClaimed");
+    }
     Ok(outcome)
 }

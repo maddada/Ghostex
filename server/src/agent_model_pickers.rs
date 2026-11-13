@@ -34,8 +34,8 @@ const COLS: u16 = 160;
 const READ_LIMIT: Duration = Duration::from_secs(90);
 const DOWN: &[u8] = b"\x1b[B";
 const UP: &[u8] = b"\x1b[A";
-const ENTER: &[u8] = b"\r";
-const ESCAPE: &[u8] = b"\x1b";
+pub(crate) const ENTER: &[u8] = b"\r";
+pub(crate) const ESCAPE: &[u8] = b"\x1b";
 
 /// One row of a picker, in the picker's order.
 #[derive(Clone, Debug, PartialEq)]
@@ -189,8 +189,9 @@ fn read_picker(agent: &str, program: &str, scratch: &Path) -> Option<Vec<PickerR
     }
 }
 
-/// A CLI running in a hidden terminal, killed when dropped.
-struct Hidden {
+/// A CLI running in a hidden terminal, killed when dropped. Also reads Claude Code's `/usage`
+/// screen (accounts/usage_screen.rs).
+pub(crate) struct Hidden {
     terminal: Arc<Mutex<LoginTerminal>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     killer: Box<dyn ChildKiller + Send + Sync>,
@@ -202,10 +203,14 @@ impl Hidden {
         let mut command = CommandBuilder::new(program);
         command.args(args);
         command.cwd(cwd);
-        command.env("TERM", "xterm-256color");
         for (key, value) in env {
             command.env(key, value);
         }
+        Self::spawn_command(command)
+    }
+
+    pub(crate) fn spawn_command(mut command: CommandBuilder) -> Option<Self> {
+        command.env("TERM", "xterm-256color");
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: ROWS,
@@ -252,7 +257,7 @@ impl Hidden {
         })
     }
 
-    fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         self.terminal
             .lock()
             .map(|terminal| terminal.text())
@@ -267,17 +272,17 @@ impl Hidden {
     }
 
     /// Sends `bytes` and waits `pause` for the CLI to redraw.
-    fn press(&self, bytes: &[u8], pause_ms: u64) {
+    pub(crate) fn press(&self, bytes: &[u8], pause_ms: u64) {
         self.send(bytes);
         std::thread::sleep(Duration::from_millis(pause_ms));
     }
 
-    fn out_of_time(&self) -> bool {
+    pub(crate) fn out_of_time(&self) -> bool {
         self.started.elapsed() > READ_LIMIT
     }
 
     /// Polls the screen until `done` holds, for at most `limit`.
-    fn wait_for(&self, limit: Duration, done: impl Fn(&str) -> bool) -> Option<String> {
+    pub(crate) fn wait_for(&self, limit: Duration, done: impl Fn(&str) -> bool) -> Option<String> {
         let started = Instant::now();
         while started.elapsed() < limit && !self.out_of_time() {
             let text = self.text();
@@ -321,13 +326,9 @@ fn split_columns(rest: &str) -> (String, Option<String>) {
 // ones, and an effort line under the list for the focused row.
 // ---------------------------------------------------------------------------
 
-fn read_claude(program: &str, scratch: &Path) -> Option<Vec<PickerRow>> {
-    let cli = Hidden::spawn(
-        program,
-        &["--settings", r#"{"disableAllHooks":true}"#],
-        scratch,
-        &[],
-    )?;
+/// Waits until Claude Code in `cli` takes input, trusting its scratch folder on the way. `None`
+/// when it is signed out or does not get there in time.
+pub(crate) fn wait_for_claude_prompt(cli: &Hidden) -> Option<()> {
     loop {
         if cli.out_of_time() {
             return None;
@@ -358,6 +359,17 @@ fn read_claude(program: &str, scratch: &Path) -> Option<Vec<PickerRow>> {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
+    Some(())
+}
+
+fn read_claude(program: &str, scratch: &Path) -> Option<Vec<PickerRow>> {
+    let cli = Hidden::spawn(
+        program,
+        &["--settings", r#"{"disableAllHooks":true}"#],
+        scratch,
+        &[],
+    )?;
+    wait_for_claude_prompt(&cli)?;
     std::thread::sleep(Duration::from_millis(2000));
     cli.press(b"/model", 700);
     cli.press(ENTER, 300);

@@ -33,6 +33,59 @@ impl GhostexGpuiApp {
         });
     }
 
+    /// The usage panel's Refresh now: reads the account's usage again on the gxserver that owns it
+    /// (`readUsageNow`), then refreshes every account button and tells the panel.
+    pub(crate) fn refresh_account_usage_now(
+        &mut self,
+        titlebar_key: &str,
+        panel: gpui::WeakEntity<AccountUsagePanel>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let account = self
+            .titlebar_accounts
+            .iter()
+            .find(|a| a["titlebarKey"] == titlebar_key && a["registered"] == true)
+            .cloned()
+            .unwrap_or(Value::Null);
+        let machine = account["titlebarMachine"].as_str().unwrap_or("local");
+        let target = if machine == "local" {
+            Some(None)
+        } else {
+            self.remote_gxserver_connections
+                .get(machine)
+                .map(|connection| Some(connection.request_target()))
+        };
+        let request = account["id"]
+            .as_str()
+            .zip(target)
+            .map(|(id, target)| (target, json!({"operation":"readUsageNow","id":id})));
+        cx.spawn(async move |this, cx| {
+            if let Some((target, params)) = request {
+                let _ = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let timeout = Duration::from_secs(120);
+                        match target {
+                            Some(target) => gpui_remote_gxserver_rpc_result(
+                                &target,
+                                "/api/agentAccounts",
+                                &params,
+                                timeout,
+                            ),
+                            None => gpui_gxserver_rpc_result("/api/agentAccounts", &params, timeout),
+                        }
+                    })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    this.titlebar_accounts_revision = this.titlebar_accounts_revision.wrapping_add(1);
+                    this.refresh_titlebar_accounts(cx);
+                });
+            }
+            let _ = panel.update(cx, |panel, cx| panel.finish_refresh(cx));
+        })
+        .detach();
+    }
+
     /// Claims the reset the user confirmed in an account's usage panel on the gxserver that owns the account, then refreshes every account button and hands the result back to the panel.
     pub(crate) fn redeem_account_reset(
         &mut self,

@@ -42,4 +42,5 @@ pub(crate) mod setup_terminal;
 pub(crate) mod store;
 pub(crate) mod switch_progress;
 pub(crate) mod usage_only;
+mod usage_screen;
 pub(crate) mod wake_account;

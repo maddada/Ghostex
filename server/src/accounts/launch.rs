@@ -263,9 +263,17 @@ pub(crate) fn claude_account_argv(
                 "The Claude account this cloud session started on is no longer registered.",
             )
         })?;
-    let home = home()?;
-    launch_command(&home, account)?;
-    let executable = helpers::executable(&home, account.provider.helper()).ok_or_else(|| {
+    claude_argv(&home()?, account)
+}
+
+/// [`claude_account_argv`] for an account already read from the registry: also how gxserver's
+/// hidden `/usage` read starts Claude on an account (usage_screen.rs).
+pub(crate) fn claude_argv(
+    home: &Path,
+    account: &SavedAccount,
+) -> Result<Vec<String>, DomainStateError> {
+    launch_command(home, account)?;
+    let executable = helpers::executable(home, account.provider.helper()).ok_or_else(|| {
         DomainStateError::bad_request(format!(
             "Install {} in Settings > Accounts first.",
             helpers::tool_label(account.provider.helper())

@@ -6678,7 +6678,12 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Claude, promotions such as a model-launch reset). Click the count to list
   each reset with its expiry date, click Use beside one, then Reset to confirm:
   Ghostex uses that reset right away, without opening a terminal, and the
-  limits refresh in the dropdown. Using a reset can't be undone; if your usage
+  limits refresh in the dropdown. For a Claude account, Ghostex then also reads
+  the new limits off Claude Code's own usage screen in the background, so the
+  dropdown, the sidebar meters and Settings > Accounts show them within about
+  half a minute instead of waiting for the next usage check. Click "Updated …
+  ago" at the top of a Claude or Codex dropdown (its tooltip is Refresh now) to
+  read that account's limits again at once. Using a reset can't be undone; if your usage
   doesn't need a reset yet, nothing is used. When a saved account's banked
   reset expires within 3 days, and again within 24 hours, a red notification
   appears in the Notifications bell (once per reset, also after a restart) and
