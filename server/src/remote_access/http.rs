@@ -291,7 +291,13 @@ pub(crate) async fn handle_remote_access_http(
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 let doors =
                     crate::tailcat::known_door_addresses(&paths, status.relay.host.as_deref());
-                Ok(json!({ "addresses": easy_connect_addresses_with_doors(&status, doors) }))
+                // `enabled`: the user's Easy Connect switch, so a phone tells Off from a helper that
+                // is restarting (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs); older phones
+                // read only `addresses`.
+                Ok(json!({
+                    "addresses": easy_connect_addresses_with_doors(&status, doors),
+                    "enabled": status.enabled,
+                }))
             })
             .await
         }
@@ -385,6 +391,9 @@ pub(crate) async fn handle_remote_access_http(
                         "clientKey must be a nodekey: public key.",
                     )),
                     Err(LinkKeyError::NotPaired) => Err(RemoteAccessHttpError::unknown_device(&device_id)),
+                    Err(LinkKeyError::EasyConnectOff) => Err(RemoteAccessHttpError::bad_request(
+                        crate::tailcat::EASY_CONNECT_OFF_REFUSAL,
+                    )),
                     Err(LinkKeyError::HeldByAnotherDevice { name, paired }) => {
                         Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired }.into())
                     }
@@ -471,6 +480,16 @@ pub(crate) async fn handle_remote_access_http(
             let server_port = state.config.listeners.local.port;
             tokio::task::spawn_blocking(move || {
                 let device_name = params.device_name.clone();
+                // Easy Connect off here: no ask, no card, no key (CDXC:RemotePairing 2026-11-13 in
+                // tailcat/status.rs).
+                let db = open_gxserver_database(&paths)?;
+                if params.tailcat_client_key.is_some()
+                    && !crate::tailcat::easy_connect_turned_on(&db)?
+                {
+                    return Err(RemoteAccessHttpError::bad_request(
+                        crate::tailcat::EASY_CONNECT_OFF_REFUSAL,
+                    ));
+                }
                 // Traced only for a pairing that includes Easy Connect, the one it can approve.
                 let owner = if params.tailcat_client_key.is_some() {
                     super::tailnet_owner::check(client, server_port)
@@ -486,7 +505,6 @@ pub(crate) async fn handle_remote_access_http(
                     ),
                     _ => "A phone that signs in over SSH asked to pair with this computer".to_string(),
                 };
-                let db = open_gxserver_database(&paths)?;
                 let started = begin_ssh_pairing(&db, &pairing_runtime, &security, params, &owner);
                 // The same request handed back again is no new ask: the log keeps the first one. One
                 // approved without a click is logged once, when it pairs (`finish_pairing`).

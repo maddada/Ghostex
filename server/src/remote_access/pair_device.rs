@@ -1001,6 +1001,14 @@ fn finish_pairing(
     pending: &PendingPairing,
 ) -> Result<Value, PairDeviceError> {
     let phone = pending.kind == PairingDeviceKind::Phone;
+    // Nothing is written for a pairing that would add a key while Easy Connect is off
+    // (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs).
+    if pending.tailcat_client_key.is_some() && !crate::tailcat::easy_connect_turned_on(context.db)?
+    {
+        return Err(PairDeviceError::BadRequest(
+            crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string(),
+        ));
+    }
     // A computer gets neither an SSH key line nor a token (CDXC:RemotePairing 2026-11-08 above); a
     // phone that paired over its own SSH login gets the token only (`begin_ssh_pairing`), and the
     // key line too when it paired for Easy Connect (it sent its SSH key).
@@ -1053,50 +1061,90 @@ fn finish_pairing(
     fails, and no token is live before `reload_device_api_tokens` below), and the earlier entries are
     retired after it (their key lines, the push store, the allow-list).
     */
-    let earlier = {
-        let transaction = rusqlite::Transaction::new_unchecked(
-            context.db,
-            rusqlite::TransactionBehavior::Immediate,
-        )
-        .map_err(anyhow::Error::from)?;
-        // Checked again here: a device may have paired with that key while this one waited.
-        if let Some(client_key) = pending.tailcat_client_key.as_deref() {
-            if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
-                context.db,
-                client_key,
-                &pending.device_key.public_key,
-            )? {
-                return Err(key_held_by(&holder));
-            }
-        }
-        repository.insert_device(&record)?;
-        let mut earlier = super::paired_devices::earlier_pairings_of_same_device(
-            context.db,
-            &device_id,
-            pending.tailcat_client_key.as_deref(),
-            // Proven: `pairing_status` checked this key's signature before finishing the pairing.
-            &pending.device_key.public_key,
-        )?;
-        // A phone trusted over SSH earlier and now pairing for Easy Connect too: this entry replaces
-        // its SSH-only one, so Settings › Remote lists the phone once.
-        if pending.over_ssh && pending.tailcat_client_key.is_some() {
-            for device in super::paired_devices::earlier_ssh_trusts_of_same_device(
-                context.db,
-                &device_id,
-                &pending.device_key.public_key,
-            )? {
-                if !earlier.iter().any(|known| known.id == device.id) {
-                    earlier.push(device);
+    // The holder check, the new entry and the entries it retires, read in one IMMEDIATE transaction.
+    let save_entry =
+        || -> Result<Result<Vec<RemotePairedDeviceRecord>, PairDeviceError>, anyhow::Error> {
+            // Checked again here: a device may have paired with that key while this one waited.
+            if let Some(client_key) = pending.tailcat_client_key.as_deref() {
+                if let Some(holder) = super::paired_devices::tailcat_key_held_by_another_device(
+                    context.db,
+                    client_key,
+                    &pending.device_key.public_key,
+                )? {
+                    return Ok(Err(key_held_by(&holder)));
                 }
             }
+            repository.insert_device(&record)?;
+            let mut earlier = super::paired_devices::earlier_pairings_of_same_device(
+                context.db,
+                &device_id,
+                pending.tailcat_client_key.as_deref(),
+                // Proven: `pairing_status` checked this key's signature before finishing the pairing.
+                &pending.device_key.public_key,
+            )?;
+            // A phone trusted over SSH earlier and now pairing for Easy Connect too: this entry replaces
+            // its SSH-only one, so Settings › Remote lists the phone once.
+            if pending.over_ssh && pending.tailcat_client_key.is_some() {
+                for device in super::paired_devices::earlier_ssh_trusts_of_same_device(
+                    context.db,
+                    &device_id,
+                    &pending.device_key.public_key,
+                )? {
+                    if !earlier.iter().any(|known| known.id == device.id) {
+                        earlier.push(device);
+                    }
+                }
+            }
+            Ok(Ok(earlier))
+        };
+    let earlier = match pending.tailcat_client_key.as_deref() {
+        // With an Easy Connect key, the entry and its allow-list line are one write under the
+        // tailcat lock, refused whole while Easy Connect is off (CDXC:RemotePairing 2026-11-13 in
+        // tailcat/status.rs), so a pairing refused there leaves no entry behind.
+        Some(client_key) => crate::tailcat::with_tailcat_state(
+            context.paths,
+            context.db,
+            Some(context.tailcat_runtime),
+            |state| {
+                if !state.enabled {
+                    return Ok(Err(PairDeviceError::BadRequest(
+                        crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string(),
+                    )));
+                }
+                let earlier = save_entry()?;
+                if earlier.is_ok() {
+                    state.allowed_client_keys = super::paired_devices::allow_list_adding(
+                        &state.allowed_client_keys,
+                        client_key,
+                    );
+                }
+                Ok(earlier)
+            },
+        )??,
+        None => {
+            let transaction = rusqlite::Transaction::new_unchecked(
+                context.db,
+                rusqlite::TransactionBehavior::Immediate,
+            )
+            .map_err(anyhow::Error::from)?;
+            let earlier = save_entry()??;
+            transaction.commit().map_err(anyhow::Error::from)?;
+            earlier
         }
-        transaction.commit().map_err(anyhow::Error::from)?;
-        earlier
     };
     if let Some(key) = &key {
         if let Err(error) = (context.append_key)(key, &device_id, &pending.name) {
-            // No key line, no entry.
+            // No key line, no entry, and no allow-list line for it.
             let _ = repository.remove_device(&device_id);
+            if let Some(client_key) = pending.tailcat_client_key.as_deref() {
+                let _ = super::paired_devices::remove_tailcat_client_key(
+                    context.paths,
+                    context.db,
+                    context.tailcat_runtime,
+                    client_key,
+                    Some(&pending.device_key.public_key),
+                );
+            }
             return Err(if error.is::<AdministratorApprovalDeclined>() {
                 PairDeviceError::ApprovalDeclined
             } else {
@@ -1141,14 +1189,6 @@ fn finish_pairing(
 
     super::paired_devices::reload_device_api_tokens(context.db, context.device_tokens)?;
 
-    if let Some(client_key) = pending.tailcat_client_key.as_deref() {
-        super::paired_devices::add_tailcat_client_key_when_allow_listed(
-            context.paths,
-            context.db,
-            context.tailcat_runtime,
-            client_key,
-        )?;
-    }
     if let Some(approver_key) = approver_key {
         // The same approval that let the phone in enrolls its Face ID / fingerprint key, saved
         // with the other approver keys (`SecurityState::add_approver_key`).
@@ -1337,6 +1377,9 @@ pub fn register_computer_keys_signed(
         Err(super::paired_devices::LinkKeyError::HeldByAnotherDevice { name, paired }) => {
             Err(PairDeviceError::KeyHeldByAnotherDevice { name, paired })
         }
+        Err(super::paired_devices::LinkKeyError::EasyConnectOff) => Err(
+            PairDeviceError::BadRequest(crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string()),
+        ),
         Err(_) => Err(PairDeviceError::BadRequest(
             "keys must name app or server, each with a nodekey: public key.".to_string(),
         )),
