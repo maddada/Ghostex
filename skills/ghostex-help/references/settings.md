@@ -311,7 +311,7 @@ How to use this file:
 - **Sponsor Ghostex** `sponsor` (Settings UI row without a settings key; use `ghostex settings open`): Support the continued development of Ghostex.
 ### Privacy
 
-- **Anonymous analytics** `analyticsEnabled` (boolean, default true) [not agent-writable]: Send anonymous usage analytics. Ask the user before changing it.
+- **Anonymous analytics** `analyticsEnabled` (boolean, default true) [not agent-writable]: Send anonymous usage analytics. Settings has no switch for it: to turn analytics off, start Ghostex or gxserver with GHOSTEX_TELEMETRY_DISABLED=1 (or DO_NOT_TRACK=1, or the --no-analytics flag). Ask the user before changing it.
 ### Internal state (not user settings)
 
 - **gpuiTitlebarActionCommandByProject** `gpuiTitlebarActionCommandByProject` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.

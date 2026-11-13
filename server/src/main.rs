@@ -2,7 +2,15 @@ fn main() {
     if invoked_as_cli() {
         std::process::exit(gxserver::ghostex_cli::run());
     }
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // `gxserver --no-analytics`: the analytics launch option (telemetry/gate.rs). It becomes the
+    // environment variable here, before any thread starts, so a background start's child inherits it.
+    let flag_count = args.len();
+    args.retain(|arg| arg != gxserver::telemetry::gate::NO_ANALYTICS_FLAG);
+    if args.len() != flag_count {
+        // Single-threaded here: the runtime and every other thread start below.
+        std::env::set_var(gxserver::telemetry::gate::TELEMETRY_DISABLED_ENV, "1");
+    }
     if let Some(result) = gxserver::cli::run_hook_command(&args) {
         if let Err(error) = result {
             eprintln!("{error}");

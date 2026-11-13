@@ -10,7 +10,10 @@ design exists to make impossible.
 */
 
 use std::{
-    sync::{Mutex, OnceLock},
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant, SystemTime},
 };
 
@@ -63,6 +66,39 @@ struct SettingsCache {
 static SETTINGS_CACHE: OnceLock<Mutex<Option<SettingsCache>>> = OnceLock::new();
 static ENVIRONMENT_OPT_OUT: OnceLock<bool> = OnceLock::new();
 static INSTALL_ROLE_OPT_OUT: OnceLock<bool> = OnceLock::new();
+static CLIENT_LAUNCH_OPT_OUT: AtomicBool = AtomicBool::new(false);
+
+/// The command-line flag that turns analytics off for one run of the desktop
+/// app or gxserver. Both turn it into `GHOSTEX_TELEMETRY_DISABLED=1` before
+/// any thread starts, so it rides the same environment opt-out below and every
+/// child process inherits it.
+pub const NO_ANALYTICS_FLAG: &str = "--no-analytics";
+pub const TELEMETRY_DISABLED_ENV: &str = "GHOSTEX_TELEMETRY_DISABLED";
+
+/*
+CDXC:Telemetry 2026-11-13 DECISION (Q2799, PR #588):
+The user keeps analytics on with no Settings switch ("I need analytics ... if
+people start turning them off I'll be lost") and opts people out the way other
+apps do: a launch option. `GHOSTEX_TELEMETRY_DISABLED=1`, `DO_NOT_TRACK=1` or
+`--no-analytics` on the desktop app or gxserver.
+
+gxserver is long-lived (a launchd job on macOS, shared by every client), so a
+desktop started with the option may find one already running without it. The
+desktop then sends `analytics.off` over the loopback event endpoint in place of
+every ping, and this flag opts the daemon out until it exits. It only ever turns
+analytics OFF; nothing a client sends can turn them back on.
+*/
+pub fn opt_out_until_exit() {
+    if !CLIENT_LAUNCH_OPT_OUT.swap(true, Ordering::SeqCst) {
+        super::debug_log("a client launched with analytics off; analytics are off until gxserver exits".to_string());
+    }
+}
+
+/// True when this process was started with the launch option, as either
+/// environment variable or the flag (which `main` turned into the variable).
+pub fn launch_option_opts_out() -> bool {
+    env_is_truthy(TELEMETRY_DISABLED_ENV) || env_is_truthy("DO_NOT_TRACK")
+}
 
 fn settings_cache() -> &'static Mutex<Option<SettingsCache>> {
     SETTINGS_CACHE.get_or_init(|| Mutex::new(None))
@@ -72,10 +108,7 @@ fn settings_cache() -> &'static Mutex<Option<SettingsCache>> {
 /// running process, so this is resolved once.
 fn environment_opts_out() -> bool {
     *ENVIRONMENT_OPT_OUT.get_or_init(|| {
-        if env_is_truthy("GHOSTEX_TELEMETRY_DISABLED") {
-            return true;
-        }
-        if env_is_truthy("DO_NOT_TRACK") {
+        if launch_option_opts_out() {
             return true;
         }
         /*
@@ -212,7 +245,10 @@ pub fn evaluate(paths: &GxserverPaths) -> SettingsProfile {
     by environment or by install role must not stat the settings file on every
     capture attempt for an answer it already knows.
     */
-    if environment_opts_out() || install_role_opts_out(paths) {
+    if environment_opts_out()
+        || CLIENT_LAUNCH_OPT_OUT.load(Ordering::SeqCst)
+        || install_role_opts_out(paths)
+    {
         return SettingsProfile {
             analytics_enabled: false,
             interface: None,

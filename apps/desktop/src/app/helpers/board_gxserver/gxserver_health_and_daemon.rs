@@ -898,6 +898,17 @@ fn gpui_spawn_local_gxserver_launchd_job(
             environment_entries.push((variable.to_string(), value));
         }
     }
+    // The analytics launch option (server/src/telemetry/gate.rs): launchd starts gxserver with only
+    // the variables listed here, so a desktop started with analytics off passes that on.
+    for variable in ["GHOSTEX_TELEMETRY_DISABLED", "DO_NOT_TRACK"] {
+        if let Some(value) = env::var(variable)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        {
+            environment_entries.push((variable.to_string(), value));
+        }
+    }
     let environment_xml = environment_entries
         .iter()
         .map(|(key, value)| {

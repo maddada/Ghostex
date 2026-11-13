@@ -6891,8 +6891,8 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Transparency row (the simple choices from Settings > Interface), with a
   "More theme options in Settings > Interface" link that opens the Interface
   page. Turning transparency on there also switches Appearance to Dark. The
-  last panel also says that Ghostex sends anonymous usage analytics, which
-  Settings > About turns off. Setup
+  last panel also says that Ghostex sends anonymous usage analytics (see
+  "Usage analytics" below for the launch option that turns them off). Setup
   asks for no project folder: Open Ghostex ends it and goes straight to the
   app, and when there is no project yet, Add Project opens. Advanced settings
   later ends it and opens Settings. Closing the window instead (with no project
@@ -7262,6 +7262,31 @@ Ghostex's copies of compressed Codex chats nobody opened for 30 days (opening th
 again rebuilds its copy), and closed sessions idle for 90 days from the closed sessions
 list (pinned and favorite sessions stay, and the agent's own conversation files are not
 touched). There is no setting for it.
+
+## Usage analytics
+
+Ghostex sends anonymous usage analytics (for example that the app started, which
+views you open, that a session started with a given agent, or that a phone
+connected) so the app can keep getting better. Only Ghostex's service on your
+computer sends them, to PostHog; events carry a one-way hash instead of your name,
+email or account id, and never prompts, file paths, project names or email
+addresses. A server Ghostex installed on a remote computer over SSH never sends
+any. Settings has no switch for analytics.
+
+To turn them off, start Ghostex with a launch option, the way many developer tools
+do:
+
+- `GHOSTEX_TELEMETRY_DISABLED=1` in the environment (`DO_NOT_TRACK=1` works too), or
+- the `--no-analytics` flag, on the desktop app or on gxserver.
+
+Quit Ghostex first: a Ghostex that is already open ignores a new launch's options.
+On a Mac, for example: `open -a Ghostex --args --no-analytics`, or
+`launchctl setenv GHOSTEX_TELEMETRY_DISABLED 1` once so every Ghostex you start
+from the Dock gets it until you restart the computer. On Windows and Linux, run
+Ghostex with the flag or the variable from a shortcut or a terminal. The app passes
+it on to Ghostex's service, including one that is already running, which then stays
+off until it stops. A gxserver you run yourself (`gxserver --no-analytics`) takes
+the same option.
 
 ## Sending feedback
 

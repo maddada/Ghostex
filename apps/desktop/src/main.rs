@@ -201,6 +201,11 @@ fn main() {
     unsafe {
         terminal_environment::remove_color_disabling_from_current_process();
         terminal_environment::remove_session_identity_from_current_process();
+        // `--no-analytics`: the analytics launch option (server/src/telemetry/gate.rs). As the
+        // environment variable, gxserver started from here inherits it too.
+        if env::args_os().skip(1).any(|arg| arg == "--no-analytics") {
+            env::set_var("GHOSTEX_TELEMETRY_DISABLED", "1");
+        }
         /*
         CDXC:OsIntegration 2026-07-24:
         LaunchServices gives packaged macOS apps a system-only PATH. Normalize

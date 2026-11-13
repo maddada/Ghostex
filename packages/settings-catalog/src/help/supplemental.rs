@@ -675,7 +675,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section: "privacy",
         section_title: "Privacy",
         title: "Anonymous analytics",
-        subtitle: "Send anonymous usage analytics. Ask the user before changing it.",
+        subtitle: "Send anonymous usage analytics. Settings has no switch for it: to turn analytics off, start Ghostex or gxserver with GHOSTEX_TELEMETRY_DISABLED=1 (or DO_NOT_TRACK=1, or the --no-analytics flag). Ask the user before changing it.",
         options: &[],
         user_only: true,
     },

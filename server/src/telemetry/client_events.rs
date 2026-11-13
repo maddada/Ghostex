@@ -30,6 +30,11 @@ pub fn record_client_event(body: &Value) {
         super::debug_log("recordClientEvent body has no event name".to_string());
         return;
     };
+    // A desktop started with the analytics launch option (gate.rs). Never captured.
+    if event == "analytics.off" {
+        super::gate::opt_out_until_exit();
+        return;
+    }
     if !taxonomy::is_client_ping_event(event) {
         super::debug_log(format!(
             "recordClientEvent rejected {event}: not a client ping event"

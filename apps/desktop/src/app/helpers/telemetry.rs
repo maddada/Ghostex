@@ -1,7 +1,7 @@
 // Anonymous-analytics loopback pings (docs/2026-08-26/anonymous-analytics/PLAN.md).
 //
 // The desktop app never talks to PostHog. It POSTs a tiny fixed-vocabulary
-// event to the local gxserver, which owns the `analyticsEnabled` opt-out gate,
+// event to the local gxserver, which owns the analytics opt-out gate,
 // the property whitelist, and all outbound egress. That single chokepoint is
 // why nothing here consults the setting: the daemon drops events when
 // analytics is off.
@@ -189,15 +189,38 @@ pub(crate) fn record_gpui_surface_opened_telemetry(
     record_gpui_client_event("surface.opened", surface.properties(), background);
 }
 
+/// Started with the analytics launch option: `GHOSTEX_TELEMETRY_DISABLED=1`, `DO_NOT_TRACK=1`, or
+/// `--no-analytics` (which `main` turns into the first). Read once; the environment cannot change.
+fn gpui_analytics_off_at_launch() -> bool {
+    static OFF: OnceLock<bool> = OnceLock::new();
+    *OFF.get_or_init(|| {
+        ["GHOSTEX_TELEMETRY_DISABLED", "DO_NOT_TRACK"].iter().any(|name| {
+            std::env::var(name).is_ok_and(|value| {
+                let value = value.trim();
+                value == "1" || value.eq_ignore_ascii_case("true")
+            })
+        })
+    })
+}
+
 fn record_gpui_client_event(
     event: &'static str,
     properties: serde_json::Value,
     background: &gpui::BackgroundExecutor,
 ) {
-    let body = serde_json::json!({
-        "event": event,
-        "properties": properties,
-    })
+    /*
+    With the launch option on, every ping becomes `analytics.off` instead: a gxserver that was
+    already running (or that a later start brought up without the variable) is opted out until it
+    exits, and nothing about the event is sent (server/src/telemetry/gate.rs).
+    */
+    let body = if gpui_analytics_off_at_launch() {
+        serde_json::json!({ "event": "analytics.off" })
+    } else {
+        serde_json::json!({
+            "event": event,
+            "properties": properties,
+        })
+    }
     .to_string();
     background
         .spawn(async move {
