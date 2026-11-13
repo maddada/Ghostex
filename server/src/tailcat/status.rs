@@ -99,7 +99,13 @@ pub fn apply_tailcat_state_update(
         }
         TailcatStateUpdate::SetAllowedClientKeys {
             allowed_client_keys,
-        } => state.allowed_client_keys = normalize_tailcat_client_keys(allowed_client_keys),
+        } => {
+            let next = normalize_tailcat_client_keys(allowed_client_keys);
+            if !state.enabled && adds_client_key(&state.allowed_client_keys, &next) {
+                anyhow::bail!(EASY_CONNECT_OFF_REFUSAL);
+            }
+            state.allowed_client_keys = next;
+        }
         TailcatStateUpdate::SetRelay { mode, custom_host } => {
             let custom_host = custom_host.trim().to_string();
             // An empty field keeps the last hostname, so the switch back to Custom restores it.
@@ -119,6 +125,26 @@ pub fn apply_tailcat_state_update(
     let record = repository.upsert_state(state)?;
     runtime.apply(paths, &record.state);
     Ok(record)
+}
+
+/*
+CDXC:RemotePairing 2026-11-13 DECISION:
+User (Sebastian, after 11.6.0 put his SSH-only iPhone on a computer's Easy Connect allow-list with no click): "Remove ALL. Do not auto force Easy Connect ever. ... We cannot auto promote this from the phone without the users approval ... Just use whatever the user asked to use", and as a hard rule: while Easy Connect is off on a computer, no key can be added to its allow-list by any path (pairing, a phone's request, the API, the CLI); it is refused. Every allow-list write goes through `apply_tailcat_state_update`, so the refusal lives there; taking keys off always works.
+SEE-ALSO: remote_access/pair_device.rs (`finish_pairing`, `/api/pairOverSsh` refuse before anything is written), apps/mobile/app/src/machines/sshPairing.ts.
+*/
+/// The refusal for a key added while Easy Connect is off.
+pub const EASY_CONNECT_OFF_REFUSAL: &str =
+    "Easy Connect is off on this computer, so no device can be added to it. Turn it on in Ghostex Settings › Remote first.";
+
+/// Whether `next` holds a key `saved` does not (the `none` placeholder is no key).
+fn adds_client_key(saved: &[String], next: &[String]) -> bool {
+    next.iter()
+        .any(|key| key != TAILCAT_ALLOW_NONE && !saved.iter().any(|known| known == key))
+}
+
+/// Whether the user turned Easy Connect on here (the saved switch, not whether the helper runs).
+pub fn easy_connect_turned_on(db: &Connection) -> Result<bool> {
+    Ok(read_tailcat_state_or_default(&TailcatRepository::new(db))?.enabled)
 }
 
 /// How long one `/api/remotePairingCode` ask keeps Easy Connect open to new phones.

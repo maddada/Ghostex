@@ -1001,6 +1001,14 @@ fn finish_pairing(
     pending: &PendingPairing,
 ) -> Result<Value, PairDeviceError> {
     let phone = pending.kind == PairingDeviceKind::Phone;
+    // Nothing is written for a pairing that would add a key while Easy Connect is off
+    // (CDXC:RemotePairing 2026-11-13 in tailcat/status.rs).
+    if pending.tailcat_client_key.is_some() && !crate::tailcat::easy_connect_turned_on(context.db)?
+    {
+        return Err(PairDeviceError::BadRequest(
+            crate::tailcat::EASY_CONNECT_OFF_REFUSAL.to_string(),
+        ));
+    }
     // A computer gets neither an SSH key line nor a token (CDXC:RemotePairing 2026-11-08 above); a
     // phone that paired over its own SSH login gets the token only (`begin_ssh_pairing`), and the
     // key line too when it paired for Easy Connect (it sent its SSH key).

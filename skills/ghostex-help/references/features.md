@@ -5144,7 +5144,10 @@ sessions, so any client can control agents on any machine.
   shows "Approve this phone?" with three words to compare). Computers you reach
   over SSH don't pair either, and a computer you add under Settings > Remote
   lets the agents on both computers reach each other at once. With the
-  computer's Agent access off they don't.
+  computer's Agent access off they don't. Such a phone never gets Easy Connect
+  by itself: only Add Easy Connect on the computer's page in the phone app asks
+  for it, and only while Easy Connect is on there. While Easy Connect is off,
+  no phone or computer can be added to it in any way.
   Paired devices are listed and can be removed with one tap, on the computer or
   on any paired phone (on the phone, Machines > the computer lists them under
   Devices that can reach this computer).

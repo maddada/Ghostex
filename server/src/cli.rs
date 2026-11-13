@@ -200,10 +200,11 @@ const ENDPOINT_CAPABILITIES: [&str; 17] = [
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS,
     // A phone signing in over SSH may pair through that login (`/api/pairOverSsh`, GitHub #495).
     "pairOverSsh",
-    // `/api/pairOverSsh` also pairs for Easy Connect (`easyConnect` with the phone's keys), with no
-    // click for the owner's own tailnet device (CDXC:RemotePairing 2026-11-12 in
-    // remote_access/tailnet_owner.rs).
-    "pairOverSshEasyConnect",
+    // `/api/pairOverSsh` also pairs for Easy Connect (`easyConnect` with the phone's keys), only when
+    // the person taps Add Easy Connect on the phone and Easy Connect is on here (CDXC:RemotePairing
+    // 2026-11-13 in remote_access/tailnet_owner.rs). The 11.6.0 name, `pairOverSshEasyConnect`, is
+    // no longer offered: phones that read it asked by themselves at every first sign-in.
+    "pairOverSshEasyConnectOnRequest",
     // Approvals are plain clicks here (no signature, no approver key): newer apps stop signing
     // (CDXC:Security 2026-11-10 in security/policy.rs). `/api/securityStatus` says it too.
     "plainApprovals",
@@ -1299,7 +1300,7 @@ mod tests {
                 Value::from("toolOutputCut"),
                 Value::from("pushNotifications"),
                 Value::from("pairOverSsh"),
-                Value::from("pairOverSshEasyConnect"),
+                Value::from("pairOverSshEasyConnectOnRequest"),
                 Value::from("plainApprovals"),
                 Value::from("easyConnectClientKeys"),
                 Value::from("pushSessionNames"),

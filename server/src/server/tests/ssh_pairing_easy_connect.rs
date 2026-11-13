@@ -119,10 +119,20 @@ impl Computer {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
         std::fs::create_dir_all(paths.config_file.parent().unwrap()).unwrap();
+        let state = test_app_state(paths);
+        // Easy Connect is on: while it is off no pairing may add a key (CDXC:RemotePairing
+        // 2026-11-13 in tailcat/status.rs).
+        {
+            let db = crate::storage::open_gxserver_database(&state.paths).unwrap();
+            let repository = crate::tailcat::TailcatRepository::new(&db);
+            let mut state = crate::tailcat::read_tailcat_state_or_default(&repository).unwrap();
+            state.enabled = true;
+            repository.upsert_state(state).unwrap();
+        }
         (
             guard,
             Self {
-                state: test_app_state(paths),
+                state,
                 _temp: temp,
                 key_lines: Mutex::new(Vec::new()),
             },
