@@ -34,7 +34,9 @@ pub(crate) struct Details {
     pub(crate) answer: Option<Entity<TextareaState>>,
     pub(crate) label: Option<Entity<InputState>>,
     pub(crate) date: Option<Entity<DatePickerState>>,
-    _subscriptions: Vec<Subscription>,
+    /// The Links row's open input (links.rs).
+    pub(crate) link: Option<(super::links::LinkKind, Entity<InputState>)>,
+    pub(crate) _subscriptions: Vec<Subscription>,
 }
 
 fn shown_text(shown: Option<&Value>, key: &str) -> String {
@@ -67,6 +69,7 @@ impl BeadsView {
             answer: None,
             label: None,
             date: None,
+            link: None,
             _subscriptions: vec![subscription],
         });
         self.load_details(cx);
@@ -81,7 +84,8 @@ impl BeadsView {
 
     /// Reads the bead's description and comments (`show`).
     pub(crate) fn load_details(&mut self, cx: &mut Context<Self>) {
-        let (Some(details), Some(target)) = (self.details.as_mut(), self.target.clone()) else {
+        let target = self.rpc_target();
+        let (Some(details), Some(target)) = (self.details.as_mut(), target) else {
             return;
         };
         details.stale = false;
@@ -512,10 +516,13 @@ impl BeadsView {
                             ))
                             .child(status_label(&row.status)),
                     )
-                    .child(
-                        small_button("beads-details-close", Some("titlebar/x.svg"), None, p)
-                            .on_click(cx.listener(|this, _, _, cx| this.close_details(cx))),
-                    ),
+                    // In a narrow panel the back bar above returns to the tree, so no second ✕.
+                    .when(!self.is_narrow(), |this| {
+                        this.child(
+                            small_button("beads-details-close", Some("titlebar/x.svg"), None, p)
+                                .on_click(cx.listener(|this, _, _, cx| this.close_details(cx))),
+                        )
+                    }),
             )
             .child(
                 div()
@@ -749,6 +756,9 @@ impl BeadsView {
                     })
                     .into_any_element(),
             ));
+        if let Some(links) = self.render_links(shown.as_ref(), p, window, cx) {
+            body = body.child(field_row("Links", links));
+        }
         if let (Some(epic), Some((done, total))) = (epic.clone(), epic_progress) {
             let epic_id = epic.id.clone();
             body = body.child(field_row(
@@ -1005,20 +1015,20 @@ impl BeadsView {
                         ),
                     ),
             );
+        // Beside the tree the column's width and its divider come from render.rs; in a narrow
+        // panel it takes the whole panel (layout.rs).
+        let beside = !self.is_narrow();
         Some(
             div()
                 .id("beads-details")
                 .flex()
                 .flex_col()
-                .w(px(420.0))
-                .flex_none()
+                .w_full()
                 .h_full()
                 .min_h_0()
                 .overflow_y_scroll()
-                .pl(px(18.0))
+                .when(beside, |this| this.pl(px(12.0)))
                 .pr(px(6.0))
-                .border_l_1()
-                .border_color(p.border)
                 .child(header)
                 .child(body)
                 .into_any_element(),

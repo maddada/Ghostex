@@ -538,18 +538,10 @@ impl BeadsView {
                                 ),
                         )
                     })
+                    // CDXC:ProjectBoard 2026-11-13 DECISION: User: the time next to an epic's priority is not editable and not relevant, so epic rows show only the priority.
                     .when_some(epic.priority.clone(), |this, priority| {
                         this.child(priority_tag(&priority, p))
                     })
-                    .child(
-                        div()
-                            .flex_none()
-                            .w(px(30.0))
-                            .text_right()
-                            .text_size(px(12.0))
-                            .text_color(p.faint)
-                            .child(epic.changed.clone()),
-                    )
                     .into_any_element()
             }
             BeadsSectionKind::NeedsDecision | BeadsSectionKind::NotInEpic => {
@@ -606,6 +598,7 @@ impl BeadsView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let hovered = self.hovered_row.as_deref() == Some(row.id.as_str());
+        let narrow = self.is_narrow();
         let selected = self
             .details
             .as_ref()
@@ -750,15 +743,18 @@ impl BeadsView {
             .when_some(row.priority.clone(), |this, priority| {
                 this.child(priority_tag(&priority, p))
             })
-            .child(
-                div()
-                    .flex_none()
-                    .w(px(30.0))
-                    .text_right()
-                    .text_size(px(12.0))
-                    .text_color(p.faint)
-                    .child(row.changed.clone()),
-            )
+            // In a narrow panel the title gets the room the age took.
+            .when(!narrow, |this| {
+                this.child(
+                    div()
+                        .flex_none()
+                        .w(px(30.0))
+                        .text_right()
+                        .text_size(px(12.0))
+                        .text_color(p.faint)
+                        .child(row.changed.clone()),
+                )
+            })
             .into_any_element()
     }
 }
