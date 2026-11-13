@@ -108,6 +108,19 @@ fn ask_before_edits_flags(agent_id: &str) -> &'static str {
 /// CDXC:SideChats 2026-11-02 DECISION:
 /// User: a side chat starts in ask-before-edits (Claude Manual, Codex Ask for approval), whatever the main session runs in, because it works in the same folder while the main session may still be editing there. Accept-all is taken off the fork's command, then the agent's ask mode is added.
 pub(crate) fn ask_before_edits_command(command: &str, agent_id: &str) -> String {
+    let mut output = without_auto_approve(command, agent_id);
+    let ask = ask_before_edits_flags(agent_id);
+    if !ask.is_empty() {
+        output.push(' ');
+        output.push_str(ask);
+    }
+    output
+}
+
+/// `command` without the flags that make `agent_id` act without asking (`auto_approve_flags`),
+/// the rest kept exactly as written. A read-only coordinator thread
+/// (`coordinators::read_only_thread_command`) adds its own mode after it too.
+pub(crate) fn without_auto_approve(command: &str, agent_id: &str) -> String {
     let (single, paired) = auto_approve_flags(agent_id);
     // Words with their byte ranges, so what is kept stays exactly as written (quoted paths with
     // spaces included).
@@ -154,11 +167,5 @@ pub(crate) fn ask_before_edits_command(command: &str, agent_id: &str) -> String 
         }
     }
     output.push_str(&command[cursor..]);
-    let mut output = output.trim().to_string();
-    let ask = ask_before_edits_flags(agent_id);
-    if !ask.is_empty() {
-        output.push(' ');
-        output.push_str(ask);
-    }
-    output
+    output.trim().to_string()
 }

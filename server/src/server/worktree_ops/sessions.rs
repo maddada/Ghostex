@@ -146,13 +146,22 @@ pub(crate) async fn create_worktree_session(
         crate::agents::check_requested_account(&db, &project, &check)?;
     }
     let prepared = prepare_worktree_session_checkout(state, &context, &request).await?;
+    // Said back so `start-thread --read-only --computer` can tell this gxserver started it
+    // read-only (one from before 2026-11-13 ignores the param).
+    let read_only = crate::coordinators::read_only_thread_requested(&request.agent_session_params);
     match start_worktree_session(state, &context, &request, &prepared).await {
-        Ok(session_id) => Ok(json!({
-            "projectId": context.source_project_id,
-            "branch": prepared.branch,
-            "sessionId": session_id,
-            "worktreePath": prepared.path,
-        })),
+        Ok(session_id) => {
+            let mut created = json!({
+                "projectId": context.source_project_id,
+                "branch": prepared.branch,
+                "sessionId": session_id,
+                "worktreePath": prepared.path,
+            });
+            if read_only {
+                created["readOnly"] = json!(true);
+            }
+            Ok(created)
+        }
         Err(error) => {
             if prepared.created {
                 rollback_worktree_session_checkout(&context, &prepared).await;
@@ -250,9 +259,15 @@ pub(crate) fn normalize_worktree_session_create_request(
     {
         agent_session_params.insert("launchSettings".to_string(), launch_settings.clone());
     }
-    // A thread's marked handovers (CDXC:MarkedHandovers in agents/launch_plan.rs).
-    if params.get("markedHandovers").and_then(Value::as_bool) == Some(true) {
-        agent_session_params.insert("markedHandovers".to_string(), Value::Bool(true));
+    // A thread's marked handovers (CDXC:MarkedHandovers in agents/launch_plan.rs), and a
+    // read-only thread (CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs).
+    for key in [
+        "markedHandovers",
+        crate::coordinators::READ_ONLY_THREAD_PARAM,
+    ] {
+        if params.get(key).and_then(Value::as_bool) == Some(true) {
+            agent_session_params.insert(key.to_string(), Value::Bool(true));
+        }
     }
     // A Claude cloud session brought to this computer (crate::claude_cloud): it stays on the
     // account that started it (`runtimeSettings.accountId`, as the ordinary create takes it) and

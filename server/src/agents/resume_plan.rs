@@ -342,6 +342,15 @@ pub(crate) fn to_agent_resume_input(
             .map(|command| crate::side_chats::ask_before_edits_command(&command, agent_id)),
         _ => runtime_command,
     };
+    // A read-only coordinator thread wakes in its read-only mode as it started (CDXC:Coordinators
+    // 2026-11-13 in server/src/coordinators/read_only.rs).
+    let runtime_command = if crate::coordinators::is_read_only_thread(Some(&runtime_settings)) {
+        runtime_command.map(|command| {
+            crate::coordinators::read_only_thread_command(&command, agent_id.as_deref())
+        })
+    } else {
+        runtime_command
+    };
     // The workspace's own gh and gws sign-ins (crate::connectors), on this run only.
     let runtime_command = runtime_command.map(|command| {
         let command = crate::connectors::with_project_cli_env_for_resume(

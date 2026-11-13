@@ -223,6 +223,12 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     if let Some(account) = flag_text(&parsed.flags, "account") {
         create["account"] = json!(account);
     }
+    // `--read-only`: gxserver starts the agent in its read-only mode, or refuses an agent that has
+    // none (CDXC:Coordinators 2026-11-13 in server/src/coordinators/read_only.rs).
+    let read_only = parsed.flags.truthy("readOnly");
+    if read_only {
+        create[crate::coordinators::READ_ONLY_THREAD_PARAM] = json!(true);
+    }
     let worktree = parsed.flags.truthy("worktree");
     let (session_id, branch, worktree_path, created_project) = if worktree {
         if let Some(base) = flag_text(&parsed.flags, "baseBranch") {
@@ -243,6 +249,9 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
                 json!(coordinator_ref);
         }
         let created = call_gxserver_rpc("/api/createWorktreeSession", &create, &flags)?;
+        if read_only && created["readOnly"] != true {
+            undo_unrestricted_thread(&created, &flags)?;
+        }
         (
             agents::text(&created, "sessionId").to_string(),
             Some(agents::text(&created, "branch").to_string()),
@@ -259,6 +268,12 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             });
         }
         let created = call_gxserver_rpc("/api/createAgentSession", &create, &flags)?;
+        if read_only
+            && created["session"]["runtimeSettings"][crate::coordinators::READ_ONLY_THREAD_KEY]
+                != true
+        {
+            undo_unrestricted_thread(&created["session"], &flags)?;
+        }
         (
             agents::text(&created["session"], "sessionId").to_string(),
             None,
@@ -354,6 +369,9 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         "note": note,
         "thread": { "globalRef": reference, "projectId": project_id, "sessionId": session_id, "title": title },
     });
+    if read_only {
+        result["thread"]["readOnly"] = json!(true);
+    }
     if let Some(branch) = branch.filter(|branch| !branch.is_empty()) {
         result["thread"]["branch"] = json!(branch);
     }
@@ -372,13 +390,37 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             .as_str()
             .map(|branch| format!(" on branch {branch}"))
             .unwrap_or_default();
+        let kind = if read_only {
+            "read-only thread"
+        } else {
+            "thread"
+        };
         match status {
-            "started" => println!("Started thread \"{title}\" ({reference}){where_}. {note}"),
-            _ => println!("Created thread \"{title}\" ({reference}){where_}, pending: {note}"),
+            "started" => println!("Started {kind} \"{title}\" ({reference}){where_}. {note}"),
+            _ => println!("Created {kind} \"{title}\" ({reference}){where_}, pending: {note}"),
         }
         println!("Its report comes back to you when it finishes a turn; end your turn now instead of waiting.");
     }
     Ok(())
+}
+
+/// A `--read-only` thread whose gxserver did not say it started read-only (another computer on a
+/// Ghostex from before read-only threads ignores the request): its session is ended and removed
+/// before it gets the brief, and start-thread fails instead of handing work to an agent with full
+/// rights.
+fn undo_unrestricted_thread(
+    created: &Value,
+    flags: &crate::ghostex_cli::args::Flags,
+) -> CliResult<()> {
+    let session = json!({
+        "projectId": agents::text(created, "projectId"),
+        "sessionId": agents::text(created, "sessionId"),
+    });
+    let _ = call_gxserver_rpc("/api/killSession", &session, flags);
+    let _ = call_gxserver_rpc("/api/removeSession", &session, flags);
+    Err(CliError::Other(
+        "Not started: that computer's Ghostex is older than read-only threads, so its agent would have had full rights. Its session was removed and no brief was sent. Update Ghostex there, or start the thread without --read-only.".into(),
+    ))
 }
 
 pub(super) fn link(parsed: &ParsedArgs) -> CliResult<()> {

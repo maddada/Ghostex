@@ -140,6 +140,29 @@ pub(crate) fn create_agent_session_params_for_project(
         configured_command
     };
     refuse_unsupported_coordinator_agent(&agent_id, &agent_config, &launch_settings, params)?;
+    // `start-thread --read-only` (CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs): an
+    // agent with no read-only mode is refused here, before any session exists; a box keeps its
+    // own launch, so it is refused too. The marker keeps every later launch read-only, a copy of
+    // the session (fork) included.
+    let read_only_family = if crate::coordinators::read_only_thread_requested(params)
+        || crate::coordinators::is_read_only_thread(Some(&runtime_settings))
+    {
+        if agentbox_provider.is_some() {
+            return Err(DomainStateError::bad_request(
+                "A read-only thread runs on this computer's agent, not in a box. Leave out --read-only or the box.",
+            ));
+        }
+        let family =
+            resume_agent_family_id(Some(agent_id.clone()), &agent_config, &launch_settings);
+        crate::coordinators::check_read_only_thread_family(family.as_deref())?;
+        runtime_settings.insert(
+            crate::coordinators::READ_ONLY_THREAD_KEY.to_string(),
+            json!(true),
+        );
+        family
+    } else {
+        None
+    };
     let configured_command = if agentbox_provider.is_none() {
         apply_thread_marked_handovers(
             &agent_id,
@@ -314,6 +337,25 @@ pub(crate) fn create_agent_session_params_for_project(
                     }),
                 };
             if let Some(plan) = plan.as_object_mut() {
+                // A read-only thread starts in its agent's read-only mode, accept-all taken off.
+                if let Some(command) = plan
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .filter(|command| !command.trim().is_empty())
+                    .filter(|_| read_only_family.is_some())
+                    .map(|command| {
+                        crate::coordinators::read_only_thread_command(
+                            command,
+                            read_only_family.as_deref(),
+                        )
+                    })
+                {
+                    plan.insert(
+                        "startupText".to_string(),
+                        Value::String(as_atuin_ignored_shell_input(&command)),
+                    );
+                    plan.insert("command".to_string(), Value::String(command));
+                }
                 if let Some(command) = plan
                     .get("command")
                     .and_then(Value::as_str)

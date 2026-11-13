@@ -15,7 +15,7 @@ USAGE
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
                               [--account <number|email>] [--worktree [--base-branch <branch>]]
                               [--project-id <id> | --path <folder>] [--computer <name>]
-                              [--coordinator <ref>] [--json]
+                              [--read-only] [--coordinator <ref>] [--json]
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
   ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
   ghostex coordinator rename-self "<title>" [--json]
@@ -166,6 +166,14 @@ THREADS
   --account starts a Claude or Codex thread on that saved account (its number or email, as
   `ghostex accounts` lists them) instead of the Account for new sessions rule; an account that
   needs signing in or is turned off is refused, with the accounts that would work.
+  --read-only starts the thread's agent in its read-only mode, for a reviewer
+  or a researcher that must not change anything: Claude in Plan mode (it reads
+  and plans, and asks before it edits or runs anything), Codex in its
+  read-only sandbox (Read Only). Accept-all is taken off its command, and every
+  later start of the session (a restart, a wake) keeps the mode. If it asks to
+  leave the mode, that is an approval card for the user, never for you. An
+  agent with no read-only mode is refused, and so is another computer whose
+  Ghostex is too old to start one (nothing is left running there).
   start-thread then waits up to a minute for the thread's transcript to show
   the brief and answers `started`, or `pending: <reason>` (still starting, or
   its screen shows a question only a person can answer). A brief whose send
