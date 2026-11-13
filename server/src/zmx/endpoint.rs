@@ -1210,19 +1210,51 @@ separate delayed Enter) between bursts.
 /// Escape and terminal controls must not wait for a fresh login shell to source the user's profile on every keystroke.
 /// The bundled provider receives these bytes on stdin; the user's existing terminal shell owns their interpretation.
 pub(crate) fn session_chat_zmx_write(zmx_name: &str, payload: &str) -> Result<i32, String> {
+    use super::input_chunks::{
+        unfinished_paste_end, zmx_input_chunks, ZMX_INPUT_DRAIN_WAIT, ZMX_INPUT_STALL_LIMIT,
+        ZMX_SEND_BUFFER_FULL_MESSAGE,
+    };
     let zmx = require_bundled_zmx()?;
-    let result = run_zmx_profileless_command(
-        build_zmx_send_command(zmx_name, &zmx.executable_path),
-        ZmxCommandOptions {
-            stdin: Some(payload.to_string()),
-            ..ZmxCommandOptions::default()
-        },
-    )
-    .map_err(|error| match error {
-        ZmxEndpointError::DependencyUnavailable(message) => message,
-        ZmxEndpointError::Domain(error) => error.message,
-    })?;
-    Ok(result.exit_code)
+    let write = |chunk: &str| {
+        run_zmx_profileless_command(
+            build_zmx_send_command(zmx_name, &zmx.executable_path),
+            ZmxCommandOptions {
+                stdin: Some(chunk.to_string()),
+                ..ZmxCommandOptions::default()
+            },
+        )
+        .map(|result| result.exit_code)
+        .map_err(|error| match error {
+            ZmxEndpointError::DependencyUnavailable(message) => message,
+            ZmxEndpointError::Domain(error) => error.message,
+        })
+    };
+    // Long input goes in pieces the daemon's input buffer can take (input_chunks.rs).
+    let mut sent = 0;
+    for chunk in zmx_input_chunks(payload) {
+        let started = std::time::Instant::now();
+        let outcome = loop {
+            match write(chunk) {
+                Err(message)
+                    if message.contains(ZMX_SEND_BUFFER_FULL_MESSAGE)
+                        && started.elapsed() < ZMX_INPUT_STALL_LIMIT =>
+                {
+                    std::thread::sleep(ZMX_INPUT_DRAIN_WAIT);
+                }
+                outcome => break outcome,
+            }
+        };
+        match outcome {
+            Ok(0) => sent += chunk.len(),
+            outcome => {
+                if let Some(end) = unfinished_paste_end(payload, sent) {
+                    let _ = write(end);
+                }
+                return outcome;
+            }
+        }
+    }
+    Ok(0)
 }
 
 #[cfg(test)]

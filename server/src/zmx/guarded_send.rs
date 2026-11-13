@@ -99,13 +99,80 @@ pub(crate) fn send_after_screen_check(
             code => ZmxCheckedSend::NotTaken(format!("zmx send exited with {code}")),
         });
     }
-    // A barrier follows the input: a daemon too old for `SendAcked` drops it (answering
-    // `Unsupported`, or nothing) and answers the barrier first, which means nothing was queued,
-    // so the bytes go through `zmx send`, which probes the daemon itself (GitHub #555 review).
-    // Any other reply (the capture's `Info`) is skipped.
-    let mut frame = zmx_ipc_header(ZMX_IPC_TAG_SEND_ACKED, payload.len() as u32).to_vec();
-    frame.extend_from_slice(payload.as_bytes());
-    frame.extend_from_slice(&zmx_ipc_header(ZMX_IPC_TAG_LABEL_GET, 0));
+    // Long input goes in pieces the daemon's input buffer can take (input_chunks.rs), each with
+    // its own receipt; a piece the full buffer dropped is offered again once the agent has read
+    // what is queued.
+    let chunks = super::input_chunks::zmx_input_chunks(payload);
+    let mut sent = 0;
+    let mut stalled_since = None;
+    let mut index = 0;
+    while index < chunks.len() {
+        let chunk = chunks[index];
+        let receipt =
+            match write_input_chunk(&mut stream, chunk, sent == 0 && stalled_since.is_none()) {
+                Ok(receipt) => receipt,
+                Err(error) => return Err(close_cut_paste(zmx_name, payload, sent, error)),
+            };
+        match receipt {
+            Some(ZMX_SEND_ACK_QUEUED) => {
+                sent += chunk.len();
+                index += 1;
+                stalled_since = None;
+            }
+            Some(ZMX_SEND_ACK_BUFFER_FULL) => {
+                let since = *stalled_since.get_or_insert_with(std::time::Instant::now);
+                if since.elapsed() >= super::input_chunks::ZMX_INPUT_STALL_LIMIT {
+                    return Ok(ZmxCheckedSend::NotTaken(close_cut_paste(
+                        zmx_name,
+                        payload,
+                        sent,
+                        "the session's input buffer stayed full".to_string(),
+                    )));
+                }
+                std::thread::sleep(super::input_chunks::ZMX_INPUT_DRAIN_WAIT);
+            }
+            Some(status) => {
+                return Ok(ZmxCheckedSend::NotTaken(close_cut_paste(
+                    zmx_name,
+                    payload,
+                    sent,
+                    format!("the session refused the input (receipt {status})"),
+                )));
+            }
+            // A daemon too old for `SendAcked` queued nothing: `zmx send` probes it itself.
+            None => {
+                return Ok(match super::session_chat_zmx_write(zmx_name, payload)? {
+                    0 => ZmxCheckedSend::Sent,
+                    code => ZmxCheckedSend::NotTaken(format!("zmx send exited with {code}")),
+                });
+            }
+        }
+    }
+    Ok(ZmxCheckedSend::Sent)
+}
+
+/// `ipc.SendAckStatus.dropped_pty_buffer_full`.
+#[cfg(unix)]
+const ZMX_SEND_ACK_BUFFER_FULL: u8 = 1;
+
+/// Writes one piece of input as `SendAcked` and answers its receipt's status, or `None` when the
+/// daemon is too old for `SendAcked`.
+///
+/// The first piece is followed by a barrier: a daemon too old for `SendAcked` drops it (answering
+/// `Unsupported`, or nothing) and answers the barrier first, which means nothing was queued
+/// (GitHub #555 review). Any other reply (the capture's `Info`, output broadcasts, a later
+/// piece's barrier answer) is skipped.
+#[cfg(unix)]
+fn write_input_chunk(
+    stream: &mut std::os::unix::net::UnixStream,
+    chunk: &str,
+    with_barrier: bool,
+) -> Result<Option<u8>, String> {
+    let mut frame = zmx_ipc_header(ZMX_IPC_TAG_SEND_ACKED, chunk.len() as u32).to_vec();
+    frame.extend_from_slice(chunk.as_bytes());
+    if with_barrier {
+        frame.extend_from_slice(&zmx_ipc_header(ZMX_IPC_TAG_LABEL_GET, 0));
+    }
     stream
         .write_all(&frame)
         .map_err(|error| format!("zmx session input could not be written: {error}"))?;
@@ -120,20 +187,22 @@ pub(crate) fn send_after_screen_check(
             .read_exact(&mut body)
             .map_err(|error| format!("zmx session input receipt was unreadable: {error}"))?;
         if tag == ZMX_IPC_TAG_SEND_ACK {
-            return Ok(match body.first() {
-                Some(&ZMX_SEND_ACK_QUEUED) => ZmxCheckedSend::Sent,
-                status => ZmxCheckedSend::NotTaken(format!(
-                    "the session refused the input (receipt {status:?})"
-                )),
-            });
+            return Ok(Some(body.first().copied().unwrap_or(u8::MAX)));
         }
-        if matches!(tag, ZMX_IPC_TAG_LABEL_DATA | ZMX_IPC_TAG_UNSUPPORTED) {
-            return Ok(match super::session_chat_zmx_write(zmx_name, payload)? {
-                0 => ZmxCheckedSend::Sent,
-                code => ZmxCheckedSend::NotTaken(format!("zmx send exited with {code}")),
-            });
+        if with_barrier && matches!(tag, ZMX_IPC_TAG_LABEL_DATA | ZMX_IPC_TAG_UNSUPPORTED) {
+            return Ok(None);
         }
     }
+}
+
+/// Ends a bracketed paste that broke off after `sent` bytes, so the agent does not take the next
+/// send's keys as pasted text, and answers `error`.
+#[cfg(unix)]
+fn close_cut_paste(zmx_name: &str, payload: &str, sent: usize, error: String) -> String {
+    if let Some(end) = super::input_chunks::unfinished_paste_end(payload, sent) {
+        let _ = super::session_chat_zmx_write(zmx_name, end);
+    }
+    error
 }
 
 /// Windows reaches its daemons through a command, so the read and the write are two commands.

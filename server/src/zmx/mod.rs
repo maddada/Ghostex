@@ -8,6 +8,7 @@ mod fish_startup;
 mod foreground_job;
 mod grok_startup;
 mod guarded_send;
+mod input_chunks;
 #[cfg(unix)]
 pub(crate) mod ipc_frame;
 pub mod launch;
