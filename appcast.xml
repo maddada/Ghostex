@@ -8,6 +8,68 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>11.6.1</title>
+            <pubDate>Fri, 13 Nov 2026 16:52:36 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.6.1</sparkle:fullReleaseNotesLink>
+            <sparkle:version>110601</sparkle:version>
+            <sparkle:shortVersionString>11.6.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.6.1
+
+## 11.6.1 - 2026-11-13
+
+**Ghostex 11.6.1 is out.** Codex on Windows recovers when it quits, model lists read live from each agent, a coordinator on any agent with a clearer setup, fewer coordinator notifications, a limit card that can continue on Opus, folded sent answers, and many fixes, on the computer and the Android app.
+
+### 🤖 Agents and models
+
+- **Codex recovers when it quits early:** a Codex that quits before its first message shows "Codex isn't running" with Restart, and a message you send then restarts it and goes through. ([#595](https://github.com/maddada/Ghostex/issues/595))
+- **Model lists come from each agent:** the model menu for Claude Code, Cursor and Antigravity now matches what the agent itself offers, read from its own model picker, with older versions under Legacy models (GPT-5.6 Terra, Opus 5 and Sonnet 5 are back there), and Antigravity lists Gemini 4 Carbon.
+- **Amp picks its model in Amp:** Amp's model pill says "Pick the model in Amp" and opens Terminal view.
+- **Gemini CLI is no longer supported:** it leaves Settings > Agents, the New session menu, setup and the Agents Hub. Antigravity CLI runs Google's Gemini models.
+
+### 🔐 Accounts and limits
+
+- **The limit card says why it didn't switch and can continue on Opus:** when no account has room, the card names the model ("No account has room for Fable 5.2"), says in one sentence why each other account is out and when it continues, and offers to continue on another model with room ("Continue with Opus 5.5 on ST"). A Fable session that runs out on every account continues on Opus by itself; turn that off with Settings > Accounts > Claude rules > Continue on Opus when Fable runs out. On the computer and the phone.
+- **Usage shows right after a reset is used:** the usage popup, sidebar meters and Settings > Accounts show a Claude account's new limits at once, and clicking "Updated … ago" in a Claude or Codex usage popup reads that account again (Refresh now).
+
+### 🧭 Coordinators
+
+- **Pick a coordinator's agent after the form:** New Coordinator no longer asks for agent, model and effort; Next opens the agent picker, "Pick the coordinator's agent", with every agent you have, on the computer and the phone. Any agent can now run a coordinator.
+- **A coordinator on a weaker setup says so:** a coordinator on a model or effort that may make it work worse shows an amber "Coordinator quality may be degraded" pill with why and Hide for this chat, and tells you once. A coordinator that drifts from its playbook is reminded in its next message.
+- **Coordinators notify you only for what needs you:** a coordinator finishing a turn no longer notifies; only a turn that adds a question, a Needs you item or a Blocked item does.
+- **Codex's own reviewer is no longer an approval for you:** an approval Codex's reviewer decides no longer shows as your approval card, and the Approvals pill is red while a thread's approval waits on you. ([#597](https://github.com/maddada/Ghostex/issues/597))
+- **Workers shows each thread's work items:** a second line of item pills (two, then +N), with a hover card for the item's status, steps and asks and the thread's last report; a click shows the item in the Work panel.
+- **Idle threads are left alone:** a thread that ended its turn with a background shell still running counts as idle, so it no longer gets "no new output" nudges or stall reports.
+- **The How to use note reads in two short lines** under its pill.
+
+### 💬 Chat
+
+- **Your sent answers fold to one line:** the page's or form's name, "3 answered · 1 skipped" and a button that opens the page again; opened, each question shows once by its tag with its answer and note. On the computer and the phone.
+- **Select text to reply:** selecting text in the conversation shows a small bar with Copy, Add to Chat and Reply.
+- **Up recalls your sent messages:** Up in the chat box steps back through this chat's sent messages like a shell history, and never fails with "The agent already took this message".
+- **Pictures and files move with a paste across computers:** a picture or file pill pasted into a chat on another computer gets its file copied there, so the agent can open it.
+- **A "could not deliver" notice reaches a busy agent** as soon as its input box is ready, instead of waiting for a turn end that may never come.
+- **The ? pill no longer opens an empty popup** for a question a work item also asks.
+
+### 🛡️ Autopilot
+
+- **Autopilot answers approval cards by default:** Answer approval cards is on when Autopilot is on (a choice you made stays), and Autopilot never approves anything for a read-only thread.
+
+### 🩹 Fixes and polish
+
+- **Drag another computer's sessions in the sidebar** between Pinned, Sessions and Parked, and reorder them among the pinned ones.
+- **Popovers open at their full height** and fade in, instead of opening small and growing.
+- **Every drag shows the same see-through ghost** as a dragged sidebar session.
+- **Settings is quieter:** section subtitles that repeated what the switches say are cut or shortened.
+- **The Grok logo is as large as Claude's** in the chat header, sidebar, pickers and Settings.
+- **A tool call card opened inside a Quiet View card fills its width,** without the line beside its rows. On the computer and the phone.
+- **The Beads view's Tree and Board read the same project,** a narrow panel fits a new bead, the search and links, the divider width is kept, links show whole on hover, and failed syncs are logged (#599), thanks to @sebastianarena.
+- **An iPhone keeps a busy computer's connection** instead of reconnecting about every minute, a busy computer says what Reset connection does, and the phone's kept logs scrub names as they are written (#596, ghostex-mobile #39), thanks to @sebastianarena.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.6.1/ghostex-11.6.1-arm64.dmg" length="64119663" type="application/octet-stream" sparkle:edSignature="8XsobO28jgniWcnUXdq4uiLTXOCMlbQ/Q+zYuTtcB6QkHymu70kFJ7ypqO/7Nrz4lW6CpgfRNDFOLUywyN1PDA=="/>
+        </item>
+        <item>
             <title>11.6.0</title>
             <pubDate>Fri, 13 Nov 2026 04:01:12 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.6.0</sparkle:fullReleaseNotesLink>
@@ -533,104 +595,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.2.2/ghostex-11.2.2-arm64.dmg" length="59631778" type="application/octet-stream" sparkle:edSignature="3RJOPkTdkWJuylhg/GpUYhGrb42LX76apy/nwWqeHaNDaRqZY7rMIRJbK+FixkTycr33LKV5WPDAQK27SVncCw=="/>
         </item>
         <item>
-            <title>11.2.1</title>
-            <pubDate>Mon, 09 Nov 2026 05:39:28 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.2.1</sparkle:fullReleaseNotesLink>
-            <sparkle:version>110201</sparkle:version>
-            <sparkle:shortVersionString>11.2.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.2.1
-
-## 11.2.1 - 2026-11-09
-
-**Ghostex 11.2.1 is out.** GBots come back as Ghostex's own bots (beta, off by default), chats get opt-in looks and one / key for skills, cloning runs in the background, Settings and Extensions get tidier, iPhone voice calls keep the microphone, and Windows and macOS get a round of fixes.
-
-### 🤖 GBots (beta)
-
-- **GBots are now Ghostex's own bots (beta, off by default):** turn on Main Hub, then GBots in Settings > Extensions > Experimental. The previous GBots and its separate download are gone; their bots and chats were not carried over, and their old files are in your Trash as "GBots (previous)". The Bots space shows Hermes bots again.
-- **GBots sit in Main Hub under Chief of Staff** on your computer and phone, each with its icon and colour and its chats folding under it; New Chat, GBot Settings and Remove GBot are a right-click (or long press) away, and GBot folders never show as projects.
-- **Chief of Staff hands work to your GBots:** it gives a job to the right GBot or asks one a question and gets the answer back in its chat; when no GBot fits it adds one and tells you in a "GBot added" card you can undo (Settings > Agents makes it ask first). `ghostex gbots ask`, `assignments`, `changes` and `undo` are new.
-- **GBots remember:** each GBot keeps short dated notes that load into every chat, longer topic notes and a daily log, and the oldest notes move to an archive when memory fills up. The Memory tab shows what loads and lets you edit or undo any change, and `ghostex gbots prefs set` sets preferences every GBot follows.
-- **GBot routines:** ask a GBot for something on a schedule and it sets a routine; a free check (new mail, a calendar event, a web page, a folder or a command) runs first so a quiet day costs nothing, each run is a chat of that GBot, and a "Routine set" card has Pause, Edit and Undo.
-- **GBot departments** group GBots with shared instructions and a lead who hands the others work; they show as small headings under GBots.
-- **GBots tell Chief of Staff when they're stuck:** a GBot chat that can't start, stops, goes quiet for 20 minutes or whose routine fails is reported to Chief of Staff, which restarts it where it stopped or tells you in two lines what only you can fix; it answers approvals only for GBots it added.
-- **Keep an eye on my day:** with Gmail or Google Calendar connected, Chief of Staff can set up Day Watcher, which briefs you every morning and warns you about a meeting about to start or important new mail, with a notification on your computer and phone. It only reads; Ghostex refuses anything it tries to send or change.
-- **Team files and presets:** export your GBots (or a department, or one GBot as a preset) as a JSON file with secrets removed, and import one with a preview first; routines arrive paused and Undo removes the whole import. New GBot can start from built-in or kept presets.
-- **GBot API:** an app or script on your computer can message a GBot and get its reply, or start one of its routines, with a key from GBot Settings > Bot API. It's off until you turn it on with your approval; messages from apps run in their own folder, can't read your secret folders, don't see the GBot's memory unless you allow it, and only you answer what they wait on.
-- **A computer per GBot:** in GBot Settings > Computer, a GBot's chats can run on one of your connected computers or a Cloud Box, still reading its instructions and keeping its memory here, optionally using that computer's screen and apps (Touch ID to give it more).
-- **GBots and Chief of Staff on Codex can run `ghostex` commands:** a new Codex GBot starts at Full access and Chief of Staff on Codex runs without asking; on macOS and Linux Codex still keeps them out of your secret folders.
-- **A GBot asked to start work in a folder adds it as a project** and starts the coordinator, thread or session there (`--path <folder>`), and nothing but a GBot's own chats can land in its hidden folder (#519).
-- **GBots hide completely while they are off,** including their chat cards, Quick Access folders and Automate routines, and GBot chats install the GBot playbook skill they are told to read, here and on a connected computer.
-
-### 💬 Chat
-
-- **Chat look settings (Settings > Chat > Advanced, all off by default):** messages that start at the left, your messages on a full-width band, the agent's work as one small line per message (Reduced) or behind a button on each reply (Quiet), the status line as the chat's last line, a chat box as wide as the transcript, and compact spacing; the phone follows the computer, thanks to @sebastianarena.
-- **Tool call lines (Settings > Extensions > Experimental, off by default):** each run of an agent's tool calls is one quiet line you open to see its calls, and running calls now shimmer in every look. On the phone the switch is in Settings > Chat.
-- **/ is the one key for skills and commands with every agent:** the list shows the agent's skills, then its custom and plugin commands, then its built-in commands, each under a heading, and each agent receives a picked skill in its own spelling. $ still opens the same skills, and a Codex message with two skills no longer shows the text between them as a formula.
-- **The skill picker lists a Claude Code plugin's skills and commands as Claude Code loads them** (#513): skills named in its plugin.json, commands in nested folders or named by the manifest, and a picked command reaches Claude as /plugin:name. The prompt editor draws command pills like the chat does.
-- **A Claude chat on a Claude Swap account reopens again** (#521): Ghostex finds the conversation in that account's own history, and a chat whose conversation really is gone says so and offers Start fresh, which starts a new conversation in the same session instead of leaving the input box stuck.
-- **Right-click an HTML file an agent linked to Open in Browser** in a new Browser tab of the session's project (#515).
-- **File and folder paths in Ghostex's own screens open in Files when clicked** (Settings pages and their descriptions, dialogs, chat folders): `~` expands to your home folder, a right-click offers Copy path and Reveal in Finder, and a folder outside the project opens in your file manager.
-- **A session's 5h and 7d limits read as reset once the reset time has passed** and take the newest reading from its login, so an idle coordinator no longer keeps its old percentages (#514).
-- **Text strength raises an agent's reply from its standard colour,** so the slider works with Show thinking in grey on.
-- **The working line above the chat box no longer repeats the running tool call's words** when the transcript already shows them; it shows the agent's status or its working word and time instead.
-- **The pills strip fades each pill out at a scrolled edge** instead of painting a dark band over them, so no half-pill stub is left, on the computer and the phone.
-- **A click on the coordinator board that jumps into a chat closes the board first,** so the chat is visible.
-- **Session Links: an × on the Suggested header removes every suggestion** in two clicks (the first arms it red); they go to Removed and can be restored, on the computer, the web and the phone.
-
-### 🧩 Settings and Extensions
-
-- **The Extensions page is in tabs:** Built-in, Views, Panels & menus, Installed, Community and Experimental, with one search over every tab, a short title on each tile with its description behind an (i), and the page reopens on the tab you had open.
-- **Each experimental feature has its own switch in Extensions > Experimental,** replacing Enable Experimental Features; Faster rendering moved there from About.
-- **Grok, a new built-in extension (off by default):** a Grok button beside Claude's opens grok.com inside Ghostex, with several Grok logins kept apart (each signed in on its own) and a start page you can set in Settings > Files & Links.
-- **Settings > Updates has the machine picker and Update all machines:** pick a machine at the top to see and update only its agents and tools, or update every connected machine at once with a line per machine saying how it went. Not installed pills install on a click and spin while they do.
-- **Settings never shows a long build id, hash or path whole:** it shows it short, and pointing at it shows it in full.
-- **Settings > Security shows only while Extensions > Experimental > Security logs is on (off by default):** the log is still written, its alerts and `ghostex security log` work as before, and a security alert's link still opens the page.
-- **Problems in Settings read plainly:** each one leads with a sentence, raw installer and command output moves under Details with Copy details, pages that can't reach Ghostex's service show one empty state with Try again, and Accounts says "Sign in needed" quietly.
-- **The Home folder card is the last on Settings > Agents,** and its folders row starts folded to a count ("25 folders") that opens the editable list.
-- **Merge copies of the same repository, a switch in Settings > Sidebar & Sessions:** turn it off to keep two copies of one repository on a computer as two projects; the phone follows it (#518).
-- **Settings > Autopilot says when the supervisor wakes,** and a supervisor that can't start or wake is logged and retried less and less often instead of every 10 seconds.
-- **When Connectors, Workspaces, Main Hub or Bot automations are off, the terminal hint now names a command that works.**
-- **Long text in the Updates popover is cut with an ellipsis inside the popup,** and hovering shows it in full.
-
-### 🌐 Remote computers and projects
-
-- **Cloning a project no longer holds the Add Project dialog open:** it runs in the background behind a progress button in the header, a project on another computer can be cloned onto any connected computer from its right-click menu (Clone on…), and the folder browser lists your home folder's folders again.
-- **The machine dialog (Settings > Remote) shows less at first:** each field's explanation is an (i) that appears next to its label when you point at the field, errors still show under the field, and Agent access moved into Advanced as its first row.
-- **A failing machine's tile shows two words and a red dot,** and its sheet leads with the problem, Reconnect, Reinstall and Copy details.
-- **Threads started with `--computer` get `GHOSTEX_COORDINATOR_ROLE=thread` and `GHOSTEX_COORDINATOR_SESSION` too** (#523), so launch wrappers on that computer can tell them from your own sessions.
-- **An approval a connected computer waits on shows there even when its app missed the moment it was asked,** and the asking app no longer shows one only that computer's owner can answer.
-- **A phone on Tailscale or SSH no longer brings up the pair-again notice** or its "can't connect" line in Settings > Remote.
-- **A command to a connected computer no longer gets lost right after that computer's Ghostex restarted** (#520), and Ghostex's log says when and why an Easy Connect connection ended.
-
-### 📱 On the phone
-
-- **iPhone voice calls keep the microphone** (#500): a call no longer loses it in a loop, "The microphone stopped." shows once, and Unmute or Talk brings it back. This arrives with the new iPhone app.
-- **A dropped connection says so on the phone** ("The connection to the computer dropped. Ghostex reconnects by itself…") instead of blaming Ghostex on the computer.
-- **The phone gets the chat look settings, Tool call lines, the / list's headings, GBots in Main Hub and the Suggested links ×** with this release.
-
-### 🍎 macOS
-
-- **`ghostex agents reload` works again on macOS** (#522): a reload, or any wake right after a sleep, no longer fails with "the session could not be started again" or "macOS refused to start it from this login", and a reload that still fails says why, as does a thread's report.
-- **A Mac's Ghostex service started from its app bundle finds its terminal program,** so a computer connecting to it no longer says its zmx program is missing, and start at login starts it the right way.
-
-### 🪟 Windows
-
-- **On Windows without Windows Hello, approvals take your Windows password** (#520) instead of needing a PIN: pairing a computer and letting it act as you.
-- **Glass set to "Wallpaper only" no longer crashes Ghostex at start** (#516), an open window picks up a new desktop wallpaper, and a solid-colour desktop no longer shows the previous picture blurred.
-- **A Windows computer no longer keeps trying to connect to itself every minute.**
-- **An administrator prompt nobody answers no longer holds pairing or SSH setup forever;** after 5 minutes Ghostex says so.
-
-### 🩹 Fixes and polish
-
-- **Daily, weekly and cron automations run at their time in your timezone** (they ran on UTC time before) and handle daylight-saving changes.
-- **Long chats are faster:** loading older rows ends in half the time, a new row no longer rebuilds the whole transcript, and questions, the coordinator board and Resources are no longer rebuilt on every event.
-- **Ghostex uses less of your computer while idle:** the menu bar, the settings poll, the sidebar's flash and spinners, account usage and coordinator panels do less work.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.2.1/ghostex-11.2.1-arm64.dmg" length="59863438" type="application/octet-stream" sparkle:edSignature="dtUyNFtrvEjRS8Q1Frnj/y9q6DnB4AILkvN+k+p0PWXPf/fqstTva7RwjaxmKtcUVLcw5Ze9ycMTpf9HzkfRCg=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -642,6 +606,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: ka6Ugr19g12DFg1j+VvXJAMWD9dQLVywg1+Xuv9mayUTwm8WYuH5yvkTxlgKUYLVFkeRORVFaUrEY99IXtbhBQ==
-length: 105935
+edSignature: I8ncGfCxcqjIdeIrz+8ElohpT0iXfdfaGVgw5J4CgZUCbcSQl+OiQmLRa8e0j+OgpPeLKrrDav5O0ITW4OEkCQ==
+length: 98536
 -->
