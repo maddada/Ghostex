@@ -28,7 +28,7 @@ fn saved_layout() -> Option<BeadsLayout> {
 
 /// The width the details / New bead column was last dragged to, kept with the sidebar's own width
 /// in the desktop's native settings file (`sidebarWidth` beside it), so it survives a restart.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn saved_side_width() -> Option<f32> {
     crate::app::helpers::read_json_number_field(
         &crate::app::helpers::native_chrome_settings_path(),
@@ -38,13 +38,13 @@ fn saved_side_width() -> Option<f32> {
 }
 
 /// The page keeps no settings file: the width lasts while the page is open.
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn saved_side_width() -> Option<f32> {
     None
 }
 
 /// CDXC:ProjectBoard 2026-11-13 WHY: the divider's width is the user's preference, so it is saved only when they drag; a panel that is narrower for a while clamps what is shown (`side_width_now`) without rewriting it.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn save_side_width(width: f32) {
     let Some(number) = serde_json::Number::from_f64(f64::from(width.round())) else {
         return;
@@ -52,11 +52,11 @@ fn save_side_width(width: f32) {
     crate::app::helpers::write_native_chrome_number_setting(BEADS_SIDE_WIDTH_SETTING, number);
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(ghostex_web)]
 fn save_side_width(_width: f32) {}
 
 /// The native settings key of the details column's dragged width.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 const BEADS_SIDE_WIDTH_SETTING: &str = "beadsDetailsWidth";
 
 impl GhostexGpuiApp {

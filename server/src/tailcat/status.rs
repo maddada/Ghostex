@@ -210,7 +210,7 @@ pub fn reconcile_tailcat_runtime(
 
 /*
 CDXC:RemotePairing 2026-11-13 DECISION:
-User (Sebastian, after 11.6.0 put his SSH-only iPhone on a computer's Easy Connect allow-list with no click): "Remove ALL. Do not auto force Easy Connect ever. ... We cannot auto promote this from the phone without the users approval ... Just use whatever the user asked to use", and as a hard rule: while Easy Connect is off on a computer, no key can be added to its allow-list by any path (pairing, a phone's request, the API, the CLI); it is refused. Every tailcat state write goes through `change_tailcat_state`, so the refusal lives there; taking keys off always works.
+Easy Connect is strictly opt-in (11.6.0 put an SSH-only iPhone on a computer's Easy Connect allow-list with no click): nothing turns it on or moves a phone onto it without the person's own ask, only the route they chose is used, and as a hard rule: while Easy Connect is off on a computer, no key can be added to its allow-list by any path (pairing, a phone's request, the API, the CLI); it is refused. Every tailcat state write goes through `change_tailcat_state`, so the refusal lives there; taking keys off always works.
 SEE-ALSO: remote_access/pair_device.rs (`finish_pairing`, `/api/pairOverSsh` refuse before anything is written), apps/mobile/app/src/machines/sshPairing.ts.
 */
 /// The refusal for a key added while Easy Connect is off.

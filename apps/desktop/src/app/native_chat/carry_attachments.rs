@@ -15,12 +15,12 @@
 
 use super::state::NativeChatView;
 use gpui::Context;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
 /// What this chat box knows about its attachment references' files.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[cfg_attr(ghostex_web, allow(dead_code))]
 #[derive(Default)]
 pub(super) struct CarryState {
     /// Paths on the session's computer, or that no copy can be made of (looked at once).
@@ -47,14 +47,14 @@ impl CarryState {
 
 /// How far a look goes: a paste may ask the session's computer whether it has a picture; a send
 /// only looks at this computer's files, so a send with nothing to copy never waits.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 #[derive(Clone, Copy, PartialEq)]
 enum Depth {
     Paste,
     Send,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 enum Outcome {
     /// The session's computer has it (with the picture when it was read to find out).
     There(Option<gpui::Image>),
@@ -71,14 +71,14 @@ impl NativeChatView {
     /// Text was pasted into the chat box: its attachment references whose file is elsewhere are
     /// copied to the session's computer.
     pub(super) fn carry_pasted_attachments(&mut self, text: &str, cx: &mut Context<Self>) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             let paths = self.unchecked_paths(text);
             if !paths.is_empty() {
                 self.start_carry(paths, Depth::Paste, cx);
             }
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         let _ = (text, cx);
     }
 
@@ -86,7 +86,7 @@ impl NativeChatView {
     /// to a file this computer holds for a chat elsewhere (or one missing here for a chat here)
     /// holds the send until its copy lands. Returns whether the send was held.
     pub(super) fn hold_send_for_carry(&mut self, mode: &str, cx: &mut Context<Self>) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(ghostex_web))]
         {
             let moved: Vec<(String, String)> = self
                 .carry
@@ -118,14 +118,14 @@ impl NativeChatView {
             }
             false
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(ghostex_web)]
         {
             let _ = (mode, cx);
             false
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn unchecked_paths(&self, text: &str) -> Vec<String> {
         // A chat on a computer this app has no way to reach yet (a Cloud Box before it connects)
         // has nowhere to copy to.
@@ -142,7 +142,7 @@ impl NativeChatView {
             .collect()
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn start_carry(&mut self, paths: Vec<String>, depth: Depth, cx: &mut Context<Self>) {
         // Marked now, so the same path is not looked at twice while its look runs.
         self.carry.checked.extend(paths.iter().cloned());
@@ -188,7 +188,7 @@ impl NativeChatView {
 
     /// Points the draft's references to moved files at their copies, the caret staying after the
     /// same words.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn retarget_draft(&mut self, moved: &[(String, String)], cx: &mut Context<Self>) {
         use ghostex_gx_chat_core::composer::attachment_moves::retarget_attachment_references;
         if moved.is_empty() {
@@ -213,7 +213,7 @@ impl NativeChatView {
         self.input_caret = caret;
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(ghostex_web))]
     fn finish_carry(&mut self, outcomes: Vec<(String, Outcome)>, cx: &mut Context<Self>) {
         self.carry.in_flight = self.carry.in_flight.saturating_sub(1);
         let mut moved = Vec::new();
@@ -256,21 +256,21 @@ impl NativeChatView {
 
 /// Whether `path` is a file or folder on this computer. A path written for another system (a
 /// `C:\…` path on a Mac, a `/Users/…` path on Windows) is not absolute here.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn on_this_computer(path: &str) -> bool {
     let path = std::path::Path::new(path);
     path.is_absolute() && path.exists()
 }
 
 /// Where the chat's session runs, for the background copy.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 struct Session {
     remote: Option<crate::app::model::GpuiRemoteGxserverRequestTarget>,
     project_id: String,
     session_id: String,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 async fn carry_one(
     path: &str,
     config: &Session,
@@ -364,7 +364,7 @@ async fn carry_one(
 }
 
 /// The picture a `readSessionChatImage` answer carries, for the reference's thumbnail.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(ghostex_web))]
 fn picture(read: &Value) -> Option<gpui::Image> {
     use base64::Engine as _;
     let format = match read["mediaType"].as_str()? {

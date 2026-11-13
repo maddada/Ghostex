@@ -99,7 +99,7 @@ const READ_ONLY_GIT_ACTIONS: [&str; 1] = ["changesDiff"];
 /// Tree sends (reading a bead, the details' writes, New bead, Pull and Push).
 ///
 /// CDXC:ProjectBoard 2026-11-13 DECISION:
-/// The user chose to let phones that reach a computer only over SSH open the Beads view, through
+/// Phones that reach a computer only over SSH can open the Beads view too, through
 /// this bridge, kept to exactly the calls the desktop view makes. Board setup, label and prefix
 /// configuration, deletes and dependency edits stay off the bridge.
 /// SEE-ALSO: apps/desktop/src/app/native_beads/view.rs, apps/mobile/app/src/beads/client.ts

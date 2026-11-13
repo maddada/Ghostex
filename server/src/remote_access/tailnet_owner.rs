@@ -3,10 +3,9 @@
 //!
 //! CDXC:RemotePairing 2026-11-13 DECISION:
 //! Supersedes 2026-11-12 (Q2716 = A, Q2719: "a phone that connects over Tailscale also gets Easy
-//! Connect, inside the same pairing", asked by the phone at its first sign-in). User (Sebastian,
-//! whose SSH-only iPhone was added this way): "Do not auto force Easy Connect ever. ... We cannot
-//! auto promote this from the phone without the users approval ... Just use whatever the user
-//! asked to use." A phone paired over SSH asks for Easy Connect only when the person taps Add Easy
+//! Connect, inside the same pairing", asked by the phone at its first sign-in), after an SSH-only
+//! iPhone was added this way: Easy Connect is strictly opt-in, and nothing moves a phone onto it
+//! without the person's own ask; only the route they chose is used. A phone paired over SSH asks for Easy Connect only when the person taps Add Easy
 //! Connect on it (capability `pairOverSshEasyConnectOnRequest`; the old `pairOverSshEasyConnect`
 //! that 11.6.0 phones asked by themselves on is no longer offered), and only while Easy Connect is
 //! on here (refused otherwise, `EASY_CONNECT_OFF_REFUSAL`). That tap is the person's own ask, so
