@@ -65,6 +65,15 @@ pub(crate) struct GpuiRemoteGxserverCapabilities {
     pub(crate) protocol_version: Option<u64>,
     /// The daemon's server id from its health answer, `None` when it does not say.
     pub(crate) server_id: Option<String>,
+    pub(crate) instance: Option<GpuiRemoteGxserverInstance>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GpuiRemoteGxserverInstance {
+    pub(crate) server_id: String,
+    pub(crate) pid: u32,
+    pub(crate) started_at: String,
 }
 
 pub(crate) struct GpuiRemoteGxserverConnection {

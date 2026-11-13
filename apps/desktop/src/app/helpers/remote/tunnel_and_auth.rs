@@ -293,6 +293,7 @@ pub(crate) fn gpui_remote_gxserver_capabilities_from_health_response(
             .map(str::trim)
             .filter(|id| !id.is_empty())
             .map(str::to_string),
+        instance: gpui_remote_gxserver_instance(&value),
         zmx_missing: value
             .get("tools")
             .and_then(serde_json::Value::as_array)
