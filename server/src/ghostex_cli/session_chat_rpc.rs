@@ -30,12 +30,13 @@ use crate::ghostex_cli::rpc::{
 /// desktop host calls when a session opens straight in Chat and the phone calls for a Handoff's new
 /// conversation so the staged handover link lands in its chat composer, and `runGitAction`, for
 /// the phone's read-only Changes screen, which may only ask for `changesDiff` through this verb
-/// (`READ_ONLY_GIT_ACTIONS`). It stays a chat bridge
+/// (`READ_ONLY_GIT_ACTIONS`), and the Beads view's three calls (`beadsView`, `beadsGenerateTitle`,
+/// `runBeadsAction` limited to `BEADS_VIEW_ACTIONS`) for the phone's Beads screen. It stays a chat bridge
 /// rather than a door to every gxserver path, the same rule `saved_prompts.rs` keeps. Params travel
 /// base64-encoded so no shell
 /// (POSIX, PowerShell, WSL) can re-quote a JSON body on its way through.
 /// SEE-ALSO: packages/gx-chat-core/src/wire/rpc.rs, apps/mobile/app/src/chat/rust/transport.ts
-const SESSION_CHAT_RPC_METHODS: [&str; 44] = [
+const SESSION_CHAT_RPC_METHODS: [&str; 47] = [
     "readSessionChat",
     "readSessionChatSkills",
     "readSessionChatFiles",
@@ -80,6 +81,9 @@ const SESSION_CHAT_RPC_METHODS: [&str; 44] = [
     "readSessionDetails",
     "stopSessionBackgroundTask",
     "runGitAction",
+    "beadsView",
+    "beadsGenerateTitle",
+    "runBeadsAction",
 ];
 
 /// The Git actions `runGitAction` may run through this verb: reading a project's Changes diff.
@@ -90,6 +94,35 @@ const SESSION_CHAT_RPC_METHODS: [&str; 44] = [
 /// bridge refuses every other Git action instead of opening `runGitAction` whole.
 /// SEE-ALSO: server/src/typed_operations/git_changes.rs, apps/mobile/app/src/changes/client.ts
 const READ_ONLY_GIT_ACTIONS: [&str; 1] = ["changesDiff"];
+
+/// The Beads actions `runBeadsAction` may run through this verb: the ones the desktop Beads view's
+/// Tree sends (reading a bead, the details' writes, New bead, Pull and Push).
+///
+/// CDXC:ProjectBoard 2026-11-13 DECISION:
+/// The user chose to let phones that reach a computer only over SSH open the Beads view, through
+/// this bridge, kept to exactly the calls the desktop view makes. Board setup, label and prefix
+/// configuration, deletes and dependency edits stay off the bridge.
+/// SEE-ALSO: apps/desktop/src/app/native_beads/view.rs, apps/mobile/app/src/beads/client.ts
+const BEADS_VIEW_ACTIONS: [&str; 18] = [
+    "show",
+    "claim",
+    "reopen",
+    "close",
+    "defer",
+    "undefer",
+    "humanRespond",
+    "humanDismiss",
+    "updatePriority",
+    "updateStatus",
+    "updateTitle",
+    "addLabel",
+    "removeLabel",
+    "comment",
+    "update",
+    "create",
+    "doltPull",
+    "doltPush",
+];
 
 /// The request timeout when the caller names none: the desktop chat's own (`native_chat/rpc.rs`).
 const DEFAULT_TIMEOUT_MS: f64 = 60_000.0;
@@ -126,6 +159,15 @@ pub fn session_chat_rpc_command(args: &[String]) -> CliResult<()> {
             return Err(CliError::Other(format!(
                 "session-chat-rpc runGitAction only reads: {} (got {action:?}).",
                 READ_ONLY_GIT_ACTIONS.join(", ")
+            )));
+        }
+    }
+    if method == "runBeadsAction" {
+        let action = params.get("action").and_then(Value::as_str).unwrap_or("");
+        if !BEADS_VIEW_ACTIONS.contains(&action) {
+            return Err(CliError::Other(format!(
+                "session-chat-rpc runBeadsAction only runs the Beads view's actions: {} (got {action:?}).",
+                BEADS_VIEW_ACTIONS.join(", ")
             )));
         }
     }
