@@ -1022,14 +1022,16 @@ fn append_prompt(
     Ok(prompt)
 }
 
-/// Appends a plain queued prompt outside the endpoint, for gxserver's own notes.
+/// Appends a queued prompt outside the endpoint, for gxserver's own notes: a plain row, or with
+/// `startup_send` a held message that goes out as soon as the agent's input box is up.
 pub(crate) fn enqueue_session_chat_prompt(
     db: &Connection,
     project_id: &str,
     session_id: &str,
     text: &str,
+    startup_send: bool,
 ) -> Result<SessionChatQueuedPrompt, DomainStateError> {
-    append_prompt(None, db, project_id, session_id, text, false, &[])
+    append_prompt(None, db, project_id, session_id, text, startup_send, &[])
 }
 
 fn update_prompt(
