@@ -823,7 +823,7 @@ impl SessionChatQueueRuntime {
         }
         // A panel the send closes itself (Claude's rating survey, an Escape-safe offer) holds a
         // startup send no longer than an ordinary row: it goes on to the gates below, and out as
-        // soon as the agent is idle.
+        // soon as the input box is back (mid-turn too, GitHub #591 below).
         if awaiting_startup
             && crate::session_chat_composer::has_session_chat_composer_signature(
                 composer_agent.as_deref(),
@@ -906,21 +906,35 @@ impl SessionChatQueueRuntime {
         // CDXC:SessionChat 2026-11-11 WHY: an agent killed at its approval leaves the session in attention for good (no hook ends it; seen live on a throwaway server, the two queued rows still held a minute later). Nothing on screen can take the row's Return as an answer once the agent is confirmed gone, so the row goes to the send path, which restarts the agent first (`restart_exited_agent_before_send` in send_heal.rs).
         let agent_gone =
             crate::session_chat_start_failure::agent_gone_confirmed(project_id, session_id);
+        let startup_composer_ready = awaiting_startup && composer_ready;
+        /*
+        CDXC:SessionChat 2026-11-13 DECISION:
+        GitHub #591 (Q2789, "fix-scheduler"): a normal message Ghostex had to hold for a moment (a
+        startup send: Enter in the chat, form or page answers with "wait for turn end" off,
+        `ghostex agents send`, a thread's report) waited here for a busy agent's whole turn to end,
+        and every later normal send lined up behind it ("An earlier message is waiting for the agent
+        to start."); a coordinator got its answers and reports minutes late. Such a row was never
+        deferred on purpose, so a working agent whose input box is up takes it now, as a direct send
+        would. It still goes through every gate below (notices, the input box, retry backoff) and the
+        guarded sender's fresh read. A question or approval still holds it, and an ordinary row
+        (Tab, `--queue`, answers with the setting on) still waits for the turn to end: the
+        2026-09-04 "one attention" rule above is narrowed to rows queued on purpose.
+        */
+        let working = !question_waits && presentation_activity(&session, generated_at) == "working";
         if !gateway_idle
             && !agent_gone
+            && !(working && startup_composer_ready)
             && (question_waits
                 || !session_chat_queue_activity_is_deliverable(&session, generated_at))
         {
             self.reset_gate(key);
-            let reason =
-                if !question_waits && presentation_activity(&session, generated_at) == "working" {
-                    WaitReason::Working
-                } else {
-                    WaitReason::Answer
-                };
+            let reason = if working {
+                WaitReason::Working
+            } else {
+                WaitReason::Answer
+            };
             return hold(head, reason);
         }
-        let startup_composer_ready = awaiting_startup && composer_ready;
         // CDXC:SessionChat 2026-09-26 WHY:
         // An agent that died mid-turn leaves its transcript ending in a tool result with no reply, which reads as Working forever. A freshly started CLI showing an empty input box cannot be mid-turn, so a startup send trusts the screen over that dead turn; checking the transcript here left a woken session's "continue" queued indefinitely.
         if !startup_composer_ready && self.transcript_lifecycle_is_working(key, &session) {
