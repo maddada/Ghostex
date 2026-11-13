@@ -64,7 +64,7 @@ fn a_refused_key_says_which_provider_and_where_to_check_it() {
             assert_eq!(
                 problem.message,
                 format!(
-                    "{} refused the API key. Check it in Settings > Voice, then transcribe again.",
+                    "{} refused the API key. Check it in Settings > Dictation, then transcribe again.",
                     provider.label()
                 )
             );

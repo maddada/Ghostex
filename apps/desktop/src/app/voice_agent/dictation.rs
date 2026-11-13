@@ -31,6 +31,10 @@ const TICK: Duration = Duration::from_millis(50);
 const ENGINE_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 /// The bars of the recording pill's waveform (1.2 s of levels).
 pub(crate) const WAVEFORM_BARS: usize = 24;
+/// Below this level the microphone counts as hearing nothing (about -40 dBFS).
+const QUIET_LEVEL: f32 = 0.04;
+/// How long near-silence lasts before the pill says it can't hear (Q2919).
+const QUIET_FOR: Duration = Duration::from_secs(3);
 
 /// Where a recording that has no text yet is.
 #[derive(Clone, Debug)]
@@ -57,6 +61,14 @@ pub(crate) enum DictatePhase {
     /// gxserver said its engine can't transcribe yet (`readDictateEngine`), so nothing was
     /// recorded; `failure` says why (its code and sentence).
     Unavailable {
+        failure: DictateFailure,
+    },
+    /// Something the reader should know that no button can retry: the microphone couldn't start
+    /// (`micUnavailable`), the recording had no words (`nothingHeard`), or nothing waited for
+    /// Transcribe previous (`nothingWaiting`).
+    ///
+    /// CDXC:Dictate 2026-11-13 DECISION: User (Q2916 "card"): a refused microphone and "nothing heard" show as the Dictate card above the microphone, which stays until dismissed, instead of a toast that is gone in seconds. The terminal bar, which draws no card, keeps the toast.
+    Notice {
         failure: DictateFailure,
     },
 }
@@ -126,6 +138,8 @@ pub(crate) struct Dictate {
     elapsed: Duration,
     /// The microphone's level at each tick of this recording, oldest first ([`WAVEFORM_BARS`]).
     levels: VecDeque<f32>,
+    /// When this recording last heard more than near-silence (`cant_hear`).
+    loud_at: std::time::Instant,
     /// A hotkey hold ended while the microphone was still opening: stop as soon as it records.
     stop_when_started: bool,
 }
@@ -143,6 +157,7 @@ impl Dictate {
             ticker: None,
             elapsed: Duration::ZERO,
             levels: resting_levels(),
+            loud_at: std::time::Instant::now(),
             stop_when_started: false,
         }
     }
@@ -170,12 +185,21 @@ impl Dictate {
         &self.levels
     }
 
+    /// The recording has heard only near-silence for [`QUIET_FOR`]: the pill says "Can't hear
+    /// you" until sound comes back.
+    ///
+    /// CDXC:Dictate 2026-11-13 DECISION: User (Q2919 "keep", with "add the 3 seconds can't hear you thingy"): the waveform keeps its look in a quiet room, and after 3 seconds of near-silence the pill says "Can't hear you" until sound comes back, on the desktop and the phone (`DictationWaveform.tsx`).
+    pub(crate) fn cant_hear(&self) -> bool {
+        matches!(self.phase, DictatePhase::Recording) && self.loud_at.elapsed() >= QUIET_FOR
+    }
+
     /// The microphone button: start, or stop and transcribe.
     pub(crate) fn toggle(&mut self, cx: &mut Context<Self>) {
         match self.phase {
-            DictatePhase::Idle | DictatePhase::Failed { .. } | DictatePhase::Unavailable { .. } => {
-                self.start(cx)
-            }
+            DictatePhase::Idle
+            | DictatePhase::Failed { .. }
+            | DictatePhase::Unavailable { .. }
+            | DictatePhase::Notice { .. } => self.start(cx),
             DictatePhase::Recording => self.stop(cx),
             DictatePhase::Starting | DictatePhase::Transcribing => {}
         }
@@ -227,6 +251,7 @@ impl Dictate {
                 }
                 Ok(active) => {
                     this.active = Some(active);
+                    this.loud_at = std::time::Instant::now();
                     this.phase = DictatePhase::Recording;
                     if std::mem::take(&mut this.stop_when_started) {
                         this.stop(cx);
@@ -236,7 +261,10 @@ impl Dictate {
                     cx.notify();
                 }
                 Err(Start::Microphone(error)) => {
-                    this.phase = DictatePhase::Idle;
+                    // The phase first, so the chat box knows its card shows this.
+                    this.phase = DictatePhase::Notice {
+                        failure: DictateFailure::new("micUnavailable", error.message()),
+                    };
                     cx.emit(DictateEvent::Failure {
                         title: "Dictation couldn't start".to_string(),
                         message: error.message(),
@@ -264,8 +292,12 @@ impl Dictate {
                         return false;
                     };
                     this.elapsed = active.elapsed();
+                    let level = active.level();
                     this.levels.pop_front();
-                    this.levels.push_back(active.level());
+                    this.levels.push_back(level);
+                    if level >= QUIET_LEVEL {
+                        this.loud_at = std::time::Instant::now();
+                    }
                     if active.take_silent() {
                         // A warning only: a headset with a noise gate is silent too.
                         cx.emit(DictateEvent::Failure {
@@ -372,7 +404,9 @@ impl Dictate {
                     work.detach();
                 }
             }
-            DictatePhase::Failed { .. } | DictatePhase::Unavailable { .. } => {}
+            DictatePhase::Failed { .. }
+            | DictatePhase::Unavailable { .. }
+            | DictatePhase::Notice { .. } => {}
         }
         self.phase = DictatePhase::Idle;
         cx.notify();
@@ -435,10 +469,19 @@ impl Dictate {
                 self.phase = DictatePhase::Idle;
                 cx.emit(DictateEvent::Text(text));
             }
-            Outcome::Nothing(message) => {
+            Outcome::Nothing(_, message) if message.is_empty() => {
                 self.phase = DictatePhase::Idle;
+            }
+            Outcome::Nothing(code, message) => {
+                self.phase = DictatePhase::Notice {
+                    failure: DictateFailure::new(code, message.clone()),
+                };
                 cx.emit(DictateEvent::Failure {
-                    title: "Nothing to transcribe".to_string(),
+                    title: if code == "nothingHeard" {
+                        "No words heard".to_string()
+                    } else {
+                        "Nothing to transcribe".to_string()
+                    },
                     message,
                 });
             }
@@ -505,7 +548,9 @@ fn engine_not_ready() -> Option<DictateFailure> {
 enum Outcome {
     Text(String),
     /// Nothing was waiting (Transcribe previous) or the recording had no words.
-    Nothing(String),
+    /// Its code (`nothingHeard`, `nothingWaiting`) and sentence; an empty sentence is a run the
+    /// reader cancelled, which says nothing.
+    Nothing(&'static str, String),
     /// Transcribe previous could not reach gxserver; nothing changed.
     Error(String),
     Failed(Kept, DictateFailure),
@@ -550,7 +595,7 @@ fn save_and_transcribe(
     if cancelled.load(Ordering::SeqCst) {
         let _ = recorder::rpc("dismissDictation", json!({"id": id}), LIST_TIMEOUT);
         refresh_previous();
-        return Outcome::Nothing(String::new());
+        return Outcome::Nothing("nothingWaiting", String::new());
     }
     let answer = recorder::rpc("transcribeDictation", json!({"id": id}), TRANSCRIBE_TIMEOUT);
     if cancelled.load(Ordering::SeqCst) {
@@ -590,7 +635,7 @@ fn transcribe_latest(cancelled: &AtomicBool, in_flight: &Mutex<Option<String>>) 
             ),
         ),
         Err(message) if message.contains("no recording waiting") => {
-            Outcome::Nothing(message.clone())
+            Outcome::Nothing("nothingWaiting", message.clone())
         }
         Err(message) => Outcome::Error(message.clone()),
     };
@@ -614,6 +659,7 @@ fn outcome_of(answer: Result<Value, String>, kept: Kept) -> Outcome {
                 .to_string();
             if text.is_empty() {
                 Outcome::Nothing(
+                    "nothingHeard",
                     "No words were heard in the recording. It is kept in Settings > Dictation > Past recordings."
                         .to_string(),
                 )

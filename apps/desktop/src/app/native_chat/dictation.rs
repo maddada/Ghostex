@@ -151,6 +151,43 @@ pub(super) fn open_voice_agent_key(provider: &str) -> serde_json::Value {
     })
 }
 
+/// Which Dictate card shows (`render_dictation_failure`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum CardKind {
+    Failed,
+    Unavailable,
+    Notice,
+}
+
+/// A notice card's title (the phone's `noticeTitle` in `DictationBar.tsx`).
+pub(super) fn notice_title(code: &str) -> &'static str {
+    match code {
+        "micUnavailable" => "Can't use the microphone",
+        "nothingHeard" => "No words heard",
+        _ => "Nothing to transcribe",
+    }
+}
+
+/// gxserver's sentence for a card that has Try again: without its trailing "then transcribe
+/// again" (or a closing "Transcribe again."), which the button says (Q2915). Older Ghostex
+/// versions keep reading the full sentences from gxserver.
+pub(crate) fn card_sentence(message: &str) -> String {
+    let message = message.trim();
+    for tail in [
+        ", then transcribe again.",
+        " Then transcribe again.",
+        ", then try again.",
+    ] {
+        if let Some(head) = message.strip_suffix(tail) {
+            return format!("{head}.");
+        }
+    }
+    match message.strip_suffix(" Transcribe again.") {
+        Some(head) if !head.is_empty() => head.to_string(),
+        _ => message.to_string(),
+    }
+}
+
 /// A card title for why the engine can't transcribe yet, in 2 to 6 words (the phone's
 /// `unavailableTitle` in `DictationBar.tsx`).
 pub(super) fn unavailable_title(code: &str) -> &'static str {
@@ -282,7 +319,9 @@ impl NativeChatView {
                 let in_row = this.dictation.as_ref().is_some_and(|control| {
                     matches!(
                         control.dictate.read(cx).phase(),
-                        DictatePhase::Failed { .. } | DictatePhase::Unavailable { .. }
+                        DictatePhase::Failed { .. }
+                            | DictatePhase::Unavailable { .. }
+                            | DictatePhase::Notice { .. }
                     )
                 });
                 if !in_row {
@@ -498,7 +537,10 @@ impl NativeChatView {
         let dictate = self.dictate(window, cx);
         let idle = matches!(
             dictate.read(cx).phase(),
-            DictatePhase::Idle | DictatePhase::Failed { .. } | DictatePhase::Unavailable { .. }
+            DictatePhase::Idle
+                | DictatePhase::Failed { .. }
+                | DictatePhase::Unavailable { .. }
+                | DictatePhase::Notice { .. }
         );
         if !hovered || !idle {
             if let Some(control) = self.dictation.as_mut() {
@@ -596,21 +638,38 @@ impl NativeChatView {
         };
         let is_card = matches!(
             phase,
-            DictatePhase::Failed { .. } | DictatePhase::Unavailable { .. }
+            DictatePhase::Failed { .. }
+                | DictatePhase::Unavailable { .. }
+                | DictatePhase::Notice { .. }
         );
         let floating = match &phase {
             DictatePhase::Idle => return None,
             DictatePhase::Failed { failure, .. } => {
                 let width = card_width();
-                div()
-                    .w(width)
-                    .child(self.render_dictation_failure(failure, false, p, cx))
+                div().w(width).child(self.render_dictation_failure(
+                    failure,
+                    CardKind::Failed,
+                    p,
+                    cx,
+                ))
             }
             DictatePhase::Unavailable { failure } => {
                 let width = card_width();
-                div()
-                    .w(width)
-                    .child(self.render_dictation_failure(failure, true, p, cx))
+                div().w(width).child(self.render_dictation_failure(
+                    failure,
+                    CardKind::Unavailable,
+                    p,
+                    cx,
+                ))
+            }
+            DictatePhase::Notice { failure } => {
+                let width = card_width();
+                div().w(width).child(self.render_dictation_failure(
+                    failure,
+                    CardKind::Notice,
+                    p,
+                    cx,
+                ))
             }
             _ => {
                 let recording = matches!(phase, DictatePhase::Recording);
@@ -621,39 +680,95 @@ impl NativeChatView {
                     }
                     _ => "Transcribing".to_string(),
                 };
-                div()
-                    .h(px(PILL_HEIGHT * s))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0 * s))
-                    // The dot or the text starts 9px in; the ✕'s 11px mark, centred in its 18px
-                    // button, ends 9px in, so both ends are inset alike.
-                    .pl(px(9.0 * s))
-                    .pr(px(5.5 * s))
-                    .rounded_full()
-                    .whitespace_nowrap()
-                    .when(recording, |this| {
-                        this.child(
+                if recording {
+                    // CDXC:Dictate 2026-11-13 DECISION: The recording pill reads like the reference app's: ✕ cancel on the left, the clock and the waveform in the middle, a filled ✓ that finishes on the right (the brief for Q2918), and "Can't hear you" after 3 seconds of near-silence (Q2919). Both ends are 18px buttons 4px from the pill's edge.
+                    let (levels, quiet) = {
+                        let dictate = control.dictate.read(cx);
+                        (
+                            dictate.levels().iter().copied().collect::<Vec<f32>>(),
+                            dictate.cant_hear(),
+                        )
+                    };
+                    let finish = div()
+                        .id("dictation-finish")
+                        .role(gpui::Role::Button)
+                        .aria_label("Finish and transcribe")
+                        .chat_cursor_pointer()
+                        .flex_shrink_0()
+                        .size(px(18.0 * s))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded_full()
+                        .bg(p.control_primary)
+                        .hover(|style| style.opacity(0.85))
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Finish and transcribe")
+                                .build(window, cx)
+                        })
+                        .child(
+                            gpui::svg()
+                                .path("titlebar/check.svg")
+                                .size(px(11.0 * s))
+                                .text_color(p.background),
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(control) = this.dictation.as_ref() {
+                                let dictate = control.dictate.clone();
+                                dictate.update(cx, |dictate, cx| dictate.stop_recording(cx));
+                            }
+                            cx.notify();
+                        }));
+                    div()
+                        .h(px(PILL_HEIGHT * s))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .px(px(4.0 * s))
+                        .rounded_full()
+                        .whitespace_nowrap()
+                        .child(close(false, cx))
+                        .child(
                             div()
                                 .flex_shrink_0()
                                 .size(px(7.0 * s))
                                 .rounded_full()
                                 .bg(gpui::rgb(0xef4444)),
                         )
-                    })
-                    .child(
-                        div()
-                            .when(recording, |this| {
-                                this.font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
-                            })
-                            .text_color(p.foreground)
-                            .child(label),
-                    )
-                    .when(recording, |this| {
-                        let dictate = control.dictate.read(cx);
-                        this.child(waveform(dictate.levels().iter(), p).ml(px(2.0 * s)))
-                    })
-                    .child(close(false, cx))
+                        .child(
+                            div()
+                                .font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
+                                .text_color(p.foreground)
+                                .child(label),
+                        )
+                        .child(waveform(levels.iter(), p).ml(px(2.0 * s)))
+                        .when(quiet, |this| {
+                            this.child(
+                                div()
+                                    .text_color(
+                                        super::tone_card::tone_look("warning", p)
+                                            .hue
+                                            .unwrap_or(p.muted),
+                                    )
+                                    .child("Can't hear you"),
+                            )
+                        })
+                        .child(finish)
+                } else {
+                    div()
+                        .h(px(PILL_HEIGHT * s))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        // The text starts 9px in; the ✕'s 11px mark, centred in its 18px button,
+                        // ends 9px in, so both ends are inset alike.
+                        .pl(px(9.0 * s))
+                        .pr(px(5.5 * s))
+                        .rounded_full()
+                        .whitespace_nowrap()
+                        .child(div().text_color(p.foreground).child(label))
+                        .child(close(false, cx))
+                }
             }
         };
         let microphone_shown = self.dictation_button_shown();
@@ -709,87 +824,92 @@ impl NativeChatView {
         Some(deferred(pill).with_priority(1).into_any_element())
     }
 
-    /// The failure card, compact: "Couldn't transcribe" and the ✕, gxserver's sentence saying what
-    /// went wrong and what to do with "Your recording is safe.", and the buttons that help
-    /// (`failure_actions`), Try again filled. With `unavailable` it is the card a press shows while
-    /// the engine can't transcribe: why, "Nothing was recorded.", and the way to fix it. The provider's own words,
-    /// when it gave any, are the sentence's tooltip.
+    /// The Dictate card, compact: a mark and a title, gxserver's sentence (shortened where a
+    /// button says it, `card_sentence`) with what became of the recording, and the buttons that
+    /// help, Try again filled. `Failed` is a transcription that failed ("Couldn't transcribe",
+    /// "Your recording is safe.", `failure_actions`); `Unavailable` the card a press shows while
+    /// the engine can't transcribe ("Nothing was recorded.", the way to fix it); `Notice` what no
+    /// button retries (a microphone that couldn't start, no words heard, nothing waiting). The
+    /// provider's own words, when it gave any, are the sentence's tooltip. Its ✕ sits on the
+    /// card's corner while the pointer is over it (`card_corner_close`).
     ///
     /// CDXC:VoiceMode 2026-10-30 DECISION: User picked Q779 option B, "a two-line card with the full sentence", for every failure gxserver reports, each in plain words, instead of a pill that only said "Transcription failed" with the reason in a tooltip (Sam on Discord, no xAI key set). Q780 option A: its Add key / Check key button opens the page with that key's field focused (Settings > Voice since 2026-11-05). Supersedes the failure part of the 2026-10-20 one-line pill above; recording and transcribing keep the pill.
-    /// CDXC:Dictate 2026-11-13 DECISION: User, of the phone's failure: "the error you're showing is so ugly. Make it look nicer": a calm card in the notices' family, what happened in plain words, that the recording is safe, and one or two buttons (Try again, Open settings), on the desktop and the phone alike (`DictationBar.tsx`).
+    /// CDXC:Dictate 2026-11-13 DECISION: User, of the phone's failure: "the error you're showing is so ugly. Make it look nicer": a calm card, what happened in plain words, that the recording is safe, and one or two buttons (Try again, Open settings), on the desktop and the phone alike (`DictationBar.tsx`). Then (Q2915) the sentence drops its trailing "then transcribe again" where Try again shows, and (Q2914, "please we should never ever lose the user's transcript") a card whose recording has no words yet says where it is kept: Settings > Dictation > Past recordings.
     fn render_dictation_failure(
         &self,
         failure: &DictateFailure,
-        unavailable: bool,
+        kind: CardKind,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let actions = failure_actions(failure);
+        let actions = match kind {
+            CardKind::Notice => FailureActions {
+                key: None,
+                models: (failure.code == "nothingHeard").then_some("Past recordings"),
+                retry: false,
+                recording_kept: false,
+            },
+            _ => failure_actions(failure),
+        };
         let detail = failure.detail.clone().map(|detail| {
             match failure.provider.as_deref().map(provider_label) {
                 Some(label) => format!("{label} said: {detail}"),
                 None => detail,
             }
         });
+        let (icon, tone) = match (kind, failure.code.as_str()) {
+            (CardKind::Unavailable, _) | (CardKind::Notice, "micUnavailable") => {
+                ("titlebar/microphone-off.svg", "warning")
+            }
+            (CardKind::Notice, _) => ("titlebar/microphone.svg", "terminal"),
+            _ => ("titlebar/microphone.svg", "warning"),
+        };
         let look = ToneLook {
-            icon: if unavailable {
-                "titlebar/microphone-off.svg".to_string()
-            } else {
-                "titlebar/microphone.svg".to_string()
-            },
-            ..tone_look("warning", p)
+            icon: icon.to_string(),
+            ..tone_look(tone, p)
         };
-        let title = if unavailable {
-            unavailable_title(&failure.code).to_string()
+        let title = match kind {
+            CardKind::Unavailable => unavailable_title(&failure.code).to_string(),
+            CardKind::Notice => notice_title(&failure.code).to_string(),
+            CardKind::Failed => "Couldn't transcribe".to_string(),
+        };
+        let retry = actions.retry && kind == CardKind::Failed;
+        let message = if retry {
+            card_sentence(&failure.message)
         } else {
-            "Couldn't transcribe".to_string()
+            failure.message.clone()
         };
-        let dismiss = self
-            .tone_icon_button(
-                "dictation-cancel",
-                "titlebar/x.svg",
-                if unavailable {
-                    "Dismiss"
-                } else {
-                    "Dismiss (the recording is kept)"
-                },
-                p,
-            )
-            .on_click(cx.listener(|this, _, _, cx| {
-                if let Some(control) = this.dictation.as_ref() {
-                    let dictate = control.dictate.clone();
-                    dictate.update(cx, |dictate, cx| dictate.cancel(cx));
-                }
-                cx.notify();
-            }))
-            .into_any_element();
         let sentence = (
-            if unavailable {
-                format!("{} Nothing was recorded.", failure.message)
-            } else if actions.recording_kept {
-                format!("{} Your recording is safe.", failure.message)
-            } else {
-                failure.message.clone()
+            match kind {
+                CardKind::Unavailable => format!("{message} Nothing was recorded."),
+                CardKind::Failed if actions.recording_kept => {
+                    format!("{message} Your recording is safe in Past recordings.")
+                }
+                _ => message,
             },
             detail,
         );
-        let retry = actions.retry && !unavailable;
         let mut footer = Vec::new();
-        if let Some(label) = actions
-            .models
-            .or(unavailable.then_some("Open settings"))
-            .filter(|_| actions.key.is_none())
-        {
+        let settings_label = match kind {
+            CardKind::Unavailable if actions.key.is_none() => Some("Open settings"),
+            _ => actions.models.filter(|_| actions.key.is_none()),
+        };
+        if let Some(label) = settings_label {
             let kind = if retry {
                 ToneButton::Secondary
             } else {
                 ToneButton::Primary
             };
+            let history = label == "Past recordings";
             footer.push(
                 self.tone_button("dictation-models", label, None, kind, None, false, p)
-                    .on_click(cx.listener(|_, _, _, cx| {
-                        cx.emit(NativeChatEvent::Host(open_voice_models()));
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if history {
+                            this.open_dictation_history(cx);
+                        } else {
+                            cx.emit(NativeChatEvent::Host(open_voice_models()));
+                        }
                     }))
                     .into_any_element(),
             );
@@ -830,18 +950,23 @@ impl NativeChatView {
                 .into_any_element(),
             );
         }
-        // Compact: the mark, the title and the ✕ on one line, the sentence, then the buttons
-        // (CDXC:Dictate 2026-11-13 DECISION on the phone's `DictationCard`: "they're huge").
+        let close_label = if kind == CardKind::Failed {
+            "Dismiss (the recording is kept)"
+        } else {
+            "Dismiss"
+        };
         let (sentence_text, sentence_detail) = sentence;
         let hue = look.hue.unwrap_or(p.muted);
         div()
+            .id("dictation-card")
+            .group("dictation-card")
+            .relative()
             .w_full()
             .flex()
             .flex_col()
             .gap(px(4.0 * s))
-            .pl(px(12.0 * s))
-            .pr(px(8.0 * s))
-            .pt(px(8.0 * s))
+            .px(px(12.0 * s))
+            .pt(px(9.0 * s))
             .pb(px(10.0 * s))
             .rounded(px(14.0 * s))
             .border_1()
@@ -869,13 +994,11 @@ impl NativeChatView {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(p.foreground)
                             .child(title),
-                    )
-                    .child(dismiss),
+                    ),
             )
             .child(
                 div()
                     .id("dictation-reason")
-                    .pr(px(4.0 * s))
                     .text_size(px(12.5 * s))
                     .line_height(px(17.0 * s))
                     .text_color(p.card_muted)
@@ -890,13 +1013,77 @@ impl NativeChatView {
                 card.child(
                     div()
                         .mt(px(4.0 * s))
-                        .pr(px(4.0 * s))
                         .flex()
                         .justify_end()
                         .gap(px(6.0 * s))
                         .children(footer),
                 )
             })
+            .child(self.card_corner_close(close_label, p, cx))
+            .into_any_element()
+    }
+
+    /// The Dictate card's ✕: the toast's round button centred on the card's top corner (the
+    /// left on macOS unless Close buttons on the right is on, like every dialog), shown while the
+    /// pointer is over the card. It dismisses the card; a recording stays kept.
+    ///
+    /// CDXC:Dictate 2026-11-13 DECISION: User (Q2913, Other): "when I hover, it's shown on the top right or top left corner, just like we do for Settings". Supersedes the filled ✕ inside the card's header.
+    /// SEE-ALSO: window/round_close_button.rs (`close_buttons_on_left`), native_chat/coordinator_board.rs (the board card's remove button, the same look).
+    fn card_corner_close(
+        &self,
+        label: &'static str,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let size = crate::app::window::round_close_button::ROUND_CLOSE_BUTTON_SIZE * s;
+        let outset = px(-size / 2.0 + 2.0 * s);
+        let light = p.light;
+        div()
+            .id("dictation-cancel")
+            .role(gpui::Role::Button)
+            .aria_label(label)
+            .absolute()
+            .top(outset)
+            .map(|button| {
+                if crate::app::window::round_close_button::close_buttons_on_left() {
+                    button.left(outset)
+                } else {
+                    button.right(outset)
+                }
+            })
+            .size(px(size))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_full()
+            .border(px(s))
+            .border_color(
+                crate::app::window::toast::gpui_app_toast_close_button_border_color(light),
+            )
+            .bg(crate::app::window::toast::gpui_app_toast_close_button_color(light))
+            .chat_cursor_pointer()
+            .opacity(0.0)
+            .group_hover("dictation-card", |style| style.opacity(1.0))
+            .hover(move |style| {
+                style
+                    .opacity(1.0)
+                    .bg(crate::app::window::toast::gpui_app_toast_close_button_hover_color(light))
+            })
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+            })
+            .child(crate::app::window::round_close_button::round_close_x_icon(
+                s,
+                crate::app::window::toast::gpui_app_toast_close_button_icon_color(light),
+            ))
+            .on_click(cx.listener(|this, _, _, cx| {
+                if let Some(control) = this.dictation.as_ref() {
+                    let dictate = control.dictate.clone();
+                    dictate.update(cx, |dictate, cx| dictate.cancel(cx));
+                }
+                cx.notify();
+            }))
             .into_any_element()
     }
 

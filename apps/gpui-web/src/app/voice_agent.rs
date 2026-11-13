@@ -18,6 +18,7 @@ pub(crate) enum DictatePhase {
     Transcribing,
     Failed { kept: (), failure: DictateFailure },
     Unavailable { failure: DictateFailure },
+    Notice { failure: DictateFailure },
 }
 
 /// The desktop's `voice_agent::dictation::WAVEFORM_BARS`.
@@ -57,31 +58,60 @@ pub(crate) enum DictateEvent {
 /// shows the failure card for one of gxserver's codes (`failed:noKey`, `failed:providerUnavailable`,
 /// ...), worded as gxserver words it (`server/src/voice_agent/transcribe.rs`);
 /// `unavailable:<code>` the card a press shows while the engine can't transcribe (the microphone
-/// greyed meanwhile, `dictation_unready`).
+/// greyed meanwhile, `dictation_unready`); `notice:<code>` a card no button retries
+/// (`notice:micUnavailable`, `notice:nothingHeard`).
 pub(crate) fn dictation_preview() -> bool {
     preview_phase().is_some()
 }
 
-fn preview_phase() -> Option<DictatePhase> {
+fn preview_value() -> Option<String> {
     let search = web_sys::window().and_then(|window| window.location().search().ok())?;
-    let value = search
+    search
         .trim_start_matches('?')
         .split('&')
-        .find_map(|pair| pair.strip_prefix("dictatePreview="))?;
+        .find_map(|pair| pair.strip_prefix("dictatePreview="))
+        .map(str::to_string)
+}
+
+fn preview_phase() -> Option<DictatePhase> {
+    let value = preview_value()?;
+    let value = value.as_str();
     match value {
-        "recording" => Some(DictatePhase::Recording),
+        "recording" | "quiet" => Some(DictatePhase::Recording),
         "transcribing" => Some(DictatePhase::Transcribing),
         "failed" => preview_failure("paymentRequired"),
         "unavailable" => preview_unavailable("hexNotInstalled"),
         _ => value
-            .strip_prefix("failed:")
-            .and_then(preview_failure)
+            .strip_prefix("notice:")
+            .and_then(preview_notice)
+            .or_else(|| value.strip_prefix("failed:").and_then(preview_failure))
             .or_else(|| {
                 value
                     .strip_prefix("unavailable:")
                     .and_then(preview_unavailable)
             }),
     }
+}
+
+fn preview_notice(code: &str) -> Option<DictatePhase> {
+    let message = match code {
+        "micUnavailable" => {
+            "Ghostex can't use the microphone. Allow Ghostex under Microphone in System Settings > Privacy & Security."
+        }
+        "nothingHeard" => {
+            "No words were heard in the recording. It is kept in Settings > Dictation > Past recordings."
+        }
+        "nothingWaiting" => "There is no recording waiting to be transcribed.",
+        _ => return None,
+    };
+    Some(DictatePhase::Notice {
+        failure: DictateFailure {
+            code: code.to_string(),
+            message: message.to_string(),
+            provider: None,
+            detail: None,
+        },
+    })
 }
 
 fn preview_unavailable(code: &str) -> Option<DictatePhase> {
@@ -194,7 +224,15 @@ impl Dictate {
     }
 
     pub(crate) fn levels(&self) -> VecDeque<f32> {
+        if self.cant_hear() {
+            return std::iter::repeat_n(0.01, WAVEFORM_BARS).collect();
+        }
         preview_levels()
+    }
+
+    /// `?dictatePreview=quiet` records in a silent room: the pill says "Can't hear you".
+    pub(crate) fn cant_hear(&self) -> bool {
+        matches!(self.phase, DictatePhase::Recording) && preview_value().as_deref() == Some("quiet")
     }
 
     pub(crate) fn toggle(&mut self, cx: &mut Context<Self>) {

@@ -1837,18 +1837,22 @@ Voice or OpenAI GPT Realtime), so Dictate can stay on Hex while calls use xAI
 or OpenAI; the key that provider needs sits right under it, and it is the same
 key Dictation uses. A problem with the provider or the connection never loses
 what you said: when the transcription fails, a small card above the microphone
-says what went wrong in plain words and that your recording is safe (no key, a
-refused key, Hex not installed, no internet, too many requests, credit or plan
-usage, audio the provider couldn't read), with Add key or Check key, which opens
-that key's field in Settings > Dictation, Open settings, which opens Settings >
-Dictation at the engine, and Try again; hover its sentence for the provider's own words when it gave any.
+says what went wrong in plain words and that your recording is safe in Settings >
+Dictation > Past recordings (no key, a refused key, Hex not installed, no
+internet, too many requests, credit or plan usage, audio the provider couldn't
+read), with Add key or Check key, which opens that key's field in Settings >
+Dictation, Open settings, which opens Settings > Dictation at the engine, and Try
+again; hover its sentence for the provider's own words when it gave any. A
+microphone Ghostex can't use and a recording with no words show the same kind of
+card; hover a card for its ✕ on the corner. Every recording and its text stay in
+Past recordings until you delete them, with Copy and Transcribe.
 While the engine can't transcribe at all (Hex not installed, no key), the
 microphone is greyed: pressing it records nothing and the card says why, with
 Open settings to fix it or pick another engine. In
 the chat box, a small pill right above the microphone shows what Dictate is
-doing: the recording time and a live waveform of your voice while you talk (so
-you can see the microphone hears you), then Transcribing. Its ✕ cancels, and
-so does Esc. A cancelled recording is still
+doing: ✕ to cancel, the recording time and a live waveform of your voice while
+you talk (so you can see the microphone hears you; after 3 seconds of silence it
+says "Can't hear you"), and ✓ to finish, then Transcribing. Esc cancels too. A cancelled recording is still
 kept: rest the pointer on the microphone (or right-click it) and choose
 Transcribe previous to type the newest recording that has no text yet into the
 chat box. On the terminal bar, press the microphone again while it transcribes
