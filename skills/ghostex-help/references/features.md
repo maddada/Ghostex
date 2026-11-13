@@ -4439,6 +4439,14 @@ stays on one line: search is an icon until you press it (then the field takes th
 - A project on another computer is read with that computer's `bd`. If that
   computer runs an older Ghostex, the view shows a card asking to update it
   and the Board still works.
+- On the phone, **Beads** sits beside **Changes** in a session's long-press
+  menu and the terminal's ⋯ menu. It shows the same tree with the filters
+  (scroll them sideways), search, **Show done** (finished epics and their
+  beads) and the sync pill (tap it for Pull and Push). Tap a bead to open it full screen: close, defer, claim, answer a
+  decision, change its priority, labels and links, and comment. Links can be
+  changed only when that computer runs a Ghostex that supports them; the
+  phone needs Ghostex 11.5 or later on the computer, and a newer one when it
+  connects over SSH.
 - The `$ghostex-manage-beads` skill teaches agents the same workflow from the
   command line. Ask a coordinator to "work the ready beads with high priority"
   to have it pick beads and start workers.
