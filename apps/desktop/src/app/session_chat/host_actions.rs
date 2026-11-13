@@ -149,6 +149,14 @@ impl GhostexGpuiApp {
         // CDXC:Settings 2026-09-06 WHY: The chat bridge previously dropped Settings opens as unknown chat actions, so the account settings shortcut did nothing. Route this modal through the existing native modal owner.
         // CDXC:SessionChat 2026-09-06 WHY:
         // Transcript diagrams use the shared modal launcher; their expand requests must reach the native diagram window instead of being discarded as unknown chat actions.
+        // A page card's Export: this computer's gxserver builds the file and it is saved here
+        // (visual_page_modal_lifecycle.rs `export_session_chat_visual_page`).
+        if message.get("type").and_then(serde_json::Value::as_str) == Some("exportVisualPage") {
+            if let Some(url) = message.get("url").and_then(serde_json::Value::as_str) {
+                self.export_session_chat_visual_page(session_id, url, cx);
+            }
+            return;
+        }
         if message.get("type").and_then(serde_json::Value::as_str) == Some("open")
             && message.get("modal").and_then(serde_json::Value::as_str) == Some("visualPage")
         {

@@ -360,7 +360,7 @@ impl GhostexGpuiApp {
             }
             // The browser downloads the exported page; the page stays open.
             VisualPageModalCommand::ExportPage { url } => {
-                let _ = gpui_open_external_http_url(&url);
+                self.export_visual_page_to_file(url, cx);
                 return;
             }
             VisualPageModalCommand::Notice {
@@ -406,6 +406,98 @@ impl GhostexGpuiApp {
             }
         };
         self.open_visual_page_web_link(url, cx);
+    }
+}
+
+impl GhostexGpuiApp {
+    /// A page card's Export: the page's address as the session's computer wrote it, made one this
+    /// computer can reach (a remote computer's goes through its tunnel, as Open does), then
+    /// exported (`export_visual_page_to_file`).
+    pub(crate) fn export_session_chat_visual_page(
+        &mut self,
+        session_id: TerminalSessionId,
+        url: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let url = url.trim().to_string();
+        let remote_project = self
+            .remote_project_for_terminal_target(GpuiEngineTerminalEventTarget::Agents(session_id));
+        let url = match remote_project.and_then(|remote_project| {
+            self.gpui_remote_gxserver_request_target(&remote_project.remote_machine_id)
+        }) {
+            Some(target) => match gpui_remote_machine_url(&url, &target) {
+                GpuiRemoteMachineUrl::Gxserver(url) => url,
+                _ => url,
+            },
+            None => url,
+        };
+        self.export_visual_page_to_file(url, cx);
+    }
+
+    /// Export page: this computer's gxserver builds the exported file (`/api/exportVisualPage`
+    /// `{url}`, server/src/visual_pages/exported.rs), from its own copy of the page or from the page
+    /// as its computer serves it, so a page on a computer with an older Ghostex exports too; the
+    /// file is saved where the reader picks (Downloads first), and a toast says where.
+    ///
+    /// CDXC:SessionChat 2026-11-13 WHY:
+    /// Export used to hand the page's `/export` address to the system browser. For a page on another computer that is a tunnel port on this machine (`http://127.0.0.1:50423/…`), which the other computer's 11.5.0 gxserver answered with a 404, and a tunnel address has no business in a browser anyway.
+    pub(crate) fn export_visual_page_to_file(&mut self, url: String, cx: &mut gpui::Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let exported = crate::app::gx_store::gx_rpc(
+                None,
+                "/api/exportVisualPage",
+                serde_json::json!({ "url": url }),
+            )
+            .await;
+            let exported = match exported {
+                Ok(exported) => exported,
+                Err(error) => {
+                    let _ = this.update(cx, |this, cx| {
+                        this.dispatch_gpui_app_modal_toast(
+                            "warning",
+                            "The page could not be exported",
+                            &error.message,
+                            cx,
+                        )
+                    });
+                    return;
+                }
+            };
+            let html = exported["html"].as_str().unwrap_or_default().to_string();
+            let name = exported["fileName"]
+                .as_str()
+                .filter(|name| !name.is_empty())
+                .unwrap_or("ghostex-page.html")
+                .to_string();
+            let folder = std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .map(std::path::PathBuf::from)
+                .map(|home| {
+                    let downloads = home.join("Downloads");
+                    if downloads.is_dir() { downloads } else { home }
+                })
+                .unwrap_or_else(std::env::temp_dir);
+            let picked = cx.update(|cx| cx.prompt_for_new_path(&folder, Some(name.as_str())));
+            let Ok(Ok(Some(path))) = picked.await else {
+                return;
+            };
+            let written = std::fs::write(&path, html);
+            let _ = this.update(cx, |this, cx| match written {
+                Ok(()) => this.dispatch_gpui_app_modal_toast(
+                    "success",
+                    "Page exported",
+                    &format!("Saved to {}", path.display()),
+                    cx,
+                ),
+                Err(error) => this.dispatch_gpui_app_modal_toast(
+                    "warning",
+                    "The page could not be saved",
+                    &error.to_string(),
+                    cx,
+                ),
+            });
+        })
+        .detach();
     }
 }
 

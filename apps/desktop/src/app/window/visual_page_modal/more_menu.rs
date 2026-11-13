@@ -257,6 +257,7 @@ impl GpuiVisualPageModalWindow {
             prompt: Some("Import answers".into()),
         });
         let remote = self.remote.clone();
+        let remote_page = remote.is_some();
         let own_page = self.page_id.clone();
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = paths.await else {
@@ -278,7 +279,16 @@ impl GpuiVisualPageModalWindow {
                 )
                 .await
                 .map_err(|error| {
-                    if error.message.contains("projectId") {
+                    // A computer with an older Ghostex has no import (404, unknown endpoint).
+                    let lower = error.message.to_ascii_lowercase();
+                    if remote_page
+                        && (lower.contains("not found")
+                            || lower.contains("unknown")
+                            || lower.contains("404")
+                            || lower.contains("importvisualpageanswers"))
+                    {
+                        "Update Ghostex on the page's computer to import answers.".to_string()
+                    } else if error.message.contains("projectId") {
                         "These answers are for a page this computer doesn't know. Drop the file on the chat box instead.".to_string()
                     } else {
                         error.message

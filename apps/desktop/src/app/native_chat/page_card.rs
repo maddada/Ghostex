@@ -280,7 +280,7 @@ impl NativeChatView {
             "Answered"
         };
         let gxv::PageRef { title, url, .. } = page;
-        let export_url = page_id.as_ref().map(|_| exported_page_url(&url));
+        let export_url = page_id.as_ref().map(|_| url.clone());
         let bar_label = file.clone().unwrap_or_else(|| title.clone());
         let page_title = title.clone();
         let aria = format!("Open page {title}");
@@ -616,6 +616,7 @@ fn later_button(
 
 /// The address of the page's exported file (server/src/visual_pages/exported.rs): the page's own
 /// address with `/export`, which the reader's browser downloads.
+#[cfg(target_arch = "wasm32")]
 fn exported_page_url(url: &str) -> String {
     let end = url.find(['?', '#']).unwrap_or(url.len());
     format!("{}/export", url[..end].trim_end_matches('/'))
@@ -634,7 +635,13 @@ fn export_button(
     let s = p.scale;
     let (rest, hover) = if p.light { (0.07, 0.11) } else { (0.10, 0.15) };
     let hover_fill = p.foreground.opacity(hover);
-    let action = json!({"type": "openMarkdownLink", "href": export_url, "external": true});
+    // The desktop has its own gxserver build the file and saves it (app/visual_page_modal_lifecycle.rs
+    // `export_visual_page_to_file`), which works for a page on a computer with an older Ghostex; the
+    // web build hands the page's export address to the browser.
+    #[cfg(not(target_arch = "wasm32"))]
+    let action = json!({"type": "exportVisualPage", "url": export_url});
+    #[cfg(target_arch = "wasm32")]
+    let action = json!({"type": "openMarkdownLink", "href": exported_page_url(&export_url), "external": true});
     div()
         .id(SharedString::from(format!("visual-page-export:{key}")))
         .role(gpui::Role::Button)
@@ -667,7 +674,11 @@ fn export_button(
         .child("Export")
         .on_click(cx.listener(move |this, _, _, cx| {
             cx.stop_propagation();
-            this.invoke(action.clone(), cx)
+            #[cfg(not(target_arch = "wasm32"))]
+            cx.emit(super::state::NativeChatEvent::Host(action.clone()));
+            #[cfg(target_arch = "wasm32")]
+            this.invoke(action.clone(), cx);
+            let _ = &this;
         }))
         .into_any_element()
 }

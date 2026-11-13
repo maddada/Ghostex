@@ -476,13 +476,24 @@ pub(super) async fn route_chat_http(
                 &body_json,
             )
         }
+        // It may read the page from another computer over its tunnel (exported.rs `export_url`).
         crate::visual_pages::EXPORT_VISUAL_PAGE_ENDPOINT => {
-            crate::visual_pages::handle_export_visual_page_http(
-                &state,
-                endpoint.path,
-                request_id,
-                &body_json,
-            )
+            let state = state.clone();
+            let path = endpoint.path.clone();
+            let body = body_json.clone();
+            let id = request_id.clone();
+            match tokio::task::spawn_blocking(move || {
+                crate::visual_pages::handle_export_visual_page_http(&state, path, id, &body)
+            })
+            .await
+            {
+                Ok(routed) => routed,
+                Err(_) => crate::server::domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    crate::domain::DomainStateError::bad_request("The page could not be exported."),
+                ),
+            }
         }
         crate::visual_pages::IMPORT_VISUAL_PAGE_ANSWERS_ENDPOINT => {
             crate::visual_pages::handle_import_visual_page_answers_http(

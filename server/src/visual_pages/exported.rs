@@ -178,7 +178,9 @@ pub(crate) fn handle_export_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     let state_dir = &state.paths.root_dir;
-    let exported = if let Some(id) = params.get("pageId").and_then(Value::as_str) {
+    let exported = if let Some(url) = params.get("url").and_then(Value::as_str) {
+        export_url(state_dir, url).map_err(DomainStateError::bad_request)
+    } else if let Some(id) = params.get("pageId").and_then(Value::as_str) {
         let id = id.trim().to_ascii_lowercase();
         if !is_page_id(&id) {
             Err(DomainStateError::bad_request("pageId is not a page id."))
@@ -209,6 +211,82 @@ pub(crate) fn handle_export_http(
         ),
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }
+}
+
+/// The page at `url` (`http://127.0.0.1:<port>/visual/<id>`, this computer's own or another
+/// computer's through its tunnel), exported here: the page this computer stores under that id, or
+/// else the page as its own computer serves it, with today's built-in block from this gxserver in
+/// place of the one it was served with (`with_current_block`), so a page on a computer running an
+/// older Ghostex, which has no `/export` route, exports all the same.
+///
+/// CDXC:SessionChat 2026-11-13 WHY:
+/// Export page on a page from another computer handed the system browser the page's tunnel address with `/export` (`http://127.0.0.1:50423/visual/<id>/export`): the other computer ran 11.5.0, which has no such route, so the browser showed a 404, and a tunnel port means nothing to a browser anyway. The desktop now asks its own gxserver, which reads the page over the tunnel the way the page window loads it and saves the file locally.
+fn export_url(gxserver_state_dir: &Path, url: &str) -> Result<ExportedPage, String> {
+    let parsed =
+        url::Url::parse(url.trim()).map_err(|_| "That is not a page address.".to_string())?;
+    let id = parsed
+        .path()
+        .strip_prefix(VISUAL_PAGE_ROUTE_PREFIX)
+        .map(|id| id.trim_end_matches('/').to_ascii_lowercase())
+        .filter(|id| is_page_id(id))
+        .ok_or_else(|| "That is not a page address.".to_string())?;
+    if let Some(exported) = exported_page(gxserver_state_dir, &id) {
+        return Ok(exported);
+    }
+    // Only a page on this machine's loopback: this computer's gxserver or a tunnel to another's.
+    let loopback = matches!(parsed.scheme(), "http" | "https")
+        && matches!(
+            parsed.host_str(),
+            Some("127.0.0.1") | Some("localhost") | Some("[::1]") | Some("::1")
+        );
+    if !loopback {
+        return Err("Only a Ghostex page's own address can be exported.".to_string());
+    }
+    let page_url = format!(
+        "{}://{}{}{id}",
+        parsed.scheme(),
+        parsed.host_str().unwrap_or("127.0.0.1"),
+        parsed
+            .port()
+            .map(|port| format!(":{port}"))
+            .unwrap_or_default()
+            + VISUAL_PAGE_ROUTE_PREFIX
+    );
+    let mut response = crate::http_agent::answering_agent()
+        .get(&page_url)
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(30)))
+        .http_status_as_error(false)
+        .build()
+        .call()
+        .map_err(|error| format!("The page's computer could not be reached: {error}"))?;
+    if !response.status().is_success() {
+        return Err("The page's computer no longer has this page.".to_string());
+    }
+    let html = response
+        .body_mut()
+        .with_config()
+        .limit(VISUAL_PAGE_MAX_BYTES as u64 * 2)
+        .read_to_string()
+        .map_err(|error| format!("The page could not be read: {error}"))?;
+    let title = page_title(&html).unwrap_or_else(|| "Ghostex page".to_string());
+    Ok(export(html.into_bytes(), &id, title, false))
+}
+
+/// The text of the page's `<title>`, when it has one.
+fn page_title(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let start = lower.find("<title")?;
+    let open = start + lower[start..].find('>')? + 1;
+    let close = open + lower[open..].find("</title")?;
+    let title = html[open..close]
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'");
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!title.is_empty()).then_some(title)
 }
 
 fn export_file(gxserver_state_dir: &Path, file: &Path) -> Result<ExportedPage, String> {
