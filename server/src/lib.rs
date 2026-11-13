@@ -5,6 +5,7 @@ pub mod agent_hooks;
 pub mod agent_message_deliveries;
 pub mod agent_model_catalog;
 pub(crate) mod agent_model_lineups;
+pub(crate) mod agent_model_pickers;
 pub mod agent_model_pins;
 pub mod agent_prompt_search;
 pub(crate) mod agent_sign_in;

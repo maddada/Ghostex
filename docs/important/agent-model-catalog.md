@@ -35,6 +35,21 @@ Read this whole page before touching the file.
 4. If every fetch fails, the newer (by `updatedAt`) of the bundled and cached
    copies stays in effect.
 
+Since 2026-11-13 gxserver also reads the model list of every installed,
+signed-in CLI itself (`server/src/agent_model_lineups.rs`), and that lineup
+takes the agent's place in the copy it serves: Codex (`codex debug models`, in
+its `priority` order), Grok (`grok models` and `~/.grok/models_cache.json`),
+OpenCode (`/api/model`), and Claude Code, Cursor and Antigravity from their own
+`/model` pickers (`server/src/agent_model_pickers.rs`): a hidden terminal in
+gxserver's cache folder opens `/model`, reads the rows and leaves with Escape.
+A picker is read once per CLI version (cached in `agent-model-pickers.json`);
+Cursor's and Antigravity's rows and order come from the picker, their efforts
+and Fast from the list command. A CLI that is missing, signed out or cannot
+be read keeps its last lineup, else this file. The order is always the CLI's,
+except Claude's family sort below; older versions go under Legacy models by
+the same rule. This file is still what released apps, logged-out computers
+and the first start read, so keep it current.
+
 GitHub's raw server caches the file for 5 minutes, so a push reaches open apps
 in roughly 5 to 10 minutes. Apps older than the 2026-09-22 change only
 re-fetch when they start.

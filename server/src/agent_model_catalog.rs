@@ -119,17 +119,19 @@ pub fn current() -> Arc<Value> {
 /// document, adopt a changed lineup.
 fn rebuild_effective(state: &mut CatalogState) {
     let mut effective = (*state.catalog).clone();
-    order_claude_models(&mut effective);
     if state.lineups.is_empty() {
+        order_claude_models(&mut effective);
         state.effective = Arc::new(effective);
         return;
     }
-    // A lineup read from a CLI replaces its agent whole; Claude's comes from the file.
+    // A lineup read from a CLI replaces its agent whole. Claude's, read from its picker, is then
+    // sorted by family like the file's (Q2982: the Fable-first sort stays).
     if let Some(agents) = effective.get_mut("agents").and_then(Value::as_object_mut) {
         for (agent, lineup) in &state.lineups {
             agents.insert(agent.clone(), lineup.entry.clone());
         }
     }
+    order_claude_models(&mut effective);
     if let Some(newest) = state
         .lineups
         .values()
@@ -285,7 +287,8 @@ fn refresh_lineups(paths: GxserverPaths, event_hub: GxserverEventHub, server_id:
             if Instant::now() < due[index] {
                 continue;
             }
-            let entry = crate::agent_model_lineups::read_lineup(agent).filter(is_valid_agent);
+            let entry = crate::agent_model_lineups::read_lineup(agent, &paths.app_cache_dir)
+                .filter(is_valid_agent);
             due[index] = Instant::now()
                 + if entry.is_some() {
                     LINEUP_TTL
@@ -309,6 +312,18 @@ fn agent_models(catalog: &Value, agent: &str) -> Vec<Value> {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default()
+}
+
+/// One agent's entry in the published file (the newest of the bundle, the cache and GitHub),
+/// before any CLI's lineup takes its place.
+pub(crate) fn published_agent(agent: &str) -> Option<Value> {
+    state()
+        .read()
+        .ok()?
+        .catalog
+        .get("agents")?
+        .get(agent)
+        .cloned()
 }
 
 /// One agent's catalog rows, in the catalog's order, plus the agent's own `efforts` and
