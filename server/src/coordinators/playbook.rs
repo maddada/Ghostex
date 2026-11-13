@@ -38,8 +38,43 @@ const GUIDE_NOTES_METADATA_KEY: &str = "coordinatorGuideNotes";
 const NEW_COORDINATOR_NOTE: &str = "new";
 /// An edited playbook never grows past this (the shipped one is about 16 KB).
 pub const COORDINATOR_PLAYBOOK_MAX_CHARS: usize = 100_000;
-/// The user's playbook overrides never grow past this.
-pub const COORDINATOR_PLAYBOOK_OVERRIDES_MAX_CHARS: usize = 20_000;
+/// The user's playbook overrides never grow past this, the same room an edited playbook had.
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// GitHub #584 (sebastianarena): overrides were capped at 20,000 characters while a real workflow
+/// already fills 17,000 ("Please remove the cap, or make it a setting ... a warning past a size
+/// would let the user decide instead of a hard refusal"). The user picked "raise it to 100,000
+/// with a size warning": the cap matches `COORDINATOR_PLAYBOOK_MAX_CHARS`, and past
+/// `COORDINATOR_PLAYBOOK_OVERRIDES_LONG_CHARS` the CLI and the desktop's overrides rows say how
+/// long they are, because every coordinator reads them in full at each guide.
+pub const COORDINATOR_PLAYBOOK_OVERRIDES_MAX_CHARS: usize = 100_000;
+/// Overrides past this many characters are long: saving them works, with a warning.
+pub const COORDINATOR_PLAYBOOK_OVERRIDES_LONG_CHARS: usize = 20_000;
+
+/// The warning for overrides longer than `COORDINATOR_PLAYBOOK_OVERRIDES_LONG_CHARS`, or none.
+pub fn overrides_length_warning(text: &str) -> Option<String> {
+    let length = text.trim().chars().count();
+    (length > COORDINATOR_PLAYBOOK_OVERRIDES_LONG_CHARS).then(|| {
+        format!(
+            "Long overrides: {} characters. Every coordinator reads them in full at each guide, so they take that much of its context. The limit is {}.",
+            group_thousands(length),
+            group_thousands(COORDINATOR_PLAYBOOK_OVERRIDES_MAX_CHARS)
+        )
+    })
+}
+
+/// `23400` as `23,400`.
+fn group_thousands(number: usize) -> String {
+    let digits = number.to_string();
+    let mut grouped = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    grouped
+}
 /// Where `retireOldCopies` saves the full copies it removes, under gxserver's root folder.
 const OLD_PLAYBOOKS_DIR: &str = "coordinators/old-playbooks";
 
@@ -516,7 +551,8 @@ fn set_playbook(
         };
         if text.trim().chars().count() > COORDINATOR_PLAYBOOK_OVERRIDES_MAX_CHARS {
             return Err(DomainStateError::bad_request(format!(
-                "The playbook overrides are limited to {COORDINATOR_PLAYBOOK_OVERRIDES_MAX_CHARS} characters."
+                "The playbook overrides are limited to {} characters.",
+                group_thousands(COORDINATOR_PLAYBOOK_OVERRIDES_MAX_CHARS)
             )));
         }
         playbooks.set_overrides(text);

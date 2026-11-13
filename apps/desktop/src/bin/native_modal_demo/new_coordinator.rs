@@ -1,7 +1,8 @@
 //! New Orchestrator preview. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default (Claude
 //! selected, Opus 5.5 at High), `codex`, `cursor` (an agent whose launch takes no model),
 //! `antigravity` (no XHigh: Medium and High), `none` (no agent an orchestrator can run on),
-//! `overrides` (the user wrote playbook overrides), `overrides-edit` (their editor open),
+//! `overrides` (the user wrote playbook overrides), `overrides-long` (long ones, over 20,000
+//! characters), `overrides-edit` (their editor open),
 //! `old-playbook` (an edited full playbook saved before overrides is still in use, editor open),
 //! `view` (the read-only playbook page, no overrides), `overrides-view` (the page with overrides),
 //! `overrides-view-end` (that page scrolled to the overrides),
@@ -325,10 +326,20 @@ fn demo_copies(state: &str, here: Vec<NewCoordinatorAgent>) -> Vec<NewCoordinato
 
 /// The scripted `/api/readCoordinatorPlaybook` answer for a demo state.
 fn demo_playbook_view(state: &str) -> serde_json::Value {
-    let overrides = if state.starts_with("overrides") {
+    let overrides = if state == "overrides-long" {
+        // Past the 20,000 characters that make overrides long (GitHub #584).
+        let rule = "Every thread runs the review loop twice before it lands anything that touches gxserver.";
+        let mut text = "Never push without asking.".to_string();
+        while text.chars().count() <= 24_000 {
+            text.push_str("\n\n");
+            text.push_str(rule);
+        }
+        text
+    } else if state.starts_with("overrides") {
         "Never push without asking.\nIgnore the board rules.\nThreads never restart the app."
+            .to_string()
     } else {
-        ""
+        String::new()
     };
     let old = state == "old-playbook";
     serde_json::json!({

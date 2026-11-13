@@ -158,6 +158,9 @@ pub(super) fn show(parsed: &ParsedArgs) -> CliResult<()> {
             "Overrides: {lines} line{} after the playbook, taking precedence over it (--overrides prints them).",
             if lines == 1 { "" } else { "s" }
         );
+        if let Some(warning) = crate::coordinators::overrides_length_warning(overrides) {
+            println!("{warning}");
+        }
     }
     let old = old_copy_lines(&view);
     if !old.is_empty() {
@@ -196,6 +199,11 @@ fn set_overrides(parsed: &ParsedArgs) -> CliResult<()> {
         println!("No playbook overrides now: coordinators follow the playbook alone.");
     } else {
         println!("Saved the playbook overrides. Every coordinator reads them after the playbook, ranked above it.");
+        if let Some(warning) =
+            crate::coordinators::overrides_length_warning(agents::text(&view["overrides"], "text"))
+        {
+            println!("{warning}");
+        }
     }
     println!("Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; the next message each one gets tells it the playbook changed.");
     Ok(())
@@ -286,7 +294,7 @@ fn override_entries(text: &str) -> Vec<String> {
 /// it's manual only". `--set-overrides` replaces the whole text, which an agent would use to
 /// clobber what the user wrote, so agents get numbered edits: list, add one rule to the end,
 /// replace or remove one by its number. Each saves the whole text through the same endpoint, so
-/// the 20,000 character limit and the note that tells every coordinator its playbook changed
+/// the 100,000 character limit, the long overrides warning and the note that tells every coordinator its playbook changed
 /// apply as they do to the Settings editor.
 fn edit_overrides(parsed: &ParsedArgs) -> CliResult<()> {
     let (_, flags, caller) = target_project(parsed, true)?;
@@ -365,5 +373,8 @@ fn edit_overrides(parsed: &ParsedArgs) -> CliResult<()> {
         return Ok(());
     }
     println!("{done} Every coordinator reads the overrides after the playbook, ranked above it; each one is told its playbook changed with its next message.");
+    if let Some(warning) = crate::coordinators::overrides_length_warning(&text) {
+        println!("{warning}");
+    }
     Ok(())
 }

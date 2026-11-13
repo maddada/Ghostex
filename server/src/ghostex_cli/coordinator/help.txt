@@ -359,8 +359,10 @@ COORDINATOR PLAYBOOK
   --list-overrides numbers them; --add-override "<rule>" adds one at the end,
   --replace-override <n> "<rule>" rewrites rule n and --remove-override <n>
   removes it (the ones after it move up a number). A rule is saved as one
-  paragraph. The overrides stay under 20,000 characters: a change that would
-  go over is refused and says so. A coordinator saves them too, when the user
+  paragraph. The overrides stay under 100,000 characters: a change that would
+  go over is refused and says so. Past 20,000 characters, playbook and every
+  save add a warning that they are long, since every coordinator reads them
+  in full at each guide. A coordinator saves them too, when the user
   confirms a rule for every coordinator; each coordinator is told its
   playbook changed with its next message. For example:
     ghostex coordinator playbook --add-override "Never push without asking."

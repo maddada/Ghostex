@@ -128,14 +128,34 @@ pub(crate) fn old_copies_note(places: &[String]) -> Option<String> {
     ))
 }
 
-/// The row's summary: none, or the overrides' first line.
+/// Overrides past this many characters are long: gxserver's
+/// `COORDINATOR_PLAYBOOK_OVERRIDES_LONG_CHARS` (server/src/coordinators/playbook.rs, GitHub #584).
+const OVERRIDES_LONG_CHARS: usize = 20_000;
+
+/// The row's summary: none, or the overrides' first line, led by their length when they are long
+/// (every coordinator reads them in full at each guide; see GitHub #584 on gxserver's limit).
 pub(crate) fn overrides_summary(overrides: &str) -> String {
-    overrides
+    let first_line = overrides
         .lines()
         .map(str::trim)
         .find(|line| !line.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| "None. Coordinators follow Ghostex's playbook as it ships.".to_string())
+        .map(str::to_string);
+    let Some(first_line) = first_line else {
+        return "None. Coordinators follow Ghostex's playbook as it ships.".to_string();
+    };
+    let length = overrides.trim().chars().count();
+    if length <= OVERRIDES_LONG_CHARS {
+        return first_line;
+    }
+    let digits = length.to_string();
+    let mut grouped = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    format!("Long: {grouped} characters · {first_line}")
 }
 
 /// Ghostex's part of a guide (`/api/readCoordinatorGuide`): the playbook and the reply format,
