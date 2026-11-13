@@ -226,16 +226,24 @@ impl GhostexGpuiApp {
         self.native_docs.drafts = read_drafts(&project_id);
         let open = read_open_files(&project_id);
         let active = read_active_file(&project_id, &open).or_else(|| open.first().cloned());
-        for path in &open {
-            if self.native_docs.document(path).is_none() {
+        let mut added = Vec::new();
+        for path in open {
+            if self.native_docs.document(&path).is_none() {
                 let mut document = super::state::DocsDocument::new(path.clone(), path.clone());
-                document.dirty = self.native_docs.drafts.contains_key(path);
+                document.dirty = self.native_docs.drafts.contains_key(&path);
                 document.restored = true;
                 self.native_docs.documents.push(document);
-                self.native_docs_read(path, cx);
+                added.push(path);
             }
         }
+        // CDXC:Docs 2026-11-13 WHY: the selection is set before any file is read, because a read
+        // can close its file at once (a remote file outside the project, reopened after a restart);
+        // set afterwards, it named that closed file, and a narrow Files pane showed only "Select a
+        // file" with no list.
         self.native_docs.active = active;
+        for path in added {
+            self.native_docs_read(&path, cx);
+        }
     }
 
     /// Writes the open list and the selected file for the current project.

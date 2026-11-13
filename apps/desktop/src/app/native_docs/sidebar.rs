@@ -39,7 +39,8 @@ impl GhostexGpuiApp {
     pub(crate) fn native_docs_sidebar_layout(&self) -> DocsSidebarLayout {
         let state = &self.native_docs;
         let narrow = view_width() < FLOATING_SIDEBAR_MAX_WIDTH;
-        let forced = state.active.is_none();
+        // CDXC:Docs 2026-11-13 WHY: a selection naming a file that is not open (one closed while the open files were being restored) showed "Select a file" with neither the list nor its Show files button in a narrow pane, so what counts is whether a file is shown, not whether one is selected.
+        let forced = state.active_document().is_none();
         let docked = (state.sidebar_pinned && !narrow) || forced;
         DocsSidebarLayout {
             narrow,

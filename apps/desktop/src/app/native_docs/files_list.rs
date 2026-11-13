@@ -782,6 +782,10 @@ impl GhostexGpuiApp {
             && self.native_docs_type_filter_active();
         let state = &self.native_docs;
         let query = state.search_query.trim();
+        // The project's top level did not list: say why, with a Retry, in place of the rows.
+        let load_error =
+            (query.is_empty() && !filter_tree && state.load_state == Some(DocsLoadState::Error))
+                .then(|| state.error.clone().unwrap_or_default());
         let status = if !query.is_empty() || filter_tree {
             match &state.search_results {
                 _ if state.search_results_query != search_key => Some("Searching…".to_string()),
@@ -802,7 +806,7 @@ impl GhostexGpuiApp {
         } else {
             match state.load_state {
                 Some(DocsLoadState::Loading) => Some("Updating files…".to_string()),
-                Some(DocsLoadState::Error) => state.error.clone(),
+                Some(DocsLoadState::Error) => None,
                 _ if state.entries.is_empty() => Some("No files found".to_string()),
                 _ => None,
             }
@@ -898,6 +902,52 @@ impl GhostexGpuiApp {
                         .text_size(px(11.0))
                         .text_color(p.subtle)
                         .child(status),
+                )
+            })
+            .when_some(load_error, |this, reason| {
+                let hover = p.control_hover;
+                this.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_none()
+                        .gap(px(6.0))
+                        .px(px(12.0))
+                        .py(px(8.0))
+                        .text_size(px(11.0))
+                        .text_color(p.subtle)
+                        .child(
+                            div()
+                                .text_color(p.muted)
+                                .font_weight(FontWeight::MEDIUM)
+                                .child("Couldn't load the files"),
+                        )
+                        .when(!reason.trim().is_empty(), |this| this.child(reason))
+                        .child(
+                            div()
+                                .id("native-docs-tree-retry")
+                                .flex()
+                                .flex_none()
+                                .items_center()
+                                .justify_center()
+                                .self_start()
+                                .h(px(24.0))
+                                .px(px(10.0))
+                                .mt(px(2.0))
+                                .rounded(px(6.0))
+                                .border_1()
+                                .border_color(p.border_strong)
+                                .cursor_pointer()
+                                .text_color(p.text)
+                                .hover(move |style| style.bg(hover))
+                                .child("Retry")
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.native_docs.load_state = Some(DocsLoadState::Loading);
+                                    this.native_docs_refresh(cx);
+                                    this.native_docs_notify(cx);
+                                })),
+                        ),
                 )
             })
             // The folder every group sits under, said once (`folder_groups.rs`).
