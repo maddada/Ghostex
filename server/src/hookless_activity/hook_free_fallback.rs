@@ -246,6 +246,16 @@ impl FallbackWatch {
                 continue;
             };
             live.insert(pane.clone());
+            if why == Unseen::NoProgramStatus && codex_waits_on_screen(&name) {
+                // Codex reports its status once its session starts: the time starts when the
+                // user has answered the dialog.
+                self.unseen_since.remove(&pane);
+                if self.waiting.insert(pane.clone()) {
+                    log_waiting_on_dialog(state, agent, &pane);
+                }
+                continue;
+            }
+            self.waiting.remove(&pane);
             let since = match self.unseen_since.get(&pane) {
                 Some((known, since)) if *known == why => *since,
                 _ => {
@@ -255,15 +265,6 @@ impl FallbackWatch {
                 }
             };
             if since.elapsed() < UNSEEN_FOR {
-                continue;
-            }
-            if why == Unseen::NoProgramStatus && codex_waits_on_screen(&name) {
-                // Codex reports its status once its session starts: the time starts again when
-                // the user has answered the dialog.
-                self.unseen_since.remove(&pane);
-                if self.waiting.insert(pane.clone()) {
-                    log_waiting_on_dialog(state, agent, &pane);
-                }
                 continue;
             }
             let codex_version = hook_free::known_cli_version("codex");
@@ -353,14 +354,15 @@ fn hook_noun(agent: &str) -> &'static str {
 }
 
 /// CDXC:AgentHooks 2026-11-13 WHY:
-/// Codex writes no OSC 7501 status while a terminal dialog that comes before its session holds the screen ("Hooks need review", sign-in, sandbox setup, a migration choice), so a Codex waiting there for the user looked exactly like one that never reports its status. After the 11.6.0 update Codex stopped on "Hooks need review" in every new session (the hook-free cleanup had moved another tool's hooks off their trusted slots), and after `UNSEEN_FOR` this watch put Ghostex's Codex hook back for each of those sessions (it now asks in the chat first), though nothing was wrong with Codex's status: it was waiting for an answer the chat already asks for (session_chat_codex_blocking.rs, the "Codex is waiting for hook review" card). So no status while such a dialog is on screen is not counted, and the 90 seconds start again once it is gone.
+/// Codex writes no OSC 7501 status while a terminal dialog that comes before its session holds the screen ("Hooks need review", sign-in, sandbox setup, a migration choice), so a Codex waiting there for the user looked exactly like one that never reports its status. After the 11.6.0 update Codex stopped on "Hooks need review" in every new session (the hook-free cleanup had moved another tool's hooks off their trusted slots), and after `UNSEEN_FOR` this watch put Ghostex's Codex hook back for each of those sessions (it now asks in the chat first), though nothing was wrong with Codex's status: it was waiting for an answer the chat already asks for (session_chat_codex_blocking.rs, the "Codex is waiting for hook review" card). So the screen is read on every check while a Codex reports no status: while such a dialog holds it (the detector's dialog and its own key-hint footer) nothing is counted, and the 90 seconds start only once it is gone.
 /// SEE-ALSO: server/src/session_chat_codex_blocking.rs (`detect_codex_blocking_screen`, the dialogs it knows).
 fn codex_waits_on_screen(zmx_name: &str) -> bool {
-    crate::zmx::read_zmx_session_screen_capture(zmx_name).is_ok_and(|capture| {
-        !capture.truncated
-            && crate::session_chat_codex_blocking::detect_codex_blocking_screen(&capture.text)
-                .is_some()
-    })
+    // The styled capture, so the detector tells Codex's input box (and a draft that merely quotes
+    // a dialog's words) from a dialog, as the chat's own checks do.
+    crate::session_chat_composer::read_session_composer_verdict_capture(zmx_name, Some("codex"))
+        .is_some_and(|capture| {
+            crate::session_chat_codex_blocking::codex_dialog_holds_screen(&capture.text)
+        })
 }
 
 /// One routine line (Hook-free activity comparison) for a Codex whose missing status was a dialog

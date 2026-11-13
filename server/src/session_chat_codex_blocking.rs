@@ -213,6 +213,13 @@ fn is_structured_request_user_input(lines: &[String], selected_index: usize) -> 
     })
 }
 
+/// Whether a Codex dialog holds the screen with positive evidence of its own: a blocking screen
+/// this detector names, plus the key-hint footer only a live dialog draws in its last rows. Text
+/// that merely quotes a dialog's words (a draft, transcript prose) has no such footer.
+pub(crate) fn codex_dialog_holds_screen(text: &str) -> bool {
+    detect_codex_blocking_screen(text).is_some() && latest_modal_footer(&scan_lines(text)).is_some()
+}
+
 /// Classify a live Codex screen that has replaced the ordinary composer with a
 /// decision surface. `None` means either the composer is live, the selected UI
 /// is stale scrollback, or the structured request_user_input path owns it.
