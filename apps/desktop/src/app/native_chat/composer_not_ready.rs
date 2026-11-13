@@ -19,7 +19,7 @@ use gpui::{
 };
 use serde_json::json;
 
-const NOT_READY_HEADLINE: &str = "Message not sent. Your draft was restored.";
+const NOT_READY_HEADLINE: &str = "Not sent. Your message is back in the chat box.";
 
 impl NativeChatView {
     pub(super) fn composer_not_ready(&self) -> bool {

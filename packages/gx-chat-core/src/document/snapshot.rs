@@ -207,8 +207,8 @@ pub struct Document {
     pub send_failure_card_prompt_id: Option<String>,
     /// The card under each waiting or failed message, by its `startupDelivery.promptId`:
     /// `{ promptId, level, icon, title, sentence, buttons, menu }`, where `level` is `working`,
-    /// `needs` or `failed` and each button or menu row is `{ id, label, icon?, primary?, command }`
-    /// (a core action) or `{ id, label, icon?, host: "terminalView" }` (`composer/delivery_card.rs`).
+    /// `needs` or `failed` and each button or menu row is `{ id, label, icon?, primary?, command }`,
+    /// `command` being the core action it sends (`composer/delivery_card.rs`).
     #[serde(default)]
     pub delivery_cards: BTreeMap<String, Value>,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]

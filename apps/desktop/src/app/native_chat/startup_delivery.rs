@@ -49,6 +49,15 @@ impl NativeChatView {
         if !delivery.is_object() {
             return None;
         }
+        // A plain message's delivery is the chat core's card under it (delivery_card.rs); the
+        // note below stays for the cards that draw their own (from another agent, page answers).
+        if let Some(card) = delivery["promptId"]
+            .as_str()
+            .and_then(|id| self.snapshot["deliveryCards"].get(id))
+            .filter(|card| card.is_object())
+        {
+            return Some(self.delivery_card(card, p, cx));
+        }
         let failed = delivery["state"] == "failed";
         // Why gxserver still holds it, once it has waited about a minute; shown on every waiting
         // send, beside the spinner a user bubble already has.

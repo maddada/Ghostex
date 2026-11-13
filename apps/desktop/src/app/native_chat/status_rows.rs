@@ -206,11 +206,9 @@ impl NativeChatView {
             "neutral" => card.tile(glyph, p),
             _ => card.tile(glyph, p).child(card.check_badge(p)),
         };
-        let detail_tone = if tone_name == "error" {
-            tone_color(tone_name, p)
-        } else {
-            p.card_muted
-        };
+        // The tile's badge carries the tone; the pill stays muted (CDXC:SessionChat 2026-11-13 on
+        // `tone_tile`, tone_card.rs).
+        let detail_tone = p.card_muted;
         let hint = SharedString::from(label.clone());
         card.shell(div(), p)
             .id(SharedString::from(id))

@@ -53,7 +53,9 @@ impl NativeChatView {
         } else {
             "titlebar/alert-circle.svg"
         };
-        let tile = shape.tile_box(p).bg(tint.opacity(0.14)).child(
+        // Only the icon carries the colour (CDXC:SessionChat 2026-11-13 on `tone_tile`,
+        // tone_card.rs): no tinted tile, and the chip is muted.
+        let tile = shape.tile_box(p).child(
             gpui::svg()
                 .path(glyph)
                 .size(px(shape.glyph_size() * s))
@@ -83,7 +85,7 @@ impl NativeChatView {
                         "titlebar/alert-triangle.svg"
                     }),
                     Some(chip),
-                    tint,
+                    p.muted,
                     p,
                 ))
             });

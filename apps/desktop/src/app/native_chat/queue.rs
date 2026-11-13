@@ -257,12 +257,13 @@ impl NativeChatView {
                         .child(preview),
                 )
                 .when(failed, |this| {
-                    let reason = format!(
-                        "Not delivered: {}",
-                        prompt["errorMessage"]
-                            .as_str()
-                            .unwrap_or("the send failed.")
-                    );
+                    // One wording for a message that did not go out (packages/gx-chat-core/src/composer/delivery_card.rs).
+                    let reason = match ghostex_gx_chat_core::composer::delivery_card::plain_reason(
+                        prompt["errorMessage"].as_str().unwrap_or(""),
+                    ) {
+                        reason if reason.is_empty() => "Not sent.".to_string(),
+                        reason => format!("Not sent: {reason}"),
+                    };
                     this.child(undelivered_info(&id, reason, composer, failed_color, s))
                 })
                 .child(actions);
@@ -275,11 +276,9 @@ impl NativeChatView {
                 .pr(px(2.0 * s))
                 .rounded(px(8.0 * s))
                 .border_1()
-                .border_color(if failed {
-                    failed_color.opacity(0.35)
-                } else {
-                    p.border.opacity(0.58)
-                })
+                // Only the row's icon carries the failure's colour (CDXC:SessionChat 2026-11-13 on
+                // `tone_tile`, tone_card.rs).
+                .border_color(p.border.opacity(0.58))
                 .text_color(p.muted)
                 .hover(|style| {
                     let style = style.bg(p.foreground.opacity(0.05));

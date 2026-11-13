@@ -48,7 +48,7 @@ struct Item {
     id: &'static str,
     label: &'static str,
     icon: Option<&'static str>,
-    /// What the renderer sends to the core, or `None` for the host's own Terminal view.
+    /// What the renderer sends to the core.
     command: Option<Value>,
 }
 
@@ -58,9 +58,8 @@ impl Item {
         if let Some(icon) = self.icon {
             value["icon"] = json!(icon);
         }
-        match &self.command {
-            Some(command) => value["command"] = command.clone(),
-            None => value["host"] = json!("terminalView"),
+        if let Some(command) = &self.command {
+            value["command"] = command.clone();
         }
         if primary {
             value["primary"] = json!(true);
@@ -74,7 +73,8 @@ fn terminal_view() -> Item {
         id: "terminalView",
         label: "Terminal view",
         icon: Some("terminal-2"),
-        command: None,
+        // The core asks the host to show the session's terminal (menus/actions.rs).
+        command: Some(json!({ "type": "switchToTerminal" })),
     }
 }
 

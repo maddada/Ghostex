@@ -35,20 +35,12 @@ struct Shell {
     radius: f32,
     pad_x: f32,
     pad_y: f32,
-    tile: f32,
-    tile_radius: f32,
     tile_icon: f32,
     header_gap: f32,
     title_size: f32,
     title_line_height: f32,
     detail_size: f32,
     detail_line_height: f32,
-    wash_dark: f32,
-    wash_light: f32,
-    tile_fill: f32,
-    tile_ring: f32,
-    footer_shade_dark: f32,
-    footer_shade_light: f32,
     button_height: f32,
     button_radius: f32,
     button_text_size: f32,
@@ -229,15 +221,6 @@ impl NativeChatView {
                 _ => column,
             }
         });
-        let wash = match parts.look.hue {
-            Some(hue) => hue.opacity(if p.light { v.wash_light } else { v.wash_dark }),
-            None => gpui::transparent_black(),
-        };
-        let footer_shade: Hsla = gpui::black().opacity(if p.light {
-            v.footer_shade_light
-        } else {
-            v.footer_shade_dark
-        });
         div()
             .relative()
             .w_full()
@@ -250,23 +233,6 @@ impl NativeChatView {
             .bg(p.card_panel)
             .overflow_hidden()
             .text_color(p.card_muted)
-            // The tone's wash fades out down the card; no id, so it takes no input.
-            .when(parts.look.hue.is_some(), |card| {
-                card.child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .right_0()
-                        .h(px(96.0 * s))
-                        .rounded_t(inner_radius)
-                        .bg(gpui::linear_gradient(
-                            180.0,
-                            gpui::linear_color_stop(wash, 0.0),
-                            gpui::linear_color_stop(wash.opacity(0.0), 1.0),
-                        )),
-                )
-            })
             .child(header)
             .when_some(body, |card, body| card.child(body))
             .when(has_footer, |card| {
@@ -277,11 +243,8 @@ impl NativeChatView {
                         .items_center()
                         .gap(px(8.0 * s))
                         .px(px(v.pad_x * s))
-                        .py(px(10.0 * s))
-                        .border_t_1()
-                        .border_color(p.control_border.opacity(0.65))
-                        .bg(footer_shade)
-                        .rounded_b(inner_radius)
+                        .pb(px(12.0 * s))
+                        .when(!has_body, |footer| footer.pt(px(0.0)))
                         .children(parts.footer_start)
                         .when_some(parts.footer_note, |footer, note| {
                             footer.child(
@@ -447,29 +410,17 @@ impl NativeChatView {
 }
 
 /// The tinted square the tone's glyph sits in.
+/// The card's mark: the tone's icon alone, in its colour.
+///
+/// CDXC:SessionChat 2026-11-13 DECISION: on the chat errors page the user chose Q2944, "the icon's colour only": every notice is the Dictate card's calm shape, so the tinted tile, the wash fading down the card and the footer's shaded band are gone and the level shows only in this icon (and in which button is filled).
 fn tone_tile(look: &ToneLook, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
     let v = &VISUAL.shell;
-    let (fill, ring, glyph) = match look.hue {
-        Some(hue) => (hue.opacity(v.tile_fill), hue.opacity(v.tile_ring), hue),
-        None => (p.foreground.opacity(0.05), p.control_border, p.muted),
-    };
-    div()
-        .size(px(v.tile * s))
+    gpui::svg()
+        .path(look.icon.clone())
         .flex_shrink_0()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(v.tile_radius * s))
-        .border_1()
-        .border_color(ring)
-        .bg(fill)
-        .child(
-            gpui::svg()
-                .path(look.icon.clone())
-                .size(px(v.tile_icon * s))
-                .text_color(glyph),
-        )
+        .size(px(v.tile_icon * s))
+        .text_color(look.hue.unwrap_or(p.muted))
         .into_any_element()
 }
 

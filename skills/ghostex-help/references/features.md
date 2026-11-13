@@ -2455,9 +2455,15 @@ hasn't come back after about four minutes, Ghostex reloads the agent on its own 
 Full Reload does, and the message goes in once the new input box is ready. It does not reload an
 agent that is in the middle of a turn, is waiting for an answer, shows background tasks, or was
 already restarted automatically in the last ten minutes.
-When a chat message cannot be sent, it stays in the thread with a card saying why.
-Retry sends it again, Fix it restarts the agent on its conversation and then
-sends it, and Terminal view shows what the agent is showing. The session gets a
+When a chat message cannot be sent, it stays in the thread with a small card right
+under it saying Not sent and why, with the main actions as buttons and the rest in
+its ⋯ menu. Retry sends it again, Fix it restarts the agent on its conversation and
+then sends it, Start fresh starts the agent over when it has no conversation to
+resume, Terminal view shows what the agent is showing, Edit puts the words back in
+the chat box and Remove drops the message. If a message you retried fails again,
+the card says Still not sent and offers Fix it first. A message still waiting says
+why on the same card. Every notice in the chat has the same calm look: only its
+icon is coloured, red when something failed and amber when it waits for you. The session gets a
 red dot in the sidebar and a Not sent row in Notifications until you deal with
 it. A mode the session cannot use is greyed out in the Mode menu, with how to
 turn it on.
