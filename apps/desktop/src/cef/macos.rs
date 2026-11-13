@@ -55,7 +55,8 @@ unsafe extern "C" {
     );
     fn GhostexGpuiCEFOrderNativeViewFront(native_view: *mut c_void);
     fn GhostexGpuiCEFNativeViewContentIdentity(native_view: *mut c_void) -> u64;
-    fn GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view: *mut c_void);
+    fn GhostexGpuiCEFRetainNativeView(native_view: *mut c_void) -> *mut c_void;
+    fn GhostexGpuiCEFReleaseNativeView(retained_view: *mut c_void);
     fn GhostexGpuiCEFPrepareNativeViewForFocus(native_view: *mut c_void);
     fn GhostexGpuiCEFSetNativeViewPinchZoomDisabled(native_view: *mut c_void, disabled: bool);
     fn GhostexGpuiCEFFocusNativeView(native_view: *mut c_void);
@@ -364,7 +365,15 @@ pub(super) fn native_view_content_identity(native_view: *mut c_void) -> u64 {
     unsafe { GhostexGpuiCEFNativeViewContentIdentity(native_view) }
 }
 
-pub(super) fn release_native_view(native_view: *mut c_void) {
+/// Takes the browser's own reference to CEF's child view (CDXC:CefRuntime 2026-11-13 WHY in
+/// GpuiCefAppKitHooks.m); null when there is no view. `release_native_view` gives it back.
+pub(super) fn retain_native_view(native_view: *mut c_void) -> *mut c_void {
+    unsafe { GhostexGpuiCEFRetainNativeView(native_view) }
+}
+
+/// Takes the view out of its window and gives back the reference `retain_native_view` took, which
+/// ends the view; pass each retained pointer exactly once.
+pub(super) fn release_native_view(retained_view: *mut c_void) {
     /*
     CDXC:CefRuntime 2026-08-24:
     GhostexGpuiLifeSpanHandler::do_close returns handled so CEF never sends a
@@ -381,7 +390,7 @@ pub(super) fn release_native_view(native_view: *mut c_void) {
     adapter does with its embed-host X window.
     */
     unsafe {
-        GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view);
+        GhostexGpuiCEFReleaseNativeView(retained_view);
     }
 }
 

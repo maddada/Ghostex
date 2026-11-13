@@ -58,6 +58,11 @@ pub struct CefBrowser {
     /// CDXC:Browser 2026-09-23 WHY:
     /// Remote reconnect disposes CEF surfaces while retaining their tabs. Mark app-owned disposal before releasing the native view so synchronous or deferred DoClose callbacks cannot turn that teardown into a user-requested tab close.
     app_initiated_close: StdRc<Cell<bool>>,
+    /// CEF's child view, with this browser's own reference to it (`platform::retain_native_view`),
+    /// so it cannot go with a window the surface is no longer in (CDXC:CefRuntime 2026-11-13 WHY
+    /// in native/macos/GpuiCefAppKitHooks.m). `Drop` takes it out and gives it back once.
+    #[cfg(target_os = "macos")]
+    retained_native_view: Cell<*mut c_void>,
 }
 
 /// The Files embed page (`manage.html?embed=1&path=…`) showing an Excalidraw drawing.
@@ -343,8 +348,14 @@ impl CefBrowser {
             "cef-rs child browser creation returned null (request context still initializing)"
                 .to_string()
         })?;
+        #[cfg(target_os = "macos")]
+        let mut retained_native_view = std::ptr::null_mut();
         if let Some(host) = browser.host() {
             let native_view = platform::native_view_ptr(host.window_handle());
+            #[cfg(target_os = "macos")]
+            {
+                retained_native_view = platform::retain_native_view(native_view);
+            }
             platform::prepare_native_view_for_focus(native_view);
             #[cfg(target_os = "macos")]
             platform::set_native_view_pinch_zoom_disabled(native_view, pinch_zoom_disabled);
@@ -390,6 +401,8 @@ impl CefBrowser {
             extension_bridge_surface: extension_bridge_surface
                 .filter(|_| extension_bridge_installed),
             app_initiated_close,
+            #[cfg(target_os = "macos")]
+            retained_native_view: Cell::new(retained_native_view),
         };
         if let Some((bounds, scale_factor)) = initial_frame {
             created.set_bounds(bounds, scale_factor);
@@ -799,10 +812,23 @@ impl Drop for CefBrowser {
         if let Some(view) = self.native_view() {
             platform::dispose_sidebar_hover_reveal(view);
         }
+        // The view this browser holds (macOS), never one read back from CEF now: CEF's handle is
+        // a plain pointer that outlived its view before the browser held one.
+        #[cfg(target_os = "macos")]
+        {
+            let retained = self.retained_native_view.replace(std::ptr::null_mut());
+            if !retained.is_null() {
+                unregister_native_view_browser(retained);
+                platform::release_native_view(retained);
+            }
+        }
         if let Some(host) = self.browser.borrow().host() {
-            let native_view = platform::native_view_ptr(host.window_handle());
-            unregister_native_view_browser(native_view);
-            platform::release_native_view(native_view);
+            #[cfg(not(target_os = "macos"))]
+            {
+                let native_view = platform::native_view_ptr(host.window_handle());
+                unregister_native_view_browser(native_view);
+                platform::release_native_view(native_view);
+            }
             host.close_browser(1);
             /*
             CDXC:CefRuntime 2026-07-11:

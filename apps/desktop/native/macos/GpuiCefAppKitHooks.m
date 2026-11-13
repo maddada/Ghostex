@@ -1167,8 +1167,30 @@ uint64_t GhostexGpuiCEFNativeViewContentIdentity(void *nativeView) {
   return 0;
 }
 
-void GhostexGpuiCEFRemoveNativeViewFromSuperview(void *nativeView) {
+/// CDXC:CefRuntime 2026-11-13 WHY:
+/// CEF creates a browser's child NSView, adds it to the GPUI content view and releases it, so the
+/// window the view sits in was its only owner. A CefSurface outlives the window it was last drawn
+/// in whenever app state keeps it (a hidden page window, a parked Browser tab, a pane drawn in a
+/// window that closed): the window took the view with it, CEF's window handle went on naming the
+/// freed address, and the drop that came later sent removeFromSuperview to whatever object lived
+/// there now (crash 2026-11-13: `-[_SwiftObject doesNotRecognizeSelector:]` on a mouse-up that
+/// dropped a CefSurface). The browser now holds its own reference from creation
+/// (`CefBrowser::new`) to drop (`GhostexGpuiCEFReleaseNativeView`), so the view, and CEF's browser
+/// host the view keeps alive, last exactly as long as the CefBrowser. Returns the retained view,
+/// NULL when there is none.
+void *GhostexGpuiCEFRetainNativeView(void *nativeView) {
   if (!nativeView) {
+    return NULL;
+  }
+  id object = (__bridge id)nativeView;
+  if (![object isKindOfClass:NSView.class]) {
+    return NULL;
+  }
+  return (void *)CFBridgingRetain(object);
+}
+
+void GhostexGpuiCEFReleaseNativeView(void *retainedView) {
+  if (!retainedView) {
     return;
   }
 
@@ -1177,15 +1199,15 @@ void GhostexGpuiCEFRemoveNativeViewFromSuperview(void *nativeView) {
    Completes CEF's close contract for browsers whose DoClose returns handled
    (cef_life_span_handler.h: the app must still finish the close by proceeding
    with window/view-hierarchy tear-down, otherwise the browser stays partially
-   closed). CEF creates this child NSView, adds it to the GPUI content view and
-   releases it, so the superview holds its only strong reference: removing it
-   deallocs the view, CEF observes the window destruction, fires OnBeforeClose
-   and the renderer process exits. Without this every closed CEF surface left a
-   live renderer subprocess parented to the long-lived GPUI window.
-   `__bridge` (never `__bridge_transfer`): Rust holds a borrowed pointer to a
-   CEF-owned view, so ARC must not consume a reference here.
+   closed). Taking the view out of its superview and dropping the browser's own
+   reference (GhostexGpuiCEFRetainNativeView) deallocs it, CEF observes the
+   window destruction, fires OnBeforeClose and the renderer process exits.
+   Without this every closed CEF surface left a live renderer subprocess
+   parented to the long-lived GPUI window.
+   `__bridge_transfer`: this consumes the reference GhostexGpuiCEFRetainNativeView
+   gave, exactly once (CefBrowser::drop takes the pointer out before calling).
   */
-  NSView *view = (__bridge NSView *)nativeView;
+  NSView *view = (__bridge_transfer NSView *)retainedView;
   [view removeFromSuperview];
 }
 
