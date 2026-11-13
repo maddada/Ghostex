@@ -390,6 +390,83 @@ fn summary_text(summary: &EpicSummary) -> String {
     parts.join(" · ")
 }
 
+fn epic_summary(members: &[&BeadsViewRow], readiness_ok: bool) -> EpicSummary {
+    let mut summary = EpicSummary {
+        total: members.len(),
+        done: members.iter().filter(|row| is_closed(row)).count(),
+        in_progress: members
+            .iter()
+            .filter(|row| row.status == "in_progress")
+            .count(),
+        blocked: if readiness_ok {
+            members
+                .iter()
+                .filter(|row| !is_closed(row) && is_blocked(row))
+                .count()
+        } else {
+            0
+        },
+        ready: if readiness_ok {
+            members
+                .iter()
+                .filter(|row| !is_closed(row) && row.ready == Some(true))
+                .count()
+        } else {
+            0
+        },
+        needs_decision: members.iter().filter(|row| row.needs_decision).count(),
+        text: String::new(),
+    };
+    summary.text = summary_text(&summary);
+    summary
+}
+
+/// One bead as a details page shows it: its row, the epic above it with that epic's progress,
+/// and, for an epic, its own progress. `None` when the bead is not in `rows`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BeadDetailsModel {
+    pub row: BeadRowModel,
+    pub epic: Option<(String, String, EpicSummary)>,
+    pub summary: Option<EpicSummary>,
+}
+
+pub fn bead_details(
+    rows: &[BeadsViewRow],
+    readiness: &BeadsReadiness,
+    id: &str,
+    clock: &BeadsClock,
+) -> Option<BeadDetailsModel> {
+    let readiness_ok = *readiness == BeadsReadiness::Ok;
+    let agents = BeadAgents::new();
+    let context = Context {
+        by_id: rows.iter().map(|row| (row.id.as_str(), row)).collect(),
+        agents: &agents,
+        clock,
+        readiness_ok,
+    };
+    let row = *context.by_id.get(id)?;
+    let members_of = |epic: &str| -> Vec<&BeadsViewRow> {
+        rows.iter()
+            .filter(|candidate| !is_epic(candidate))
+            .filter(|candidate| context.epic_of(candidate).as_deref() == Some(epic))
+            .collect()
+    };
+    let epic = context.epic_of(row).and_then(|epic_id| {
+        let epic = context.by_id.get(epic_id.as_str())?;
+        Some((
+            epic.id.clone(),
+            epic.title.clone(),
+            epic_summary(&members_of(&epic.id), readiness_ok),
+        ))
+    });
+    let summary = is_epic(row).then(|| epic_summary(&members_of(&row.id), readiness_ok));
+    Some(BeadDetailsModel {
+        row: context.row_model(row, None),
+        epic,
+        summary,
+    })
+}
+
 /// CDXC:ProjectBoard 2026-11-11 DECISION:
 /// User (the Beads view design): every bead sits under its epic, "Not in an epic" last, and beads waiting on a person ("Needs a decision", bd's `human` flag) are pinned on top. A bead that needs a decision is listed only in that pinned group, never twice; its epic still counts it in "2 of 5 done" and says "1 needs a decision". Filters keep the tree's shape, and done beads fold into one "N done" row per epic.
 pub fn build_tree(
@@ -486,36 +563,8 @@ pub fn build_tree(
             .filter(|row| epic_matches || matches_query(row, &query))
             .collect();
         sort_rows(&mut done, BeadsSort::LastChanged);
-        let summary = matches!(kind, BeadsSectionKind::Epic(_)).then(|| {
-            let mut summary = EpicSummary {
-                total: members.len(),
-                done: members.iter().filter(|row| is_closed(row)).count(),
-                in_progress: members
-                    .iter()
-                    .filter(|row| row.status == "in_progress")
-                    .count(),
-                blocked: if readiness_ok {
-                    members
-                        .iter()
-                        .filter(|row| !is_closed(row) && is_blocked(row))
-                        .count()
-                } else {
-                    0
-                },
-                ready: if readiness_ok {
-                    members
-                        .iter()
-                        .filter(|row| !is_closed(row) && row.ready == Some(true))
-                        .count()
-                } else {
-                    0
-                },
-                needs_decision: members.iter().filter(|row| row.needs_decision).count(),
-                text: String::new(),
-            };
-            summary.text = summary_text(&summary);
-            summary
-        });
+        let summary =
+            matches!(kind, BeadsSectionKind::Epic(_)).then(|| epic_summary(&members, readiness_ok));
         let show_done_rows = filter == BeadsFilter::All;
         let unfiltered = show_done_rows && (query.is_empty() || epic_matches);
         let is_epic_section = matches!(kind, BeadsSectionKind::Epic(_));
