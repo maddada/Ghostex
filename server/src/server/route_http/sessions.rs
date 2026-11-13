@@ -125,9 +125,13 @@ pub(super) async fn route_sessions_http(
                 // Queued before the response, so the skill line goes ahead of anything a client
                 // queues next. The session and its coordinator record are committed, so a failure
                 // from here on is reported, not raised.
+                // Any agent may run a coordinator (Q2980): one Ghostex cannot name gets the
+                // guide line instead of a skill (`coordinator_skill_line`).
                 let role_error = is_coordinator
-                    .then(|| crate::agents::session_agent_family_id(&project, &session))
-                    .flatten()
+                    .then(|| {
+                        crate::agents::session_agent_family_id(&project, &session)
+                            .unwrap_or_default()
+                    })
                     .and_then(|family| {
                         coordinator_runtime::start_orchestrator_role(
                             &state,

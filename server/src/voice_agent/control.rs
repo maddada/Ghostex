@@ -271,19 +271,14 @@ pub(super) fn coordinator_agent(
             .ok_or_else(|| {
                 format!("No agent type matches \"{requested}\". Call list_agent_types.")
             })?;
-        if crate::coordinators::coordinator_launcher_family(row).is_none() {
-            return Err(format!(
-                "A coordinator can't run on \"{requested}\"; it runs on {}. Ask the user which to use.",
-                crate::coordinators::coordinator_agent_families_text()
-            ));
-        }
         return id_of(row).ok_or_else(|| "That agent has no id.".to_string());
     }
     if let Some(preferred) = preferred {
-        if rows.iter().any(|row| {
-            id_of(row).as_deref() == Some(preferred)
-                && crate::coordinators::coordinator_launcher_family(row).is_some()
-        }) {
+        // Any agent may run a coordinator (Q2980, COORDINATOR_AGENT_FAMILIES in gx-protocol).
+        if rows
+            .iter()
+            .any(|row| id_of(row).as_deref() == Some(preferred))
+        {
             return Ok(preferred.to_string());
         }
     }

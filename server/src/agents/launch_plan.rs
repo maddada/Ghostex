@@ -139,7 +139,6 @@ pub(crate) fn create_agent_session_params_for_project(
     } else {
         configured_command
     };
-    refuse_unsupported_coordinator_agent(&agent_id, &agent_config, &launch_settings, params)?;
     // `start-thread --read-only` (CDXC:Coordinators 2026-11-13 in coordinators/read_only.rs): an
     // agent with no read-only mode is refused here, before any session exists; a box keeps its
     // own launch, so it is refused too. The marker keeps every later launch read-only, a copy of
@@ -902,29 +901,6 @@ fn pin_remembered_agent_model(
             command
         }
     })
-}
-
-/// A new orchestrator gets its role from the `ghostex-coordinator` skill and its first message
-/// (coordinators/role.rs), so its command stays as the launcher has it; an agent that cannot run
-/// that skill is refused before the session is made.
-fn refuse_unsupported_coordinator_agent(
-    agent_id: &str,
-    agent_config: &Map<String, Value>,
-    launch_settings: &Map<String, Value>,
-    params: &Map<String, Value>,
-) -> Result<(), DomainStateError> {
-    if crate::coordinators::coordinator_create_request(params)?.is_none() {
-        return Ok(());
-    }
-    resume_agent_family_id(Some(agent_id.to_string()), agent_config, launch_settings)
-        .filter(|family| crate::coordinators::coordinator_agent_family_supported(family))
-        .map(|_| ())
-        .ok_or_else(|| {
-            DomainStateError::bad_request(format!(
-                "A coordinator runs on {}. Pick one of those agents.",
-                crate::coordinators::coordinator_agent_families_text()
-            ))
-        })
 }
 
 /// CDXC:MarkedHandovers 2026-10-11 WHY:

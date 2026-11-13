@@ -75,12 +75,25 @@ pub const SKILL_LINE_PREFIX: &str = "Read and adhere to this skill: ";
 /// Claude Code, `$ghostex-coordinator` for Codex. gxserver sends it, and the New Orchestrator
 /// dialog shows it as the locked first line.
 /// SEE-ALSO: server/src/coordinators/role.rs (`orchestrator_first_message`, the CDXC:Coordinators 2026-10-17 decision).
+///
+/// CDXC:Coordinators 2026-11-13 WHY:
+/// Any agent may run a coordinator since the user's Q2980 decision, but only the agents in `COORDINATOR_AGENT_FAMILIES` (gx-protocol) load skills from a folder Ghostex installs into. Every other agent (and one Ghostex cannot name) gets [`COORDINATOR_GUIDE_LINE`], which works for any agent that can run a shell command; it keeps the same opening so a queued first message is still found by it (role.rs `coordinator_role_reminder`).
 pub fn coordinator_skill_line(agent: Option<&str>) -> String {
+    let known = agent.map(str::trim).is_some_and(|agent| {
+        ghostex_gx_protocol::coordinator::COORDINATOR_AGENT_FAMILIES.contains(&agent)
+    });
+    if !known {
+        return COORDINATOR_GUIDE_LINE.to_string();
+    }
     format!(
         "{SKILL_LINE_PREFIX}{}",
         skill_invocation(COORDINATOR_SKILL_NAME, agent)
     )
 }
+
+/// The first line of a coordinator whose agent loads no skills Ghostex installs: the playbook
+/// straight from the CLI.
+pub const COORDINATOR_GUIDE_LINE: &str = "Read and adhere to this skill: run `ghostex coordinator guide` and follow what it prints for the whole session.";
 
 /// The name in a `$name` or `/name` pill label, when it is one gxserver's scanner also accepts,
 /// so the two sides convert the same links.

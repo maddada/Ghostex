@@ -9,9 +9,7 @@ use super::records::{
     insert_coordinator, read_coordinator, read_thread, sql_error, SessionKey,
     COORDINATOR_GOAL_MAX_CHARS,
 };
-use super::role::{
-    coordinator_agent_families_text, coordinator_agent_family_supported, coordinator_skill_line,
-};
+use super::role::coordinator_skill_line;
 use crate::domain::{DomainRepository, DomainStateError};
 
 /// What a promotion did: the session it turned into a coordinator, its agent family (whose skill
@@ -72,14 +70,8 @@ pub fn promote_session_to_coordinator(
     let project = repository
         .get_project(&project_id)?
         .ok_or_else(|| DomainStateError::not_found("The session's project does not exist."))?;
-    let family = crate::agents::session_agent_family_id(&project, &session)
-        .filter(|family| coordinator_agent_family_supported(family))
-        .ok_or_else(|| {
-            DomainStateError::bad_request(format!(
-                "A coordinator runs on {}, and this session runs another agent. Start a New Coordinator instead.",
-                coordinator_agent_families_text()
-            ))
-        })?;
+    // CDXC:Coordinators 2026-11-13 SEE-ALSO: COORDINATOR_AGENT_FAMILIES in packages/gx-protocol/src/coordinator.rs (the user's Q2980 decision that any agent may run a coordinator); an agent Ghostex cannot name gets the guide line (`coordinator_skill_line`).
+    let family = crate::agents::session_agent_family_id(&project, &session).unwrap_or_default();
 
     let mut runtime = session
         .get("runtimeSettings")

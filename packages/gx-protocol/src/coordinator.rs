@@ -24,9 +24,12 @@ pub const COORDINATOR_AGENT_FAMILIES: [&str; 11] = [
     "dsh",
 ];
 
-/// True for the agent families a new orchestrator can run on.
+/// True for the agent families a new orchestrator can run on: every agent Ghostex can name.
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// User (Q2980 "Build it: auto-send + remind on drift"): "Any harness, account and model is allowed: remove every limit on which model or harness a coordinator can use." So gxserver no longer refuses a coordinator, a promotion or Make Coordinator for an agent outside [`COORDINATOR_AGENT_FAMILIES`]; that list now only orders `ghostex coordinator create`'s default, names the agents whose skill folder Ghostex installs the playbook into (the others get the guide line, gx-chat-core `coordinator_skill_line`) and the ones whose launch takes a model. A weak or unknown model gets a warning instead ([`coordinator_quality_concern`]). Supersedes the 2026-10-20 WHY above as a limit.
 pub fn coordinator_agent_family_supported(family: &str) -> bool {
-    COORDINATOR_AGENT_FAMILIES.contains(&family)
+    !family.trim().is_empty()
 }
 
 /// True for the orchestrator families whose new coordinator takes a chosen model, so a New
@@ -37,7 +40,7 @@ pub fn coordinator_agent_family_supported(family: &str) -> bool {
 /// Issue #395: the forms kept their own list of model-taking agents (Claude, Codex, Pi, ZCode, Antigravity) after gxserver started taking a launch model from Cursor, Grok, Copilot and OMP on 2026-11-01, so those coordinators showed no Model or Effort field. The forms read this rule and gxserver's launch refusals stay the one that decides. OpenCode joined the same day (the user chose to build it): its terminal app has no model flag, so gxserver switches a new OpenCode coordinator to the chosen model and variant through OpenCode's own server before its first message, the way ZCode's model goes as a `/model` line.
 /// SEE-ALSO: server/src/agents/launch_plan.rs (`apply_requested_agent_model`, what a launch accepts), server/src/server/coordinator_runtime.rs (`start_orchestrator_role`, the ZCode and OpenCode `/model` line), server/src/ghostex_cli/coordinator/command.rs (`ghostex coordinator options`, the phone's form), apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog).
 pub fn coordinator_launch_takes_model(family: &str) -> bool {
-    coordinator_agent_family_supported(family) && family != "dsh"
+    COORDINATOR_AGENT_FAMILIES.contains(&family) && family != "dsh"
 }
 
 /// True for the orchestrator families whose new coordinator takes a chosen effort, so a New
@@ -210,7 +213,7 @@ mod tests {
         assert!(coordinator_agent_family_supported("dsh"));
         assert_eq!(coordinator_agent_family_name("dsh"), "DeepSeek Harness");
         assert!(coordinator_agent_families_text().ends_with("OpenCode or DeepSeek Harness"));
-        assert!(!coordinator_agent_family_supported("gemini"));
+        assert!(coordinator_agent_family_supported("gemini"));
     }
 
     #[test]
