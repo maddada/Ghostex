@@ -362,6 +362,12 @@ impl BeadsView {
         };
         let notice = board_notice(&message, &project_path);
         let prompt = notice.fix_prompt.clone();
+        // Names the folder bd was asked about, so a project whose Beads folder setting points
+        // somewhere else shows where Ghostex looked (absent from older computers).
+        let mut lines = notice.lines.clone();
+        if let Some(folder) = snapshot.workspace.checked_folder.as_deref() {
+            lines.push(format!("Looked in {}", tilde_home(folder)));
+        }
         let mut buttons = div().flex().gap(px(8.0)).child(
             kanban_button(
                 "beads-copy-fix",
@@ -392,10 +398,21 @@ impl BeadsView {
         }
         Some(card(
             &notice.title,
-            notice.lines.clone(),
+            lines,
             Some(buttons.into_any_element()),
             p,
         ))
+    }
+}
+
+/// A path under the home folder written with `~`, as the app shows paths elsewhere.
+fn tilde_home(path: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    match path.strip_prefix(home.as_str()) {
+        Some(rest) if !home.is_empty() && (rest.is_empty() || rest.starts_with('/')) => {
+            format!("~{rest}")
+        }
+        _ => path.to_string(),
     }
 }
 

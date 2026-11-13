@@ -27,18 +27,24 @@ fn saved_layout() -> Option<BeadsLayout> {
 }
 
 impl GhostexGpuiApp {
-    /// The active project, as the Beads view reads it.
+    /// The active project, as the Beads view reads it: the Board's own context (id, folder,
+    /// remote route), so Tree and Board never ask about two different projects.
+    ///
+    /// CDXC:ProjectBoard 2026-11-13 WHY: the Tree resolved its project through the git scope and sent only the project id, while the Board used the sidebar's board context with the folder and remote route, so the two could ask about different folders or computers and the Tree could show a setup card while the Board showed beads.
     pub(crate) fn beads_target(&self) -> Option<BeadsTarget> {
-        let key = self.git_active_scoped_project_id()?;
-        let scope = self.git_scope_for_project(&key).ok()?;
-        if scope.projectless {
-            return None;
-        }
+        let project_key = self.git_active_scoped_project_id()?;
+        let context = self.native_kanban_bridge_context()?;
+        let machine = context
+            .remote_machine_id
+            .clone()
+            .map(MachineId::Remote)
+            .unwrap_or(MachineId::Local);
         Some(BeadsTarget {
-            project_key: scope.scoped_id(),
-            rpc_project_id: scope.project_id(),
-            project_path: scope.path.clone().unwrap_or_default(),
-            remote: scope.remote.clone(),
+            project_key,
+            rpc_project_id: context.project_id?,
+            project_path: context.project_path,
+            machine,
+            remote: context.remote_target,
         })
     }
 
@@ -96,11 +102,7 @@ impl GhostexGpuiApp {
         } else {
             None
         };
-        let machine = self
-            .git_scope_for_project(&target.project_key)
-            .map(|scope| scope.key.machine.clone())
-            .unwrap_or(MachineId::Local);
-        let sessions = self.beads_agent_sessions(&machine);
+        let sessions = self.beads_agent_sessions(&target.machine);
         let global_beads_directory = shared_settings::shared_sidebar_settings_snapshot()
             .object()
             .get("globalBeadsDirectory")
@@ -150,8 +152,7 @@ impl GhostexGpuiApp {
                 // The session lives on the computer that owns the project (a remote one too).
                 let machine = self
                     .beads_target()
-                    .and_then(|target| self.git_scope_for_project(&target.project_key).ok())
-                    .map(|scope| scope.key.machine.clone())
+                    .map(|target| target.machine)
                     .unwrap_or(MachineId::Local);
                 let session = SessionKey {
                     machine,

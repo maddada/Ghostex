@@ -10,7 +10,7 @@ use ghostex_gx_core::beads_view::{BeadsSort, local_date_after, parse_bd_time_ms,
 use gpui::{Bounds, Context, Pixels, Point, Window, point, px, size};
 use serde_json::{Value, json};
 
-use super::view::BeadsView;
+use super::view::{BeadsNotice, BeadsTarget, BeadsView};
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::menus::SidebarMenuOpener;
 
@@ -20,6 +20,8 @@ pub(crate) enum BeadsMenuKind {
     Defer(String),
     Priority(String),
     Sort,
+    /// The narrow filter row's Sort and Show done.
+    ViewOptions,
     CreateEpic,
     CreateBlockedBy,
     Sync,
@@ -33,6 +35,10 @@ pub(crate) struct BeadsMenu {
     pub(crate) pending: bool,
     /// Which opening a row belongs to, so a stale row never runs.
     pub(crate) serial: u64,
+    /// The project and workspace generation the menu was opened for: a row runs only while both
+    /// still hold, so it never writes to another project or workspace.
+    pub(crate) target: Option<BeadsTarget>,
+    pub(crate) generation: u64,
 }
 
 impl BeadsMenu {
@@ -42,8 +48,20 @@ impl BeadsMenu {
             position,
             pending: true,
             serial: 0,
+            target: None,
+            generation: 0,
         }
     }
+}
+
+/// A Project board diagnostic line about the view's menus and writes (open, reset, dispatch,
+/// result), written only while that diagnostic area is on.
+pub(crate) fn menu_log(event: &str, details: Value) {
+    crate::support_logs::append(
+        crate::support_logs::GpuiSupportLog::ProjectBoard,
+        event,
+        details,
+    );
 }
 
 /// Where the Beads view was last drawn, the area its menus stay inside.
@@ -229,6 +247,24 @@ impl BeadsView {
                     item
                 })
                 .collect(),
+            BeadsMenuKind::ViewOptions => {
+                let mut entries = vec![{
+                    let mut item =
+                        entry("Show done", None, |this, _, cx| this.toggle_show_done(cx));
+                    item.checked = self.options.show_done;
+                    item
+                }];
+                for sort in [BeadsSort::Priority, BeadsSort::LastChanged] {
+                    let mut item = entry(
+                        format!("Sort by {}", sort.label().to_lowercase()),
+                        None,
+                        move |this, _, cx| this.set_sort(sort, cx),
+                    );
+                    item.checked = self.options.sort == sort;
+                    entries.push(item);
+                }
+                entries
+            }
             BeadsMenuKind::CreateEpic => {
                 let current = self.create.as_ref().and_then(|form| form.epic.clone());
                 let mut entries = vec![{
@@ -284,7 +320,18 @@ impl BeadsView {
         menu.pending = false;
         self.menu_serial += 1;
         menu.serial = self.menu_serial;
+        menu.target = self.target.clone();
+        menu.generation = self.generation;
         let menu = menu.clone();
+        menu_log(
+            "beadsView.menuOpen",
+            json!({
+                "kind": format!("{:?}", menu.kind),
+                "serial": menu.serial,
+                "generation": menu.generation,
+                "project": menu.target.as_ref().map(|target| target.project_key.clone()),
+            }),
+        );
         let items: Vec<Value> = if menu.kind == BeadsMenuKind::Sync {
             self.menu_runs.clear();
             self.sync_items(menu.serial)
@@ -346,12 +393,42 @@ impl BeadsView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let serial = command["serial"].as_u64();
         let Some(menu) = self.menu.take() else {
+            // The view started over (another project or workspace) while the menu was open.
+            let stale = serial.is_some_and(|serial| serial == self.menu_serial);
+            menu_log(
+                "beadsView.menuDispatch",
+                json!({ "serial": serial, "outcome": if stale { "staleAfterReset" } else { "noMenu" } }),
+            );
+            if stale {
+                self.menu_runs.clear();
+                self.notice = Some(stale_menu_notice());
+                cx.notify();
+            }
             return;
         };
-        if command["serial"].as_u64() != Some(menu.serial) {
+        if serial != Some(menu.serial) {
+            menu_log(
+                "beadsView.menuDispatch",
+                json!({ "serial": serial, "open": menu.serial, "outcome": "otherMenu" }),
+            );
             return;
         }
+        if menu.generation != self.generation || menu.target != self.target {
+            menu_log(
+                "beadsView.menuDispatch",
+                json!({ "serial": serial, "outcome": "targetChanged" }),
+            );
+            self.menu_runs.clear();
+            self.notice = Some(stale_menu_notice());
+            cx.notify();
+            return;
+        }
+        menu_log(
+            "beadsView.menuDispatch",
+            json!({ "serial": serial, "outcome": "run", "index": command["index"] }),
+        );
         let Some(index) = command["index"].as_u64().map(|index| index as usize) else {
             return;
         };
@@ -415,5 +492,16 @@ impl BeadsView {
             }
         }
         items
+    }
+}
+
+/// The card for a menu pick that no longer applies.
+fn stale_menu_notice() -> BeadsNotice {
+    BeadsNotice {
+        title: "Nothing was changed".to_string(),
+        message: "The list changed while the menu was open. Open it again and pick once more."
+            .to_string(),
+        details: None,
+        pull_now: false,
     }
 }

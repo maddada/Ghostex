@@ -126,6 +126,11 @@ impl BeadsView {
         let tree = self.layout == BeadsLayout::Tree;
         let focused = self.search.read(cx).focus_handle(cx).is_focused(window);
         let can_create = ready || self.legacy;
+        let narrow = self.is_narrow();
+        let search_collapsed = self.search_collapsed(focused);
+        if !focused && self.options.query.trim().is_empty() {
+            self.search_open = false;
+        }
         let Some(modal) = self.modal else {
             return div().into_any_element();
         };
@@ -135,7 +140,7 @@ impl BeadsView {
             .gap(px(10.0))
             .flex_grow(1.0)
             .flex_shrink(1.0)
-            .flex_basis(px(380.0))
+            .flex_basis(px(if narrow { 0.0 } else { 380.0 }))
             .min_w_0()
             .child(
                 div()
@@ -147,7 +152,7 @@ impl BeadsView {
             .child(
                 div()
                     .flex_none()
-                    .w(px(190.0))
+                    .w(px(if narrow { 164.0 } else { 190.0 }))
                     .child(modal_segmented_control(
                         &modal,
                         "beads-layout",
@@ -173,43 +178,56 @@ impl BeadsView {
                         cx,
                     )),
             )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0))
-                    .w(px(260.0))
-                    .flex_shrink(1.0)
-                    .min_w(px(120.0))
-                    .h(px(CONTROL_HEIGHT))
-                    .px(px(10.0))
-                    .rounded(px(CONTROL_RADIUS))
-                    .border_1()
-                    .border_color(if focused { p.border_strong } else { p.border })
-                    .bg(p.control)
-                    .child(titlebar_svg_icon("titlebar/search.svg", 14.0, p.muted))
-                    .child(
-                        div().flex_1().min_w_0().child(
-                            Input::new(&self.search)
-                                .with_size(ComponentSize::Small)
-                                .appearance(false)
-                                .bordered(false)
-                                .focus_bordered(false)
-                                .w_full()
-                                .px(px(0.0))
-                                .py(px(0.0))
-                                .text_size(px(13.0))
-                                .text_color(p.foreground),
+            .when(search_collapsed, |this| {
+                this.child(self.render_search_icon(p, cx))
+            })
+            .when(!search_collapsed, |this| {
+                this.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0))
+                        .w(px(260.0))
+                        .flex_shrink(1.0)
+                        .min_w(px(120.0))
+                        .h(px(CONTROL_HEIGHT))
+                        .px(px(10.0))
+                        .rounded(px(CONTROL_RADIUS))
+                        .border_1()
+                        .border_color(if focused { p.border_strong } else { p.border })
+                        .bg(p.control)
+                        .child(titlebar_svg_icon("titlebar/search.svg", 14.0, p.muted))
+                        .child(
+                            div().flex_1().min_w_0().child(
+                                Input::new(&self.search)
+                                    .with_size(ComponentSize::Small)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .focus_bordered(false)
+                                    .w_full()
+                                    .px(px(0.0))
+                                    .py(px(0.0))
+                                    .text_size(px(13.0))
+                                    .text_color(p.foreground),
+                            ),
                         ),
-                    ),
-            );
+                )
+            });
         let right = div()
             .flex()
             .flex_none()
             .items_center()
             .gap(px(10.0))
             .ml_auto()
-            .when(ready && sync_ok && has_remote, |this| {
+            .when(narrow && ready && sync_ok && has_remote, |this| {
+                this.child(self.render_sync_pill(
+                    super::layout::short_sync_label(&synced),
+                    sync_failed,
+                    p,
+                    cx,
+                ))
+            })
+            .when(!narrow && ready && sync_ok && has_remote, |this| {
                 this.child(
                     joined(p)
                         .child(
@@ -284,7 +302,7 @@ impl BeadsView {
                 crate::app::native_kanban::widgets::kanban_button(
                     "beads-new",
                     Some("titlebar/plus.svg"),
-                    Some("New bead".into()),
+                    (!narrow).then(|| "New bead".into()),
                     crate::app::native_kanban::widgets::KanbanButtonKind::Primary,
                     !can_create,
                     p,
@@ -327,36 +345,61 @@ impl BeadsView {
         let Some(modal) = self.modal else {
             return div().into_any_element();
         };
+        let narrow = self.filters_compact();
+        let control = modal_bordered_segmented_control(
+            ink,
+            gpui::Rgba { a: 0.14, ..ink },
+            gpui::Rgba { a: 0.55, ..ink },
+            "beads-filters",
+            &filters
+                .iter()
+                .map(|filter| ModalRailItem {
+                    label: if narrow {
+                        super::layout::short_filter_label(*filter).into()
+                    } else {
+                        filter.label().into()
+                    },
+                    trailing: Some(self.tree.counts.get(*filter).to_string().into()),
+                    dot: None,
+                })
+                .collect::<Vec<_>>(),
+            filters
+                .iter()
+                .position(|filter| *filter == current)
+                .unwrap_or(0),
+            move |this: &mut Self, index, _, cx| {
+                if let Some(filter) = filters_for_click.get(index).copied() {
+                    this.set_filter(filter, cx)
+                }
+            },
+            cx,
+        );
+        // CDXC:ProjectBoard 2026-11-13 WHY: in the panel's usual narrow width the filters stay the shared segmented control (one control kind for this single-select) and scroll sideways instead of wrapping, and Sort and Show done move into one view-options menu, so the filter row keeps one line.
+        if narrow {
+            return div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap(px(8.0))
+                .child(
+                    div()
+                        .id("beads-filters-scroll")
+                        .flex()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_x_scroll()
+                        .child(control),
+                )
+                .child(self.render_view_options_button(p, cx))
+                .into_any_element();
+        }
         div()
             .flex()
             .flex_none()
             .flex_wrap()
             .items_center()
             .gap(px(10.0))
-            .child(modal_bordered_segmented_control(
-                ink,
-                gpui::Rgba { a: 0.14, ..ink },
-                gpui::Rgba { a: 0.55, ..ink },
-                "beads-filters",
-                &filters
-                    .iter()
-                    .map(|filter| ModalRailItem {
-                        label: filter.label().into(),
-                        trailing: Some(self.tree.counts.get(*filter).to_string().into()),
-                        dot: None,
-                    })
-                    .collect::<Vec<_>>(),
-                filters
-                    .iter()
-                    .position(|filter| *filter == current)
-                    .unwrap_or(0),
-                move |this: &mut Self, index, _, cx| {
-                    if let Some(filter) = filters_for_click.get(index).copied() {
-                        this.set_filter(filter, cx)
-                    }
-                },
-                cx,
-            ))
+            .child(control)
             .child(div().flex_1())
             .child(
                 div()
@@ -449,10 +492,16 @@ impl Render for BeadsView {
         let empty = self.render_empty_card(&p, cx);
         let tree_layout = self.layout == BeadsLayout::Tree;
         let ready = self.workspace_ready();
+        let narrow = self.is_narrow();
         let side = match self.create.is_some() {
             true => self.render_create(&p, window, cx),
             false => self.render_details(&p, window, cx),
         };
+        let full_side = narrow && side.is_some();
+        // The New bead form has its own title, ✕ and Cancel, so only the details get a back bar.
+        let back_bar = (full_side && self.create.is_none()).then(|| self.render_back_bar(&p, cx));
+        let divider = (!narrow && side.is_some()).then(|| self.render_side_divider(&p, cx));
+        let side_width = self.side_width_now();
         self.show_pending_menu(window, cx);
         let bounds = self.bounds.clone();
         let main: AnyElement = if tree_layout && !ready {
@@ -498,6 +547,17 @@ impl Render for BeadsView {
             .id("beads-view")
             .key_context("BeadsView")
             .track_focus(&self.focus)
+            .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                this.drag_side_divider(event, cx)
+            }))
+            .on_mouse_up(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| this.end_side_drag(cx)),
+            )
+            .on_mouse_up_out(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| this.end_side_drag(cx)),
+            )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "escape" {
                     if this.menu.is_some() {
@@ -522,7 +582,15 @@ impl Render for BeadsView {
             .when(!p.glass, |this| this.bg(p.page))
             .child(header)
             .children(cards.into_iter().map(|card| div().pt(px(12.0)).child(card)))
-            .child(
+            .children(back_bar)
+            .child(if full_side {
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h_0()
+                    .children(side.map(|side| div().pt(px(8.0)).flex_1().min_h_0().child(side)))
+            } else {
                 div()
                     .flex()
                     .flex_1()
@@ -535,12 +603,20 @@ impl Render for BeadsView {
                             .flex_1()
                             .min_w_0()
                             .min_h_0()
-                            .pr(px(12.0))
+                            .pr(px(5.0))
                             .overflow_hidden()
                             .child(main),
                     )
-                    .children(side.map(|side| div().pt(px(14.0)).h_full().child(side))),
-            )
+                    .children(divider)
+                    .children(side.map(|side| {
+                        div()
+                            .pt(px(14.0))
+                            .h_full()
+                            .w(px(side_width))
+                            .flex_none()
+                            .child(side)
+                    }))
+            })
             .child(
                 gpui::canvas(move |area, _, _| bounds.set(Some(area)), |_, _, _, _| {})
                     .absolute()

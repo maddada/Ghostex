@@ -7,6 +7,8 @@ mod cards;
 mod create;
 mod details;
 mod host;
+mod layout;
+mod links;
 mod menus;
 mod render;
 mod tree;

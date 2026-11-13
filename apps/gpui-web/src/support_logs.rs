@@ -6,6 +6,7 @@ pub(crate) enum GpuiSupportLog {
     SidebarRefresh,
     TerminalFocus,
     SessionChat,
+    ProjectBoard,
 }
 
 pub(crate) fn append(log: GpuiSupportLog, event: &str, details: Value) {
