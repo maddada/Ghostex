@@ -102,7 +102,13 @@ export const EMPTY_NOTIFICATION_FEED_STATE: NotificationFeedState = {
  * markAllRead and clearAll take nothing.
  */
 export type NotificationFeedUpdateAction =
-  'markRead' | 'markUnread' | 'dismiss' | 'markSessionRead' | 'deferUnread' | 'markAllRead' | 'clearAll';
+  | 'markRead'
+  | 'markUnread'
+  | 'dismiss'
+  | 'markSessionRead'
+  | 'deferUnread'
+  | 'markAllRead'
+  | 'clearAll';
 
 export type NotificationFeedUpdateParams = {
   action: NotificationFeedUpdateAction;

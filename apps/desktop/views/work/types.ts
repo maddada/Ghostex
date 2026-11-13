@@ -11,7 +11,16 @@ export type WorkItemKind = 'ticket' | 'pullRequest';
 export type WorkTracker = 'linear' | 'github';
 
 export type WorkStatusGroup =
-  'backlog' | 'todo' | 'progress' | 'review' | 'done' | 'canceled' | 'draft' | 'open' | 'merged' | 'closed';
+  | 'backlog'
+  | 'todo'
+  | 'progress'
+  | 'review'
+  | 'done'
+  | 'canceled'
+  | 'draft'
+  | 'open'
+  | 'merged'
+  | 'closed';
 
 export type WorkChecksState = 'passing' | 'failing' | 'pending';
 

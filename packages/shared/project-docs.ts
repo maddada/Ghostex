@@ -22,7 +22,13 @@ export type ProjectDocsFileEntry = {
 };
 
 export type ProjectDocsGitBaselineReason =
-  'binary' | 'error' | 'git-unavailable' | 'ignored' | 'not-file' | 'not-repo' | 'too-large';
+  | 'binary'
+  | 'error'
+  | 'git-unavailable'
+  | 'ignored'
+  | 'not-file'
+  | 'not-repo'
+  | 'too-large';
 
 export type ProjectDocsGitBaseline = {
   available: boolean;

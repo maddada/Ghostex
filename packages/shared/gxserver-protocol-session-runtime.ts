@@ -91,7 +91,13 @@ export interface GxserverTerminalTitleEventResult {
 }
 
 export type GxserverFirstPromptTitleGenerationAgent =
-  'codex' | 'cursor' | 'claude' | 'grok' | 'pi' | 'antigravity' | 'custom';
+  | 'codex'
+  | 'cursor'
+  | 'claude'
+  | 'grok'
+  | 'pi'
+  | 'antigravity'
+  | 'custom';
 
 export interface GxserverSessionRenameRequestParams extends GxserverSessionLifecycleParams {
   agentName?: string;
@@ -252,9 +258,12 @@ export interface GxserverTerminalWsResizeMessage {
 
 export type GxserverTerminalWsClientControlMessage = GxserverTerminalWsResizeMessage;
 export type GxserverTerminalWsServerControlMessage =
-  GxserverTerminalWsReadyMessage | GxserverTerminalWsExitMessage | GxserverTerminalWsErrorMessage;
+  | GxserverTerminalWsReadyMessage
+  | GxserverTerminalWsExitMessage
+  | GxserverTerminalWsErrorMessage;
 export type GxserverTerminalWsControlMessage =
-  GxserverTerminalWsClientControlMessage | GxserverTerminalWsServerControlMessage;
+  | GxserverTerminalWsClientControlMessage
+  | GxserverTerminalWsServerControlMessage;
 
 export interface GxserverStartSessionProviderParams extends GxserverSessionLifecycleParams {
   promptEditor?: 'code-server' | 'monaco';

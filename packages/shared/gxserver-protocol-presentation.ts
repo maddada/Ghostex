@@ -18,7 +18,12 @@ import type { GxserverSwitchableSessionAgent } from './gxserver-protocol-session
  * so a client can tell "the user's unsent text" apart from a real session title.
  */
 export type GxserverSessionTitleSource =
-  'browser-auto' | 'draft' | 'generated' | 'placeholder' | 'terminal-auto' | 'user';
+  | 'browser-auto'
+  | 'draft'
+  | 'generated'
+  | 'placeholder'
+  | 'terminal-auto'
+  | 'user';
 
 export interface GxserverSessionTitleProjection {
   displayTitle?: string;
