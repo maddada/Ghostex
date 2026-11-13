@@ -27,7 +27,10 @@ export interface SessionChatImageRefBlock {
 }
 
 export type SessionChatBlock =
-  SessionChatTextBlock | SessionChatToolCallBlock | SessionChatToolResultBlock | SessionChatImageRefBlock;
+  | SessionChatTextBlock
+  | SessionChatToolCallBlock
+  | SessionChatToolResultBlock
+  | SessionChatImageRefBlock;
 
 export interface SessionChatAsyncQuestion {
   title: string;

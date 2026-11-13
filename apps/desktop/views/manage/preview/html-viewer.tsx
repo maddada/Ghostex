@@ -81,8 +81,8 @@ export function ManageHtmlRenderViewer({
           return;
         }
         (renderedDocument.defaultView as
-          (Window & { __ghostexSendAnnotation?: ManageAnnotationSend }) | null)!.__ghostexSendAnnotation =
-          onSendAnnotation;
+          | (Window & { __ghostexSendAnnotation?: ManageAnnotationSend })
+          | null)!.__ghostexSendAnnotation = onSendAnnotation;
         renderedDocument.documentElement.style.setProperty(
           '--foreground',
           renderedDocument.defaultView!.getComputedStyle(renderedDocument.body).color

@@ -334,7 +334,14 @@ export type GxserverRpcEndpointPath = Exclude<
 >;
 
 export type GxserverLifecycleState =
-  'running' | 'stopped' | 'starting' | 'stopping' | 'stale' | 'unreachable' | 'portConflict' | 'protocolMismatch';
+  | 'running'
+  | 'stopped'
+  | 'starting'
+  | 'stopping'
+  | 'stale'
+  | 'unreachable'
+  | 'portConflict'
+  | 'protocolMismatch';
 
 export interface GxserverMinimalHealthResponse {
   ok: true;
