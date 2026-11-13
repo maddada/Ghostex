@@ -119,8 +119,13 @@ the same commands; never edit Beads files by hand.
   shows them); it shows pinned on top of the view. People answer it with `bd human respond <id> -r
   "<answer>"` (which comments and closes it) or `bd human dismiss <id>`. Flag a
   bead this way when you need the user to choose, instead of guessing.
+- **Links**: `bd update <id> --external-ref <url>` sets a bead's external link
+  (an issue or page) and `--spec-id <url-or-path>` its spec link; an empty value
+  clears it. The view's Links row shows and edits both. Beads has no file
+  attachments, so link to files instead.
 - **Sync**: `bd dolt pull` brings in changes from the user's other computers
-  and `bd dolt push --no-adopt` sends this computer's. Only sync when the user
+  and `bd dolt push --remote <name>` sends this computer's (the view names the
+  workspace's own Dolt remote). Only sync when the user
   asks; a rejected push means pull first, then push again.
 
 ## Dispatch A Bead To A Worker Session (Coordinators)

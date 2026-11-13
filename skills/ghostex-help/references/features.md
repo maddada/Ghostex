@@ -4330,8 +4330,12 @@ project's Beads issue tracker: every row or card is a bead in the project's
 computer that runs the project (Ghostex does not bundle it; the view's
 **Install Beads** button installs it). A project without a Beads workspace
 shows a card with a fix prompt to hand an agent, which asks you before it
-creates any Beads files. The header has a **Tree | Board** switch, search,
-the sync status with **Pull** and **Push**, Refresh, and **New bead**.
+creates any Beads files; the card names the folder Ghostex looked in (a
+project's Beads folder setting can point elsewhere). The header has a **Tree |
+Board** switch, search, the sync status with **Pull** and **Push**, Refresh, and
+**New bead**. In the panel's usual narrow width (under about 760px) the header
+stays on one line: search is an icon until you press it, the sync status is a
+small button whose menu holds Pull and Push, and New bead is a **+** button.
 
 - **Tree** (the default): every bead sits under its epic, with the epic's
   progress ("2 of 5 done · 1 in progress · 1 blocked · 1 ready") and its done
@@ -4339,18 +4343,28 @@ the sync status with **Pull** and **Push**, Refresh, and **New bead**.
   waiting on a person (bd's `human` flag, `bd human`) are pinned on top under
   **Needs a decision**, with an **Answer** button. Each row shows the status,
   type, what it is waiting on, its defer or due date, labels, comments, the
-  agent on it (a green dot while it works), the priority and when it last
-  changed; hovering shows the bead's id, **Claim** and a ⋯ menu.
+  agent on it (a green dot while it works), the priority and, when the panel is
+  wide, when it last changed (an epic's row shows only its priority); hovering
+  shows the bead's id, **Claim** and a ⋯ menu.
 - **Filters**: All, Needs a decision, Ready, In progress, Blocked and Deferred,
   with counts from bd's own answers (`bd ready`); a filter keeps the tree's
   shape. **Show done** lists done beads too; the sort is Priority or Last changed.
-- **Details**: click a bead to open its details beside the tree (✕ or Escape
-  closes them): Close or Reopen, **Defer** (Tomorrow, Next week, Pick a date…,
-  or On ice, which waits until you bring it back) and **Bring back**, the
-  priority, labels, its epic, who claimed it, who's on it with **Go to agent**,
+  In a narrow panel the filters scroll sideways and Show done and the sort sit
+  behind the sort button next to them.
+- **Details**: click a bead to open its details (✕ or Escape closes them). In a
+  wide panel they sit beside the tree, and the line between the two drags to
+  give either more room; in a narrow panel the details (and New bead) take the
+  whole panel, with a ← back bar that names the epic. The details have Close or
+  Reopen, **Defer** (Tomorrow, Next week, Pick a date…, or On ice, which waits
+  until you bring it back) and **Bring back**, the priority, labels, **Links**,
+  its epic, who claimed it, who's on it with **Go to agent**,
   what blocks it and what it blocks, the description and comments, and a box to
   add a comment. Claim really claims the bead (`bd update <id> --claim`, which
-  sets you as its assignee).
+  sets you as its assignee). **Links** holds the bead's external link (an issue
+  or web page, `bd update <id> --external-ref <url>`) and its spec link
+  (`--spec-id`); click a web link to open it, **Add link** or **Add spec** to
+  set one, and its x to remove it. Beads keeps links, not files: there are no
+  attachments. On a computer running an older Ghostex the links show read-only.
 - **New bead**: title (leave it empty and Ghostex writes one from the
   description), description, type (Task, Bug, Feature, Chore, Epic), priority
   P0 to P4, an epic, labels (a child starts with its epic's labels; remove any
@@ -4378,7 +4392,9 @@ the sync status with **Pull** and **Push**, Refresh, and **New bead**.
   **Pull** brings in changes from your other computers (`bd dolt pull`), **Push**
   sends this computer's (`bd dolt push`). When a push doesn't go through because
   the remote has changes this computer doesn't have, a card says so with **Pull
-  now**; then push again. A workspace with no remote shows no Pull or Push.
+  now**; then push again. A workspace with no remote shows no Pull or Push. A
+  failed Pull or Push is written to the Ghostex server log
+  (`beadsView.syncFailed`), so it can be looked at later.
 - Everything an agent changes with `bd` shows up in the view on its own within
   a few seconds, and an open view that nothing changes costs nothing: Ghostex
   re-reads Beads only when the workspace changes.
