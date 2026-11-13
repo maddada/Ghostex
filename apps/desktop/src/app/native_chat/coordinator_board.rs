@@ -404,32 +404,18 @@ pub(crate) struct BoardCardDrag {
     /// The group it is dragged from; dropping it back there does nothing.
     from: String,
     scale: f32,
-    foreground: gpui::Hsla,
-    surface: gpui::Hsla,
 }
 
 impl gpui::Render for BoardCardDrag {
+    /// The sidebar's dragged session row (`drag_ghost`), a default-width sidebar wide.
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let s = self.scale;
-        div()
-            .max_w(px(280.0 * s))
-            .px(px(12.0 * s))
-            .py(px(8.0 * s))
-            .rounded(px(10.0 * s))
-            .bg(self.surface)
-            .border(px(s))
-            .border_color(self.foreground.opacity(0.14))
-            .shadow(vec![gpui::BoxShadow {
-                color: gpui::black().opacity(0.3),
-                offset: gpui::point(px(0.0), px(8.0 * s)),
-                blur_radius: px(20.0 * s),
-                spread_radius: px(0.0),
-                inset: false,
-            }])
-            .text_size(px(TITLE_SIZE * s))
-            .text_color(self.foreground)
-            .truncate()
-            .child(self.title.clone())
+        crate::app::helpers::drag_ghost(
+            self.title.clone(),
+            None,
+            Some(px(crate::app::consts::DEFAULT_SIDEBAR_WIDTH * s)),
+            s,
+        )
     }
 }
 
@@ -1586,8 +1572,6 @@ impl NativeChatView {
                     move_to,
                     from: group.to_string(),
                     scale: s,
-                    foreground: p.foreground,
-                    surface: p.menu_opaque(),
                 };
                 this.on_drag(drag, |drag, _, _, cx| {
                     gpui::AppContext::new(cx, |_| drag.clone())

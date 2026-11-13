@@ -214,10 +214,6 @@ pub(crate) fn gpui_terminal_theme_background(
     [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8]
 }
 
-pub(crate) fn workspace_tab_drag_preview_color() -> Hsla {
-    chrome_color(0x242424, 0xf4f4f5).opacity(0.94).into()
-}
-
 pub(crate) fn workspace_drop_feedback_border_color() -> Hsla {
     rgb(0x58b7ff).opacity(0.92).into()
 }

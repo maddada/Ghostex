@@ -1,0 +1,1 @@
+../../../../desktop/src/app/helpers/drag_ghost.rs

@@ -1045,9 +1045,6 @@ impl GhostexGpuiApp {
                                 .to_string()
                                 .into(),
                             icon,
-                            text: p.text,
-                            background: p.raised,
-                            border: p.border_strong,
                         };
                         let folder = drop_folder(&row.path, kind);
                         let over_folder = folder.clone();

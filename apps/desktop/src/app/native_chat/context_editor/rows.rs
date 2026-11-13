@@ -19,13 +19,7 @@ struct ContextRowDrag {
 }
 impl Render for ContextRowDrag {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .px_3()
-            .py_1()
-            .rounded_md()
-            .bg(self.appearance.input)
-            .text_color(self.appearance.primary)
-            .child(self.label.clone())
+        crate::app::helpers::drag_ghost(self.label.clone(), None, None, self.appearance.scale)
     }
 }
 impl ContextEditorWindow {

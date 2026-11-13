@@ -3,7 +3,7 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, AppContext as _, DragMoveEvent, Hsla, InteractiveElement, IntoElement, MouseButton,
+    AnyElement, AppContext as _, DragMoveEvent, InteractiveElement, IntoElement, MouseButton,
     ParentElement, Render, StatefulInteractiveElement, Styled, div, px,
 };
 use gpui_component::tooltip::ManagedTooltipExt as _;
@@ -25,22 +25,11 @@ pub(super) struct UnifiedGroupDrag {
     repo_key: String,
     label: String,
     scale: f32,
-    foreground: Hsla,
-    background: Hsla,
 }
 
 impl Render for UnifiedGroupDrag {
     fn render(&mut self, _: &mut gpui::Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
-        div()
-            .h(px(28.0 * self.scale))
-            .px(px(10.0 * self.scale))
-            .flex()
-            .items_center()
-            .rounded(px(6.0 * self.scale))
-            .bg(self.background)
-            .text_color(self.foreground)
-            .text_size(px(13.0 * self.scale))
-            .child(self.label.clone())
+        crate::app::helpers::drag_ghost(self.label.clone(), None, None, self.scale)
     }
 }
 
@@ -97,8 +86,6 @@ impl GhostexGpuiApp {
             repo_key: key.clone(),
             label: group.label.clone(),
             scale,
-            foreground: appearance.foreground,
-            background: appearance.selected,
         };
         let new_key = key.clone();
         let menu_key = key.clone();

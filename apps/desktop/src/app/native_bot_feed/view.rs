@@ -32,7 +32,7 @@ use ghostex_gx_core::bot_feed::{
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, Bounds, Context, Entity, FocusHandle, FontWeight, Hsla,
+    AnyElement, AppContext as _, Bounds, Context, Entity, FocusHandle, FontWeight,
     InteractiveElement as _, IntoElement, ListAlignment, ListOffset, ListState, MouseButton,
     MouseDownEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, Task, WeakEntity, Window, div,
@@ -155,21 +155,11 @@ struct ChannelDrag {
     key: SharedString,
     kind: FeedChannelKind,
     slug: SharedString,
-    background: Hsla,
-    foreground: Hsla,
 }
 
 impl Render for ChannelDrag {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .px(px(8.0))
-            .py(px(4.0))
-            .rounded(px(6.0))
-            .bg(self.background)
-            .text_color(self.foreground)
-            .text_size(px(13.0))
-            .shadow_lg()
-            .child(format!("# {}", self.slug))
+        crate::app::helpers::drag_ghost(format!("# {}", self.slug), None, None, 1.0)
     }
 }
 
@@ -801,7 +791,6 @@ impl NativeBotFeedView {
             .clone()
             .zip(kind)
             .filter(|_| self.prefs.sort == FeedSort::Manual);
-        let (background, foreground) = (self.style.chat.background, p.foreground);
         let slug_for_drag = slug.clone();
         let drop_highlight = p.selected;
         h_flex()
@@ -867,8 +856,6 @@ impl NativeBotFeedView {
                     key: target.clone(),
                     kind: kind.clone(),
                     slug: slug_for_drag,
-                    background,
-                    foreground,
                 };
                 row.on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
                     .drag_over::<ChannelDrag>(move |style, drag, _, _| {
