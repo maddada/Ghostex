@@ -145,6 +145,54 @@ pub(crate) fn reveal_popup_window(window: &mut Window, reduce_motion: bool) {
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn fade_in_popup_window(_window: &Window, _reduce_motion: bool) {}
 
+/// Where a popover that fits its window to its content stands in its open: held (drawn
+/// transparent, without glass) until fitted, revealing once asked to show, then shown.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum PopupHold {
+    #[default]
+    Held,
+    Revealing,
+    Shown,
+}
+
+/// A held popover's open state, shared by its view and its content's prepaint.
+pub(crate) type PopupHoldState = std::rc::Rc<std::cell::Cell<PopupHold>>;
+
+/// From the prepaint of a popover's content: its window takes the content's `height`, and once the
+/// window has that height and the content is `ready` (what it shows has loaded), a held popover is
+/// shown once: `reveal` runs after this draw, and the next frame draws the content opaque.
+///
+/// CDXC:AppModal 2026-11-13 DECISION:
+/// User: the Share popover appeared "with tiny height then stretching weirdly until it gets to full height after 1 s ... make it appear like the Claude Usage modals ... make showing like this Claude usage thingy always (with fade and a static height that doesn't grow)". Every popover panel (the header's Share, Jobs and usage popovers, Resources, Notifications, Remote Sites, the Links list, and the chat box's pill, context ring and Accounts & limits panels) opens at its final size and fades in once. One that measures itself opens transparent, without glass, and shows only once it has its content and its window has that height; it may still resize afterwards when what it shows changes. Supersedes nothing: the usage popup's 2026-11-11 decision was the first case of this rule.
+pub(crate) fn fit_popup_window_to_content(
+    height: f32,
+    ready: bool,
+    hold: &PopupHoldState,
+    window: &mut Window,
+    cx: &mut gpui::App,
+    reveal: impl FnOnce(&mut gpui::App) + 'static,
+) {
+    let current = window.bounds().size;
+    if (current.height.as_f32() - height).abs() > 0.5 {
+        let width = current.width;
+        window.on_next_frame(move |window, _| {
+            window.resize(gpui::size(width, px(height)));
+        });
+        return;
+    }
+    if !ready || hold.get() != PopupHold::Held {
+        return;
+    }
+    hold.set(PopupHold::Revealing);
+    let hold = hold.clone();
+    let handle = window.window_handle();
+    cx.defer(move |cx| {
+        hold.set(PopupHold::Shown);
+        let _ = handle.update(cx, |_, window, _| window.refresh());
+        reveal(cx);
+    });
+}
+
 /// How long a popup takes to fade out before it is removed.
 const POPUP_CLOSE_DURATION: Duration = Duration::from_millis(170);
 

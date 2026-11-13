@@ -33,6 +33,27 @@ pub(crate) enum GpuiTitlebarPopupKind {
 }
 
 impl GpuiTitlebarPopupKind {
+    /// A popover panel, not a menu of rows: it fades in as it opens (CDXC:AppModal 2026-11-13 in
+    /// popup_frame.rs).
+    pub(crate) fn is_panel(self) -> bool {
+        matches!(
+            self,
+            Self::AccountUsage(_)
+                | Self::CollabShare
+                | Self::Jobs
+                | Self::Notifications
+                | Self::RemoteSites
+                | Self::Resources
+                | Self::SessionLinks
+        )
+    }
+
+    /// A popover whose height is known only once it has drawn (or loaded) its content: it opens
+    /// held and transparent, and is shown once fitted (`fit_popup_window_to_content`).
+    pub(crate) fn fits_itself_before_showing(self) -> bool {
+        matches!(self, Self::AccountUsage(_) | Self::CollabShare | Self::Jobs)
+    }
+
     pub(crate) fn diagnostic_label(self) -> &'static str {
         match self {
             Self::AccountUsage(_) => "accountUsage",
@@ -577,20 +598,20 @@ impl GpuiTitlebarReadingPanel {
 
 impl Render for GpuiTitlebarReadingPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        match self.state {
+        let content = match self.state {
             GpuiTitlebarReadingPanelState::Resources { .. } => {
-                resource_panel_frame().child(self.render_resources(cx))
+                self.render_resources(cx).into_any_element()
             }
             GpuiTitlebarReadingPanelState::Notifications { .. } => {
-                return super::popup_frame::popup_open_frame(
-                    resource_panel_frame(),
-                    self.render_notifications(cx),
-                    false,
-                    cx.reduce_motion(),
-                );
+                self.render_notifications(cx).into_any_element()
             }
-        }
-        .into_any_element()
+        };
+        super::popup_frame::popup_open_frame(
+            resource_panel_frame(),
+            content,
+            false,
+            cx.reduce_motion(),
+        )
     }
 }
 

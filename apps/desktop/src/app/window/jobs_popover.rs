@@ -4,7 +4,7 @@
 
 use std::rc::Rc;
 
-use gpui::{IntoElement, ParentElement as _, Render, Styled as _, Window, div, px, size};
+use gpui::{IntoElement, ParentElement as _, Render, Styled as _, Window, div, px};
 use gpui_component::ElementExt as _;
 
 use super::jobs_popover_view::{
@@ -23,11 +23,17 @@ pub(crate) fn jobs_popover_height(jobs: usize) -> f32 {
 
 pub(crate) struct JobsPopoverPanel {
     main_app: gpui::WeakEntity<GhostexGpuiApp>,
+    /// Held until its window has the popover's height, then shown (CDXC:AppModal 2026-11-13 in
+    /// popup_frame.rs).
+    hold: crate::app::window::popup_frame::PopupHoldState,
 }
 
 impl JobsPopoverPanel {
     pub(crate) fn new(main_app: gpui::WeakEntity<GhostexGpuiApp>) -> Self {
-        Self { main_app }
+        Self {
+            main_app,
+            hold: Default::default(),
+        }
     }
 
     fn act(&mut self, action: JobsAction, cx: &mut gpui::Context<Self>) {
@@ -58,23 +64,35 @@ impl Render for JobsPopoverPanel {
         let on: JobsHandler<Self> =
             Rc::new(|panel: &mut Self, action, _window, cx| panel.act(action, cx));
         let popover = view::render_jobs_popover(&model, &on, cx);
-        div()
-            .size_full()
-            .child(div().w(px(JOBS_POPOVER_WIDTH)).child(popover).on_prepaint(
-                |bounds, window, _| {
-                    let height = bounds
-                        .size
-                        .height
-                        .as_f32()
-                        .clamp(60.0, JOBS_POPOVER_MAX_HEIGHT);
-                    let current = window.bounds().size;
-                    if (current.height.as_f32() - height).abs() > 0.5 {
-                        let width = current.width;
-                        window.on_next_frame(move |window, _| {
-                            window.resize(size(width, px(height)));
+        let hold = self.hold.clone();
+        let main_app = self.main_app.clone();
+        let measured = div().w(px(JOBS_POPOVER_WIDTH)).child(popover).on_prepaint(
+            move |bounds, window, cx| {
+                let height = bounds
+                    .size
+                    .height
+                    .as_f32()
+                    .clamp(60.0, JOBS_POPOVER_MAX_HEIGHT);
+                crate::app::window::popup_frame::fit_popup_window_to_content(
+                    height,
+                    true,
+                    &hold,
+                    window,
+                    cx,
+                    move |cx| {
+                        let _ = main_app.update(cx, |app, cx| {
+                            app.reveal_titlebar_popup(GpuiTitlebarPopupKind::Jobs, cx)
                         });
-                    }
-                },
-            ))
+                    },
+                );
+            },
+        );
+        crate::app::window::popup_frame::popup_open_frame_held(
+            div().size_full(),
+            measured,
+            self.hold.get() == crate::app::window::popup_frame::PopupHold::Held,
+            false,
+            cx.reduce_motion(),
+        )
     }
 }

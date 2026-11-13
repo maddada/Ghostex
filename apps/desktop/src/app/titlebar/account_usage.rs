@@ -402,26 +402,7 @@ impl GhostexGpuiApp {
         id: ExtensionId,
         cx: &mut gpui::Context<Self>,
     ) {
-        let kind = GpuiTitlebarPopupKind::AccountUsage(id);
-        if !self
-            .titlebar_popup_menu
-            .as_ref()
-            .is_some_and(|state| state.kind == kind)
-        {
-            return;
-        }
-        let (Some(popup), Some(main)) = (self.titlebar_popup_window, self.main_window_handle)
-        else {
-            return;
-        };
-        if gpui::AnyWindowHandle::from(popup) == main {
-            return;
-        }
-        let _ = popup.update(cx, |_, window, _| {
-            window.on_next_frame(|window, cx| {
-                crate::app::window::popup_frame::reveal_popup_window(window, cx.reduce_motion());
-            });
-        });
+        self.reveal_titlebar_popup(GpuiTitlebarPopupKind::AccountUsage(id), cx);
     }
 
     /// A usage notice's button: the popup closes and Settings > Accounts opens, on `reconnect`'s

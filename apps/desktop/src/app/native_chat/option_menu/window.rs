@@ -82,6 +82,9 @@ pub(in crate::app::native_chat) struct ChatOptionMenu {
     pub(super) windows: Vec<gpui::WindowHandle<Root>>,
     pub(super) opening: bool,
     pub(super) closed: bool,
+    /// A panel is being reopened in place (`reopen`): the same panel growing, not an open, so it
+    /// does not fade in again.
+    reopening: bool,
     /// Where each depth's panel was anchored, so a panel can reopen in place.
     /// Each open panel's anchor, width, whether it drops below its trigger, and whether a dropped
     /// list lines its right edge up with the trigger's instead of its left.
@@ -123,6 +126,8 @@ pub(super) struct ChatOptionMenuPanel {
     pub(super) model_menu: Option<super::model_menu::ModelMenuState>,
     /// The card's corner radius, the one its window was rounded to (`popup_card_radius`).
     pub(super) card_radius: Pixels,
+    /// It fades in and rises as it opens (`panel_opens_animated`).
+    pub(super) opens_animated: bool,
     was_active: bool,
     _activation: Subscription,
     _press: Subscription,
@@ -488,7 +493,9 @@ impl ChatOptionMenu {
     /// The Switch Account panel uses this when it grows past the room below its top edge.
     pub(super) fn reopen(&mut self, depth: usize, rows: Vec<Value>, cx: &mut Context<Self>) {
         if let Some(&(anchor, width, below, right)) = self.anchors.get(depth) {
+            self.reopening = true;
             self.open_panel_at(rows, anchor, width, depth, below, right, cx);
+            self.reopening = false;
         }
     }
 
@@ -608,7 +615,10 @@ impl ChatOptionMenu {
         #[cfg(target_os = "linux")]
         let owner = self.source;
         let accounts_customize = rows.first().is_some_and(|row| row["customize"] == true);
-        let fade_in = rows.first().is_some_and(accounts_row_opens_animated);
+        let fade_in = !self.reopening
+            && rows
+                .first()
+                .is_some_and(|row| panel_opens_animated(row, depth));
         self.opening = true;
         // Under window glass the menu's window blurs what is behind it, rounded to the card.
         let glass = crate::app::helpers::window_glass_active();
@@ -858,6 +868,7 @@ impl ChatOptionMenu {
                                 select_bounds: Rc::new(Cell::new(Bounds::default())),
                                 model_menu,
                                 card_radius,
+                                opens_animated: fade_in,
                                 was_active: window.is_window_active(),
                                 _activation: activation,
                                 _press: press,
@@ -1059,6 +1070,7 @@ impl NativeChatView {
             windows: vec![],
             opening: false,
             closed: false,
+            reopening: false,
             anchors: vec![],
             parent,
             compact: below,
@@ -1150,8 +1162,17 @@ mod tests {
     }
 }
 
-/// The Accounts & limits panel fades in when it opens. `refit_accounts` reopening it taller carries
-/// `customize` in its row, and that is the same panel growing, not an open.
-pub(super) fn accounts_row_opens_animated(row: &Value) -> bool {
-    row["accounts"].is_object() && row.get("customize").is_none()
+/// The chat box's popover panels fade in when they open, each already at its measured height
+/// (CDXC:AppModal 2026-11-13 in popup_frame.rs): Accounts & limits, and the context ring's,
+/// a pill's and the model picker's panels. Menus of rows and their side lists open at once.
+/// `refit_accounts` reopening Accounts & limits taller carries `customize` in its row, and that is
+/// the same panel growing, not an open.
+pub(super) fn panel_opens_animated(row: &Value, depth: usize) -> bool {
+    if row["accounts"].is_object() {
+        return row.get("customize").is_none();
+    }
+    depth == 0
+        && (row["context"].is_object()
+            || row["pillMenu"].is_object()
+            || row["modelMenu"].is_object())
 }
