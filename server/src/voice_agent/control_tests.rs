@@ -133,29 +133,36 @@ fn an_unsure_stop_puts_a_card_up_and_a_sure_one_does_not() {
 
 fn launchers() -> Vec<Value> {
     vec![
-        json!({"agentId": "gemini", "name": "Gemini", "icon": "gemini", "command": "gemini"}),
+        json!({"agentId": "kiro", "name": "Kiro CLI", "icon": "kiro", "command": "kiro-cli"}),
         json!({"agentId": "codex", "name": "Codex", "icon": "codex", "command": "codex"}),
         json!({"agentId": "claude", "name": "Claude", "icon": "claude", "command": "claude"}),
     ]
 }
 
 #[test]
-fn a_voice_coordinator_runs_on_an_agent_that_can_coordinate() {
+fn a_voice_coordinator_runs_on_any_set_up_agent() {
     let rows = launchers();
     assert_eq!(
         control::coordinator_agent(&rows, "Codex", None).as_deref(),
         Ok("codex")
     );
-    let refused = control::coordinator_agent(&rows, "gemini", None).unwrap_err();
-    assert!(refused.contains("can't run on"), "{refused}");
+    // Any agent may run a coordinator (Q2980): one outside the coordinator list is not refused.
+    assert_eq!(
+        control::coordinator_agent(&rows, "kiro", None).as_deref(),
+        Ok("kiro")
+    );
     assert!(control::coordinator_agent(&rows, "nothing", None).is_err());
-    // The user's default agent when it can coordinate, else Claude first.
+    // The user's default agent when it is set up, else Claude first.
     assert_eq!(
         control::coordinator_agent(&rows, "", Some("codex")).as_deref(),
         Ok("codex")
     );
     assert_eq!(
-        control::coordinator_agent(&rows, "", Some("gemini")).as_deref(),
+        control::coordinator_agent(&rows, "", Some("kiro")).as_deref(),
+        Ok("kiro")
+    );
+    assert_eq!(
+        control::coordinator_agent(&rows, "", Some("missing")).as_deref(),
         Ok("claude")
     );
     assert_eq!(
