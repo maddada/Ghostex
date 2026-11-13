@@ -676,6 +676,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSessionChatSkills"
         | "/api/readSessionChatFiles"
         | "/api/sendSessionChatMessage"
+        // CDXC:SessionChat 2026-11-13 WHY: remote-allowed like sendSessionChatMessage: answers brought back from an exported page are a message to a session on the machine that runs it (visual_pages/import.rs).
+        | "/api/importVisualPageAnswers"
         | "/api/saveSessionChatImage"
         | "/api/saveSessionChatAttachment"
         | "/api/readSessionChatImage"
@@ -1195,6 +1197,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         Refresh reads the HTML file a page was published from on this computer and replaces the page, so like publishing it is for this computer's own clients only: the desktop app asks here, or through its tunnel for a remote machine's page (visual_pages/source.rs).
         */
         "/api/readVisualPageSource" | "/api/refreshVisualPage" => full_local(path),
+        // CDXC:ServerApi 2026-11-13 WHY: `ghostex visual export` reads an HTML file on this computer (visual_pages/exported.rs), so like publishing it is for this computer's own clients only; the page card and window download through `GET /visual/<id>/export` instead.
+        "/api/exportVisualPage" => full_local(path),
         // CDXC:RemoteMachines 2026-11-03 WHY: the desktop app registers the computers it is connected to (and, through its tunnel, how a connected computer reaches this one back); it carries a loopback address and that computer's token, so only this computer's own clients and the tunnel may call these.
         "/api/registerConnectedComputer"
         | "/api/unregisterConnectedComputer"

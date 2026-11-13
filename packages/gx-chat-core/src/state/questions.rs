@@ -109,6 +109,9 @@ pub struct QuestionsState {
     // ---- unanswered questions --------------------------------------------
     /// The Previous question pill's place and the last jump (`crate::questions::open_questions`).
     pub open_questions: crate::questions::open_questions::OpenQuestionsState,
+    /// Exported pages' answers on their way to gxserver, by request id, with the text that brought
+    /// them (`crate::questions::page_import`).
+    pub page_imports: std::collections::BTreeMap<u64, String>,
     /// The For later marks set here that gxserver has not confirmed yet (`crate::questions::later`).
     pub later: crate::state::Stamped<crate::questions::later::LaterState>,
     /// The pages that ask nothing and the charts the ? pill's list names (`crate::questions::content`).

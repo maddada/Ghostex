@@ -652,6 +652,11 @@ function setup(root){
   questions=Array.prototype.map.call(root.querySelectorAll("gx-question"),function(qe,index){return question(qe,index,used,changed);});
   var explicit=bindOptions(questions),auto=autoTie(questions,explicit);
   options=explicit.concat(auto.options);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied};syncOptions();
+  /* An exported page's answers name each question as well as its key (theme.rs PAGE_API, exported.rs): its tag, its text, the value and label of what was picked, and its note. */
+  window.__ghostexKit.describe=function(a){a=a||{};var rows=questions.map(function(q){var v=a[q.key],r={tag:q.tag||null,question:q.title,key:q.key,value:v===undefined?null:v};
+    if(q.choices.length){var lab=function(x){var c=q.choices.filter(function(c){return c.value===x;})[0];return c?c.label:x;};r.label=Array.isArray(v)?v.map(lab):v==null||v===SKIPPED?null:lab(v);}
+    var n=a[q.key+" (note)"];r.note=typeof n==="string"?n:null;return r;});
+    if(notes&&typeof a[notesKey]==="string")rows.push({tag:null,question:seen?"Reply about this page":"Anything else?",key:notesKey,value:a[notesKey],note:null});return rows;};
   /* "Anything else?": see the SessionChat 2026-11-04 DECISION on KIT_SCRIPT. */
   var last=questions[questions.length-1],notes=null,notesCard=null,notesKey=seen?"reply":NOTES;
   for(var copy=2;questions.some(function(q){return q.key===notesKey||q.key+" (note)"===notesKey;});copy++)notesKey=NOTES+" ("+copy+")";
@@ -718,6 +723,9 @@ function setup(root){
   function allPills(){boxes().forEach(pills);}
   if(!window.ghostex){button.disabled=true;skipAll.remove();status.textContent="This Ghostex can't send answers from a page; type them in the chat.";return;}
   if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
+  /* An exported page has no Ghostex to send to: Send becomes Export answers, which shows the answers to copy or download, and the page stays open for more (exported.rs). */
+  var exported=!!ghostex.exported;
+  if(exported){label.textContent="Export answers";button.setAttribute("data-gx-tip","Export answers");skipAll.remove();infoText=seen?"Exports that you saw the page, with your reply if you write one.":"Questions you leave blank are exported as skipped.";info.setAttribute("aria-label",infoText);info.setAttribute("data-gx-tip",infoText);}
   var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
   /* Pasted images: see the Clipboard DECISIONs on KIT_SCRIPT. */
   var pendingImages=0,kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
@@ -730,7 +738,7 @@ function setup(root){
   function keepThumb(path,file){shrink(file).then(function(d){if(!d||keptSize+d.length>24000||button.disabled)return;kept[path]=small[path]=d;keptSize+=d.length;if(ghostex.__saveDraft)ghostex.__saveDraft("thumbs",kept);});}
   function nextImage(){var top=0;boxes().forEach(function(t){t.value.replace(/\[Image #(\d+)\]\(/g,function(_,n){top=Math.max(top,+n);});});return top+1;}
   function hint(area,text,error){var h=area.__gxHint;if(!h){h=el("div","gx-paste");(area.__gxPills||area.__gxBox||area).after(h);area.__gxHint=h;}h.textContent=text||"";h.classList.toggle("gx-error",!!error);h.hidden=!text;}
-  function upload(file){return fetch(base+"/image",{method:"POST",body:new Blob([file])}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok&&j.path)return j.path;throw new Error(j.error||"The pasted image could not be saved.");});});}
+  function upload(file){if(exported)return Promise.reject(new Error("Pictures can't be added to an exported page. Describe them in words instead."));return fetch(base+"/image",{method:"POST",body:new Blob([file])}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok&&j.path)return j.path;throw new Error(j.error||"The pasted image could not be saved.");});});}
   root.addEventListener("input",function(e){if(e.target&&e.target.matches&&e.target.matches("textarea.gx-note,textarea.gx-text"))pills(e.target);},true);
   root.addEventListener("paste",function(e){
     var t=e.target,ed=t&&t.closest&&t.closest(".gx-box"),area=ed?ed.__gxArea:t&&t.matches&&t.matches("textarea.gx-note,textarea.gx-text")?t:null;
@@ -754,6 +762,7 @@ function setup(root){
   document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();});
   function send(out,sent){
     if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
+    if(exported){status.classList.remove("gx-error");ghostex.submit(out).then(function(){status.textContent="Answers exported. Send them back to whoever shared this page.";});return;}
     button.disabled=true;status.classList.remove("gx-error");status.textContent="Sending…";
     /* A send that can't reach Ghostex keeps trying with everything left as typed, and says so (PAGE_API's submit). */
     ghostex.submit(out,function(message){status.classList.add("gx-error");status.textContent=message;}).then(function(){if(sent)sent();lock();},function(error){button.disabled=false;status.classList.add("gx-error");status.textContent=error&&error.message||"Your answers were not sent.";});

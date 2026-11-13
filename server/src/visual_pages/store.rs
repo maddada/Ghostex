@@ -64,7 +64,7 @@ pub(crate) fn prune_old_pages(
 }
 
 /// 128 random bits from the operating system's generator, as 32 lowercase hex characters.
-fn new_page_id() -> String {
+pub(super) fn new_page_id() -> String {
     let mut bytes = [0u8; 16];
     rand::rngs::SysRng
         .try_fill_bytes(&mut bytes)

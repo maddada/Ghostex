@@ -476,6 +476,23 @@ pub(super) async fn route_chat_http(
                 &body_json,
             )
         }
+        crate::visual_pages::EXPORT_VISUAL_PAGE_ENDPOINT => {
+            crate::visual_pages::handle_export_visual_page_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+        }
+        crate::visual_pages::IMPORT_VISUAL_PAGE_ANSWERS_ENDPOINT => {
+            crate::visual_pages::handle_import_visual_page_answers_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         crate::visual_pages::READ_VISUAL_PAGE_SOURCE_ENDPOINT => {
             crate::visual_pages::handle_read_visual_page_source_http(
                 &state,

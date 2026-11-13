@@ -79,6 +79,7 @@ mod team;
 mod team_slack;
 pub mod usage;
 mod visual;
+mod visual_export;
 mod visual_page_check;
 mod voice;
 pub mod wait;

@@ -49,6 +49,7 @@ const ICON_CLOSE: &str = "titlebar/x.svg";
 const ICON_OPEN_IN_BROWSER: &str = "titlebar/external-link.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
 const ICON_HIDE: &str = "titlebar/window-minimize.svg";
+const ICON_EXPORT: &str = "titlebar/download.svg";
 /// A focus loss this soon after a press in another window is that press, already counted.
 const SAME_CLICK: Duration = Duration::from_millis(400);
 /// Its own browser profile, so a page's storage never mixes with the Browser's or an
@@ -72,6 +73,9 @@ pub(crate) enum VisualPageModalCommand {
     TabChanged,
     /// Closes the window and opens the page in the reader's browser.
     OpenInBrowser { url: String },
+    /// Downloads the page's exported file in the reader's browser and keeps the window open
+    /// (server/src/visual_pages/exported.rs).
+    ExportPage { url: String },
     /// A link the page opened (a new window or `target=_blank`), for the app to route by the
     /// machine the page came from.
     OpenLink { url: String },
@@ -736,6 +740,22 @@ impl GpuiVisualPageModalWindow {
                     .items_center()
                     .when(self.source_changed || self.refreshing, |this| {
                         this.child(self.refresh_button(glass, cx))
+                    })
+                    .when(self.page_id.is_some(), |this| {
+                        this.child(
+                            control_button(
+                                "visual-page-export",
+                                ICON_EXPORT,
+                                "Export page: one file anyone can open and answer in a browser",
+                                glass,
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                let end = this.url.find(['?', '#']).unwrap_or(this.url.len());
+                                let url =
+                                    format!("{}/export", this.url[..end].trim_end_matches('/'));
+                                (this.host)(VisualPageModalCommand::ExportPage { url }, cx);
+                            })),
+                        )
                     })
                     .child(
                         control_button(

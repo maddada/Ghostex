@@ -82,6 +82,12 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::read_page_image(state.clone(), path, query).await;
     }
 
+    // `GET /visual/<id>/export` is the page's exported file, as a download (exported.rs).
+    if method == Method::GET && crate::visual_pages::is_export_route(&path) {
+        return crate::visual_pages::download_exported_page(state.paths.root_dir.clone(), path)
+            .await;
+    }
+
     if method == Method::GET && path.starts_with(crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX) {
         let host = parts
             .headers

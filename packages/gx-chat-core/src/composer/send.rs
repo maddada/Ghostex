@@ -106,6 +106,14 @@ pub fn begin_named(
     caret: Option<usize>,
     named: Option<String>,
 ) -> Vec<Effect> {
+    // The answers an exported page gave, pasted into the chat box, go to gxserver's import, which
+    // sends the agent the page's own answers message (`questions/page_import.rs`).
+    if mode != SubmissionMode::Compact
+        && image_paths.is_empty()
+        && crate::questions::page_import::is_exported_answers(text)
+    {
+        return crate::questions::page_import::import(state, text, true);
+    }
     // A block that clears on its own does not refuse: the delivery phase waits for it instead.
     if let Some(refused) = crate::composer::document::send_refused(state) {
         state.core.fail(refused, None);

@@ -198,6 +198,7 @@ action_kinds! {
     PreviousQuestion => "previousQuestion",
     JumpToQuestion => "jumpToQuestion",
     QuestionForLater => "questionForLater",
+    ImportPageAnswers => "importPageAnswers",
     QuestionRemove => "questionRemove",
     SnoozeQuestion => "snoozeQuestion",
     CancelQuestion => "cancelQuestion",

@@ -42,6 +42,45 @@ impl NativeChatView {
             || self.snapshot["pendingAttachments"].as_u64().unwrap_or(0) > 0
     }
 
+    /// The answers an exported page gave, as a `.json` file dropped, pasted or picked into the chat
+    /// box: each goes to the chat core's import (packages/gx-chat-core/src/questions/page_import.rs)
+    /// instead of being attached; the other paths are handed back. Files are read where the app
+    /// runs, so a page answered on this computer imports into a chat on any computer.
+    fn import_exported_answers(
+        &mut self,
+        paths: Vec<String>,
+        cx: &mut Context<Self>,
+    ) -> Vec<String> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut rest = Vec::with_capacity(paths.len());
+            for path in paths {
+                let text = std::path::Path::new(&path)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+                    .then(|| std::fs::metadata(&path).ok())
+                    .flatten()
+                    .filter(|metadata| metadata.is_file() && metadata.len() <= 256 * 1024)
+                    .and_then(|_| std::fs::read_to_string(&path).ok())
+                    .filter(|text| {
+                        ghostex_gx_chat_core::questions::page_import::is_exported_answers(text)
+                    });
+                match text {
+                    Some(text) => {
+                        self.invoke(json!({"type": "importPageAnswers", "text": text}), cx)
+                    }
+                    None => rest.push(path),
+                }
+            }
+            rest
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = cx;
+            paths
+        }
+    }
+
     /// Saves pasted pictures, or copies pasted, dropped or picked files, onto the session's
     /// machine and writes their references into the chat box, or into the message a send took
     /// them with. The uploading tile shows on this frame.
@@ -51,6 +90,7 @@ impl NativeChatView {
         external_paths: Vec<String>,
         cx: &mut Context<Self>,
     ) {
+        let external_paths = self.import_exported_answers(external_paths, cx);
         if images.is_empty() && external_paths.is_empty() {
             return;
         }

@@ -280,6 +280,7 @@ impl NativeChatView {
             "Answered"
         };
         let gxv::PageRef { title, url, .. } = page;
+        let export_url = page_id.as_ref().map(|_| exported_page_url(&url));
         let bar_label = file.clone().unwrap_or_else(|| title.clone());
         let page_title = title.clone();
         let aria = format!("Open page {title}");
@@ -529,6 +530,9 @@ impl NativeChatView {
                         .child(done_label),
                 )
             })
+            .when_some(export_url, |this, export_url| {
+                this.child(export_button(key, export_url, p, cx))
+            })
             .child(
                 div()
                     .id("visual-page-open")
@@ -603,6 +607,64 @@ fn later_button(
         .chat_cursor_pointer()
         .hover(move |style| style.bg(hover_fill))
         .child(label)
+        .on_click(cx.listener(move |this, _, _, cx| {
+            cx.stop_propagation();
+            this.invoke(action.clone(), cx)
+        }))
+        .into_any_element()
+}
+
+/// The address of the page's exported file (server/src/visual_pages/exported.rs): the page's own
+/// address with `/export`, which the reader's browser downloads.
+fn exported_page_url(url: &str) -> String {
+    let end = url.find(['?', '#']).unwrap_or(url.len());
+    format!("{}/export", url[..end].trim_end_matches('/'))
+}
+
+/// Export: downloads the page as an exported page, one HTML file anyone can open and answer in a
+/// browser; its Send gives the answers as JSON, which the chat box imports
+/// (CDXC:SessionChat 2026-11-13 DECISION in server/src/visual_pages/exported.rs). The browser
+/// downloads it, here or through a remote computer's forward, as Open in browser opens the page.
+fn export_button(
+    key: &str,
+    export_url: String,
+    p: &ChatAppearance,
+    cx: &Context<NativeChatView>,
+) -> AnyElement {
+    let s = p.scale;
+    let (rest, hover) = if p.light { (0.07, 0.11) } else { (0.10, 0.15) };
+    let hover_fill = p.foreground.opacity(hover);
+    let action = json!({"type": "openMarkdownLink", "href": export_url, "external": true});
+    div()
+        .id(SharedString::from(format!("visual-page-export:{key}")))
+        .role(gpui::Role::Button)
+        .aria_label("Export page")
+        .flex_shrink_0()
+        .h(px(28.0 * s))
+        .px(px(11.0 * s))
+        .flex()
+        .items_center()
+        .gap(px(5.0 * s))
+        .rounded(px(8.0 * s))
+        .bg(p.foreground.opacity(rest))
+        .text_color(p.foreground)
+        .text_size(px(12.5 * s))
+        .font_weight(FontWeight::MEDIUM)
+        .chat_cursor_pointer()
+        .hover(move |style| style.bg(hover_fill))
+        .tooltip(|window, cx| {
+            gpui_component::tooltip::Tooltip::new(
+                "Export page: one file anyone can open and answer in a browser",
+            )
+            .build(window, cx)
+        })
+        .child(
+            svg()
+                .path("titlebar/download.svg")
+                .size(px(13.0 * s))
+                .text_color(p.foreground),
+        )
+        .child("Export")
         .on_click(cx.listener(move |this, _, _, cx| {
             cx.stop_propagation();
             this.invoke(action.clone(), cx)

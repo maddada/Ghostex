@@ -611,6 +611,7 @@ Usage:
   gx visual --help
   gx visual check <file.json|-> [--width N] [--light] [--out file.png]
   gx visual check <page.html> [--width N] [--light] [--out file.png]
+  gx visual export <file.html|page id|page URL> [--out file.html] [--json]
   gx visual install-skill [--json]
 
 Names:
@@ -673,6 +674,18 @@ Pages (Ghostex pages):
   .gx-options row of tied sections (each gets a Pick button), one question
   under them, and keep it to about one screen. The skill's
   examples/plan-review.html shows the whole shape.
+
+Exported pages:
+  Any Ghostex page can be exported: one HTML file that opens in any browser
+  without Ghostex, to send to someone who answers it there. Its Send button
+  reads Export answers and gives the answers as JSON (copy or download). The
+  user drops or pastes that JSON into the chat, and it reaches you as the
+  page's usual <ghostex-page-answers> message, keyed the same way. The page
+  card and page window have an Export button; `gx visual export` writes the
+  same file (default name: the page's title, in this folder). An exported
+  page makes no requests; only what the page itself loads from https (a CDN
+  library, a web font) needs the internet, so a self-contained page also
+  works offline.
 
 check:
   Draws the block's JSON (or the whole fenced block) exactly as the chat lays

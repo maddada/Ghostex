@@ -2309,6 +2309,24 @@ agent can check it before replying;
 `ghostex visual check <file.html>` opens a page in Chrome at a phone's width
 and a computer's, saves a screenshot of each and lists what does not fit.
 
+**Exported pages.** Any Ghostex page can go to someone who doesn't use Ghostex.
+Press Export on the page's card in the chat, or the download button at the top
+of the floating page window, and your browser downloads the exported page: one
+HTML file with the page, its mockups and its questions, in the same look (light
+and dark), that opens in any browser and needs nothing else. Attach it to an
+email, a chat or an issue. The person answers it there (choices, Pick buttons,
+notes and "Anything else?" all work, and what they pick is kept if they close and
+reopen the file), and the Send button reads Export answers: it shows their
+answers as JSON, with Copy and Download .json, for them to send back to you.
+To give those answers to the agent, drop the .json file on the chat box or
+paste its text there and press Enter: the agent gets them the same way as answers
+sent from the page itself, and the page's card reads Answered. The answers go to
+the chat that published the page, even if you drop them in another chat, and
+answers from several people each reach the agent; answers to a page from another
+computer go to the chat you drop them in, under the page's title. Pictures can't
+be pasted into an exported page. Command: `ghostex visual export <file.html or
+page id> [--out <file.html>]` writes the same file.
+
 Use Cmd+P (Recent Sessions) to jump between chats across projects, or
 Cmd+[ and Cmd+] to go back and forward through visited sessions, the same keys
 Chrome uses (Ctrl+Alt+Shift+[ and Ctrl+Alt+Shift+] on Windows and Linux).

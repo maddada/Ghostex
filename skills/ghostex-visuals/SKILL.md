@@ -609,6 +609,41 @@ works.
 If `ghostex show` is an unknown command, say this Ghostex is too old to show
 pages and give the HTML file's path instead.
 
+### Exported pages
+
+Every Ghostex page can be exported: one HTML file that opens in any browser
+without Ghostex, for the user to send to someone else (a customer, a teammate,
+an issue's author) who answers it there. The user presses Export on the page's
+card or in its window; you can write the same file yourself with
+`ghostex visual export <file.html or page id> --out <file.html>` (Ghostex
+releases after 11.5.0; an older one says `visual export` is unknown, and
+its pages have no Export button). Nothing about the
+page changes: write it as usual. In the exported file the kit's send button
+reads Export answers and shows the answers as JSON (Copy, Download .json), and
+a page's own `ghostex.submit(answers)` does the same there (`ghostex.exported`
+is set in an exported page). The file makes no requests and keeps its draft in
+the browser; what the page itself loads from https still needs the internet,
+so keep a page meant for export self-contained, and pictures can't be pasted
+into it. When the user drops or pastes that JSON into the chat, you receive the
+page's usual answers message, keyed the same way as the page's own Send, so
+read it the same way. Several people may answer one exported page, so answers
+to the same page can arrive more than once, once per person. A JSON for a page
+from another computer arrives with the title it carries. The JSON itself, if
+the user pastes it somewhere you read, looks like this:
+
+```json
+{
+  "ghostexPageAnswers": 1,
+  "page": "7ea5c5be1f2d68ebc9e40f790db0ef29",
+  "title": "Settings redesign",
+  "exportedAt": "2026-11-13T09:30:00.000Z",
+  "answers": {"Q1": "tabs", "Q1 (note)": "keep search at the top"},
+  "questions": [{"tag": "Q1", "question": "Which layout should I build?",
+                 "key": "Q1", "value": "tabs", "label": "Tabs",
+                 "note": "keep search at the top"}]
+}
+```
+
 ### Ghostex pages with questions
 
 Only for questions the reader can answer by seeing something: two layouts to

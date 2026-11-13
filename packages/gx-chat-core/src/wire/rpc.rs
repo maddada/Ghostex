@@ -31,6 +31,8 @@ pub enum ChatRpcMethod {
     /// A published page's state for the dock: how many of its questions the reader's draft
     /// answers and how many it asks (`server/src/visual_pages/source.rs`).
     ReadVisualPageSource,
+    /// Answers brought back from an exported page (`questions/page_import.rs`).
+    ImportVisualPageAnswers,
     SendSessionChatMessage,
     InterruptSessionChat,
     AnswerSessionChatPrompt,
@@ -118,6 +120,7 @@ impl ChatRpcMethod {
             Self::ReadSessionChatResource => "readSessionChatResource",
             Self::ReadVisualPageThumbnail => "readVisualPageThumbnail",
             Self::ReadVisualPageSource => "readVisualPageSource",
+            Self::ImportVisualPageAnswers => "importVisualPageAnswers",
             Self::SendSessionChatMessage => "sendSessionChatMessage",
             Self::InterruptSessionChat => "interruptSessionChat",
             Self::AnswerSessionChatPrompt => "answerSessionChatPrompt",
@@ -178,6 +181,7 @@ impl ChatRpcMethod {
             "readSessionChatResource" => Self::ReadSessionChatResource,
             "readVisualPageThumbnail" => Self::ReadVisualPageThumbnail,
             "readVisualPageSource" => Self::ReadVisualPageSource,
+            "importVisualPageAnswers" => Self::ImportVisualPageAnswers,
             "sendSessionChatMessage" => Self::SendSessionChatMessage,
             "interruptSessionChat" => Self::InterruptSessionChat,
             "answerSessionChatPrompt" => Self::AnswerSessionChatPrompt,

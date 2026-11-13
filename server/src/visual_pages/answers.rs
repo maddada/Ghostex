@@ -113,6 +113,41 @@ pub(crate) async fn submit(
         .unwrap_or("Ghostex page")
         .to_string();
     let message = answers_message(&id, &title, &answers);
+    let (error, wait_for_idle) = deliver(
+        &state,
+        project_id,
+        session_id,
+        message,
+        format!("visual-page-{id}"),
+    )
+    .await;
+    let state_dir = state.paths.root_dir.clone();
+    let noted = error.clone();
+    let _ =
+        tokio::task::spawn_blocking(move || note_delivery(&state_dir, &id, noted.as_deref())).await;
+    match error {
+        None => reply(
+            StatusCode::OK,
+            json!({"ok": true, "answeredAt": answered_at, "queued": wait_for_idle, "delivered": true}),
+        ),
+        Some(error) => reply(
+            StatusCode::OK,
+            json!({"ok": true, "answeredAt": answered_at, "queued": false,
+                   "error": format!("Saved, but the agent was not told: {error}")}),
+        ),
+    }
+}
+
+/// Sends a `<ghostex-page-answers>` message to the session, the way the page's own Send does:
+/// queued until the agent is idle when the Advanced setting asks for it, else sent normally.
+/// Returns the error that kept it from the agent, if any, and whether it was queued.
+pub(super) async fn deliver(
+    state: &Arc<AppState>,
+    project_id: String,
+    session_id: String,
+    message: String,
+    send_request_id: String,
+) -> (Option<String>, bool) {
     let wait_for_idle =
         crate::session_chat_catch_up::chat_setting_enabled(&state.paths, "chatAnswersWaitForIdle");
     let error = if wait_for_idle {
@@ -147,12 +182,12 @@ pub(crate) async fn submit(
             "projectId": project_id,
             "sessionId": session_id,
             "text": message,
-            "sendRequestId": format!("visual-page-{id}"),
+            "sendRequestId": send_request_id,
         }});
         let sent = crate::session_chat_send::handle_send_session_chat_message_http(
-            &state,
+            state,
             "/api/sendSessionChatMessage".to_string(),
-            format!("visual-page-{id}"),
+            send_request_id,
             &body,
         )
         .await;
@@ -165,28 +200,14 @@ pub(crate) async fn submit(
             Some(String::from_utf8_lossy(&bytes).to_string())
         }
     };
-    let state_dir = state.paths.root_dir.clone();
-    let noted = error.clone();
-    let _ =
-        tokio::task::spawn_blocking(move || note_delivery(&state_dir, &id, noted.as_deref())).await;
-    match error {
-        None => reply(
-            StatusCode::OK,
-            json!({"ok": true, "answeredAt": answered_at, "queued": wait_for_idle, "delivered": true}),
-        ),
-        Some(error) => reply(
-            StatusCode::OK,
-            json!({"ok": true, "answeredAt": answered_at, "queued": false,
-                   "error": format!("Saved, but the agent was not told: {error}")}),
-        ),
-    }
+    (error, wait_for_idle)
 }
 
 /// The message the publishing agent receives.
 ///
 /// CDXC:SessionChat 2026-10-11 SEE-ALSO:
 /// The envelope is parsed by packages/gx-chat-core/src/transcript/page_answers.rs (the answers card and the page card's Answered state) and described to agents in skills/ghostex-visuals/SKILL.md. Change them together.
-fn answers_message(id: &str, title: &str, answers: &Value) -> String {
+pub(super) fn answers_message(id: &str, title: &str, answers: &Value) -> String {
     ghostex_gx_visual::questions::page_answers_message(id, title, answers)
 }
 

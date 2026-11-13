@@ -144,6 +144,13 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         }
         ActionKind::QuestionListMore => crate::questions::open_questions::more(state),
         ActionKind::QuestionListReset => crate::questions::open_questions::reset_pages(state),
+        ActionKind::ImportPageAnswers => {
+            let text = action
+                .param("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            effects.extend(crate::questions::page_import::import(state, text, false));
+        }
         ActionKind::QuestionForLater => {
             let id = action
                 .param("id")
@@ -177,7 +184,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                     .and_then(Value::as_str)
                     .unwrap_or_default()
             };
-            effects.extend(crate::questions::later::reply(state, field("id"), field("text")));
+            effects.extend(crate::questions::later::reply(
+                state,
+                field("id"),
+                field("text"),
+            ));
         }
         ActionKind::QuestionRemove => {
             let id = action

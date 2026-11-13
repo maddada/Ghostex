@@ -129,7 +129,12 @@ pub(super) fn with_read_only(page: Vec<u8>, note: &str) -> Vec<u8> {
     let Ok(html) = String::from_utf8(page) else {
         return Vec::new();
     };
-    // After `<head>` (never before the doctype, which would put the page in quirks mode).
+    in_head(html, &script).into_bytes()
+}
+
+/// `html` with `script` just after its `<head>` tag (never before the doctype, which would put the
+/// page in quirks mode), else after `<body>`, else first.
+pub(super) fn in_head(html: String, script: &str) -> String {
     let at = html
         .find("<head")
         .and_then(|head| html[head..].find('>').map(|close| head + close + 1))
@@ -139,8 +144,8 @@ pub(super) fn with_read_only(page: Vec<u8>, note: &str) -> Vec<u8> {
         })
         .unwrap_or(0);
     let mut out = html;
-    out.insert_str(at, &script);
-    out.into_bytes()
+    out.insert_str(at, script);
+    out
 }
 
 fn status(code: StatusCode) -> RoutedResponse {

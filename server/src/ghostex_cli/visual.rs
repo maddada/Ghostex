@@ -1,5 +1,6 @@
 //! `ghostex visual`: draw a ```visual block to a PNG so an agent can look at it before replying
-//! (`check`), and install the `$ghostex-visuals` skill (`install-skill`).
+//! (`check`), write a page as an exported page (`export`, visual_export.rs), and install the
+//! `$ghostex-visuals` skill (`install-skill`).
 //!
 //! CDXC:SessionChat 2026-10-06 SEE-ALSO:
 //! The block is laid out by packages/gx-visual, the same crate every chat client draws with (apps/desktop/src/app/native_chat/visual.rs, apps/mobile/app/src/chat/native/transcript/VisualBlock.tsx), so the check shows what the reader will see. skills/ghostex-visuals/SKILL.md tells agents to run it.
@@ -35,6 +36,7 @@ pub fn visual_command(args: &[String]) -> CliResult<()> {
             Ok(())
         }
         "check" => check_command(rest),
+        "export" => crate::ghostex_cli::visual_export::export_command(rest),
         "install-skill" => skills::install_visuals_skill_command(rest),
         other => Err(CliError::Other(format!(
             "Unknown visual command: {other}\n\n{}",

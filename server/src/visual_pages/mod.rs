@@ -6,10 +6,12 @@
 mod answers;
 mod builtin;
 mod drafts;
+mod exported;
 mod file_page;
 mod fit;
 mod guest;
 mod images;
+mod import;
 mod kit;
 mod notice;
 mod prepare;
@@ -25,9 +27,17 @@ mod version;
 
 pub(crate) use answers::{is_answers_route, submit as submit_answers};
 pub(crate) use drafts::{is_draft_route, read as read_draft, save as save_draft};
+pub(crate) use exported::{
+    download as download_exported_page, handle_export_http as handle_export_visual_page_http,
+    is_export_route, EXPORT_VISUAL_PAGE_ENDPOINT,
+};
 pub(crate) use file_page::page_for_file;
 pub(crate) use guest::{guest_file_page, guest_page, guest_page_answers_message};
 pub(crate) use images::{is_image_route, read as read_page_image, save as save_page_image};
+pub(crate) use import::{
+    handle_import_http as handle_import_visual_page_answers_http,
+    IMPORT_VISUAL_PAGE_ANSWERS_ENDPOINT,
+};
 pub(crate) use notice::{dismiss as dismiss_page_notice, is_notice_route};
 pub(crate) use prepare::{page_too_large, prepare_page};
 pub(crate) use publish::{

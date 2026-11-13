@@ -358,6 +358,11 @@ impl GhostexGpuiApp {
                 let _ = gpui_open_external_http_url(&url);
                 return;
             }
+            // The browser downloads the exported page; the page stays open.
+            VisualPageModalCommand::ExportPage { url } => {
+                let _ = gpui_open_external_http_url(&url);
+                return;
+            }
             VisualPageModalCommand::RefreshFailed { message } => {
                 self.dispatch_gpui_app_modal_toast(
                     "warning",
