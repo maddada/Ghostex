@@ -20,6 +20,8 @@ pub struct DropWrites {
     pub order: Option<Vec<String>>,
     pub pinned: Option<bool>,
     pub parked: Option<bool>,
+    /// New `sidebarOrder` numbers (sidebar session id, number), which order pinned rows.
+    pub sidebar_orders: Vec<(String, i64)>,
 }
 
 /// Where the moved row is drawn after the drop.
@@ -61,6 +63,15 @@ impl SidebarViewModel {
             rows.push(carried.clone());
         }
         for session in &mut rows {
+            if let Some((_, order)) = writes
+                .sidebar_orders
+                .iter()
+                .find(|(id, _)| *id == session.row.sidebar_session_id)
+            {
+                let mut row = (*session.row).clone();
+                row.sidebar_order = Some(*order);
+                session.row = Arc::new(row);
+            }
             if session.row.sidebar_session_id != moved {
                 continue;
             }

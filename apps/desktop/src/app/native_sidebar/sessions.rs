@@ -59,15 +59,11 @@ impl GhostexGpuiApp {
         let drag_group_id = group_id.clone();
         // Every local row drags: a drop on an Agents pane splits it (session_pane_placement.rs),
         // and the reorder drop line still shows only when the sort mode allows a reorder.
-        // Another machine's session in a merged project (`machineName`) has no place in this
-        // computer's groups to move to, except a pinned one among the Pinned rows it is drawn with
-        // (CDXC:Sidebar 2026-11-07 WHY in gx-core sidebar_drag/pinned_order.rs).
+        // CDXC:Sidebar 2026-11-13 WHY:
+        // User, of a project whose sessions run on another computer: "I can't drag to move a session between different sections for this project (can't reorder pinned sessions too)". Another machine's session (its project's own group, or a row of a merged project, `machineName`) takes the sidebar drops its own machine can perform: moving between Pinned, Sessions and Parked (pin and park calls go to that machine) and a place among the Pinned rows (`sidebarOrder`, gx-core sidebar_drag/session_drop.rs). Every other drop of it is refused by the store's plan (a remote row is never moved into another group or project, sidebar_drag/session_move.rs and session_handoff.rs), so it draws no line there.
         let unified = place == SessionRowPlace::UnifiedThread;
-        let reorders = place == SessionRowPlace::ProjectList
-            && !session.is_browser()
-            && !group.is_stale
-            && group.remote_machine_context.is_none()
-            && (session.details.get("machineName").is_none() || session.is_pinned);
+        let reorders =
+            place == SessionRowPlace::ProjectList && !session.is_browser() && !group.is_stale;
         // CDXC:RemoteMachines 2026-11-09 DECISION:
         // User: "i can't drag sessions from the sidebar onto the main work area to split it if they are remote machine projects pls fix". A session of another machine's project (its own group, as the Separate-by-machine tabs draw it, or a merged project's row) drags onto the Agents panes like a local one, pinned or not, coordinator or plain session; the sidebar still takes no drop of a row that `reorders` refuses, so it moves nowhere in this computer's list.
         let can_drag = !session.is_browser() && !group.is_stale;

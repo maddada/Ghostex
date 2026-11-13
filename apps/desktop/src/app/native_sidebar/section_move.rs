@@ -49,7 +49,9 @@ impl GhostexGpuiApp {
                 .iter()
                 .any(|session| session.session_id == session_id)
         })?;
-        if group.is_stale || group.remote_machine_context.is_some() {
+        // Another machine's group moves its rows between sections too: the pin and park calls go
+        // to that machine (CDXC:Sidebar 2026-11-13 in sessions.rs).
+        if group.is_stale {
             return None;
         }
         let from = section_of(group, session_id)?;
