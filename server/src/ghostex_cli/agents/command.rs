@@ -73,16 +73,14 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 }
             }
         }
+        // CDXC:AgentMessaging 2026-11-13 DECISION: PR #580 made `agents send` print one short line
+        // (`--json` for the full answer); the user had that part taken out on merge ("I don't get
+        // why he added this"), so send prints its full JSON answer like create and close.
+        "send" if args.main_coordinator => {
+            print_json(&main_coordinator::send(&args)?);
+        }
         "send" => {
-            let result = if args.main_coordinator {
-                main_coordinator::send(&args)?
-            } else {
-                delivery::send(&args)?
-            };
-            match delivery::send_answer_line(&result).filter(|_| !args.json) {
-                Some(line) => println!("{line}"),
-                None => print_json(&result),
-            }
+            print_json(&delivery::send(&args)?);
         }
         "create" => {
             print_json(&lifecycle::create(&args)?);
