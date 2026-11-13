@@ -242,27 +242,37 @@ impl NativeChatView {
             let mut rows = vec![heading];
             if expanded || motion.is_some() {
                 let body = self.tool_row_list(&id, &tools, &visible, p, cx);
-                let body = disclosure_body(
-                    p,
-                    DisclosureRail::Marker,
-                    ROW_GAP,
-                    key.clone(),
-                    "Collapse tool calls",
-                    body,
-                    cx,
-                );
-                // In the card the rows sit under a hairline, inset as the tool card's are.
+                // In the card the rows sit under a hairline, inset as the tool card's are, with
+                // no rail: the card's header already says which rows it opened, so each row
+                // takes the card's full width and its glyph lines up under the header's chevron.
+                //
+                // CDXC:SessionChat 2026-11-13 DECISION: User, of the thin line beside the rows
+                // of an opened "1 tool call" card in a Quiet View line: "no need for this line
+                // here and widen the tool call inside to take up the space when that line is
+                // gone". Only this boxed card drops it; every other open tool group keeps its
+                // rail (`disclosure_body`). The phone matches (ToolRows.tsx).
                 let body = if card_header {
                     div()
                         .w_full()
                         .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(ROW_GAP * p.scale))
                         .p(px(BOXED_BODY_PAD * p.scale))
                         .border_t_1()
                         .border_color(super::cards::SINGLE_LINE_CARD.hairline(p))
-                        .child(body)
+                        .children(body)
                         .into_any_element()
                 } else {
-                    body
+                    disclosure_body(
+                        p,
+                        DisclosureRail::Marker,
+                        ROW_GAP,
+                        key.clone(),
+                        "Collapse tool calls",
+                        body,
+                        cx,
+                    )
                 };
                 let gap = if card_header { 0.0 } else { ROW_GAP * p.scale };
                 rows.push(self.disclosure_body_motion(&key, motion, gap, body));
