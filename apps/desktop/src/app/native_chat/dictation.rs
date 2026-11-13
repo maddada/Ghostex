@@ -681,7 +681,7 @@ impl NativeChatView {
                     _ => "Transcribing".to_string(),
                 };
                 if recording {
-                    // CDXC:Dictate 2026-11-13 DECISION: The recording pill reads like the reference app's: ✕ cancel on the left, the clock and the waveform in the middle, a filled ✓ that finishes on the right (the brief for Q2918), and "Can't hear you" after 3 seconds of near-silence (Q2919). Both ends are 18px buttons 4px from the pill's edge.
+                    // CDXC:Dictate 2026-11-13 DECISION: The recording pill: ✕ cancel on the left, the clock and the waveform, and "Can't hear you" after 3 seconds of near-silence (Q2919). User (Q2918 "pill"): no ✓ finish in it; the microphone's Stop finishes.
                     let (levels, quiet) = {
                         let dictate = control.dictate.read(cx);
                         (
@@ -689,42 +689,15 @@ impl NativeChatView {
                             dictate.cant_hear(),
                         )
                     };
-                    let finish = div()
-                        .id("dictation-finish")
-                        .role(gpui::Role::Button)
-                        .aria_label("Finish and transcribe")
-                        .chat_cursor_pointer()
-                        .flex_shrink_0()
-                        .size(px(18.0 * s))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded_full()
-                        .bg(p.control_primary)
-                        .hover(|style| style.opacity(0.85))
-                        .tooltip(|window, cx| {
-                            gpui_component::tooltip::Tooltip::new("Finish and transcribe")
-                                .build(window, cx)
-                        })
-                        .child(
-                            gpui::svg()
-                                .path("titlebar/check.svg")
-                                .size(px(11.0 * s))
-                                .text_color(p.background),
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            if let Some(control) = this.dictation.as_ref() {
-                                let dictate = control.dictate.clone();
-                                dictate.update(cx, |dictate, cx| dictate.stop_recording(cx));
-                            }
-                            cx.notify();
-                        }));
                     div()
                         .h(px(PILL_HEIGHT * s))
                         .flex()
                         .items_center()
                         .gap(px(6.0 * s))
-                        .px(px(4.0 * s))
+                        // The ✕'s 11px mark, centred in its 18px button 4px in, starts 7.5px in;
+                        // the waveform or "Can't hear you" ends as far from the other end.
+                        .pl(px(4.0 * s))
+                        .pr(px(8.0 * s))
                         .rounded_full()
                         .whitespace_nowrap()
                         .child(close(false, cx))
@@ -753,7 +726,6 @@ impl NativeChatView {
                                     .child("Can't hear you"),
                             )
                         })
-                        .child(finish)
                 } else {
                     div()
                         .h(px(PILL_HEIGHT * s))
