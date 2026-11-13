@@ -5792,8 +5792,13 @@ Q335 with the first option").
 A Ghostex form or page you want to answer another time can be put off
 with For later on its card: it stops counting as unanswered (no pink dot, no count
 on the chat's ? pill, no notification) but stays answerable, and Back to
-unanswered on the card undoes it. Answering it ends For later by itself. The
-choice is kept by Ghostex, so the computer, the web page and the phone agree.
+unanswered on the card undoes it. Answering it ends For later by itself. To put
+one off for a while instead, Snooze it for 1 hour, 6 hours or 24 hours: a form
+has Snooze beside Skip all (on its card and in its popup), and a page's floating
+window has Snooze in its ⋯ menu, which also closes the window. A snoozed form or
+page leaves the list of things that need you and the unanswered counts until its
+time is up, then comes back by itself; the agent is not told. The choice is kept
+by Ghostex, so the computer, the web page and the phone agree.
 The ? pill on the chat's working row opens Chat Resources, a list of the chat's
 generated content: Ghostex forms, Ghostex pages (with or without questions) and Ghostex visuals,
 each row marked by its icon. A small dropdown at the top right, on the header's

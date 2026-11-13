@@ -22,6 +22,18 @@ const SOURCE_CHECK_EVERY: Duration = Duration::from_secs(2);
 const RELOAD_AFTER_FLUSH: &str =
     "try{window.ghostex&&ghostex.__flush&&ghostex.__flush();}finally{location.reload();}";
 
+/// The project and session that published the page (a gxserver from 2026-11-13 on says), for
+/// the ⋯ menu's Snooze (`more_menu.rs`).
+fn page_session(status: &serde_json::Value) -> Option<(String, String)> {
+    let text = |key: &str| {
+        status[key]
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    Some((text("projectId")?, text("sessionId")?))
+}
+
 /// `(answered, total)` of the page's questions, when it has any (a gxserver from 2026-11-11 on
 /// says; an older one leaves both out).
 fn question_counts(status: &serde_json::Value) -> Option<(u64, u64)> {
@@ -44,8 +56,13 @@ impl GpuiVisualPageModalWindow {
         };
         let remote = self.remote.clone();
         self._source_watch = Some(cx.spawn(async move |this, cx| {
+            let mut first = true;
             loop {
-                cx.background_executor().timer(SOURCE_CHECK_EVERY).await;
+                // The first ask goes out at once, so the ⋯ menu knows the page's session (Snooze)
+                // as soon as the window is open.
+                if !std::mem::replace(&mut first, false) {
+                    cx.background_executor().timer(SOURCE_CHECK_EVERY).await;
+                }
                 let status = gx_rpc(
                     remote.clone(),
                     "/api/readVisualPageSource",
@@ -58,11 +75,15 @@ impl GpuiVisualPageModalWindow {
                 };
                 let questions_left = status["questionsLeft"].as_bool();
                 let counts = question_counts(&status);
+                let session = page_session(&status);
                 if status["refreshable"] != true && questions_left.is_none() {
                     return;
                 }
                 let changed = status["refreshable"] == true && status["changed"] == true;
                 let updated = this.update(cx, |this, cx| {
+                    if session.is_some() {
+                        this.page_session = session;
+                    }
                     if this.source_changed != changed && !this.refreshing {
                         this.source_changed = changed;
                         cx.notify();

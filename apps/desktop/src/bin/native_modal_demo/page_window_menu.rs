@@ -4,7 +4,9 @@
 //! `more_menu.rs` places it (right edge on the ⋯ button's, 6pt below it). Run it with
 //! `GHOSTEX_NATIVE_MODAL_DEMO=page-window-menu`.
 use super::page_band_geometry::{CONTROL_INSET, CONTROL_SIZE, TOP_BAND_HEIGHT};
-use super::page_window_menu_panel::{MENU_WIDTH, MenuInk, height, panel};
+use super::page_window_menu_panel::{
+    MENU_WIDTH, MenuInk, SNOOZE_HOURS, SUBMENU_WIDTH, height, menu_rows, panel, snooze_rows,
+};
 use gpui::{
     App, AppContext as _, Context, IntoElement, ParentElement as _, Render, Styled as _, Window,
     div, px, rgb, rgba, svg,
@@ -39,6 +41,7 @@ impl Render for PageWindowMenuDemo {
             hover: rgb(0xffffff).opacity(0.08).into(),
             border: rgb(0xffffff).opacity(0.12).into(),
             fill: rgb(0x2b2c30).into(),
+            muted: rgb(0xfcfcfc).opacity(0.55).into(),
             row_height: 34.0,
         };
         // The ⋯ button is the first of the three on the right: its right edge sits two buttons
@@ -96,8 +99,30 @@ impl Render for PageWindowMenuDemo {
                     .left(px(menu_left))
                     .top(px(menu_top))
                     .w(px(MENU_WIDTH))
-                    .h(px(height(ink.row_height)))
-                    .child(panel(ink, std::rc::Rc::new(|_, _| {}))),
+                    .h(px(height(4, ink.row_height)))
+                    .child(panel(
+                        "visual-page-more-menu",
+                        ink,
+                        menu_rows(true),
+                        Some(3),
+                        std::rc::Rc::new(|_, _| {}),
+                    )),
+            )
+            // The Snooze lengths, beside the Snooze row toward the page (more_menu.rs).
+            .child(
+                div()
+                    .absolute()
+                    .left(px(menu_left - SUBMENU_WIDTH - 4.0))
+                    .top(px(menu_top + 1.0 + 3.0 * ink.row_height))
+                    .w(px(SUBMENU_WIDTH))
+                    .h(px(height(SNOOZE_HOURS.len(), ink.row_height)))
+                    .child(panel(
+                        "visual-page-snooze-menu",
+                        ink,
+                        snooze_rows(),
+                        None,
+                        std::rc::Rc::new(|_, _| {}),
+                    )),
             )
     }
 }

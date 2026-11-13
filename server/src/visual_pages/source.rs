@@ -54,7 +54,8 @@ fn page_id_param(body: &Value) -> Result<String, DomainStateError> {
 /// has no answer yet (`page_questions_left`; added 2026-11-11, so an older gxserver leaves it out);
 /// `questionsAnswered` and `questionsTotal` how many of its questions the reader's draft answers
 /// and how many it asks (`page_question_counts`, null for a page with no questions; added
-/// 2026-11-11 for the dock's page rows).
+/// 2026-11-11 for the dock's page rows); `projectId` and `sessionId` the session that published
+/// it, null for none (added 2026-11-13 for the page window's Snooze).
 pub(crate) fn handle_read_http(
     state: &AppState,
     endpoint_path: String,
@@ -75,6 +76,13 @@ pub(crate) fn handle_read_http(
         _ => false,
     };
     let counts = super::questions::page_question_counts(&state.paths.root_dir, &id);
+    // The session that published the page, for the page window's Snooze (added 2026-11-13).
+    let (project_id, session_id) = record
+        .as_ref()
+        .and_then(|record| record.get("sessionRef"))
+        .and_then(Value::as_str)
+        .map(crate::agent_hooks::probing::parse_global_session_ref)
+        .unwrap_or((None, None));
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
@@ -87,6 +95,8 @@ pub(crate) fn handle_read_http(
                 "questionsLeft": super::questions::page_questions_left(&state.paths.root_dir, &id),
                 "questionsAnswered": counts.map(|(answered, _)| answered),
                 "questionsTotal": counts.map(|(_, total)| total),
+                "projectId": project_id,
+                "sessionId": session_id,
             }),
         ),
     )

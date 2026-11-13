@@ -794,6 +794,63 @@ impl NativeChatView {
             .on_click(cx.listener(move |this, _, _, cx| this.invoke(action.clone(), cx)))
             .into_any_element()
     }
+
+    /// A soft-fill button (`ask_soft_button`'s look) that opens the chat's dropdown at the press
+    /// with `rows` (`{label, command}`), in whichever window the button is drawn: the chat's, or a
+    /// form's popup (resource_modal.rs). The dock's Snooze opens its lengths the same way
+    /// (work_actions.rs).
+    pub(super) fn ask_soft_menu_button(
+        &self,
+        id: impl Into<gpui::ElementId>,
+        label: String,
+        rows: Vec<Value>,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let (rest, hover) = if p.light { (0.07, 0.11) } else { (0.10, 0.15) };
+        let hover_fill = p.foreground.opacity(hover);
+        div()
+            .id(id)
+            .role(gpui::Role::Button)
+            .aria_label(label.clone())
+            .h(px(28.0 * s))
+            .px(px(11.0 * s))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(5.0 * s))
+            .rounded(px(8.0 * s))
+            .bg(p.foreground.opacity(rest))
+            .text_color(p.foreground)
+            .text_size(px(13.0 * s))
+            .font_weight(FontWeight::MEDIUM)
+            .child(label)
+            .child(
+                gpui::svg()
+                    .path("titlebar/chevron-down.svg")
+                    .size(px(12.0 * s))
+                    .text_color(p.muted),
+            )
+            .chat_cursor_pointer()
+            .hover(move |style| style.bg(hover_fill))
+            .on_click(
+                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    let at = event.position();
+                    let in_main = this
+                        .open_main_window(cx)
+                        .is_none_or(|main| main == window.window_handle());
+                    if in_main {
+                        this.show_chat_menu_at(rows.clone(), at, 160.0, window, cx);
+                    } else {
+                        this.show_chat_menu_in_window_at(rows.clone(), at, 160.0, window, cx);
+                    }
+                }),
+            )
+            .into_any_element()
+    }
 }
 
 /// What a question form's footer says about the questions left blank; the footer shows it behind an

@@ -617,6 +617,7 @@ impl NativeChatView {
             vec![
                 status_slot,
                 self.later_button(id, enabled, later, p, cx),
+                self.snooze_button(id, enabled, p, cx),
                 self.skip_all_button(id, enabled, p, cx),
                 self.ask_primary_button(
                     SharedString::from(format!("question-form-send:{id}")),
@@ -929,6 +930,38 @@ impl NativeChatView {
             "Skip all".to_string(),
             Some(("Skip all".to_string(), skip_all_chord())),
             json!({"type":"formSkipAll","form":id}),
+            p,
+            cx,
+        )
+    }
+
+    /// "Snooze", beside Skip all while the form is open: the dock's lengths (1 hour, 6 hours, 24
+    /// hours) in the chat's dropdown; picking one puts the form off For later until then, when
+    /// gxserver brings it back by itself (gx-chat-core questions/later.rs `snooze`). The agent is
+    /// told nothing.
+    ///
+    /// CDXC:SessionChat 2026-11-13 DECISION:
+    /// User: "add snooze to the inline page under the 3 dots menu (top). Also same, we need a snooze button for inline questions (Ghostex Forms)." The form card and its popup get Snooze next to Send and Skip all, with the dock's snooze model and lengths, so a snoozed form leaves the dock and the unanswered counts until it comes back; the page window's ⋯ menu gets the same (apps/desktop/src/app/window/visual_page_modal/more_menu.rs).
+    fn snooze_button(
+        &self,
+        id: &str,
+        enabled: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        if !enabled {
+            return div().into_any_element();
+        }
+        let rows = [(1, "1 hour"), (6, "6 hours"), (24, "24 hours")]
+            .into_iter()
+            .map(|(hours, label)| {
+                json!({"label": label, "command": {"type": "snoozeQuestion", "id": id, "hours": hours}})
+            })
+            .collect();
+        self.ask_soft_menu_button(
+            SharedString::from(format!("question-form-snooze:{id}")),
+            "Snooze".to_string(),
+            rows,
             p,
             cx,
         )

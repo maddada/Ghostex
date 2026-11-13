@@ -128,9 +128,12 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// The page's file changed on disk since it was published (`source.rs`).
     source_changed: bool,
     refreshing: bool,
-    /// The ⋯ menu is open (`more_menu.rs`), and where its button was last drawn.
-    more_menu_open: bool,
+    /// The open ⋯ menu (`more_menu.rs`), and where its button was last drawn.
+    more_menu: Option<more_menu::OpenMoreMenu>,
     more_button: Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
+    /// The project and session that published the page, as gxserver names them
+    /// (`readVisualPageSource`, `source.rs`), for the menu's Snooze.
+    page_session: Option<(String, String)>,
     /// The press in another window counted last, so the same press is never counted twice.
     counted_press: Option<Instant>,
     _source_watch: Option<Task<()>>,
@@ -223,7 +226,8 @@ impl GpuiVisualPageModalWindow {
             page_id,
             remote,
             source_changed: false,
-            more_menu_open: false,
+            more_menu: None,
+            page_session: None,
             more_button: Rc::default(),
             refreshing: false,
             counted_press: None,
@@ -586,7 +590,7 @@ impl GpuiVisualPageModalWindow {
             window.prevent_default();
             cx.stop_propagation();
             // Escape closes the ⋯ menu first, then the window.
-            if self.more_menu_open {
+            if self.more_menu.is_some() {
                 self.close_more_menu(cx);
                 return;
             }

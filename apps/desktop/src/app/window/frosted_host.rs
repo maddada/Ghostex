@@ -49,6 +49,8 @@ pub(crate) enum FrostedHostKind {
     /// sidebar menu's look, over the page window, whose page is a native view nothing in the
     /// window can draw over.
     PageWindowMenu,
+    /// That menu's Snooze lengths, beside it.
+    PageWindowSubmenu,
 }
 
 /// How many stacked sidebar menu panels get a window of their own; deeper ones share none.
@@ -114,6 +116,7 @@ thread_local! {
     static TERMINAL_BAR_FLYOUT_HOST: RefCell<HostSlot> = RefCell::default();
     static BOARD_CARD_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static PAGE_WINDOW_MENU_HOST: RefCell<HostSlot> = RefCell::default();
+    static PAGE_WINDOW_SUBMENU_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_MENU_HOSTS: RefCell<Vec<HostSlot>> = RefCell::default();
 }
 
@@ -142,6 +145,9 @@ fn with_slot<R>(kind: FrostedHostKind, f: impl FnOnce(&mut HostSlot) -> R) -> R 
         }
         FrostedHostKind::PageWindowMenu => {
             PAGE_WINDOW_MENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
+        FrostedHostKind::PageWindowSubmenu => {
+            PAGE_WINDOW_SUBMENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
         }
         FrostedHostKind::SidebarMenu(level) => SIDEBAR_MENU_HOSTS.with(|slots| {
             let mut slots = slots.borrow_mut();
@@ -228,6 +234,7 @@ pub(crate) fn hide_frosted_hosts_over(parent: AnyWindowHandle, cx: &mut App) {
         FrostedHostKind::TerminalBarFlyout,
         FrostedHostKind::BoardCardMenu,
         FrostedHostKind::PageWindowMenu,
+        FrostedHostKind::PageWindowSubmenu,
     ]
     .into_iter()
     .chain(
@@ -347,7 +354,8 @@ fn open_host(
                 // window is simply rounded to the panel's corners.
                 FrostedHostKind::SidebarMenu(_)
                 | FrostedHostKind::BoardCardMenu
-                | FrostedHostKind::PageWindowMenu => {
+                | FrostedHostKind::PageWindowMenu
+                | FrostedHostKind::PageWindowSubmenu => {
                     window.set_background_corner_radius(gpui::px(SIDEBAR_MENU_HOST_RADIUS))
                 }
                 FrostedHostKind::DocsSelectionToolbar => {
