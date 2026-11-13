@@ -502,6 +502,7 @@ fn build_row(
         .as_deref()
         .filter(|report| !report.trim().is_empty())
         .map(|report| report_headline(report, 140));
+    let report_line = last_report.clone();
     let detail = match state {
         ThreadState::Waiting => session
             .and_then(waiting_prompt)
@@ -534,6 +535,12 @@ fn build_row(
         // What a reference to the thread in the coordinator's chat names (the + mention's form).
         "globalRef": crate::ids::create_global_session_ref(server_id, &thread.project_id, &thread.session_id),
     });
+    // Its last report on its own, which a work item pill's card in the Workers list quotes while
+    // the row's line says what it is doing now (gx-chat-core extras/coordinator_threads.rs
+    // `attach_items`, CDXC:Coordinators 2026-11-13).
+    if let Some(report) = &report_line {
+        row["lastReport"] = json!(report);
+    }
     if is_recent(&active_at, now) {
         row["recent"] = json!(true);
     }
@@ -675,6 +682,13 @@ fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::U
         "detail": detail,
         "activeAt": thread.updated_at,
     });
+    if let Some(report) = thread
+        .last_report
+        .as_deref()
+        .filter(|report| !report.trim().is_empty())
+    {
+        row["lastReport"] = json!(report_headline(report, 140));
+    }
     if is_recent(&thread.updated_at, now) {
         row["recent"] = json!(true);
     }

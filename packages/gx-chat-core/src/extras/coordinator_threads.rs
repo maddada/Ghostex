@@ -48,7 +48,73 @@ pub struct CoordinatorThreadRow {
     /// That computer's name, which the row shows.
     #[serde(default)]
     pub computer: String,
+    /// The first [`ITEMS_SHOWN`] work items the thread is on, as pills on a second line under the
+    /// row ([`attach_items`]); empty for a thread on none, which keeps one line.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<WorkPill>,
+    /// "+2" for the items past those, or "".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub more_items: String,
+    /// The "+N" pill's hover: one line per item it stands for.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub more_items_tooltip: String,
+    /// The thread's last report (gxserver's `lastReport`), which an item's card quotes.
+    #[serde(skip)]
+    pub last_report: String,
 }
+
+/// A work item a thread is on, as a pill in its Workers row, and the card that pill shows on hover
+/// (a tap on the phone).
+///
+/// CDXC:Coordinators 2026-11-13 DECISION:
+/// User, of the Workers pill's list: "when I click on Workers here, can I see pills for each item
+/// they're working on so I can hover over them to read more?" On the design page they picked
+/// (Q3020 B) a second line under each worker with its items as pills, two then "+N", the first
+/// line unchanged and a thread on no item keeping one line; a click shows the item in the Work
+/// panel (Q3021); on the phone a tap shows the card with a Show in Work button (Q3022); finished
+/// threads under Show recent list all their items with the finished ones dimmed (Q3023); the card
+/// quotes the thread's last report (Q3024); the pill is neutral with the Work panel's teal icon
+/// (Q3025). Dropped items are left out.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkPill {
+    /// The Work panel row's key, `work:402`, which the click focuses.
+    pub key: String,
+    /// `W402`.
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub title: String,
+    pub status: String,
+    /// "In progress", "Waiting", "Finished" (work_cards.rs `status_label`).
+    pub status_label: String,
+    /// Finished: drawn dimmed.
+    pub done: bool,
+    /// Where it stands now, as the coordinator last said.
+    pub now: String,
+    /// "3 of 5 steps", or "".
+    pub steps: String,
+    /// Its questions and tasks still open for the user.
+    pub asks: Vec<WorkPillAsk>,
+    /// The thread's last report, or "".
+    pub report: String,
+    /// The whole card as text, its first line the heading (the desktop's card tooltip).
+    pub tooltip: String,
+    /// What a click sends: `jumpToWorkCard` at `key`.
+    pub command: Value,
+}
+
+/// One open ask on a pill's card.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct WorkPillAsk {
+    pub tag: String,
+    pub text: String,
+}
+
+/// The items a row shows as pills before "+N".
+pub const ITEMS_SHOWN: usize = 2;
+
+/// The last line of an item's card: what a click on its pill does.
+pub const SHOW_IN_WORK_HINT: &str = "Click to show it in Work";
 
 /// The panel.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -99,6 +165,130 @@ pub fn is_coordinator(threads: Option<&Value>) -> bool {
 
 fn plural(count: usize, one: &str, many: &str) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
+}
+
+/// The pill of `item` (a row of `coordinatorThreads.work.items`) on a thread whose last report is
+/// `report`.
+fn work_pill(item: &Value, report: &str) -> WorkPill {
+    let status = text(item, "status");
+    let reference = text(item, "ref");
+    let title = text(item, "title");
+    let now = text(item, "now");
+    let (done, total) = (
+        item["steps"]["done"].as_u64().unwrap_or(0),
+        item["steps"]["total"].as_u64().unwrap_or(0),
+    );
+    let steps = if total > 0 {
+        format!("{done} of {total} steps")
+    } else {
+        String::new()
+    };
+    let asks: Vec<WorkPillAsk> = item["asks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|ask| ask["open"] == true)
+        .map(|ask| WorkPillAsk {
+            tag: text(ask, "tag"),
+            text: text(ask, "text"),
+        })
+        .collect();
+    let status_label = crate::extras::work_cards::status_label(&status).to_string();
+    let mut lines = vec![format!("{reference} {title}")];
+    lines.push(
+        [status_label.as_str(), steps.as_str()]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" \u{b7} "),
+    );
+    if !now.is_empty() {
+        lines.push(format!("Now: {now}"));
+    }
+    for ask in &asks {
+        lines.push(if ask.tag.is_empty() {
+            ask.text.clone()
+        } else {
+            format!("{}: {}", ask.tag, ask.text)
+        });
+    }
+    if !report.is_empty() {
+        lines.push(format!("Last report: {report}"));
+    }
+    lines.push(SHOW_IN_WORK_HINT.to_string());
+    let key = text(item, "key");
+    WorkPill {
+        command: json!({"type": "jumpToWorkCard", "key": key}),
+        key,
+        reference,
+        title,
+        done: status == "finished",
+        status,
+        status_label,
+        now,
+        steps,
+        asks,
+        report: report.to_string(),
+        tooltip: lines
+            .into_iter()
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }
+}
+
+/// Puts on each row the work items its thread is on (`work.items[].threads`): the open ones first,
+/// then the finished ones, each newest first; dropped items and threads on no item get none.
+fn attach_items(rows: &mut [CoordinatorThreadRow], work: Option<&Value>) {
+    let items: Vec<&Value> = work
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| text(item, "kind") == "item" && text(item, "status") != "dropped")
+        .collect();
+    if items.is_empty() {
+        return;
+    }
+    for row in rows {
+        let mut on: Vec<&Value> = items
+            .iter()
+            .copied()
+            .filter(|item| {
+                item["threads"].as_array().is_some_and(|threads| {
+                    threads.iter().any(|thread| {
+                        text(thread, "projectId") == row.project_id
+                            && text(thread, "sessionId") == row.session_id
+                            && text(thread, "serverId") == row.server_id
+                    })
+                })
+            })
+            .collect();
+        on.sort_by(|left, right| {
+            (text(left, "status") == "finished")
+                .cmp(&(text(right, "status") == "finished"))
+                .then_with(|| text(right, "at").cmp(&text(left, "at")))
+        });
+        // gxserver's `lastReport`; a gxserver from before it sends none, and a thread at rest
+        // shows its last report as its line, so that line stands in.
+        let report = if !row.last_report.is_empty() {
+            row.last_report.clone()
+        } else if !row.working && !row.waiting && !row.needs_approval {
+            row.detail.clone()
+        } else {
+            String::new()
+        };
+        let rest = on.split_off(on.len().min(ITEMS_SHOWN));
+        row.items = on.iter().map(|item| work_pill(item, &report)).collect();
+        if !rest.is_empty() {
+            row.more_items = format!("+{}", rest.len());
+            row.more_items_tooltip = rest
+                .iter()
+                .map(|item| format!("{} {}", text(item, "ref"), text(item, "title")))
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
+    }
 }
 
 /// Moves the list to `step`; the first two steps drop the full list "N more" read.
@@ -275,6 +465,8 @@ fn parse_rows(rows: Option<&Value>) -> Vec<(String, CoordinatorThreadRow)> {
                     lifecycle_state: text(row, "lifecycleState"),
                     server_id: text(row, "serverId"),
                     computer: text(row, "computer"),
+                    last_report: text(row, "lastReport"),
+                    ..CoordinatorThreadRow::default()
                 },
             )
         })
@@ -360,6 +552,8 @@ pub fn coordinator_threads_panel(
             .filter(|row| in_flight(row) || (step > 0 && row.recent))
             .collect(),
     };
+    let mut rows = rows;
+    attach_items(&mut rows, threads.get("work"));
     // With no recent rows "Show recent" would add nothing, so the first link is already "N more".
     let (more_label, more_step) = if hidden == 0 {
         if step > 0 && total > flying {

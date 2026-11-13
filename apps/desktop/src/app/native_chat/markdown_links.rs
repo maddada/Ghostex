@@ -66,6 +66,17 @@ pub(super) fn transcript_link_color(appearance: &ChatAppearance) -> Option<Hsla>
     hex_color(palette.get("url")?)
 }
 
+/// The Work panel's teal (`board` in the shared reference palette) for this chat's light or dark
+/// mode: a work item pill's icon in the Workers list (coordinator_threads.rs).
+pub(super) fn board_tint(appearance: &ChatAppearance) -> Option<Hsla> {
+    let palette = if appearance.light {
+        &VISUAL.transcript.light
+    } else {
+        &VISUAL.transcript.dark
+    };
+    hex_color(palette.get("board")?)
+}
+
 /// The color a reference pill uses inside an editable composer.
 ///
 /// CDXC:SessionChat 2026-09-18 WHY:

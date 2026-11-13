@@ -29,12 +29,33 @@ const APPROVAL_COLOR: u32 = crate::app::native_sidebar::status::APPROVAL_COLOR;
 const ROW_HEIGHT: f32 = 28.0;
 const ROW_GAP: f32 = 2.0;
 const LIST_MAX: f32 = 360.0;
+/// The second line of a row whose thread is on work items: its pills (`items_line`).
+const ITEMS_LINE_HEIGHT: f32 = 22.0;
+const ITEM_PILL_HEIGHT: f32 = 19.0;
+const ITEM_PILL_MAX: f32 = 230.0;
+
+fn row_height(row: &Value) -> f32 {
+    if row["items"]
+        .as_array()
+        .is_some_and(|items| !items.is_empty())
+    {
+        ROW_HEIGHT + ITEMS_LINE_HEIGHT
+    } else {
+        ROW_HEIGHT
+    }
+}
 
 /// The Workers pill's menu: the header line, the rows and "Show recent" / "N more" / "Show fewer".
 pub(super) fn threads_menu_height(panel: &Value) -> f32 {
-    let rows = panel["rows"].as_array().map_or(0, Vec::len)
-        + usize::from(!text(panel, "emptyLabel").is_empty());
-    let list = (rows as f32 * ROW_HEIGHT + rows.saturating_sub(1) as f32 * ROW_GAP).min(LIST_MAX);
+    let listed = panel["rows"].as_array();
+    let rows = listed.map_or(0, Vec::len) + usize::from(!text(panel, "emptyLabel").is_empty());
+    let heights: f32 = listed.into_iter().flatten().map(row_height).sum::<f32>()
+        + if text(panel, "emptyLabel").is_empty() {
+            0.0
+        } else {
+            ROW_HEIGHT
+        };
+    let list = (heights + rows.saturating_sub(1) as f32 * ROW_GAP).min(LIST_MAX);
     let footer = if text(panel, "moreLabel").is_empty() {
         0.0
     } else {
@@ -186,13 +207,12 @@ impl NativeChatView {
             "projectId": row["projectId"],
             "sessionId": row["sessionId"],
         });
-        div()
+        let key = text(row, "key");
+        let items = self.items_line(row, &key, p, cx);
+        let line = div()
             .id(gpui::SharedString::from(format!(
-                "chat-coordinator-thread:{}",
-                text(row, "key")
+                "chat-coordinator-thread-line:{key}"
             )))
-            .role(gpui::Role::Button)
-            .aria_label(format!("Open worker {title}"))
             .flex()
             .items_center()
             .gap(px(8.0 * s))
@@ -200,11 +220,6 @@ impl NativeChatView {
             .min_w_0()
             .flex_shrink_0()
             .h(px(ROW_HEIGHT * s))
-            .px(px(4.0 * s))
-            .rounded(px(5.0 * s))
-            .text_size(px(13.0 * s))
-            .chat_cursor_pointer()
-            .hover(|style| style.bg(p.foreground.opacity(0.06)))
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
             })
@@ -223,7 +238,7 @@ impl NativeChatView {
                     .max_w(px(300.0 * s))
                     .truncate()
                     .text_color(p.foreground)
-                    .child(title),
+                    .child(title.clone()),
             )
             .when(needs_approval, |this| {
                 this.child(
@@ -282,11 +297,139 @@ impl NativeChatView {
                         .text_color(p.muted)
                         .child(branch),
                 )
-            })
+            });
+        div()
+            .id(gpui::SharedString::from(format!(
+                "chat-coordinator-thread:{key}"
+            )))
+            .role(gpui::Role::Button)
+            .aria_label(format!("Open worker {title}"))
+            .flex()
+            .flex_col()
+            .w_full()
+            .min_w_0()
+            .flex_shrink_0()
+            .h(px(row_height(row) * s))
+            .px(px(4.0 * s))
+            .rounded(px(5.0 * s))
+            .text_size(px(13.0 * s))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.06)))
+            .child(line)
+            .children(items)
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.invoke(command.clone(), cx);
                 this.close_pill_menu(cx);
             }))
             .into_any_element()
+    }
+
+    /// A row's second line: a pill per work item its thread is on (two, then "+N"), under its
+    /// title. A pill's hover is the item's card; its click shows the item in the Work panel
+    /// (`jumpToWorkCard`) instead of opening the thread. The pills, cards and order come from the
+    /// core (gx-chat-core extras/coordinator_threads.rs `attach_items`, where the user's decision
+    /// lives).
+    fn items_line(
+        &self,
+        row: &Value,
+        key: &str,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let items = row["items"].as_array().filter(|items| !items.is_empty())?;
+        let s = p.scale;
+        let tint = super::markdown_links::board_tint(p).unwrap_or(p.muted);
+        let pill = |id: String| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .flex()
+                .items_center()
+                .flex_shrink_0()
+                .gap(px(4.0 * s))
+                .h(px(ITEM_PILL_HEIGHT * s))
+                .px(px(6.0 * s))
+                .rounded_full()
+                .border(px(s))
+                .border_color(p.foreground.opacity(0.1))
+                .text_size(px(12.0 * s))
+                .whitespace_nowrap()
+                .overflow_hidden()
+        };
+        let mut line = div()
+            .flex()
+            .items_center()
+            .gap(px(4.0 * s))
+            .h(px(ITEMS_LINE_HEIGHT * s))
+            .pb(px(3.0 * s))
+            // Under the title, past the status dot's column.
+            .pl(px(21.0 * s))
+            .min_w_0()
+            .overflow_hidden();
+        for item in items {
+            let reference = text(item, "ref");
+            let card = text(item, "tooltip");
+            let command = item["command"].clone();
+            line = line.child(
+                pill(format!("chat-coordinator-thread-item:{key}:{reference}"))
+                    .role(gpui::Role::Button)
+                    .aria_label(format!("Show {reference} in Work"))
+                    .max_w(px(ITEM_PILL_MAX * s))
+                    .when(item["done"] == true, |pill| pill.opacity(0.55))
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .tooltip(move |window, cx| {
+                        crate::app::native_sidebar::tooltips::sidebar_style_card_tooltip(
+                            card.clone(),
+                            0.0,
+                            0.0,
+                            window,
+                            cx,
+                        )
+                    })
+                    .child(
+                        gpui::svg()
+                            .path("titlebar/layout-board-split.svg")
+                            .flex_shrink_0()
+                            .size(px(12.0 * s))
+                            .text_color(tint),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(p.foreground)
+                            .child(reference),
+                    )
+                    .child(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .text_color(p.card_muted)
+                            .child(text(item, "title")),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                        this.close_pill_menu(cx);
+                    })),
+            );
+        }
+        let more = text(row, "moreItems");
+        if !more.is_empty() {
+            let rest = text(row, "moreItemsTooltip");
+            line = line.child(
+                pill(format!("chat-coordinator-thread-items-more:{key}"))
+                    .text_color(p.muted)
+                    .tooltip(move |window, cx| {
+                        crate::app::native_sidebar::tooltips::sidebar_style_tooltip(
+                            rest.clone(),
+                            window,
+                            cx,
+                        )
+                    })
+                    .child(more),
+            );
+        }
+        Some(line.into_any_element())
     }
 }
