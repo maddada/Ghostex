@@ -60,7 +60,7 @@ Web build
 
 Checks and generators
   typecheck               root gate (storage lint, Help files, tsc, release scripts, formatting)
-  format                  format every app-owned file (cargo fmt per crate, prettier; tooling/format/scope.json)
+  format                  format every app-owned file (cargo fmt per crate, oxfmt; tooling/format/scope.json)
   format-check            fail when an app-owned file is not formatted (part of typecheck)
   desktop-typecheck       apps/desktop/tsconfig.json (CEF entry modules, Files embed page)
   test [<vitest arguments>]
