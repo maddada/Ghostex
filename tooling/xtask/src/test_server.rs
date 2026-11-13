@@ -101,6 +101,7 @@ pub fn run(args: &[String]) -> Res<i32> {
             let server = Server::load(name)?;
             set_network(&server, state)?;
             println!("Test server {name}'s online check now sees: {state}.");
+            warn_if_other_build(&server);
             Ok(0)
         }
         "list" => list(),
@@ -376,7 +377,8 @@ fn start(args: &[String]) -> Res<i32> {
     let mut build = true;
     let mut dry_run = false;
     let mut binaries: Option<PathBuf> = None;
-    let mut network = "online".to_string();
+    // Online unless asked: a throwaway server should not depend on the shell reaching the agents' API hosts (the plan's default was the real check; online is deliberate, since the real check is what failed).
+    let mut network: Option<String> = None;
     let mut index = 0;
     while index < args.len() {
         let value = |index: usize| -> Res<&String> {
@@ -403,8 +405,9 @@ fn start(args: &[String]) -> Res<i32> {
                 }
             }
             "--network" => {
-                network = value(index)?.clone();
-                check_network_state(&network)?;
+                let state = value(index)?.clone();
+                check_network_state(&state)?;
+                network = Some(state);
                 index += 1;
             }
             "--no-build" => build = false,
@@ -465,6 +468,11 @@ fn start(args: &[String]) -> Res<i32> {
             if !existing.record_has_own_zmx_dir() {
                 eprintln!("Warning: it was started before test servers had their own zmx folder and server id check. Run `cargo xtask test-server stop {0}` and start it again.", existing.name);
             }
+            if let Some(state) = &network {
+                set_network(existing, state)?;
+                println!("Its online check now sees: {state}.");
+                warn_if_other_build(existing);
+            }
             add_projects(existing, &projects)?;
             print_env(existing);
             return Ok(0);
@@ -492,7 +500,7 @@ fn start(args: &[String]) -> Res<i32> {
         None => Server::new(&name, port),
     };
     prepare_folder(&server, &debug, linked)?;
-    set_network(&server, &network)?;
+    set_network(&server, network.as_deref().unwrap_or("online"))?;
     ensure_isolated(&server)?;
     server.write_env_file()?;
     fs::write(
@@ -927,9 +935,21 @@ fn set_network(server: &Server, state: &str) -> Res {
             fs::remove_file(&file)?;
         }
     } else {
-        fs::write(&file, format!("{state}\n"))?;
+        // Written aside and renamed in, so the server never reads a half-written file (which would fall through to the real check for a tick).
+        let staged = file.with_extension("new");
+        fs::write(&staged, format!("{state}\n"))?;
+        fs::rename(&staged, &file)?;
     }
     Ok(())
+}
+
+/// A server started with `--binaries` runs another build's gxserver; one older than the network seam ignores the file, so the switch is only claimed for this checkout's build.
+fn warn_if_other_build(server: &Server) {
+    if fs::symlink_metadata(server.bin().join("gxserver"))
+        .is_ok_and(|meta| meta.file_type().is_symlink())
+    {
+        println!("Note: this server runs the gxserver given with --binaries. A gxserver from 11.6.0 or earlier ignores the network file and keeps the real check.");
+    }
 }
 
 fn launch(server: &Server) -> Res {
