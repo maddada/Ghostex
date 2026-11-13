@@ -945,10 +945,6 @@ ZIG_VERSION="$("$ZIG_BIN" version)"
 echo "Zig for zmx: $ZIG_BIN ($ZIG_VERSION)"
 export ZIG="$ZIG_BIN"
 
-mkdir -p "$WEB_DIR"
-rm -rf "$CLI_DIR"
-mkdir -p "$CLI_DIR"
-
 # CDXC:Zmx 2026-05-20-09:57: zmx pane refresh is now a zmx IPC feature, so Ghostex must bundle the pinned submodule binary instead of depending on whichever zmx happens to be on PATH. Build the submodule for the requested macOS architecture and copy it into app resources where TerminalWorkspaceView can launch it directly.
 if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
 	{
@@ -1000,6 +996,16 @@ x86_64)
 	;;
 esac
 build_zmx_if_needed
+# SEE-ALSO: `cargo xtask setup-worktree` (tooling/xtask/src/setup_worktree.rs) builds zmx through this mode for a fresh worktree, so its SDK workarounds live only here; it stops before anything is staged.
+if [[ "${GHOSTEX_MACOS_ZMX_ONLY:-0}" == "1" ]]; then
+	printf 'Built zmx only at %s\n' "$ZMX_ROOT/zig-out/bin/zmx"
+	exit 0
+fi
+
+mkdir -p "$WEB_DIR"
+rm -rf "$CLI_DIR"
+mkdir -p "$CLI_DIR"
+
 # CDXC:Build 2026-09-23 WHY: a fresh copy gave zmx a new modification time on every start, so the packager re-copied it into the bundle and re-signed it; rsync keeps the source's time and skips an unchanged binary.
 mkdir -p "$WEB_DIR/bin"
 find "$WEB_DIR/bin" -mindepth 1 -maxdepth 1 ! -name zmx -exec rm -rf {} +
