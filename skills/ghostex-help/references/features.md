@@ -4334,8 +4334,9 @@ creates any Beads files; the card names the folder Ghostex looked in (a
 project's Beads folder setting can point elsewhere). The header has a **Tree |
 Board** switch, search, the sync status with **Pull** and **Push**, Refresh, and
 **New bead**. In the panel's usual narrow width (under about 760px) the header
-stays on one line: search is an icon until you press it, the sync status is a
-small button whose menu holds Pull and Push, and New bead is a **+** button.
+stays on one line: search is an icon until you press it (then the field takes the row,
+  and its ✕ clears it), the sync status is a small button whose menu holds Pull
+  and Push, and New bead is a **+** button.
 
 - **Tree** (the default): every bead sits under its epic, with the epic's
   progress ("2 of 5 done · 1 in progress · 1 blocked · 1 ready") and its done
@@ -4353,8 +4354,9 @@ small button whose menu holds Pull and Push, and New bead is a **+** button.
   behind the sort button next to them.
 - **Details**: click a bead to open its details (✕ or Escape closes them). In a
   wide panel they sit beside the tree, and the line between the two drags to
-  give either more room; in a narrow panel the details (and New bead) take the
-  whole panel, with a ← back bar that names the epic. The details have Close or
+  give either more room, and the width you drag to is kept for next time. In a
+  narrow panel the details take the whole panel, with a ← back bar that names
+  the epic, and New bead takes it too, closing with its ✕ or Cancel. The details have Close or
   Reopen, **Defer** (Tomorrow, Next week, Pick a date…, or On ice, which waits
   until you bring it back) and **Bring back**, the priority, labels, **Links**,
   its epic, who claimed it, who's on it with **Go to agent**,
@@ -4392,9 +4394,7 @@ small button whose menu holds Pull and Push, and New bead is a **+** button.
   **Pull** brings in changes from your other computers (`bd dolt pull`), **Push**
   sends this computer's (`bd dolt push`). When a push doesn't go through because
   the remote has changes this computer doesn't have, a card says so with **Pull
-  now**; then push again. A workspace with no remote shows no Pull or Push. A
-  failed Pull or Push is written to the Ghostex server log
-  (`beadsView.syncFailed`), so it can be looked at later.
+  now**; then push again. A workspace with no remote shows no Pull or Push. A failed Pull or Push is recorded for troubleshooting.
 - Everything an agent changes with `bd` shows up in the view on its own within
   a few seconds, and an open view that nothing changes costs nothing: Ghostex
   re-reads Beads only when the workspace changes.

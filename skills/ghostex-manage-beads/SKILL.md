@@ -126,7 +126,9 @@ the same commands; never edit Beads files by hand.
 - **Sync**: `bd dolt pull` brings in changes from the user's other computers
   and `bd dolt push --remote <name>` sends this computer's (the view names the
   workspace's own Dolt remote). Only sync when the user
-  asks; a rejected push means pull first, then push again.
+  asks; a rejected push means pull first, then push again. When a Pull or Push
+  from the view failed, the gxserver log (`gxserver.jsonl`) has a
+  `beadsView.syncFailed` line with the kind, code and bd's first error line.
 
 ## Dispatch A Bead To A Worker Session (Coordinators)
 
