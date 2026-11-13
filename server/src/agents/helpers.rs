@@ -240,9 +240,12 @@ pub(crate) fn quote_shell_double_arg(value: &str) -> String {
     )
 }
 
+/// `value` as one argument to a program on the shell line an agent's command runs in. On Windows a
+/// value holding a double quote becomes a PowerShell expression, so write it as a whole word (see
+/// `powershell_native_arg`); text for a cmdlet such as `Write-Host` takes `powershell_single_quote`.
 pub(crate) fn quote_shell_arg(value: &str) -> String {
     #[cfg(windows)]
-    return crate::platform::shell::powershell_single_quote(value);
+    return crate::platform::shell::powershell_native_arg(value);
     #[cfg(not(windows))]
     format!("'{}'", value.replace('\'', "'\\''"))
 }
@@ -258,7 +261,7 @@ pub(crate) fn wrap_restored_terminal_resume_command(
     {
         let mut script = format!(
             "Write-Host 'Restoring session...'; Write-Host {}; & {{ {} }}",
-            quote_shell_arg(display_command),
+            crate::platform::shell::powershell_single_quote(display_command),
             command
         );
         if let Some(fallback) = fallback_command.filter(|fallback| *fallback != command) {

@@ -165,6 +165,94 @@ pub(crate) fn powershell_single_quote(text: &str) -> String {
     format!("'{}'", powershell_single_quoted_content(text))
 }
 
+/// The start, middle and end of the PowerShell expression [`powershell_native_arg`] writes for a
+/// value holding a double quote, around its two single-quoted literals.
+const NATIVE_ARG_START: &str = "$(if ($PSNativeCommandArgumentPassing -in 'Standard','Windows') { ";
+const NATIVE_ARG_MIDDLE: &str = " } else { ";
+const NATIVE_ARG_END: &str = " })";
+
+/// `text` as one argument to a program (not a cmdlet) on a PowerShell command line, arriving whole
+/// in Windows PowerShell 5.1 and in PowerShell 7.
+///
+/// CDXC:PlatformSupport 2026-11-13 WHY:
+/// GitHub #582 (Q2785): on a PC with only Windows PowerShell 5.1 every Claude session Ghostex started quit with "Invalid JSON provided to --settings". PowerShell 5.1 (and 7 before 7.3, or with `$PSNativeCommandArgumentPassing = 'Legacy'`) builds a program's command line without escaping the double quotes inside an argument, so `'{"permissions":…}'` reached claude.exe as `{permissions:…}`; PowerShell 7.3 and later escape them. No one literal reads right in both (an argument escaped for 5.1 gains backslashes in 7), so a value holding a double quote becomes an expression that picks at run time: the value itself where PowerShell escapes for us, else the value already written as a Windows command-line argument: wrapped in double quotes, each inner quote doubled (`""`, which the C runtime, Rust and Zig all read as one quote inside quotes) and the backslashes before a quote doubled. Doubling keeps the quote count even before every space, so 5.1 neither wraps it again nor splits it at a space (`\"` did, checked on Windows PowerShell 5.1.26100 and PowerShell 7.6 on 2026-11-13). A value without a double quote stays a plain literal. Write a value this way only as a whole word: `-c=$(…)` is not expanded.
+/// SEE-ALSO: server/src/agents/helpers.rs (`quote_shell_arg`), server/src/agents/home_secret_folders.rs (`read_quoted_word`, which reads it back).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn powershell_native_arg(text: &str) -> String {
+    if !text.contains('"') {
+        return powershell_single_quote(text);
+    }
+    format!(
+        "{NATIVE_ARG_START}{}{NATIVE_ARG_MIDDLE}{}{NATIVE_ARG_END}",
+        powershell_single_quote(text),
+        powershell_single_quote(&windows_command_line_argument(text))
+    )
+}
+
+/// `text` as one argument on a Windows command line, read back whole by the C runtime's rules.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_command_line_argument(text: &str) -> String {
+    let mut argument = String::with_capacity(text.len() + 2);
+    argument.push('"');
+    let mut backslashes = 0;
+    for ch in text.chars() {
+        match ch {
+            '\\' => backslashes += 1,
+            '"' => {
+                argument.push_str(&"\\".repeat(backslashes * 2));
+                argument.push_str("\"\"");
+                backslashes = 0;
+            }
+            _ => {
+                argument.push_str(&"\\".repeat(backslashes));
+                argument.push(ch);
+                backslashes = 0;
+            }
+        }
+    }
+    argument.push_str(&"\\".repeat(backslashes * 2));
+    argument.push('"');
+    argument
+}
+
+/// The value of the argument [`powershell_native_arg`] wrote at the start of `text` (a plain
+/// single-quoted literal or its expression), and the length it takes.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn read_powershell_native_arg(text: &str) -> Option<(String, usize)> {
+    let Some(expression) = text.strip_prefix(NATIVE_ARG_START) else {
+        return read_powershell_single_quoted(text);
+    };
+    let (value, value_len) = read_powershell_single_quoted(expression)?;
+    let rest = expression[value_len..].strip_prefix(NATIVE_ARG_MIDDLE)?;
+    let (_, legacy_len) = read_powershell_single_quoted(rest)?;
+    rest[legacy_len..].strip_prefix(NATIVE_ARG_END)?;
+    let len = text.len() - rest.len() + legacy_len + NATIVE_ARG_END.len();
+    Some((value, len))
+}
+
+/// The value of the single-quoted literal at the start of `text` (as `powershell_single_quote`
+/// writes it) and the length it takes.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn read_powershell_single_quoted(text: &str) -> Option<(String, usize)> {
+    let is_quote =
+        |ch: char| matches!(ch, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}');
+    let mut chars = text.char_indices().peekable();
+    if !chars.next().is_some_and(|(_, ch)| is_quote(ch)) {
+        return None;
+    }
+    let mut value = String::new();
+    while let Some((index, ch)) = chars.next() {
+        if !is_quote(ch) {
+            value.push(ch);
+        } else if let Some((_, quote)) = chars.next_if(|(_, next)| is_quote(*next)) {
+            value.push(quote);
+        } else {
+            return Some((value, index + ch.len_utf8()));
+        }
+    }
+    None
+}
+
 impl PlatformShell {
     fn new(path: impl Into<String>) -> Self {
         let executable = path.into();

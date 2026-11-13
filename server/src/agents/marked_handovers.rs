@@ -233,8 +233,9 @@ mod tests {
             with_note_text(&paths, "pi", "pi", &text),
             format!("pi --append-system-prompt {quoted}")
         );
-        assert!(with_note_text(&paths, "codex", "codex", &text)
-            .starts_with("codex -c 'developer_instructions=\"You are running inside Ghostex."));
+        let codex = with_note_text(&paths, "codex", "codex", &text);
+        assert!(codex.starts_with("codex -c "));
+        assert!(codex.contains("'developer_instructions=\"You are running inside Ghostex."));
         assert_eq!(
             with_note_text(&paths, "opencode", "opencode", &text),
             "opencode"

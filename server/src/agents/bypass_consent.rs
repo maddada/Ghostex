@@ -57,7 +57,10 @@ mod tests {
         ] {
             assert_eq!(
                 with_claude_bypass_consent(Some("claude"), command),
-                format!(r#"{command} --settings '{{"skipDangerousModePermissionPrompt":true}}'"#),
+                format!(
+                    "{command} --settings {}",
+                    quote_shell_arg(r#"{"skipDangerousModePermissionPrompt":true}"#)
+                ),
                 "{command}"
             );
         }

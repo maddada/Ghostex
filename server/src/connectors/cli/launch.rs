@@ -112,11 +112,19 @@ mod tests {
         let env = [("GH_CONFIG_DIR".to_string(), "/w/gh".to_string())];
         assert_eq!(
             with_env("claude", &env, "claude --dangerously-skip-permissions"),
-            r#"claude --dangerously-skip-permissions --settings '{"env":{"GH_CONFIG_DIR":"/w/gh"},"skipDangerousModePermissionPrompt":true}'"#
+            format!(
+                "claude --dangerously-skip-permissions --settings {}",
+                quote_shell_arg(
+                    r#"{"env":{"GH_CONFIG_DIR":"/w/gh"},"skipDangerousModePermissionPrompt":true}"#
+                )
+            )
         );
         assert_eq!(
             with_env("claude", &env, "claude"),
-            r#"claude --settings '{"env":{"GH_CONFIG_DIR":"/w/gh"}}'"#
+            format!(
+                "claude --settings {}",
+                quote_shell_arg(r#"{"env":{"GH_CONFIG_DIR":"/w/gh"}}"#)
+            )
         );
     }
 }

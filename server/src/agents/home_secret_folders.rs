@@ -175,6 +175,17 @@ pub(super) fn with_claude_deny_rules(command: &str, rules: Vec<Value>) -> Option
 /// index just past it.
 fn read_quoted_word(command: &str, start: usize) -> Option<(String, usize)> {
     let rest = command.get(start..)?;
+    // PowerShell: a single-quoted literal, or the expression a value holding `"` is written as.
+    #[cfg(windows)]
+    return crate::platform::shell::read_powershell_native_arg(rest)
+        .filter(|(_, len)| rest[*len..].chars().next().is_none_or(char::is_whitespace))
+        .map(|(text, len)| (text, start + len));
+    #[cfg(not(windows))]
+    read_posix_quoted_word(rest, start)
+}
+
+#[cfg_attr(windows, allow(dead_code))]
+fn read_posix_quoted_word(rest: &str, start: usize) -> Option<(String, usize)> {
     let mut chars = rest.char_indices().peekable();
     let mut text = String::new();
     let mut quoted = false;
@@ -182,16 +193,9 @@ fn read_quoted_word(command: &str, start: usize) -> Option<(String, usize)> {
     while let Some((index, character)) = chars.next() {
         match (quoted, character) {
             (false, '\'') => quoted = true,
-            // PowerShell writes a quote inside single quotes as two.
-            (true, '\'')
-                if cfg!(windows) && chars.peek().is_some_and(|(_, next)| *next == '\'') =>
-            {
-                chars.next();
-                text.push('\'');
-            }
             (true, '\'') => quoted = false,
             // POSIX `'\''`: close, an escaped quote, reopen.
-            (false, '\\') if !cfg!(windows) => {
+            (false, '\\') => {
                 let (_, escaped) = chars.next()?;
                 text.push(escaped);
             }
