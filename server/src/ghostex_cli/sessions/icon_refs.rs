@@ -86,3 +86,49 @@ pub(super) fn project_icons_command(flags: &Flags) -> CliResult<()> {
     print_json(&json!({ "icons": icons, "ok": true }));
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icon_ref_is_the_first_16_hex_of_the_data_urls_sha256() {
+        // The phone caches icons by this ref, so it must stay the same across runs and versions.
+        assert_eq!(icon_ref("data:image/png;base64,AAAA"), "bde6da8e9d3902a8");
+        assert_ne!(
+            icon_ref("data:image/png;base64,AAAA"),
+            icon_ref("data:image/png;base64,AAAB")
+        );
+    }
+
+    #[test]
+    fn swap_icons_for_refs_sends_refs_and_leaves_the_rest() {
+        let mut summary = json!({
+            "projects": [
+                { "projectId": "P1", "discoveredIconDataUrl": "data:image/png;base64,AAAA" },
+                { "projectId": "P2", "discoveredIconDataUrl": "" },
+                { "projectId": "P3", "name": "No icon" },
+            ],
+            "sessions": [{ "sessionId": "G1" }],
+        });
+        swap_icons_for_refs(summary.as_object_mut().unwrap());
+        assert_eq!(
+            summary,
+            json!({
+                "projects": [
+                    { "projectId": "P1", "discoveredIconRef": "bde6da8e9d3902a8" },
+                    { "projectId": "P2" },
+                    { "projectId": "P3", "name": "No icon" },
+                ],
+                "sessions": [{ "sessionId": "G1" }],
+            })
+        );
+    }
+
+    #[test]
+    fn swap_icons_for_refs_leaves_a_summary_without_projects_alone() {
+        let mut summary = json!({ "sessions": [] });
+        swap_icons_for_refs(summary.as_object_mut().unwrap());
+        assert_eq!(summary, json!({ "sessions": [] }));
+    }
+}
