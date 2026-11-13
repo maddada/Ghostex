@@ -11,6 +11,7 @@ mod isolated;
 mod mobile_chat_wasm;
 mod rebuild;
 mod remote_build;
+#[cfg(unix)]
 mod setup_worktree;
 mod start;
 mod start_server;
@@ -40,7 +41,7 @@ Desktop app
                           run an isolated variant's ghostex CLI
   setup-windows           Windows: install the build prerequisites and prepare sources
   setup-worktree [--with <submodule path>]... [--no-zmx]
-                          prepare a fresh `git worktree` for building: build submodules at their pins (cloned from the
+                          macOS and Linux: prepare a fresh `git worktree` for building: build submodules at their pins (fetched from the
                           main checkout's copies), its CEF and Zig package caches, bun install, a ReleaseSafe zmx
 
 Testing
@@ -112,7 +113,13 @@ fn main() {
             Err("test-server runs on macOS and Linux (gxserver's zmx sessions).".into())
         }
         "setup-windows" => tasks::setup_windows(&args),
+        #[cfg(unix)]
         "setup-worktree" => setup_worktree::run(&args),
+        #[cfg(not(unix))]
+        "setup-worktree" => Err(
+            "setup-worktree runs on macOS and Linux. On Windows, `cargo xtask setup-windows` prepares the sources."
+                .into(),
+        ),
         "web-build" => tasks::web_build(&args),
         "web-dev" => tasks::web_dev(&args),
         "web-test" => tasks::web_test(&args),

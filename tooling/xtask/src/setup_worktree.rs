@@ -1,6 +1,6 @@
 //! `cargo xtask setup-worktree`: everything a fresh `git worktree` of this repository needs before `cargo xtask start`, `web-build` or `test-server` work in it.
 //!
-//! CDXC:Build 2026-11-13 WHY: a fresh worktree has empty `.dependencies` submodules, no `node_modules`, no CEF download and no built zmx. `git submodule update --init` from GitHub crawls through zed, `--reference <main checkout>` is refused because the main checkout's submodules are shallow, and cef-dll-sys hangs downloading CEF. So the submodules are cloned at their pins from the main checkout's own copies (one second instead of minutes; GitHub only for a pin the main checkout lacks), the main checkout's CEF and Ghostty Zig package caches are reused, and zmx is built the way the start builds it. It never runs `git submodule deinit`: worktrees share `.git/config`, so that would unregister the main checkout's submodules.
+//! CDXC:Build 2026-11-13 WHY: a fresh worktree has empty `.dependencies` submodules, no `node_modules`, no CEF download and no built zmx. `git submodule update --init` from GitHub crawls through zed, `--reference <main checkout>` is refused because the main checkout's submodules are shallow, and cef-dll-sys hangs downloading CEF. So each submodule's pinned commit is fetched from the main checkout's own copy (seconds instead of minutes; GitHub only for a pin the main checkout lacks), the main checkout's CEF and Ghostty Zig package caches are reused, and zmx is built the way the start builds it. It never runs `git submodule deinit`: worktrees share `.git/config`, so that would unregister the main checkout's submodules.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,8 +20,9 @@ const BUILD_SUBMODULES: &[&str] = &[
 const USAGE: &str = "Usage: cargo xtask setup-worktree [--with <submodule path>]... [--no-zmx]
 
 Prepares this worktree for `cargo xtask start`, `web-build` and `test-server`:
-  - checks out the build submodules (zed, gpui-component, cef-rs, zmx) at their pins, cloned from
-    the main checkout's copies when it has the pinned commit, else from GitHub (shallow)
+  - checks out the build submodules (zed, gpui-component, cef-rs, zmx) at their pins, fetched from
+    the main checkout's copies when they have the pinned commit, else from GitHub (shallow); the
+    main checkout's .git/config is never written
   - reuses the main checkout's CEF download (apps/desktop/build/cef-cache) and Ghostty's Zig
     package cache, so no build downloads them again
   - runs `bun install --frozen-lockfile`
@@ -145,48 +146,77 @@ fn submodule_names() -> Res<Vec<(String, String)>> {
         .collect())
 }
 
+/// CDXC:Build 2026-11-13 WHY: never `git submodule update --init` or `init` here. Linked worktrees share `.git/config`, and init writes `submodule.<name>.active`, the URL and the update mode into it, so it would change the main checkout's registration (Git documents the limitation in submodule--helper's init_submodule). The pinned commit is fetched into a repository in this worktree's own git folder (`<git dir>/modules/<name>`, where Git keeps a linked worktree's submodules) and is pointed at its path by hand, so every write lands in files that belong to this worktree.
 fn checkout_submodule(name: &str, path: &str, main: Option<&Path>) -> Res {
-    let status = git_stdout(root(), &["submodule", "status", "--", path])?;
-    if !status.trim_start().starts_with('-') {
-        println!("==> {path}: already checked out");
+    let pin = git_stdout(root(), &["rev-parse", &format!("HEAD:{path}")])?;
+    let checkout = root().join(path);
+    if checkout.join(".git").exists() {
+        // Read-only: `submodule status` marks a wrong pin `+` and a conflict `U`. Either is someone's work, so it is reported and left alone.
+        let status = git_stdout(root(), &["submodule", "status", "--", path])?;
+        match status.trim_start().chars().next() {
+            Some('+') => println!(
+                "==> {path}: checked out at another commit than its pin {pin}; left as it is"
+            ),
+            Some('U') => println!("==> {path}: has merge conflicts; left as it is"),
+            _ => println!("==> {path}: already checked out at its pin"),
+        }
         return Ok(());
     }
-    let pin = git_stdout(root(), &["rev-parse", &format!("HEAD:{path}")])?;
+    if fs::read_dir(&checkout).is_ok_and(|mut entries| entries.next().is_some()) {
+        bail!("{path} holds files but no checkout. Move them away, then run setup-worktree again.");
+    }
+    let git_dir = PathBuf::from(git_stdout(root(), &["rev-parse", "--absolute-git-dir"])?)
+        .join("modules")
+        .join(name);
+    if git_dir.exists() {
+        bail!(
+            "{} is left from an earlier attempt. Delete that folder (it belongs to this worktree only), then run setup-worktree again.",
+            git_dir.display()
+        );
+    }
+    let url = git_stdout(
+        root(),
+        &[
+            "config",
+            "-f",
+            ".gitmodules",
+            &format!("submodule.{name}.url"),
+        ],
+    )?;
+    fs::create_dir_all(git_dir.parent().expect("a module folder has a parent"))?;
     let local = main
         .map(|main| main.join(path))
         .filter(|source| has_commit(source, &pin));
-    let mut update = command("git");
+    check(
+        command("git")
+            .args(["init", "--quiet", "--separate-git-dir"])
+            .arg(&git_dir)
+            .arg(path),
+    )?;
+    check(command("git").args(["-C", path, "remote", "add", "origin", &url]))?;
+    let mut fetch = command("git");
+    fetch.args(["-C", path]);
     if let Some(source) = &local {
-        println!("==> {path}: cloning {pin} from {}", source.display());
-        // The URL override lives only on this command line, so the shared `.git/config` keeps the GitHub URL. The main checkout's copy may be shallow and its pin need not be a branch tip, so its upload-pack is allowed to serve any commit it has.
-        update
+        // The main checkout's copy may be shallow and its pin need not be a branch tip, so its upload-pack (started by this fetch, which is all these settings reach) may serve any commit it has.
+        println!("==> {path}: fetching {pin} from {}", source.display());
+        fetch
             .args(["-c", "protocol.file.allow=always"])
             .args(["-c", "uploadpack.allowAnySHA1InWant=true"])
-            .arg("-c")
-            .arg(format!("submodule.{name}.url={}", source.display()));
+            .args(["fetch", "--quiet", "--depth", "1"])
+            .arg(format!("file://{}", source.display()));
     } else {
-        println!("==> {path}: cloning {pin} from GitHub (shallow)");
+        println!("==> {path}: fetching {pin} from {url} (shallow)");
+        fetch.args(["fetch", "--quiet", "--depth", "1", "origin"]);
     }
-    update.args(["submodule", "update", "--init"]);
-    // A clone from a local path hard-links the main checkout's objects (no disk, no download) and ignores --depth, so only GitHub gets it.
-    if local.is_none() {
-        update.args(["--depth", "1"]);
-    }
-    update.args(["--", path]);
-    check(&mut update)?;
-    if local.is_some() {
-        // Point the new clone's origin back at GitHub so a later fetch or push there goes where the main checkout's would.
-        let url = git_stdout(
-            root(),
-            &[
-                "config",
-                "-f",
-                ".gitmodules",
-                &format!("submodule.{name}.url"),
-            ],
-        )?;
-        check(command("git").args(["-C", path, "remote", "set-url", "origin", &url]))?;
-    }
+    check(fetch.arg(&pin))?;
+    check(
+        command("git")
+            .arg("--git-dir")
+            .arg(&git_dir)
+            .args(["config", "core.worktree"])
+            .arg(fs::canonicalize(&checkout)?),
+    )?;
+    check(command("git").args(["-C", path, "checkout", "--quiet", "--detach", &pin]))?;
     Ok(())
 }
 
@@ -207,7 +237,6 @@ fn reuse_caches(main: &Path) -> Res {
     let cef_link = root().join("apps/desktop/build/cef-cache");
     if cef_source.is_dir() && fs::symlink_metadata(&cef_link).is_err() {
         fs::create_dir_all(cef_link.parent().expect("cef-cache has a parent"))?;
-        #[cfg(unix)]
         std::os::unix::fs::symlink(&cef_source, &cef_link)?;
         println!(
             "==> apps/desktop/build/cef-cache -> {}",

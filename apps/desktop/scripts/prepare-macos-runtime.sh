@@ -850,6 +850,78 @@ writeFileSync(
 JS
 }
 
+# Resolves the one Zig series and builds the pinned zmx submodule for GHOSTEX_MACOS_ARCH.
+build_bundled_zmx() {
+	# `cargo xtask start` builds zmx and its Ghostty Zig dependency with the one Zig
+	# series the vendored Ghostty requires, resolved the same way as every other build
+	# path (tooling/zig-toolchain.sh), so a PATH `zig` of another version is skipped.
+	# shellcheck source=../../../tooling/zig-toolchain.sh
+	source "$REPO_ROOT/tooling/zig-toolchain.sh"
+	ZIG_BIN="$(ghostex_find_zig "$REPO_ROOT")"
+	ZIG_VERSION="$("$ZIG_BIN" version)"
+	echo "Zig for zmx: $ZIG_BIN ($ZIG_VERSION)"
+	export ZIG="$ZIG_BIN"
+
+	# CDXC:Zmx 2026-05-20-09:57: zmx pane refresh is now a zmx IPC feature, so Ghostex must bundle the pinned submodule binary instead of depending on whichever zmx happens to be on PATH. Build the submodule for the requested macOS architecture and copy it into app resources where TerminalWorkspaceView can launch it directly.
+	if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
+		{
+			if [[ "$ZMX_ROOT_EXPLICITLY_CONFIGURED" == "1" ]]; then
+				printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
+				printf 'ZMX_ROOT is set to an external checkout, so it is not a submodule of this repository.\nPoint ZMX_ROOT at a zmx checkout that contains build.zig, or unset it to use the bundled submodule.\n'
+			else
+				# CDXC:RepoStructure 2026-08-25: `git submodule update --init` is the
+				# wrong repair for a checkout the 2026-08-22 restructure stranded at the old
+				# top-level zmx path: it re-clones instead of reusing the tree that is already
+				# on disk. Detect that signature and print the move plus pointer repair.
+				ZMX_LEGACY_ROOT="$(legacy_submodule_checkout zmx build.zig || true)"
+				if [[ -n "$ZMX_LEGACY_ROOT" ]]; then
+					printf 'zmx source is stranded at its pre-restructure path:\n  %s\n\n' "$ZMX_LEGACY_ROOT"
+					cat <<EOF
+The 2026-08-22 restructure moved the submodule from zmx to .dependencies/zmx.
+Git cannot move a submodule working tree with the gitlink, so your checkout
+stayed at the old path and .dependencies/zmx is empty.
+
+Unblock this build without moving anything:
+  ZMX_ROOT=$ZMX_LEGACY_ROOT cargo xtask start
+
+Repair the checkout (keeps the built zig-out payload):
+  cd $REPO_ROOT
+  rmdir .dependencies/zmx
+  mv zmx .dependencies/zmx
+  echo 'gitdir: ../../.git/modules/zmx' > .dependencies/zmx/.git
+  git config -f .git/modules/zmx/config core.worktree ../../../.dependencies/zmx
+
+Then verify the repair:
+  git -C .dependencies/zmx rev-parse HEAD
+  git submodule status .dependencies/zmx
+EOF
+				else
+					printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
+					printf 'Initialize submodules before building:\n  git -C %q submodule update --init --recursive -- %q\n' \
+						"$REPO_ROOT" "$ZMX_ROOT"
+				fi
+			fi
+		} >&2
+		exit 1
+	fi
+	case "$GHOSTEX_MACOS_ARCH" in
+	arm64)
+		ZMX_TARGET="aarch64-macos.15.0"
+		;;
+	x86_64)
+		ZMX_TARGET="x86_64-macos.13.0"
+		;;
+	esac
+	build_zmx_if_needed
+}
+
+# SEE-ALSO: `cargo xtask setup-worktree` (tooling/xtask/src/setup_worktree.rs) builds zmx through this mode for a fresh worktree, so its SDK workarounds live only here. It runs before the code-server and Node preparation below, which zmx does not need.
+if [[ "${GHOSTEX_MACOS_ZMX_ONLY:-0}" == "1" ]]; then
+	build_bundled_zmx
+	printf 'Built zmx only at %s\n' "$ZMX_ROOT/zig-out/bin/zmx"
+	exit 0
+fi
+
 # CDXC:CodeEditor 2026-06-08-12:17: code-server owns the bundled Node runtime in the macOS app. Build code-server with its pinned Node version and stage that runtime inside Web/code-server/lib/node; explicit TypeScript gxserver packages reuse that runtime instead of shipping a duplicate Node.
 CODE_SERVER_NODE_BIN="$(prepare_code_server_app_node_runtime)"
 CODE_SERVER_NODE_DIR="$(cd "$(dirname "$CODE_SERVER_NODE_BIN")" && pwd)"
@@ -935,72 +1007,7 @@ if [[ "${GHOSTEX_MACOS_GXSERVER_ONLY:-0}" == "1" ]]; then
 	exit 0
 fi
 
-# `cargo xtask start` builds zmx and its Ghostty Zig dependency with the one Zig
-# series the vendored Ghostty requires, resolved the same way as every other build
-# path (tooling/zig-toolchain.sh), so a PATH `zig` of another version is skipped.
-# shellcheck source=../../../tooling/zig-toolchain.sh
-source "$REPO_ROOT/tooling/zig-toolchain.sh"
-ZIG_BIN="$(ghostex_find_zig "$REPO_ROOT")"
-ZIG_VERSION="$("$ZIG_BIN" version)"
-echo "Zig for zmx: $ZIG_BIN ($ZIG_VERSION)"
-export ZIG="$ZIG_BIN"
-
-# CDXC:Zmx 2026-05-20-09:57: zmx pane refresh is now a zmx IPC feature, so Ghostex must bundle the pinned submodule binary instead of depending on whichever zmx happens to be on PATH. Build the submodule for the requested macOS architecture and copy it into app resources where TerminalWorkspaceView can launch it directly.
-if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
-	{
-		if [[ "$ZMX_ROOT_EXPLICITLY_CONFIGURED" == "1" ]]; then
-			printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
-			printf 'ZMX_ROOT is set to an external checkout, so it is not a submodule of this repository.\nPoint ZMX_ROOT at a zmx checkout that contains build.zig, or unset it to use the bundled submodule.\n'
-		else
-			# CDXC:RepoStructure 2026-08-25: `git submodule update --init` is the
-			# wrong repair for a checkout the 2026-08-22 restructure stranded at the old
-			# top-level zmx path: it re-clones instead of reusing the tree that is already
-			# on disk. Detect that signature and print the move plus pointer repair.
-			ZMX_LEGACY_ROOT="$(legacy_submodule_checkout zmx build.zig || true)"
-			if [[ -n "$ZMX_LEGACY_ROOT" ]]; then
-				printf 'zmx source is stranded at its pre-restructure path:\n  %s\n\n' "$ZMX_LEGACY_ROOT"
-				cat <<EOF
-The 2026-08-22 restructure moved the submodule from zmx to .dependencies/zmx.
-Git cannot move a submodule working tree with the gitlink, so your checkout
-stayed at the old path and .dependencies/zmx is empty.
-
-Unblock this build without moving anything:
-  ZMX_ROOT=$ZMX_LEGACY_ROOT cargo xtask start
-
-Repair the checkout (keeps the built zig-out payload):
-  cd $REPO_ROOT
-  rmdir .dependencies/zmx
-  mv zmx .dependencies/zmx
-  echo 'gitdir: ../../.git/modules/zmx' > .dependencies/zmx/.git
-  git config -f .git/modules/zmx/config core.worktree ../../../.dependencies/zmx
-
-Then verify the repair:
-  git -C .dependencies/zmx rev-parse HEAD
-  git submodule status .dependencies/zmx
-EOF
-			else
-				printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
-				printf 'Initialize submodules before building:\n  git -C %q submodule update --init --recursive -- %q\n' \
-					"$REPO_ROOT" "$ZMX_ROOT"
-			fi
-		fi
-	} >&2
-	exit 1
-fi
-case "$GHOSTEX_MACOS_ARCH" in
-arm64)
-	ZMX_TARGET="aarch64-macos.15.0"
-	;;
-x86_64)
-	ZMX_TARGET="x86_64-macos.13.0"
-	;;
-esac
-build_zmx_if_needed
-# SEE-ALSO: `cargo xtask setup-worktree` (tooling/xtask/src/setup_worktree.rs) builds zmx through this mode for a fresh worktree, so its SDK workarounds live only here; it stops before anything is staged.
-if [[ "${GHOSTEX_MACOS_ZMX_ONLY:-0}" == "1" ]]; then
-	printf 'Built zmx only at %s\n' "$ZMX_ROOT/zig-out/bin/zmx"
-	exit 0
-fi
+build_bundled_zmx
 
 mkdir -p "$WEB_DIR"
 rm -rf "$CLI_DIR"
