@@ -38,6 +38,55 @@ fn opens_in_browser(kind: GpuiAppModalKind) -> bool {
     )
 }
 
+/// The corner radius of an app modal's window in the page, near the rounded corners macOS gives
+/// the desktop's borderless modal window.
+const MODAL_WINDOW_CORNER_RADIUS: f32 = 12.0;
+
+/// Gives the dialog window just opened the frame the desktop's window server draws around it:
+/// rounded corners and the modal's rim (`ModalPalette::window_border`), so the dialog reads as a
+/// card over the page instead of a square of its surface colour.
+///
+/// CDXC:WebGpui 2026-11-13 WHY:
+/// GitHub issue #602: in the browser the Rename dialog looked like a dark backdrop whose edge
+/// stopped partway across the chat. There is no backdrop on either build: a native app modal's
+/// view paints its surface to the edges of its own window, and on the desktop the OS rounds that
+/// borderless window and draws its rim (macOS) or DWM border (Windows, `frame_app_modal_window`).
+/// The page's overlay canvas got neither, so the dialog's 24px padded surface showed as an
+/// edgeless near-black rectangle over the chat. The overlay window is the last canvas in the body
+/// (gpui_web appends each one as it opens, and removes it on close), so the frame is CSS on that
+/// element: `border-radius` clips the canvas, and a 1px spread `box-shadow` draws the rim outside
+/// it without changing the size the dialog lays out at. No drop shadow, no page-wide fill.
+fn frame_modal_canvas(border: gpui::Rgba) {
+    use wasm_bindgen::JsCast as _;
+    let Some(canvas) = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| {
+            document
+                .query_selector("body > canvas:last-of-type")
+                .ok()
+                .flatten()
+        })
+        .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok())
+    else {
+        return;
+    };
+    let style = canvas.style();
+    // Only an overlay window's canvas is fixed; never restyle the page's own.
+    if style.get_property_value("position").ok().as_deref() != Some("fixed") {
+        return;
+    }
+    let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let rim = format!(
+        "rgba({}, {}, {}, {:.3})",
+        channel(border.r),
+        channel(border.g),
+        channel(border.b),
+        border.a.clamp(0.0, 1.0)
+    );
+    let _ = style.set_property("border-radius", &format!("{MODAL_WINDOW_CORNER_RADIUS}px"));
+    let _ = style.set_property("box-shadow", &format!("0 0 0 1px {rim}"));
+}
+
 impl GhostexGpuiApp {
     /// The desktop's door into every app modal, for the dialogs the page can show.
     pub(crate) fn open_app_modal_from_bridge(&mut self, message: Value, cx: &mut Context<Self>) {
@@ -169,6 +218,9 @@ impl GhostexGpuiApp {
                 cx.new(|cx| Root::new(frame, window, cx).bg(gpui::transparent_black()))
             })
             .ok();
+        if window.is_some() {
+            frame_modal_canvas(window_border);
+        }
         let view = view_slot.borrow_mut().take();
         self.native_app_modal = match (window, view) {
             (Some(window), Some(view)) => Some(NativeAppModal { kind, window, view }),
