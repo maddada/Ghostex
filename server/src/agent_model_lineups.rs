@@ -240,16 +240,18 @@ fn antigravity_lineup(output: &str) -> Option<Value> {
             continue;
         }
         // Gemini 4 Hydrogen adds `-xhigh`, labelled "(XHigh)" (Antigravity 1.5.6).
-        let split = ["low", "medium", "high", "xhigh"].into_iter().find_map(|effort| {
-            let base = id.strip_suffix(&format!("-{effort}"))?;
-            let title = if effort == "xhigh" {
-                "XHigh".to_string()
-            } else {
-                format!("{}{}", effort[..1].to_uppercase(), &effort[1..])
-            };
-            let name = label.strip_suffix(&format!(" ({title})"))?;
-            Some((base, name, effort))
-        });
+        let split = ["low", "medium", "high", "xhigh"]
+            .into_iter()
+            .find_map(|effort| {
+                let base = id.strip_suffix(&format!("-{effort}"))?;
+                let title = if effort == "xhigh" {
+                    "XHigh".to_string()
+                } else {
+                    format!("{}{}", effort[..1].to_uppercase(), &effort[1..])
+                };
+                let name = label.strip_suffix(&format!(" ({title})"))?;
+                Some((base, name, effort))
+            });
         let (base, name, effort) = split.map_or((id, label, None), |(base, name, effort)| {
             (base, name, Some(effort))
         });
