@@ -1422,7 +1422,7 @@ impl IntegrationsTab {
             p,
             "Floating Capture",
             Some(
-                "A small button that floats over every app and shows how many agents are working, waiting for you, or asking a question. Use it to screenshot an area, an app or the whole screen, mark it up, and send a prompt to any project or session without switching to Ghostex."
+                "A button over every app: screenshot, mark up and send a prompt to any session without switching to Ghostex."
                     .into(),
             ),
             None,

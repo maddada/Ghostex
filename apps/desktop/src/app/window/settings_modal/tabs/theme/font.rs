@@ -149,13 +149,6 @@ impl ThemeTab {
             preview_body_family(self.pending_font.as_deref()),
             preview_mono_family(self.pending_monospace_font.as_deref()),
         ));
-        settings_section(
-            &p,
-            "Text",
-            Some("The fonts, and how the chat's text reads.".into()),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(&p, "Text", None, None, rows).map(IntoElement::into_any_element)
     }
 }

@@ -363,11 +363,6 @@ impl Render for SyncTab {
             )));
             return settings_page(&self.store, SettingsTabId::Sync, &p, blocks, cx);
         }
-        let intro = static_note(
-            &p,
-            "Your computers keep what you pick here the same whenever they are connected to each other, and each works on its own while apart.",
-            false,
-        );
         let refresh = settings_button(
             &p,
             "sync-reload",
@@ -388,7 +383,7 @@ impl Render for SyncTab {
                 .w_full()
                 .gap(px(12.0))
                 .items_center()
-                .child(div().flex_1().min_w_0().child(intro))
+                .child(div().flex_1())
                 .child(refresh),
         ));
         let unreachable = self.error.as_deref().is_some_and(is_service_unreachable);

@@ -568,7 +568,7 @@ impl CloudBoxesTab {
             p,
             "More providers (agentbox)",
             Some(
-                "Run an agent session in an isolated box on this computer (Docker), on Hetzner, Vercel, Daytona, E2B or DigitalOcean, or on your own server. Ghostex uses agentbox, a free open-source command line tool."
+                "Docker here, Hetzner, Vercel, Daytona, E2B, DigitalOcean or your own server, through agentbox (free, open source)."
                     .into(),
             ),
             None,

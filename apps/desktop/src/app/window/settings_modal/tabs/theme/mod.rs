@@ -507,14 +507,7 @@ impl ThemeTab {
         if shown {
             rows.extend(self.more_colour_rows(t, window, cx));
         }
-        settings_section(
-            &p,
-            "Colours",
-            Some("The colour of the sidebar and window in each mode.".into()),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(&p, "Colours", None, None, rows).map(IntoElement::into_any_element)
     }
 
     /// The window frame rows of the Advanced fold: Frame the work area, under it the window
@@ -1045,14 +1038,8 @@ impl ThemeTab {
                 ));
             }
         }
-        settings_section(
-            &p,
-            "Chat and terminal",
-            Some("Follow the app, or give them their own appearance.".into()),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(&p, "Chat and terminal", None, None, rows)
+            .map(IntoElement::into_any_element)
     }
 
     /// Related settings on the Sidebar & Sessions and Terminal pages: each Open searches

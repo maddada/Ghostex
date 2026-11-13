@@ -152,14 +152,7 @@ impl ThemeTab {
                 ));
             }
         }
-        settings_section(
-            &p,
-            "UI Scale",
-            Some("How big the sidebar, chats, files and terminal text are.".into()),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(&p, "UI Scale", None, None, rows).map(IntoElement::into_any_element)
     }
 }
 

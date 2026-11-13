@@ -530,13 +530,7 @@ impl CollabTab {
                 None,
             ));
         }
-        settings_section(
-            p,
-            "Guest messages log",
-            Some("Every message guests sent, and what you did with it.".into()),
-            None,
-            rows,
-        )
+        settings_section(p, "Guest messages log", None, None, rows)
     }
 }
 

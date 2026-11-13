@@ -395,7 +395,7 @@ impl ConnectorsTab {
         settings_section(
             p,
             title,
-            Some("Executor runs on this computer and links apps from its catalog or any remote MCP server. Some apps, Google's for example, first need your own sign-in app (OAuth client) from that app's developer console, using the callback address below.".into()),
+            Some("Runs on this computer. Some apps, Google's for example, first need your own OAuth client from their developer console, with the callback address below.".into()),
             None,
             rows,
         )

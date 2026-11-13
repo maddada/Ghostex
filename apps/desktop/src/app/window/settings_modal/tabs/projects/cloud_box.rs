@@ -287,10 +287,7 @@ impl ProjectsTab {
         super::super::super::fields::settings_section(
             p,
             "Cloud box",
-            Some(
-                "How a Cloud Box for this project starts. Pick Cloud Box in a new chat to use one."
-                    .into(),
-            ),
+            Some("Pick Cloud Box in a new chat to use one.".into()),
             None,
             rows,
         )

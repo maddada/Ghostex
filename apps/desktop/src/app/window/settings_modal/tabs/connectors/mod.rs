@@ -144,7 +144,7 @@ impl Render for ConnectorsTab {
         }
         let intro = static_note(
             &p,
-            "Connect your apps so agents can use them. Each workspace has its own sign-ins and apps. Reads run on their own; before an agent sends, posts, changes or deletes anything, Ghostex asks you in that session's chat. Experimental.",
+            "Each workspace has its own sign-ins and apps. Reads run on their own; before an agent sends, posts, changes or deletes anything, Ghostex asks you in that chat. Experimental.",
             false,
         );
         let refresh = settings_button(

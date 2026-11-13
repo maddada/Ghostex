@@ -114,7 +114,7 @@ impl CloudBoxesTab {
             p,
             "Providers",
             Some(
-                "A Cloud Box runs a session on a Linux machine in the cloud: pick Cloud Box in a new chat. Boxes run on your own provider account, which bills them."
+                "Boxes run on your own provider account, which bills them. Pick Cloud Box in a new chat."
                     .into(),
             ),
             None,

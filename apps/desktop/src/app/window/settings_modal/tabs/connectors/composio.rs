@@ -144,12 +144,6 @@ impl ConnectorsTab {
                 ))
                 .into_any_element()
         });
-        settings_section(
-            p,
-            title,
-            Some("Apps through Composio's hosted service: Gmail, Google Calendar, Slack, Notion, GitHub, Linear and many more.".into()),
-            actions,
-            rows,
-        )
+        settings_section(p, title, None, actions, rows)
     }
 }

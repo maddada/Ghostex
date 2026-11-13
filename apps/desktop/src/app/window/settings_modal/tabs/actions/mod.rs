@@ -554,20 +554,20 @@ impl Render for ActionsTab {
                 CommandScope::Global,
                 &ordered_global,
                 "Global Actions",
-                "Global actions apply to every project and are stored by the Ghostex daemon, so they follow you to every app that connects to it. They appear under Global in every project's Start menu.",
+                "They follow you to every app that connects to this computer, under Global in each project's Start menu.",
                 "No global actions yet",
                 "Add a terminal or browser action that should be available in every project.",
                 cx,
             ) {
                 blocks.push(PageBlock::section("globalActions", section));
             }
-            // CDXC:AgentLauncher 2026-06-15-14:00 SEE-ALSO: the header copy explains quick command terminals, browser panes, worktree sharing and the right-click list.
+            // CDXC:AgentLauncher 2026-06-15-14:00 SEE-ALSO: the header copy says the actions are shared with worktrees and show in the Start menu (Q2965: the right-click list is gone).
             if let Some(section) = self.actions_section(
                 &p,
                 CommandScope::Project,
                 &ordered,
                 "Project Actions",
-                "Actions are custom shortcuts for repeat work. Add terminal actions to run saved commands in quick command terminals, or browser actions to open saved URLs in browser panes. These actions are shared between a main project and its worktrees, and you can right-click the action button to show all configured actions for that project.",
+                "Shared with the project's worktrees. They show in the project's Start menu.",
                 "No actions yet",
                 "Add a terminal or browser action.",
                 cx,

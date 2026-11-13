@@ -27,7 +27,7 @@ use std::time::Duration;
 const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 const REFRESH_EVERY: Duration = Duration::from_secs(10);
 const SHOWN_ENTRIES: u64 = 200;
-const LOG_DESCRIPTION: &str = "Newest first. The important ones also show in the notification bell and on your paired phones.";
+const LOG_DESCRIPTION: &str = "The important ones also show in the bell and on your paired phones.";
 
 pub(crate) fn security_tab_view(store: &Entity<SettingsStore>, cx: &mut App) -> AnyView {
     cx.new(|cx| SecurityTab::new(store.clone(), cx)).into()

@@ -681,7 +681,9 @@ impl AccountsTab {
         settings_section(
             &p,
             "Configuration",
-            Some("Add your account to see usage and reset times in Ghostex, even if you only use one account. Turn on Show usage in the sidebar for an account to keep its stats there.".into()),
+            Some(
+                "Turn on Show usage in the sidebar for an account to keep its stats there.".into(),
+            ),
             refresh,
             rows,
         )

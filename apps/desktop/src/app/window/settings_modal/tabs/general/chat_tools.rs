@@ -505,9 +505,11 @@ fn dev_servers_section(
             cx,
         ));
     }
-    settings_section(&g.p, g.section_title("terminalDevServers", "Dev Servers"),
+    settings_section(
+        &g.p,
+        g.section_title("terminalDevServers", "Dev Servers"),
         Some(SharedString::from(
-            "Choose how Ghostex discovers running dev servers and which ports stay hidden. Detected URLs follow Browser \u{2192} Open links in.",
+            "Detected URLs follow Browser \u{2192} Open links in.",
         )),
         None,
         rows,
@@ -789,7 +791,7 @@ fn file_opening_section(
     ));
     settings_section(&g.p, g.section_title("fileOpening", "File opening"),
         Some(SharedString::from(
-            "Choose where files open from Quick Access, agent chat links and terminal links. An editor app shows here once it is installed on this computer. If a view is unavailable, Ghostex uses the other one.",
+            "An editor app shows here once it is installed. If a view is unavailable, Ghostex uses the other one.",
         )),
         None,
         rows,

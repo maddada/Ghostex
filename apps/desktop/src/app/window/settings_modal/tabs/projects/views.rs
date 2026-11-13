@@ -426,10 +426,7 @@ pub(super) fn view_section(
     settings_section(
         p,
         format!("{} view", view.name),
-        Some(
-            "Settings for this project. View definitions and templates are managed in Extensions."
-                .into(),
-        ),
+        Some("View definitions and templates are in Extensions.".into()),
         None,
         rows,
     )

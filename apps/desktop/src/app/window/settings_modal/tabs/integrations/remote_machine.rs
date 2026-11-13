@@ -294,10 +294,7 @@ impl IntegrationsTab {
                 settings_section(
                     p,
                     tool_sections::COMPUTER_BROWSER_USE_TITLE,
-                    Some(
-                        format!("Lets agents use {machine}'s apps and browser. {grants_note}")
-                            .into(),
-                    ),
+                    Some(grants_note.clone().into()),
                     None,
                     trycua_rows,
                 )

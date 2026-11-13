@@ -153,14 +153,7 @@ impl ExtensionsTab {
         } else {
             ""
         };
-        settings_section(
-            p,
-            title,
-            Some("Choose the order of built-in, extension, and custom views.".into()),
-            None,
-            vec![row],
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(p, title, None, None, vec![row]).map(IntoElement::into_any_element)
     }
 
     /// `scopeControls.describe(key)`: the card's scope label while the view is narrowed.

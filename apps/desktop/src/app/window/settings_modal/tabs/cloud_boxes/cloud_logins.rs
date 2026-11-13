@@ -107,14 +107,8 @@ impl CloudBoxesTab {
                 }
             }
         }
-        settings_section(
-            p,
-            "Agent logins for boxes",
-            Some("Boxes run Claude and Codex on the accounts you allow here.".into()),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(p, "Agent logins for boxes", None, None, rows)
+            .map(IntoElement::into_any_element)
     }
 
     fn cloud_login_row(

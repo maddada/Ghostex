@@ -38,6 +38,9 @@ const CHECK_TIMEOUT: Duration = Duration::from_secs(60);
 const ICON_TRASH: &str = "modals/settings/trash.svg";
 const ICON_PLUS: &str = "modals/settings/plus.svg";
 const PROVIDERS: &str = "secretProviders";
+/// The 1Password group's subtitle (Q2974): shorter than the catalog row, which keeps its full
+/// wording for Settings search and Help.
+const ONE_PASSWORD_SUBTITLE: &str = "Paste an op:// reference instead of a key. Needs the 1Password CLI with \"Integrate with 1Password CLI\" on. Ghostex keeps only the account name.";
 const CHECK: &str = "secretReferenceCheck";
 const REQUESTS: &str = "secretRequests";
 
@@ -513,9 +516,7 @@ impl Render for SecretsTab {
         // (CDXC:Settings 2026-11-11 DECISION in packages/settings-catalog/src/pages/secrets.rs).
         let show_providers = search.row_visible("providers", PROVIDERS);
         let show_check = search.row_visible("providers", CHECK);
-        if (show_providers || show_check)
-            && let Some((_, subtitle)) = Self::catalog_row(PROVIDERS)
-        {
+        if (show_providers || show_check) && Self::catalog_row(PROVIDERS).is_some() {
             let mut rows = if show_providers {
                 self.provider_rows(&p, window, cx)
             } else {
@@ -524,9 +525,13 @@ impl Render for SecretsTab {
             if show_check {
                 rows.extend(self.check_row(&p, window, cx));
             }
-            if let Some(section) =
-                settings_section(&p, "1Password", Some(subtitle.into()), None, rows)
-            {
+            if let Some(section) = settings_section(
+                &p,
+                "1Password",
+                Some(ONE_PASSWORD_SUBTITLE.into()),
+                None,
+                rows,
+            ) {
                 let mut block = PageBlock::section("providers", section);
                 block.margin_top += PAGE_TOP_PADDING;
                 blocks.push(block);

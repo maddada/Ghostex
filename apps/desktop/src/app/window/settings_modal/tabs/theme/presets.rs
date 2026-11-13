@@ -348,14 +348,7 @@ impl ThemeTab {
                 .size_full(),
             )
             .into_any_element();
-        settings_section(
-            p,
-            "Presets",
-            Some("Sets the colours below together. You can change each of them afterwards.".into()),
-            None,
-            vec![body],
-        )
-        .map(IntoElement::into_any_element)
+        settings_section(p, "Presets", None, None, vec![body]).map(IntoElement::into_any_element)
     }
 }
 

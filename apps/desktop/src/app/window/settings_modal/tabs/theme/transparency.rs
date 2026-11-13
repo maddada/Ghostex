@@ -388,14 +388,8 @@ impl ThemeTab {
         if shown {
             rows.extend(self.more_transparency_rows(t, single, window, cx));
         }
-        super::super::super::fields::settings_section(
-            &p,
-            "Transparency",
-            Some("Let your desktop show softly through the window.".into()),
-            None,
-            rows,
-        )
-        .map(IntoElement::into_any_element)
+        super::super::super::fields::settings_section(&p, "Transparency", None, None, rows)
+            .map(IntoElement::into_any_element)
     }
 
     /// Behind the glass: the four picture cards, the Same for light and dark switch (`same`, absent
