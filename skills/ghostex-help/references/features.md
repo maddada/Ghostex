@@ -3245,10 +3245,19 @@ Ghostex's own retry messages do not count as new. When Ghostex moves the session
 to another account by itself, that is still the same error; picking another
 account yourself starts over. A usage limit and Stop retrying never send one.
 A sleeping session whose account is already at its limit wakes on another
-account that has room. When every account set to Automatically is full, the
-session's chat shows "7d limit reached on every account" (or whichever limit
-it hit) with when it continues on its own, and the bell gets one notification;
-both go away once the session switches or resumes.
+account that has room. When no account set to Automatically has room, the
+session's chat says so for the model it runs ("No account has room for Fable
+5.2"), names in one sentence why each other account is out (for example "ST's
+Fable limit is full and SP is manual only") and when it continues on its own,
+and the bell gets one notification; both go away once the session switches or
+resumes. The Accounts & limits popup's waiting box says the same. When another
+model has room on an account, the card's main button continues there ("Continue
+with Opus 5.5 on ST"), switching the account and the model together. A Fable
+session first moves to another account with Fable usage left; when none has
+any, it continues on Opus at the same effort on an account with room by itself,
+unless Continue on Opus when Fable runs out is off in Settings > Accounts >
+Claude rules. It never picks an account set to manual only, and it stays on
+Opus until you pick Fable again. Setting: `claudeFableFallbackToOpus`.
 Account sign-in terminals open in the active local project's folder and appear
 under that project. Before a first project is chosen, sign-in uses the home folder.
 When a newer usage reading cannot be fetched for a Claude account, for example

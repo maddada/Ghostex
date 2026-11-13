@@ -630,7 +630,8 @@ pub fn catalog_json() -> String {
 /// Continue on Opus when Fable runs out (Settings > Accounts > Claude rules) is held the same way
 /// until the release that ships it; its hand-written paragraph waits in the held help patch
 /// (~/.local/share/agent-work/Ghostex/limit-card/help-fable-fallback.patch).
-pub const HELD_FROM_HELP_FILES: &[&str] = &["claudeFableFallbackToOpus"];
+/// 2026-11-13: that patch is applied for 11.6.1, so nothing is held now.
+pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).

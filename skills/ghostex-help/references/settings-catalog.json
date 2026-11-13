@@ -9414,6 +9414,18 @@
       "agentWritable": false
     },
     {
+      "key": "claudeFableFallbackToOpus",
+      "title": "Continue on Opus when Fable runs out",
+      "subtitle": "When a Claude session on Fable hits its limit and no account with Auto-switch on has Fable usage left, Ghostex continues it on Opus, at the same effort, on an account that has room. It never picks an account set to manual only, and it stays on Opus until you pick Fable again.",
+      "tab": "accounts",
+      "tabTitle": "Accounts",
+      "section": "accounts",
+      "sectionTitle": "Configuration",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": false
+    },
+    {
       "key": "claudeAutoRedeemExpiringResets",
       "title": "Auto-redeem expiring Claude resets",
       "subtitle": "Ghostex automatically uses a banked Claude reset 5 minutes before it expires, so it isn't lost.",
