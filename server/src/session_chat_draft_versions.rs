@@ -169,6 +169,22 @@ pub fn save(
         "SELECT revision, content, consumed FROM session_chat_draft_versions WHERE projectId=?1 AND sessionId=?2 AND draftId=?3",
         params![project, session, version.draft_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     ).optional().map_err(sql_error)?;
+    // CDXC:Drafts 2026-11-13 WHY: GitHub #587 (Q2792): a draft written with `ghostex
+    // set-session-chat-draft` was gone after the user looked at the session and switched away.
+    // Leaving blurs the chat box, which saves what it holds: nothing, under the fresh identity it
+    // opened with, and that first write replaced the script's draft with "". A composer that never
+    // held text under an identity has nothing to clear, so an empty first write of an identity
+    // gxserver has never stored leaves another draft in place and answers with it. Clearing text
+    // this composer typed or took in is a later revision of an identity stored here, which still
+    // writes; so does an empty save when no other text is kept.
+    if current.is_none() && content.trim().is_empty() {
+        if let Some(kept) =
+            read(&transaction, project, session)?.filter(|draft| !draft.content.trim().is_empty())
+        {
+            transaction.commit().map_err(sql_error)?;
+            return Ok(kept);
+        }
+    }
     if current
         .as_ref()
         .is_some_and(|(revision, previous, consumed)| {
