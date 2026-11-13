@@ -19,11 +19,15 @@ use crate::gxserver::health;
 use crate::util::{home_dir, kill_pid, output, root, sleep_ms, stdout_if_ok, xdg_state_root, Res};
 
 const USAGE: &str = "Usage: cargo xtask test-server <command>
-  start [--name <n>] [--projects <path>...] [--port <p>] [--no-build] [--dry-run] [--binaries <dir>]
+  start [--name <n>] [--projects <path>...] [--port <p>] [--network online|offline|probe] [--no-build] [--dry-run] [--binaries <dir>]
                 build (or reuse) the debug gxserver, start it on its own GHOSTEX_HOME and port,
                 add the projects, and print the env lines for the ghostex CLI and `ghostex web`;
                 --binaries runs the gxserver and ghostex in <dir> instead (an older release's, to check
-                compatibility)
+                compatibility); --network sets what its online check sees (online by default, probe for
+                the real check)
+  network <name> online|offline|probe
+                switch what a running test server's online check sees: offline holds Autopilot and
+                coordinator reports as a real outage does, online brings them back, probe uses the real check
   env <name>    print those env lines again
   stop <name>   close its sessions, stop it, and remove any LaunchAgent it created
   remove <name> stop it and delete its folder
@@ -87,6 +91,16 @@ pub fn run(args: &[String]) -> Res<i32> {
                 fs::remove_dir_all(&folder)?;
             }
             println!("Removed {}.", folder.display());
+            Ok(0)
+        }
+        "network" => {
+            let [name, state] = rest else {
+                bail!("Usage: cargo xtask test-server network <name> online|offline|probe");
+            };
+            validate_name(name)?;
+            let server = Server::load(name)?;
+            set_network(&server, state)?;
+            println!("Test server {name}'s online check now sees: {state}.");
             Ok(0)
         }
         "list" => list(),
@@ -362,6 +376,7 @@ fn start(args: &[String]) -> Res<i32> {
     let mut build = true;
     let mut dry_run = false;
     let mut binaries: Option<PathBuf> = None;
+    let mut network = "online".to_string();
     let mut index = 0;
     while index < args.len() {
         let value = |index: usize| -> Res<&String> {
@@ -386,6 +401,11 @@ fn start(args: &[String]) -> Res<i32> {
                     projects.push(path.clone());
                     index += 1;
                 }
+            }
+            "--network" => {
+                network = value(index)?.clone();
+                check_network_state(&network)?;
+                index += 1;
             }
             "--no-build" => build = false,
             "--dry-run" => dry_run = true,
@@ -472,6 +492,7 @@ fn start(args: &[String]) -> Res<i32> {
         None => Server::new(&name, port),
     };
     prepare_folder(&server, &debug, linked)?;
+    set_network(&server, &network)?;
     ensure_isolated(&server)?;
     server.write_env_file()?;
     fs::write(
@@ -885,6 +906,32 @@ fn is_debug_zmx(path: &Path) -> bool {
     fs::read(path).is_ok_and(|bytes| bytes.windows(MARKER.len()).any(|window| window == MARKER))
 }
 
+/// CDXC:OfflineHold 2026-11-13 WHY: a test server started from a sandboxed or proxied shell could not connect straight to the agents' API hosts, so it read as offline and held every report; pointing HTTPS_PROXY at its own port was the workaround. gxserver's hidden `--network-status-file` makes its online check read this file instead while it says `online` or `offline` (server/src/network_status/probe.rs), so a test server is online by default and an outage can be tested by switching it, never by cutting the computer's network.
+fn network_file(server: &Server) -> PathBuf {
+    server.folder.join("network-status")
+}
+
+fn check_network_state(state: &str) -> Res {
+    if !matches!(state, "online" | "offline" | "probe") {
+        bail!("The network state is online, offline or probe (got {state}).");
+    }
+    Ok(())
+}
+
+/// `probe` removes the file, so the server runs the real check.
+fn set_network(server: &Server, state: &str) -> Res {
+    check_network_state(state)?;
+    let file = network_file(server);
+    if state == "probe" {
+        if file.exists() {
+            fs::remove_file(&file)?;
+        }
+    } else {
+        fs::write(&file, format!("{state}\n"))?;
+    }
+    Ok(())
+}
+
 fn launch(server: &Server) -> Res {
     let log = fs::OpenOptions::new()
         .create(true)
@@ -893,6 +940,8 @@ fn launch(server: &Server) -> Res {
     let mut command = server.command(server.bin().join("gxserver"));
     command
         .arg("--foreground")
+        .arg("--network-status-file")
+        .arg(network_file(server))
         .current_dir(&server.folder)
         .stdin(Stdio::null())
         .stdout(log.try_clone()?)
