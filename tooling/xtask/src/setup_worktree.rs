@@ -150,15 +150,47 @@ fn submodule_names() -> Res<Vec<(String, String)>> {
 fn checkout_submodule(name: &str, path: &str, main: Option<&Path>) -> Res {
     let pin = git_stdout(root(), &["rev-parse", &format!("HEAD:{path}")])?;
     let checkout = root().join(path);
+    let url = git_stdout(
+        root(),
+        &[
+            "config",
+            "-f",
+            ".gitmodules",
+            &format!("submodule.{name}.url"),
+        ],
+    )?;
+    let local = main
+        .map(|main| main.join(path))
+        .filter(|source| has_commit(source, &pin));
     if checkout.join(".git").exists() {
-        // Read-only: `submodule status` marks a wrong pin `+` and a conflict `U`. Either is someone's work, so it is reported and left alone.
-        let status = git_stdout(root(), &["submodule", "status", "--", path])?;
-        match status.trim_start().chars().next() {
-            Some('+') => println!(
-                "==> {path}: checked out at another commit than its pin {pin}; left as it is"
-            ),
-            Some('U') => println!("==> {path}: has merge conflicts; left as it is"),
-            _ => println!("==> {path}: already checked out at its pin"),
+        // The checkout's own HEAD decides, never `git submodule status`: a module this command set up is not registered in the shared config, and status prints such a module as uninitialized whatever its HEAD is.
+        let head = stdout_if_ok(command("git").args([
+            "-C",
+            path,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "HEAD",
+        ]));
+        match head.as_deref().map(str::trim) {
+            Some(head) if head == pin => println!("==> {path}: already checked out at its pin"),
+            Some(head) => {
+                println!("==> {path}: checked out at {head}, not its pin {pin}; left as it is")
+            }
+            // No commit yet: an earlier run stopped between creating the repository and checking out the pin (a failed fetch). With nothing in the folder but its `.git`, it is resumed.
+            None => {
+                let only_git_file = fs::read_dir(&checkout)?
+                    .filter_map(Result::ok)
+                    .all(|entry| entry.file_name() == ".git");
+                if !only_git_file {
+                    bail!("{path} has a repository with no commit and other files in it. Move them away, then run setup-worktree again.");
+                }
+                println!("==> {path}: finishing an earlier unfinished setup");
+                let git_dir =
+                    PathBuf::from(git_stdout(&checkout, &["rev-parse", "--absolute-git-dir"])?);
+                fetch_pin(path, &pin, &url, local.as_deref())?;
+                check_out_pin(path, &pin, &git_dir, &checkout)?;
+            }
         }
         return Ok(());
     }
@@ -174,19 +206,7 @@ fn checkout_submodule(name: &str, path: &str, main: Option<&Path>) -> Res {
             git_dir.display()
         );
     }
-    let url = git_stdout(
-        root(),
-        &[
-            "config",
-            "-f",
-            ".gitmodules",
-            &format!("submodule.{name}.url"),
-        ],
-    )?;
     fs::create_dir_all(git_dir.parent().expect("a module folder has a parent"))?;
-    let local = main
-        .map(|main| main.join(path))
-        .filter(|source| has_commit(source, &pin));
     check(
         command("git")
             .args(["init", "--quiet", "--separate-git-dir"])
@@ -194,9 +214,14 @@ fn checkout_submodule(name: &str, path: &str, main: Option<&Path>) -> Res {
             .arg(path),
     )?;
     check(command("git").args(["-C", path, "remote", "add", "origin", &url]))?;
+    fetch_pin(path, &pin, &url, local.as_deref())?;
+    check_out_pin(path, &pin, &git_dir, &checkout)
+}
+
+fn fetch_pin(path: &str, pin: &str, url: &str, local: Option<&Path>) -> Res {
     let mut fetch = command("git");
     fetch.args(["-C", path]);
-    if let Some(source) = &local {
+    if let Some(source) = local {
         // The main checkout's copy may be shallow and its pin need not be a branch tip, so its upload-pack (started by this fetch, which is all these settings reach) may serve any commit it has.
         println!("==> {path}: fetching {pin} from {}", source.display());
         fetch
@@ -208,16 +233,18 @@ fn checkout_submodule(name: &str, path: &str, main: Option<&Path>) -> Res {
         println!("==> {path}: fetching {pin} from {url} (shallow)");
         fetch.args(["fetch", "--quiet", "--depth", "1", "origin"]);
     }
-    check(fetch.arg(&pin))?;
+    check(fetch.arg(pin))
+}
+
+fn check_out_pin(path: &str, pin: &str, git_dir: &Path, checkout: &Path) -> Res {
     check(
         command("git")
             .arg("--git-dir")
-            .arg(&git_dir)
+            .arg(git_dir)
             .args(["config", "core.worktree"])
-            .arg(fs::canonicalize(&checkout)?),
+            .arg(fs::canonicalize(checkout)?),
     )?;
-    check(command("git").args(["-C", path, "checkout", "--quiet", "--detach", &pin]))?;
-    Ok(())
+    check(command("git").args(["-C", path, "checkout", "--quiet", "--detach", pin]))
 }
 
 fn has_commit(repository: &Path, commit: &str) -> bool {
