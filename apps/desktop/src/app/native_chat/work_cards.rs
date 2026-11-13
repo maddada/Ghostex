@@ -89,7 +89,7 @@ pub(super) fn pill_fit(widths: (f32, f32, f32), room: f32) -> PillFit {
 }
 
 /// The thin divider that sets an opened row's Reply apart from its answers.
-fn answers_divider(p: &ChatAppearance) -> AnyElement {
+pub(super) fn answers_divider(p: &ChatAppearance) -> AnyElement {
     div()
         .flex_shrink_0()
         .w(px(1.0))
@@ -953,197 +953,20 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// One dock row. Its first line is its status glyph, its question, the answers beside it when
-    /// they fit and its age, which stays at the top right open or closed, with the row's ⋯ menu
-    /// (Show in chat, Dismiss, Snooze, Mention) over it under the pointer. Closed it stays one
-    /// line. Opened, it is its own card (one open at a time): the title, the work it belongs to as
-    /// a small label under it, the whole description; the answers stay beside the title when they
-    /// fit and go on a line under it when they do not, Reply after a divider. The answers and
-    /// Reply are always one line: past its room the answers fold into one Choose an answer
-    /// dropdown (work_actions.rs `answers_dropdown`).
+    /// One dock row: its mark, its question on one line, its answers and Reply beside it (folded
+    /// into one Choose an answer dropdown when they do not all fit), and its age with the ⋯ over it
+    /// under the pointer. A click on it shows the whole ask in its modal (dock_ask_modal.rs); a
+    /// Ghostex page's row opens the page.
     ///
-    /// CDXC:Coordinators 2026-11-10 DECISION:
-    /// User, picking on the dock rows page (rows-page.html) after a long question was squeezed
-    /// into a narrow column beside five answers: an opened row's answers sit "beside the question
-    /// when they fit, under it when they do not", where fit means they leave the question at least
-    /// half the row (B); a closed row whose answers do not fit shows "the answers that fit, then
-    /// +3" and stays one line (B); the icon buttons go "at the right end of the row's last line"
-    /// (A, superseded by the ⋯ menu); a very long question shows "four lines, then more" (B,
-    /// superseded: an opened row shows it whole). Also as drawn: the age stays
-    /// at the top right, and the work item's name and "Nothing waits on it" share one line.
-    ///
-    /// Opening or shutting, the row eases between the two as the chat's folds do
-    /// (disclosure_motion.rs, its timing, curve and the reduced motion setting): its height
-    /// moves from the one line's to the card's while the line fades out and the card fades in
-    /// over it, so the rows under it slide instead of jumping. Shutting does the same backwards,
-    /// and a press part of the way through turns it around from where it is.
-    ///
-    /// CDXC:Coordinators 2026-11-12 DECISION:
-    /// User: opening and closing each docked card animated, quickly, the way the chat's folds
-    /// ease open and shut.
+    /// CDXC:Coordinators 2026-11-14 DECISION:
+    /// User: "i want when i click on a thing like this one to open modal instead of expanding like
+    /// accordion because accordion is annoying pls fix". A row never opens in place any more: its
+    /// title, description, answers and actions are a modal over the chat. Supersedes the opened
+    /// row card (2026-11-11 and 2026-11-12 decisions, now on the modal in dock_ask_modal.rs) and
+    /// its scrolling into view past the dock's height cap.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
-        let key = text(row, "key");
-        let open_key = format!("dock-row:{key}");
-        let drawn = self.dock_row_moving(row, p, cx);
-        self.dock_row_reveal(&open_key, drawn)
-    }
-
-    /// A row the reader just opened, past the dock's height cap: as it grows, the dock's rows
-    /// scroll just far enough that its end shows, never so far that its title leaves the top,
-    /// with the transcript's own arithmetic for a fold opened by a reader scrolled up
-    /// (disclosure_reveal.rs `reveal_distance`, the row's title being inside what is measured).
-    /// It follows the row while it moves and lands once on its settled height; a row that fits
-    /// moves nothing, and a row opened more than 1.5 seconds ago is left where the reader puts it.
-    ///
-    /// CDXC:Coordinators 2026-11-12 DECISION:
-    /// User: when a docked row opens while the dock is at its height cap, scroll it into view, as
-    /// the chat's folds do.
-    fn dock_row_reveal(&self, open_key: &str, drawn: AnyElement) -> AnyElement {
-        let Some((_, pressed)) = self
-            .board
-            .dock_reveal
-            .as_ref()
-            .filter(|(key, pressed)| key == open_key && pressed.elapsed().as_millis() <= 1500)
-        else {
-            return drawn;
-        };
-        let pressed = *pressed;
-        let scroll = self.board.dock_scroll.clone();
-        div()
-            .relative()
-            .w_full()
-            .min_w_0()
-            .flex_shrink_0()
-            .child(drawn)
-            .child(
-                gpui::canvas(
-                    move |bounds, window, _| {
-                        let view = scroll.bounds();
-                        let distance = super::disclosure_reveal::reveal_distance(
-                            view.top().as_f32(),
-                            view.bottom().as_f32(),
-                            bounds.top().as_f32(),
-                            bounds.bottom().as_f32(),
-                            0.0,
-                        );
-                        let offset = scroll.offset();
-                        let max = scroll.max_offset().y.as_f32();
-                        let target = (offset.y.as_f32() - distance).max(-max);
-                        if distance > 0.5 && target < offset.y.as_f32() - 0.5 {
-                            scroll.set_offset(gpui::point(offset.x, px(target)));
-                            // The row's height and the list's room are a frame behind: look
-                            // again until nothing is left to show.
-                            if pressed.elapsed().as_millis() <= 1500 {
-                                window.refresh();
-                            }
-                        }
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full(),
-            )
-            .into_any_element()
-    }
-
-    /// One dock row at rest, or easing between its line and its card.
-    fn dock_row_moving(
-        &self,
-        row: &Value,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let key = text(row, "key");
-        let open_key = format!("dock-row:{key}");
-        let page_row = row["page"] == true && row["open"].is_object();
-        let open = self.expanded.contains(&open_key) && !page_row;
-        // The shut line measures its height whenever it is drawn, kept between motions, so an
-        // opening starts from exactly the line on screen.
-        let shut_height = self.disclosure_floor(&open_key);
-        let shut_id = gpui::SharedString::from(format!("dock-row-shut:{key}"));
-        let open_id = gpui::SharedString::from(format!("dock-row-open:{key}"));
-        let Some(frame) = self.disclosure_frame(&open_key, open, cx) else {
-            let layer = self.dock_row_layout(row, open, p, cx);
-            return if open {
-                div().id(open_id).w_full().child(layer).into_any_element()
-            } else {
-                div()
-                    .id(shut_id)
-                    .w_full()
-                    .child(super::disclosure_motion::measured(shut_height, layer))
-                    .into_any_element()
-            };
-        };
-        let factor = frame.log.clamp(0.0, 1.0);
-        let card_height = self
-            .disclosure_motion
-            .borrow_mut()
-            .height(&open_key, "card");
-        let (shut, card) = (shut_height.get(), card_height.get());
-        // Both layers keep the ids they have at rest, so nothing they hold is lost when the
-        // motion starts or ends. The one the row is turning into lies on top and takes presses.
-        let shut_layer = div()
-            .id(shut_id)
-            .absolute()
-            .top_0()
-            .left_0()
-            .w_full()
-            .opacity((1.0 - factor / 0.75).clamp(0.0, 1.0))
-            .child(super::disclosure_motion::measured(
-                shut_height,
-                self.dock_row_layout(row, false, p, cx),
-            ))
-            .into_any_element();
-        let card_layer = div()
-            .id(open_id)
-            .w_full()
-            .flex_shrink_0()
-            .opacity(((factor - 0.25) / 0.75).clamp(0.0, 1.0))
-            .child(super::disclosure_motion::measured(
-                card_height,
-                self.dock_row_layout(row, true, p, cx),
-            ))
-            .into_any_element();
-        let layers = if open {
-            [shut_layer, card_layer]
-        } else {
-            [card_layer, shut_layer]
-        };
-        div()
-            .relative()
-            .w_full()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .flex_shrink_0()
-            .overflow_hidden()
-            .map(|holder| {
-                if shut > 0.0 && card > 0.0 {
-                    holder.h(px(shut + (card - shut) * factor))
-                } else if shut > 0.0 && factor < 0.5 {
-                    holder.h(px(shut))
-                } else {
-                    holder
-                }
-            })
-            .children(layers)
-            .into_any_element()
-    }
-
-    /// One dock row drawn shut (`open` false, one line) or opened (its card), at rest
-    /// (`dock_row` eases between the two).
-    fn dock_row_layout(
-        &self,
-        row: &Value,
-        open: bool,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
-        let open_key = format!("dock-row:{key}");
         // A Ghostex page's row never opens to a second line: a click opens the page, and its other
         // actions are the ⋯ menu that takes the age's place under the pointer (`page_row_menu`).
         //
@@ -1152,7 +975,6 @@ impl NativeChatView {
         // basically) where i can click to see show in chat/dismiss/snooze. don't make it expand
         // on click since it's useless when it expands".
         let page_row = row["page"] == true && row["open"].is_object();
-        let open = open && !page_row;
         let (icon, color) = row_mark(row, p);
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
@@ -1203,58 +1025,30 @@ impl NativeChatView {
         // Reply always shows: it is the one answer that takes anything, so a row keeps it one
         // click away.
         let reply_width = reply_answer.as_ref().map_or(0.0, |answer| {
-            dock_button_width(&text(answer, "label"), true, false, p, cx)
-                + 6.0
-                + if open { 13.0 } else { 0.0 }
+            dock_button_width(&text(answer, "label"), true, false, p, cx) + 6.0
         });
         let all_width = buttons_width(&widths) + reply_width;
-        let fit = all_width <= beside_room;
-        // The answers, Reply and its divider are one line, never wrapped: when they do not all fit
-        // (beside the title on a closed row, on their own line under an opened one's text), the
-        // answers fold into one Choose an answer dropdown in their place. Measured, with the
-        // dock's width at its last paint, so a resize decides again.
+        // The answers and Reply are one line, never wrapped: when they do not all fit beside the
+        // title, the answers fold into one Choose an answer dropdown in their place. Measured, with
+        // the dock's width at its last paint, so a resize decides again. Answers no wider than the
+        // dropdown stay as they are: folding them would gain nothing.
         //
         // CDXC:Coordinators 2026-11-11 DECISION:
         // User, of an opened row whose Reply wrapped under four answers: "i dont like the choices
         // wrapping, please make them never wrap… should just show a dropdown". Supersedes the
         // closed row's "+N" chip.
-        // Answers no wider than the dropdown stay as they are: folding them would gain nothing.
-        let line_room = row_width - DOCK_LEAD;
         let choose_width =
             dock_button_width(super::work_actions::CHOOSE_ANSWER, true, false, p, cx);
-        // An opened row's item pills lead its answers (`item_pills`): the answers fold first,
-        // then the pills drop their ids, then they become one "+N" pill.
-        let pills: Vec<Value> = if open {
-            row["itemPills"].as_array().cloned().unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        let pill_room = pill_widths(&pills, p, cx);
         let fold = action.is_none()
             && !answers.is_empty()
             && buttons_width(&widths) > choose_width
-            && !(if open {
-                all_width + pill_room.0 <= line_room
-            } else {
-                fit
-            });
-        let answers_used = if fold {
-            choose_width + reply_width
-        } else {
-            all_width
-        };
-        let pill_fit = pill_fit(pill_room, line_room - answers_used);
+            && all_width > beside_room;
         let mut buttons: Vec<AnyElement> = match &action {
             Some(_) => self.work_row_action(&key, row, p, cx).into_iter().collect(),
             None if fold => vec![self.answers_dropdown(&key, &answers, busy, p, cx)],
             None => self.work_answer_buttons(&key, &answers, busy, p, cx),
         };
-        let toggle = open_key.clone();
         if let Some(answer) = &reply_answer {
-            // Opened, Reply stands apart from the answers after a thin divider.
-            if open {
-                buttons.push(answers_divider(p));
-            }
             buttons.extend(self.work_answer_buttons(
                 &format!("{key}:reply"),
                 std::slice::from_ref(answer),
@@ -1263,11 +1057,6 @@ impl NativeChatView {
                 cx,
             ));
         }
-        // Opened, the answers always take their own line under the text, so the title is the
-        // only thing that shares its width with the age and the ⋯.
-        let beside = !open;
-        let detail = text(row, "body");
-        let title_runs = &row["titleRuns"];
         let count = text(row, "count");
         let question = if page_row && !count.is_empty() {
             // The page's name, then how much it still asks; the name gives way first.
@@ -1291,14 +1080,14 @@ impl NativeChatView {
                         .child(count.to_string()),
                 )
                 .into_any_element()
-        } else if !open {
+        } else {
             div()
                 .flex_1()
                 .min_w_0()
                 .child(self.ask_title(
                     &key,
                     &title,
-                    title_runs,
+                    &row["titleRuns"],
                     true,
                     body,
                     PROSE_SIZE,
@@ -1307,147 +1096,7 @@ impl NativeChatView {
                     cx,
                 ))
                 .into_any_element()
-        } else {
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(self.ask_title(
-                    &key,
-                    &title,
-                    title_runs,
-                    false,
-                    body,
-                    PROSE_SIZE,
-                    PROSE_LINE_HEIGHT,
-                    p,
-                    cx,
-                ))
-                .into_any_element()
         };
-        // Opened: the work it belongs to as a small label under the title, then the whole
-        // description (or where a line of work stands). Nothing is cut; the row's own open and
-        // shut hides it. It sits under the title line, from the title's left edge to the card's
-        // right padding, not in a column beside the age and the ⋯.
-        //
-        // CDXC:Coordinators 2026-11-12 DECISION:
-        // User, of an opened row whose description stopped where the age and the ⋯ sit: "It
-        // should take up the full width of this card when I expand".
-        //
-        // CDXC:Coordinators 2026-11-12 DECISION:
-        // User, of the thread line between an opened row's title and text ("looks out of place
-        // in this case. and the spacing above it is smaller than below it"), picking the logo
-        // alone: each thread of a line of work is its agent's logo at the left of the Done /
-        // Reply line, its name in a tooltip, a click opening the thread. The title, the text and
-        // the answers are then 6 px apart (two lines of text) and 12 px before the answers.
-        let (thread_chips, other_chips): (Vec<Value>, Vec<Value>) =
-            if open && !row["waitedBy"].is_array() {
-                row["chips"]
-                    .as_array()
-                    .cloned()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .partition(|chip| chip["kind"] == "thread")
-            } else {
-                (Vec::new(), Vec::new())
-            };
-        let thread_logos: Vec<AnyElement> = thread_chips
-            .iter()
-            .enumerate()
-            .map(|(index, chip)| self.work_thread_logo(chip, &format!("dock:{key}:{index}"), p, cx))
-            .collect();
-        let opened_detail = open.then(|| {
-            let mut column = div()
-                .w_full()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap(px(2.0 * s))
-                .pl(px(DOCK_LEAD * s));
-            if row["waitedBy"].is_array() {
-                // An ask's own item, then the other items that wait on its answer: one line. With
-                // item pills on the answers row, only its other parts (the steps) are left here.
-                let parts = self.item_line(&key, row, p, cx);
-                if !parts.is_empty() {
-                    column = column.child(
-                        div()
-                            .w_full()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .gap_x(px(6.0 * s))
-                            .overflow_hidden()
-                            .text_size(px(PROSE_SIZE * s))
-                            .line_height(px(20.0 * s))
-                            .children(parts),
-                    );
-                }
-            } else {
-                // A line of work's threads and links, wrapping, with no separator between them.
-                let chips: Vec<AnyElement> = other_chips
-                    .iter()
-                    .enumerate()
-                    .map(|(index, chip)| {
-                        self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx)
-                    })
-                    .collect();
-                if !chips.is_empty() {
-                    column = column.child(
-                        div()
-                            .w_full()
-                            .min_w_0()
-                            .flex()
-                            .flex_wrap()
-                            .items_center()
-                            .gap_x(px(14.0 * s))
-                            .gap_y(px(2.0 * s))
-                            .children(chips),
-                    );
-                }
-            }
-            // The description stands apart from the title and its work item line, as a question
-            // card's text stands under its head: `OPENED_ROW_GAP` with the column's own 2.
-            //
-            // CDXC:Coordinators 2026-11-12 DECISION:
-            // User, of an opened row: "please add space between the title/description/choice
-            // buttons they're too close together now". The gaps are the question card's
-            // (question.rs: 12 from the head to the text, 12 from the text to the options).
-            let mut first_body = true;
-            // Two lines of text are 6 px apart (the title's 2 under it and 4), with a work item
-            // line or a link between them the question card's 12.
-            let has_line = row["waitedBy"].is_array() || !other_chips.is_empty();
-            let body_lead = if has_line { OPENED_ROW_GAP - 2.0 } else { 4.0 };
-            if !detail.is_empty() {
-                first_body = false;
-                column = column.child(div().mt(px(body_lead * s)).child(self.ask_markdown(
-                    &format!("detail:{key}"),
-                    &detail,
-                    p.card_muted,
-                    PROSE_SIZE,
-                    PROSE_LINE_HEIGHT,
-                    p,
-                    cx,
-                )));
-            }
-            // Where a line of work stands, on lines of its own: no dot can be left at a line's end.
-            for line in row["detail"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .filter(|line| !line.is_empty())
-            {
-                column = column.child(
-                    div()
-                        .min_w_0()
-                        .when(first_body, |line| line.mt(px(body_lead * s)))
-                        .whitespace_normal()
-                        .text_color(p.card_muted)
-                        .child(line.to_string()),
-                );
-                first_body = false;
-            }
-            column
-        });
         let mut head = div()
             .w_full()
             .min_w_0()
@@ -1463,30 +1112,18 @@ impl NativeChatView {
                     .child(svg().path(icon).size(px(13.0 * s)).text_color(color)),
             )
             .child(question);
-        let mut under_answers = Vec::new();
-        if beside {
-            if !buttons.is_empty() {
-                head = head.child(
-                    div()
-                        .flex_shrink_0()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0 * s))
-                        .children(buttons),
-                );
-            }
-        } else {
-            // The item pills at the left, the answers and Reply at the right edge.
-            //
-            // CDXC:Coordinators 2026-11-12 DECISION:
-            // User: "move the answer buttons to bottom right. keep work item tag bottom left".
-            under_answers = self.item_pill_elements(&key, &pills, pill_fit, p, cx);
-            under_answers.extend(thread_logos);
-            under_answers.push(div().flex_1().min_w_0().into_any_element());
-            under_answers.extend(buttons);
+        if !buttons.is_empty() {
+            head = head.child(
+                div()
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .children(buttons),
+            );
         }
         // The row's other actions (Show in chat, Dismiss, Snooze, Mention) are one ⋯ menu that
-        // takes the age's place while the pointer is over the row, closed or opened.
+        // takes the age's place while the pointer is over the row.
         //
         // CDXC:Coordinators 2026-11-11 DECISION:
         // User, of the ⋯ at the right end of an opened row's answers: "please move this button to
@@ -1494,42 +1131,9 @@ impl NativeChatView {
         // expanded)". The answers and Reply get its room.
         let hover = gpui::SharedString::from(format!("dock-row-hover:{key}"));
         let age_menu = self.row_age_menu(&key, &age, &hover, row, p, cx);
-        if page_row {
-            let page = row["open"].clone();
-            let right_row = row.clone();
-            let head = Self::dock_row_press(&key, open, head.child(age_menu), p)
-                .group(hover.clone())
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.invoke(page.clone(), cx);
-                }))
-                .on_mouse_down(
-                    gpui::MouseButton::Right,
-                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                        cx.stop_propagation();
-                        let rows = this.row_menu(&right_row, cx);
-                        this.show_dock_row_menu(rows, event.position, window, cx);
-                    }),
-                );
-            if let Some(page_id) = row["pageId"].as_str() {
-                self.refresh_page_counts(page_id, cx);
-            }
-            return div().w_full().child(head).into_any_element();
-        }
-        // A right-click on its title line opens the ⋯ menu too, as a page row's does.
         let right_row = row.clone();
-        let press = Self::dock_row_press(&key, open, head.child(age_menu), p)
-            .on_click(cx.listener(move |this, _, _, cx| {
-                // One row open at a time: opening this one shuts the one that was open.
-                if this.expanded.remove(&toggle) {
-                    this.board.dock_reveal = None;
-                } else {
-                    this.expanded.retain(|key| !key.starts_with("dock-row:"));
-                    this.expanded.insert(toggle.clone());
-                    // Past the dock's height cap it scrolls into view as it opens.
-                    this.board.dock_reveal = Some((toggle.clone(), web_time::Instant::now()));
-                }
-                cx.notify();
-            }))
+        let press = Self::dock_row_press(&key, head.child(age_menu), p)
+            .group(hover.clone())
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
@@ -1538,115 +1142,39 @@ impl NativeChatView {
                     this.show_dock_row_menu(rows, event.position, window, cx);
                 }),
             );
-        // Opened, only the title line opens and shuts the row: what sits under it takes a press
-        // as text, so a drag selects, a double-click picks a word and Cmd+C copies.
-        //
-        // CDXC:Coordinators 2026-11-12 DECISION:
-        // User, of an opened row whose command he could not select: "let's make collapsing
-        // require clicking on the header of the card not the inner part please".
-        let head = match opened_detail {
-            Some(detail) => div()
+        if page_row {
+            let page = row["open"].clone();
+            if let Some(page_id) = row["pageId"].as_str() {
+                self.refresh_page_counts(page_id, cx);
+            }
+            return div()
                 .w_full()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(press)
-                .child(
-                    // `pl` again, the title's indent with the row's own padding: `px` would
-                    // replace the indent the column carries.
-                    detail
-                        .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
-                        .pr(px(DOCK_ROW_PAD_X * s))
-                        // The answers' line sits `OPENED_ROW_GAP` under the text.
-                        .pb(px(if under_answers.is_empty() {
-                            6.0
-                        } else {
-                            OPENED_ROW_GAP
-                        } * s)),
-                )
-                .into_any_element(),
-            None => press.into_any_element(),
-        };
-        if !open {
-            return div().w_full().group(hover).child(head).into_any_element();
+                .child(press.on_click(cx.listener(move |this, _, _, cx| {
+                    this.invoke(page.clone(), cx);
+                })))
+                .into_any_element();
         }
-        // Opened: its own card, a little lighter than the dock, with the answers on a line under
-        // its text.
-        //
-        // CDXC:Coordinators 2026-11-11 DECISION:
-        // User, picking on the opened row page (opened-row-page.html): "C. Answers and one menu"
-        // (only the answers stay buttons; Show in chat, Dismiss, Snooze and Mention are one ⋯ menu
-        // at the right end of the answers), Show more removed ("remove show more, they can
-        // collapse this item if they dont want to read it"), the work item's name as a small label
-        // under the title, Reply after a divider apart from the answers, and an opened row as its
-        // own card with only one open at a time.
-        let mut card = div()
-            .w_full()
-            .group(hover)
-            .rounded(px(10.0 * s))
-            .border_1()
-            .border_color(p.foreground.opacity(if p.light { 0.10 } else { 0.10 }))
-            .bg(if p.light {
-                gpui::white().opacity(0.6)
-            } else {
-                p.foreground.opacity(0.055)
-            })
-            .child(head);
-        if !under_answers.is_empty() {
-            card = card.child(
-                div()
-                    .w_full()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0 * s))
-                    .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
-                    .pr(px(DOCK_ROW_PAD_X * s))
-                    .pb(px(8.0 * s))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.0 * s))
-                            .children(under_answers),
-                    ),
-            );
-        }
-        // Its spacing above and below is padding, not margin, so the height `dock_row` measures
-        // while it moves is the whole room it takes.
+        let shown = key.clone();
         div()
             .w_full()
-            .py(px(4.0 * s))
-            .child(card)
+            .child(press.on_click(cx.listener(move |this, _, window, cx| {
+                this.open_dock_ask_modal(&shown, window, cx);
+            })))
             .into_any_element()
     }
 
-    /// A dock row's clickable surface: its title line (opened, only that line; what sits under it
-    /// is the row's text, `dock_row`).
-    fn dock_row_press(
-        key: &str,
-        open: bool,
-        line: gpui::Div,
-        p: &ChatAppearance,
-    ) -> gpui::Stateful<gpui::Div> {
+    /// A dock row's clickable surface: its one line.
+    fn dock_row_press(key: &str, line: gpui::Div, p: &ChatAppearance) -> gpui::Stateful<gpui::Div> {
         let s = p.scale;
         div()
             .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
+            .role(gpui::Role::Button)
             .w_full()
             .min_w_0()
             .px(px(DOCK_ROW_PAD_X * s))
-            .pt(px(6.0 * s))
-            .pb(px(if open { 2.0 } else { 6.0 } * s))
+            .py(px(6.0 * s))
             .rounded(px(8.0 * s))
             .chat_cursor_pointer()
-            // Opened too: the title line is what shuts the row, so it lights up under the pointer
-            // as the rows do; what sits under it takes no hover (it is for selecting text).
-            //
-            // CDXC:Coordinators 2026-11-12 DECISION:
-            // User, of an opened row's title: "show bg hover effect change when i hover the title
-            // of this so i know clicking collapses it please".
             .hover(|style| style.bg(p.foreground.opacity(0.04)))
             .child(line)
     }
@@ -1655,7 +1183,7 @@ impl NativeChatView {
     /// as Markdown for an ask, a question, a form or a page (`row_markdown`), then Mention in chat
     /// box, which puts the item's, form's or page's reference in the chat box where the caret is
     /// now.
-    fn row_menu(&self, row: &Value, cx: &Context<Self>) -> Vec<Value> {
+    pub(super) fn row_menu(&self, row: &Value, cx: &Context<Self>) -> Vec<Value> {
         let mut rows = page_row_menu(row);
         let markdown = row_markdown(row, &self.snapshot["questionForms"]);
         if !markdown.is_empty() {
@@ -1806,7 +1334,7 @@ impl NativeChatView {
     /// User, of a line that read "<item> · <item> waits on this" with its dot left hanging: only
     /// the item's name (the row's mark says whether it holds that item up); one other item that
     /// waits is named, more are counted; and the line is cut, never wrapped.
-    fn item_line(
+    pub(super) fn item_line(
         &self,
         key: &str,
         row: &Value,
@@ -2150,7 +1678,7 @@ impl NativeChatView {
 
     /// Opens a dock row's menu at `at` with the app's dropdown, inside the window it was pressed
     /// in (the chat's, or the floating Work card's).
-    fn show_dock_row_menu(
+    pub(super) fn show_dock_row_menu(
         &mut self,
         rows: Vec<Value>,
         at: gpui::Point<gpui::Pixels>,
@@ -2391,7 +1919,7 @@ impl NativeChatView {
     /// One part of a card's bottom line (`chips` in gx-chat-core work_cards.rs `item_chips`).
     /// A thread of an opened dock row as its agent's logo alone, at the left of the answers' line:
     /// its name (and state) is the tooltip, and a click opens the thread as the line's name did.
-    fn work_thread_logo(
+    pub(super) fn work_thread_logo(
         &self,
         chip: &Value,
         id: &str,
@@ -2447,7 +1975,7 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    fn work_card_part(
+    pub(super) fn work_card_part(
         &self,
         chip: &Value,
         id: &str,

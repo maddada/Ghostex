@@ -43,6 +43,7 @@ mod coordinator_intro;
 mod coordinator_threads;
 pub(crate) mod cursor;
 mod deferred_work;
+mod dock_ask_modal;
 mod delivery_card;
 pub(crate) mod dictation;
 mod disclosure_body;
