@@ -5078,7 +5078,13 @@ sessions, so any client can control agents on any machine.
   of connecting (each opens that computer's page), then Auto reconnect and
   Troubleshooting > Logs. Logs is also in the menu at the top of the Sessions
   screen (☰), and Settings search finds Computers and Logs. Logs shows the
-  phone's connection and status events; Copy copies them. Send to developer,
+  phone's connection and status events, kept across restarts (the newest 2,000);
+  Copy copies them, and Export saves them as a text file through the share
+  sheet (AirDrop, Files, Mail) with the same personal details replaced as Send
+  to developer. When a computer is busy (it refused the phone another channel)
+  its line says "Ghostex is busy on <computer>" and Ghostex tries again by
+  itself; its Reset connection button starts the connection over, which
+  restarts any open terminal that isn't an agent. Send to developer,
   beside Copy, first opens a review step that says what the report holds (the
   phone's connection and status events, the app version and phone system,
   routes and timings), what is replaced (IP addresses, user names, computer and

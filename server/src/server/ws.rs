@@ -94,6 +94,8 @@ pub(crate) async fn handle_events(
     let catalog_revision = query_value(&uri, "catalogRevision");
     // Long tool outputs cut for a phone that asked (session_chat_tool_outputs.rs).
     let cut_outputs = query_value(&uri, "toolOutputs").as_deref() == Some("cut");
+    // Project icons by ref on the sessions list for a phone that asked (sessions/icon_refs.rs).
+    let icon_refs = query_value(&uri, "iconRefs").as_deref() == Some("1");
     ws.on_upgrade(move |socket| {
         handle_event_socket_scoped(
             socket,
@@ -104,18 +106,21 @@ pub(crate) async fn handle_events(
                 deflate,
                 catalog_revision,
                 cut_outputs,
+                icon_refs,
             },
         )
     })
 }
 
 /// What a client asked of its event socket in the query: deflated frames (`encoding=deflate`), the
-/// model catalog it holds (`catalogRevision=`), cut tool outputs (`toolOutputs=cut`).
+/// model catalog it holds (`catalogRevision=`), cut tool outputs (`toolOutputs=cut`), project icons
+/// by ref on the sessions list (`iconRefs=1`).
 #[derive(Default)]
 pub(crate) struct SocketOptions {
     pub(crate) deflate: bool,
     pub(crate) catalog_revision: Option<String>,
     pub(crate) cut_outputs: bool,
+    pub(crate) icon_refs: bool,
 }
 
 /// What one `/api/events` socket carries, picked by its `stream` query value.
@@ -223,6 +228,7 @@ pub(crate) async fn handle_event_socket_scoped(
         deflate,
         catalog_revision,
         cut_outputs,
+        icon_refs,
     } = options;
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (outbound_tx, mut outbound_rx) = state.event_hub.client_channel();
@@ -326,7 +332,11 @@ pub(crate) async fn handle_event_socket_scoped(
     let mut renderer_client_id: Option<String> = None;
     let mut session_chat_subscriptions: HashSet<(String, String)> = HashSet::new();
     let sessions_list = (mode == EventStreamMode::SessionsList).then(|| {
-        super::sessions_list_stream::SessionsListStream::start(state.clone(), outbound_tx.clone())
+        super::sessions_list_stream::SessionsListStream::start(
+            state.clone(),
+            outbound_tx.clone(),
+            icon_refs,
+        )
     });
     loop {
         let message = tokio::select! {
