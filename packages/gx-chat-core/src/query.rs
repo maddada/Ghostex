@@ -62,6 +62,21 @@ pub fn answer_query(
             to_json(&send_blocked_toast(&reason))
         }
         Query::InsertAnswerAttachments => to_json(&answer_attachments_edit(arguments)?),
+        Query::AttachmentReferencePaths => to_json(
+            &crate::composer::attachment_moves::attachment_reference_paths(
+                first.and_then(Value::as_str)?,
+            ),
+        ),
+        Query::RetargetAttachmentReferences => {
+            let moved: Vec<(String, String)> =
+                serde_json::from_value(arguments.get(1)?.clone()).ok()?;
+            to_json(
+                &crate::composer::attachment_moves::retarget_attachment_references(
+                    first.and_then(Value::as_str)?,
+                    &moved,
+                ),
+            )
+        }
         Query::RemoveChatReference => to_json(&chat_reference_removal(arguments)?),
         Query::RenderVisual => render_visual(arguments)?,
         // `null` when the chat has no agent message by that id.
@@ -162,6 +177,12 @@ pub enum Query {
     SendBlockedToast,
     /// A question answer with the references for the files a paste uploaded.
     InsertAnswerAttachments,
+    /// `attachmentReferencePaths(text)`: the paths of the draft's attachment references
+    /// (composer/attachment_moves.rs), for the phone's copy to the session's computer at send.
+    AttachmentReferencePaths,
+    /// `retargetAttachmentReferences(text, [[from, to], …])`: the draft with those references
+    /// pointing at the copies.
+    RetargetAttachmentReferences,
     /// A draft without the reference an attachment pill stands for.
     RemoveChatReference,
     /// One ```visual block drawn for the phone: its scene as SVG, tooltip regions, or a page card.
@@ -189,6 +210,8 @@ impl Query {
             Self::TranscriptReply => "transcriptReply",
             Self::SendBlockedToast => "sendBlockedToast",
             Self::InsertAnswerAttachments => "insertAnswerAttachments",
+            Self::AttachmentReferencePaths => "attachmentReferencePaths",
+            Self::RetargetAttachmentReferences => "retargetAttachmentReferences",
             Self::RemoveChatReference => "removeChatReference",
             Self::RenderVisual => "renderVisual",
             Self::SpeakableSegments => "speakableSegments",
@@ -208,6 +231,8 @@ impl Query {
             "transcriptReply" => Self::TranscriptReply,
             "sendBlockedToast" => Self::SendBlockedToast,
             "insertAnswerAttachments" => Self::InsertAnswerAttachments,
+            "attachmentReferencePaths" => Self::AttachmentReferencePaths,
+            "retargetAttachmentReferences" => Self::RetargetAttachmentReferences,
             "removeChatReference" => Self::RemoveChatReference,
             "renderVisual" => Self::RenderVisual,
             "speakableSegments" => Self::SpeakableSegments,
