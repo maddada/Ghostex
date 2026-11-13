@@ -1,6 +1,6 @@
 //! The Debugging page (packages/core-ui/settings-modal/tabs/debugging.tsx (deleted 2026-10-01)), listed in the rail
-//! under its built-in extension: Show debug UI controls, the diagnostic log areas, then Track Claude
-//! without its hooks.
+//! under its built-in extension: Show debug UI controls, the diagnostic log areas, then Use agent
+//! hooks.
 use super::super::fields::{
     FieldStates, RowSpec, SettingsPage, diagnostic_logging_field, reset_key, settings_section,
     toggle_field,
@@ -12,6 +12,16 @@ use super::super::store::SettingsStore;
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, Entity, IntoElement, Render, Window,
 };
+
+/// Claude, Codex and OpenCode use their hooks (off: Ghostex follows them without; CDXC:AgentHooks
+/// 2026-11-12 in server/src/agent_hooks/hook_free.rs).
+///
+/// CDXC:AgentHooks 2026-11-13 DECISION: the user moved this switch here from Settings > Agents >
+/// Session resume hooks (Q3040 "B. Move it to Settings > Debugging": the same switch, out of
+/// sight, next to the other troubleshooting tools). gxserver installs or removes the three
+/// agents' hooks within a few seconds of the change (hookless_activity/hook_free_fallback.rs),
+/// and the Agents page reads the hooks again when it opens.
+const USE_AGENT_HOOKS: &str = "useAgentHooks";
 
 /// `.settings-page-width grid gap-6 px-5 py-5`: 20px above the first section on top of its own 12px.
 const PAGE_TOP_PADDING: f32 = 20.0;
@@ -90,6 +100,20 @@ impl Render for DebuggingTab {
                 Some(reset_key::<Self>("diagnosticLogging")),
                 &value,
                 window,
+                cx,
+            ));
+        }
+        if search.row_visible("controls", USE_AGENT_HOOKS) {
+            rows.push(toggle_field(
+                self,
+                &p,
+                USE_AGENT_HOOKS,
+                RowSpec::new("Use agent hooks")
+                    .description(
+                        "Install hooks for Claude, Codex and OpenCode. Ghostex follows them without hooks, so turn this on only if it can't follow them on this computer.",
+                    )
+                    .keyed(&values, USE_AGENT_HOOKS),
+                values.bool(USE_AGENT_HOOKS),
                 cx,
             ));
         }

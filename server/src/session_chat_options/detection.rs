@@ -475,7 +475,8 @@ pub fn detect_session_chat_terminal_state(
     if notice.is_none() && agent == Some(SessionChatOptionAgent::Codex) {
         notice = crate::hookless_activity::codex_update_notice(project_id, session_id);
     }
-    // A session that went back to its agent's hook says so once (hook_free_fallback.rs).
+    // A session its watcher can't follow asks before its agent's hook goes back, and one that went
+    // back to it says so once (hook_free_fallback.rs).
     if notice.is_none() {
         notice = crate::hookless_activity::fallback_notice(project_id, session_id);
     }

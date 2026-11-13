@@ -300,6 +300,7 @@ How to use this file:
 
 - **Show debug UI controls** `debuggingMode` (boolean, default false): Show diagnostic logs. From the next start, also opens Chromium's DevTools port (9334) for developer tools.
 - **Diagnostic logs** `diagnosticLogging` (structured value; change it in Settings, not with `ghostex settings set`): Pick the areas to log while you reproduce an issue, and when logging turns off. Warnings, errors, and crashes are always captured.
+- **Use agent hooks** `useAgentHooks` (boolean, default false): Install hooks for Claude, Codex and OpenCode and follow them through their hooks. Ghostex follows these three without hooks, so turn this on only if it can't follow them on this computer. When off, a session Ghostex can't follow asks in its chat before turning that agent's hook on. Other agents always use their hooks.
 ## About (tab `about`)
 
 ### About
@@ -409,9 +410,8 @@ How to use this file:
 - **Custom Title Command** `customSessionTitleGenerationCommand` (text, default (empty)): Custom command run with the title prompt on stdin when Title Generation Agent is custom. It should print only the title.
 ### Session resume hooks
 
-- **Session resume hooks** `agentResumeHooks` (Settings UI row without a settings key; use `ghostex settings open`): Hooks let Ghostex capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.
+- **Session resume hooks** `agentResumeHooks` (Settings UI row without a settings key; use `ghostex settings open`): Claude Code, Codex and OpenCode need no hook: Ghostex follows them from the files they write themselves. Other agents use a hook so Ghostex can capture their native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.
 - **Install the hook when I turn on an agent** `agentHooksAutoInstall` (boolean, default false): Install an agent's session resume hook as soon as you turn it on, without asking.
-- **Use agent hooks** `useAgentHooks` (boolean, default false): Install hooks for Claude, Codex and OpenCode and follow them through their hooks. When off, Ghostex follows these three from the files they write themselves, and turns a hook on by itself for a session it can't follow, saying so in its chat. Other agents always use their hooks.
 ### Home folder
 
 - **Show Main Hub on all Spaces** `chiefShowOnAllSpaces` (boolean, default false): Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.
@@ -542,7 +542,7 @@ How to use this file:
 - **Workspaces** `workspaces` (Settings UI row without a settings key; use `ghostex settings open`): Keep each company's projects, Spaces, browser sign-ins, Linear key and Claude account in its own workspace, pick each one's primary tracker, and share a team backend for your team's Slack flow.
 - **Connectors** `connectors` (Settings UI row without a settings key; use `ghostex settings open`): Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands.
 - **OS Integration** `osIntegration` (Settings UI row without a settings key; use `ghostex settings open`): Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links.
-- **Debugging** `debugging` (Settings UI row without a settings key; use `ghostex settings open`): The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue.
+- **Debugging** `debugging` (Settings UI row without a settings key; use `ghostex settings open`): The Debugging page in Settings: debug UI controls, the diagnostic logs you turn on while reproducing an issue, and Use agent hooks.
 - **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): An entry under Tools in the sidebar's menu that lists your installed extensions.
 - **Hide Bots** `botsHidden` (boolean, default true): Stop offering Bots, the sidebar mode with one row per Hermes profile. Hidden by default; offered only where the Hermes CLI is installed.
 - **GBots** `gbotsEnabled` (boolean, default false): Turn GBots on or off: your own team of bots under Chief of Staff in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.

@@ -59,6 +59,9 @@ pub(crate) async fn restart(
         Some(crate::hookless_activity::ACTION_UPDATE_CODEX) => {
             return crate::hookless_activity::answer_codex_update(state, params).await
         }
+        Some(crate::hookless_activity::ACTION_TURN_ON_HOOK) => {
+            return crate::hookless_activity::answer_ask_notice(state, params).await
+        }
         Some(crate::hookless_activity::ACTION_RESTART_FOR_HOOK) => {
             return crate::hookless_activity::answer_fallback_notice(state, params).await
         }

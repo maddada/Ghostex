@@ -62,7 +62,7 @@ pub(crate) fn official(platform: Platform) -> Section {
         row("workspaces", "Workspaces", "Keep each company's projects, Spaces, browser sign-ins, Linear key and Claude account in its own workspace, pick each one's primary tracker, and share a team backend for your team's Slack flow."),
         row("connectors", "Connectors", "Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands."),
         row("osIntegration", "OS Integration", "Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links."),
-        row("debugging", "Debugging", "The Debugging page in Settings: debug UI controls and the diagnostic logs you turn on while reproducing an issue."),
+        row("debugging", "Debugging", "The Debugging page in Settings: debug UI controls, the diagnostic logs you turn on while reproducing an issue, and Use agent hooks."),
         row("extensionsButton", "Extensions", "An entry under Tools in the sidebar's menu that lists your installed extensions."),
     ];
     rows.retain(|row| crate::built_in_extensions::available_on(row.key, platform));

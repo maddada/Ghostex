@@ -1,10 +1,13 @@
 //! The safety net under hook-free tracking: a running Claude, Codex or OpenCode that its watcher
-//! cannot see gets its hook back for its session, and the chat says so once; a Codex too old to
-//! report its approvals is asked to update instead. Also the upkeep that keeps the hooks matching
+//! cannot see has its chat ask whether to turn its hook back on for its session, and gets it only
+//! when the user agrees; a Codex too old to report its approvals is asked to update instead. Also the upkeep that keeps the hooks matching
 //! Use agent hooks: the start cleanup, and the switch turned on or off.
 //!
 //! CDXC:AgentHooks 2026-11-12 DECISION:
 //! The user's safety net (agent_hooks/hook_free.rs): "Ghostex switches back to a hook automatically when its watcher can't see a running agent (for example after an agent update changes its files), and says so in the chat." A session counts as unseen only while its agent's own process runs in its terminal (the zmx process scan) and for `UNSEEN_FOR` in a row, far longer than any watcher takes on a normal start: Claude writes its session record as it starts, Codex reports OSC 7501 on its first frame, OpenCode's service stream connects within seconds. Then: Claude with no session record Ghostex can read for that terminal; Codex reporting no OSC 7501 status (0.162 and older never does: that one is asked to update, the user's "Ask to update", and gets no hook) or working with no rollout Ghostex can find; OpenCode whose service stream is down or whose conversation Ghostex does not know. Ghostex installs that agent's hook, records the session (its hook drives it from then on and its watcher stops, drive.rs), raises one card in the session's chat ("Claude's hooks turned on", with Restart, which starts the agent again so the hook takes over at once; the chat's own Dismiss closes it, and it is not raised again for that session), and logs it in the Hook-free activity comparison area (and once, unconditionally, without paths). Agents read their hooks when they start, so the hook takes over the next time the agent starts in that terminal.
+//!
+//! CDXC:AgentHooks 2026-11-13 DECISION:
+//! Asked what to do when the safety net would put a hook back, the user picked (Q3041) "Ask in the chat before installing it: the user decides, but the session stays blind until they answer." This replaces "Ghostex installs that agent's hook" above: once a session is unseen for `UNSEEN_FOR`, its chat shows one card ("Turn on Claude's hooks?", why Ghostex can't follow it, a Turn on hooks button; the chat's own Dismiss closes it) and nothing is written to the agent's settings. Turn on hooks installs the hook and records the fallback as before, and the "Claude's hooks turned on" card with Restart follows. The question goes away by itself when the watcher sees the agent again or the agent stops; it is asked once per session while gxserver runs (a dismissed card is not raised again until gxserver restarts).
 //! SEE-ALSO: server/src/agent_hooks/hook_free.rs (the records), server/src/agent_hooks/hook_free_cleanup.rs (the removal), server/src/session_chat_codex_update.rs (the update the Codex card runs).
 
 use std::collections::{HashMap, HashSet};
@@ -39,6 +42,9 @@ pub(crate) const NOTICE_KIND: &str = "codexTooOldForHookFree";
 /// The fallback card's kind and its Restart button (the chat adds Dismiss to every info card).
 pub(crate) const FALLBACK_NOTICE_KIND: &str = "agentHookFallback";
 pub(crate) const ACTION_RESTART_FOR_HOOK: &str = "restartForAgentHook";
+/// The card that asks before the hook goes back, and its Turn on button.
+pub(crate) const ASK_NOTICE_KIND: &str = "agentHookFallbackAsk";
+pub(crate) const ACTION_TURN_ON_HOOK: &str = "turnOnAgentHook";
 
 /// Codex sessions running a Codex too old to report OSC 7501, with its version.
 static CODEX_TOO_OLD: LazyLock<Mutex<HashMap<(String, String), String>>> =
@@ -46,6 +52,11 @@ static CODEX_TOO_OLD: LazyLock<Mutex<HashMap<(String, String), String>>> =
 /// Sessions whose fallback card is up: the agent, and why it fell back.
 static FALLBACK_CARDS: LazyLock<Mutex<HashMap<(String, String), (String, Unseen)>>> =
     LazyLock::new(Default::default);
+/// Sessions whose chat asks whether to turn their agent's hook on: the agent, and why.
+static ASK_CARDS: LazyLock<Mutex<HashMap<(String, String), (String, Unseen)>>> =
+    LazyLock::new(Default::default);
+/// Sessions already asked while gxserver runs, so a dismissed question is not asked again.
+static ASKED: LazyLock<Mutex<HashSet<(String, String)>>> = LazyLock::new(Default::default);
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|error| error.into_inner())
@@ -123,7 +134,7 @@ pub(super) fn unseen(agent: &str, seen: Seen) -> Option<Unseen> {
 /// What to do about a session unseen for `UNSEEN_FOR`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Remedy {
-    /// Install the agent's hook for the session.
+    /// Ask in the chat whether to install the agent's hook for the session.
     Hook,
     /// Ask the user to update this Codex (0.162 and older): no hook.
     UpdateCodex(String),
@@ -145,8 +156,6 @@ pub(super) struct FallbackWatch {
     checked_at: Option<Instant>,
     /// When each session was first seen unseen, and why.
     unseen_since: HashMap<(String, String), (Unseen, Instant)>,
-    /// Sessions whose hook did not install, so the install is not retried every check.
-    failed: HashSet<(String, String)>,
 }
 
 impl FallbackWatch {
@@ -243,7 +252,7 @@ impl FallbackWatch {
                     continue;
                 }
             };
-            if since.elapsed() < UNSEEN_FOR || self.failed.contains(&pane) {
+            if since.elapsed() < UNSEEN_FOR {
                 continue;
             }
             let codex_version = hook_free::known_cli_version("codex");
@@ -259,47 +268,76 @@ impl FallbackWatch {
                     }
                 }
                 Remedy::Hook => {
-                    if !self.fall_back(state, agent, &pane, why) {
-                        self.failed.insert(pane.clone());
+                    if lock(&ASKED).insert(pane.clone()) {
+                        lock(&ASK_CARDS).insert(pane.clone(), (agent.to_string(), why));
+                        crate::session_chat_options::session_chat_terminal_notice_publisher(
+                            state, &pane.0, &pane.1,
+                        )();
+                        log_fallback(state, agent, &pane, why, "askedToInstall", None);
                     }
                 }
             }
         }
         self.unseen_since.retain(|pane, _| live.contains(pane));
-        self.failed.retain(|pane| live.contains(pane));
-    }
-
-    /// Installs `agent`'s hook for the session and says so in its chat. Returns `false` when the
-    /// hook could not be installed.
-    fn fall_back(
-        &mut self,
-        state: &AppState,
-        agent: &str,
-        pane: &(String, String),
-        why: Unseen,
-    ) -> bool {
-        match crate::agent_hooks::install_agent_hooks_for_running_agent(&state.paths, agent) {
-            Ok(_) => {}
-            Err(error) => {
-                log_fallback(
-                    state,
-                    agent,
-                    pane,
-                    why,
-                    "installFailed",
-                    Some(error.message),
-                );
-                return false;
-            }
-        }
-        if hook_free::record_fallback(&state.paths, agent, &pane.0, &pane.1, why.code()) {
-            lock(&FALLBACK_CARDS).insert(pane.clone(), (agent.to_string(), why));
+        // A question about an agent its watcher sees again, or that stopped, goes away.
+        let gone: Vec<(String, String)> = lock(&ASK_CARDS)
+            .keys()
+            .filter(|pane| !live.contains(*pane))
+            .cloned()
+            .collect();
+        for pane in gone {
+            lock(&ASK_CARDS).remove(&pane);
+            lock(&ASKED).remove(&pane);
             crate::session_chat_options::session_chat_terminal_notice_publisher(
                 state, &pane.0, &pane.1,
             )();
-            log_fallback(state, agent, pane, why, "hookInstalled", None);
         }
-        true
+    }
+
+}
+
+/// Installs `agent`'s hook for the session (the user said Turn on hooks) and says so in its chat.
+fn fall_back(
+    state: &AppState,
+    agent: &str,
+    pane: &(String, String),
+    why: Unseen,
+) -> Result<(), DomainStateError> {
+    if let Err(error) =
+        crate::agent_hooks::install_agent_hooks_for_running_agent(&state.paths, agent)
+    {
+        log_fallback(
+            state,
+            agent,
+            pane,
+            why,
+            "installFailed",
+            Some(error.message.clone()),
+        );
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: format!(
+                "Ghostex couldn't turn on {}'s {}: {}",
+                crate::agent_hooks::api::hook_free_agent_name(agent),
+                hook_noun(agent),
+                error.message
+            ),
+        });
+    }
+    if hook_free::record_fallback(&state.paths, agent, &pane.0, &pane.1, why.code()) {
+        lock(&FALLBACK_CARDS).insert(pane.clone(), (agent.to_string(), why));
+        log_fallback(state, agent, pane, why, "hookInstalled", None);
+    }
+    crate::session_chat_options::session_chat_terminal_notice_publisher(state, &pane.0, &pane.1)();
+    Ok(())
+}
+
+/// What the agent's hook is called: OpenCode's is a plugin.
+fn hook_noun(agent: &str) -> &'static str {
+    if agent == "opencode" {
+        "plugin"
+    } else {
+        "hooks"
     }
 }
 
@@ -341,16 +379,76 @@ fn log_fallback(
     };
 }
 
-/// The card that says a session went back to its agent's hook, until it is dismissed or the agent
+/// The card that asks whether to turn the agent's hook on, until it is answered or dismissed; then
+/// the card that says a session went back to its agent's hook, until it is dismissed or the agent
 /// is restarted from it (once: it is not raised again after a gxserver restart).
 pub(crate) fn fallback_notice(
     project_id: &str,
     session_id: &str,
 ) -> Option<SessionChatTerminalNotice> {
-    let (agent, why) = lock(&FALLBACK_CARDS)
-        .get(&(project_id.to_string(), session_id.to_string()))
-        .cloned()?;
+    let pane = (project_id.to_string(), session_id.to_string());
+    if let Some((agent, why)) = lock(&ASK_CARDS).get(&pane).cloned() {
+        return Some(ask_card(&agent, why));
+    }
+    let (agent, why) = lock(&FALLBACK_CARDS).get(&pane).cloned()?;
     Some(fallback_card(&agent, why))
+}
+
+fn ask_card(agent: &str, why: Unseen) -> SessionChatTerminalNotice {
+    let name = crate::agent_hooks::api::hook_free_agent_name(agent);
+    let noun = hook_noun(agent);
+    SessionChatTerminalNotice::new(
+        ASK_NOTICE_KIND,
+        SessionChatTerminalNoticeSeverity::Info,
+        SessionChatTerminalNoticeSource::Screen,
+        format!("Turn on {name}'s {noun}?"),
+    )
+    .with_detail(format!(
+        "Ghostex can't follow {name} in this session because {}, so this chat may not show when it works, finishes or asks. Turning on its {noun} adds them to {name}'s settings for this computer.",
+        why.because()
+    ))
+    .with_actions(vec![SessionChatTerminalNoticeAction {
+        id: ACTION_TURN_ON_HOOK.to_string(),
+        label: format!("Turn on {noun}"),
+        kind: SessionChatTerminalNoticeActionKind::RestartAgent,
+        send: None,
+    }])
+}
+
+/// The question's Turn on: installs the agent's hook for the session, then shows the card that
+/// says so (with its Restart).
+pub(crate) async fn answer_ask_notice(
+    state: &AppState,
+    params: &Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let target =
+        crate::session_chat_send::resolve_session_chat_send_target(state, params, "restartAgent")?;
+    let pane = (target.project_id.clone(), target.session_id.clone());
+    let Some((agent, why)) = lock(&ASK_CARDS).remove(&pane) else {
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: "Ghostex follows this session again, so it needs no hook.".to_string(),
+        });
+    };
+    let state = state.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let result = fall_back(&state, &agent, &pane, why);
+        if result.is_err() {
+            // Ask again: the install failed, nothing was written.
+            lock(&ASK_CARDS).insert(pane.clone(), (agent.clone(), why));
+            crate::session_chat_options::session_chat_terminal_notice_publisher(
+                &state, &pane.0, &pane.1,
+            )();
+        }
+        result
+    })
+    .await;
+    result.unwrap_or_else(|_| {
+        Err(DomainStateError {
+            code: "invalidState",
+            message: "Ghostex couldn't turn on the hook.".to_string(),
+        })
+    })
 }
 
 fn fallback_card(agent: &str, why: Unseen) -> SessionChatTerminalNotice {
@@ -649,6 +747,34 @@ mod tests {
         let opencode = fallback_card("opencode", Unseen::ServiceUnreachable);
         assert_eq!(opencode.title, "OpenCode's plugin turned on");
         assert!(fallback_notice("Py", "Gy").is_none());
+    }
+
+    #[test]
+    fn the_chat_asks_before_the_hook_goes_back() {
+        let card = ask_card("claude", Unseen::NoSessionRecord);
+        assert_eq!(card.kind, ASK_NOTICE_KIND);
+        assert_eq!(card.title, "Turn on Claude's hooks?");
+        assert!(card
+            .detail
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("Ghostex can't follow Claude in this session because it can't read"));
+        assert_eq!(card.actions.len(), 1);
+        assert_eq!(card.actions[0].id, ACTION_TURN_ON_HOOK);
+        assert_eq!(card.actions[0].label, "Turn on hooks");
+        assert_eq!(
+            ask_card("opencode", Unseen::ServiceUnreachable).title,
+            "Turn on OpenCode's plugin?"
+        );
+        // While a session is asked, its chat shows the question, not the "turned on" card.
+        let pane = ("Pa".to_string(), "Ga".to_string());
+        lock(&ASK_CARDS).insert(pane.clone(), ("codex".into(), Unseen::NoRollout));
+        assert_eq!(
+            fallback_notice("Pa", "Ga").expect("question").kind,
+            ASK_NOTICE_KIND
+        );
+        lock(&ASK_CARDS).remove(&pane);
+        assert!(fallback_notice("Pa", "Ga").is_none());
     }
 
     #[test]

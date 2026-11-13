@@ -36,7 +36,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("actions", "Buttons that run a command or open a page, for every project or just one."),
     ("openTargets", "The editors and apps a project or file can open in."),
     ("osIntegration", "Make Ghostex the default app for files and links, and check that it worked."),
-    ("debugging", "Debug controls and diagnostic logs, for tracking down a problem."),
+    ("debugging", "Debug controls, diagnostic logs and the Use agent hooks switch, for tracking down a problem."),
 ];
 
 /// The intro of the page with rail id `id`.
