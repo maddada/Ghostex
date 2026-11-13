@@ -19,7 +19,7 @@
 use super::appearance::ChatAppearance;
 use super::cursor::ChatCursor as _;
 use super::state::{NativeChatEvent, NativeChatView};
-use super::tone_card::{ToneButton, ToneCardParts, ToneLook, tone_look};
+use super::tone_card::{ToneButton, ToneLook, tone_look};
 use crate::app::voice_agent::{Dictate, DictateEvent, DictateFailure, DictatePhase};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -599,8 +599,10 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
-                    .pl(px(if recording { 9.0 } else { 11.0 } * s))
-                    .pr(px(4.0 * s))
+                    // The dot or the text starts 9px in; the ✕'s 11px mark, centred in its 18px
+                    // button, ends 9px in, so both ends are inset alike.
+                    .pl(px(9.0 * s))
+                    .pr(px(5.5 * s))
                     .rounded_full()
                     .whitespace_nowrap()
                     .when(recording, |this| {
@@ -680,10 +682,10 @@ impl NativeChatView {
         Some(deferred(pill).with_priority(1).into_any_element())
     }
 
-    /// The failure card: "Couldn't transcribe" with "Your recording is safe", gxserver's sentence
-    /// saying what went wrong and what to do, the ✕, and the buttons that help (`failure_actions`),
-    /// Try again filled. With `unavailable` it is the card a press shows while the engine can't
-    /// transcribe: why, "Nothing was recorded", and the way to fix it. The provider's own words,
+    /// The failure card, compact: "Couldn't transcribe" and the ✕, gxserver's sentence saying what
+    /// went wrong and what to do with "Your recording is safe.", and the buttons that help
+    /// (`failure_actions`), Try again filled. With `unavailable` it is the card a press shows while
+    /// the engine can't transcribe: why, "Nothing was recorded.", and the way to fix it. The provider's own words,
     /// when it gave any, are the sentence's tooltip.
     ///
     /// CDXC:VoiceMode 2026-10-30 DECISION: User picked Q779 option B, "a two-line card with the full sentence", for every failure gxserver reports, each in plain words, instead of a pill that only said "Transcription failed" with the reason in a tooltip (Sam on Discord, no xAI key set). Q780 option A: its Add key / Check key button opens the page with that key's field focused (Settings > Voice since 2026-11-05). Supersedes the failure part of the 2026-10-20 one-line pill above; recording and transcribing keep the pill.
@@ -711,18 +713,10 @@ impl NativeChatView {
             },
             ..tone_look("warning", p)
         };
-        let (title, subtitle) = if unavailable {
-            (
-                unavailable_title(&failure.code).to_string(),
-                "Nothing was recorded".to_string(),
-            )
-        } else if actions.recording_kept {
-            (
-                "Couldn't transcribe".to_string(),
-                "Your recording is safe".to_string(),
-            )
+        let title = if unavailable {
+            unavailable_title(&failure.code).to_string()
         } else {
-            ("Couldn't transcribe".to_string(), String::new())
+            "Couldn't transcribe".to_string()
         };
         let dismiss = self
             .tone_icon_button(
@@ -743,18 +737,16 @@ impl NativeChatView {
                 cx.notify();
             }))
             .into_any_element();
-        let sentence = div()
-            .id("dictation-reason")
-            .text_size(px(13.0 * s))
-            .line_height(px(18.0 * s))
-            .text_color(p.card_muted)
-            .child(failure.message.clone())
-            .when_some(detail, |this, detail| {
-                this.tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(detail.clone()).build(window, cx)
-                })
-            })
-            .into_any_element();
+        let sentence = (
+            if unavailable {
+                format!("{} Nothing was recorded.", failure.message)
+            } else if actions.recording_kept {
+                format!("{} Your recording is safe.", failure.message)
+            } else {
+                failure.message.clone()
+            },
+            detail,
+        );
         let retry = actions.retry && !unavailable;
         let mut footer = Vec::new();
         if let Some(label) = actions
@@ -811,21 +803,74 @@ impl NativeChatView {
                 .into_any_element(),
             );
         }
-        self.tone_card(
-            ToneCardParts {
-                look,
-                title,
-                detail: subtitle,
-                trailing: vec![dismiss],
-                body: vec![sentence],
-                footer_start: Vec::new(),
-                footer_note: None,
-                footer_end: footer,
-            },
-            None,
-            None,
-            p,
-        )
+        // Compact: the mark, the title and the ✕ on one line, the sentence, then the buttons
+        // (CDXC:Dictate 2026-11-13 DECISION on the phone's `DictationCard`: "they're huge").
+        let (sentence_text, sentence_detail) = sentence;
+        let hue = look.hue.unwrap_or(p.muted);
+        div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(px(4.0 * s))
+            .pl(px(12.0 * s))
+            .pr(px(8.0 * s))
+            .pt(px(8.0 * s))
+            .pb(px(10.0 * s))
+            .rounded(px(14.0 * s))
+            .border_1()
+            .border_color(p.input_border)
+            .bg(p.card_panel)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0 * s))
+                    .child(
+                        gpui::svg()
+                            .path(look.icon.clone())
+                            .flex_shrink_0()
+                            .size(px(14.0 * s))
+                            .text_color(hue),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(13.0 * s))
+                            .line_height(px(18.0 * s))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(p.foreground)
+                            .child(title),
+                    )
+                    .child(dismiss),
+            )
+            .child(
+                div()
+                    .id("dictation-reason")
+                    .pr(px(4.0 * s))
+                    .text_size(px(12.5 * s))
+                    .line_height(px(17.0 * s))
+                    .text_color(p.card_muted)
+                    .child(sentence_text)
+                    .when_some(sentence_detail, |this, detail| {
+                        this.tooltip(move |window, cx| {
+                            gpui_component::tooltip::Tooltip::new(detail.clone()).build(window, cx)
+                        })
+                    }),
+            )
+            .when(!footer.is_empty(), |card| {
+                card.child(
+                    div()
+                        .mt(px(4.0 * s))
+                        .pr(px(4.0 * s))
+                        .flex()
+                        .justify_end()
+                        .gap(px(6.0 * s))
+                        .children(footer),
+                )
+            })
+            .into_any_element()
     }
 
     /// Whether the toolbar draws the microphone this frame (`toolbar.rs` `render_toolbar`'s rule);
