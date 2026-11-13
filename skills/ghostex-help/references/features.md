@@ -5179,10 +5179,14 @@ sessions, so any client can control agents on any machine.
   over SSH don't pair either, and a computer you add under Settings > Remote
   lets the agents on both computers reach each other at once. With the
   computer's Agent access off they don't. Such a phone never gets Easy Connect
-  by itself: only Add Easy Connect on the computer's page in the phone app asks
-  for it, and only while Easy Connect is on there. The tap asks for Face ID,
-  the fingerprint or the screen lock when the computer's Require Face ID to
-  approve is on, as an approval does. While Easy Connect is off, no phone or
+  by itself: the first time it connects to a computer whose Easy Connect is
+  on, the phone app asks "Fall back to Easy Connect?" (Fall back or Don't fall
+  back, neither picked for you), and only a Fall back asks the computer to add
+  it (your own Tailscale phone is added at once; another one waits for Approve
+  on the computer). The answer can be changed later with Fall back to Easy
+  Connect on the computer's page in the phone app (Machines > the computer)
+  or on its card in the Connections sheet; while it is off, the phone never
+  uses Easy Connect for that computer. While Easy Connect is off, no phone or
   computer can be added to it in any way, and the phone connects to that
   computer only the way you set it up (SSH over Tailscale, say).
   Paired devices are listed and can be removed with one tap, on the computer or
