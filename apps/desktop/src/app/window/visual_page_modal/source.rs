@@ -119,6 +119,16 @@ impl GpuiVisualPageModalWindow {
         .detach();
     }
 
+    /// Reloads the page where the reader was, after it saved its draft (an import answered it,
+    /// `more_menu.rs`).
+    pub(super) fn reload_page(&mut self, cx: &mut Context<Self>) {
+        if let Some(surface) = &self.surface {
+            surface.update(cx, |surface, _| {
+                surface.execute_app_owned_script(RELOAD_AFTER_FLUSH)
+            });
+        }
+    }
+
     /// The refresh button: publish the file again, then reload where the reader was.
     pub(super) fn refresh_page(&mut self, cx: &mut Context<Self>) {
         let Some(page_id) = self.page_id.clone() else {

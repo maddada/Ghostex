@@ -363,6 +363,14 @@ impl GhostexGpuiApp {
                 let _ = gpui_open_external_http_url(&url);
                 return;
             }
+            VisualPageModalCommand::Notice {
+                level,
+                title,
+                message,
+            } => {
+                self.dispatch_gpui_app_modal_toast(level, &title, &message, cx);
+                return;
+            }
             VisualPageModalCommand::RefreshFailed { message } => {
                 self.dispatch_gpui_app_modal_toast(
                     "warning",

@@ -562,7 +562,7 @@ works.
    The chat shows it as a card for your page. Clicking the card opens the page
    where the reader chose under Settings > Chat > Open Ghostex pages in: a
    floating window over the chat (the default), the Files view or their
-   browser, and the floating window has its own Open in browser button. The
+   browser, and the floating window's ⋯ menu has Open in browser. The
    reader decides, so publish every page the same way and leave the block's
    `"open": "popup"` mark in: some older Ghostex apps float only a marked card
    and open any other in the browser. Older Ghostex versions print the block
@@ -614,7 +614,7 @@ pages and give the HTML file's path instead.
 Every Ghostex page can be exported: one HTML file that opens in any browser
 without Ghostex, for the user to send to someone else (a customer, a teammate,
 an issue's author) who answers it there. The user presses Export on the page's
-card or in its window; you can write the same file yourself with
+card or in its window's ⋯ menu (on the phone, on its card or sheet); you can write the same file yourself with
 `ghostex visual export <file.html or page id> --out <file.html>` (Ghostex
 releases after 11.5.0; an older one says `visual export` is unknown, and
 its pages have no Export button). Nothing about the

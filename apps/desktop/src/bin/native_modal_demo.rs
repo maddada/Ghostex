@@ -132,6 +132,10 @@ mod onboarding_demo;
 mod page_band_geometry;
 #[path = "native_modal_demo/page_window_band.rs"]
 mod page_window_band_demo;
+#[path = "native_modal_demo/page_window_menu.rs"]
+mod page_window_menu_demo;
+#[path = "../app/window/visual_page_modal/more_menu_panel.rs"]
+mod page_window_menu_panel;
 #[path = "native_modal_demo/permission_guide.rs"]
 mod permission_guide_demo;
 #[path = "../app/os_integration/permission_guide/tag.rs"]
@@ -856,6 +860,7 @@ fn main() {
                 "new-bot" => new_bot_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "page-window-band" => page_window_band_demo::open(&demo, cx),
+                "page-window-menu" => page_window_menu_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),
                 "chief-row" => chief_row_demo::open(&demo, cx),
                 "extension-menu" => extension_menu_demo::open(&demo, cx),

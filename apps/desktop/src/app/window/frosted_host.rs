@@ -45,6 +45,10 @@ pub(crate) enum FrostedHostKind {
     /// A coordinator board card's menu (`native_chat/coordinator_board.rs`), the sidebar menu's
     /// look, over the window its board is in.
     BoardCardMenu,
+    /// The floating Ghostex page window's ⋯ menu (`window/visual_page_modal/more_menu.rs`), the
+    /// sidebar menu's look, over the page window, whose page is a native view nothing in the
+    /// window can draw over.
+    PageWindowMenu,
 }
 
 /// How many stacked sidebar menu panels get a window of their own; deeper ones share none.
@@ -109,6 +113,7 @@ thread_local! {
     static TERMINAL_BAR_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static TERMINAL_BAR_FLYOUT_HOST: RefCell<HostSlot> = RefCell::default();
     static BOARD_CARD_MENU_HOST: RefCell<HostSlot> = RefCell::default();
+    static PAGE_WINDOW_MENU_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_MENU_HOSTS: RefCell<Vec<HostSlot>> = RefCell::default();
 }
 
@@ -134,6 +139,9 @@ fn with_slot<R>(kind: FrostedHostKind, f: impl FnOnce(&mut HostSlot) -> R) -> R 
         }
         FrostedHostKind::BoardCardMenu => {
             BOARD_CARD_MENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
+        FrostedHostKind::PageWindowMenu => {
+            PAGE_WINDOW_MENU_HOST.with(|slot| f(&mut slot.borrow_mut()))
         }
         FrostedHostKind::SidebarMenu(level) => SIDEBAR_MENU_HOSTS.with(|slots| {
             let mut slots = slots.borrow_mut();
@@ -219,6 +227,7 @@ pub(crate) fn hide_frosted_hosts_over(parent: AnyWindowHandle, cx: &mut App) {
         FrostedHostKind::TerminalBarMenu,
         FrostedHostKind::TerminalBarFlyout,
         FrostedHostKind::BoardCardMenu,
+        FrostedHostKind::PageWindowMenu,
     ]
     .into_iter()
     .chain(
@@ -336,7 +345,9 @@ fn open_host(
                 FrostedHostKind::Tooltip => window.set_frosted_surface(true),
                 // A menu panel fills its window exactly, the way a header dropdown does, so the
                 // window is simply rounded to the panel's corners.
-                FrostedHostKind::SidebarMenu(_) | FrostedHostKind::BoardCardMenu => {
+                FrostedHostKind::SidebarMenu(_)
+                | FrostedHostKind::BoardCardMenu
+                | FrostedHostKind::PageWindowMenu => {
                     window.set_background_corner_radius(gpui::px(SIDEBAR_MENU_HOST_RADIUS))
                 }
                 FrostedHostKind::DocsSelectionToolbar => {

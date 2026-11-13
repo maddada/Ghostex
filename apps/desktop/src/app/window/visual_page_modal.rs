@@ -22,6 +22,8 @@
 mod band_geometry;
 pub(crate) mod frame;
 mod glass;
+mod more_menu;
+mod more_menu_panel;
 pub(crate) mod open_timing;
 mod page;
 mod source;
@@ -46,10 +48,9 @@ use std::{
 pub(crate) use band_geometry::TOP_BAND_HEIGHT;
 use band_geometry::{CONTROL_INSET, CONTROL_SIZE};
 const ICON_CLOSE: &str = "titlebar/x.svg";
-const ICON_OPEN_IN_BROWSER: &str = "titlebar/external-link.svg";
+const ICON_MORE: &str = "titlebar/dots.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
 const ICON_HIDE: &str = "titlebar/window-minimize.svg";
-const ICON_EXPORT: &str = "titlebar/download.svg";
 /// A focus loss this soon after a press in another window is that press, already counted.
 const SAME_CLICK: Duration = Duration::from_millis(400);
 /// Its own browser profile, so a page's storage never mixes with the Browser's or an
@@ -81,6 +82,12 @@ pub(crate) enum VisualPageModalCommand {
     OpenLink { url: String },
     /// Publishing the page's changed file again failed (`source.rs`); the app says why.
     RefreshFailed { message: String },
+    /// A notice for the app to show: how Import answers went (`more_menu.rs`).
+    Notice {
+        level: &'static str,
+        title: String,
+        message: String,
+    },
 }
 
 pub(crate) type VisualPageModalHost = Rc<dyn Fn(VisualPageModalCommand, &mut App)>;
@@ -121,6 +128,9 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// The page's file changed on disk since it was published (`source.rs`).
     source_changed: bool,
     refreshing: bool,
+    /// The ⋯ menu is open (`more_menu.rs`), and where its button was last drawn.
+    more_menu_open: bool,
+    more_button: Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
     /// The press in another window counted last, so the same press is never counted twice.
     counted_press: Option<Instant>,
     _source_watch: Option<Task<()>>,
@@ -213,6 +223,8 @@ impl GpuiVisualPageModalWindow {
             page_id,
             remote,
             source_changed: false,
+            more_menu_open: false,
+            more_button: Rc::default(),
             refreshing: false,
             counted_press: None,
             _source_watch: None,
@@ -561,6 +573,7 @@ impl GpuiVisualPageModalWindow {
     pub(crate) fn set_hidden(&mut self, hidden: bool, cx: &mut Context<Self>) {
         self.hidden = hidden;
         if hidden {
+            self.close_more_menu(cx);
             self.flush_draft(cx);
             self.check_questions_left_soon(cx);
         } else {
@@ -572,6 +585,11 @@ impl GpuiVisualPageModalWindow {
         if event.keystroke.key == "escape" {
             window.prevent_default();
             cx.stop_propagation();
+            // Escape closes the ⋯ menu first, then the window.
+            if self.more_menu_open {
+                self.close_more_menu(cx);
+                return;
+            }
             (self.host)(VisualPageModalCommand::Close, cx);
         }
     }
@@ -692,19 +710,47 @@ impl GpuiVisualPageModalWindow {
             .when(!self.loaded && self.error.is_none(), |this| {
                 this.child(modal_spinner(glass.icon))
             });
-        let close = control_button("visual-page-close", ICON_CLOSE, "Close", glass)
-            .on_click(cx.listener(|this, _, _, cx| (this.host)(VisualPageModalCommand::Close, cx)));
+        let close = control_button("visual-page-close", ICON_CLOSE, "Close", glass).on_click(
+            cx.listener(|this, _, _, cx| {
+                this.close_more_menu(cx);
+                (this.host)(VisualPageModalCommand::Close, cx)
+            }),
+        );
         // Hide sits beside the X (CDXC:SessionChat 2026-11-11 DECISION above): after it in the
         // left corner, before it at the right.
-        let hide = control_button("visual-page-hide", ICON_HIDE, "Hide", glass)
-            .on_click(cx.listener(|this, _, _, cx| (this.host)(VisualPageModalCommand::Hide, cx)));
+        let hide = control_button("visual-page-hide", ICON_HIDE, "Hide", glass).on_click(
+            cx.listener(|this, _, _, cx| {
+                this.close_more_menu(cx);
+                (this.host)(VisualPageModalCommand::Hide, cx)
+            }),
+        );
+        // The ⋯ menu (Export page, Import answers, Open in browser) sits beside Hide and Close
+        // (CDXC:SessionChat 2026-11-13 DECISION in more_menu.rs); its button's bounds place the menu.
+        let more_bounds = self.more_button.clone();
+        let more = control_button("visual-page-more", ICON_MORE, "More", glass)
+            .relative()
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_more_menu(window, cx)))
+            .child(
+                gpui::canvas(
+                    move |bounds, _, _| more_bounds.set(Some(bounds)),
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            );
         // The X sits in the band's left corner on macOS, before the status, and ends the right
         // corner's controls elsewhere (CDXC:AppModal 2026-11-10 in window/round_close_button.rs).
         let (leading_close, trailing_close) = if super::round_close_button::close_buttons_on_left()
         {
-            (Some(h_flex().gap(px(6.0)).child(close).child(hide)), None)
+            (
+                Some(h_flex().gap(px(6.0)).child(close).child(hide).child(more)),
+                None,
+            )
         } else {
-            (None, Some(h_flex().gap(px(6.0)).child(hide).child(close)))
+            (
+                None,
+                Some(h_flex().gap(px(6.0)).child(more).child(hide).child(close)),
+            )
         };
         h_flex()
             .flex_shrink_0()
@@ -723,7 +769,10 @@ impl GpuiVisualPageModalWindow {
             })
             .child(
                 crate::app::render::window_drag_region::window_drag_region(
-                    div().id("visual-page-drag-band"),
+                    div().id("visual-page-drag-band").on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, _, cx| this.close_more_menu(cx)),
+                    ),
                 )
                 .flex_1()
                 .min_w_0()
@@ -741,34 +790,6 @@ impl GpuiVisualPageModalWindow {
                     .when(self.source_changed || self.refreshing, |this| {
                         this.child(self.refresh_button(glass, cx))
                     })
-                    .when(self.page_id.is_some(), |this| {
-                        this.child(
-                            control_button(
-                                "visual-page-export",
-                                ICON_EXPORT,
-                                "Export page: one file anyone can open and answer in a browser",
-                                glass,
-                            )
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                let end = this.url.find(['?', '#']).unwrap_or(this.url.len());
-                                let url =
-                                    format!("{}/export", this.url[..end].trim_end_matches('/'));
-                                (this.host)(VisualPageModalCommand::ExportPage { url }, cx);
-                            })),
-                        )
-                    })
-                    .child(
-                        control_button(
-                            "visual-page-open-in-browser",
-                            ICON_OPEN_IN_BROWSER,
-                            "Open in browser",
-                            glass,
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let url = this.url.clone();
-                            (this.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
-                        })),
-                    )
                     .children(trailing_close),
             )
     }
