@@ -392,13 +392,18 @@ fn index_only<'a>(state: &ChatState, entries: &'a [ResourceEntry]) -> Vec<&'a Re
 ///
 /// CDXC:SessionChat 2026-11-02 WHY:
 /// A waiting record with no `offset` reads withdrawn. gxserver records the offset of everything its transcript read holds, so a record without one is from a transcript it no longer reads: nothing there can answer it, "Go to chat" and the Resources modal cannot read it back, and the ? pill counted it while its click only said "Ghostex has not recorded where that sits in the chat yet".
+///
+/// CDXC:SessionChat 2026-11-13 WHY:
+/// The coordinator's ? pill counted Q2783, a one-click question older than the loaded rows whose tag a work item ask (W358) also asked and the user answered there, and its click opened the popup with only the title: the form is that ask (`extras::work_cards::card_tags`, the 2026-11-10 decision there), so its card draws nothing. A loaded form like it was already left out (`waiting`); a record is too, and reads answered as the loaded one does in the list (`status_of`).
 fn indexed_status(
     entry: &ResourceEntry,
     later: &std::collections::BTreeSet<String>,
     removed: &std::collections::BTreeSet<String>,
+    cards: &std::collections::BTreeSet<String>,
 ) -> String {
     match entry.status.as_str() {
         "waiting" if removed.contains(&entry.id) => "canceled",
+        "waiting" if crate::extras::work_cards::covered_by_cards(&entry.tags, cards) => "answered",
         "waiting" if entry.offset.is_none() && entry.thread.is_none() => "withdrawn",
         "waiting" if later.contains(&entry.id) => "later",
         "withdrawn" if removed.contains(&entry.id) => "canceled",
@@ -413,6 +418,7 @@ fn indexed_status(
 fn indexed_waiting<'a>(state: &ChatState, entries: &'a [ResourceEntry]) -> Vec<&'a ResourceEntry> {
     let later = crate::questions::later::later_ids(state);
     let removed = crate::questions::later::removed_ids(state);
+    let cards = crate::extras::work_cards::card_tags(state);
     let on_the_way: Vec<String> = answers_on_the_way(state)
         .into_iter()
         .map(|answers| answers.page_id)
@@ -420,7 +426,7 @@ fn indexed_waiting<'a>(state: &ChatState, entries: &'a [ResourceEntry]) -> Vec<&
     index_only(state, entries)
         .into_iter()
         .filter(|entry| entry.thread.is_none())
-        .filter(|entry| indexed_status(entry, &later, &removed) == "waiting")
+        .filter(|entry| indexed_status(entry, &later, &removed, &cards) == "waiting")
         .filter(|entry| !on_the_way.contains(&entry.id))
         .collect()
 }
@@ -516,8 +522,9 @@ fn list_rows(state: &ChatState, context: &ChatContext, labels: bool) -> Vec<Ques
     // the pages the coordinator's threads posted.
     let mut thread_pages: Vec<QuestionListRow> = Vec::new();
     let entries = indexed_entries(state);
+    let cards = crate::extras::work_cards::card_tags(state);
     for entry in index_only(state, &entries) {
-        let mut status = indexed_status(entry, &later, &removed);
+        let mut status = indexed_status(entry, &later, &removed, &cards);
         // Answers sent from the modal wait in the queue: the form reads answered at once.
         if status == "waiting" && on_the_way.contains(&entry.id) {
             status = "answered".to_string();

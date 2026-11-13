@@ -959,7 +959,7 @@ pub fn tags_answered_in_words(text: &str) -> Vec<String> {
                 Some(rest) if digits > 0 => rest.trim_start(),
                 _ => part,
             };
-            if let Some(tag) = answered_tag(part) {
+            if let Some(tag) = answered_tag(without_work_ref(part)) {
                 tags.push(tag);
             }
         }
@@ -967,6 +967,30 @@ pub fn tags_answered_in_words(text: &str) -> Vec<String> {
     tags.sort();
     tags.dedup();
     tags
+}
+
+/// `part` without the work item it starts with when a tag follows it: a work item ask's Reply and
+/// its one-click answers go as "W358 Q2783: words" (`extras::work_cards`), which answer Q2783.
+///
+/// CDXC:SessionChat 2026-11-13 WHY:
+/// The user answered "W358 Q2783: Wait for the next release" and the one-click question the
+/// coordinator had also tagged Q2783 stayed open in gxserver's index, the ? pill and the sidebar
+/// count: the line started with the work item, so no tag was read as answered. Coordinator: an
+/// answered tag is never listed as open, whatever answered it.
+fn without_work_ref(part: &str) -> &str {
+    let Some(len) = part
+        .strip_prefix(['W', 'w'])
+        .filter(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+        .and_then(|_| tag_length(part, 0))
+    else {
+        return part;
+    };
+    let rest = &part[len..];
+    let after = rest.trim_start();
+    if after.len() == rest.len() || tag_length(after, 0).is_none() {
+        return part;
+    }
+    after
 }
 
 /// The tag `part` starts with, uppercased, when an answer follows it.

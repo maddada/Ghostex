@@ -789,7 +789,9 @@ because what the reading keeps may have changed with it; a change to what
 // 4: `observe` keeps every answers envelope (gx-chat-core's `Found::Answers`), so a tag's answer
 // settles only the copies asked before it (issue #579, `asks_alike`); a copy without them is read
 // again.
-const SAVED_LEDGER_FORMAT: u32 = 4;
+// 5: a work item ask's answer ("W358 Q2783: words") answers its tag (gx-chat-core's
+// `without_work_ref`), so `observe` keeps those messages; a copy without them is read again.
+const SAVED_LEDGER_FORMAT: u32 = 5;
 const SAVED_LEDGERS_DIR: &str = "open-questions";
 const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
 const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);

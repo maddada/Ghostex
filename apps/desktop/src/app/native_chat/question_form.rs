@@ -445,13 +445,17 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let form = &self.snapshot["questionForms"][id];
+        // The popup (resource_modal.rs) always draws its form: the skips below are about the
+        // transcript, and in the popup they left only its title over an empty body (Q2783, a
+        // one-click question a work item ask also tagged).
+        let in_modal = self.form_in_modal.get();
         // Asked by a work item too: drawn once, as its ask card (gx-chat-core work_cards.rs
         // `card_tags`).
-        if form["coveredByCard"] == true {
+        if form["coveredByCard"] == true && !in_modal {
             return gpui::div().into_any_element();
         }
         // Answered, with the reader's answers card right under it: that card names it (Q2995).
-        if form["state"] == "answered" && self.answers_right_below(id) {
+        if form["state"] == "answered" && !in_modal && self.answers_right_below(id) {
             return gpui::div().into_any_element();
         }
         if !form.is_object() {
