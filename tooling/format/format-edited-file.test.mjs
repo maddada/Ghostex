@@ -67,7 +67,7 @@ describe('ownedPath', () => {
   });
 
   it('refuses dependencies, the lockfile, missing files and files outside the repository', () => {
-    expect(ownedPath(path.join(root, 'node_modules/prettier/index.mjs'))).toBeNull();
+    expect(ownedPath(path.join(root, 'node_modules/oxfmt/package.json'))).toBeNull();
     expect(ownedPath(path.join(root, 'bun.lock'))).toBeNull();
     expect(ownedPath(path.join(root, 'no-such-file.rs'))).toBeNull();
     expect(ownedPath('/etc/hosts')).toBeNull();

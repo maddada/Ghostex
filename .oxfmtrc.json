@@ -1,8 +1,7 @@
 {
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "embeddedLanguageFormatting": "auto",
-  "insertPragma": false,
   "proseWrap": "preserve",
-  "requirePragma": false,
   "jsxSingleQuote": true,
   "singleQuote": true,
   "semi": true,
@@ -12,9 +11,10 @@
   "bracketSameLine": false,
   "useTabs": false,
   "arrowParens": "always",
-  "endOfLine": "auto",
   "bracketSpacing": true,
   "htmlWhitespaceSensitivity": "css",
   "quoteProps": "as-needed",
-  "singleAttributePerLine": false
+  "singleAttributePerLine": false,
+  "sortPackageJson": false,
+  "ignorePatterns": []
 }
