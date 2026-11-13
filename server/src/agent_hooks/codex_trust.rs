@@ -14,11 +14,12 @@ Installing and trusting are one act of the same consent: the user pressed
 Install Hooks in Ghostex for a hook that runs nothing but Ghostex's own notify
 script. This module therefore writes the trust record for GHOSTEX-OWNED hooks
 only, and only on that explicit install/update. The daemon-startup repair pass
-re-trusts a slot solely when Codex already held a trust record for that exact
-slot (a command-path upgrade of an already-approved hook); a slot Codex never
+re-trusts a Ghostex hook solely when Codex already held a trust record for
+that hook (a command-path upgrade of an already-approved hook); a slot Codex never
 saw approved stays untrusted and surfaces as "needs update" in Settings until
-the user presses Update Hooks themselves. User-authored hooks in the same file
-are never touched.
+the user presses Update Hooks themselves. Hooks other writers put in the same
+file are never trusted by Ghostex; their existing records only follow them
+when a Ghostex edit moves them (`follow_codex_hook_trust`).
 
 Hash and key formats mirror `codex-rs/hooks/src/engine/discovery.rs`
 (`hook_hash`, `hook_key`) and `codex-rs/config/src/fingerprint.rs`
@@ -28,6 +29,7 @@ table the user wrote survives untouched.
 */
 
 use std::{
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
 };
@@ -296,20 +298,22 @@ pub(crate) fn codex_config_path_for_hooks(hooks_path: &Path) -> PathBuf {
     hooks_path.with_file_name("config.toml")
 }
 
-/// Every Ghostex-owned command hook in `hooks_path`, keyed and hashed the way
-/// Codex will see it. Group and handler indexes are positions in the file,
-/// which is why Ghostex always appends its group and never reorders a user's.
-pub(crate) fn ghostex_codex_hook_trust_entries(
-    hooks_path: &Path,
-    hook_paths: &HookPaths,
-    command: &str,
-) -> Vec<CodexHookTrustEntry> {
-    let data = read_json_object(&read_file_text(hooks_path));
+/// One command handler in a Codex `hooks.json`, keyed and hashed the way Codex sees it, whoever
+/// wrote it.
+struct CodexHookSlot {
+    label: &'static str,
+    key: String,
+    hash: String,
+    ghostex: bool,
+}
+
+/// Every command handler in `data`. Group and handler indexes are positions in the file, so a
+/// hook's key changes whenever a group before it in the same event comes or goes.
+fn codex_hook_slots(data: &Value, key_source: &str, command: &str) -> Vec<CodexHookSlot> {
     let Some(events) = data.get("hooks").and_then(Value::as_object) else {
         return Vec::new();
     };
-    let key_source = codex_hook_key_source(hooks_path, hook_paths);
-    let mut entries = Vec::new();
+    let mut slots = Vec::new();
     for (event_name, groups) in events {
         let Some(label) = codex_hook_event_key_label(event_name) else {
             continue;
@@ -323,20 +327,38 @@ pub(crate) fn ghostex_codex_hook_trust_entries(
                 continue;
             };
             for (handler_index, hook) in hooks.iter().enumerate() {
-                if !is_ghostex_owned_hook_command(hook, command) {
-                    continue;
-                }
                 let Some(hash) = codex_hook_trust_hash(event_name, matcher, hook) else {
                     continue;
                 };
-                entries.push(CodexHookTrustEntry {
+                slots.push(CodexHookSlot {
+                    label,
                     key: format!("{key_source}:{label}:{group_index}:{handler_index}"),
                     hash,
+                    ghostex: is_ghostex_owned_hook_command(hook, command),
                 });
             }
         }
     }
-    entries
+    slots
+}
+
+/// Every Ghostex-owned command hook in `hooks_path`, keyed and hashed the way
+/// Codex will see it.
+pub(crate) fn ghostex_codex_hook_trust_entries(
+    hooks_path: &Path,
+    hook_paths: &HookPaths,
+    command: &str,
+) -> Vec<CodexHookTrustEntry> {
+    let data = read_json_object(&read_file_text(hooks_path));
+    let key_source = codex_hook_key_source(hooks_path, hook_paths);
+    codex_hook_slots(&data, &key_source, command)
+        .into_iter()
+        .filter(|slot| slot.ghostex)
+        .map(|slot| CodexHookTrustEntry {
+            key: slot.key,
+            hash: slot.hash,
+        })
+        .collect()
 }
 
 fn parse_config_document(config_path: &Path) -> Result<DocumentMut, DomainStateError> {
@@ -432,63 +454,127 @@ fn write_config_document(
     Ok(())
 }
 
-/// Records Codex trust for the Ghostex-owned hooks in `hooks_path`. Returns
-/// whether `config.toml` changed. See the module comment for the consent rule
-/// behind `mode`.
-pub(crate) fn trust_ghostex_codex_hooks(
+/*
+CDXC:AgentHooks 2026-11-13 WHY:
+Codex keys trust by position (`<file>:<event>:<group>:<handler>`), and Ghostex shares `hooks.json` with other writers (bd's hooks, the user's own). Every Ghostex edit removes its groups and appends them again (install, startup repair), and the hook-free cleanup and Uninstall remove them outright, so a hook written after Ghostex's moved to an earlier slot while its trust record stayed behind: after the 11.6.0 update the hook-free cleanup dropped Ghostex's SessionStart, UserPromptSubmit and Stop groups from slot 0, the bd hooks behind them became slot 0 with no record, and every new Codex session stopped on "Hooks need review: 3 hooks are new or changed" (which also starved the hook-free tracking, whose fallback put Ghostex's hooks back at slot 1, writing Ghostex's hash over bd's old slot-1 record). So every edit is followed by this pass: a hook another writer added keeps the record Codex already holds for it, moved to its new slot, but only when that record's hash is exactly the hook's own (the user approved that hook; Ghostex adds trust for nothing it does not own). Ghostex's own records move with its hooks the same way, and a repair refreshes only a Ghostex hook whose own record existed before the edit, never a slot whose record belonged to someone else.
+SEE-ALSO: install/install_hook.rs and install/uninstall.rs (each edit reads the file before it changes it).
+*/
+/// Brings `[hooks.state]` in line with an edit Ghostex just made to `hooks_path`, given the file's
+/// contents before the edit. Records follow their hooks to the slots they now hold; with
+/// `ghostex_trust`, the Ghostex-owned hooks are trusted under that mode's consent rule. Returns
+/// whether `config.toml` changed.
+pub(crate) fn follow_codex_hook_trust(
     hooks_path: &Path,
     hook_paths: &HookPaths,
     command: &str,
-    mode: CodexTrustWriteMode,
+    before: &Value,
+    ghostex_trust: Option<CodexTrustWriteMode>,
 ) -> Result<bool, DomainStateError> {
-    let entries = ghostex_codex_hook_trust_entries(hooks_path, hook_paths, command);
-    if entries.is_empty() {
+    let key_source = codex_hook_key_source(hooks_path, hook_paths);
+    let after = read_json_object(&read_file_text(hooks_path));
+    let before_slots = codex_hook_slots(before, &key_source, command);
+    let after_slots = codex_hook_slots(&after, &key_source, command);
+    let config_path = codex_config_path_for_hooks(hooks_path);
+    if before_slots.is_empty() && !after_slots.iter().any(|slot| slot.ghostex) {
         return Ok(false);
     }
-    let config_path = codex_config_path_for_hooks(hooks_path);
     let mut document = parse_config_document(&config_path)?;
-    let previously_recorded = hook_state_table(&document)
+    let records: HashMap<String, Item> = hook_state_table(&document)
         .map(|state| {
-            entries
+            state
                 .iter()
-                .filter(|entry| state.get(&entry.key).is_some())
-                .map(|entry| entry.key.clone())
-                .collect::<Vec<_>>()
+                .map(|(key, item)| (key.to_string(), item.clone()))
+                .collect()
         })
         .unwrap_or_default();
-    let targets = match mode {
-        CodexTrustWriteMode::Explicit => entries,
-        CodexTrustWriteMode::RefreshExisting => entries
-            .into_iter()
-            .filter(|entry| previously_recorded.contains(&entry.key))
-            .collect(),
+    let recorded_hash = |key: &str| {
+        records
+            .get(key)
+            .and_then(Item::as_table_like)
+            .and_then(|record| record.get("trusted_hash"))
+            .and_then(Item::as_str)
+            .map(|hash| hash.trim().to_string())
     };
-    if targets.is_empty() {
+
+    // Another writer's hook is the same hook after the edit when its event and hash match (the
+    // hash holds the matcher and the whole handler); repeats pair up in file order. Ghostex's own
+    // hooks pair by event in file order, since a repair may have changed their command.
+    let mut foreign_after: HashMap<(&str, &str), VecDeque<&str>> = HashMap::new();
+    let mut ghostex_after: HashMap<&str, VecDeque<&str>> = HashMap::new();
+    for slot in &after_slots {
+        if slot.ghostex {
+            ghostex_after
+                .entry(slot.label)
+                .or_default()
+                .push_back(&slot.key);
+        } else {
+            foreign_after
+                .entry((slot.label, slot.hash.as_str()))
+                .or_default()
+                .push_back(&slot.key);
+        }
+    }
+    let mut moves: Vec<(String, String)> = Vec::new();
+    let mut removals: Vec<String> = Vec::new();
+    let mut ghostex_recorded: HashSet<String> = HashSet::new();
+    for slot in &before_slots {
+        if slot.ghostex {
+            let destination = ghostex_after
+                .get_mut(slot.label)
+                .and_then(VecDeque::pop_front);
+            if !records.contains_key(&slot.key) {
+                continue;
+            }
+            match destination {
+                Some(destination) => {
+                    ghostex_recorded.insert(destination.to_string());
+                    if destination != slot.key {
+                        moves.push((slot.key.clone(), destination.to_string()));
+                    }
+                }
+                None => removals.push(slot.key.clone()),
+            }
+        } else {
+            let destination = foreign_after
+                .get_mut(&(slot.label, slot.hash.as_str()))
+                .and_then(VecDeque::pop_front);
+            if let Some(destination) = destination {
+                if destination != slot.key
+                    && recorded_hash(&slot.key).as_deref() == Some(slot.hash.as_str())
+                {
+                    moves.push((slot.key.clone(), destination.to_string()));
+                }
+            }
+        }
+    }
+
+    let targets = after_slots
+        .iter()
+        .filter(|slot| slot.ghostex)
+        .filter(|slot| match ghostex_trust {
+            Some(CodexTrustWriteMode::Explicit) => true,
+            Some(CodexTrustWriteMode::RefreshExisting) => ghostex_recorded.contains(&slot.key),
+            None => false,
+        })
+        .collect::<Vec<_>>();
+    if moves.is_empty() && removals.is_empty() && targets.is_empty() {
         return Ok(false);
     }
 
-    let root = document.as_table_mut();
-    let hooks_item = root.entry("hooks").or_insert_with(|| {
-        let mut table = Table::new();
-        table.set_implicit(true);
-        Item::Table(table)
-    });
-    let Some(hooks) = hooks_item.as_table_mut() else {
-        return Err(unsupported_hooks_shape(&config_path));
-    };
-    let state_item = hooks.entry("state").or_insert_with(|| {
-        let mut table = Table::new();
-        table.set_implicit(true);
-        Item::Table(table)
-    });
-    let Some(state) = state_item.as_table_mut() else {
-        return Err(unsupported_hooks_shape(&config_path));
-    };
-
+    let state = state_table_mut(&mut document, &config_path)?;
     let mut changed = false;
-    for entry in targets {
+    for key in moves.iter().map(|(source, _)| source).chain(&removals) {
+        changed |= state.remove(key).is_some();
+    }
+    for (source, destination) in &moves {
+        if let Some(record) = records.get(source) {
+            state.insert(destination, record.clone());
+            changed = true;
+        }
+    }
+    for slot in targets {
         let record_item = state
-            .entry(&entry.key)
+            .entry(&slot.key)
             .or_insert_with(|| Item::Table(Table::new()));
         let Some(record) = record_item.as_table_like_mut() else {
             return Err(unsupported_hooks_shape(&config_path));
@@ -497,11 +583,11 @@ pub(crate) fn trust_ghostex_codex_hooks(
             .get("trusted_hash")
             .and_then(Item::as_str)
             .map(str::to_string);
-        if current_hash.as_deref() != Some(entry.hash.as_str()) {
-            record.insert("trusted_hash", toml_edit::value(entry.hash.clone()));
+        if current_hash.as_deref() != Some(slot.hash.as_str()) {
+            record.insert("trusted_hash", toml_edit::value(slot.hash.clone()));
             changed = true;
         }
-        if mode == CodexTrustWriteMode::Explicit
+        if ghostex_trust == Some(CodexTrustWriteMode::Explicit)
             && record.get("enabled").and_then(Item::as_bool) == Some(false)
         {
             record.remove("enabled");
@@ -514,39 +600,27 @@ pub(crate) fn trust_ghostex_codex_hooks(
     Ok(changed)
 }
 
-/// Drops the `[hooks.state]` records for the given keys (computed BEFORE the
-/// hooks were removed from `hooks.json`, since the keys are positional).
-pub(crate) fn remove_codex_hook_trust_entries(
-    hooks_path: &Path,
-    keys: &[String],
-) -> Result<bool, DomainStateError> {
-    if keys.is_empty() {
-        return Ok(false);
-    }
-    let config_path = codex_config_path_for_hooks(hooks_path);
-    if read_file_text(&config_path).trim().is_empty() {
-        return Ok(false);
-    }
-    let mut document = parse_config_document(&config_path)?;
-    let Some(state) = document
-        .as_table_mut()
-        .get_mut("hooks")
-        .and_then(Item::as_table_like_mut)
-        .and_then(|hooks| hooks.get_mut("state"))
-        .and_then(Item::as_table_like_mut)
-    else {
-        return Ok(false);
+/// `[hooks.state]`, created (as implicit tables) when the file has none.
+fn state_table_mut<'a>(
+    document: &'a mut DocumentMut,
+    config_path: &Path,
+) -> Result<&'a mut dyn toml_edit::TableLike, DomainStateError> {
+    let hooks_item = document.as_table_mut().entry("hooks").or_insert_with(|| {
+        let mut table = Table::new();
+        table.set_implicit(true);
+        Item::Table(table)
+    });
+    let Some(hooks) = hooks_item.as_table_like_mut() else {
+        return Err(unsupported_hooks_shape(config_path));
     };
-    let mut changed = false;
-    for key in keys {
-        if state.remove(key).is_some() {
-            changed = true;
-        }
-    }
-    if changed {
-        write_config_document(&config_path, &document)?;
-    }
-    Ok(changed)
+    let state_item = hooks.entry("state").or_insert_with(|| {
+        let mut table = Table::new();
+        table.set_implicit(true);
+        Item::Table(table)
+    });
+    state_item
+        .as_table_like_mut()
+        .ok_or_else(|| unsupported_hooks_shape(config_path))
 }
 
 fn unsupported_hooks_shape(config_path: &Path) -> DomainStateError {

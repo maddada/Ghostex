@@ -7,9 +7,7 @@ use serde_json::Value;
 
 use crate::domain::DomainStateError;
 
-use crate::agent_hooks::codex_trust::{
-    ghostex_codex_hook_trust_entries, remove_codex_hook_trust_entries,
-};
+use crate::agent_hooks::codex_trust::follow_codex_hook_trust;
 use crate::agent_hooks::config::{hook_format, hook_marker, HookDefinition, HookFormat, HookPaths};
 use crate::agent_hooks::plugin_sources::command_for_agent;
 use crate::agent_hooks::probing::{io_error, path_string, push_unique_path, read_file_text};
@@ -59,17 +57,9 @@ fn uninstall_agent_hook_with(
             let mut removed_paths = Vec::new();
             for config_path in config_paths {
                 // CDXC:AgentHooks 2026-09-02: state keys are positional, so
-                // they must be read before the hooks leave the file.
-                let codex_trust_keys = if definition.agent_id == "codex" {
-                    {
-                        ghostex_codex_hook_trust_entries(&config_path, hook_paths, &command)
-                            .into_iter()
-                            .map(|entry| entry.key)
-                            .collect::<Vec<_>>()
-                    }
-                } else {
-                    Default::default()
-                };
+                // the file is read before the hooks leave it.
+                let codex_before =
+                    super::install_hook::codex_hooks_before_edit(definition, &config_path);
                 // CDXC:AgentHooks 2026-09-24 WHY: Cursor's statusLine lives in
                 // its own file and leaves with the hooks, restoring the user's.
                 if definition.agent_id == "cursor" {
@@ -81,7 +71,15 @@ fn uninstall_agent_hook_with(
                 }
                 if remove_json_hook_with(&config_path, definition, &command, keep_statusline)? {
                     removed_paths.push(path_string(&config_path));
-                    if remove_codex_hook_trust_entries(&config_path, &codex_trust_keys)? {
+                    if definition.agent_id == "codex"
+                        && follow_codex_hook_trust(
+                            &config_path,
+                            hook_paths,
+                            &command,
+                            &codex_before,
+                            None,
+                        )?
+                    {
                         let config_toml =
                             super::codex_trust::codex_config_path_for_hooks(&config_path);
                         removed_paths.push(path_string(&config_toml));
