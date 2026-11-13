@@ -7,9 +7,7 @@ use serde_json::Value;
 
 use crate::domain::DomainStateError;
 
-use crate::agent_hooks::codex_trust::{
-    ghostex_codex_hook_trust_entries, remove_codex_hook_trust_entries,
-};
+use crate::agent_hooks::codex_trust::follow_codex_hook_trust;
 use crate::agent_hooks::config::{hook_format, hook_marker, HookDefinition, HookFormat, HookPaths};
 use crate::agent_hooks::plugin_sources::command_for_agent;
 use crate::agent_hooks::probing::{io_error, path_string, push_unique_path, read_file_text};
@@ -58,18 +56,6 @@ fn uninstall_agent_hook_with(
         | HookFormat::NestedEventsJson => {
             let mut removed_paths = Vec::new();
             for config_path in config_paths {
-                // CDXC:AgentHooks 2026-09-02: state keys are positional, so
-                // they must be read before the hooks leave the file.
-                let codex_trust_keys = if definition.agent_id == "codex" {
-                    {
-                        ghostex_codex_hook_trust_entries(&config_path, hook_paths, &command)
-                            .into_iter()
-                            .map(|entry| entry.key)
-                            .collect::<Vec<_>>()
-                    }
-                } else {
-                    Default::default()
-                };
                 // CDXC:AgentHooks 2026-09-24 WHY: Cursor's statusLine lives in
                 // its own file and leaves with the hooks, restoring the user's.
                 if definition.agent_id == "cursor" {
@@ -79,9 +65,21 @@ fn uninstall_agent_hook_with(
                         removed_paths.push(path_string(&path));
                     }
                 }
-                if remove_json_hook_with(&config_path, definition, &command, keep_statusline)? {
+                // CDXC:AgentHooks 2026-09-02: state keys are positional, so the
+                // trust pass gets the file exactly as the removal read it.
+                if let Some(codex_before) =
+                    remove_json_hook_with(&config_path, definition, &command, keep_statusline)?
+                {
                     removed_paths.push(path_string(&config_path));
-                    if remove_codex_hook_trust_entries(&config_path, &codex_trust_keys)? {
+                    if definition.agent_id == "codex"
+                        && follow_codex_hook_trust(
+                            &config_path,
+                            hook_paths,
+                            &command,
+                            &codex_before,
+                            None,
+                        )?
+                    {
                         let config_toml =
                             super::codex_trust::codex_config_path_for_hooks(&config_path);
                         removed_paths.push(path_string(&config_toml));
@@ -161,7 +159,7 @@ pub(crate) fn remove_json_hook(
     definition: &HookDefinition,
     command: &str,
 ) -> Result<bool, DomainStateError> {
-    remove_json_hook_with(config_path, definition, command, false)
+    remove_json_hook_with(config_path, definition, command, false).map(|before| before.is_some())
 }
 
 fn remove_json_hook_with(
@@ -169,13 +167,14 @@ fn remove_json_hook_with(
     definition: &HookDefinition,
     command: &str,
     keep_statusline: bool,
-) -> Result<bool, DomainStateError> {
+) -> Result<Option<Value>, DomainStateError> {
     let current_text = read_file_text(config_path);
     if current_text.trim().is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
     ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
     let mut data = read_json_object(&current_text);
+    let before = data.clone();
     let mut changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
     // CDXC:AgentHooks 2026-09-03 WHY: the statusLine Ghostex registered (or
     // wrapped) leaves with the hooks, restoring the user's own command.
@@ -183,10 +182,10 @@ fn remove_json_hook_with(
         changed |= unregister_statusline(&mut data);
     }
     if !changed {
-        return Ok(false);
+        return Ok(None);
     }
     write_json_file(config_path, &data)?;
-    Ok(true)
+    Ok(Some(before))
 }
 
 pub(super) fn remove_owned_json_hooks(data: &mut Value, format: HookFormat, command: &str) -> bool {

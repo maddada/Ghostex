@@ -14,18 +14,22 @@ use crate::agent_hooks::statusline::register_claude_statusline;
 
 use super::*;
 
+/// Merges Ghostex's hook into `config_path` and returns the object it read before the edit: Codex
+/// trust keys are positions, so the trust pass after the edit compares the two
+/// (codex_trust.rs `follow_codex_hook_trust`).
 pub(super) fn merge_json_hook(
     config_path: &Path,
     definition: &HookDefinition,
     hook_paths: &HookPaths,
     command: &str,
-) -> Result<(), DomainStateError> {
+) -> Result<Value, DomainStateError> {
     if definition.agent_id == "zcode" {
         super::zcode::ensure_zcode_config(config_path, hook_paths)?;
     }
     let current_text = read_file_text(config_path);
     ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
     let mut data = read_json_object(&current_text);
+    let before = data.clone();
     let events = all_hook_events(definition.agent_id);
     let format = hook_format(definition.agent_id);
     remove_owned_json_hooks(&mut data, format, command);
@@ -151,7 +155,8 @@ pub(super) fn merge_json_hook(
         register_claude_statusline(&mut data, hook_paths);
         super::claude_retention::ensure_claude_transcript_retention(&mut data);
     }
-    write_json_file(config_path, &data)
+    write_json_file(config_path, &data)?;
+    Ok(before)
 }
 
 /// The `matcher` a nested-JSON provider expects on one event group, if any.
