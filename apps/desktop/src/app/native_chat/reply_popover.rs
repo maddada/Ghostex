@@ -365,7 +365,9 @@ impl NativeChatView {
             let _ = chat.update(cx, |chat, cx| match result {
                 Ok(handle) => chat.reply_popover.handle = Some(handle),
                 Err(error) => {
-                    chat.error = Some(error.to_string());
+                    chat.error = Some(crate::app::native_chat::child_window::window_open_failed(
+                        error,
+                    ));
                     cx.notify();
                 }
             });

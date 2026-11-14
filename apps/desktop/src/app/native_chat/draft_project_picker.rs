@@ -515,7 +515,9 @@ impl NativeChatView {
                 }
                 Err(error) => {
                     chat.draft_project_picker = None;
-                    chat.error = Some(error.to_string());
+                    chat.error = Some(crate::app::native_chat::child_window::window_open_failed(
+                        error,
+                    ));
                     cx.notify();
                 }
             });

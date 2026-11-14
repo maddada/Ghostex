@@ -263,7 +263,11 @@ fn apply_frosted_overlay(
     match result {
         Ok(handle) => finish(&chat, overlay, Some(handle), Some(frame), cx),
         Err(error) => {
-            chat.update(cx, |chat, _| chat.error = Some(error.to_string()));
+            chat.update(cx, |chat, _| {
+                chat.error = Some(crate::app::native_chat::child_window::window_open_failed(
+                    error,
+                ))
+            });
             finish(&chat, overlay, None, None, cx);
         }
     }

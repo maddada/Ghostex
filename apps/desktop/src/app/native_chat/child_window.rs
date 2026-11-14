@@ -3,6 +3,13 @@
 use super::state::NativeChatView;
 use gpui::{Bounds, Context, Pixels};
 
+/// The chat's card when one of its windows (a menu, a preview, a dialog) did not open.
+///
+/// CDXC:SessionChat 2026-11-14 WHY: A window that failed to open showed the platform's own words as the card's title ("X11 transient owner is no longer open" on Omarchy). The card's title is the message's lead-in before its first ": " (gx-chat-core `error_card`), so the title says what happened in plain words and the platform's reason stays in the card's details.
+pub(crate) fn window_open_failed(error: impl std::fmt::Display) -> String {
+    format!("Window didn't open: {error}")
+}
+
 impl NativeChatView {
     pub(crate) fn active_child_window_source(&self, cx: &gpui::App) -> Option<gpui::WindowId> {
         let source = self.main_window?.window_id();

@@ -167,7 +167,9 @@ impl NativeChatView {
                         chat.sync_table_preview_window(cx);
                     }
                     Err(error) => {
-                        chat.error = Some(error.to_string());
+                        chat.error = Some(
+                            crate::app::native_chat::child_window::window_open_failed(error),
+                        );
                         chat.table_preview.source = None;
                     }
                 }

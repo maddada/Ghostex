@@ -295,7 +295,9 @@ impl NativeChatView {
                 match result {
                     Some(Ok(handle)) => chat.suggestions.handle = Some(handle),
                     Some(Err(error)) => {
-                        chat.error = Some(error.to_string());
+                        chat.error = Some(
+                            crate::app::native_chat::child_window::window_open_failed(error),
+                        );
                         chat.suggestions.bounds = None;
                     }
                     None => {}
