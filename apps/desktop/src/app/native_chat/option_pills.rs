@@ -167,14 +167,29 @@ fn pill(
             color.g *= 0.525;
             color.b *= 0.525;
         }
-        item = item.child(
-            svg()
-                .path(format!("titlebar/{icon}.svg"))
-                .w(px(16.0 * scale))
-                .h(px(14.0 * scale))
-                .text_color(color)
-                .opacity(0.55),
-        );
+        item = item
+            .child(
+                svg()
+                    .path(format!("titlebar/{icon}.svg"))
+                    .w(px(16.0 * scale))
+                    .h(px(14.0 * scale))
+                    .text_color(color)
+                    .opacity(0.55),
+            )
+            // While a restart into another mode waits ("Bypass when idle", chat core
+            // `menus/mode_restart.rs`), the button says so beside its glyph.
+            .when_some(
+                values["modeNote"].as_str().map(str::to_owned),
+                |item, note| {
+                    item.child(
+                        div()
+                            .min_w_0()
+                            .text_ellipsis()
+                            .text_color(appearance.muted)
+                            .child(note),
+                    )
+                },
+            );
     } else {
         item = item
             .when(!loading, |item| {
@@ -336,6 +351,9 @@ impl NativeChatView {
             .is_some_and(|rows| !rows.is_empty())
         {
             width += 30.0 * scale;
+            if let Some(note) = values["modeNote"].as_str() {
+                width += text_width(note) + 4.0 * scale;
+            }
         }
         width - self.option_pills_lead_in(values) * scale
     }

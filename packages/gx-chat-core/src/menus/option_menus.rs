@@ -337,7 +337,18 @@ pub fn native_option_menus(
             heading.label = Some(mode.label.clone());
             heading.description = mode.description.clone();
             let mut items = vec![heading];
-            items.extend(rows(mode));
+            for item in rows(mode) {
+                // Under a greyed mode a restart can bring, its switch (menus/mode_restart.rs).
+                let restart = item.disabled.unwrap_or(false).then(|| {
+                    params
+                        .unavailable_modes
+                        .iter()
+                        .find(|unavailable| item.id == format!("mode:{}", unavailable.value))
+                        .and_then(crate::menus::mode_restart::restart_row)
+                });
+                items.push(item);
+                items.extend(restart.flatten());
+            }
             items
         }
     };

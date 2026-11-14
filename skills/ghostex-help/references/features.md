@@ -1997,7 +1997,14 @@ Plan) is the Mode button beside the model pill. Claude can also put itself into
 Plan mode on its own, for example when a message asks it to plan something;
 Ghostex then switches the session straight back to the mode you had, so only you
 change it. Plan mode you pick yourself (the Mode button, `/plan`, or Shift+Tab in
-the terminal) stays on. From the CLI:
+the terminal) stays on. Claude can only use Bypass permissions when it was started
+with it allowed (Settings > Agents > Agent approvals > Accept all does that for new
+chats). For a chat started without it, the Mode menu greys Bypass out and shows a
+Restart in Bypass when idle switch under it: turn it on and Ghostex restarts Claude
+in Bypass as soon as it has finished what it is doing (at once if it is idle), on
+the same conversation, and that chat keeps starting in Bypass from then on. While it
+waits, the Mode button says "Bypass when idle"; turn the switch off to cancel. Only
+that chat changes, and only you can turn it on (agents can't). From the CLI:
 `ghostex select-session-chat-model <session> --mode bypass|auto|manual|accept-edits|plan`.
 Codex chats have a Mode button too, for what Codex is allowed to do: Ask for
 approval (it asks before editing outside the project or using the

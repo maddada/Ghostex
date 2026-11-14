@@ -213,6 +213,7 @@ pub mod session_chat_interactive;
 pub mod session_chat_local_command;
 pub mod session_chat_mention_paths;
 mod session_chat_mode_availability;
+mod session_chat_mode_restart;
 mod session_chat_model_selection;
 mod session_chat_model_selection_alert;
 pub mod session_chat_notice;

@@ -162,6 +162,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FilesLinksJump => Family::Composer,
 
         ActionKind::SelectOption
+        | ActionKind::RestartInMode
         | ActionKind::ModelMenuView
         | ActionKind::ModelMenuFavorite
         | ActionKind::ModelMenuPick

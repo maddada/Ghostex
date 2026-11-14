@@ -224,6 +224,8 @@ action_kinds! {
 
     // Options, models and accounts.
     SelectOption => "selectOption",
+    // The Mode menu's "Restart in Bypass when idle" switch (`menus/mode_restart.rs`).
+    RestartInMode => "restartInMode",
     ModelMenuView => "modelMenuView",
     ModelMenuFavorite => "modelMenuFavorite",
     ModelMenuPick => "modelMenuPick",

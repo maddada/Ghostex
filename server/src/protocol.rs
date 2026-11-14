@@ -673,6 +673,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // CDXC:SessionDetails 2026-10-25 WHY: remote-allowed like readSessionChat: the transcript, the agent process and the checkout the panel reads live on the machine that runs the session.
         | "/api/readSessionDetails"
         | "/api/stopSessionBackgroundTask"
+        // CDXC:SessionChat 2026-11-14 WHY: remote-allowed like reloadSessionAgent: the Mode menu's "Restart in Bypass when idle" restarts the agent on the machine that runs it; it carries only ids, the mode and on or off (session_chat_mode_restart.rs).
+        | "/api/restartSessionInMode"
         | "/api/readSessionChatSkills"
         | "/api/readSessionChatFiles"
         | "/api/sendSessionChatMessage"
