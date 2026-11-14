@@ -128,7 +128,7 @@ mod notice_modal_demo;
 mod onboarding;
 #[path = "native_modal_demo/onboarding.rs"]
 mod onboarding_demo;
-#[path = "../app/window/visual_page_modal/band_geometry.rs"]
+#[path = "../app/window/page_band_geometry.rs"]
 mod page_band_geometry;
 #[path = "native_modal_demo/page_window_band.rs"]
 mod page_window_band_demo;

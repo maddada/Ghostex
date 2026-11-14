@@ -19,7 +19,6 @@
 //! CDXC:SessionChat 2026-11-04 WHY:
 //! The controls can't float over the page itself: the page is a windowed CEF browser, a native view nothing drawn in the window can sit above, and a press the page passed back through the page bridge would arrive after its mouse-down, too late to start a window move (`start_window_move` drags with the event being handled). So the band is the window's own, and the page starts under it.
 //! SEE-ALSO: apps/desktop/src/app/visual_page_modal_lifecycle.rs (open and close), apps/desktop/src/app/native_chat/visual.rs (the card), packages/gx-visual (the `open` mark).
-mod band_geometry;
 pub(crate) mod frame;
 mod glass;
 mod more_menu;
@@ -28,6 +27,7 @@ pub(crate) mod open_timing;
 mod page;
 mod source;
 
+pub(crate) use glass::{PAGE_TOP_DARK, PAGE_TOP_LIGHT, panel_backdrop};
 pub(crate) use page::page_id;
 
 use super::native_modal_kit::*;
@@ -45,8 +45,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) use band_geometry::TOP_BAND_HEIGHT;
-use band_geometry::{CONTROL_INSET, CONTROL_SIZE};
+pub(crate) use super::page_band_geometry::TOP_BAND_HEIGHT;
+use super::page_band_geometry::{CONTROL_INSET, CONTROL_SIZE};
+use super::page_controls::{ControlGlass, control_button};
 const ICON_CLOSE: &str = "titlebar/x.svg";
 const ICON_MORE: &str = "titlebar/dots.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
@@ -600,67 +601,6 @@ impl GpuiVisualPageModalWindow {
             (self.host)(VisualPageModalCommand::Close, cx);
         }
     }
-}
-
-/// The glass of the floating controls in one theme (`ControlGlass::for_theme`).
-#[derive(Clone, Copy)]
-struct ControlGlass {
-    fill: gpui::Rgba,
-    hover: gpui::Rgba,
-    border: gpui::Rgba,
-    icon: gpui::Rgba,
-    text: gpui::Rgba,
-}
-
-impl ControlGlass {
-    /// The page's own glass buttons (server/src/visual_pages/theme.rs `--gx-raised`,
-    /// `--gx-card-border`, `--gx-text`, `--gx-fg`), so they read as part of the page.
-    fn for_theme(light: bool) -> Self {
-        if light {
-            Self {
-                fill: gpui::rgba(0xffffffb8),
-                hover: gpui::rgba(0xfffffff2),
-                border: gpui::rgba(0x43434324),
-                icon: gpui::rgba(0x3f3f46ff),
-                text: gpui::rgba(0x18181bff),
-            }
-        } else {
-            Self {
-                fill: gpui::rgba(0x26262699),
-                hover: gpui::rgba(0x404040b8),
-                border: gpui::rgba(0xe9e9e924),
-                icon: gpui::rgba(0xc8cdd5ff),
-                text: gpui::rgba(0xfcfcfcff),
-            }
-        }
-    }
-}
-
-/// A round glass button of the floating controls; its presses never reach the drag band.
-fn control_button(
-    id: &'static str,
-    icon: &'static str,
-    label: &'static str,
-    glass: ControlGlass,
-) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .role(gpui::Role::Button)
-        .aria_label(label)
-        .flex_shrink_0()
-        .flex()
-        .items_center()
-        .justify_center()
-        .size(px(CONTROL_SIZE))
-        .rounded_full()
-        .bg(glass.fill)
-        .border_1()
-        .border_color(glass.border)
-        .cursor_pointer()
-        .hover(move |style| style.bg(glass.hover))
-        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
-        .child(modal_icon(icon, 14.0, glass.icon))
 }
 
 impl GpuiVisualPageModalWindow {

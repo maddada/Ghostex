@@ -112,7 +112,7 @@ impl NativeChatView {
             .border_color(card_border);
         // The X hangs from the header's top as far in as it sits from the side, and leads the
         // header on macOS (CDXC:AppModal 2026-11-10 in window/round_close_button.rs;
-        // CDXC:SessionChat 2026-11-11 in window/visual_page_modal/band_geometry.rs).
+        // CDXC:SessionChat 2026-11-11 in window/page_band_geometry.rs).
         let close_on_left = crate::app::window::round_close_button::close_buttons_on_left();
         let close = div()
             .self_start()

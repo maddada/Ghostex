@@ -51,6 +51,8 @@ pub(crate) mod remote_sites;
 pub(crate) mod rename_session_modal;
 pub(crate) mod rename_worktree_modal;
 pub(crate) mod resources_style;
+pub(crate) mod page_band_geometry;
+pub(crate) mod page_controls;
 pub(crate) mod round_close_button;
 pub(crate) mod security_upgrade_modal;
 pub(crate) mod session_handoff_modal;

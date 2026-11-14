@@ -41,6 +41,8 @@ impl NativeChatView {
         self.close_own_menu(cx);
         self.close_reply_popover(cx);
         self.close_draft_project_picker(cx);
+        // The dock ask panel belongs to this chat's dock: it goes with the pane.
+        self.close_dock_ask_modal(cx);
         self.pending_model_menu = None;
         self.hide_frosted_overlays(cx);
         self.sync_pane_modal_windows(cx);

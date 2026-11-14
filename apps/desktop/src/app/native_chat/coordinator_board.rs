@@ -359,10 +359,16 @@ pub(crate) struct CoordinatorBoardView {
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
     /// The dock's rows' scroll position.
     pub(super) dock_scroll: gpui::ScrollHandle,
-    /// The dock row whose ask is shown in its modal, by key (dock_ask_modal.rs).
+    /// The dock row whose ask is shown in its floating panel, by key (dock_ask_modal.rs).
     pub(super) dock_modal: Option<String>,
-    /// Whether the open ask modal has taken the keyboard, so a redraw does not take it again.
-    pub(super) dock_modal_focused: bool,
+    /// What the row said it was replied to when the panel showed it: a change means a Reply from
+    /// the panel was taken, which closes it.
+    pub(super) dock_modal_replied: String,
+    /// The panel's window once open, and while it opens.
+    pub(super) dock_modal_window: Option<gpui::AnyWindowHandle>,
+    pub(super) dock_modal_opening: bool,
+    /// Clears the panel when its window is closed from outside (the main window going away).
+    pub(super) dock_modal_closed: Option<gpui::Subscription>,
     /// When each page row last asked its gxserver for its counts (work_cards.rs
     /// `refresh_page_counts`), by page id.
     pub(super) page_counts_asked:

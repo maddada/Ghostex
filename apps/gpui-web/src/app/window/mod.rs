@@ -28,6 +28,8 @@ pub(crate) mod popup_frame;
 pub(crate) mod quick_access;
 pub(crate) mod rename_session_modal;
 pub(crate) mod rename_worktree_modal;
+pub(crate) mod page_band_geometry;
+pub(crate) mod page_controls;
 pub(crate) mod round_close_button;
 pub(crate) mod session_handoff_modal;
 pub(crate) mod session_note_modal;

@@ -144,9 +144,7 @@ impl Render for NativeChatView {
         let glass = crate::app::helpers::window_glass_active_in(window);
         // Under glass the subagent viewer sits straight on the pane's glass, so the chat behind it
         // is not painted (subagent_view.rs, `render_subagent_viewer`).
-        // The dock's ask modal sits on it the same way (dock_ask_modal.rs).
-        let covered = maximized
-            || (glass && (self.snapshot["subagent"].is_object() || self.dock_ask_modal_shown()));
+        let covered = maximized || (glass && self.snapshot["subagent"].is_object());
         self.sync_search_folds(&p, cx);
         let search_bar = if covered {
             None
@@ -261,7 +259,6 @@ impl Render for NativeChatView {
             self.hide_frosted_overlays(cx);
         }
         let subagent_viewer = self.render_subagent_viewer(&p, window, cx);
-        let dock_ask_modal = self.render_dock_ask_modal(&p, window, cx);
         let edit_menu = self.edit_menu(window, cx);
         let session_details_dock = self.render_session_details_dock(&p, window, cx);
         // A coordinator's board docks between the chat and Session details (coordinator_board.rs).
@@ -409,8 +406,7 @@ impl Render for NativeChatView {
             )
             .when_some(account_switch_card, |this, card| this.child(card))
             // The subagent transcript is a modal over the whole pane, like the account-switch card.
-            .when_some(subagent_viewer, |this, viewer| this.child(viewer))
-            .when_some(dock_ask_modal, |this, modal| this.child(modal));
+            .when_some(subagent_viewer, |this, viewer| this.child(viewer));
         // The Session details panel docks beside the chat as its own column (session_details/).
         div()
             .id("native-session-chat-pane")

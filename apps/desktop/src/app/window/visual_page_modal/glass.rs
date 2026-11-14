@@ -41,8 +41,8 @@ const GLASS_CHECK_EVERY: Duration = Duration::from_secs(1);
 /// The top of the page's painted dusk (dark) and dawn (light), which the header paints when there
 /// is no picture: `--gx-backdrop-top` in server/src/visual_pages/theme.rs, where the floating
 /// window's page fades its backdrop into this colour at its top edge.
-pub(super) const PAGE_TOP_DARK: u32 = 0x131313;
-pub(super) const PAGE_TOP_LIGHT: u32 = 0xf0f0f0;
+pub(crate) const PAGE_TOP_DARK: u32 = 0x131313;
+pub(crate) const PAGE_TOP_LIGHT: u32 = 0xf0f0f0;
 
 /// What the page was last handed.
 #[derive(Default)]
@@ -159,6 +159,14 @@ impl GpuiVisualPageModalWindow {
             cx.notify();
         }
     }
+}
+
+/// What another floating panel over the chat paints behind it to wear the page window's look
+/// (native_chat/dock_ask_modal.rs): the same softened picture as JPEG bytes, where it lies in
+/// `window`, and the work area's tint over it; `None` while the glass shows no picture, when the
+/// panel paints `PAGE_TOP_DARK` / `PAGE_TOP_LIGHT` as the page window's band does.
+pub(crate) fn panel_backdrop(window: &Window, cx: &mut App) -> Option<(Vec<u8>, Bounds<Pixels>, Rgba)> {
+    page_glass(window, cx).map(|glass| (glass.jpeg, glass.rect, glass.tint))
 }
 
 /// The picture behind the main window's glass, where it lies in the page window `window`, and the

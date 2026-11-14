@@ -203,15 +203,6 @@ impl NativeChatView {
             window.prevent_default();
             return;
         }
-        // The dock's ask modal too: Escape closes it, Enter picks nothing (dock_ask_modal.rs).
-        if self.board.dock_modal.is_some() && !event.keystroke.modifiers.platform {
-            if event.keystroke.key == "escape" && !event.is_held {
-                self.close_dock_ask_modal(cx);
-            }
-            cx.stop_propagation();
-            window.prevent_default();
-            return;
-        }
         let this = self;
 
         let key = &event.keystroke;

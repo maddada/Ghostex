@@ -434,9 +434,6 @@ pub(crate) struct NativeChatView {
     pub(super) subagent_focus: gpui::FocusHandle,
     /// Whether the open viewer has already taken focus, so a redraw does not steal it back every frame.
     pub(super) subagent_focused: bool,
-    /// The dock's ask modal's own focus, so its Escape works wherever the reader last clicked
-    /// (dock_ask_modal.rs).
-    pub(super) dock_modal_focus: gpui::FocusHandle,
     /// The whole chat view's own focus (`render.rs`), taken by a click on the transcript's empty space.
     pub(super) surface_focus: gpui::FocusHandle,
     pub(crate) pane_focused: bool,
@@ -731,7 +728,6 @@ impl NativeChatView {
             subagent_list,
             subagent_focus: cx.focus_handle(),
             subagent_focused: false,
-            dock_modal_focus: cx.focus_handle(),
             surface_focus: cx.focus_handle(),
             pane_focused: false,
             composer_focused: false,
@@ -911,7 +907,7 @@ impl NativeChatView {
     }
 
     pub(crate) fn invoke(&mut self, action: Value, cx: &mut Context<Self>) {
-        // A pick in the dock's ask modal's ⋯ menu closes the modal as it goes (dock_ask_modal.rs).
+        // A pick in the dock ask panel's ⋯ menu closes the panel as it goes (dock_ask_modal.rs).
         let action = self.unwrap_dock_ask_command(action, cx);
         self.hold_for_answer(&action, cx);
         self.note_resource_modal_send(&action);
