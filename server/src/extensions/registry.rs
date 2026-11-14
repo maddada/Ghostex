@@ -3,6 +3,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use crate::paths::GxserverPaths;
@@ -25,7 +26,20 @@ pub(crate) struct ExtensionRegistry {
     runtime: ExtensionRuntime,
     /// Store README, changelog and icon by zip SHA-256: a published zip never changes under its hash.
     store_content: Arc<Mutex<HashMap<String, StoreEntryContent>>>,
+    /// The last catalog read and when, for [`Self::store_entry_content`]. Its own lock, held
+    /// while a fetch runs, so Store requests that arrive together wait for one fetch and share it
+    /// instead of queueing behind an install on `gate`.
+    recent_catalog: Arc<Mutex<Option<(Instant, ExtensionCatalogSnapshot)>>>,
 }
+
+/*
+CDXC:Extensions 2026-11-14 WHY:
+The Store asks gxserver once per extension that is not installed (README, changelog, icon). Each
+request fetched catalog.json again, one at a time under the registry lock, so the icons appeared
+one after another. They reuse a catalog read in the last few minutes instead. Installing still
+reads the catalog fresh, so a zip is always checked against the current hash.
+*/
+const RECENT_CATALOG_TTL: Duration = Duration::from_secs(5 * 60);
 
 impl ExtensionRegistry {
     pub(crate) fn new_with_api_url(paths: &GxserverPaths, api_url: String) -> Self {
@@ -35,6 +49,7 @@ impl ExtensionRegistry {
             gate: Arc::new(Mutex::new(())),
             runtime: ExtensionRuntime::new(api_url),
             store_content: Arc::new(Mutex::new(HashMap::new())),
+            recent_catalog: Arc::new(Mutex::new(None)),
         };
         // CDXC:Workarea 2026-09-22 DECISION:
         // User: remove the original Storybook extension and keep only the built-in view.
@@ -53,7 +68,28 @@ impl ExtensionRegistry {
 
     pub(crate) fn catalog(&self) -> ExtensionResult<ExtensionCatalogSnapshot> {
         let _guard = self.lock()?;
-        fetch_catalog(&self.extensions_dir)
+        let snapshot = fetch_catalog(&self.extensions_dir)?;
+        if let Ok(mut recent) = self.recent_catalog.lock() {
+            *recent = Some((Instant::now(), snapshot.clone()));
+        }
+        Ok(snapshot)
+    }
+
+    /// The catalog read in the last [`RECENT_CATALOG_TTL`], or a fresh read that the next Store
+    /// requests reuse.
+    fn recent_catalog(&self) -> ExtensionResult<ExtensionCatalogSnapshot> {
+        let mut recent = self
+            .recent_catalog
+            .lock()
+            .map_err(|_| ExtensionError::internal("Extension catalog cache lock is poisoned."))?;
+        if let Some((read_at, snapshot)) = recent.as_ref() {
+            if read_at.elapsed() < RECENT_CATALOG_TTL {
+                return Ok(snapshot.clone());
+            }
+        }
+        let snapshot = fetch_catalog(&self.extensions_dir)?;
+        *recent = Some((Instant::now(), snapshot.clone()));
+        Ok(snapshot)
     }
 
     /// The README, changelog and icon of a Store entry, read from its hash-verified zip, so the
@@ -61,8 +97,7 @@ impl ExtensionRegistry {
     pub(crate) fn store_entry_content(&self, id: &str) -> ExtensionResult<StoreEntryContent> {
         validate_extension_id(id)?;
         let (zip_url, sha256, icon) = {
-            let _guard = self.lock()?;
-            let snapshot = fetch_catalog(&self.extensions_dir)?;
+            let snapshot = self.recent_catalog()?;
             let entry = snapshot
                 .catalog
                 .extensions
