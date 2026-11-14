@@ -209,7 +209,14 @@ pub(super) fn enter(
     });
     if first {
         if let Some(id) = notification.as_deref() {
-            crate::push::announce_blocked(state, repo, session, id, crate::push::BlockedWhy::Usage);
+            crate::push::announce_blocked(
+                state,
+                repo,
+                session,
+                id,
+                crate::push::BlockedWhy::Usage,
+                crate::push::PushRoute::default(),
+            );
         }
     }
     wait["notificationId"] = json!(notification);
@@ -372,7 +379,14 @@ pub(super) fn announce_limit_gave_up(
     };
     broadcast_notification_feed_changed(state);
     if let Some(id) = item["id"].as_str() {
-        crate::push::announce_blocked(state, repo, session, id, crate::push::BlockedWhy::Usage);
+        crate::push::announce_blocked(
+                state,
+                repo,
+                session,
+                id,
+                crate::push::BlockedWhy::Usage,
+                crate::push::PushRoute::default(),
+            );
     }
 }
 

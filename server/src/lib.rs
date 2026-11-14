@@ -315,6 +315,7 @@ pub(crate) mod vault;
 pub(crate) mod visual_pages;
 pub(crate) mod voice_agent;
 pub(crate) mod work_mode;
+pub(crate) mod worker_alerts;
 pub mod workspace_groups;
 pub mod workspaces;
 pub(crate) mod worktree_branch_name;

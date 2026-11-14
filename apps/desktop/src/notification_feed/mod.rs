@@ -174,9 +174,21 @@ pub(crate) struct GpuiNotificationFeedItem {
     pub(crate) created_at_epoch_secs: Option<i64>,
     pub(crate) read: bool,
     pub(crate) awaiting_approval: bool,
+    /// The session a click opens when it is not the row's own: a coordinator's thread's approval
+    /// opens the coordinator, where the card is relayed (`openProjectId`, `openSessionId`;
+    /// CDXC:Notifications 2026-11-14 in server/src/worker_alerts.rs).
+    pub(crate) open_on: Option<(String, String)>,
 }
 
 impl GpuiNotificationFeedItem {
+    /// The project and session a click on the row opens.
+    pub(crate) fn open_target(&self) -> (&str, &str) {
+        match &self.open_on {
+            Some((project_id, session_id)) => (project_id, session_id),
+            None => (&self.project_id, &self.session_id),
+        }
+    }
+
     fn from_bridge_value(value: &serde_json::Value) -> Option<Self> {
         let text = |key: &str| value.get(key)?.as_str().map(str::to_string);
         let id = text("id")?;
@@ -212,6 +224,11 @@ impl GpuiNotificationFeedItem {
                 .get("awaitingApproval")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
+            open_on: text("openProjectId")
+                .zip(text("openSessionId"))
+                .filter(|(project_id, session_id)| {
+                    !project_id.is_empty() && !session_id.is_empty()
+                }),
             id,
         })
     }

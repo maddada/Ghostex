@@ -170,11 +170,24 @@ pub(crate) fn observe_program_error(state: &AppState, result: &Value) {
         .map(str::to_string);
     let outcome = open_repository(state).and_then(|(db, server_id)| {
         let repository = DomainRepository::new(&db, server_id);
-        let row = record_failed_row(&repository, session, attention_event_id)?;
-        crate::push::announce_feed_row(state, &repository, session, &row);
-        Ok(row)
+        match worker_failure(&repository, session, false) {
+            WorkerFailure::NoRow => {
+                crate::push::announce_worker_event(
+                    state,
+                    &repository,
+                    session,
+                    crate::push::message::AlertKind::Failed,
+                );
+                return Ok(false);
+            }
+            route => {
+                let row = record_failed_row(&repository, session, attention_event_id)?;
+                announce_failed_row(state, &repository, session, &row, route);
+            }
+        }
+        Ok(true)
     });
-    finish(state, session, outcome.map(|_| true));
+    finish(state, session, outcome);
 }
 
 /// Stores `members` of `runtime` for the session together with its episode's failed row in one
@@ -182,8 +195,9 @@ pub(crate) fn observe_program_error(state: &AppState, result: &Value) {
 /// the row and the marker are committed together or not at all. Only `members` are written, onto
 /// the row as read after the writer is reserved, so newer runtime members another writer stored
 /// meanwhile stay. When that fails (logged), `members` of `unannounced` are stored instead, if
-/// given, so the episode still owes its row. `Ok(true)` when the row was committed; the caller
-/// announces the feed change.
+/// given, so the episode still owes its row. A coordinator's thread's episode stores only the
+/// marker while Workers is Off (`WorkerFailure::NoRow`). `Ok(true)` when the row was committed;
+/// the caller announces the feed change.
 pub(crate) fn store_failure_notice(
     state: &AppState,
     repository: &DomainRepository<'_>,
@@ -206,6 +220,13 @@ pub(crate) fn store_failure_notice(
         )
     };
     let mut committed_row = None;
+    // A sign-in that stopped working is the user's to fix, worker or not.
+    let sign_in = runtime
+        .get("accountRecovery")
+        .and_then(|recovery| recovery.get("trigger"))
+        .and_then(Value::as_str)
+        == Some("accountDisabled");
+    let route = worker_failure(repository, session, sign_in);
     let sql = |error: rusqlite::Error| DomainStateError {
         code: "internalError",
         message: format!("SQLite gxserver state error: {error}"),
@@ -215,9 +236,13 @@ pub(crate) fn store_failure_notice(
         .execute_batch(begin)
         .map_err(sql)
         .and_then(|()| {
-            let written = record_failed_row(repository, session, None)
+            let written = (if route == WorkerFailure::NoRow {
+                Ok(None)
+            } else {
+                record_failed_row(repository, session, None).map(Some)
+            })
                 .and_then(|row| {
-                    committed_row = Some(row);
+                    committed_row = row;
                     if let Some(recovery) = runtime.get_mut("accountRecovery") {
                         recovery[crate::accounts::api_errors::FAILURE_NOTIFIED_AT] =
                             json!(Utc::now().to_rfc3339());
@@ -234,10 +259,19 @@ pub(crate) fn store_failure_notice(
         });
     match stored {
         Ok(()) => {
-            if let Some(row) = committed_row.filter(|_| own_transaction) {
-                crate::push::announce_feed_row(state, repository, session, &row);
+            let wrote_row = committed_row.is_some();
+            if own_transaction {
+                match committed_row {
+                    Some(row) => announce_failed_row(state, repository, session, &row, route),
+                    None => crate::push::announce_worker_event(
+                        state,
+                        repository,
+                        session,
+                        crate::push::message::AlertKind::Failed,
+                    ),
+                }
             }
-            Ok(true)
+            Ok(wrote_row)
         }
         Err(error) => {
             log_failed_notice(state, session, error);
@@ -248,6 +282,58 @@ pub(crate) fn store_failure_notice(
             }
             Ok(false)
         }
+    }
+}
+
+/// How a failed turn reaches the user (CDXC:Notifications 2026-11-14, Q3245 in
+/// server/src/worker_alerts.rs): a coordinator's thread's error is the coordinator's to handle, so
+/// it has no row while Workers is Off and its push follows the phone's Workers choice. A sign-in
+/// that stopped working stays the user's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WorkerFailure {
+    /// Anyone else's: the row and the push as before.
+    User,
+    /// A worker's, with a row (Workers brings them back).
+    Row,
+    /// A worker's, without a row.
+    NoRow,
+}
+
+fn worker_failure(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    users_to_fix: bool,
+) -> WorkerFailure {
+    let text = |key: &str| session.get(key).and_then(Value::as_str).unwrap_or_default();
+    if users_to_fix
+        || !crate::worker_alerts::is_worker(repository.db, text("projectId"), text("sessionId"))
+    {
+        WorkerFailure::User
+    } else if crate::worker_alerts::worker_alerts().rows() {
+        WorkerFailure::Row
+    } else {
+        WorkerFailure::NoRow
+    }
+}
+
+fn announce_failed_row(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    row: &Value,
+    route: WorkerFailure,
+) {
+    if route == WorkerFailure::User {
+        crate::push::announce_feed_row(state, repository, session, row);
+    } else {
+        crate::push::announce_feed_row_as(
+            state,
+            repository,
+            session,
+            row,
+            crate::push::message::AlertKind::Failed,
+            crate::push::PushRoute::worker(),
+        );
     }
 }
 

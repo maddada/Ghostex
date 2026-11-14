@@ -550,6 +550,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("showMacOSAttentionNotifications", J::Bool(true)),
     // CDXC:Notifications 2026-11-07 DECISION: All stays the default; Needs you only (approved with PR #457) is the rule in packages/gx-core/src/attention.rs.
     ("attentionAlertsFor", J::Str("all")),
+    ("workerNotifications", J::Str("off")),
     // CDXC:Notifications 2026-10-05 DECISION:
     // User: a banked reset that expires within 3 days, and again within 24 hours, also gets a system notification, which "can be switched off for the system" while the red bell row stays.
     ("resetExpirySystemNotifications", J::Bool(true)),

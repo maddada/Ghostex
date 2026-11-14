@@ -514,6 +514,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 ATTENTION_ALERTS_FOR_OPTIONS.to_json(),
             ),
             (
+                "WORKER_NOTIFICATIONS_OPTIONS",
+                WORKER_NOTIFICATIONS_OPTIONS.to_json(),
+            ),
+            (
                 "COORDINATOR_BOARD_VIEW_OPTIONS",
                 COORDINATOR_BOARD_VIEW_OPTIONS.to_json(),
             ),

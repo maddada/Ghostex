@@ -129,6 +129,12 @@ impl GhostexGpuiApp {
         let Some(session) = crate::app::gx_store::system_notification_session(&session_id) else {
             return;
         };
+        // CDXC:Notifications 2026-11-14 (Q3243 in server/src/worker_alerts.rs): a coordinator's
+        // thread waiting for an approval opens its coordinator, where the card is relayed.
+        let (session_id, session) = match self.approval_coordinator_of(&session) {
+            Some(coordinator) => (coordinator.to_sidebar_session_id(), coordinator),
+            None => (session_id, session),
+        };
         self.activate_session_in_its_window(&session_id, window, cx, move |app, cx| {
             app.gx_store_show_session_on_its_machine(
                 &session,
@@ -136,6 +142,24 @@ impl GhostexGpuiApp {
                 cx,
             );
         });
+    }
+
+    /// The coordinator of a thread that waits for an approval, on the thread's computer.
+    fn approval_coordinator_of(
+        &self,
+        session: &ghostex_gx_core::SessionKey,
+    ) -> Option<ghostex_gx_core::SessionKey> {
+        let row = self.gx_store.core.presentation().session(session)?;
+        if !row.awaiting_approval {
+            return None;
+        }
+        let project_id = row.coordinator_project_id.as_deref()?.trim();
+        let session_id = row.coordinator_session_id.as_deref()?.trim();
+        (!project_id.is_empty() && !session_id.is_empty()).then(|| ghostex_gx_core::SessionKey {
+            machine: session.machine.clone(),
+            project_id: project_id.to_string(),
+            session_id: session_id.to_string(),
+        })
     }
 
     pub(crate) fn deliver_gpui_macos_session_attention_notification(

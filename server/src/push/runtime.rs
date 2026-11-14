@@ -363,7 +363,7 @@ fn fan_out(shared: &Shared, events: VecDeque<AlertEvent>, start: Option<AgentSta
         }
         let event = Arc::new(event);
         for registration in &data.registrations {
-            if event.kind.delivery(registration) != AlertChoice::Off {
+            if event.delivery(registration) != AlertChoice::Off {
                 jobs.push(AlertJob {
                     event: event.clone(),
                     machine_id: registration.machine_id.clone(),
@@ -452,7 +452,7 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
     }
     let admission = charge_budget(shared, &job.machine_id, &job.token_hash, |data| {
         let registration = data.registration(&job.machine_id)?;
-        let delivery = job.event.kind.delivery(registration);
+        let delivery = job.event.delivery(registration);
         if delivery == AlertChoice::Off {
             return None;
         }

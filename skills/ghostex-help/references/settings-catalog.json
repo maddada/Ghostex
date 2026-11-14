@@ -2311,7 +2311,7 @@
     {
       "key": "attentionAlertsFor",
       "title": "Alert me for",
-      "subtitle": "A coordinator's threads finishing, and a coordinator that only finished, stay quiet under both choices, and a red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever any other agent finishes; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. The bell keeps every row either way.",
+      "subtitle": "A red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever an agent finishes, and for a coordinator only once none of its workers is still working; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. Workers follow the Workers setting instead. The bell keeps a row either way.",
       "tab": "notifications",
       "tabTitle": "Notifications",
       "section": "sounds",
@@ -2326,6 +2326,32 @@
         {
           "label": "Needs you only",
           "value": "needsYou"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "workerNotifications",
+      "title": "Workers",
+      "subtitle": "How a coordinator's workers reach you. Off: when they finish, ask a question, can't take a message, stop moving or hit an error, their coordinator is told and you see only their dot. Silent: they also show in the bell, without the sound or system notification. Sound: they alert like any other agent. An approval, every account out of usage and a sign-in that stopped working always reach you.",
+      "tab": "notifications",
+      "tabTitle": "Notifications",
+      "section": "sounds",
+      "sectionTitle": "Sounds",
+      "type": "enum",
+      "default": "off",
+      "options": [
+        {
+          "label": "Off",
+          "value": "off"
+        },
+        {
+          "label": "Silent",
+          "value": "silent"
+        },
+        {
+          "label": "Sound",
+          "value": "sound"
         }
       ],
       "agentWritable": true

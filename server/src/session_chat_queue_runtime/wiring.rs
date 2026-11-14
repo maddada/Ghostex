@@ -160,6 +160,31 @@ pub(crate) fn session_chat_queue_stuck_notifier(
         };
         let repository =
             crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+        // CDXC:Notifications 2026-11-14 DECISION (Q3242 in server/src/worker_alerts.rs): the
+        // user's screenshot showed this row for a coordinator's message to its thread, which they
+        // can do nothing about. A thread's stuck message goes to its coordinator, as a held note
+        // it reads at its next stop; the row only while Workers brings them back.
+        if let Some((coordinator_project, coordinator_session)) =
+            crate::worker_alerts::worker_coordinator(&db, project_id, session_id)
+        {
+            if tell_coordinator_message_stuck(
+                &state,
+                &db,
+                &repository,
+                (project_id, session_id),
+                (&coordinator_project, &coordinator_session),
+                body,
+            ) {
+                super::broadcast_session_chat_queue_state(
+                    &state,
+                    &coordinator_project,
+                    &coordinator_session,
+                );
+            }
+            if !crate::worker_alerts::worker_alerts().rows() {
+                return;
+            }
+        }
         let mut params = Map::new();
         params.insert("projectId".to_string(), json!(project_id));
         params.insert("sessionId".to_string(), json!(session_id));
@@ -171,6 +196,52 @@ pub(crate) fn session_chat_queue_stuck_notifier(
             &params,
         );
     })
+}
+
+/// Puts a note in the coordinator's queue that its thread has not taken a message for minutes
+/// because its input box is not on screen: `body` is the bell's words about the thread, which name
+/// the wait and quote its terminal. Held, so a busy coordinator takes it at its next input
+/// boundary. Returns whether the note was queued.
+fn tell_coordinator_message_stuck(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &crate::domain::DomainRepository<'_>,
+    (project_id, session_id): (&str, &str),
+    (coordinator_project, coordinator_session): (&str, &str),
+    body: &str,
+) -> bool {
+    let Ok(Some(thread)) = repository.get_session(project_id, session_id) else {
+        return false;
+    };
+    let title = crate::coordinators::session_title_of(&thread);
+    let thread_ref = crate::ids::create_global_session_ref(
+        state.metadata.server_id.as_str(),
+        project_id,
+        session_id,
+    );
+    let wait = body
+        .strip_prefix("A message has waited ")
+        .and_then(|rest| rest.split_once(" to reach this agent"))
+        .map_or("several minutes", |(minutes, _)| minutes);
+    let shows = body
+        .find(" The terminal shows: ")
+        .and_then(|start| {
+            let rest = &body[start + 1..];
+            rest.find(". Open the terminal").map(|end| &rest[..end + 1])
+        })
+        .map(|shows| format!(" {shows}"))
+        .unwrap_or_default();
+    let note = format!(
+        "Ghostex thread report: a message has waited {wait} to reach \"{title}\" ({thread_ref}) because its input box isn't on screen.{shows} Ghostex keeps trying and sends the message once the box is back. If it stays stuck, `ghostex agents reload {thread_ref}`, or ask the user to open its terminal."
+    );
+    crate::session_chat_queue::enqueue_session_chat_prompt(
+        db,
+        coordinator_project,
+        coordinator_session,
+        &note,
+        true,
+    )
+    .is_ok()
 }
 
 /// The input-box ladder's reload step (held_reload.rs).

@@ -19,6 +19,12 @@
 //!   (the turn keeps its dot and alert), a question form it asked (open questions raise it,
 //!   session_chat_open_questions.rs), and any approval, question card or red dot, which are not
 //!   finished turns.
+//!
+//! CDXC:Notifications 2026-11-14 DECISION:
+//! User (Q3241 on the worker-notifications page): a thread's finished turn leaves nothing, no
+//! Notifications row and no dot, while Settings > Notifications > Workers is Off (the default;
+//! server/src/worker_alerts.rs). It is stored as already seen the same way; its report still
+//! reaches the coordinator, which reads the thread's state, not its attention.
 //! SEE-ALSO: server/src/agents/activity.rs and server/src/agents/session_state_ingest.rs (where it
 //! is applied), packages/gx-core/src/alert_rule.rs (the alert rule).
 
@@ -34,6 +40,41 @@ use crate::domain::DomainRepository;
 use crate::session_status::{
     settle_entered_turn_end_as_seen, update_enters_turn_complete_attention, ActivityUpdate,
 };
+
+/// Stores a finished turn as already seen when nobody should hear of it: a coordinator's while its
+/// threads still work (`quiet_coordinator_turn_end`), or a thread's while Workers is Off
+/// (`quiet_thread_turn_end`). Returns whether it did (`quietTurnEnd` on the endpoint's result).
+pub(crate) fn quiet_turn_end(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    update: &mut ActivityUpdate,
+) -> bool {
+    quiet_coordinator_turn_end(repository, session, update)
+        || quiet_thread_turn_end(repository, session, update)
+}
+
+/// Stores a thread's finished turn `update` enters as already seen while Workers is Off. A turn
+/// that ends on a question or approval is not a finished turn and is left alone.
+pub(crate) fn quiet_thread_turn_end(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    update: &mut ActivityUpdate,
+) -> bool {
+    if !update_enters_turn_complete_attention(update)
+        || update.activity.get("sessionChatPrompt").is_some()
+        || crate::agents::session_chat_prompt_setting(session).is_some()
+        || crate::session_approval::session_has_question(session)
+        || crate::worker_alerts::worker_alerts().rows()
+    {
+        return false;
+    }
+    let text = |key: &str| session.get(key).and_then(Value::as_str).unwrap_or_default();
+    if !crate::worker_alerts::is_worker(repository.connection(), text("projectId"), text("sessionId")) {
+        return false;
+    }
+    settle_entered_turn_end_as_seen(update);
+    true
+}
 
 /// Stores the coordinator's finished turn `update` enters as already seen while its threads still
 /// work and the turn put no holding ask on its board. Returns whether it did, so the caller can

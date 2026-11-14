@@ -570,6 +570,24 @@ async fn notify(state: &Arc<AppState>, candidate: &Candidate, body: &str) {
             return;
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        // CDXC:Notifications 2026-11-14 (Q3245 in server/src/worker_alerts.rs): a stop in a
+        // coordinator's thread is the coordinator's to handle; a row only while Workers brings
+        // them back, a push by the phone's Workers choice.
+        let worker = crate::worker_alerts::is_worker(&db, &key.0, &key.1);
+        if worker && !crate::worker_alerts::worker_alerts().rows() {
+            crate::push::announce_worker_event(
+                &state,
+                &repository,
+                &session,
+                crate::push::BlockedWhy::OutOfMemory.kind(),
+            );
+            return;
+        }
+        let route = if worker {
+            crate::push::PushRoute::worker()
+        } else {
+            crate::push::PushRoute::default()
+        };
         let mut params = Map::new();
         params.insert("projectId".to_string(), json!(key.0));
         params.insert("sessionId".to_string(), json!(key.1));
@@ -589,6 +607,7 @@ async fn notify(state: &Arc<AppState>, candidate: &Candidate, body: &str) {
                 &session,
                 id,
                 crate::push::BlockedWhy::OutOfMemory,
+                route,
             );
         }
     })

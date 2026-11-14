@@ -122,9 +122,29 @@ pub(crate) struct AlertEvent {
     pub(crate) session_title: String,
     /// When the event happened, in wall-clock milliseconds; the alert expires an hour later.
     pub(crate) occurred_at_ms: i64,
+    /// A coordinator's thread's own news (its finished turn, question, stall, error or memory
+    /// stop): it goes by the phone's Workers choice (`threadReports` on the wire) instead of the
+    /// kind's, and a phone older than the choices never gets it (CDXC:Notifications 2026-11-14 in
+    /// server/src/worker_alerts.rs).
+    pub(crate) worker: bool,
+    /// The session a tap opens when it is not the event's own: a thread's approval opens its
+    /// coordinator, where the card is relayed (`openSessionId`; an older phone ignores it and
+    /// opens the thread).
+    pub(crate) open_session_id: Option<String>,
 }
 
 impl AlertEvent {
+    /// How `registration`'s phone wants this event: its Workers choice for a worker's news, else
+    /// its choice for the kind.
+    pub(crate) fn delivery(&self, registration: &PushRegistration) -> AlertChoice {
+        if !self.worker {
+            return self.kind.delivery(registration);
+        }
+        registration
+            .alerts
+            .map_or(AlertChoice::Off, |alerts| alerts.thread_reports)
+    }
+
     pub(crate) fn is_valid(&self) -> bool {
         is_printable_id(&self.session_id, SESSION_ID_MAX)
             && is_printable_id(&self.notification_id, NOTIFICATION_ID_MAX)
@@ -167,12 +187,22 @@ pub(crate) fn alert_message(
     message.insert("body".into(), json!(event.kind.words(has_question)));
     message.insert(
         "data".into(),
-        json!({
-            "kind": event.kind.wire(),
-            "machineId": machine_id,
-            "sessionId": event.session_id,
-            "notificationId": event.notification_id,
-        }),
+        {
+            let mut data = json!({
+                "kind": event.kind.wire(),
+                "machineId": machine_id,
+                "sessionId": event.session_id,
+                "notificationId": event.notification_id,
+            });
+            if let Some(open) = event.open_session_id.as_deref().filter(|id| !id.is_empty()) {
+                data["openSessionId"] = json!(open);
+            }
+            // A worker's news, which the phone shows by its Workers choice as it came.
+            if event.worker {
+                data["worker"] = json!(true);
+            }
+            data
+        },
     );
     message.insert(CONTENT_AVAILABLE_FIELD.into(), json!(true));
     // A Silent kind, or a notice right after another one sounded, shows without the sound.
