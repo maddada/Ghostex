@@ -73,6 +73,25 @@ pub(crate) fn open_with_applications(_target: &str, _is_url: bool) -> Vec<OpenWi
     Vec::new()
 }
 
+/// Whether Open With offers `app` for the file at `path`: one of the apps the system lists for its
+/// extension, or (Windows) the system's own Open With dialog.
+pub(crate) fn open_with_app_is_offered(path: &str, app: &std::path::Path) -> bool {
+    #[cfg(target_os = "windows")]
+    if app.as_os_str() == crate::app::helpers::GPUI_OPEN_WITH_CHOOSER {
+        return true;
+    }
+    let extension = path
+        .rsplit('/')
+        .next()
+        .and_then(|name| name.rsplit_once('.'))
+        .map(|(_, extension)| extension)
+        .unwrap_or_default();
+    !extension.is_empty()
+        && open_with_applications(extension, false)
+            .iter()
+            .any(|offered| offered.path == app)
+}
+
 impl DocsFileKind {
     /// HTML pages, drawings and Markdown have a browser page to open.
     pub(crate) fn opens_externally(self) -> bool {
@@ -220,23 +239,42 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// Opens the file itself with `app` (local projects only).
+    /// Opens the file itself with `app`, a row the user picked in Open With (local projects only).
+    ///
+    /// CDXC:Docs 2026-11-14 DECISION:
+    /// The app stays on the native side: it is checked against the apps the system offers for the
+    /// file (the list the menu was built from) and used here once the Files bridge has said where
+    /// the file is (`resolveOpenWithTarget`). No request carries it, and the bridge refuses one
+    /// that names an app (helpers/manage_docs/files_bridge.rs).
     pub(crate) fn native_docs_open_with_app(
         &mut self,
         path: &str,
         app: PathBuf,
         cx: &mut Context<Self>,
     ) {
-        let request = self.native_docs_request(
-            "openWithSystemApp",
-            json!({ "path": path, "appPath": app.to_string_lossy() }),
-        );
+        if self.native_docs_remote_target().is_some() || !open_with_app_is_offered(path, &app) {
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                "Couldn't open the file",
+                "Pick the app from Open With again.",
+                cx,
+            );
+            return;
+        }
+        let request = self.native_docs_request("resolveOpenWithTarget", json!({ "path": path }));
         self.run_docs_files_request(request.to_string(), cx, move |this, response, cx| {
-            if let Some(error) = response["error"].as_str() {
+            let opened = match (response["error"].as_str(), response["openPath"].as_str()) {
+                (Some(error), _) => Err(error.to_string()),
+                (None, Some(target)) => {
+                    gpui_open_with_application(&app, std::ffi::OsStr::new(target))
+                }
+                (None, None) => Err("The file is unavailable.".to_string()),
+            };
+            if let Err(error) = opened {
                 this.dispatch_gpui_workspace_action_toast(
                     "error",
                     "Couldn't open the file",
-                    error,
+                    &error,
                     cx,
                 );
             }

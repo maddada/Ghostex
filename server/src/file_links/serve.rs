@@ -19,6 +19,16 @@ pub(crate) const FILE_LINK_ROUTE_PREFIX: &str = "/open-file/";
 const RANGE_CHUNK_MAX_BYTES: u64 = 16 * 1024 * 1024;
 const DRAWING_MAX_BYTES: usize = 64 * 1024 * 1024;
 
+/// CDXC:Docs 2026-11-14 DECISION:
+/// A link answer a browser shows as a document (an HTML or SVG file, an XML file, the rendered
+/// Markdown page) gets the sandbox the Files preview has: its scripts run in their own opaque
+/// origin, so a page from a project can no longer read the link's other files, gxserver's cookies
+/// or storage as a same-origin page. A Ghostex page (`/visual/`) already has its own sandbox, and
+/// the Excalidraw editor page, which Ghostex writes and which saves back to its own link, keeps its
+/// origin. Same flags as the Files preview frame (apps/desktop/views/manage/preview/html-viewer.tsx)
+/// without `allow-same-origin`.
+const DOCUMENT_SANDBOX_POLICY: &str = "sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads allow-presentation";
+
 /// `GET` reads a file under the link's folder (Markdown and drawings as pages unless `?raw=1`),
 /// `PUT` saves a drawing from the Excalidraw page.
 pub(crate) async fn serve(
@@ -44,30 +54,43 @@ pub(crate) async fn serve(
         let raw = query
             .as_deref()
             .is_some_and(|query| query.split('&').any(|pair| pair == "raw=1"));
-        match (method, body) {
-            (Method::PUT, Some(body)) if is_drawing(&file) => save_drawing(&file, &body),
-            (Method::GET, _) if !raw && is_markdown(&file) => super::pages::markdown(&file)
-                .map(html)
-                .unwrap_or_else(|| status(StatusCode::NOT_FOUND)),
-            (Method::GET, _) if !raw && is_drawing(&file) => html(super::pages::drawing(&file)),
-            // A Ghostex page file opens as its page, with the page kit (visual_pages/file_page.rs).
-            (Method::GET, _) if !raw && is_html(&file) => {
-                match crate::visual_pages::page_for_file(&gxserver_state_dir, &file) {
-                    Ok(Some(page)) => redirect(&format!(
-                        "{}{}?{}",
-                        crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX,
-                        page.id,
-                        crate::visual_pages::PAGE_SCRIPT_QUERY
-                    )),
-                    _ => read(&file, &headers),
-                }
-            }
-            (Method::GET, _) => read(&file, &headers),
-            _ => status(StatusCode::METHOD_NOT_ALLOWED),
-        }
+        answer(&gxserver_state_dir, method, body, &file, raw, &headers)
     })
     .await
     .unwrap_or_else(|_| status(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+/// The answer for one resolved file of a link.
+fn answer(
+    gxserver_state_dir: &Path,
+    method: Method,
+    body: Option<axum::body::Bytes>,
+    file: &Path,
+    raw: bool,
+    headers: &HeaderMap,
+) -> RoutedResponse {
+    match (method, body) {
+        (Method::PUT, Some(body)) if is_drawing(file) => save_drawing(file, &body),
+        (Method::GET, _) if !raw && is_markdown(file) => super::pages::markdown(file)
+            .map(html)
+            .map(sandboxed)
+            .unwrap_or_else(|| status(StatusCode::NOT_FOUND)),
+        (Method::GET, _) if !raw && is_drawing(file) => html(super::pages::drawing(file)),
+        // A Ghostex page file opens as its page, with the page kit (visual_pages/file_page.rs).
+        (Method::GET, _) if !raw && is_html(file) => {
+            match crate::visual_pages::page_for_file(gxserver_state_dir, file) {
+                Ok(Some(page)) => redirect(&format!(
+                    "{}{}?{}",
+                    crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX,
+                    page.id,
+                    crate::visual_pages::PAGE_SCRIPT_QUERY
+                )),
+                _ => read(file, headers),
+            }
+        }
+        (Method::GET, _) => read(file, headers),
+        _ => status(StatusCode::METHOD_NOT_ALLOWED),
+    }
 }
 
 fn resolve(path: &str) -> Option<PathBuf> {
@@ -113,6 +136,17 @@ fn redirect(location: &str) -> RoutedResponse {
     let mut response = status(StatusCode::FOUND);
     insert(&mut response, header::LOCATION, location);
     no_store(response)
+}
+
+/// Files a browser renders as a document that can run script when opened on their own.
+fn is_document(file: &Path) -> bool {
+    matches!(extension(file).as_str(), "html" | "htm" | "svg" | "xml")
+}
+
+/// A sandboxed page loads its fonts in CORS mode from another origin; a font shows nothing of its
+/// bytes to the page, so it may be read from anywhere (the Files resource origin's rule).
+fn is_font(file: &Path) -> bool {
+    matches!(extension(file).as_str(), "woff" | "woff2" | "ttf" | "otf")
 }
 
 fn is_drawing(file: &Path) -> bool {
@@ -197,7 +231,15 @@ fn read(file: &Path, headers: &HeaderMap) -> RoutedResponse {
     }
     insert(&mut response, header::CONTENT_TYPE, content_type(file));
     insert(&mut response, header::ACCEPT_RANGES, "bytes");
-    no_store(response)
+    if is_font(file) {
+        insert(&mut response, header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+    }
+    let response = no_store(response);
+    if is_document(file) {
+        sandboxed(response)
+    } else {
+        response
+    }
 }
 
 /// `bytes=start-end`, `bytes=start-` or `bytes=-suffix`; one range only.
@@ -249,6 +291,16 @@ fn html(page: String) -> RoutedResponse {
 fn no_store(mut response: RoutedResponse) -> RoutedResponse {
     insert(&mut response, header::CACHE_CONTROL, "no-store");
     insert(&mut response, header::REFERRER_POLICY, "no-referrer");
+    insert(&mut response, header::X_CONTENT_TYPE_OPTIONS, "nosniff");
+    response
+}
+
+fn sandboxed(mut response: RoutedResponse) -> RoutedResponse {
+    insert(
+        &mut response,
+        header::CONTENT_SECURITY_POLICY,
+        DOCUMENT_SANDBOX_POLICY,
+    );
     response
 }
 
@@ -262,5 +314,115 @@ fn status(code: StatusCode) -> RoutedResponse {
     RoutedResponse {
         endpoint_path: None,
         response: code.into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn get(state: &Path, file: &Path, raw: bool) -> RoutedResponse {
+        answer(state, Method::GET, None, file, raw, &HeaderMap::new())
+    }
+
+    fn header_value(response: &RoutedResponse, name: header::HeaderName) -> Option<String> {
+        response
+            .response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string)
+    }
+
+    fn project() -> (tempfile::TempDir, PathBuf) {
+        let folder = tempfile::tempdir().expect("temp folder");
+        let state = folder.path().join("state");
+        fs::create_dir_all(&state).expect("state folder");
+        for (name, text) in [
+            (
+                "page.html",
+                "<!doctype html><script>fetch('notes.txt')</script>",
+            ),
+            ("note.md", "# Note\n\n<img src=x onerror=alert(1)>"),
+            (
+                "logo.svg",
+                "<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>",
+            ),
+            (
+                "plan.excalidraw",
+                "{\"type\":\"excalidraw\",\"elements\":[]}",
+            ),
+            ("font.woff2", "font"),
+            ("data.json", "{}"),
+        ] {
+            fs::write(folder.path().join(name), text).expect("write");
+        }
+        (folder, state)
+    }
+
+    #[test]
+    fn html_markdown_and_svg_answers_are_sandboxed() {
+        let (folder, state) = project();
+        for (name, raw) in [
+            ("page.html", false),
+            ("page.html", true),
+            ("note.md", false),
+            ("logo.svg", false),
+        ] {
+            let response = get(&state, &folder.path().join(name), raw);
+            assert_eq!(response.response.status(), StatusCode::OK, "{name}");
+            let policy = header_value(&response, header::CONTENT_SECURITY_POLICY)
+                .unwrap_or_else(|| panic!("{name} (raw={raw}) has no content policy"));
+            assert!(policy.starts_with("sandbox "), "{name}: {policy}");
+            assert!(policy.contains("allow-scripts"), "{name}: {policy}");
+            assert!(!policy.contains("allow-same-origin"), "{name}: {policy}");
+            assert_eq!(
+                header_value(&response, header::X_CONTENT_TYPE_OPTIONS).as_deref(),
+                Some("nosniff")
+            );
+        }
+    }
+
+    #[test]
+    fn a_ranged_html_answer_is_sandboxed_too() {
+        let (folder, state) = project();
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, HeaderValue::from_static("bytes=0-4"));
+        let response = answer(
+            &state,
+            Method::GET,
+            None,
+            &folder.path().join("page.html"),
+            true,
+            &headers,
+        );
+        assert_eq!(response.response.status(), StatusCode::PARTIAL_CONTENT);
+        assert!(header_value(&response, header::CONTENT_SECURITY_POLICY).is_some());
+    }
+
+    #[test]
+    fn drawings_data_and_fonts_keep_their_origin() {
+        let (folder, state) = project();
+        for (name, raw) in [
+            ("plan.excalidraw", false),
+            ("plan.excalidraw", true),
+            ("data.json", false),
+            ("note.md", true),
+            ("font.woff2", false),
+        ] {
+            let response = get(&state, &folder.path().join(name), raw);
+            assert_eq!(response.response.status(), StatusCode::OK, "{name}");
+            assert!(
+                header_value(&response, header::CONTENT_SECURITY_POLICY).is_none(),
+                "{name} (raw={raw}) should not be sandboxed"
+            );
+        }
+        let font = get(&state, &folder.path().join("font.woff2"), false);
+        assert_eq!(
+            header_value(&font, header::ACCESS_CONTROL_ALLOW_ORIGIN).as_deref(),
+            Some("*")
+        );
+        let data = get(&state, &folder.path().join("data.json"), false);
+        assert!(header_value(&data, header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
     }
 }
