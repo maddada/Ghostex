@@ -116,7 +116,7 @@ impl NativeChatView {
                         }));
                         chat.sync_context_editor_window(cx);
                     }
-                    Err(error)=>{chat.error=Some(error.to_string());chat.invoke(json!({"type":"contextCancel"}),cx);}
+                    Err(error)=>{chat.error=Some(crate::app::native_chat::child_window::window_open_failed(error));chat.invoke(json!({"type":"contextCancel"}),cx);}
                 }
             });
         });

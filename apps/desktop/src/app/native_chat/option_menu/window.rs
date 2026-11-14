@@ -646,7 +646,16 @@ impl ChatOptionMenu {
             corner_radius
         };
         let display_id = self.owner.display_for(bounds, cx);
+        let source = self.source;
         cx.defer(move |cx| {
+            // CDXC:SessionChat 2026-11-14 WHY: The menu opens a tick after it was asked for; when the window it was opened from closed in between, it belongs nowhere, and opening it anyway failed on X11 ("X11 transient owner is no longer open" in a failed card). It closes instead.
+            if !cx.windows().contains(&source) {
+                menu.update(cx, |menu, cx| {
+                    menu.opening = false;
+                    menu.close(None, cx);
+                });
+                return;
+            }
             let result = cx.open_window(
                 WindowOptions {
                     kind: crate::app::window::popup_frame::menu_window_kind(),
@@ -899,7 +908,9 @@ impl ChatOptionMenu {
                     }
                     Err(error) => {
                         let _ = menu.chat.update(cx, |chat, cx| {
-                            chat.error = Some(error.to_string());
+                            chat.error = Some(
+                                crate::app::native_chat::child_window::window_open_failed(error),
+                            );
                             cx.notify();
                         });
                         menu.close(None, cx);

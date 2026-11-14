@@ -304,7 +304,9 @@ impl NativeChatView {
                         chat.sync_image_viewer_window(cx);
                     }
                     Err(error) => {
-                        chat.error = Some(error.to_string());
+                        chat.error = Some(
+                            crate::app::native_chat::child_window::window_open_failed(error),
+                        );
                         chat.image_viewer.request = None;
                     }
                 }

@@ -479,7 +479,9 @@ impl NativeChatView {
                     }
                     Err(error) => {
                         this.board.dock_modal = None;
-                        this.error = Some(error.to_string());
+                        this.error = Some(
+                            crate::app::native_chat::child_window::window_open_failed(error),
+                        );
                         cx.notify();
                     }
                 }
