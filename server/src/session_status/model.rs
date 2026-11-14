@@ -314,6 +314,37 @@ pub fn is_turn_complete_attention(value: Option<&Value>) -> bool {
     normalize_agent_activity_state(value, "idle").is_unacknowledged_turn_complete_attention()
 }
 
+/// Whether an activity endpoint's `result` is a finished turn: one that entered its turn-complete
+/// attention, or a coordinator's that was stored as seen while its threads work (`quietTurnEnd`,
+/// server/src/coordinators/quiet_turn_end.rs). For the observers that look at every turn end.
+pub fn result_ended_turn(result: &Value) -> bool {
+    let entered = result.get("enteredAttention").and_then(Value::as_bool) == Some(true)
+        && result
+            .pointer("/activity/attentionSource")
+            .and_then(Value::as_str)
+            == Some(TURN_COMPLETE_ATTENTION_SOURCE);
+    entered || result.get("quietTurnEnd").and_then(Value::as_bool) == Some(true)
+}
+
+/// Whether `update` enters a finished turn (an unacknowledged turn-complete attention).
+pub fn update_enters_turn_complete_attention(update: &ActivityUpdate) -> bool {
+    update.entered_attention && is_turn_complete_attention(Some(&update.activity))
+}
+
+/// Turns a finished turn `update` is entering into the state a user's acknowledgement leaves
+/// (idle, seen), so it enters no attention: no dot, no Notifications row, sound or push. The
+/// turn's end time stays its last change. Used for a coordinator's turn that ends while its threads
+/// still work (`quiet_coordinator_turn_end` in server/src/coordinators/quiet_turn_end.rs).
+pub fn settle_entered_turn_end_as_seen(update: &mut ActivityUpdate) {
+    let mut state = normalize_agent_activity_state(Some(&update.activity), "idle");
+    state.activity = "idle".to_string();
+    state.attention_source = None;
+    state.is_acknowledged = Some(true);
+    state.working_started_at = None;
+    update.activity = state.to_value();
+    update.entered_attention = false;
+}
+
 /*
 CDXC:Coordinators 2026-11-13 WHY:
 A Claude thread ("Status line follows computer", G2z88, 2026-11-12) ended its turn at 13:23 with "1 shell still running" in its footer. Its Stop listed that shell in `background_tasks`, which keeps the session working so it rings only once the work is done (CDXC:Notifications 2026-09-15 in agent_hooks/event_mapping.rs), and the coordinator's stall watch took that working for a turn still running: it typed "no new output from you for 8 minutes. Still working?" into an idle agent, which answered "Nothing is running and I'm not waiting on anything", and the coordinator's thread reports repeated it. The turn had ended; only a background job remained, which is not work for the watchdogs (CDXC:SessionStatus 2026-09-22 in presentation/session_attributes.rs: a background shell after the turn is not working). So a turn-end hook (Claude's, OpenClaude's or Empryo's Stop with background tasks, Antigravity's Stop or turn completion that background work will wake) that leaves the session working marks the stint `backgroundOnlySince`, and any other working event (a prompt, a tool call, the program's own working) clears it. Notifications and Auto Sleep keep reading the working state as before; the stall watches and the coordinator's thread state skip such a stint (`working_only_in_background`), and the idle watch (coordinators/idle_wait.rs) covers a thread that waits on a job.

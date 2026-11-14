@@ -208,8 +208,9 @@ fn attention_row_alerts(
     let now = crate::presentation::now_iso();
     let mut attention = crate::presentation::attention_state(session, &now);
     let role = crate::presentation::recorded_alert_role(db, project_id, session_id);
-    // A coordinator's finished turn alerts only when its board gained something for the user
-    // (CDXC:Notifications 2026-11-13 in coordinators/work.rs `raised_for_user_since`).
+    // For a coordinator, Needs you only reads whether the turn put something new on its board for
+    // the user (CDXC:Notifications 2026-11-13 in coordinators/work.rs `raised_for_user_since`); a
+    // turn that ended while its threads work never gets here (2026-11-14, quiet_turn_end.rs).
     if role == ghostex_gx_core::alert_rule::AlertRole::Coordinator {
         crate::coordinators::set_coordinator_turn_needs_you(
             &mut attention,

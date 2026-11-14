@@ -6076,7 +6076,8 @@ without a sound) or **Off** for each kind:
 - **Needs you** (Sound by default): a question, an approval or permission, or
   an agent waiting for you.
 - **Finished** (Sound by default): a session you talk to finished its turn. A
-  coordinator's own turn notifies only when it needs you.
+  coordinator's turn notifies once none of its threads is still working, or
+  when it needs you.
 - **Errors** (Sound by default): a session stopped on an error, is stuck, or is
   out of usage on every account.
 - **Thread reports** (Off by default): a thread under a coordinator finished a
@@ -6181,9 +6182,11 @@ Debugging page records each time detection and a program's report disagree.
 
 Ghostex plays a sound and shows a notification (on the computer and, with push on,
 on the phone) only when something needs you. A coordinator's thread finishing its
-work never alerts: it reports to its coordinator. A coordinator alerts only when it
-needs you: it asks you something, ends with a 🛑 Blocked or ❓ Needs you section, or
-gets a red dot; a coordinator that just finished stays quiet. A red dot always
+work never alerts: it reports to its coordinator. A coordinator that finishes a turn
+while any of its threads is still working gets no blue dot and stays quiet; the turn
+that ends with no thread working gets the dot and one notification. While threads
+work, a coordinator still alerts when it needs you: it asks you something, opens an
+ask that holds the work until you answer, or gets a red dot. A red dot always
 alerts: an approval only you can grant, a session that is not moving, a session
 Ghostex could not restart, and a session that is blocked because every account is
 out of usage or it stopped on an API, sign-in or similar error Ghostex couldn't get

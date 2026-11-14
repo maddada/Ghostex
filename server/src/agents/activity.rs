@@ -95,6 +95,10 @@ pub(crate) fn update_agent_activity_endpoint(
     if !escape_denied_approval {
         carry_session_chat_prompt(&current, &mut update.activity);
     }
+    // A coordinator's turn that ends while its threads still work is stored as seen
+    // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
+    let quiet_turn_end =
+        crate::coordinators::quiet_coordinator_turn_end(repository, &current, &mut update);
     let mut runtime_settings = object_field(&current, "runtimeSettings");
     runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
     promote_draft_on_first_activity(
@@ -119,6 +123,9 @@ pub(crate) fn update_agent_activity_endpoint(
     });
     if escape_denied_approval {
         result["sessionChatPromptChanged"] = json!(true);
+    }
+    if quiet_turn_end {
+        result["quietTurnEnd"] = json!(true);
     }
     Ok(result)
 }
@@ -243,6 +250,7 @@ pub(crate) fn ingest_agent_hook_event(
         changed = true;
     }
     let mut activity_update: Option<ActivityUpdate> = None;
+    let mut quiet_turn_end = false;
     let mut session_chat_prompt_changed = false;
     let mut session_chat_activity_changed = false;
     if normalize_agent_id(params.get("agentName").and_then(Value::as_str)).as_deref()
@@ -329,6 +337,10 @@ pub(crate) fn ingest_agent_hook_event(
             }
         }
         if !is_stale_activity_event(&session, now_ms) {
+            // A coordinator's turn that ends while its threads still work is stored as seen
+            // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
+            quiet_turn_end =
+                crate::coordinators::quiet_coordinator_turn_end(repository, &session, &mut update);
             let next_activity_name = update
                 .activity
                 .get("activity")
@@ -471,6 +483,9 @@ pub(crate) fn ingest_agent_hook_event(
         );
     } else {
         result.insert("enteredAttention".to_string(), Value::Bool(false));
+    }
+    if quiet_turn_end {
+        result.insert("quietTurnEnd".to_string(), Value::Bool(true));
     }
     result.insert("changed".to_string(), Value::Bool(changed));
     result.insert(

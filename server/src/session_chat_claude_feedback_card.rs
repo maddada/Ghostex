@@ -317,12 +317,7 @@ pub(crate) fn dispatch_dismissal(
 /// After a Claude turn ends, read its screen once, so a card on a session nobody is watching is
 /// closed too (the funnel does the closing).
 pub(crate) fn observe_turn_end(state: &AppState, params: &Map<String, Value>, result: &Value) {
-    if result.get("enteredAttention").and_then(Value::as_bool) != Some(true)
-        || result
-            .pointer("/activity/attentionSource")
-            .and_then(Value::as_str)
-            != Some("turnComplete")
-    {
+    if !crate::session_status::result_ended_turn(result) {
         return;
     }
     let Some(session) = result.get("session") else {

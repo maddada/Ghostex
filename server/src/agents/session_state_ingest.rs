@@ -681,6 +681,10 @@ pub(crate) fn ingest_terminal_title_event_with_home(
     // sitting on an AskUserQuestion produces no output, so title ticks keep
     // firing while the question waits).
     carry_session_chat_prompt(&session, &mut activity_update.activity);
+    // A coordinator's turn that ends while its threads still work is stored as seen
+    // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
+    let quiet_turn_end =
+        crate::coordinators::quiet_coordinator_turn_end(repository, &session, &mut activity_update);
     let should_update_activity = should_persist_activity_update(&session, &activity_update);
     if should_update_activity {
         let mut runtime_settings = object_field(&session, "runtimeSettings");
@@ -733,7 +737,7 @@ pub(crate) fn ingest_terminal_title_event_with_home(
         reason.unwrap_or_else(|| "terminal-title-not-visible".to_string())
     };
     let response_changed = changed || reconciled_changed;
-    let result = json!({
+    let mut result = json!({
         "agentSessionId": captured_agent_session_id,
         "activity": activity_update.activity,
         "changed": response_changed,
@@ -744,6 +748,9 @@ pub(crate) fn ingest_terminal_title_event_with_home(
         "session": session,
         "visibleTitle": visible_title,
     });
+    if quiet_turn_end {
+        result["quietTurnEnd"] = json!(true);
+    }
     let result_activity = result
         .get("activity")
         .and_then(Value::as_object)

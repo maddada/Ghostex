@@ -42,6 +42,17 @@
 //! an item moved into Needs you or Blocked; server/src/coordinators/work.rs
 //! `raised_for_user_since`). A plain finished turn never alerts, whatever its handover says. Its
 //! open question forms, approvals and red dots alert as before (they are not `Finished`).
+//!
+//! CDXC:Notifications 2026-11-14 DECISION:
+//! User: "please don't show the blue dot on any coordinator while it has workers still working. ur
+//! spamming me with notifications this is annoying af. only 1 notification when u send me when all
+//! done and no running workers. dont put blue dot on sidebar if not all workers done under the
+//! coordinator". gxserver stores a coordinator's turn that ends while its threads still work as
+//! already seen (no dot, row or alert; server/src/coordinators/quiet_turn_end.rs), so a
+//! coordinator's finished turn reaches this rule only when no thread works, or when the turn opened
+//! an ask that holds the work. That turn alerts once, like any session's, under Alert me for.
+//! Supersedes the 2026-11-08 and 2026-11-13 rules above that a plain finished coordinator turn never
+//! alerts.
 //! SEE-ALSO: server/src/presentation/attention_alerts.rs (the stamps), server/src/notification_feed/producer.rs
 //! (rows and pushes), apps/desktop/src/app/gx_store/attention/host.rs (sound and banner),
 //! apps/mobile/app/src/notifications/attentionAlerts.ts (the phone).
@@ -66,7 +77,8 @@ pub enum AlertRole {
 pub enum AlertTrigger {
     /// A turn ended with nothing waiting on the user. `handover_needs_you`: its handover has a
     /// Blocked or Needs you section; for a coordinator, the turn raised a new ask, Needs you item
-    /// or Blocked item on its board (CDXC:Notifications 2026-11-13).
+    /// or Blocked item on its board (CDXC:Notifications 2026-11-13). A coordinator's turn that
+    /// ended while its threads still work never gets here (CDXC:Notifications 2026-11-14).
     Finished { handover_needs_you: bool },
     /// A question card, open question, bell, connector card or other wait: the pink dot.
     NeedsInput,
@@ -104,8 +116,7 @@ pub fn should_alert(
         AlertTrigger::Approval | AlertTrigger::Stuck => !handling.autopilot_handles,
         AlertTrigger::Finished { handover_needs_you } => match role {
             AlertRole::Thread => false,
-            AlertRole::Coordinator => handover_needs_you,
-            AlertRole::Session => match alerts_for {
+            AlertRole::Coordinator | AlertRole::Session => match alerts_for {
                 AttentionAlerts::All => true,
                 AttentionAlerts::NeedsYou => handover_needs_you,
             },
