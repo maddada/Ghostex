@@ -104,6 +104,18 @@ impl ClaudeCompaction {
     }
 }
 
+/// `/api/readClaudeCompaction`: the three values as Settings shows them, for the phone's Settings ›
+/// Chat, which changes them on a computer through `updateSettingsPatch` like any settings write
+/// (apps/mobile/app/src/screens/settings/ClaudeCompactionRows.tsx).
+pub(crate) fn read_endpoint_value() -> Value {
+    let compaction = ClaudeCompaction::read();
+    json!({
+        "idleCompaction": compaction.idle_compaction,
+        "idleCompactAbove": compaction.min_tokens.to_string(),
+        "oneHourPromptCache": compaction.one_hour_cache,
+    })
+}
+
 /// `command` with this computer's idle compaction and cache length in its `--settings` JSON, for a
 /// Claude launch or resume; any other agent, or settings that match Claude's defaults, leave it as
 /// it is.

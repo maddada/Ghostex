@@ -940,6 +940,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readVoiceAgent" | "/api/forgetVoiceAgentMemory" | "/api/setVoiceAgentSettings" => {
             remote_allowed(path)
         }
+        // Claude Code's idle compaction settings, which the phone's Settings › Chat shows per
+        // computer (agents/claude_idle_compaction.rs); it changes them with `updateSettingsPatch`.
+        "/api/readClaudeCompaction" => remote_allowed(path),
         // A recorded or typed turn for a call the client opened (`voice_agent/clip.rs`): any client that may call.
         "/api/voiceAgentClip" | "/api/voiceAgentText" => remote_allowed(path),
         "/api/setVoiceAgentKey" => full_local(path),
