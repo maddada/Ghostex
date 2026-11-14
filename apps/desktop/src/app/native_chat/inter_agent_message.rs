@@ -443,6 +443,7 @@ impl NativeChatView {
                             .when(session.is_object(), |name| {
                                 let command = json!({
                                     "type": "openAgentSession",
+                                    "serverId": session["serverId"],
                                     "projectId": session["projectId"],
                                     "sessionId": session["sessionId"],
                                 });
@@ -505,8 +506,11 @@ impl NativeChatView {
         );
         let session = &pill["session"];
         let command = session.is_object().then(|| {
+            // `serverId` names the session's computer, which the core hands on to the host when it
+            // is not the chat's own (gx-chat-core `transcript/actions.rs`).
             json!({
                 "type": "openAgentSession",
+                "serverId": session["serverId"],
                 "projectId": session["projectId"],
                 "sessionId": session["sessionId"],
             })

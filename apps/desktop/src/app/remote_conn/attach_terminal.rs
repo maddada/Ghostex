@@ -339,7 +339,7 @@ impl GhostexGpuiApp {
         if payload.validate_launch_strings().is_err() {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
-                "Remote attach unavailable",
+                crate::app::remote_conn::attach_request::REMOTE_OPEN_FAILED_TITLE,
                 "Ghostex couldn't open the remote terminal.",
                 cx,
             );
@@ -372,7 +372,7 @@ impl GhostexGpuiApp {
                 else {
                     self.dispatch_gpui_app_modal_toast(
                         "warning",
-                        "Remote attach unavailable",
+                        crate::app::remote_conn::attach_request::REMOTE_OPEN_FAILED_TITLE,
                         "Ghostex couldn't place the remote terminal in the requested pane.",
                         cx,
                     );
@@ -460,7 +460,7 @@ impl GhostexGpuiApp {
         let Some((pane_id, session_id)) = created else {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
-                "Remote attach unavailable",
+                crate::app::remote_conn::attach_request::REMOTE_OPEN_FAILED_TITLE,
                 "Ghostex couldn't create a pane for the remote terminal.",
                 cx,
             );

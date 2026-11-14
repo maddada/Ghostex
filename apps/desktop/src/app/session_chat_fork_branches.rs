@@ -69,8 +69,8 @@ impl GhostexGpuiApp {
                     None => {
                         self.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Could not open that worker",
-                            "This app isn't connected to the computer it runs on. Connect to it from the sidebar, then try again.",
+                            crate::app::remote_conn::attach_request::REMOTE_OPEN_FAILED_TITLE,
+                            "Ghostex here isn't connected to the computer it runs on. Connect to it from the sidebar, then try again.",
                             cx,
                         );
                         return;

@@ -430,9 +430,9 @@ impl GhostexGpuiApp {
         let Some(session_id) = target else {
             self.receive_gpui_app_toast_bridge_message(
                 &json!({
-                    "description": "This remote project has no attachable sessions.",
+                    "description": "This project has nothing to open on that computer yet.",
                     "level": "info",
-                    "title": "Remote attach unavailable",
+                    "title": "Nothing to open",
                     "type": "toast",
                 }),
                 cx,
