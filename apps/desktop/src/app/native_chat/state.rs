@@ -1069,6 +1069,8 @@ impl NativeChatView {
         } = output;
         let mut changed = false;
         if let Some(splice) = items_splice {
+            // Measured from the layout before these rows (scroll_bottom.rs).
+            self.follow_tail_if_near_end();
             let anchor_key = self.transcript_anchor_key();
             // The host ships only the changed window of transcript items (see transcriptItemsSplice in native-host.ts).
             let items = Arc::make_mut(&mut self.items);

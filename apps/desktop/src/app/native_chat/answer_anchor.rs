@@ -161,6 +161,7 @@ impl NativeChatView {
                 .iter()
                 .position(|row| super::pagination::row_ids(row).first() == Some(key))
         });
+        let held_elsewhere = self.held_by_focus_or_disclosure();
         gpui::canvas(
             |_, _, _| {},
             move |_, _, window: &mut Window, _| {
@@ -169,8 +170,15 @@ impl NativeChatView {
                     return;
                 }
                 if list.is_scrollbar_dragging() {
-                    hold.point = None;
-                    hold.placing = false;
+                    // The reader moved the list: the hold ends as on a wheel scroll
+                    // (`release_answer_hold`). Kept active, it left the list in Normal mode, which
+                    // never followed again, even dragged to the end (GitHub issue #615).
+                    *hold = AnswerHold::default();
+                    if !held_elsewhere && !list.is_following_tail() {
+                        let top = list.logical_scroll_top();
+                        list.set_follow_mode(FollowMode::Tail);
+                        list.scroll_to(top);
+                    }
                     return;
                 }
                 if hold.placing {

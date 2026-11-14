@@ -541,7 +541,7 @@ impl NativeChatView {
         if !shown && animating.is_none() {
             return None;
         }
-        let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list);
+        let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list, p.scale);
         let (chips, pills) = if shown {
             let mut chips: Vec<AnyElement> =
                 self.saved_draft_pill_element(p, cx).into_iter().collect();

@@ -158,7 +158,7 @@ impl NativeChatView {
             return None;
         }
         let card = self.snapshot["workingCard"].clone();
-        let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list);
+        let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list, p.scale);
         let header = self.working_card_header(&card, WorkingLineLook::Capsule, p, cx);
         let card = div()
             .id("chat-working-card")

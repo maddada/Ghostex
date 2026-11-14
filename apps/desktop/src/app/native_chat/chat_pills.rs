@@ -412,7 +412,7 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
-        if !super::scroll_bottom::transcript_left_bottom(&self.list) {
+        if !super::scroll_bottom::transcript_left_bottom(&self.list, p.scale) {
             return None;
         }
         let label = super::scroll_bottom::label().to_string();
