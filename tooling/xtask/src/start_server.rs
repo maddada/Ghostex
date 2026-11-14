@@ -79,6 +79,8 @@ pub fn run(args: &[String]) -> Res<i32> {
         .env("GHOSTEX_APP_VARIANT", "prod")
         .env("GHOSTEX_LOCAL_START", "1")
         .env("GHOSTEX_MACOS_GXSERVER_ONLY", "1");
+    let (kache_name, kache_crates) = util::kache_incremental_crates_environment();
+    build.env(kache_name, kache_crates);
     if optimized {
         build.env("GHOSTEX_START_OPTIMIZED", "1");
     }

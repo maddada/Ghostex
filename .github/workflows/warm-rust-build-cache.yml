@@ -553,7 +553,7 @@ jobs:
       # DUPLICATED CARGO COMMAND. linux-stage.sh cannot be used as the entry
       # point: it refuses to start without the gxserver runtime package and the
       # verified code-server archive, neither of which the cargo build reads.
-      # This mirrors apps/desktop/scripts/build-linux-app.sh lines 69-72
+      # This mirrors build_release_rust in apps/desktop/scripts/build-linux-app.sh
       # (`cd "$GPUI_DIR"; cargo build --release --bins`) as invoked by
       # tooling/release-gpui/linux-stage.sh lines 35-39, which is the only
       # place in that chain that sets GHOSTEX_GPUI_MARKETING_VERSION. CEF_PATH

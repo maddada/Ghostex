@@ -246,7 +246,7 @@ jobs:
       # build rather than after: `linux-stage.sh` refuses to start without the
       # package (it would otherwise build gxserver from source itself, which is
       # far worse), and `build-linux-app.sh` copies those bytes into the app dir
-      # at step 5, after the compile at line 72. Starting cargo first would mean
+      # at step 5, after the compile (build_release_rust). Starting cargo first would mean
       # splitting `build-linux-app.sh` into compile and bundle halves — a change
       # to the shared script that macOS/Windows/local builds also run, for a few
       # minutes of overlap on full rebuilds only.
