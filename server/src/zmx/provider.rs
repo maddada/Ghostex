@@ -297,6 +297,8 @@ pub(crate) fn start_session_provider_with_observed_state(
             "Cannot start session provider because the project directory is missing.".to_string(),
         ));
     };
+    // The daemon runs from a copy of the app that outlives updates (zmx/session_host.rs).
+    let zmx = super::session_daemon_zmx(zmx);
     // A daemon and its agent are launched from here on: whatever was seen of the agent before is
     // about one that is gone (CDXC:SessionStatus 2026-11-10 in session_chat_agent_gone_activity.rs).
     crate::session_chat_start_failure::forget_agent_gone(

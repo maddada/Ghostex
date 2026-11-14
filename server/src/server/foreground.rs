@@ -517,6 +517,8 @@ pub async fn run_gxserver_foreground(
     // Daemons of isolated gxservers whose state folder was deleted; their own server can never end them. See zmx/stranded_daemons.rs.
     #[cfg(unix)]
     crate::zmx::end_stranded_zmx_session_daemons(&logger, &metadata.server_id);
+    // App copies session daemons ran from that no daemon runs from any more. See zmx/session_host.rs.
+    crate::zmx::remove_unused_session_hosts();
     /*
     CDXC:RemotePairing 2026-09-01:
     The tailcat sidecar is a child of THIS daemon, so a restart has to bring it

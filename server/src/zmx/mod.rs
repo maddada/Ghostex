@@ -32,6 +32,8 @@ pub(crate) use scripts_windows::*;
 #[cfg(not(windows))]
 mod session_bin;
 pub mod session_glue;
+mod session_host;
+pub(crate) use session_host::{remove_unused_session_hosts, session_daemon_zmx};
 #[cfg(unix)]
 mod stranded_daemons;
 #[cfg(test)]

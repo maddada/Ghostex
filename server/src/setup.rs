@@ -375,7 +375,7 @@ fn register_app_bundles(package_link: &Path) {
 /// The program file of every process this user can see (`proc_pidpath` reports where the file
 /// is now, so a program moved into `current` reads as `current`).
 #[cfg(target_os = "macos")]
-fn running_executable_paths() -> Vec<PathBuf> {
+pub(crate) fn running_executable_paths() -> Vec<PathBuf> {
     use std::os::unix::ffi::OsStrExt;
 
     let mut pids = vec![0 as libc::pid_t; 8192];
