@@ -140,4 +140,3 @@ fn with_compaction(family: Option<&str>, command: &str, compaction: ClaudeCompac
         command.to_string()
     })
 }
-

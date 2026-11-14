@@ -516,8 +516,7 @@ impl Ledger {
                     // kept here, so the page was not open to gxserver while every client showed it
                     // waiting, and each refresh forgot its snooze (`leave_out_later` keeps the
                     // marks of open forms and pages only): it came back at the next turn.
-                    let asks =
-                        inline || text.contains("questions") || text.contains("awaitsSeen");
+                    let asks = inline || text.contains("questions") || text.contains("awaitsSeen");
                     if !asks && !text.contains("visual") && !text.contains("vega") {
                         continue;
                     }
@@ -1497,7 +1496,9 @@ mod tests {
         ledger.observe(vec![message("p", "assistant", 1, page)]);
         let open = ledger.open(&[], None, |_| false);
         assert_eq!(
-            open.iter().map(|asker| (asker.id.as_str(), asker.count())).collect::<Vec<_>>(),
+            open.iter()
+                .map(|asker| (asker.id.as_str(), asker.count()))
+                .collect::<Vec<_>>(),
             vec![("0123456789abcdef0123456789abcdef", 1)]
         );
     }

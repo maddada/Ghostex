@@ -406,13 +406,12 @@ impl NativeChatView {
                     move |window, cx| {
                         // Windows draws this border around the window: 16% ink over the
                         // page's colour, as the app modals' `window_border`.
-                        let border = gpui::rgb(
-                            if crate::app::helpers::chrome_uses_light_appearance() {
+                        let border =
+                            gpui::rgb(if crate::app::helpers::chrome_uses_light_appearance() {
                                 0xcacaca
                             } else {
                                 0x3a3a3a
-                            },
-                        );
+                            });
                         crate::app::window::popup_frame::frame_app_modal_window(window, border);
                         crate::app::window::attach_gpui_app_modal_window_to_main_window(
                             window,

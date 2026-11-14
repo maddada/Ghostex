@@ -400,18 +400,19 @@ fn verdict(config: &AutopilotConfig, class: Class, read_only: bool) -> Verdict {
             if config.tier != Tier::Everything || !limit.allowed(&config.limits) =>
         {
             Verdict::Decline(
-            format!(
-                "It asked for {}, a hard limit you haven't allowed.",
-                limit.words()
-            ),
-            format!("{} is a hard limit the user hasn't allowed", limit.words()),
+                format!(
+                    "It asked for {}, a hard limit you haven't allowed.",
+                    limit.words()
+                ),
+                format!("{} is a hard limit the user hasn't allowed", limit.words()),
             )
         }
         _ if read_only => Verdict::Leave(READ_ONLY_NOTE.to_string()),
         Class::Limit(_) | Class::Safe => Verdict::Approve,
         Class::Plain if config.tier == Tier::Everything => Verdict::Approve,
         Class::Plain => Verdict::Leave(
-            "It isn't one of the safe steps Autopilot may approve, so it waits for you.".to_string(),
+            "It isn't one of the safe steps Autopilot may approve, so it waits for you."
+                .to_string(),
         ),
     }
 }

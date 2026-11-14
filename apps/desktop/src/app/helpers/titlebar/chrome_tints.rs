@@ -7,7 +7,6 @@
 
 use super::*;
 
-
 pub(crate) fn sidebar_titlebar_gradient_stops(background: u32) -> (u32, u32) {
     ghostex_settings_catalog::theme_colours::sidebar_titlebar_gradient_stops(background)
 }
@@ -16,7 +15,9 @@ pub(crate) fn sidebar_titlebar_gradient_stops_toward_full(
     background: u32,
     fade: f64,
 ) -> (u32, u32) {
-    ghostex_settings_catalog::theme_colours::sidebar_titlebar_gradient_stops_toward_full(background, fade)
+    ghostex_settings_catalog::theme_colours::sidebar_titlebar_gradient_stops_toward_full(
+        background, fade,
+    )
 }
 
 pub(crate) fn sidebar_titlebar_rgb_channels(color: u32) -> [f32; 3] {
@@ -31,9 +32,11 @@ pub(crate) fn sidebar_titlebar_tint_direction(base: [f32; 3]) -> [f32; 3] {
     ghostex_settings_catalog::theme_colours::sidebar_titlebar_tint_direction(base)
 }
 
-pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB: u32 = ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB;
+pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB: u32 =
+    ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_RGB;
 
-pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB: u32 = ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB;
+pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB: u32 =
+    ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB;
 
 pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;
 
@@ -43,22 +46,32 @@ pub(crate) const MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT: f64 = 
 
 pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_SCALE_REFERENCE_DARKNESS_PERCENT: f64 = ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_SCALE_REFERENCE_DARKNESS_PERCENT;
 
-const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_CALIBRATION_RGB: u32 = ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_CALIBRATION_RGB;
+const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_CALIBRATION_RGB: u32 =
+    ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_CALIBRATION_RGB;
 
-const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_NEUTRAL_RGB: u32 = ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_NEUTRAL_RGB;
+const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_NEUTRAL_RGB: u32 =
+    ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_NEUTRAL_RGB;
 
-pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: [(u32, u32); 25] = ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS;
+pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: [(u32, u32); 25] =
+    ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS;
 
 pub(crate) fn clamp_sidebar_titlebar_background_darkness_percent(value: f64) -> f64 {
-    ghostex_settings_catalog::theme_colours::clamp_sidebar_titlebar_background_darkness_percent(value)
+    ghostex_settings_catalog::theme_colours::clamp_sidebar_titlebar_background_darkness_percent(
+        value,
+    )
 }
 
 pub(crate) fn sidebar_titlebar_background_darkness_for_color(background: u32) -> f64 {
-    ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_darkness_for_color(background)
+    ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_darkness_for_color(
+        background,
+    )
 }
 
 pub(crate) fn sidebar_titlebar_background_for_darkness(darkness_percent: f64, tint: u32) -> u32 {
-    ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_for_darkness(darkness_percent, tint)
+    ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_for_darkness(
+        darkness_percent,
+        tint,
+    )
 }
 
 pub(crate) const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_RGB: u32 = ghostex_settings_catalog::theme_colours::DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_RGB;
@@ -73,7 +86,8 @@ const CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_SCALE_REFERENCE_LIGHTNESS_PERCENT
 
 const CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_CALIBRATION_RGB: u32 = ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_CALIBRATION_RGB;
 
-const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS: [(u32, u32); 25] = ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS;
+const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS: [(u32, u32); 25] =
+    ghostex_settings_catalog::theme_colours::CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS;
 
 pub(crate) fn clamp_sidebar_titlebar_light_background_lightness_percent(value: f64) -> f64 {
     ghostex_settings_catalog::theme_colours::clamp_sidebar_titlebar_light_background_lightness_percent(value)
@@ -83,12 +97,17 @@ pub(crate) fn sidebar_titlebar_light_background_for_lightness(
     lightness_percent: f64,
     tint: u32,
 ) -> u32 {
-    ghostex_settings_catalog::theme_colours::sidebar_titlebar_light_background_for_lightness(lightness_percent, tint)
+    ghostex_settings_catalog::theme_colours::sidebar_titlebar_light_background_for_lightness(
+        lightness_percent,
+        tint,
+    )
 }
 
-pub(crate) const DARK_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] = ghostex_settings_catalog::theme_colours::DARK_THEME_PRESET_CONTROLS;
+pub(crate) const DARK_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] =
+    ghostex_settings_catalog::theme_colours::DARK_THEME_PRESET_CONTROLS;
 
-pub(crate) const LIGHT_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] = ghostex_settings_catalog::theme_colours::LIGHT_THEME_PRESET_CONTROLS;
+pub(crate) const LIGHT_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] =
+    ghostex_settings_catalog::theme_colours::LIGHT_THEME_PRESET_CONTROLS;
 
 pub(crate) fn custom_dark_chrome_controls(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -116,7 +135,11 @@ pub(crate) fn sidebar_titlebar_background_toward_full(
     tint: u32,
     fade: f64,
 ) -> u32 {
-    ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_toward_full(darkness_percent, tint, fade)
+    ghostex_settings_catalog::theme_colours::sidebar_titlebar_background_toward_full(
+        darkness_percent,
+        tint,
+        fade,
+    )
 }
 
 pub(crate) fn sidebar_titlebar_light_background_toward_full(
@@ -124,7 +147,11 @@ pub(crate) fn sidebar_titlebar_light_background_toward_full(
     tint: u32,
     fade: f64,
 ) -> u32 {
-    ghostex_settings_catalog::theme_colours::sidebar_titlebar_light_background_toward_full(lightness_percent, tint, fade)
+    ghostex_settings_catalog::theme_colours::sidebar_titlebar_light_background_toward_full(
+        lightness_percent,
+        tint,
+        fade,
+    )
 }
 
 fn work_area_contrast_delta(object: &serde_json::Map<String, serde_json::Value>) -> f64 {
@@ -141,7 +168,8 @@ fn dark_chrome_raw_controls(object: &serde_json::Map<String, serde_json::Value>)
     ghostex_settings_catalog::theme_colours::dark_chrome_raw_controls(object)
 }
 
-pub(crate) const CUSTOM_LIGHT_THEME_DEPTH_SHIFT: f64 = ghostex_settings_catalog::theme_colours::CUSTOM_LIGHT_THEME_DEPTH_SHIFT;
+pub(crate) const CUSTOM_LIGHT_THEME_DEPTH_SHIFT: f64 =
+    ghostex_settings_catalog::theme_colours::CUSTOM_LIGHT_THEME_DEPTH_SHIFT;
 
 pub(crate) fn light_chrome_controls(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -157,7 +185,9 @@ pub(crate) fn resolved_custom_sidebar_titlebar_background_for_variant(
     object: &serde_json::Map<String, serde_json::Value>,
     light: bool,
 ) -> u32 {
-    ghostex_settings_catalog::theme_colours::resolved_custom_sidebar_titlebar_background_for_variant(object, light)
+    ghostex_settings_catalog::theme_colours::resolved_custom_sidebar_titlebar_background_for_variant(
+        object, light,
+    )
 }
 
 pub(crate) fn resolved_work_area_chrome_for_variant(
@@ -173,7 +203,6 @@ pub(crate) fn work_area_background_for_variant(
 ) -> u32 {
     ghostex_settings_catalog::theme_colours::work_area_background_for_variant(object, light)
 }
-
 
 /// CDXC:Theming 2026-09-22 DECISION:
 /// User: light mode has its own background contrast and tint, and both appearances pick a preset theme
@@ -221,9 +250,9 @@ pub(crate) fn theme_accent_for_variant(
     };
     let under = sidebar_titlebar_rgb_channels(work_area_background_for_variant(object, light));
     let over = [role.r, role.g, role.b].map(|channel| channel * 255.0);
-    sidebar_titlebar_pack_rgb([0, 1, 2].map(|index| {
-        under[index] + (over[index] - under[index]) * role.a
-    }))
+    sidebar_titlebar_pack_rgb(
+        [0, 1, 2].map(|index| under[index] + (over[index] - under[index]) * role.a),
+    )
 }
 
 #[cfg(test)]

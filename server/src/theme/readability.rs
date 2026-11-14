@@ -137,13 +137,15 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
         let Some(value) = role(settings, light, id) else {
             continue;
         };
-        let ratio = contrast(over(value, light, page), page)
-            .min(contrast(over(value, light, side), side));
+        let ratio =
+            contrast(over(value, light, page), page).min(contrast(over(value, light, side), side));
         if ratio < needed {
             text_fails |= id == "text";
             push(
                 id,
-                format!("{name} in {mode} reads at {ratio:.1}:1, where {needed}:1 is easy to read."),
+                format!(
+                    "{name} in {mode} reads at {ratio:.1}:1, where {needed}:1 is easy to read."
+                ),
                 Vec::new(),
             );
         }
@@ -200,7 +202,9 @@ fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: 
         if ratio < 4.5 {
             push(
                 id,
-                format!("Text on {name} in {mode} reads at {ratio:.1}:1, where 4.5:1 is easy to read."),
+                format!(
+                    "Text on {name} in {mode} reads at {ratio:.1}:1, where 4.5:1 is easy to read."
+                ),
                 vec![role_key(light, "text")],
             );
         }

@@ -3,7 +3,10 @@
 
 use super::native_modal_kit::*;
 use super::page_band_geometry::CONTROL_SIZE;
-use gpui::{InteractiveElement as _, ParentElement as _, StatefulInteractiveElement as _, Styled as _, div, px};
+use gpui::{
+    InteractiveElement as _, ParentElement as _, StatefulInteractiveElement as _, Styled as _, div,
+    px,
+};
 
 /// The glass of the floating controls in one theme (`ControlGlass::for_theme`).
 #[derive(Clone, Copy)]
@@ -65,4 +68,3 @@ pub(crate) fn control_button(
         .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
         .child(modal_icon(icon, 14.0, glass.icon))
 }
-

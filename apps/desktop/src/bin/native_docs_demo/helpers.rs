@@ -15,7 +15,6 @@ pub(crate) fn titlebar_tooltip(
 /// The app's spinner rate (app/helpers/indicator_animation.rs).
 pub(crate) const INDICATOR_MAX_FPS: f32 = 30.0;
 
-
 /// The app's theme roles (app/helpers/theme_roles.rs): a preview sets none, so every palette
 /// keeps the colour it derives.
 pub(crate) fn theme_role_rgba(_id: &str, _light: bool) -> Option<gpui::Rgba> {

@@ -205,9 +205,8 @@ mod x11 {
             return;
         };
         // Where the owner was before this move, to tell which windows were still on it.
-        let owner_before = frame(connection, owner).map(|(x, y, width, height)| {
-            (x - dx, y - dy, width, height)
-        });
+        let owner_before =
+            frame(connection, owner).map(|(x, y, width, height)| (x - dx, y - dy, width, height));
         let pid = std::process::id();
         let transient_for = |window: Window| {
             window_property(connection, window, b"WM_TRANSIENT_FOR")
@@ -262,7 +261,13 @@ mod x11 {
             let placed = (from.0 + dx, from.1 + dy);
             let _ = connection
                 .configure_window(window, &ConfigureWindowAux::new().x(placed.0).y(placed.1));
-            state.followed.insert(window, Followed { placed, before: from });
+            state.followed.insert(
+                window,
+                Followed {
+                    placed,
+                    before: from,
+                },
+            );
         }
         let _ = connection.flush();
     }

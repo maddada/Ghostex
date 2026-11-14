@@ -333,16 +333,16 @@ fn roles_group(settings: &Map<String, Value>) -> Value {
 pub(crate) fn grouped(settings: &Map<String, Value>) -> Value {
     let entries = look_entries(settings);
     let mut groups: Vec<Value> = GROUPS
-            .iter()
-            .filter_map(|(id, title, _)| {
-                let rows: Vec<Value> = entries
-                    .iter()
-                    .filter(|entry| group_of(&entry.key) == *id)
-                    .map(|entry| entry_json(entry, settings))
-                    .collect();
-                (!rows.is_empty()).then(|| json!({ "id": id, "title": title, "settings": rows }))
-            })
-            .collect();
+        .iter()
+        .filter_map(|(id, title, _)| {
+            let rows: Vec<Value> = entries
+                .iter()
+                .filter(|entry| group_of(&entry.key) == *id)
+                .map(|entry| entry_json(entry, settings))
+                .collect();
+            (!rows.is_empty()).then(|| json!({ "id": id, "title": title, "settings": rows }))
+        })
+        .collect();
     groups.push(roles_group(settings));
     Value::Array(groups)
 }

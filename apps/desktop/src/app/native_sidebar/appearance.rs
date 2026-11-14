@@ -87,15 +87,19 @@ impl SidebarAppearance {
             } else {
                 rgb(0xffffff).opacity(if light { 1.0 } else { 0.12 }).into()
             },
-            selected_outline: theme_role_or("border", light, chrome_ink()
-                .opacity(if light_glass {
-                    0.10
-                } else if light {
-                    0.12
-                } else {
-                    0.08
-                })
-                .into()),
+            selected_outline: theme_role_or(
+                "border",
+                light,
+                chrome_ink()
+                    .opacity(if light_glass {
+                        0.10
+                    } else if light {
+                        0.12
+                    } else {
+                        0.08
+                    })
+                    .into(),
+            ),
             selected_highlight: rgb(0xffffff).opacity(if light { 0.6 } else { 0.04 }).into(),
             hover: rgb(0x808080).opacity(0.12).into(),
             // Under window glass these are washes of the same ink rather than opaque blends of the

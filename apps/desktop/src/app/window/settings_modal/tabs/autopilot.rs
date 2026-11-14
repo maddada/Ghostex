@@ -11,8 +11,8 @@ use super::super::catalog::SettingOption;
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ROW_PADDING_X, ROW_PADDING_Y, RowSpec, SettingsPage, SliderBinding,
-    SliderSaver, advanced_fold_header, segmented_field, select_field, settings_button, settings_section,
-    slider_number_field_with, static_note, toggle_field_with,
+    SliderSaver, advanced_fold_header, segmented_field, select_field, settings_button,
+    settings_section, slider_number_field_with, static_note, toggle_field_with,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -588,8 +588,12 @@ fn preset_of(config: &Value) -> &'static str {
 /// The preset's sentence at the start of the switch row's line.
 fn preset_line(preset: &str) -> &'static str {
     match preset {
-        "careful" => "Careful: answers questions after 15 minutes and approves safe steps after a minute.",
-        "full" => "Full: answers questions after 10 minutes and approves anything that is not a hard limit after a minute.",
+        "careful" => {
+            "Careful: answers questions after 15 minutes and approves safe steps after a minute."
+        }
+        "full" => {
+            "Full: answers questions after 10 minutes and approves anything that is not a hard limit after a minute."
+        }
         _ => "Custom: your own choices below.",
     }
 }
@@ -642,7 +646,11 @@ fn permission_choice(config: &Value) -> &'static str {
     if config["answerApprovals"].as_bool() != Some(true) || config["tier"] == "heal" {
         return "wait";
     }
-    if config["tier"] == "decide" { "safe" } else { "all" }
+    if config["tier"] == "decide" {
+        "safe"
+    } else {
+        "all"
+    }
 }
 
 fn permission_patch(choice: &str) -> Value {

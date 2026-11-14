@@ -70,7 +70,11 @@ impl AutomatePalette {
             border: crate::app::helpers::theme_role_or(
                 "border",
                 chat.light,
-                if glass { ink.opacity(0.08) } else { chat.border },
+                if glass {
+                    ink.opacity(0.08)
+                } else {
+                    chat.border
+                },
             ),
             hover: crate::app::helpers::theme_role_or("hover", chat.light, ink.opacity(0.04)),
             selected: crate::app::helpers::theme_role_or(
