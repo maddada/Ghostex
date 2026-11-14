@@ -70,7 +70,7 @@ impl WorkspaceState {
 /// no Recommended chip (it only turned Browser and Files on); the Browser view stays as a first run
 /// leaves it (on), and the browser skill comes with Fast Computer & Browser use
 /// (`ws_toggle_computer_use`). This supersedes the browser skill switch of CDXC:Onboarding 2026-10-28.
-const ROW_TOPS: [f32; 5] = [362.0, 430.0, 498.0, 566.0, 634.0];
+const ROW_TOPS: [f32; 5] = [412.0, 480.0, 548.0, 616.0, 684.0];
 /// Where the Experience choice sits, above the five rows (CDXC:Experience 2026-11-15 on
 /// `render_experience_row`).
 const EXPERIENCE_TOP: f32 = 290.0;
@@ -268,6 +268,12 @@ impl GpuiOnboardingWindow {
                 .into_any_element(),
         );
         out.push(self.render_experience_row(s, cx));
+        // What the picked preset shows, in full, under its row.
+        out.push(
+            sub(s, 60.0, EXPERIENCE_TOP + 64.0, 632.0, 13.0, false)
+                .child(self.experience_shown().description())
+                .into_any_element(),
+        );
         for (key, icon_name, title, detail, top) in VIEW_ROWS {
             let on = views[key.index()];
             let thumb = self.thumb(&format!("ws-{title}"), on, now);
@@ -504,7 +510,7 @@ impl GpuiOnboardingWindow {
                     .flex_1()
                     .min_w_0()
                     .child(nm(s, 17.0, 500.0).child("How much should Ghostex show?"))
-                    .child(ss(s, 12.5).truncate().child(shown.description())),
+                    .child(ss(s, 12.5).child("You can change this any time in Settings.")),
             )
             .child(picks)
             .into_any_element()
