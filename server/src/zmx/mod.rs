@@ -29,9 +29,15 @@ pub(crate) mod scripts_windows;
 mod wmx_client;
 #[cfg(windows)]
 pub(crate) use scripts_windows::*;
+mod lost_folder_access;
 #[cfg(not(windows))]
 mod session_bin;
 pub mod session_glue;
+pub(crate) use lost_folder_access::{
+    restart as restart_after_lost_folder_access, start_lost_folder_access_watch,
+    ACTION_RESTART as LOST_FOLDER_ACCESS_ACTION_RESTART,
+    NOTICE_KIND as LOST_FOLDER_ACCESS_NOTICE_KIND,
+};
 mod session_host;
 pub(crate) use session_host::{remove_unused_session_hosts, session_daemon_zmx};
 #[cfg(unix)]

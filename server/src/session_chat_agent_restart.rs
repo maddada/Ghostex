@@ -38,6 +38,9 @@ pub(crate) async fn restart(
     }
     match params.get("actionId").and_then(Value::as_str) {
         Some(SESSION_CHAT_NOTICE_ACTION_SIGN_IN) => return sign_in(state, params).await,
+        Some(crate::zmx::LOST_FOLDER_ACCESS_ACTION_RESTART) => {
+            return crate::zmx::restart_after_lost_folder_access(state, params).await
+        }
         Some(crate::memory_guard::ACTION_RESUME) => {
             return crate::server::resume_after_memory_stop(state, params).await
         }

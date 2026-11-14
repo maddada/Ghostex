@@ -30,8 +30,13 @@ const WATCHDOG_NOTICE_MAX_AGE: Duration = Duration::from_secs(600);
 /// The memory guard's card (server/src/server/memory_guard_runtime.rs) reports what it stopped, often while the user is away, so it outlives the ten minutes a lost send gets; it is still retired by the next send, and it never hides a card about what the agent's screen shows now (`merge_session_chat_terminal_notices`).
 const MEMORY_GUARD_NOTICE_MAX_AGE: Duration = Duration::from_secs(6 * 3600);
 
+/// The lost-folder-access card (server/src/zmx/lost_folder_access.rs) stands until the session is restarted, which its own check sees and takes it off for.
+const LOST_FOLDER_ACCESS_NOTICE_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 3600);
+
 fn max_age(notice: &SessionChatTerminalNotice) -> Duration {
-    if notice.kind == crate::memory_guard::NOTICE_KIND {
+    if notice.kind == crate::zmx::LOST_FOLDER_ACCESS_NOTICE_KIND {
+        LOST_FOLDER_ACCESS_NOTICE_MAX_AGE
+    } else if notice.kind == crate::memory_guard::NOTICE_KIND {
         MEMORY_GUARD_NOTICE_MAX_AGE
     } else {
         WATCHDOG_NOTICE_MAX_AGE
@@ -144,6 +149,7 @@ pub fn retire_session_chat_watchdog_notice_on_clean_screen(
         stored.notice.kind == SESSION_CHAT_NOTICE_DELIVERY_FAILED
             || stored.notice.kind == SESSION_CHAT_NOTICE_API_REFUSAL
             || stored.notice.kind == crate::memory_guard::NOTICE_KIND
+            || stored.notice.kind == crate::zmx::LOST_FOLDER_ACCESS_NOTICE_KIND
     }) {
         return None;
     }

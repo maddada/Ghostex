@@ -538,6 +538,8 @@ pub async fn run_gxserver_foreground(
     // After the wire cycle and the restart scan above: daemons those ended are never "seen alive".
     session_self_heal_runtime::start_session_self_heal_runtime(state.clone());
     memory_guard_runtime::start_memory_guard_runtime(state.clone());
+    // Sessions an app update left without their folders: a card with Restart. See zmx/lost_folder_access.rs.
+    crate::zmx::start_lost_folder_access_watch(state.clone());
     crate::voice_agent::recover_voice_agent_memory(&state);
     // Secret request files are deleted a day after they were saved, even when no agent asks again.
     crate::secret_requests::sweep_saved_files(&state.paths);
