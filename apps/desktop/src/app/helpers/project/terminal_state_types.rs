@@ -94,8 +94,9 @@ pub(crate) fn gpui_workspace_open_target_detection_script() -> String {
 CDXC:OsIntegration 2026-10-31 WHY:
 macOS keeps the login-shell script scan (`/bin/zsh` is always there, and the app-bundle check needs
 `mdfind`). Linux searches the user's tool PATH in Rust instead of starting a shell that may not be
-installed (see `open_target_scan.rs`). Windows has neither a login shell nor this scan: it returns
-None, as it did when the zsh spawn failed there, so stored availability is kept.
+installed (see `open_target_scan.rs`). Windows searches PATH and each editor's usual install
+folders in Rust as well (`gpui_windows_open_target_availability`, 2026-11-14; until then it
+returned None and so never found an editor).
 */
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_detect_workspace_open_target_availability()
@@ -141,7 +142,13 @@ pub(crate) fn gpui_detect_workspace_open_target_availability()
     ))
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(target_os = "windows")]
+pub(crate) fn gpui_detect_workspace_open_target_availability()
+-> Option<GpuiDetectedOpenTargetAvailability> {
+    Some(gpui_windows_open_target_availability())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 pub(crate) fn gpui_detect_workspace_open_target_availability()
 -> Option<GpuiDetectedOpenTargetAvailability> {
     None
