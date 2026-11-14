@@ -12,17 +12,23 @@ fn patch(value: Value) -> Map<String, Value> {
 
 #[test]
 fn a_new_install_takes_the_xai_key_then_the_openai_key_then_hex() {
-    assert_eq!(DictateSettings::first_run(true, true).engine, Engine::Xai);
     assert_eq!(
-        DictateSettings::first_run(false, true).engine,
+        DictateSettings::first_run(true, true, false).engine,
+        Engine::Xai
+    );
+    assert_eq!(
+        DictateSettings::first_run(false, true, false).engine,
         Engine::OpenAi
     );
-    assert_eq!(DictateSettings::first_run(false, false).engine, Engine::Hex);
+    assert_eq!(
+        DictateSettings::first_run(false, false, false).engine,
+        Engine::Hex
+    );
 }
 
 #[test]
 fn a_new_install_has_auto_language() {
-    let settings = DictateSettings::first_run(false, false);
+    let settings = DictateSettings::first_run(false, false, false);
     assert_eq!(settings.hex_model, None);
     assert_eq!(settings.language, "auto");
     assert_eq!(settings.language_hint(), None);
@@ -32,7 +38,7 @@ fn a_new_install_has_auto_language() {
 fn the_first_choice_is_kept_when_a_key_is_added_later() {
     let temp = tempfile::tempdir().expect("temp");
     let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
-    let first = settings::read(&paths, || (false, false));
+    let first = settings::read(&paths, || (false, false, false));
     assert_eq!(first.engine, Engine::Hex);
     assert!(
         settings::file(&paths).is_file(),
@@ -41,7 +47,7 @@ fn the_first_choice_is_kept_when_a_key_is_added_later() {
     let mut asked = false;
     let later = settings::read(&paths, || {
         asked = true;
-        (true, true)
+        (true, true, true)
     });
     assert_eq!(
         later.engine,
@@ -64,17 +70,17 @@ fn a_patch_is_saved_and_read_back() {
             "polish": {"enabled": false},
             "dictionary": [{"word": " gxserver ", "aliases": ["GX server", "gx  server"]}],
         })),
-        || (false, false),
+        || (false, false, false),
     )
     .expect("saved");
     assert_eq!(saved.engine, Engine::OpenAi);
     assert_eq!(saved.language, "de");
-    assert_eq!(settings::read(&paths, || (true, true)), saved);
+    assert_eq!(settings::read(&paths, || (true, true, false)), saved);
 }
 
 #[test]
 fn bad_values_are_refused_with_a_sentence() {
-    let base = DictateSettings::first_run(false, false);
+    let base = DictateSettings::first_run(false, false, false);
     for (bad, says) in [
         (json!({"engine": "google"}), "engine must be"),
         (
@@ -97,7 +103,7 @@ fn bad_values_are_refused_with_a_sentence() {
 
 #[test]
 fn hex_is_an_engine_with_its_own_model_choice() {
-    let settings = DictateSettings::first_run(false, false);
+    let settings = DictateSettings::first_run(false, false, false);
     assert_eq!(settings.hex_model, None);
     let next = settings
         .patched(&patch(json!({"engine": "hex", "hexModel": "parakeet_v3"})))

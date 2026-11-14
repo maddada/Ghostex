@@ -68,7 +68,7 @@ async fn route(state: &AppState, path: &str, body: &Value) -> Result<Value, Doma
             {
                 let paths = paths.clone();
                 blocking(move || {
-                    settings::update(&paths, &patch, || dictate::saved_keys(&paths))
+                    settings::update(&paths, &patch, || dictate::new_install(&paths))
                         .map(|_| ())
                         .map_err(|message| failure("badRequest", message))
                 })

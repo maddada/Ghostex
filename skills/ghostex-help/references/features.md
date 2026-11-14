@@ -1818,8 +1818,9 @@ command). Ghostex starts Superwhisper's service when needed.
 A computer that used Ghostex's old built-in model moves to Hex (never to a paid
 engine), and Ghostex deletes the speech models that model downloaded by itself.
 A new install
-picks the xAI or OpenAI key when one is saved, and Hex otherwise, then keeps
-that choice until you change it; Dictate never switches engine by itself. Each
+picks the xAI or OpenAI key when one is saved, Superwhisper when there is no key
+and it is installed (Linux), and Hex otherwise, then keeps that choice until you
+change it; Dictate never switches engine by itself. Each
 computer has its own engine, and the phone changes it for each computer in its
 Settings > Voice. The phone has no engine of its own: it records and the
 computer transcribes, so with Hex picked there, the phone's dictation uses Hex

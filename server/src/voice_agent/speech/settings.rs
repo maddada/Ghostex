@@ -70,16 +70,23 @@ pub(crate) const RETIRED_KEYS: &[&str] = &[
 ];
 
 impl DictateSettings {
-    /// A new install's settings: the engine is the saved key's (xAI first, then OpenAI), else Hex.
+    /// A new install's settings: the engine is the saved key's (xAI first, then OpenAI), else
+    /// Superwhisper where it is installed (Linux), else Hex.
     ///
-    /// CDXC:Dictate 2026-11-08 DECISION:
-    /// User (Q1259 "default to b", Q1272): the engine is an explicit choice with no automatic switching. A new install picks it once, the key when one exists and otherwise Hex, the recommended engine since our local model was retired (Q1709, `retired.rs`), and then keeps it: adding a key later doesn't switch. Supersedes the 2026-11-05 version, whose keyless default was the local model.
-    pub(crate) fn first_run(xai_key: bool, openai_key: bool) -> DictateSettings {
+    /// CDXC:Dictate 2026-11-14 DECISION:
+    /// User (Q1259 "default to b", Q1272): the engine is an explicit choice with no automatic switching. A new install picks it once, the key when one exists and otherwise Hex, the recommended engine since our local model was retired (Q1709, `retired.rs`), and then keeps it: adding a key later doesn't switch. User (Q22, 2026-11-14): "a new Linux install with Superwhisper installed starts on Superwhisper; existing installs keep what they picked", so a keyless new install on a computer with Superwhisper picks it instead of Hex. Supersedes the 2026-11-08 version, which picked Hex there.
+    pub(crate) fn first_run(
+        xai_key: bool,
+        openai_key: bool,
+        superwhisper: bool,
+    ) -> DictateSettings {
         DictateSettings {
             engine: if xai_key {
                 Engine::Xai
             } else if openai_key {
                 Engine::OpenAi
+            } else if superwhisper {
+                Engine::Superwhisper
             } else {
                 Engine::Hex
             },
@@ -192,11 +199,11 @@ pub(crate) fn uses_hex(paths: &GxserverPaths) -> bool {
 }
 
 /// The saved settings, or a new install's (written at once, so the first choice is kept).
-/// `has_keys` answers whether an xAI and an OpenAI key are saved; it is asked only on the first
-/// read.
+/// `new_install` answers whether an xAI key and an OpenAI key are saved and whether Superwhisper is
+/// installed; it is asked only on the first read.
 pub(crate) fn read(
     paths: &GxserverPaths,
-    has_keys: impl FnOnce() -> (bool, bool),
+    new_install: impl FnOnce() -> (bool, bool, bool),
 ) -> DictateSettings {
     let _guard = lock();
     if let Some((saved, moved)) = fs::read_to_string(file(paths))
@@ -208,8 +215,8 @@ pub(crate) fn read(
         }
         return saved;
     }
-    let (xai, openai) = has_keys();
-    let settings = DictateSettings::first_run(xai, openai);
+    let (xai, openai, superwhisper) = new_install();
+    let settings = DictateSettings::first_run(xai, openai, superwhisper);
     let _ = write_locked(paths, &settings);
     settings
 }
@@ -218,9 +225,9 @@ pub(crate) fn read(
 pub(crate) fn update(
     paths: &GxserverPaths,
     patch: &Map<String, Value>,
-    has_keys: impl FnOnce() -> (bool, bool),
+    new_install: impl FnOnce() -> (bool, bool, bool),
 ) -> Result<DictateSettings, String> {
-    let current = read(paths, has_keys);
+    let current = read(paths, new_install);
     let _guard = lock();
     let next = current.patched(patch)?;
     write_locked(paths, &next)

@@ -10,15 +10,18 @@ use crate::server::AppState;
 use crate::voice_agent::keys::{self, KeyState};
 use crate::voice_agent::provider::Provider;
 
-/// The settings, picking a new install's engine from the saved keys.
+/// The settings, picking a new install's engine from the saved keys and Superwhisper.
 pub(crate) fn current_settings(paths: &GxserverPaths) -> DictateSettings {
-    settings::read(paths, || saved_keys(paths))
+    settings::read(paths, || new_install(paths))
 }
 
-pub(crate) fn saved_keys(paths: &GxserverPaths) -> (bool, bool) {
+/// What a new install's engine is picked from (`DictateSettings::first_run`): whether an xAI key
+/// and an OpenAI key are saved, and whether Superwhisper is installed.
+pub(crate) fn new_install(paths: &GxserverPaths) -> (bool, bool, bool) {
     (
         keys::key_state(paths, Provider::Xai) == KeyState::Saved,
         keys::key_state(paths, Provider::OpenAi) == KeyState::Saved,
+        superwhisper::state(&paths.home_dir) == superwhisper::State::Installed,
     )
 }
 
