@@ -1,7 +1,7 @@
-//! Terminal's Background opacity row. It acts on the window's glass, so it works only while Enable
-//! transparency is on; the rule and the user's decision are on `TERMINAL_GLASS_PERCENT` in
+//! Terminal's Transparency switch and, under it while it is on, the Background opacity row. The
+//! opacity acts on the window's glass, so it works only while transparency is on; the rule and the user's decision are on `TERMINAL_GLASS_PERCENT` in
 //! app/helpers/terminal_glass.rs.
-use super::super::super::fields::{ButtonVariant, reset_key, setting_row, settings_button};
+use super::super::super::fields::{reset_key, toggle_field_with};
 use super::{GeneralCx, GeneralTab, save};
 use gpui::{AnyElement, Context, Window};
 use serde_json::{Value, json};
@@ -38,12 +38,42 @@ pub(super) fn transparency_rows(
         == Some(true);
     let note = system_note(blocked);
     let mut rows = Vec::new();
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure
+    // ux makes sense after fix"; supersedes the 2026-10-14 part that showed this row disabled,
+    // with a note and a Turn on transparency button, while transparency was off): Terminal shows
+    // the window's Transparency as a switch, and Background opacity (%) under it as a ↳ row only
+    // while it is on. Turning the switch on picks Dark only, as the button did; Settings >
+    // Interface > Transparency keeps Always and the rest.
     if g.visible(s, "terminalBackgroundOpacity") {
+        let spec = g.spec(
+            "windowGlass",
+            "Transparency",
+            &format!(
+                "Lets terminals show what is behind the window. On picks Dark only; Settings > Interface > Transparency has Always and the window's other glass settings.{note}"
+            ),
+        );
+        rows.push(toggle_field_with(
+            &p,
+            "terminalWindowGlass",
+            spec,
+            glass_on,
+            Some(reset_key::<GeneralTab>("windowGlass")),
+            // `glass_for_transparency`: turning transparency on from Never picks Dark only.
+            |page: &mut GeneralTab, on, _window, cx| {
+                save(
+                    page,
+                    "windowGlass",
+                    json!(if on { "auto" } else { "opaque" }),
+                    cx,
+                )
+            },
+            cx,
+        ));
         if glass_on {
             let description = format!(
-                "How much of the work area's glass tint terminals keep. 100% matches the rest of the work area; lower shows more of what is behind the window. Applies while transparency is on (Settings > Interface > Transparency){}.{note}",
+                "How much of the work area's glass tint terminals keep. 100% matches the rest of the work area; lower shows more of what is behind the window.{}",
                 if glass == "auto" {
-                    ", which is dark mode only"
+                    " Transparency is dark mode only."
                 } else {
                     ""
                 },
@@ -55,36 +85,8 @@ pub(super) fn transparency_rows(
                 "Background opacity (%)",
                 &description,
                 (0.0, 100.0, 1.0),
-                false,
+                true,
                 window,
-                cx,
-            ));
-        } else {
-            let spec = g
-                .spec(
-                    "terminalBackgroundOpacity",
-                    "Background opacity (%)",
-                    "Terminals can only be see-through while the window is. Turn on transparency to show what is behind the window through them; it picks Dark only, which you can change under Settings > Interface > Transparency.",
-                )
-                .readout("Needs transparency");
-            let control = settings_button(
-                &p,
-                "terminal-turn-on-transparency",
-                "Turn on transparency",
-                None,
-                ButtonVariant::Outline,
-                false,
-                None,
-                // `glass_for_transparency`: turning transparency on from Never picks Dark only.
-                |page: &mut GeneralTab, _window, cx| save(page, "windowGlass", json!("auto"), cx),
-                cx,
-            );
-            rows.push(setting_row(
-                &p,
-                "terminalBackgroundOpacity",
-                spec,
-                Some(reset_key::<GeneralTab>("terminalBackgroundOpacity")),
-                control,
                 cx,
             ));
         }

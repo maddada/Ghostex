@@ -219,17 +219,49 @@ impl ExtensionsTab {
             .cloned();
         let mut groups: Vec<AnyElement> = Vec::new();
         let filter = self.page_filter(cx);
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make
+        // sure ux makes sense after fix"; supersedes the greyed "Turn on X first" card): a card
+        // whose required extension is off (GBots without Main Hub, Bot automations without Bots)
+        // is hidden. So that the only way to it stays where people look for it (its tab, or a
+        // search for its name), the required extension's card takes its place there unless that
+        // card already shows in the same list, and says what it unlocks.
+        let listed: Vec<String> = official_categories()
+            .iter()
+            .filter(|category| self.category_shown(&category.id, cx))
+            .flat_map(|category| {
+                official_extensions()
+                    .iter()
+                    .filter(|extension| {
+                        extension.category == category.id
+                            && official_blocked_by(&values, extension).is_none()
+                            && self.official_matches(extension, &filter, cx)
+                    })
+                    .map(|extension| extension.id.clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let mut stand_ins: Vec<String> = Vec::new();
         for category in official_categories() {
             if !self.category_shown(&category.id, cx) {
                 continue;
             }
-            let visible: Vec<&OfficialExtension> = official_extensions()
-                .iter()
-                .filter(|extension| {
-                    extension.category == category.id
-                        && self.official_matches(extension, &filter, cx)
-                })
-                .collect();
+            let mut visible: Vec<&OfficialExtension> = Vec::new();
+            for extension in official_extensions().iter().filter(|extension| {
+                extension.category == category.id && self.official_matches(extension, &filter, cx)
+            }) {
+                match official_blocked_by(&values, extension) {
+                    None => visible.push(extension),
+                    Some(required) => {
+                        if !listed.contains(&required.id)
+                            && !stand_ins.contains(&required.id)
+                            && self.show_official(&required.id, cx)
+                        {
+                            stand_ins.push(required.id.clone());
+                            visible.push(required);
+                        }
+                    }
+                }
+            }
             if visible.is_empty() {
                 continue;
             }
@@ -394,7 +426,21 @@ impl ExtensionsTab {
             Some(version) => format!("{meta} · Version {version}"),
             None => meta,
         };
-        let blocked_reason = blocked.map(|blocked| format!("Turn on {} first", blocked.title));
+        // While it is off, a card others need names them first (their cards hide until it is on).
+        let unlocks: Vec<&str> = official_extensions()
+            .iter()
+            .filter(|other| other.requires_extension.as_deref() == Some(extension.id.as_str()))
+            .map(|other| other.title.as_str())
+            .collect();
+        let description = if !enabled && !unlocks.is_empty() {
+            format!(
+                "Needed for {}. {}",
+                unlocks.join(" and "),
+                extension.description
+            )
+        } else {
+            extension.description.clone()
+        };
         let card = grid_card(
             p,
             GridCardSpec {
@@ -404,13 +450,13 @@ impl ExtensionsTab {
                 leading: None,
                 title: extension.title.clone().into(),
                 badge: extension.badge.clone().map(Into::into),
-                description: extension.description.clone().into(),
+                description: description.into(),
                 extra: None,
                 scope_summary: scoped
                     .then(|| self.describe_scope(&scope_key, cx))
                     .flatten(),
                 meta: meta.into(),
-                status: runtime_meta.or(blocked_reason).map(Into::into),
+                status: runtime_meta.map(Into::into),
                 actions,
                 editing,
                 enabled,

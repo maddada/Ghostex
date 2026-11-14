@@ -382,7 +382,16 @@ fn sidebar_section(
         cx,
     ));
     // CDXC:Sessions 2026-10-09 DECISION: the New-session cleanup is an Advanced setting, off by default, that only runs for Chat; gxserver enforces the Chat condition. It sits here, not on Chat, since CDXC:Settings 2026-11-11 (model.rs `RailTier`, Q2511): it closes sessions in the sidebar's list.
-    rows.extend(page.toggle(g, s, "closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.", false, cx));
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure ux makes sense after fix"): the cleanup only runs for an agent that opens in Chat (server/src/empty_session_cleanup.rs `cleanup_applies`), so the row shows only while some agent does: the app-wide default is Chat, or an agent is set to Chat on its own.
+    let some_agent_opens_in_chat = g.values.string("preferredAgentInterface") != "terminal"
+        || g.values
+            .value("preferredAgentInterfaceOverrides")
+            .as_object()
+            .is_some_and(|overrides| overrides.values().any(|view| view == "chat"));
+    if some_agent_opens_in_chat {
+        rows.extend(page.toggle(g, s, "closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.", false, cx));
+    }
+    let parking_on = g.values.bool("enableSessionParking");
     rows.extend(page.toggle(g, s, "enableSessionParking", "Enable session parking", "Add Park to session menus and move parked sessions into a collapsible section at the bottom of the sidebar.", false, cx));
     if g.values.bool("enableSessionParking") {
         rows.extend(page.toggle(
@@ -395,16 +404,28 @@ fn sidebar_section(
             cx,
         ));
     }
-    // CDXC:Settings 2026-09-12 DECISION: Park & Snooze with tags has the ↳ prefix and stays available while parking is off.
-    rows.extend(page.toggle(
-        g,
-        s,
-        "showTagMenuWhenParking",
-        "Ask for a tag when parking or snoozing",
-        "Open the Tag as menu when a session is parked or snoozed so it can be tagged right away.",
-        true,
-        cx,
-    ));
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure ux makes sense after fix"; supersedes the 2026-09-12 decision that kept it under parking, ↳ and all, while parking was off): the tag menu serves Park and Snooze, and Snooze works with parking off (packages/gx-core/src/sidebar_menu/session.rs). So the parking half hides with parking: while it is on the row is "↳ Ask for a tag when parking or snoozing" under it; while it is off the row is a plain "Ask for a tag when snoozing", the only thing it still does.
+    if parking_on {
+        rows.extend(page.toggle(
+            g,
+            s,
+            "showTagMenuWhenParking",
+            "Ask for a tag when parking or snoozing",
+            "Open the Tag as menu when a session is parked or snoozed so it can be tagged right away.",
+            true,
+            cx,
+        ));
+    } else {
+        rows.extend(page.toggle(
+            g,
+            s,
+            "showTagMenuWhenParking",
+            "Ask for a tag when snoozing",
+            "Open the Tag as menu when a session is snoozed so it can be tagged right away.",
+            false,
+            cx,
+        ));
+    }
     if g.values.bool("enableSessionParking") {
         rows.extend(page.toggle(g, s, "unparkAfterSendingMessage", "Unpark after sending a message", "Move a parked session out of the Parked section when you send it a message from chat or its terminal.", true, cx));
     }

@@ -12,6 +12,7 @@ use crate::app::helpers::*;
 
 /// CDXC:Terminal 2026-10-14 DECISION:
 /// User: "why is the terminal transparent on macos and linux i believe but not on windows? (i mean ghostty terminal) also can we add settings about this please in settings?", with Ghostty's `background-opacity = 0.75` and a background blur as the example. Terminals were see-through only through window glass (Enable transparency, which defaults to Never on Windows), never through Ghostty's `background-opacity`. The user then chose: Settings > Terminal > Background opacity applies while Enable transparency is on, on all three platforms; terminals are cut out of the work area's glass tint and painted at the work area's strength times this percent, so 100% looks like before; while transparency is off the row is disabled with a note and a Turn on transparency button. Background blur is the window's Blur (`windowGlassBlurRadius`) shown again under Settings > Terminal, because a window has one blur.
+/// CDXC:Settings 2026-11-14 DECISION (AGENTS.md; Q3110, user: "fix all these too but make sure ux makes sense after fix"): supersedes the disabled row above. While transparency is off, Settings > Terminal shows a Transparency switch (on picks Dark only) and hides Background opacity, which shows as its ↳ row once transparency is on (settings_modal/tabs/general/terminal_transparency.rs).
 static TERMINAL_GLASS_PERCENT: AtomicU8 = AtomicU8::new(100);
 
 /// Reads `terminalBackgroundOpacity`: whole percent from 0 to 100, 100 when unset.
