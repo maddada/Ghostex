@@ -981,6 +981,9 @@ fn spawn_tailcat_serve(spec: &TailcatServeSpec) -> std::io::Result<Child> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    // UDP GSO off on Linux: a direct path through Tailscale's 1280-byte MTU crawled at 13 KB/s
+    // with it on (CDXC:RemotePairing 2026-11-14 in packages/paths/src/tailcat_forward.rs).
+    ghostex_paths::tailcat_forward::apply_tailcat_link_environment(&mut command);
     configure_process_group(&mut command);
     let child = command.spawn()?;
     // CDXC:RemotePairing 2026-11-10 WHY: Windows does not end a child with its parent, so a gxserver that crashed or was ended from Task Manager left its `tailcat serve` helpers running: an address stayed served by a helper nobody supervises (an open pairing door among them, review of 4ac828ff7), and the next gxserver's helper with the same key shared the relay with it. The helper joins the job that ends with gxserver; a no-op on macOS and Linux, where the helper ends at its next log line once gxserver's end of its pipe is gone.
