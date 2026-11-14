@@ -51,10 +51,11 @@ async fn handle_http_request_inner(
     let headers = request.headers().clone();
     /*
     CDXC:Docs 2026-11-14 DECISION:
-    A file link (`/open-file/`) answers with its own cross-origin rule (fonts only,
-    file_links/serve.rs), never the API's: the API lets the `null` origin read it for the app's
-    own file:// pages, and an HTML or Markdown page served from a link runs in a sandbox whose
-    origin is `null` too, so it could otherwise read every file of the link's folder.
+    A file link (`/open-file/`) answers with its own cross-origin rule (fonts and, by the user's
+    choice Q3119, `.js` and `.mjs` files so module scripts keep loading; file_links/serve.rs), never
+    the API's: the API lets the `null` origin read it for the app's own file:// pages, and an HTML
+    or Markdown page served from a link runs in a sandbox whose origin is `null` too, so it could
+    otherwise read every file of the link's folder.
     */
     let file_link = request
         .uri()

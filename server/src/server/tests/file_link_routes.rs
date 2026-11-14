@@ -34,6 +34,10 @@ async fn a_sandboxed_link_page_cannot_read_the_links_other_files() {
     .expect("page");
     fs::write(root.join("notes/private.txt"), "private").expect("note");
     fs::write(root.join("docs/font.woff2"), "font").expect("font");
+    fs::write(root.join("docs/app.js"), "export {}").expect("script");
+    fs::write(root.join("docs/app.mjs"), "export {}").expect("module");
+    fs::create_dir_all(root.join(".hidden")).expect("hidden folder");
+    fs::write(root.join(".hidden/secret.js"), "export {}").expect("hidden script");
 
     let page = handle_http_request(
         state.clone(),
@@ -55,16 +59,31 @@ async fn a_sandboxed_link_page_cannot_read_the_links_other_files() {
     assert_eq!(note.status(), StatusCode::OK);
     assert_eq!(header_text(&note, "access-control-allow-origin"), None);
 
-    let font = handle_http_request(
+    // Fonts and the page's module scripts load from its opaque origin (user decision Q3119).
+    for name in ["docs/font.woff2", "docs/app.js", "docs/app.mjs"] {
+        let readable = handle_http_request(
+            state.clone(),
+            get_from_null_origin(&crate::file_links::link_path(&root, name)),
+        )
+        .await
+        .expect("answer");
+        assert_eq!(readable.status(), StatusCode::OK, "{name}");
+        assert_eq!(
+            header_text(&readable, "access-control-allow-origin").as_deref(),
+            Some("*"),
+            "{name}"
+        );
+    }
+
+    // A hidden file is never served, script or not.
+    let hidden = handle_http_request(
         state.clone(),
-        get_from_null_origin(&crate::file_links::link_path(&root, "docs/font.woff2")),
+        get_from_null_origin(&crate::file_links::link_path(&root, ".hidden/secret.js")),
     )
     .await
-    .expect("font answer");
-    assert_eq!(
-        header_text(&font, "access-control-allow-origin").as_deref(),
-        Some("*")
-    );
+    .expect("hidden answer");
+    assert_eq!(hidden.status(), StatusCode::NOT_FOUND);
+    assert_eq!(header_text(&hidden, "access-control-allow-origin"), None);
 
     // The API keeps answering the app's own file:// pages, whose origin is `null` as well.
     let api = handle_http_request(state.clone(), get_from_null_origin("/api/health/server"))

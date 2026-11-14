@@ -65,6 +65,14 @@ if (blocks.length) {{
 /// The same Excalidraw release the Files view runs, loaded from esm.sh. It reads the drawing
 /// with `?raw=1` and saves it back with `PUT` one second after the last change, like the Files
 /// view's own autosave.
+///
+/// CDXC:Docs 2026-11-14 WHY:
+/// Excalidraw shows X/Twitter, Reddit and GitHub Gist links as a `srcdoc` frame that runs those
+/// sites' widget scripts with this page's own origin, which is gxserver's link origin that can read
+/// and save the link's files. Those links stay link cards, as in the Files view's editor
+/// (apps/desktop/views/manage/preview/excalidraw-editor.tsx `validateManageExcalidrawEmbed`);
+/// YouTube, Vimeo, Figma and the other embeds Excalidraw allows load from their own sites as before
+/// (`undefined` keeps Excalidraw's own list).
 pub(super) fn drawing(file: &Path) -> String {
     format!(
         r#"<!doctype html>
@@ -103,6 +111,12 @@ const serialize = (elements, appState, files) => {{
   delete saved.collaborators;
   return JSON.stringify({{ appState: saved, elements, files, source: data.source ?? 'https://excalidraw.com', type: 'excalidraw', version: data.version ?? 2 }});
 }};
+const writtenIntoPage = ['twitter.com', 'x.com', 'reddit.com', 'gist.github.com'];
+const validateEmbeddable = (link) => {{
+  let host;
+  try {{ host = new URL(String(link).trim()).hostname.toLowerCase(); }} catch {{ return undefined; }}
+  return writtenIntoPage.some((site) => host === site || host.endsWith('.' + site)) ? false : undefined;
+}};
 let baseline;
 let timer;
 const save = (content) => {{
@@ -113,6 +127,7 @@ const save = (content) => {{
   }}, 1000);
 }};
 createRoot(root).render(createElement(Excalidraw, {{
+  validateEmbeddable,
   initialData: {{
     appState: {{ viewBackgroundColor: '#ffffff', theme: 'dark', ...previous, collaborators: new Map() }},
     elements: Array.isArray(data.elements) ? data.elements : [],
@@ -156,3 +171,27 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
 li > input[type="checkbox"] { margin-right: 0.4em; }
 .mermaid { display: flex; justify-content: center; margin: 1em 0; }
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_drawing_page_keeps_sites_written_into_the_page_as_link_cards() {
+        let page = drawing(Path::new("/project/plan.excalidraw"));
+        assert!(
+            page.contains("validateEmbeddable,"),
+            "the editor gets the rule"
+        );
+        for site in [
+            "'twitter.com'",
+            "'x.com'",
+            "'reddit.com'",
+            "'gist.github.com'",
+        ] {
+            assert!(page.contains(site), "{site} stays a link card");
+        }
+        // The page's braces come out single: it is valid JavaScript, not the format string.
+        assert!(!page.contains("{{"), "doubled braces left in the page");
+    }
+}

@@ -143,10 +143,20 @@ fn is_document(file: &Path) -> bool {
     matches!(extension(file).as_str(), "html" | "htm" | "svg" | "xml")
 }
 
-/// A sandboxed page loads its fonts in CORS mode from another origin; a font shows nothing of its
-/// bytes to the page, so it may be read from anywhere (the Files resource origin's rule).
-fn is_font(file: &Path) -> bool {
-    matches!(extension(file).as_str(), "woff" | "woff2" | "ttf" | "otf")
+/// What a sandboxed page may read from its link although its origin is not the link's: its fonts
+/// and its JavaScript, which the browser loads in CORS mode from an opaque origin.
+///
+/// CDXC:Docs 2026-11-14 DECISION:
+/// A font shows nothing of its bytes to the page (the Files resource origin's rule). The user
+/// (Q3119) chose to let `.js` and `.mjs` files be read too, so a page's module scripts beside it
+/// (`<script type="module" src="./app.js">`) keep working under Open Externally; that also lets a
+/// page read the project's other JavaScript files. Every other file stays unreadable from the page,
+/// and hidden files and folders are never served at all (`resolve`).
+fn readable_from_any_origin(file: &Path) -> bool {
+    matches!(
+        extension(file).as_str(),
+        "woff" | "woff2" | "ttf" | "otf" | "js" | "mjs"
+    )
 }
 
 fn is_drawing(file: &Path) -> bool {
@@ -231,7 +241,7 @@ fn read(file: &Path, headers: &HeaderMap) -> RoutedResponse {
     }
     insert(&mut response, header::CONTENT_TYPE, content_type(file));
     insert(&mut response, header::ACCEPT_RANGES, "bytes");
-    if is_font(file) {
+    if readable_from_any_origin(file) {
         insert(&mut response, header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
     }
     let response = no_store(response);
@@ -353,6 +363,8 @@ mod tests {
                 "{\"type\":\"excalidraw\",\"elements\":[]}",
             ),
             ("font.woff2", "font"),
+            ("app.js", "export {}"),
+            ("app.mjs", "export {}"),
             ("data.json", "{}"),
         ] {
             fs::write(folder.path().join(name), text).expect("write");
@@ -401,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    fn drawings_data_and_fonts_keep_their_origin() {
+    fn drawings_data_fonts_and_scripts_are_not_sandboxed() {
         let (folder, state) = project();
         for (name, raw) in [
             ("plan.excalidraw", false),
@@ -417,11 +429,16 @@ mod tests {
                 "{name} (raw={raw}) should not be sandboxed"
             );
         }
-        let font = get(&state, &folder.path().join("font.woff2"), false);
-        assert_eq!(
-            header_value(&font, header::ACCESS_CONTROL_ALLOW_ORIGIN).as_deref(),
-            Some("*")
-        );
+        // Fonts and module scripts load from the sandboxed page's opaque origin.
+        for name in ["font.woff2", "app.js", "app.mjs"] {
+            let readable = get(&state, &folder.path().join(name), false);
+            assert_eq!(
+                header_value(&readable, header::ACCESS_CONTROL_ALLOW_ORIGIN).as_deref(),
+                Some("*"),
+                "{name}"
+            );
+            assert!(header_value(&readable, header::CONTENT_SECURITY_POLICY).is_none());
+        }
         let data = get(&state, &folder.path().join("data.json"), false);
         assert!(header_value(&data, header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
     }
