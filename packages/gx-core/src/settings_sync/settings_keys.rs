@@ -37,7 +37,6 @@ pub const APPEARANCE_LEFT_OUT: &[&str] = &[
 const APPEARANCE_WITHOUT_ROWS: &[&str] = &[
     "customSidebarTitlebarBackgroundDarknessPercent",
     "customSidebarTitlebarLightBackgroundLightnessPercent",
-    "themeRoles",
 ];
 
 /// Agent defaults that live in the settings file (the remembered models are gxserver's own).

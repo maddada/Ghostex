@@ -76,6 +76,8 @@ pub(crate) struct ChatAppearance {
     /// Your message's fill under the Band style: one input step further off the background than
     /// the bubble (`input`).
     pub(crate) user_band: Hsla,
+    /// Your message bubble's fill: the input tone unless the Your messages theme role is set.
+    pub(crate) user_message: Hsla,
 }
 
 impl ChatAppearance {
@@ -90,6 +92,7 @@ impl ChatAppearance {
             gpui::Hsla::from(rgb(if white { 0xffffff } else { 0x000000 })).opacity(alpha)
         };
         if self.light {
+            self.user_message = wash(false, 0.04);
             self.input = wash(false, 0.04);
             self.user_band = wash(false, 0.08);
             self.border = wash(false, 0.08);
@@ -100,6 +103,7 @@ impl ChatAppearance {
             self.composer_border = wash(false, 0.08);
             self.card_row = self.input;
         } else {
+            self.user_message = wash(true, 0.06);
             self.input = wash(true, 0.06);
             self.user_band = wash(true, 0.12);
             self.border = wash(true, 0.08);
@@ -131,13 +135,22 @@ impl ChatAppearance {
     }
 
     /// The `--destructive` tone the React transcript painted failed tool results and failed writes in.
+    /// The Danger theme role when it is set (helpers/theme_roles.rs).
     pub(crate) fn error(&self) -> Hsla {
-        rgb(if self.light { 0xc53030 } else { 0xef9999 }).into()
+        crate::app::helpers::theme_role_or(
+            "danger",
+            self.light,
+            rgb(if self.light { 0xc53030 } else { 0xef9999 }).into(),
+        )
     }
 
     /// A finished tool call's check (the 2026-10-11 work look, gx-chat-core `work_summary.rs`).
     pub(crate) fn success(&self) -> Hsla {
-        rgb(if self.light { 0x059669 } else { 0x34d399 }).into()
+        crate::app::helpers::theme_role_or(
+            "success",
+            self.light,
+            rgb(if self.light { 0x059669 } else { 0x34d399 }).into(),
+        )
     }
 
     /// The look of the agent's thinking: a thought's prose, its lane marker and a reasoning
@@ -207,18 +220,40 @@ impl ChatAppearance {
         Self::derive(state, light).with_theme_roles()
     }
 
-    /// The theme roles the user or an agent set (helpers/theme_roles.rs) over the derived colours:
-    /// Borders paints every outline, Grey text the muted text. A role not set keeps the colour.
+    /// The theme roles the user or an agent set (helpers/theme_roles.rs) over the derived colours.
+    /// A role not set keeps the colour.
     fn with_theme_roles(mut self) -> Self {
+        use crate::app::helpers::{theme_role_or, theme_role_rgba};
         let light = self.light;
-        if let Some(border) = crate::app::helpers::theme_role_rgba("border", light) {
-            let border = Hsla::from(border);
+        let role = |id: &str| theme_role_rgba(id, light).map(Hsla::from);
+        if let Some(border) = role("border") {
             self.border = border;
             self.input_border = border;
             self.control_border = border;
             self.composer_border = border;
         }
-        self.muted = crate::app::helpers::theme_role_or("mutedText", light, self.muted);
+        if let Some(text) = role("text") {
+            self.foreground = text;
+            self.primary = text;
+            self.prose = text;
+            self.code_text = text;
+        }
+        self.muted = theme_role_or("mutedText", light, self.muted);
+        // Accent comes through `theme_accent_for_variant`, which lays the role over the work area.
+        self.card_panel = theme_role_or("surface", light, self.card_panel);
+        if let Some(control) = role("control") {
+            self.input = control;
+            self.card_row = control;
+        }
+        if let Some(menu) = role("menu") {
+            self.menu = menu;
+        }
+        self.ring = theme_role_or("focusRing", light, self.ring);
+        if let Some(message) = role("userMessage") {
+            self.user_message = message;
+            self.user_band = message;
+        }
+        self.composer_background = theme_role_or("chatBox", light, self.composer_background);
         self
     }
 
@@ -314,6 +349,7 @@ impl ChatAppearance {
             border: lifted(0.062, 0.095),
             input: lifted(INPUT_STEP_DARK, INPUT_STEP_LIGHT),
             user_band: lifted(INPUT_STEP_DARK * 2.0, INPUT_STEP_LIGHT * 2.0),
+            user_message: lifted(INPUT_STEP_DARK, INPUT_STEP_LIGHT),
             composer_border: lifted(0.08, 0.067),
             composer_background: if light {
                 raised(0.3)

@@ -732,7 +732,7 @@ impl NativeChatView {
                 .border(px(1.0 * s))
                 .border_color(gpui::transparent_black())
                 .p(px(12.0 * s))
-                .bg(p.input)
+                .bg(p.user_message)
                 // A slash command reads as one, in the chat's monospace (gx-chat-core `is_slash_command_line`).
                 .when(message["slashCommand"] == true, |bubble| {
                     bubble.font_family(super::fonts::CHAT_MONO)

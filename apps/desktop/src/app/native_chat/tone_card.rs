@@ -83,6 +83,17 @@ pub(super) fn tone_look(tone: &str, p: &ChatAppearance) -> ToneLook {
         entry.dark.as_deref()
     }
     .and_then(hex);
+    // A warning or error card takes the Warning or Danger theme role when it is set
+    // (helpers/theme_roles.rs).
+    let role = match tone {
+        "warning" | "wait" => Some("warning"),
+        "error" => Some("danger"),
+        _ => None,
+    };
+    let hue = role
+        .and_then(|role| crate::app::helpers::theme_role_rgba(role, p.light))
+        .map(gpui::Hsla::from)
+        .or(hue);
     ToneLook {
         hue,
         icon: format!("titlebar/{}.svg", entry.icon),

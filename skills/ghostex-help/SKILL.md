@@ -69,6 +69,7 @@ they ask for one.
    ```bash
    ghostex theme read                          # every look setting, grouped, with what it does
    ghostex theme set darkThemePreset=blue themeSidebarContrast=-6
+   ghostex theme set --dark border=4% divider=3%   # a theme colour, here for dark mode
    ghostex theme undo                          # puts the last change back; redo applies it again
    ghostex theme history                       # the last 20 changes, who made them, what changed
    ```
@@ -83,14 +84,26 @@ they ask for one.
      Undo. When the command says something is hard to read (a glass tint so low
      that text sits on the desktop, an outline that barely shows), the change
      is saved anyway: tell the user, and offer to change it back.
-   - Only the settings `read` lists can change. Borders, dividers and grey
-     text have no setting yet: say so instead of editing files.
+   - Theme colours: `border`, `divider`, `text`, `mutedText` (grey text),
+     `accent`, `surface` (cards), `control`, `menu`, `selection`, `hover`,
+     `focusRing`, `userMessage`, `chatBox`, `success`, `warning`, `danger`.
+     Name one as `dark.border` or `light.border`; a bare name sets both, or add
+     `--dark` or `--light`. A value is an opacity of the text colour over what
+     is under it (`4%`: stays see-through on glass), or a colour (`#7dd3fc`,
+     `#7dd3fc80` with its opacity); `default` puts the theme's own back. To tone
+     lines down, lower `border` and `divider` a point or two; to make grey
+     text easier to read, raise `mutedText`. The user also finds them in
+     Settings > Interface > Theme colours. They change the computer and the
+     web app, not the phone.
+   - Only the settings and colours `read` lists can change: say so instead of
+     editing files for anything else.
    - To make Ghostex look like a known theme, the Presets on Settings >
      Interface do it in one click (Catppuccin, Dracula, Solarized, Tokyo Night,
      Nord, Kanagawa, Everforest, Gruvbox); `ghostex settings open --tab theme`
      opens the page.
    - `ghostex theme` needs a Ghostex newer than 11.6.1. If it is unknown,
-     change one look setting at a time with `ghostex settings set`.
+     change one look setting at a time with `ghostex settings set`; theme
+     colours need `ghostex theme`.
 
 5. Hotkeys have their own commands. Find the action id with `list` (it
    searches titles too), then change it; `none` unassigns and `reset` restores

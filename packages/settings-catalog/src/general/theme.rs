@@ -28,6 +28,7 @@ pub(crate) fn theming(platform: Platform) -> Section {
             row("terminalColorScheme", "Terminal theme", "Follow the app theme by default, or override terminals with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
             row("terminalGhosttyLightTheme", "Terminal palette in light mode", "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.").options(&ghostty_themes_without_unmanaged()),
             row("terminalGhosttyTheme", "Terminal palette in dark mode", "Uses the dark theme set in Ghostex's terminal config, or GitHub Dark when none is set.").options(GHOSTTY_THEME_SETTING_OPTIONS),
+            row("themeRoles", "Theme colours", "Borders, dividers, text, grey text, the accent, cards, controls, menus, selected and hovered rows, your messages, the chat box and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc). Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`."),
             row("windowGlass", "Transparency", "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.").options(WINDOW_GLASS_OPTIONS),
             row("windowGlassSource", "Behind the glass", "Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.").options(WINDOW_GLASS_SOURCE_OPTIONS),
             // CDXC:Settings 2026-10-29 DECISION (cleanup Q19): one switch keeps the light-mode picture, video, Live

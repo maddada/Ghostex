@@ -7264,9 +7264,20 @@ low that text sits on the desktop, an outline colour that barely shows), it is s
 the card and the command say what is hard to read. `ghostex theme undo` and `ghostex theme redo`
 step through the last 20 changes, kept across restarts, and `ghostex theme history` lists them
 with when they were made, by which agent or by you, and what changed; Undo is refused once a
-setting it would put back was changed again. Borders, dividers and grey text have no setting
-yet, so an agent can't change them.
-Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`.
+setting it would put back was changed again.
+Theme colours go further than the colour squares: borders, dividers, text, grey text, the
+accent, cards, controls, menus, the selected and hovered rows, your messages, the chat box and
+the success, warning and danger colours, each set apart for dark and light mode. A colour is an
+opacity of the text colour over what is under it (4%), which stays see-through on window glass,
+or a colour (#7dd3fc, or #7dd3fc80 with its opacity); one not set keeps the theme's own. Agents
+set them with `ghostex theme set` ("the borders are too bright" becomes
+`ghostex theme set --dark border=4%`), and you can in Settings > Interface > Theme colours:
+Borders, Dividers, Text, Grey text and Accent show there, the rest under More theme colours, with
+a field for each appearance the app shows and Reset on each row. They change the computer's own
+window and the web app; the phone keeps its own look. When a colour makes text hard to read
+(under 4.5:1 for text, 3:1 for grey text, the accent and status colours, the text on a fill) or a
+border or divider all but vanish, the change is saved and the card says so.
+Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`. Settings: `themeRoles`.
 
 Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).

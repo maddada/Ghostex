@@ -34,6 +34,7 @@ pub mod platform_text;
 pub mod rows;
 mod search_keywords;
 pub mod spaces;
+pub mod theme_colours;
 pub mod theme_roles;
 pub use search_keywords::{search_keywords, section_search_keywords};
 

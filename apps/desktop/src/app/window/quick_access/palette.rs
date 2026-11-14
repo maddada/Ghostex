@@ -90,6 +90,13 @@ impl QuickAccessPalette {
         self.hairline = theme_role_or_rgba("border", light, self.hairline);
         self.menu_border = theme_role_or_rgba("border", light, self.menu_border);
         self.muted = theme_role_or_rgba("mutedText", light, self.muted);
+        self.foreground = theme_role_or_rgba("text", light, self.foreground);
+        self.raised = theme_role_or_rgba("control", light, self.raised);
+        self.raised_hover = theme_role_or_rgba("hover", light, self.raised_hover);
+        self.menu_hover = theme_role_or_rgba("hover", light, self.menu_hover);
+        self.row_selected = theme_role_or_rgba("selection", light, self.row_selected);
+        self.menu_background = theme_role_or_rgba("menu", light, self.menu_background);
+        self.destructive = theme_role_or_rgba("danger", light, self.destructive);
         if light && crate::app::helpers::theme_role_rgba("border", light).is_some() {
             // The light sheet pins the focus border to the hairline.
             self.focus_border = self.hairline;

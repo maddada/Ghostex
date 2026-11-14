@@ -12,6 +12,7 @@ mod font;
 mod gallery;
 mod interface_scale;
 pub(crate) mod presets;
+mod roles;
 mod swatches;
 pub(super) mod transparency;
 
@@ -59,6 +60,7 @@ pub(super) enum MoreGroup {
     Colours,
     Transparency,
     ChatTerminal,
+    ThemeColours,
 }
 
 impl MoreGroup {
@@ -67,6 +69,7 @@ impl MoreGroup {
             MoreGroup::Colours => 0,
             MoreGroup::Transparency => 1,
             MoreGroup::ChatTerminal => 2,
+            MoreGroup::ThemeColours => 3,
         }
     }
 
@@ -92,6 +95,7 @@ impl MoreGroup {
                 "windowGlassMenuBlurRadius",
             ],
             MoreGroup::ChatTerminal => &["terminalGhosttyTheme", "terminalGhosttyLightTheme"],
+            MoreGroup::ThemeColours => &["themeRoles"],
         }
     }
 }
@@ -99,7 +103,7 @@ impl MoreGroup {
 thread_local! {
     /// `rememberedThemeMoreOptionsOpen`: each group's More options stays as it was left for the rest
     /// of this app run.
-    static REMEMBERED_MORE_OPEN: Cell<[bool; 3]> = const { Cell::new([false; 3]) };
+    static REMEMBERED_MORE_OPEN: Cell<[bool; 4]> = const { Cell::new([false; 4]) };
 }
 
 pub(crate) fn theme_tab_view(
@@ -132,7 +136,7 @@ pub(crate) struct ThemeTab {
     picked_light: bool,
     /// `splitAreas`: More colour options sets the sidebar and work area apart.
     split_areas: bool,
-    more_open: [bool; 3],
+    more_open: [bool; 4],
     /// The Live gallery edits the light mode's style (`editing`).
     pub(super) live_editing_light: bool,
     /// Why the last picked glass video was refused, and for which appearance.
@@ -230,8 +234,12 @@ impl ThemeTab {
             .preview_state
             .clone()
             .unwrap_or_default();
-        if state == "theme-more" || state.starts_with("theme-glass") || state == "theme-custom" {
-            self.more_open = [true; 3];
+        if state == "theme-more"
+            || state.starts_with("theme-glass")
+            || state == "theme-custom"
+            || state == "theme-colours"
+        {
+            self.more_open = [true; 4];
         }
         if state == "theme-light-scheme" {
             self.scheme_dark = false;
@@ -1153,7 +1161,9 @@ impl Render for ThemeTab {
         let transparency = self.transparency_section(&t, window, cx);
         let chat_terminal = self.chat_terminal_section(&t, window, cx);
         let window_frame = self.window_frame_section(&t, cx);
+        let theme_colours = self.theme_colours_section(&t, window, cx);
         let anything = window_frame.is_some()
+            || theme_colours.is_some()
             || colours.is_some()
             || font.is_some()
             || interface_scale.is_some()
@@ -1183,6 +1193,7 @@ impl Render for ThemeTab {
         blocks.extend(colours.map(|section| PageBlock::section("theming", section)));
         blocks.extend(transparency.map(|section| PageBlock::section("transparency", section)));
         blocks.extend(chat_terminal.map(|section| PageBlock::section("chatTerminal", section)));
+        blocks.extend(theme_colours.map(|section| PageBlock::section("themeColours", section)));
         // Advanced: the window frame rows sit in a collapsed fold at the bottom, or in place while
         // a search matches them (CDXC:Settings 2026-10-29 in search.rs, like About).
         if let Some(section) = window_frame {

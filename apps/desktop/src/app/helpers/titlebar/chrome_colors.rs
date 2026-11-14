@@ -110,8 +110,13 @@ pub(crate) fn titlebar_button_border_color() -> Hsla {
     )
 }
 
+/// The Hover theme role replaces it when set (helpers/theme_roles.rs).
 pub(crate) fn titlebar_button_hover_color() -> Hsla {
-    titlebar_overlay_base().opacity(0.08).into()
+    theme_role_or(
+        "hover",
+        titlebar_uses_light_theme(),
+        titlebar_overlay_base().opacity(0.08).into(),
+    )
 }
 
 pub(crate) fn titlebar_active_segment_color() -> Hsla {
@@ -123,8 +128,12 @@ pub(crate) fn titlebar_active_segment_color() -> Hsla {
 pub(crate) static GPUI_MENU_BACKGROUND_RGB: std::sync::atomic::AtomicU32 =
     std::sync::atomic::AtomicU32::new(0x171717);
 
+/// The Menus theme role is laid over it when set (helpers/theme_roles.rs), so a see-through role
+/// value still gives an opaque menu; window glass frosts the result as before.
 pub(crate) fn titlebar_popup_menu_background() -> Hsla {
-    rgb(GPUI_MENU_BACKGROUND_RGB.load(Ordering::Relaxed)).into()
+    let derived: Hsla = rgb(GPUI_MENU_BACKGROUND_RGB.load(Ordering::Relaxed)).into();
+    theme_role_rgba("menu", titlebar_uses_light_theme())
+        .map_or(derived, |menu| derived.blend(Hsla::from(menu)))
 }
 
 /// The surface of a menu in a window of its own: the sidebar's dropdown menus' fill, frosted under
@@ -173,14 +182,16 @@ pub(crate) fn titlebar_popup_menu_destructive() -> Hsla {
 
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User: the hovered row of a menu read as a flat grey slab on the tinted menus ("hovered menu item color is ugly"). It is a wash of the menu's own ink instead, so it carries the theme's tint and works on frosted menus too.
+/// The Hover theme role replaces it when set (helpers/theme_roles.rs).
 pub(crate) fn titlebar_popup_menu_hover_color() -> Hsla {
-    titlebar_overlay_base()
-        .opacity(if titlebar_uses_light_theme() {
-            0.06
-        } else {
-            0.08
-        })
-        .into()
+    let light = titlebar_uses_light_theme();
+    theme_role_or(
+        "hover",
+        light,
+        titlebar_overlay_base()
+            .opacity(if light { 0.06 } else { 0.08 })
+            .into(),
+    )
 }
 
 /// A menu's or tooltip's outline: a faint ink line, fainter still on the frosted menus of window

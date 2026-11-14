@@ -116,6 +116,24 @@ impl SidebarAppearance {
             ring: crate::app::native_chat::appearance::focus_ring_color(light),
             scale,
         }
+        .with_theme_roles()
+    }
+
+    /// The Text, Selected row, Hover and Focus ring theme roles over the derived colours
+    /// (helpers/theme_roles.rs); Borders and Grey text are applied above.
+    fn with_theme_roles(mut self) -> Self {
+        let light = self.light;
+        self.foreground = theme_role_or("text", light, self.foreground);
+        if let Some(selected) = theme_role_rgba("selection", light).map(Hsla::from) {
+            self.session_selected = selected;
+            self.selected = selected;
+        }
+        if let Some(hover) = theme_role_rgba("hover", light).map(Hsla::from) {
+            self.hover = hover;
+            self.session_hover = hover;
+        }
+        self.ring = theme_role_or("focusRing", light, self.ring);
+        self
     }
 }
 

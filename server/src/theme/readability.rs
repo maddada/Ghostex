@@ -5,11 +5,13 @@
 //! User (Q3117, agent theming page): when an agent picks colours that are hard to read, "warn on unreadable colours (don't refuse)": the change applies, and `ghostex theme set` and its card say what is hard to read and why.
 //!
 //! CDXC:Theming 2026-11-14 WHY:
-//! The colours themselves cannot make text unreadable: the window's colours keep the sidebar's and work area's text readable at every colour and Colourfulness (packages/settings-catalog/src/dark_chrome.rs caps how light a dark chrome and how dark a light chrome may get). What an agent can make hard to read is the glass, where a low tint leaves text over whatever the desktop shows, and the active pane outline, whose colour is free. The work area the outline sits on is estimated from the same inputs, since its exact colour is the desktop's (`helpers/titlebar/chrome_tints.rs`): the Colourfulness fade toward the picked colour moves it far more than the depth does.
+//! The look settings cannot make text unreadable: the window's colours keep the sidebar's and work area's text readable at every colour and Colourfulness (packages/settings-catalog/src/dark_chrome.rs). What can is the glass, where a low tint leaves text over whatever the desktop shows, the active pane outline, whose colour is free, and the theme colours (`themeRoles`), each checked against the work area the window really paints (packages/settings-catalog/src/theme_colours.rs, shared with the desktop): text at 4.5:1, grey text and marks (the accent, the focus ring, success, warning and danger) at 3:1, the text on a fill (cards, controls, menus, selected and hovered rows, your messages, the chat box) at 4.5:1, and borders and dividers only once they all but vanish (1.05:1), since toning them down is the point.
 
-use ghostex_settings_catalog::dark_chrome::{
-    dark_chrome_toward_full, full_colour_fade, light_chrome_toward_full, relative_luminance,
+use ghostex_settings_catalog::dark_chrome::relative_luminance;
+use ghostex_settings_catalog::theme_colours::{
+    resolved_custom_sidebar_titlebar_background_for_variant, work_area_background_for_variant,
 };
+use ghostex_settings_catalog::theme_roles::{parse_role_value, saved_role, RoleValue};
 use serde_json::{Map, Value};
 
 use super::look::current;
@@ -26,7 +28,7 @@ const OUTLINE_MIN_CONTRAST: f64 = 3.0;
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Warning {
     pub(crate) text: String,
-    pub(crate) keys: Vec<&'static str>,
+    pub(crate) keys: Vec<String>,
 }
 
 fn number(settings: &Map<String, Value>, key: &str) -> Option<f64> {
@@ -62,56 +64,156 @@ fn parse_hex(value: &str) -> Option<[f64; 3]> {
     ])
 }
 
-/// The colour an appearance's theme square or custom colour picks.
-fn picked_colour(settings: &Map<String, Value>, light: bool) -> Option<[f64; 3]> {
-    let (preset_key, custom_key, table) = if light {
-        (
-            "lightThemePreset",
-            "customSidebarTitlebarLightBackgroundTintColor",
-            "LIGHT_THEME_PRESET_CONTROLS",
-        )
-    } else {
-        (
-            "darkThemePreset",
-            "customSidebarTitlebarBackgroundTintColor",
-            "DARK_THEME_PRESET_CONTROLS",
-        )
-    };
-    let preset = text(settings, preset_key);
-    if preset == "custom" {
-        return parse_hex(&text(settings, custom_key));
-    }
-    let controls = ghostex_settings_catalog::modules::exports(
-        ghostex_settings_catalog::modules::module::SETTINGS,
-        ghostex_settings_catalog::Platform::current(),
-    )
-    .into_iter()
-    .find(|(name, _)| *name == table)?
-    .1
-    .to_value();
-    parse_hex(controls.get(&preset)?.get("tintColor")?.as_str()?)
+fn channels(rgb: u32) -> [f64; 3] {
+    [
+        f64::from((rgb >> 16) & 0xff),
+        f64::from((rgb >> 8) & 0xff),
+        f64::from(rgb & 0xff),
+    ]
 }
 
-/// About the colour of the work area (chat, terminals) in one appearance.
+/// The colour of the work area (chat, terminals) in one appearance, as the window paints it.
 fn work_area(settings: &Map<String, Value>, light: bool) -> [f64; 3] {
-    // The neutral work areas: #0d0d0d dark, #f7f7f7 light. A colour square from Subtle to Vivid
-    // only tints them a few steps.
-    let neutral = if light { [247.0; 3] } else { [13.0; 3] };
-    let fade = number(settings, "themeWorkAreaContrast").map_or(0.0, full_colour_fade);
-    let Some(picked) = picked_colour(settings, light).filter(|_| fade > 0.0) else {
-        return neutral;
-    };
-    // The chrome fades toward the picked colour, then the work area steps toward white off it
-    // (1% dark, 25% light).
-    let (chrome, step) = if light {
-        (
-            light_chrome_toward_full([241.0, 241.0, 242.0], picked, fade),
-            0.25,
-        )
+    channels(work_area_background_for_variant(settings, light))
+}
+
+/// The colour of the sidebar in one appearance.
+fn sidebar(settings: &Map<String, Value>, light: bool) -> [f64; 3] {
+    channels(resolved_custom_sidebar_titlebar_background_for_variant(
+        settings, light,
+    ))
+}
+
+/// A role's colour laid over `under`.
+fn over(value: RoleValue, light: bool, under: [f64; 3]) -> [f64; 3] {
+    let [r, g, b, a] = value.rgba(light);
+    let a = f64::from(a);
+    let top = [r, g, b].map(|channel| f64::from(channel) * 255.0);
+    [0, 1, 2].map(|index| under[index] + (top[index] - under[index]) * a)
+}
+
+/// A role's value in one appearance, when it is set.
+fn role(settings: &Map<String, Value>, light: bool, id: &str) -> Option<RoleValue> {
+    saved_role(settings, light, id).and_then(|raw| parse_role_value(raw).ok())
+}
+
+/// The chat's message text when the Text role is not set (native_chat/chat_text_look.rs).
+fn default_text(light: bool) -> [f64; 3] {
+    if light {
+        [0x4d as f64, 0x4d as f64, 0x50 as f64]
     } else {
-        (dark_chrome_toward_full([14.0; 3], picked, fade), 0.01)
+        [0xb4 as f64, 0xb8 as f64, 0xc0 as f64]
+    }
+}
+
+/// The settings that move the work area, for a role warning's keys.
+const BACKGROUND_KEYS: [&str; 7] = [
+    "sidebarTheme",
+    "darkThemePreset",
+    "lightThemePreset",
+    "customSidebarTitlebarBackgroundTintColor",
+    "customSidebarTitlebarLightBackgroundTintColor",
+    "themeSidebarContrast",
+    "themeWorkAreaContrast",
+];
+
+/// What the theme colours of one appearance make hard to read.
+fn role_warnings(settings: &Map<String, Value>, light: bool, mode: &str, found: &mut Vec<Warning>) {
+    let page = work_area(settings, light);
+    let side = sidebar(settings, light);
+    let text_on = |fill: [f64; 3]| {
+        role(settings, light, "text").map_or(default_text(light), |text| over(text, light, fill))
     };
-    chrome.map(|channel| channel + (255.0 - channel) * step)
+    let mut push = |id: &str, text: String, extra: Vec<String>| {
+        let mut keys = vec![role_key(light, id)];
+        keys.extend(extra);
+        keys.extend(BACKGROUND_KEYS.iter().map(|key| (*key).to_string()));
+        found.push(Warning { text, keys });
+    };
+    // Text and grey text, on the chat and on the sidebar. When the text itself is hard to read,
+    // the fills below are not checked against it again.
+    let mut text_fails = false;
+    for (id, name, needed) in [("text", "Text", 4.5), ("mutedText", "Grey text", 3.0)] {
+        let Some(value) = role(settings, light, id) else {
+            continue;
+        };
+        let ratio = contrast(over(value, light, page), page)
+            .min(contrast(over(value, light, side), side));
+        if ratio < needed {
+            text_fails |= id == "text";
+            push(
+                id,
+                format!("{name} in {mode} reads at {ratio:.1}:1, where {needed}:1 is easy to read."),
+                Vec::new(),
+            );
+        }
+    }
+    // Marks drawn on the chat.
+    for (id, name) in [
+        ("accent", "The accent"),
+        ("focusRing", "The focus ring"),
+        ("success", "Success"),
+        ("warning", "Warning"),
+        ("danger", "Danger"),
+    ] {
+        let Some(value) = role(settings, light, id) else {
+            continue;
+        };
+        let ratio = contrast(over(value, light, page), page);
+        if ratio < 3.0 {
+            push(
+                id,
+                format!("{name} in {mode} is hard to see: {ratio:.1}:1, where 3:1 reads clearly."),
+                Vec::new(),
+            );
+        }
+    }
+    // Lines: only once they all but vanish.
+    for (id, name) in [("border", "Borders"), ("divider", "Dividers")] {
+        let Some(value) = role(settings, light, id) else {
+            continue;
+        };
+        let ratio = contrast(over(value, light, page), page);
+        if ratio < 1.05 {
+            push(
+                id,
+                format!("{name} in {mode} are almost invisible ({ratio:.2}:1)."),
+                Vec::new(),
+            );
+        }
+    }
+    // Fills: the text drawn on them.
+    for (id, name) in [
+        ("surface", "cards"),
+        ("control", "controls"),
+        ("menu", "menus"),
+        ("selection", "the selected row"),
+        ("hover", "a hovered row"),
+        ("userMessage", "your messages"),
+        ("chatBox", "the chat box"),
+    ] {
+        let Some(value) = role(settings, light, id).filter(|_| !text_fails) else {
+            continue;
+        };
+        let fill = over(value, light, page);
+        let ratio = contrast(text_on(fill), fill);
+        if ratio < 4.5 {
+            push(
+                id,
+                format!("Text on {name} in {mode} reads at {ratio:.1}:1, where 4.5:1 is easy to read."),
+                vec![role_key(light, "text")],
+            );
+        }
+    }
+}
+
+/// How a role is named in a change (`themeRoles.<dark|light>.<role>`, look.rs).
+fn role_key(light: bool, id: &str) -> String {
+    format!("themeRoles.{}.{id}", if light { "light" } else { "dark" })
+}
+
+fn keys(list: &[&str]) -> Vec<String> {
+    list.iter().map(|key| (*key).to_string()).collect()
 }
 
 fn contrast(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -168,7 +270,7 @@ pub(crate) fn warnings(settings: &Map<String, Value>) -> Vec<Warning> {
                     crate::ghostex_cli::settings::format_number(tint),
                     LOW_GLASS_TINT as i64
                 ),
-                keys: vec![key, "windowGlass", "sidebarTheme"],
+                keys: keys(&[key, "windowGlass", "sidebarTheme"]),
             });
         }
     }
@@ -183,7 +285,7 @@ pub(crate) fn warnings(settings: &Map<String, Value>) -> Vec<Warning> {
                             "The active pane outline ({}) is hard to see on the work area in {mode}: {ratio:.1}:1, where 3:1 reads clearly.",
                             colour.trim()
                         ),
-                        keys: vec![
+                        keys: keys(&[
                             "workspaceActivePaneBorderColor",
                             "showActivePaneOutline",
                             "sidebarTheme",
@@ -192,11 +294,14 @@ pub(crate) fn warnings(settings: &Map<String, Value>) -> Vec<Warning> {
                             "customSidebarTitlebarBackgroundTintColor",
                             "customSidebarTitlebarLightBackgroundTintColor",
                             "themeWorkAreaContrast",
-                        ],
+                        ]),
                     });
                 }
             }
         }
+    }
+    for (light, mode) in appearances(settings) {
+        role_warnings(settings, light, mode, &mut found);
     }
     found
 }

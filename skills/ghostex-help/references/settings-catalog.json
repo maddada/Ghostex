@@ -8229,6 +8229,20 @@
       "agentWritable": true
     },
     {
+      "key": "themeRoles",
+      "title": "Theme colours",
+      "subtitle": "Borders, dividers, text, grey text, the accent, cards, controls, menus, selected and hovered rows, your messages, the chat box and the status colours, each set apart for dark and light mode as an opacity (4%) or a colour (#7dd3fc). Empty keeps the theme's own; Reset puts it back. Agents change them with `ghostex theme set`.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "json",
+      "default": {},
+      "agentWritable": false
+    },
+    {
       "key": "windowGlass",
       "title": "Transparency",
       "subtitle": "Let your desktop show through the window: Off, Dark only (light mode stays solid) or Always.",
@@ -8785,20 +8799,6 @@
       "type": "number",
       "default": 0,
       "agentWritable": true
-    },
-    {
-      "key": "themeRoles",
-      "title": "Theme colours",
-      "subtitle": "Borders, dividers, grey text, the accent and the other theme colours, set apart for dark and light mode; a colour not set keeps the theme's own. Change them with `ghostex theme set`.",
-      "tab": "theme",
-      "tabTitle": "Interface",
-      "group": "appearance",
-      "groupTitle": "Interface",
-      "section": "theming",
-      "sectionTitle": "Interface",
-      "type": "json",
-      "default": {},
-      "agentWritable": false
     },
     {
       "key": "customSidebarTitlebarBackgroundDarknessPercent",
