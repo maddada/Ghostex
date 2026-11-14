@@ -581,6 +581,8 @@ impl GhostexGpuiApp {
             .relative()
             .w_full()
             .flex_shrink_0()
+            // The star request sits above the workspace line and the meters (github_star.rs).
+            .children(self.render_native_sidebar_star_request(appearance, cx))
             // Under the line, so the handle in it is above the zone and takes its own hover.
             .children(zone)
             .children(line)

@@ -19,6 +19,7 @@ mod empty;
 pub(crate) mod focus_order;
 mod gbots_departments;
 pub(crate) mod gbots_rows;
+pub(crate) mod github_star;
 mod host;
 pub(crate) mod hover_actions;
 pub(crate) mod icons;

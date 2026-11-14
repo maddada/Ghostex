@@ -138,6 +138,8 @@ impl NativeChatView {
         cx.emit(super::state::NativeChatEvent::DraftState(true));
         self.end_answer_hold_for_send();
         self.invoke(submission.clone(), cx);
+        // The sidebar's star request counts sent prompts (native_sidebar/github_star.rs).
+        crate::app::native_sidebar::github_star::note_prompt_sent();
         // The box is empty now: the view watches the message until the core has it.
         self.watch_send(send_request_id, submission, cx);
     }

@@ -24,6 +24,10 @@ impl GhostexGpuiApp {
                 );
             }
             "openExternalUrl" => {
+                // Settings > About's Star on GitHub ends the sidebar's star card.
+                if command.get("githubStar").and_then(serde_json::Value::as_bool) == Some(true) {
+                    crate::app::native_sidebar::github_star::note_starred();
+                }
                 self.receive_gpui_titlebar_resources_open_external_url_message(
                     &serde_json::Value::Object(command.clone()),
                 );

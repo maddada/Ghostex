@@ -32,7 +32,17 @@ const GHOSTEX_SPONSOR_URL: &str = "https://github.com/sponsors/maddada";
 /// The app version the About page names, baked in by apps/desktop/build.rs (`package.json`).
 const APP_VERSION: &str = env!("GHOSTEX_BUILD_MARKETING_VERSION");
 
-const LINKS: [(&str, &str, &str); 3] = [
+/// CDXC:Growth 2026-11-14 DECISION: User (star request page): a Star on GitHub row stays in About
+/// for anyone who dismissed the sidebar's ask. It opens the repository in the system browser and
+/// counts as a star, so the sidebar never asks for one again (native_sidebar/github_star.rs).
+const STAR_LABEL: &str = "Star on GitHub";
+
+const LINKS: [(&str, &str, &str); 4] = [
+    (
+        STAR_LABEL,
+        "Stars help more people find Ghostex.",
+        GHOSTEX_GITHUB_URL,
+    ),
     (
         "Join Discord",
         "Chat with the community and get help.",
@@ -207,6 +217,7 @@ impl Render for AboutTab {
             .map(|(index, (label, description, url))| {
                 let store = self.store.clone();
                 let url = url.to_string();
+                let is_star = *label == STAR_LABEL;
                 h_flex()
                     .id(SharedString::from(format!("settings-about-link-{index}")))
                     .w_full()
@@ -222,9 +233,10 @@ impl Render for AboutTab {
                     .cursor_pointer()
                     .hover(move |this| this.bg(hsla(hover)))
                     .on_click(move |_: &ClickEvent, _window, cx| {
+                        // `githubStar`: the app counts it as a star (native_sidebar/github_star.rs).
                         post_store_message(
                             &store,
-                            json!({ "type": "openExternalUrl", "url": url }),
+                            json!({ "type": "openExternalUrl", "url": url, "githubStar": is_star }),
                             cx,
                         );
                     })
