@@ -384,6 +384,7 @@ impl AgentsTab {
         };
         match state.as_str() {
             "agents-expanded" => self.expanded = vec!["codex".into(), "claude".into()],
+            "agents-off" => self.expanded = vec!["codex".into()],
             "agents-clis" => {
                 self.expanded = vec!["zcode".into(), "claude".into(), "pi".into(), "grok".into()]
             }

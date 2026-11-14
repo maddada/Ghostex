@@ -1,4 +1,5 @@
-//! The expanded panel of an Agents row (`settings-list-panel`), in three groups: Start (Name,
+//! The expanded panel of an Agents row (`settings-list-panel`). While the agent is off it holds
+//! only the CLI group and the Agent actions (`off_note`). While it is on, in these groups: Start (Name,
 //! Works like for custom agents, Command, Permission mode, Default interface for chat-capable
 //! agents, CDXC:AgentProviders 2026-08-27), Context (Claude Code only, claude_context.rs), CLI (the
 //! agent CLI controls) and Session resume hook;
@@ -44,6 +45,22 @@ fn group_title(p: &SettingsPalette, title: &'static str) -> AnyElement {
         .line_height(px(16.0))
         .text_color(hsla(css_fade(p.muted, 0.85)))
         .child(title.to_uppercase())
+        .into_any_element()
+}
+
+/// What a turned-off agent's panel says in place of the rows that only matter while it is on.
+///
+/// CDXC:Settings 2026-11-14 DECISION:
+/// User (W440, Q3107 "Also fix existing ones now"): a setting that only matters when its parent switch is on is hidden while it is off. A turned-off agent's panel showed every row as usable and only dimmed its header. Now, while an agent is off, its panel hides Start (Name, Works like, Command, Permission mode, Default interface), Context (Claude Code's idle compaction) and Session resume hook, and Reset to defaults with them, and says to turn the agent on to change them. It keeps what manages the agent while it is off: the CLI group (install, update, uninstall), Duplicate as custom agent and, for a custom agent, Delete agent. The switch in the row's header turns it back on.
+fn off_note(p: &SettingsPalette, name: &str) -> AnyElement {
+    div()
+        .py(px(12.0))
+        .text_size(px(13.0))
+        .line_height(px(18.0))
+        .text_color(hsla(p.muted))
+        .child(format!(
+            "{name} is turned off. Turn it on with the switch above to change its command, permission mode and other options."
+        ))
         .into_any_element()
 }
 
@@ -144,175 +161,182 @@ impl AgentsTab {
     ) -> AnyElement {
         let agent_id = agent.agent_id.clone();
         let loading = self.hook_status_loading;
-        let mut children: Vec<AnyElement> = vec![group_title(p, "Start")];
-        let name_agent = agent.clone();
-        let name_input = self.inline_input(
-            p,
-            SharedString::from(format!("agent-name-{agent_id}")),
-            &agent.name,
-            "Name",
-            INPUT_WIDTH,
-            false,
-            move |page: &mut Self, name, cx| {
-                page.save_agent_fields(&name_agent, Some(name), None, None, cx)
-            },
-            window,
-            cx,
-        );
-        children.push(panel_child(setting_row(
-            p,
-            SharedString::from(format!("agent-name-row-{agent_id}")),
-            RowSpec::new("Name"),
-            None,
-            name_input,
-            cx,
-        )));
-        if !agent.is_default {
-            let current = agent.icon.clone().unwrap_or_else(|| "custom".to_string());
-            let mut options: Vec<DropdownOption> = Vec::new();
-            if current == "custom" {
-                options.push(DropdownOption {
-                    value: "custom".to_string(),
-                    label: "Nothing (plain command)".to_string(),
-                    icon: Some("custom".to_string()),
-                });
-            }
-            options.extend(default_agents().iter().map(|default| DropdownOption {
-                value: default.icon.clone(),
-                label: default.name.clone(),
-                icon: Some(default.icon.clone()),
-            }));
-            let works_agent = agent.clone();
-            let works_like = self.dropdown(
+        let mut children: Vec<AnyElement> = Vec::new();
+        if agent.enabled {
+            children.push(group_title(p, "Start"));
+            let name_agent = agent.clone();
+            let name_input = self.inline_input(
                 p,
-                SharedString::from(format!("agent-works-like-{agent_id}")),
-                &options,
-                Some(&current),
-                "",
-                true,
-                Some(SELECT_WIDTH),
+                SharedString::from(format!("agent-name-{agent_id}")),
+                &agent.name,
+                "Name",
+                INPUT_WIDTH,
                 false,
-                None,
-                move |page, value, _window, cx| {
-                    if value != "custom" {
-                        page.save_agent_fields(&works_agent, None, None, Some(value), cx);
-                    }
+                move |page: &mut Self, name, cx| {
+                    page.save_agent_fields(&name_agent, Some(name), None, None, cx)
                 },
                 window,
                 cx,
             );
             children.push(panel_child(setting_row(
                 p,
-                SharedString::from(format!("agent-works-like-row-{agent_id}")),
-                RowSpec::new("Works like").description(
-                    "Gives it that agent's logo, chat view, resume hook and permission handling.",
-                ),
+                SharedString::from(format!("agent-name-row-{agent_id}")),
+                RowSpec::new("Name"),
                 None,
-                works_like,
+                name_input,
                 cx,
             )));
-        }
-        let command_agent = agent.clone();
-        let command_input = self.inline_input(
-            p,
-            SharedString::from(format!("agent-command-{agent_id}")),
-            agent.command.as_deref().unwrap_or_default(),
-            "Command",
-            INPUT_WIDTH,
-            true,
-            move |page: &mut Self, command, cx| {
-                page.save_agent_fields(&command_agent, None, Some(command), None, cx)
-            },
-            window,
-            cx,
-        );
-        children.push(panel_child(setting_row(
-            p,
-            SharedString::from(format!("agent-command-row-{agent_id}")),
-            RowSpec::new("Command").description("What Ghostex runs for a new session."),
-            None,
-            command_input,
-            cx,
-        )));
-        let accept_supported = supports_accept_all(&agent.agent_id, agent.icon.as_deref());
-        let mode = agent
-            .accept_all_mode
-            .clone()
-            .unwrap_or_else(|| "inherit".to_string());
-        let mode_agent = agent.clone();
-        let mode_select = settings_select(
-            self,
-            p,
-            SharedString::from(format!("agent-permission-{agent_id}")),
-            &accept_all_mode_options(),
-            &mode,
-            Some(SELECT_WIDTH),
-            !accept_supported,
-            Some("This agent doesn’t support approval policy changes.".into()),
-            move |page: &mut Self, value, _window, cx| page.save_agent_mode(&mode_agent, value, cx),
-            window,
-            cx,
-        );
-        children.push(panel_child(setting_row(
-            p,
-            SharedString::from(format!("agent-permission-row-{agent_id}")),
-            RowSpec::new("Permission mode")
-                .description("How the agent handles approvals when Ghostex starts it."),
-            None,
-            mode_select,
-            cx,
-        )));
-        if supports_chat_view(&agent.agent_id, agent.icon.as_deref()) {
-            let (global, overrides) = {
-                let store = self.store.read(cx);
-                (
-                    store.string("preferredAgentInterface"),
-                    store.value("preferredAgentInterfaceOverrides"),
-                )
-            };
-            let value = overrides
-                .get(&agent_id)
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .unwrap_or_else(inherit_value);
-            let interface_agent = agent_id.clone();
-            let select = settings_select(
+            if !agent.is_default {
+                let current = agent.icon.clone().unwrap_or_else(|| "custom".to_string());
+                let mut options: Vec<DropdownOption> = Vec::new();
+                if current == "custom" {
+                    options.push(DropdownOption {
+                        value: "custom".to_string(),
+                        label: "Nothing (plain command)".to_string(),
+                        icon: Some("custom".to_string()),
+                    });
+                }
+                options.extend(default_agents().iter().map(|default| DropdownOption {
+                    value: default.icon.clone(),
+                    label: default.name.clone(),
+                    icon: Some(default.icon.clone()),
+                }));
+                let works_agent = agent.clone();
+                let works_like = self.dropdown(
+                    p,
+                    SharedString::from(format!("agent-works-like-{agent_id}")),
+                    &options,
+                    Some(&current),
+                    "",
+                    true,
+                    Some(SELECT_WIDTH),
+                    false,
+                    None,
+                    move |page, value, _window, cx| {
+                        if value != "custom" {
+                            page.save_agent_fields(&works_agent, None, None, Some(value), cx);
+                        }
+                    },
+                    window,
+                    cx,
+                );
+                children.push(panel_child(setting_row(
+                    p,
+                    SharedString::from(format!("agent-works-like-row-{agent_id}")),
+                    RowSpec::new("Works like").description(
+                        "Gives it that agent's logo, chat view, resume hook and permission handling.",
+                    ),
+                    None,
+                    works_like,
+                    cx,
+                )));
+            }
+            let command_agent = agent.clone();
+            let command_input = self.inline_input(
+                p,
+                SharedString::from(format!("agent-command-{agent_id}")),
+                agent.command.as_deref().unwrap_or_default(),
+                "Command",
+                INPUT_WIDTH,
+                true,
+                move |page: &mut Self, command, cx| {
+                    page.save_agent_fields(&command_agent, None, Some(command), None, cx)
+                },
+                window,
+                cx,
+            );
+            children.push(panel_child(setting_row(
+                p,
+                SharedString::from(format!("agent-command-row-{agent_id}")),
+                RowSpec::new("Command").description("What Ghostex runs for a new session."),
+                None,
+                command_input,
+                cx,
+            )));
+            let accept_supported = supports_accept_all(&agent.agent_id, agent.icon.as_deref());
+            let mode = agent
+                .accept_all_mode
+                .clone()
+                .unwrap_or_else(|| "inherit".to_string());
+            let mode_agent = agent.clone();
+            let mode_select = settings_select(
                 self,
                 p,
-                SharedString::from(format!("agent-interface-{agent_id}")),
-                &preferred_interface_override_options(&global),
-                &value,
+                SharedString::from(format!("agent-permission-{agent_id}")),
+                &accept_all_mode_options(),
+                &mode,
                 Some(SELECT_WIDTH),
-                false,
-                None,
+                !accept_supported,
+                Some("This agent doesn’t support approval policy changes.".into()),
                 move |page: &mut Self, value, _window, cx| {
-                    page.set_interface_override(&interface_agent, value, cx)
+                    page.save_agent_mode(&mode_agent, value, cx)
                 },
                 window,
                 cx,
             );
             children.push(panel_child(setting_row(
                 p,
-                SharedString::from(format!("agent-interface-row-{agent_id}")),
-                RowSpec::new("Default interface").description(
-                    "Open this agent in Chat or Terminal, or follow the app-wide default.",
-                ),
+                SharedString::from(format!("agent-permission-row-{agent_id}")),
+                RowSpec::new("Permission mode")
+                    .description("How the agent handles approvals when Ghostex starts it."),
                 None,
-                select,
+                mode_select,
                 cx,
             )));
-        }
-        // Claude Code's idle compaction and prompt cache length (claude_context.rs).
-        if agent.is_default && agent_id == super::claude_context::CLAUDE_AGENT_ID {
-            children.push(group_title(p, "Context"));
-            let rows = self.claude_context_rows(p, window, cx);
-            children.extend(rows.into_iter().map(panel_child));
+            if supports_chat_view(&agent.agent_id, agent.icon.as_deref()) {
+                let (global, overrides) = {
+                    let store = self.store.read(cx);
+                    (
+                        store.string("preferredAgentInterface"),
+                        store.value("preferredAgentInterfaceOverrides"),
+                    )
+                };
+                let value = overrides
+                    .get(&agent_id)
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(inherit_value);
+                let interface_agent = agent_id.clone();
+                let select = settings_select(
+                    self,
+                    p,
+                    SharedString::from(format!("agent-interface-{agent_id}")),
+                    &preferred_interface_override_options(&global),
+                    &value,
+                    Some(SELECT_WIDTH),
+                    false,
+                    None,
+                    move |page: &mut Self, value, _window, cx| {
+                        page.set_interface_override(&interface_agent, value, cx)
+                    },
+                    window,
+                    cx,
+                );
+                children.push(panel_child(setting_row(
+                    p,
+                    SharedString::from(format!("agent-interface-row-{agent_id}")),
+                    RowSpec::new("Default interface").description(
+                        "Open this agent in Chat or Terminal, or follow the app-wide default.",
+                    ),
+                    None,
+                    select,
+                    cx,
+                )));
+            }
+            // Claude Code's idle compaction and prompt cache length (claude_context.rs).
+            if agent.is_default && agent_id == super::claude_context::CLAUDE_AGENT_ID {
+                children.push(group_title(p, "Context"));
+                let rows = self.claude_context_rows(p, window, cx);
+                children.extend(rows.into_iter().map(panel_child));
+            }
+        } else {
+            children.push(off_note(p, &agent.name));
         }
         if let Some(controls) = self.render_cli_controls(p, cli_agent, window, cx) {
             children.push(group_title(p, "CLI"));
             children.push(controls);
         }
-        if let Some(hook) = hook_agent {
+        if let Some(hook) = hook_agent.filter(|_| agent.enabled) {
             children.push(group_title(p, "Session resume hook"));
             let hook_installed = hook_status.is_some_and(|status| status.status == "installed");
             let label = if hook_installed {
@@ -432,7 +456,7 @@ impl AgentsTab {
                 Some(command.as_str()) != agent.command.as_deref().map(str::trim)
             })
             || agent.accept_all_mode.is_some();
-        if agent.is_default && customized {
+        if agent.enabled && agent.is_default && customized {
             let reset_agent = agent.clone();
             actions = actions.child(settings_button_sized(
                 p,

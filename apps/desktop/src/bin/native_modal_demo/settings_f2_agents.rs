@@ -6,7 +6,7 @@
 //! failed).
 //!
 //! States: `agents` (the Agents story), `agents-hooks` (the `agentHooks` deep link),
-//! `agents-expanded` (Codex and Claude open), `agents-clis` (ZCode, Claude, Pi and Grok open),
+//! `agents-expanded` (Codex and Claude open), `agents-off` (Codex turned off, its panel open), `agents-clis` (ZCode, Claude, Pi and Grok open),
 //! `agents-cli-running` (Qoder installing), `agents-cli-failed` (Grok's failed update),
 //! `agents-editor-new`, `agents-editor-edit` (Claude), `agents-skip-confirm`, `agents-loading`
 //! (hook status never answers), `agents-empty` (no launchers), `agents-search` ("approval"),
@@ -64,6 +64,12 @@ pub(super) fn extend_sidebar_state(message: &mut Value) {
     } else {
         default_agent_buttons()
     };
+    // Codex turned off after it was used (so it stays in the list), its panel open: only the CLI
+    // group and the Agent actions show.
+    if state() == "agents-off" {
+        message["hud"]["agents"][0]["enabled"] = json!(false);
+        message["hud"]["agents"][0]["lastUsedAt"] = json!("2026-11-10T09:00:00Z");
+    }
 }
 
 pub(super) fn open_message(state: &str) -> Option<Value> {
@@ -89,7 +95,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
 pub(super) fn gxserver_rpc_available(state: &str) -> bool {
     !matches!(
         state,
-        "agents" | "agents-hooks" | "agents-expanded" | "agents-loading"
+        "agents" | "agents-hooks" | "agents-expanded" | "agents-off" | "agents-loading"
     )
 }
 
