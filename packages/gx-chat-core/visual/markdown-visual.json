@@ -2,7 +2,7 @@
   "paragraphGap": 10.4,
   "headingGapBefore": 20,
   "headingLineHeight": 1.3,
-  "headingFontSizes": [20, 18, 16, 14, 14, 14],
+  "headingFontSizes": [22, 19, 17, 15.5, 14, 14],
   "inlineCode": {
     "fontScale": 0.9,
     "paddingX": 5.6,

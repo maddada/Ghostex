@@ -62,6 +62,9 @@ impl NativeChatView {
         if !self.composer_ready {
             return;
         }
+        // Pictures whose upload failed go up again, and this send takes them along
+        // (composer_attach.rs, issue #618 Q3274 A).
+        self.retry_failed_uploads(cx);
         // A paste whose clipboard is still being read: the message waits for its tile
         // (composer_attach.rs).
         let requested = if interrupt { "interrupt" } else { mode };

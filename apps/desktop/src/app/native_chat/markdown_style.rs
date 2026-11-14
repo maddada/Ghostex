@@ -149,9 +149,12 @@ pub(crate) fn text_style(p: &ChatAppearance) -> TextViewStyle {
     // block gap is already there, so only the difference is added here. The
     // renderer drops it again for a message's first block, the way
     // `.ghostex-chat-markdown > :first-child` does.
+    //
+    // CDXC:SessionChat 2026-11-15 DECISION (issue #618, Q3270 A): "Bold text and headings look almost like body text". Headings are bigger (22/19/17/15.5 in markdown-visual.json, which the phone mirrors), bold (700) and in the bright `foreground` instead of the prose's grey; bold words take `foreground` too. A lane with its own heading colour (Grey thinking) keeps it, and its bold words keep the prose's colour.
+    // SEE-ALSO: apps/mobile/app/src/chat/native/transcript/markdown/Markdown.tsx (`HEADING_SIZES`, `strong`).
     style.heading = StyleRefinement::default()
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(p.primary)
+        .font_weight(FontWeight::BOLD)
+        .text_color(p.lane_heading.unwrap_or(p.foreground))
         .line_height(relative(VISUAL.heading_line_height))
         .pt(px((VISUAL.heading_gap_before - VISUAL.paragraph_gap)
             .max(0.0)

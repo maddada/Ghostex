@@ -709,6 +709,7 @@ impl NativeChatView {
                             .items_end()
                             .gap(px(4.0 * s))
                             .children(indicator.map(|(icon, _)| icon))
+                            .children(self.attaching_line(&id, true, p))
                             .children(failed_delivery)
                             .children(actions),
                     )
@@ -758,6 +759,8 @@ impl NativeChatView {
                         .items_end()
                         .gap(px(4.0 * s))
                         .child(bubble)
+                        // "Image is being uploaded" while it waits for its picture.
+                        .children(self.attaching_line(&id, true, p))
                         .children(failed_delivery)
                         .children(actions),
                 )
