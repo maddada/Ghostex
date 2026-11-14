@@ -66,10 +66,12 @@ impl GhostexGpuiApp {
                 browser_remote_route_chip(&name, url, through_machine)
             });
         let feedback_tool_unavailable = browser_feedback_tool_unavailable_url(&address_value);
-        let feedback_tooltip = if feedback_tool_unavailable {
-            BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP
+        let feedback_tooltip: gpui::SharedString = if feedback_tool_unavailable {
+            BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP.into()
         } else {
-            BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL
+            // The Annotate hotkey toggles it too (CDXC:Docs 2026-11-14 DECISION in
+            // packages/settings-catalog/src/hotkey_definitions.rs).
+            titlebar_tooltip_label(BROWSER_FEEDBACK_TOOL_AGENTATION_LABEL, "toggleAnnotate")
         };
         let (is_loading, runtime_can_go_back, runtime_can_go_forward) = self
             .browser_tabs
@@ -241,7 +243,7 @@ impl GhostexGpuiApp {
                         "agentation",
                         BROWSER_ICON_POINTER,
                         !feedback_tool_unavailable,
-                        Some(feedback_tooltip.into()),
+                        Some(feedback_tooltip),
                         BrowserToolbarAction::FeedbackTool,
                         pane_id,
                         cx,

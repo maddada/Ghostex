@@ -1,10 +1,13 @@
 //! Opens Drafts when a new session lands there, and scrolls to it once it is the open session
 //! (CDXC:Drafts 2026-11-02 in packages/gx-core/src/sidebar_view/draft_arrivals.rs). Both sidebars:
 //! the Project sidebar's Drafts heading of the row's project, and the Unified sidebar's Drafts
-//! shelf. The web build compiles this file too.
+//! shelf. The web build compiles this file too. A new session that is not a draft (a terminal, a
+//! fork) is put on screen once it is the open session, in the Project sidebar (CDXC:Sidebar
+//! 2026-11-14 in the same gx-core file).
 
 use ghostex_gx_core::{
-    DraftArrivals, DraftRow, SessionKey, open_draft_headings, project_draft_rows, reveal_plan,
+    DraftArrivals, DraftRow, SessionKey, open_draft_headings, project_draft_rows,
+    project_session_rows, reveal_plan,
 };
 
 use crate::GhostexGpuiApp;
@@ -20,6 +23,9 @@ const UNIFIED_DRAFTS_SHELF_KEY: &str = "Drafts";
 pub(crate) struct DraftArrivalsHost {
     project: DraftArrivals,
     unified: DraftArrivals,
+    /// Every row of the Project sidebar, whatever its heading: the new one that becomes the open
+    /// session is revealed.
+    project_created: DraftArrivals,
 }
 
 impl GhostexGpuiApp {
@@ -42,6 +48,7 @@ impl GhostexGpuiApp {
         match self.native_sidebar.unified.clone() {
             Some(unified) => {
                 self.gx_store.draft_arrivals.project.reset();
+                self.gx_store.draft_arrivals.project_created.reset();
                 let drafts: Vec<DraftRow> = unified
                     .drafts
                     .iter()
@@ -73,9 +80,17 @@ impl GhostexGpuiApp {
                     inputs.settings.enable_session_parking,
                     now_ms,
                 );
-                let tracker = &mut self.gx_store.draft_arrivals.project;
-                let arrivals = tracker.observe(&drafts, now_ms);
-                let reveal = tracker.take_focused(focused.as_deref(), now_ms);
+                let rows = project_session_rows(self.gx_store.sidebar_list.view());
+                let arrivals = self
+                    .gx_store
+                    .draft_arrivals
+                    .project
+                    .observe(&drafts, now_ms);
+                // Drafts open for any arrival; the reveal is for the new row this client opened,
+                // whichever heading it is under.
+                let created = &mut self.gx_store.draft_arrivals.project_created;
+                created.observe(&rows, now_ms);
+                let reveal = created.take_focused(focused.as_deref(), now_ms);
                 let mut intents = open_draft_headings(&arrivals, self.gx_store.sidebar_ui.state());
                 // The open arrival is put on screen the way a notification click puts its row
                 // there: its group, its collection and its Space too, not only the heading.
@@ -88,7 +103,13 @@ impl GhostexGpuiApp {
                         sidebar_session_id,
                         now_ms,
                     ) {
-                        intents.extend(plan.intents(store.sidebar_ui.state()));
+                        // Both read the state before either applies, so the Drafts heading both
+                        // want open is toggled once, not opened and shut again.
+                        for intent in plan.intents(store.sidebar_ui.state()) {
+                            if !intents.contains(&intent) {
+                                intents.push(intent);
+                            }
+                        }
                     }
                 }
                 // Each intent rebuilds the list, which runs this again: the tracker has already

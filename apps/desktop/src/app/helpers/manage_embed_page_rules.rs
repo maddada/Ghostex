@@ -139,7 +139,6 @@ struct ManageEmbedPage {
     path: String,
     project_id: String,
     project_editor_id: String,
-    annotate: bool,
 }
 
 impl ManageEmbedPage {
@@ -154,7 +153,6 @@ impl ManageEmbedPage {
             path,
             project_editor_id: param("projectEditorId").unwrap_or_else(|| project_id.clone()),
             project_id,
-            annotate: param("annotate").as_deref() == Some("1"),
         })
     }
 }
@@ -164,9 +162,11 @@ impl ManageEmbedPage {
 /// CDXC:Docs 2026-11-14 DECISION:
 /// The embed page shows one file, so it may only ask for what that takes: `read` its own file,
 /// `save` it when it is a drawing (Excalidraw's autosave), `openDocsFile` another HTML file (a
-/// link in the page), and `sendPageAnnotation` for its own file while Annotate is on. Every other
-/// action (writing, moving, deleting or opening other files, Open With, the agent input) is
-/// refused here, so nothing that runs in that page can reach them even if it reached the bridge.
+/// link in the page), and Annotate's requests for its own file (`sendPageAnnotation` and
+/// `copyPageAnnotation` are answered only while Annotate is on, which the app checks, since it
+/// switches without reloading the page). Every other action (writing, moving, deleting or opening
+/// other files, Open With, the agent input) is refused here, so nothing that runs in that page can
+/// reach them even if it reached the bridge.
 pub(crate) fn manage_embed_request_allowed(
     page_url: &str,
     request: &serde_json::Value,
@@ -185,8 +185,12 @@ pub(crate) fn manage_embed_request_allowed(
     match action {
         "read" if own_file => Ok(()),
         "save" if own_file && page.path.to_ascii_lowercase().ends_with(".excalidraw") => Ok(()),
-        "sendPageAnnotation" if own_file && page.annotate => Ok(()),
-        "sendPageAnnotation" if own_file => Err("Annotate is off for this file."),
+        "sendPageAnnotation" | "copyPageAnnotation" | "annotateLoad" | "annotateState"
+        | "annotateNotes" | "annotateToggle"
+            if own_file =>
+        {
+            Ok(())
+        }
         "openDocsFile" if manage_embed_linked_html_path_allowed(path) => Ok(()),
         _ => Err("This page cannot do that."),
     }
@@ -283,21 +287,26 @@ mod tests {
     }
 
     #[test]
-    fn embed_page_sends_annotations_only_while_annotate_is_on() {
-        let on = page("docs/report.html", true);
-        let off = page("docs/report.html", false);
-        assert!(
-            manage_embed_request_allowed(&on, &request("sendPageAnnotation", "docs/report.html"))
-                .is_ok()
-        );
-        assert!(
-            manage_embed_request_allowed(&off, &request("sendPageAnnotation", "docs/report.html"))
-                .is_err()
-        );
-        assert!(
-            manage_embed_request_allowed(&on, &request("sendPageAnnotation", "docs/other.html"))
-                .is_err()
-        );
+    fn embed_page_asks_about_annotate_only_for_its_own_file() {
+        // Whether Annotate is on is the app's to check: it switches without reloading the page.
+        let url = page("docs/report.html", false);
+        for action in [
+            "sendPageAnnotation",
+            "copyPageAnnotation",
+            "annotateLoad",
+            "annotateState",
+            "annotateNotes",
+            "annotateToggle",
+        ] {
+            assert!(
+                manage_embed_request_allowed(&url, &request(action, "docs/report.html")).is_ok(),
+                "{action} should be allowed for the page's own file"
+            );
+            assert!(
+                manage_embed_request_allowed(&url, &request(action, "docs/other.html")).is_err(),
+                "{action} should be refused for another file"
+            );
+        }
     }
 
     #[test]

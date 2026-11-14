@@ -285,8 +285,8 @@ pub use crate::sidebar_view::{
     gbots_department_storage_id, gbots_section_storage_id, GbotsDepartmentView, GbotsSectionView,
 };
 pub use crate::sidebar_view::{
-    open_draft_headings, project_draft_rows, DraftArrival, DraftArrivals, DraftRow,
-    DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
+    open_draft_headings, project_draft_rows, project_session_rows, DraftArrival, DraftArrivals,
+    DraftRow, DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use crate::sidebar_view::{tag_choice, tag_choices, TagChoice};
 pub use crate::sidebar_view::{ChiefRowView, HomeHeaderView};

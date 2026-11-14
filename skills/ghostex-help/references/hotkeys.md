@@ -149,6 +149,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Select All | terminal only |  | `cmd+a` | `cmd+shift+a` | Select everything in the terminal, its scrollback included. | `terminalSelectAll` |
 | Browser History | `cmd+y` | `cmd+h` | none |  | Show the history of the browser page you are on. | `openBrowserHistory` |
 | Reload Page | `cmd+r` |  | none |  | Reload the browser page you are on (F5 also reloads it). | `reloadBrowserPage` |
+| Annotate | `cmd+ctrl+a` | `alt+shift+a` | none |  | Turn Annotate on or off for the HTML file in Files or the Browser page you are on, or comment on the text you selected in a Markdown file in Files. | `toggleAnnotate` |
 | Sleep Focused Session (Second Key) | `alt+shift+s` |  | `alt+shift+s` |  | A second key that sleeps the focused terminal session. | `sleepFocusedSessionSecondKey` |
 | Unfocus Terminal | terminal only |  | `cmd+shift+m` |  | Take the keyboard out of the terminal, so the hotkeys that apply outside a terminal work next. | `unfocusTerminal` |
 | Focus Last Terminal | `cmd+shift+m` |  | none |  | Put the keyboard back in the terminal that had it last, bringing its session forward if it is not on screen. | `focusLastTerminal` |

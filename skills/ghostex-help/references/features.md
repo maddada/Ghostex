@@ -451,8 +451,19 @@ view from the strip.
   the Annotate toolbar opens inside that frame so the content itself can be
   selected. Copying or sending annotations clears them afterwards by default;
   the toolbar's own settings panel (Clear on copy/send) turns that off.
-  HTML files in the Files view use the same Agentation overlay via Annotate,
-  with the same pictures and Send.
+  HTML files in the Files view use the same Agentation tool, with the same
+  pictures and Send, but with no floating toolbar: Annotate in the file's header
+  turns it on, ready to pick, and its buttons sit beside it in the header
+  (Pause, Layout, Hide marks, Copy, Send with the number of notes, Clear, and
+  Settings for the output detail, mark colour and clearing after Copy or
+  Send). In the narrow side panel, Layout, Settings, Open in Browser and Open
+  With move into the header's ⋯ menu while Annotate is on. Annotate starts off
+  and is remembered per file, and each file's notes are kept across reloads
+  and restarts; turning Annotate off keeps them hidden until you turn it on
+  again. The Annotate hotkey (Cmd+Ctrl+A on the Mac, Alt+Shift+A on Windows and
+  Linux, `toggleAnnotate` in Settings > Hotkeys) turns it on or off while an
+  HTML file in Files or the Browser page has the keyboard, and in a Markdown
+  file in Files it comments on the text you selected.
   Markdown files use Files selection comments instead (see Files below).
   A page in the Browser or in a website or extension view (Linear, Jira) can open
   another app through its link, such as Okta Verify, Zoom, Teams or an email link:
@@ -7731,8 +7742,10 @@ Report in Send Bug / Feedback.
 terminalViewWidthMode match-chat`.
 - "How do I annotate a Browser page or Markdown file": Browser pages use
   Agentation in the Browser toolbar (see Views, Browser); Send attaches a
-  picture of each annotated spot. Markdown files use
-  Files: select text to comment or mark Looks good, Clarify, or Needs tests,
+  picture of each annotated spot. HTML files in Files: Annotate in the file's
+  header (see Views, Browser). Markdown files use
+  Files: select text (with the mouse, or the keyboard and then the Annotate
+  hotkey) to comment or mark Looks good, Clarify, or Needs tests,
   then Send to the last-clicked session (see Views, Files).
 - "Update everything" or "update my agents": Settings > Updates has Update all
   (`ghostex settings open --tab updates`); see Updates. One agent CLI alone:

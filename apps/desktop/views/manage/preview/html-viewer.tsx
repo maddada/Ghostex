@@ -15,17 +15,46 @@ export const MANAGE_ANNOTATION_SCREENSHOT_PREFIX = 'ghostex-annotation-screensho
 /** Annotate's Send in the rendered document: its markdown and screenshots, delivered by Files (the document asks by message). */
 export type ManageAnnotationSend = (markdown: string, screenshots: { id: string; png: string }[]) => Promise<void>;
 
+/** How Annotate starts in the rendered document (`annotateLoad`), and what Files keeps for its reloads. */
+export type ManageAnnotateBoot = {
+  on: boolean;
+  theme: 'dark' | 'light';
+  settings?: Record<string, unknown>;
+  notes?: unknown[];
+  /** The Annotate hotkey: the sealed page has the keyboard while it is focused, so it listens itself. */
+  hotkey?: { key: string; code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean } | null;
+};
+
+/** A command from the Files header for the rendered document's Agentation (`ghostex-manage-annotate-command`). */
+export type ManageAnnotateCommand = { command: string; value?: unknown };
+
+/** The event the app dispatches into this page with a header command (app/native_docs/annotate.rs). */
+export const MANAGE_ANNOTATE_COMMAND_EVENT = 'ghostex-manage-annotate-command';
+
 export function ManageHtmlRenderViewer({
-  annotationsEnabled,
+  annotate,
   content,
   documentKey,
+  onAnnotateNotes,
+  onAnnotateHotkey,
+  onAnnotateState,
+  onCopyAnnotation,
   onOpenDocument,
   onSendAnnotation,
   pageName,
 }: {
-  annotationsEnabled: boolean;
+  /** How Annotate starts; Agentation is loaded into every HTML file, idle until Annotate is on. */
+  annotate: ManageAnnotateBoot;
   content: string;
   documentKey: string;
+  /** The notes after each change, so Files keeps them across reloads and restarts. */
+  onAnnotateNotes: (notes: unknown[]) => void;
+  /** What the header's Annotate buttons show. */
+  onAnnotateState: (state: Record<string, unknown>) => void;
+  /** Annotate's Copy: the app writes the clipboard (a click in the header leaves this page unfocused). */
+  onCopyAnnotation: (markdown: string) => void;
+  /** The Annotate hotkey, pressed while the page had the keyboard. */
+  onAnnotateHotkey: () => void;
   onOpenDocument: (path: string) => void;
   /** Annotate's Send: delivers the notes and their screenshots to the agent (see CDXC:Browser 2026-11-07 in app/page_annotations.rs). */
   onSendAnnotation: ManageAnnotationSend;
@@ -34,19 +63,22 @@ export function ManageHtmlRenderViewer({
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const resourceBaseUrl = manageHtmlResourceBaseUrl(documentKey);
+  // A reload (the file changed on disk) starts Agentation as Annotate is now, with the latest notes.
+  const boot = useRef(annotate);
+  boot.current = { ...boot.current, ...annotate, notes: boot.current.notes ?? annotate.notes };
   const renderedHtml = useMemo(
     () =>
       buildManageHtmlDocument(content, {
-        injectAgentation: annotationsEnabled,
+        annotate: boot.current,
         pageName,
         resourceBaseUrl,
       }),
-    [annotationsEnabled, content, pageName, resourceBaseUrl]
+    [content, pageName, resourceBaseUrl]
   );
 
   /*
    * CDXC:Docs 2026-11-14 DECISION:
-   * The rendered file runs in its own sealed (opaque) origin, so its script cannot reach this page, the Files bridge or the app. It talks to Files only through `postMessage`, and only two messages are accepted, from this frame's own window: open another HTML file beside it, and Annotate's Send while Annotate is on for this file. Everything else is ignored.
+   * The rendered file runs in its own sealed (opaque) origin, so its script cannot reach this page, the Files bridge or the app. It talks to Files only through `postMessage`, and only these messages are accepted, from this frame's own window: open another HTML file beside it, and Annotate's Send, Copy, notes and state for this file. Everything else is ignored.
    */
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -58,30 +90,73 @@ export function ManageHtmlRenderViewer({
       if (!message) {
         return;
       }
-      if (message.type === MANAGE_HTML_FRAME_OPEN_DOCUMENT) {
-        const linkedDocumentPath = manageHtmlLinkedDocumentPath(message.href, resourceBaseUrl);
-        if (linkedDocumentPath && linkedDocumentPath !== documentKey) {
-          onOpenDocument(linkedDocumentPath);
+      switch (message.type) {
+        case MANAGE_HTML_FRAME_OPEN_DOCUMENT: {
+          const linkedDocumentPath = manageHtmlLinkedDocumentPath(message.href, resourceBaseUrl);
+          if (linkedDocumentPath && linkedDocumentPath !== documentKey) {
+            onOpenDocument(linkedDocumentPath);
+          }
+          return;
         }
-        return;
+        case MANAGE_HTML_FRAME_ANNOTATE_STATE:
+          onAnnotateState(message.state);
+          return;
+        case MANAGE_HTML_FRAME_ANNOTATE_NOTES:
+          boot.current = { ...boot.current, notes: message.notes };
+          onAnnotateNotes(message.notes);
+          return;
+        case MANAGE_HTML_FRAME_ANNOTATE_COPY:
+          onCopyAnnotation(message.markdown);
+          return;
+        case MANAGE_HTML_FRAME_ANNOTATE_HOTKEY:
+          onAnnotateHotkey();
+          return;
+        case MANAGE_HTML_FRAME_SEND_ANNOTATION: {
+          const reply = (error?: string) =>
+            frameWindow.postMessage(
+              { type: MANAGE_HTML_FRAME_SEND_ANNOTATION_RESULT, id: message.id, ...(error ? { error } : {}) },
+              '*'
+            );
+          onSendAnnotation(message.markdown, message.screenshots).then(
+            () => reply(),
+            (reason: unknown) => reply(reason instanceof Error ? reason.message : String(reason))
+          );
+        }
       }
-      const reply = (error?: string) =>
-        frameWindow.postMessage(
-          { type: MANAGE_HTML_FRAME_SEND_ANNOTATION_RESULT, id: message.id, ...(error ? { error } : {}) },
-          '*'
-        );
-      if (!annotationsEnabled) {
-        reply('Annotate is off for this file.');
-        return;
-      }
-      onSendAnnotation(message.markdown, message.screenshots).then(
-        () => reply(),
-        (reason: unknown) => reply(reason instanceof Error ? reason.message : String(reason))
-      );
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [annotationsEnabled, documentKey, onOpenDocument, onSendAnnotation, resourceBaseUrl]);
+  }, [
+    documentKey,
+    onAnnotateHotkey,
+    onAnnotateNotes,
+    onAnnotateState,
+    onCopyAnnotation,
+    onOpenDocument,
+    onSendAnnotation,
+    resourceBaseUrl,
+  ]);
+
+  // The header's buttons reach Agentation through the app, this page and the frame, in that order.
+  useEffect(() => {
+    const onCommand = (event: Event) => {
+      const detail = (event as CustomEvent<ManageAnnotateCommand>).detail;
+      if (!detail || typeof detail.command !== 'string') {
+        return;
+      }
+      if (detail.command === 'setActive') {
+        boot.current = { ...boot.current, on: detail.value === true };
+      } else if (detail.command === 'theme' && (detail.value === 'dark' || detail.value === 'light')) {
+        boot.current = { ...boot.current, theme: detail.value };
+      }
+      frame.current?.contentWindow?.postMessage(
+        { type: MANAGE_HTML_FRAME_ANNOTATE_COMMAND, command: detail.command, value: detail.value },
+        '*'
+      );
+    };
+    window.addEventListener(MANAGE_ANNOTATE_COMMAND_EVENT, onCommand);
+    return () => window.removeEventListener(MANAGE_ANNOTATE_COMMAND_EVENT, onCommand);
+  }, []);
 
   /*
    * CDXC:Docs 2026-08-08:
@@ -93,7 +168,7 @@ export function ManageHtmlRenderViewer({
    * their data through `clipboardData`, which this policy does not gate.
    *
    * CDXC:Docs 2026-11-14 WHY:
-   * Clipboard writes and fullscreen are granted with `*`: the document has an opaque origin now, which `'self'` (this page's origin) no longer matches, and Agentation's copy button writes to the clipboard. No `allow-same-origin`, and no `allow-popups-to-escape-sandbox`: see the decision above.
+   * Clipboard writes and fullscreen are granted with `*`: the document has an opaque origin now, which `'self'` (this page's origin) no longer matches, and a page's own copy buttons write to the clipboard. No `allow-same-origin`, and no `allow-popups-to-escape-sandbox`: see the decision above.
    */
   return (
     <iframe
@@ -113,7 +188,14 @@ export function ManageHtmlRenderViewer({
 export const MANAGE_HTML_FRAME_OPEN_DOCUMENT = 'ghostex-open-document';
 export const MANAGE_HTML_FRAME_SEND_ANNOTATION = 'ghostex-send-annotation';
 export const MANAGE_HTML_FRAME_SEND_ANNOTATION_RESULT = 'ghostex-send-annotation-result';
+export const MANAGE_HTML_FRAME_ANNOTATE_STATE = 'ghostex-annotate-state';
+export const MANAGE_HTML_FRAME_ANNOTATE_NOTES = 'ghostex-annotate-notes';
+export const MANAGE_HTML_FRAME_ANNOTATE_COPY = 'ghostex-annotate-copy';
+export const MANAGE_HTML_FRAME_ANNOTATE_HOTKEY = 'ghostex-annotate-hotkey';
+/** Files to the rendered document: a header command for its Agentation. */
+export const MANAGE_HTML_FRAME_ANNOTATE_COMMAND = 'ghostex-annotate-command';
 const MANAGE_HTML_FRAME_MAX_SCREENSHOTS = 50;
+const MANAGE_HTML_FRAME_MAX_NOTES = 500;
 
 export type ManageHtmlFrameMessage =
   | { type: typeof MANAGE_HTML_FRAME_OPEN_DOCUMENT; href: string }
@@ -122,9 +204,24 @@ export type ManageHtmlFrameMessage =
       id: string;
       markdown: string;
       screenshots: { id: string; png: string }[];
-    };
+    }
+  | { type: typeof MANAGE_HTML_FRAME_ANNOTATE_STATE; state: Record<string, unknown> }
+  | { type: typeof MANAGE_HTML_FRAME_ANNOTATE_NOTES; notes: unknown[] }
+  | { type: typeof MANAGE_HTML_FRAME_ANNOTATE_COPY; markdown: string }
+  | { type: typeof MANAGE_HTML_FRAME_ANNOTATE_HOTKEY };
 
-/** One of the two messages the rendered document may send, checked field by field; `undefined` for anything else. */
+const MANAGE_ANNOTATE_STATE_FLAGS = [
+  'active',
+  'frozen',
+  'layout',
+  'marksVisible',
+  'canCopy',
+  'canSend',
+  'canClear',
+] as const;
+const MANAGE_ANNOTATE_SEND_STATES = ['idle', 'sending', 'sent', 'failed'];
+
+/** One of the messages the rendered document may send, checked field by field; `undefined` for anything else. */
 export function parseManageHtmlFrameMessage(data: unknown): ManageHtmlFrameMessage | undefined {
   if (!data || typeof data !== 'object') {
     return undefined;
@@ -133,6 +230,33 @@ export function parseManageHtmlFrameMessage(data: unknown): ManageHtmlFrameMessa
   if (message.type === MANAGE_HTML_FRAME_OPEN_DOCUMENT) {
     return typeof message.href === 'string' && message.href.length <= 4096
       ? { type: MANAGE_HTML_FRAME_OPEN_DOCUMENT, href: message.href }
+      : undefined;
+  }
+  if (message.type === MANAGE_HTML_FRAME_ANNOTATE_STATE) {
+    const state = message.state as Record<string, unknown> | null;
+    if (!state || typeof state !== 'object') {
+      return undefined;
+    }
+    const checked: Record<string, unknown> = {};
+    for (const flag of MANAGE_ANNOTATE_STATE_FLAGS) {
+      checked[flag] = state[flag] === true;
+    }
+    checked.notes =
+      typeof state.notes === 'number' && Number.isFinite(state.notes) ? Math.max(0, Math.floor(state.notes)) : 0;
+    checked.sendState = MANAGE_ANNOTATE_SEND_STATES.includes(state.sendState as string) ? state.sendState : 'idle';
+    return { type: MANAGE_HTML_FRAME_ANNOTATE_STATE, state: checked };
+  }
+  if (message.type === MANAGE_HTML_FRAME_ANNOTATE_NOTES) {
+    return Array.isArray(message.notes) && message.notes.length <= MANAGE_HTML_FRAME_MAX_NOTES
+      ? { type: MANAGE_HTML_FRAME_ANNOTATE_NOTES, notes: message.notes }
+      : undefined;
+  }
+  if (message.type === MANAGE_HTML_FRAME_ANNOTATE_HOTKEY) {
+    return { type: MANAGE_HTML_FRAME_ANNOTATE_HOTKEY };
+  }
+  if (message.type === MANAGE_HTML_FRAME_ANNOTATE_COPY) {
+    return typeof message.markdown === 'string'
+      ? { type: MANAGE_HTML_FRAME_ANNOTATE_COPY, markdown: message.markdown }
       : undefined;
   }
   if (message.type !== MANAGE_HTML_FRAME_SEND_ANNOTATION) {
@@ -161,18 +285,18 @@ export function parseManageHtmlFrameMessage(data: unknown): ManageHtmlFrameMessa
 
 export function buildManageHtmlDocument(
   html: string,
-  options: { injectAgentation?: boolean; pageName?: string; resourceBaseUrl?: string } = {}
+  options: { annotate?: ManageAnnotateBoot; pageName?: string; resourceBaseUrl?: string } = {}
 ): string {
   /*
    * CDXC:Docs 2026-07-01-18:12:
-   * Docs HTML files should behave like real interactive browser documents. Parse only to append Ghostex-owned viewer chrome and the optional Agentation bootstrap; do not remove authored scripts, inline handlers, JavaScript URLs, frames, form targets, srcdoc content, or base tags.
+   * Docs HTML files should behave like real interactive browser documents. Parse only to append Ghostex-owned viewer chrome and the Agentation bootstrap; do not remove authored scripts, inline handlers, JavaScript URLs, frames, form targets, srcdoc content, or base tags.
    */
   const documentValue = new DOMParser().parseFromString(html, 'text/html');
   injectManageHtmlResourceBase(documentValue, options.resourceBaseUrl);
   injectManageHtmlFrameHelper(documentValue);
   injectManageHtmlViewerChromeStyles(documentValue);
-  if (options.injectAgentation) {
-    injectManageAgentationScript(documentValue, options.pageName);
+  if (options.annotate) {
+    injectManageAgentationScript(documentValue, options.pageName, options.annotate);
   }
   return `${serializeManageDocumentType(documentValue)}\n${documentValue.documentElement.outerHTML}`;
 }
@@ -407,7 +531,7 @@ export function manageHtmlPageName(path: string, resourcePath: string): string {
 }
 
 /**
- * Runs inside the rendered document. Agentation copies through `navigator.clipboard.writeText`, so the header it wrote from the srcdoc location (`## Page Feedback: srcdoc`) is swapped for the page's name on the way out. Only that exact leading header is touched, so text a page copies itself passes through unchanged.
+ * Runs inside the rendered document. Agentation writes its Copy and Send headers from the srcdoc location (`## Page Feedback: srcdoc`), so the bootstrap swaps in the page's name before handing the text to Files. Only that exact leading header is touched.
  */
 export const MANAGE_PAGE_FEEDBACK_HEADER_SOURCE = `
 function renamePageFeedbackHeader(text, pathname, pageName) {
@@ -419,19 +543,36 @@ function renamePageFeedbackHeader(text, pathname, pageName) {
 }
 `.trim();
 
-export function injectManageAgentationScript(documentValue: Document, pageName?: string): void {
+export function injectManageAgentationScript(
+  documentValue: Document,
+  pageName?: string,
+  annotate?: ManageAnnotateBoot
+): void {
   const script = documentValue.createElement('script');
   script.type = 'module';
   // The srcdoc is serialized HTML, so nothing in the script may close its tag.
-  script.textContent = `${MANAGE_AGENTATION_BUNDLE.replace(/<\/script/giu, '<\\/script')}\n;\n${buildManageAgentationBootstrapScript(pageName)}`;
+  script.textContent = `${MANAGE_AGENTATION_BUNDLE.replace(/<\/script/giu, '<\\/script')}\n;\n${buildManageAgentationBootstrapScript(pageName, annotate)}`;
   (documentValue.body || documentValue.documentElement).appendChild(script);
 }
 
+/** JSON for inline script source: nothing in it may close the script tag. */
+function inlineScriptJson(value: unknown): string {
+  return JSON.stringify(value ?? null).replace(/</gu, '\\u003c');
+}
+
 /**
- * CDXC:Docs 2026-10-23 DECISION: User (issue #280): turning on Annotate for an HTML file in Files goes straight into annotating mode and stays in it across the reloads Files does when the file changes on disk. agentation@3.1.2 mounts collapsed (`isActive` is component state that starts false, is never persisted, and has no prop or handle), so the bootstrap clicks Agentation's own launcher once it renders. It matches the launcher only while it reads `aria-expanded="false"` and `aria-label="Start feedback mode"` inside the open shadow root of its `<agentation-toolbar>` host (3.1.2 put the shortcut into the title, so the title is not matched, and a MutationObserver on the page cannot see into the shadow root, so it polls every 50ms for up to 5s), so it can never switch an active toolbar off; its Cmd/Ctrl+Shift+F shortcut was rejected because it toggles and the synthetic key would also reach the page's own listeners. Every srcdoc reload re-runs this bootstrap, which is what keeps it active.
- * SEE-ALSO: apps/desktop/src/app/helpers/browser.rs (`autoActivate`, the Browser toolbar's Annotate does the same).
+ * CDXC:Docs 2026-11-14 DECISION:
+ * User (Q34 to Q47, after the options pages under docs/2026-11-14/files-annotate-toolbar/): "i want annotate to not show the floating toolbar ui on the page, i want that part to be controlled from our app basically so we dont have 2 toggle buttons", "when i click annotate we add agentation in ACTIVE mode so user doesn't need to click on it again". Annotate starts off for every HTML file and stays on per file across restarts; Agentation is loaded into every HTML file hidden and idle, so Annotate switches it on and off without reloading the page; its floating toolbar is never drawn (the fork's `toolbar: "hidden"`), and its buttons are the Files header's (Pause, Layout, Hide marks, Copy, Send, Clear, Settings), driven through the controller the fork hands over; the marks, the hover outline, note popups and Layout's palette (top right) stay on the page. Turning Annotate off keeps the notes and hides their marks, and the notes are kept per file across reloads and restarts. This supersedes the 2026-09-24 default ("on html pages i want agentation injected") on the desktop, where Annotate used to start on with the toolbar open, and replaces the 2026-10-23 start-up click (issue #280): the fork mounts active (`defaultActive`).
+ * SEE-ALSO: apps/desktop/src/app/native_docs/annotate.rs (the header, the saved state), .dependencies/agentation (branch ghostex: `toolbar`, `defaultActive`, `theme`, `onReady`, `onStateChange`, `onAnnotationsChange`).
  */
-export function buildManageAgentationBootstrapScript(pageName?: string): string {
+export function buildManageAgentationBootstrapScript(pageName?: string, annotate?: ManageAnnotateBoot): string {
+  const boot = {
+    on: annotate?.on === true,
+    theme: annotate?.theme === 'light' ? 'light' : 'dark',
+    settings: annotate?.settings ?? null,
+    notes: Array.isArray(annotate?.notes) ? annotate.notes : null,
+    hotkey: annotate?.hotkey ?? null,
+  };
   return `
 export const rootId = "ghostex-agentation-root";
 export const directionStyleId = "ghostex-agentation-direction-style";
@@ -449,36 +590,16 @@ rootEl.id = rootId;
 rootEl.setAttribute("data-agentation-html-root", "true");
 rootEl.setAttribute("data-agentation-root", "true");
 (document.body || document.documentElement).appendChild(rootEl);
-// Annotate means "annotate now": open Agentation's collapsed toolbar as soon
-// as it renders (see CDXC:Docs 2026-10-23 in html-viewer.tsx).
-const startManageAgentationFeedbackMode = () => {
-  const startSelector = '[data-agentation-toolbar] button[aria-expanded="false"][aria-label="Start feedback mode"]';
-  let attempts = 0;
-  const tryStart = () => {
-    const startButton = document.querySelector("agentation-toolbar")?.shadowRoot?.querySelector(startSelector);
-    if (startButton) {
-      startButton.click();
-      return;
-    }
-    attempts += 1;
-    if (attempts < 100) {
-      setTimeout(tryStart, 50);
-    }
-  };
-  tryStart();
-};
+const boot = ${inlineScriptJson(boot)};
 try {
   // __ghostexAgentation comes from the bundled fork placed before this bootstrap.
   const lib = __ghostexAgentation;
   if (!lib?.createElement || !lib?.createRoot || !lib?.Agentation) {
     throw new Error("The bundled Agentation did not expose the expected mounting API.");
   }
-  // Agentation reads its settings from this key once, on mount, and merges them
-  // over its own defaults; it exposes no prop for them. Ghostex turns
-  // "Clear on copy/send" on once per origin and keeps the stamp inside the
-  // stored object, which Agentation preserves, so a later manual toggle stays
-  // in force. Same default as the Browser toolbar injection in
-  // apps/desktop/src/app/helpers/browser.rs.
+  // Agentation reads its settings and this page's notes from storage once, on mount. The
+  // sealed document's storage is an in-memory copy, so Files hands both in: the settings
+  // Ghostex keeps for every HTML file, and the notes it kept for this one.
   const settingsKey = "feedback-toolbar-settings";
   let settings = null;
   try {
@@ -489,24 +610,27 @@ try {
   if (!settings || typeof settings !== "object") {
     settings = {};
   }
+  // "Clear on copy/send" starts on, as in the Browser toolbar (apps/desktop/src/app/helpers/browser.rs).
   if (settings.ghostexDefaults !== 1) {
     settings.autoClearAfterCopy = true;
     settings.ghostexDefaults = 1;
-    try {
-      localStorage.setItem(settingsKey, JSON.stringify(settings));
-    } catch {
-      // A sealed document keeps no storage; the helper script's in-memory copy normally answers.
+  }
+  if (boot.settings && typeof boot.settings === "object") {
+    Object.assign(settings, boot.settings);
+  }
+  try {
+    localStorage.setItem(settingsKey, JSON.stringify(settings));
+    if (Array.isArray(boot.notes)) {
+      localStorage.setItem("feedback-annotations-" + location.pathname, JSON.stringify(boot.notes));
     }
+  } catch {
+    // A sealed document keeps no storage; the helper script's in-memory copy normally answers.
   }
   const root = lib.createRoot(rootEl);
   globalThis.__GHOSTEX_AGENTATION__ = { container: rootEl, root };
-  const pageName = ${JSON.stringify(pageName ?? '').replace(/</gu, '\\u003c')};
+  const pageName = ${inlineScriptJson(pageName ?? '')};
   ${MANAGE_PAGE_FEEDBACK_HEADER_SOURCE}
-  if (pageName && navigator.clipboard?.writeText) {
-    const clipboard = navigator.clipboard;
-    const writeText = clipboard.writeText.bind(clipboard);
-    clipboard.writeText = (text) => writeText(renamePageFeedbackHeader(text, location.pathname, pageName));
-  }
+  const tell = (message) => parent.postMessage(message, "*");
   // Send hands the notes and their screenshots to Files, which delivers them to the agent;
   // screenshots are named in the markdown until the app has saved them. The document has its
   // own sealed origin, so it asks Files by message and waits for the answer.
@@ -526,10 +650,19 @@ try {
     };
     const timer = setTimeout(() => finish("Files did not answer."), 30000);
     window.addEventListener("message", onAnswer);
-    parent.postMessage({ type: ${JSON.stringify(MANAGE_HTML_FRAME_SEND_ANNOTATION)}, id, markdown, screenshots }, "*");
+    tell({ type: ${JSON.stringify(MANAGE_HTML_FRAME_SEND_ANNOTATION)}, id, markdown, screenshots });
   });
-  root.render(lib.createElement(lib.Agentation, {
+  // The Files header's buttons, through the controller the fork hands over once mounted.
+  let controller = null;
+  const waiting = [];
+  const props = {
+    toolbar: "hidden",
+    defaultActive: boot.on,
+    theme: boot.theme,
+    copyToClipboard: false,
     screenshotReference: (annotation, index) => "[Image #" + index + "](" + screenshotPrefix + annotation.id + ")",
+    // The app writes the clipboard: after a click in the header this page has no focus.
+    onCopy: (output) => tell({ type: ${JSON.stringify(MANAGE_HTML_FRAME_ANNOTATE_COPY)}, markdown: renamePageFeedbackHeader(String(output ?? ""), location.pathname, pageName) }),
     onSubmit: (output, annotations) => {
       const named = renamePageFeedbackHeader(output, location.pathname, pageName);
       const screenshots = annotations
@@ -537,8 +670,58 @@ try {
         .map((annotation) => ({ id: String(annotation.id), png: annotation.screenshot }));
       return sendToFiles(named, screenshots);
     },
-  }));
-  startManageAgentationFeedbackMode();
+    onStateChange: (state) => tell({ type: ${JSON.stringify(MANAGE_HTML_FRAME_ANNOTATE_STATE)}, state }),
+    onAnnotationsChange: (notes) => tell({ type: ${JSON.stringify(MANAGE_HTML_FRAME_ANNOTATE_NOTES)}, notes }),
+    onReady: (ready) => {
+      controller = ready;
+      waiting.splice(0).forEach(run);
+    },
+  };
+  const render = () => root.render(lib.createElement(lib.Agentation, props));
+  const run = (message) => {
+    if (message.command === "theme") {
+      if (message.value === "dark" || message.value === "light") {
+        props.theme = message.value;
+        render();
+      }
+      return;
+    }
+    if (!controller) {
+      waiting.push(message);
+      return;
+    }
+    switch (message.command) {
+      case "setActive": controller.setActive(message.value === true); break;
+      case "toggleFreeze": controller.toggleFreeze(); break;
+      case "toggleLayout": controller.toggleLayout(); break;
+      case "setMarksVisible": controller.setMarksVisible(message.value === true); break;
+      case "copy": void controller.copy(); break;
+      case "send": void controller.send(); break;
+      case "clearAll": controller.clearAll(); break;
+      case "updateSettings":
+        if (message.value && typeof message.value === "object") controller.updateSettings(message.value);
+        break;
+    }
+  };
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (event.source !== parent || !message || message.type !== ${JSON.stringify(MANAGE_HTML_FRAME_ANNOTATE_COMMAND)} || typeof message.command !== "string") return;
+    run(message);
+  });
+  // The Annotate hotkey (rebindable in Settings > Hotkeys): this page has the keyboard while it
+  // is focused, so it hands the chord to Files itself, ahead of the page's own listeners.
+  const hotkey = boot.hotkey;
+  if (hotkey) {
+    window.addEventListener("keydown", (event) => {
+      const keyMatches = hotkey.code ? event.code === hotkey.code : String(event.key).toLowerCase() === hotkey.key;
+      if (!keyMatches || event.repeat || event.ctrlKey !== hotkey.ctrl || event.altKey !== hotkey.alt
+        || event.shiftKey !== hotkey.shift || event.metaKey !== hotkey.meta) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      tell({ type: ${JSON.stringify(MANAGE_HTML_FRAME_ANNOTATE_HOTKEY)} });
+    }, true);
+  }
+  render();
 } catch (error) {
   console.warn("[Ghostex Docs Agentation] page injection failed", {
     message: error instanceof Error ? error.message : String(error)

@@ -66,10 +66,6 @@ impl GhostexGpuiApp {
                         "resourcePath",
                         self.native_docs_resource_path(&document.path),
                     ),
-                    (
-                        "annotate",
-                        if document.html_annotate { "1" } else { "0" }.to_string(),
-                    ),
                     ("revision", document.embed_revision.to_string()),
                     ("media", media.to_string()),
                 ],
@@ -93,11 +89,8 @@ impl GhostexGpuiApp {
                 .active_document()
                 .filter(|document| document.kind.uses_browser_area())
                 .map(|document| {
-                    (
-                        document.path.clone(),
-                        document.html_annotate,
-                        document.embed_revision,
-                    )
+                    // Annotate is not part of it: the page switches it without reloading.
+                    (document.path.clone(), document.embed_revision)
                 }),
             self.native_docs_browser_area_covered(),
         );

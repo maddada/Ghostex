@@ -1195,6 +1195,15 @@ impl Render for GhostexGpuiApp {
                     cx,
                 );
             }))
+            .on_action(cx.listener(|this, _: &ToggleAnnotate, window, cx| {
+                if this.active_mode == TitlebarMode::Browser {
+                    this.run_browser_feedback_tool_from_toolbar(
+                        this.browser_tabs.focused_pane,
+                        window,
+                        cx,
+                    );
+                }
+            }))
             .on_action(cx.listener(|this, _: &RunBrowserFeedbackTool, window, cx| {
                 this.run_browser_feedback_tool_from_toolbar(
                     this.browser_tabs.focused_pane,

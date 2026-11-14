@@ -403,6 +403,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("terminalSelectAll", "cmd+a"),
     ("openBrowserHistory", "cmd+y"),
     ("reloadBrowserPage", "cmd+r"),
+    ("toggleAnnotate", "cmd+ctrl+a"),
     ("sleepFocusedSessionSecondKey", "alt+shift+s"),
     ("unfocusTerminal", "cmd+shift+m"),
     ("focusLastTerminal", "cmd+shift+m"),
@@ -687,6 +688,9 @@ pub(crate) fn gpui_configured_hotkey_key_in(
 pub(crate) fn gpui_normal_hotkey_context(action_id: &str) -> &'static str {
     match action_id {
         "openBrowserHistory" | "reloadBrowserPage" => BROWSER_KEY_CONTEXT,
+        // Files' HTML and Markdown files, and the Browser (CDXC:Docs 2026-11-14 DECISION in
+        // packages/settings-catalog/src/hotkey_definitions.rs).
+        "toggleAnnotate" => ANNOTATE_KEY_CONTEXT,
         _ => GPUI_OUTSIDE_TERMINAL_KEY_CONTEXT,
     }
 }
@@ -694,6 +698,11 @@ pub(crate) fn gpui_normal_hotkey_context(action_id: &str) -> &'static str {
 /// `!` + `terminal_element::TERMINAL_KEY_CONTEXT`. GPUI's `!` checks every context on the focus
 /// path, so a binding with it never fires while focus is anywhere inside a terminal.
 pub(crate) const GPUI_OUTSIDE_TERMINAL_KEY_CONTEXT: &str = "!GhostexGpuiTerminal";
+
+/// Where the Annotate hotkey applies: inside the Files view (its Markdown editor, or Files with an
+/// HTML file open) or the Browser, never in a terminal.
+pub(crate) const ANNOTATE_KEY_CONTEXT: &str =
+    "NativeDocs || (GhostexBrowser && !GhostexGpuiTerminal)";
 
 /// The normal binding's chord ([`gpui_configured_hotkey_key_in`]), `None` for a hotkey that has
 /// only a Terminal focused binding.

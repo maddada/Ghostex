@@ -58,7 +58,7 @@ describe('Agentation bootstrap', () => {
   test('carries the page name and stays valid module source', () => {
     const script = buildManageAgentationBootstrapScript('docs/a"b.html');
     expect(script).toContain('const pageName = "docs/a\\"b.html";');
-    expect(script).toContain('renamePageFeedbackHeader(text, location.pathname, pageName)');
+    expect(script).toContain('renamePageFeedbackHeader(String(output ?? ""), location.pathname, pageName)');
     expect(() => new Function(script.replace(/^export /gmu, ''))).not.toThrow();
   });
 

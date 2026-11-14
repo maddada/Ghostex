@@ -121,7 +121,8 @@ impl GhostexGpuiApp {
     ) {
         match event {
             cef::BrowserPageMetadataEvent::HistoryRequested
-            | cef::BrowserPageMetadataEvent::FindRequested => {}
+            | cef::BrowserPageMetadataEvent::FindRequested
+            | cef::BrowserPageMetadataEvent::AnnotateRequested => {}
             cef::BrowserPageMetadataEvent::AddressChanged(url) => {
                 let Some(parked_tabs) = self.parked_browser_tabs_by_project.get_mut(project_id)
                 else {
