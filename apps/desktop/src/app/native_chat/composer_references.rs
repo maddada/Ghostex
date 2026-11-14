@@ -153,14 +153,16 @@ pub(super) fn replacements(
         .collect()
 }
 
-/// A mention of another session in the chat box: the sent pill's look (`session_pill_link` in
-/// markdown_links.rs), a hairline rounded frame around the agent's logo in its colour and the title
-/// in the line's colour at medium weight, then its state dot and, for a session on another
-/// computer, that computer's icon (`session_card.rs`). Hovering it shows the session's hover card,
-/// which the card builder finds by the Global Ref the tooltip carries (CDXC:SessionChat 2026-11-13
-/// on `mention_card` in gx-chat-core, where the user's words live). The frame's padding and the
-/// marks' room are spaces around the core's pill text, because the input lays the replacement out
-/// as text.
+/// A mention of another session in the chat box: the sent mention's look (`session_pill_link` in
+/// markdown_links.rs), the agent's logo in its colour and the title in the line's colour and weight
+/// with a faint dotted underline that is full strength under the pointer, no frame; then its state
+/// dot while it works or needs you and, for a session on another computer, that computer's icon
+/// (`session_card.rs`). It stays one piece for the caret and Delete, as every replacement does.
+/// Hovering it shows the session's hover card, which the card builder finds by the Global Ref the
+/// tooltip carries. The user's decision is CDXC:SessionChat 2026-11-15 on `mention_card` in
+/// gx-chat-core; answering the follow-up, they asked for the chat box to drop its frame too. The
+/// marks' room is spaces after the core's pill text, because the input lays the replacement out as
+/// text.
 fn session_replacement(
     reference: &ComposerReference,
     icon: &str,
@@ -179,42 +181,31 @@ fn session_replacement(
     let marks = super::session_card::card(&reference.path)
         .map(|card| super::session_card::marks(&card, appearance))
         .unwrap_or_default();
-    // A no-break space is about a quarter of the 14px line: one before the core's room for the
-    // icon makes the frame's 6px left padding, and the room after the title covers the frame's
-    // right padding and each mark with its 4px gap.
-    let trailing_px = 4.0
-        + marks
-            .iter()
-            .map(|mark| match mark {
-                super::session_card::PillMark::Dot { size, .. }
-                | super::session_card::PillMark::Icon { size, .. } => 4.0 + f32::from(*size) / s,
-            })
-            .sum::<f32>();
+    // Each mark takes its size and a 4px gap after the core's thin space; a no-break space is about
+    // a quarter of the 14px line.
+    let trailing_px = marks
+        .iter()
+        .map(|mark| match mark {
+            super::session_card::PillMark::Dot { size, .. }
+            | super::session_card::PillMark::Icon { size, .. } => 4.0 + f32::from(*size) / s,
+        })
+        .sum::<f32>();
     let trailing = "\u{a0}".repeat((trailing_px / 3.6).ceil() as usize);
-    // The hair space after the core's room for the icon opens the gap to the sent pill's 4px.
-    let text = format!(
-        "\u{a0}{}{trailing}",
-        reference.pill.replacen('\u{2009}', "\u{2009}\u{200a}", 1)
-    );
+    let text = format!("{}{trailing}", reference.pill);
     InlineReplacement::new(reference.range.clone(), text)
         .color(appearance.foreground)
         .icon(
             icon.to_string(),
             gpui::px(SESSION_ICON_PX * s),
-            gpui::px(6.0 * s),
+            gpui::px(0.0),
         )
         .icon_color(icon_color)
-        .font_weight(gpui::FontWeight::MEDIUM)
-        .frame(gpui_component::input::InlineReplacementFrame {
-            border_color: appearance.foreground.opacity(0.14),
-            border_width: gpui::px(1.0),
-            background: Some(appearance.foreground.opacity(0.03)),
-            hover_background: Some(appearance.foreground.opacity(0.06)),
-            radius: gpui::px(999.0),
-            inset_y: gpui::px(1.5 * s),
-            padding_right: gpui::px(6.0 * s),
-            gap: gpui::px(4.0 * s),
-        })
+        // The core's room for the logo (four no-break spaces and a thin space) ends about 5px past
+        // it, where the title and its underline start.
+        .underline(super::inter_agent_message::session_name_input_underline(
+            SESSION_ICON_PX + 5.0,
+            s,
+        ))
         .trailing(
             marks
                 .into_iter()

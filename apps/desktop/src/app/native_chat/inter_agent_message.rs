@@ -116,6 +116,20 @@ pub(super) fn session_name_chip_underline(
     }
 }
 
+/// The same dotted line under a session named in the chat box, which gpui-component's input draws
+/// under the replacement's text from `start` (`composer_references.rs` `session_replacement`).
+pub(super) fn session_name_input_underline(
+    start: f32,
+    scale: f32,
+) -> gpui_component::input::InlineReplacementUnderline {
+    gpui_component::input::InlineReplacementUnderline {
+        rest_opacity: NAME_UNDERLINE_REST,
+        dot: px(NAME_UNDERLINE_DOT * scale),
+        period: px(NAME_UNDERLINE_PERIOD * scale),
+        start: px(start * scale),
+    }
+}
+
 /// The dotted line under a clickable session name, as a child of the element the click is on, which
 /// must have a `.hover()` style: that is what redraws the row when the pointer crosses it. `left`
 /// and `right` are how far the name sits inside that element.

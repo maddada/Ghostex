@@ -3752,8 +3752,8 @@ current title with a faint dotted underline, which grows stronger under the
 pointer, and a dot while the session is busy (amber while it works, red when it
 needs you; none when it is idle or asleep); a session on another computer also
 shows that computer's icon. The "Message from" and "Message to" lines name their
-sessions the same way. In the chat box a mention is a framed pill (a tinted run
-of text on the phone). Hover a mention (hold it on the phone) to see a card with
+sessions the same way, and so does the chat box while you write, where a mention
+stays one piece for the cursor and Delete. Hover a mention (hold it on the phone) to see a card with
 the session's state, agent, project and computer. A mention whose session is
 gone is greyed out and opens nothing. One command that sends the same
 message to several sessions is a single "Message to 2 sessions" line that lists
