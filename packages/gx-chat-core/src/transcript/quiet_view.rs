@@ -241,6 +241,176 @@ pub struct QuietStretch {
     /// of the opened line instead of under the reply before it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cards: Vec<String>,
+    /// How the finished turns the line holds draw once it is open ([`QuietTurnLook`]); empty when
+    /// they draw as in the full view.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub turns: Vec<QuietTurnLook>,
+    /// The reads opening the line sends (`{type: 'loadWork', id, work}` each): the rows still on
+    /// the server of the turns it draws straight on its rail (`QuietTurnLook::flat`), which have
+    /// no card or line of their own to open.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loads: Vec<QuietLoad>,
+}
+
+/// One read of a turn's rows still on the server: `id` is the owner a finished turn's card reads
+/// it by (the turn's id) or, for a Reduced line's turn, its section's prompt (`startId`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct QuietLoad {
+    pub id: String,
+    pub work: Value,
+}
+
+/// How one finished turn's row (`completed-work`, or a Reduced `grouped-work` line) draws on an
+/// opened line's rail.
+///
+/// CDXC:SessionChat 2026-11-14 DECISION:
+/// The user, of an opened Quiet View line "Worked for 48s" whose only row was the turn's own "Worked for 48s · 4 tool calls" card: "I don't like seeing worked for 48 twice". From the options page (docs/2026-11-14/worked-for-twice/page.html) he picked Q16 C, "the card inside drops its time": when the line names the turn's time (one finished turn, no reports), the turn's card inside is titled by its calls ("4 tool calls", `title`) and that count leaves its pills; a Reduced line inside says "4 tool calls · …" the same way. And Q17 B, "all calls on the rail, a small mark between turns": when a line holds two or more finished turns, no turn draws its card or Reduced line; their calls sit straight on the line's rail, with a small "Then · 22s" mark (`marks`) where the agent picked up again. The full view is unchanged. The desktop, the web build and the phone draw the same.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuietTurnLook {
+    /// The row, an index into the transcript list.
+    pub row: usize,
+    /// The card's (or Reduced line's) title in place of "Worked for 48s": "4 tool calls".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
+    /// The `kind` of the stat `title` names, which the pills then leave out.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title_kind: String,
+    /// The row draws its calls straight on the rail, with no card or line of its own; opening the
+    /// Quiet View line reads back its rows still on the server.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub flat: bool,
+    /// The marks before each turn that is not the line's first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<QuietTurnMark>,
+}
+
+/// "Then · 22s" before the turn whose rows start at `at` in the row's `work` (0 for a
+/// `completed-work` row).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuietTurnMark {
+    pub at: usize,
+    pub text: String,
+}
+
+/// A finished turn row the lines may hold: its index, the title its calls give it, and each turn
+/// it holds as (where its rows start in `work`, its own label).
+struct TurnRow {
+    row: usize,
+    title: Option<(String, String)>,
+    turns: Vec<(usize, String)>,
+    /// Its rows still on the server, as opening its card or line would read them.
+    loads: Vec<QuietLoad>,
+}
+
+impl TurnRow {
+    fn of(row: usize, item: &TranscriptItem) -> Option<Self> {
+        let section = |deferred: &Option<Value>| deferred.clone().filter(Value::is_object);
+        let (stats, turns, loads) = match item {
+            TranscriptItem::CompletedWork {
+                id,
+                label,
+                stats,
+                deferred,
+                ..
+            } => (
+                stats,
+                vec![(0, label.clone())],
+                section(deferred)
+                    .map(|work| QuietLoad {
+                        id: id.clone(),
+                        work,
+                    })
+                    .into_iter()
+                    .collect(),
+            ),
+            TranscriptItem::GroupedWork { stats, turns, .. } => (
+                stats,
+                turns
+                    .iter()
+                    .map(|turn| (turn.work_start, turn.label.clone()))
+                    .collect(),
+                turns
+                    .iter()
+                    .filter_map(|turn| {
+                        let work = section(&turn.deferred)?;
+                        let id = work["startId"].as_str().unwrap_or(&turn.id).to_string();
+                        Some(QuietLoad { id, work })
+                    })
+                    .collect(),
+            ),
+            _ => return None,
+        };
+        let kind = |stat: &Value| stat["kind"].as_str().unwrap_or_default().to_string();
+        // The tool calls name the turn; failing those, the first count that is not the files
+        // (a Reduced line says its files after the counts, with their line counts).
+        let title = stats
+            .iter()
+            .find(|stat| stat["kind"] == "tools")
+            .or_else(|| stats.iter().find(|stat| stat["kind"] != "files"))
+            .and_then(|stat| Some((stat["label"].as_str()?.to_string(), kind(stat))));
+        Some(Self {
+            row,
+            title,
+            turns,
+            loads,
+        })
+    }
+}
+
+/// The looks of the finished turns `line` holds (see [`QuietTurnLook`]) and the reads opening it
+/// sends. `names_time`: the line's open header is the turn's own "Worked for 48s" or "Previous
+/// turn".
+fn turn_looks(line: &mut QuietStretch, rows: &[TurnRow], names_time: bool) {
+    let from = rows.partition_point(|turn| turn.row < line.start);
+    let to = rows.partition_point(|turn| turn.row < line.end);
+    let held = &rows[from..to];
+    let count: usize = held.iter().map(|turn| turn.turns.len()).sum();
+    if count >= 2 {
+        // One read per section: several wake-up turns can share their prompt's section.
+        for load in held.iter().flat_map(|turn| &turn.loads) {
+            if !line.loads.iter().any(|seen| seen.work == load.work) {
+                line.loads.push(load.clone());
+            }
+        }
+        let mut first = true;
+        line.turns = held
+            .iter()
+            .map(|turn| QuietTurnLook {
+                row: turn.row,
+                flat: true,
+                marks: turn
+                    .turns
+                    .iter()
+                    .filter(|_| !std::mem::take(&mut first))
+                    .map(|(at, label)| QuietTurnMark {
+                        at: *at,
+                        text: match crate::transcript::grouped_work::short_time(label) {
+                            Some(time) => format!("Then \u{b7} {time}"),
+                            None => "Then".to_string(),
+                        },
+                    })
+                    .collect(),
+                ..QuietTurnLook::default()
+            })
+            .collect();
+        return;
+    }
+    line.turns = match held {
+        [turn] if names_time => turn
+            .title
+            .as_ref()
+            .map(|(title, kind)| QuietTurnLook {
+                row: turn.row,
+                title: title.clone(),
+                title_kind: kind.clone(),
+                ..QuietTurnLook::default()
+            })
+            .into_iter()
+            .collect(),
+        _ => Vec::new(),
+    };
 }
 
 /// What of a stretch's last row stays in view: a finished turn's (or each merged turn's) reply,
@@ -847,8 +1017,10 @@ fn stretches<'a>(
     // The row each reply id is drawn in.
     let mut replies: Vec<(String, usize)> = Vec::new();
     let mut length = 0usize;
+    let mut turn_rows: Vec<TurnRow> = Vec::new();
     for (at, item) in items.enumerate() {
         length = at + 1;
+        turn_rows.extend(TurnRow::of(at, item));
         for id in reply_ids(item) {
             replies.push((id, at));
         }
@@ -933,6 +1105,8 @@ fn stretches<'a>(
         .enumerate()
         .map(|(at, (mut line, counts))| {
             line.open = inputs.all_open || (inputs.expand_last && Some(at) == newest);
+            let names_time = !line.running && counts.reports == 0 && counts.worked.is_some();
+            turn_looks(&mut line, &turn_rows, names_time);
             words(&mut line, counts, inputs, context);
             line
         })

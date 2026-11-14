@@ -32,7 +32,7 @@ hotkeys Every shortcut and its default binding
 - **Sidebar** (left by default): projects, their sessions, tags and filters,
   remote machines, and the More Options menu under the three-lines button at
   the top right (Sort & Filter, Collapse All, Commands, Agents Hub, All Automations,
-  Connect a Device, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
+  Connect a Phone, Connect a Computer, Keep Awake, then Ask Ghostex AI, Join Discord and Send Bug / Feedback, then the Tools and Ghostex submenus and
   Settings; Ghostex holds New Window, Check for Updates, Restart Ghostex, Quit
   Ghostex, and Quit Ghostex & BG Service, which also stops the background
   service and every session; Tools holds Search by Prompt, Import

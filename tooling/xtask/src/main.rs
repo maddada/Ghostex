@@ -8,6 +8,7 @@ mod gxserver;
 mod help;
 mod http;
 mod isolated;
+mod linux_desktop;
 mod mobile_chat_wasm;
 mod rebuild;
 mod remote_build;
@@ -28,7 +29,7 @@ Desktop app
                           --debug-info builds with symbols for crash debugging, off by default;
                           --install-only installs the already staged build on Linux and Windows)
   rebuild [--dry-run] [--allow-dirty] [--no-health-check] [--wait[=<minutes>]] [--log-dir <dir>] [--optimized]
-                          macOS, for a coordinator's background shell: start from committed code only, into a numbered
+                          macOS and Linux, for a coordinator's background shell: start from committed code only, into a numbered
                           log (~/.local/share/agent-work/Ghostex/rebuilds), retrying kache's known flake once, then
                           print a short summary (result, time, gxserver and app pids, a health check a minute later, log, last errors)
   remote-start [--repo <owner/name>] [--build-only]
@@ -59,7 +60,7 @@ Web build
 
 Checks and generators
   typecheck               root gate (storage lint, Help files, tsc, release scripts, formatting)
-  format                  format every app-owned file (cargo fmt per crate, prettier; tooling/format/scope.json)
+  format                  format every app-owned file (cargo fmt per crate, oxfmt; tooling/format/scope.json)
   format-check            fail when an app-owned file is not formatted (part of typecheck)
   desktop-typecheck       apps/desktop/tsconfig.json (CEF entry modules, Files embed page)
   test [<vitest arguments>]

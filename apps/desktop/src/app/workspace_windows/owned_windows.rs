@@ -156,12 +156,58 @@ mod x11 {
             .unwrap_or_default()
     }
 
+    /// Where a following window should be: where Ghostex last moved it, and where it was just before.
+    #[derive(Clone, Copy)]
+    struct Followed {
+        placed: (i32, i32),
+        before: (i32, i32),
+    }
+
+    /// The windows that follow their owner, and the ones the user moved away, which no longer do.
+    #[derive(Default)]
+    struct FollowState {
+        followed: std::collections::HashMap<Window, Followed>,
+        let_go: std::collections::HashSet<Window>,
+    }
+
+    fn follow_state() -> &'static std::sync::Mutex<FollowState> {
+        static STATE: OnceLock<std::sync::Mutex<FollowState>> = OnceLock::new();
+        STATE.get_or_init(Default::default)
+    }
+
+    /// A window manager can put a moved window a pixel off where it was asked to go.
+    const PLACEMENT_SLACK: i32 = 4;
+
+    fn near(a: (i32, i32), b: (i32, i32)) -> bool {
+        (a.0 - b.0).abs() <= PLACEMENT_SLACK && (a.1 - b.1).abs() <= PLACEMENT_SLACK
+    }
+
+    fn frame(connection: &RustConnection, window: Window) -> Option<(i32, i32, i32, i32)> {
+        let (x, y) = client_origin(window)?;
+        let geometry = connection.get_geometry(window).ok()?.reply().ok()?;
+        Some((x, y, geometry.width as i32, geometry.height as i32))
+    }
+
+    fn overlaps(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> bool {
+        a.0 < b.0 + b.2 && b.0 < a.0 + a.2 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3
+    }
+
     /// Moves every managed window of this process whose WM_TRANSIENT_FOR chain reaches `owner` by
-    /// `(dx, dy)` physical pixels, keeping its size and stacking.
+    /// `(dx, dy)` physical pixels, keeping its size and stacking, unless the user moved it away.
+    ///
+    /// CDXC:AppModal 2026-11-14 DECISION:
+    /// User (Omarchy audit Q9): "dialogs follow Ghostex until the user drags one, then stay where put." On Hyprland any floating window can be dragged, so a dialog pulled off Ghostex kept jumping along whenever Ghostex moved. A window Ghostex has moved before is let go once it is no longer where Ghostex put it; one Ghostex has not moved yet is let go when it no longer overlaps Ghostex. A let-go window stays put until it closes.
     pub(super) fn shift_transient_windows(owner: Window, dx: i32, dy: i32) {
         let Some((connection, root)) = connection() else {
             return;
         };
+        let Ok(mut state) = follow_state().lock() else {
+            return;
+        };
+        // Where the owner was before this move, to tell which windows were still on it.
+        let owner_before = frame(connection, owner).map(|(x, y, width, height)| {
+            (x - dx, y - dy, width, height)
+        });
         let pid = std::process::id();
         let transient_for = |window: Window| {
             window_property(connection, window, b"WM_TRANSIENT_FOR")
@@ -182,18 +228,41 @@ mod x11 {
             }
             false
         };
-        for window in window_property(connection, *root, b"_NET_CLIENT_LIST") {
+        let clients = window_property(connection, *root, b"_NET_CLIENT_LIST");
+        // Window ids are reused once a window closes.
+        state.followed.retain(|window, _| clients.contains(window));
+        state.let_go.retain(|window| clients.contains(window));
+        for window in clients {
             if window == owner
+                || state.let_go.contains(&window)
                 || window_property(connection, window, b"_NET_WM_PID").first() != Some(&pid)
                 || !owned_by_owner(window)
             {
                 continue;
             }
-            let Some((x, y)) = client_origin(window) else {
+            let Some((x, y, width, height)) = frame(connection, window) else {
                 continue;
             };
-            let _ =
-                connection.configure_window(window, &ConfigureWindowAux::new().x(x + dx).y(y + dy));
+            let from = match state.followed.get(&window) {
+                // Still where Ghostex put it, or not there yet during a quick drag of the owner.
+                Some(followed) if near((x, y), followed.placed) => followed.placed,
+                Some(followed) if near((x, y), followed.before) => followed.before,
+                Some(_) => {
+                    state.let_go.insert(window);
+                    continue;
+                }
+                None if owner_before
+                    .is_some_and(|owner_before| !overlaps((x, y, width, height), owner_before)) =>
+                {
+                    state.let_go.insert(window);
+                    continue;
+                }
+                None => (x, y),
+            };
+            let placed = (from.0 + dx, from.1 + dy);
+            let _ = connection
+                .configure_window(window, &ConfigureWindowAux::new().x(placed.0).y(placed.1));
+            state.followed.insert(window, Followed { placed, before: from });
         }
         let _ = connection.flush();
     }

@@ -590,6 +590,44 @@ pub(super) struct EasyConnectCode {
     pub(super) secret: Option<String>,
 }
 
+/// The computer an Easy Connect code names (name, address, user, SSH port), for the Connect a
+/// computer window; `None` for anything but a computer's code with its one-time secret.
+pub(crate) fn easy_connect_join_target(input: &str) -> Option<(String, String, String, u16)> {
+    match read_pairing_code(input)? {
+        PairingCode::EasyConnect(EasyConnectCode {
+            address,
+            name,
+            user,
+            ssh_port,
+            secret: Some(_),
+            ..
+        }) => Some((name, address, user, u16::try_from(ssh_port).unwrap_or(22))),
+        _ => None,
+    }
+}
+
+/// Connect both ways: this computer's own code as `/api/connectBackToComputer` takes it.
+pub(crate) fn connect_back_code_params(input: &str) -> Option<Value> {
+    match read_pairing_code(input)? {
+        PairingCode::EasyConnect(EasyConnectCode {
+            address,
+            name,
+            user,
+            ssh_port,
+            port,
+            secret: Some(secret),
+        }) => Some(serde_json::json!({
+            "address": address,
+            "port": port,
+            "secret": secret,
+            "name": name,
+            "user": user,
+            "sshPort": ssh_port,
+        })),
+        _ => None,
+    }
+}
+
 /// What pairing this computer with the one behind an Easy Connect code needs (`/api/pairComputer`),
 /// or `None` when the code has no one-time secret (CDXC:RemotePairing 2026-11-08 in
 /// server/src/remote_access/computer_pairing.rs).

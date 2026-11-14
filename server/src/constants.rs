@@ -27,6 +27,11 @@ general 1 MiB cap, so screenshots over about 750 KB in total failed with 413
 (GitHub issue #253). Supersedes the 2026-10-04 note that named only sendFeedback.
 */
 pub const GXSERVER_FEEDBACK_BODY_LIMIT_BYTES: usize = 36 * 1024 * 1024;
+/*
+CDXC:ServerApi 2026-11-13 WHY:
+Phones send request bodies through an SSH port forward, and a forward can stall mid-body: gxserver then waited until the socket closed (up to 326 s in production logs) before answering incompleteRequest. A body that goes this long without a single byte ends as incompleteRequest. The timer restarts with every piece that arrives and there is no total limit, because a total timeout would reject a healthy slow upload (a dictation or a screenshot over a weak link) that keeps sending.
+*/
+pub const GXSERVER_BODY_IDLE_TIMEOUT_SECS: u64 = 20;
 /// The app version (`package.json`), not the placeholder crate version; see `server/build.rs`.
 pub const GXSERVER_VERSION: &str = env!("GHOSTEX_BUILD_MARKETING_VERSION");
 

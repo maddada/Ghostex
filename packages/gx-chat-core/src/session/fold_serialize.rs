@@ -322,6 +322,7 @@ pub(crate) mod tests {
             unavailable_modes: Some(vec![UnavailableMode {
                 value: "plan".into(),
                 why: tag.into(),
+                restart: None,
             }]),
             removed_question_ids: Some(vec![format!("removed {tag}")]),
             resource_index: Some(vec![json!(tag)].into()),

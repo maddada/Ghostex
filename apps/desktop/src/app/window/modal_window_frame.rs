@@ -215,6 +215,14 @@ fn open_corner_close_window(
     if cfg!(ghostex_web) {
         return None;
     }
+    /*
+    CDXC:AppModal 2026-11-14 DECISION:
+    User: Ghostex should not draw the floating close (x) button on Omarchy at all: Hyprland draws window buttons in floating mode, and in tiled mode people close windows with the hotkey. On Hyprland an app modal closes with its titlebar's X, the close hotkey, Escape, its own buttons or a click away; other Linux desktops keep the X.
+    */
+    #[cfg(all(target_os = "linux", not(ghostex_web)))]
+    if crate::linux_hyprland::running_on_hyprland() {
+        return None;
+    }
     let Ok((modal_bounds, display_bounds, owner, modal_native)) =
         modal.update(cx, |_, window, cx| {
             (

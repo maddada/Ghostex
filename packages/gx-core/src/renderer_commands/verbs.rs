@@ -124,6 +124,15 @@ pub enum RendererVerb {
         patch: Map<String, Value>,
         keys: Vec<String>,
     },
+    /// `addRemoteMachine`: gxserver paired this computer with another through Easy Connect for
+    /// Connect both ways (server/src/remote_access/connect_back.rs); the app adds that computer
+    /// to its saved computers, or updates the one with the same address.
+    AddRemoteMachine {
+        name: String,
+        easy_connect_address: String,
+        ssh_user: String,
+        ssh_port: u16,
+    },
     /// `ghostex settings open`.
     OpenSettings {
         tab: String,
@@ -247,6 +256,28 @@ pub fn plan_renderer_command(
         "readResourcesSnapshot" => Ok(RendererVerb::ReadResourcesSnapshot),
         "readFocusedSession" => Ok(RendererVerb::ReadFocusedSession),
         "updateSettingsPatch" => settings_patch(payload),
+        "addRemoteMachine" => {
+            let name = trimmed(payload, "name");
+            let address = trimmed(payload, "easyConnectAddress");
+            let user = trimmed(payload, "sshUser");
+            let port = payload
+                .get("sshPort")
+                .and_then(Value::as_u64)
+                .and_then(|port| u16::try_from(port).ok())
+                .filter(|port| *port > 0)
+                .unwrap_or(22);
+            match (name, address, user) {
+                (Some(name), Some(easy_connect_address), Some(ssh_user)) => {
+                    Ok(RendererVerb::AddRemoteMachine {
+                        name,
+                        easy_connect_address,
+                        ssh_user,
+                        ssh_port: port,
+                    })
+                }
+                _ => Err(RendererCommandError::Unsupported),
+            }
+        }
         "openSettings" => {
             let tab = trimmed(payload, "tab").unwrap_or_else(|| "settings".to_string());
             if !SETTINGS_MODAL_TABS.contains(&tab.as_str()) {

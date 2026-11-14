@@ -1,4 +1,6 @@
-//! Tags Ghostex's windows as terminals on Hyprland while Ghostex runs.
+//! Ghostex's Hyprland integration while Ghostex runs: tags its windows as terminals, keeps its
+//! dialogs and menus floating and undecorated (`owned_window_rule_requests`), and reads whether
+//! Hyprland blurs see-through windows (`blurs_windows`).
 //!
 //! CDXC:Clipboard 2026-10-28 WHY:
 //! Omarchy's universal copy and paste (Super+C / Super+V) send Ctrl+Insert / Shift+Insert to windows
@@ -7,16 +9,22 @@
 //! ("we add the rules for users on launch just for ghostex"): a window rule for Ghostex's own class
 //! only, added at runtime over Hyprland's request socket, so no config file of the user's is
 //! rewritten and the rule is gone once Hyprland reloads without Ghostex. A config reload drops
-//! runtime rules, so the rule is added again on each `configreloaded` event. Text fields and the
+//! runtime rules, so the rules are added again (and the blur read again) on each `configreloaded`
+//! event. Text fields and the
 //! terminal take Ctrl+Insert / Shift+Insert (main.rs, terminal_element.rs, zorite-editor), so a
 //! tagged Ghostex copies and pastes everywhere. Hyprland 0.56 reads its config as Lua and takes the
 //! rule through `eval`; older versions take `keyword windowrule` (0.53 syntax) or `windowrulev2`.
-//! Nothing here runs outside Hyprland, and it never delays or fails the launch.
+//! Nothing here runs outside Hyprland, and it never fails the launch; the one blur read at start
+//! waits at most `REQUEST_TIMEOUT` on a socket that does not answer.
 
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
+
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 
 /// Ghostex's X11 class (`gpui_platform_window_app_id`).
 const WINDOW_CLASS: &str = "ghostex";
@@ -32,13 +40,116 @@ fn rule_requests() -> [String; 3] {
     ]
 }
 
-/// Starts tagging on Hyprland; does nothing anywhere else.
-pub(crate) fn start_terminal_tag() {
+/// Ghostex's own windows that are not a main window (each workspace window and the detached board
+/// open titled `Ghostex` and `Beads…`): the app modals, onboarding, Ghostex pages, the chat's menus
+/// and dialogs. Matched on the title the window opened with, which these never change.
+const OWNED_WINDOW_MATCH_LUA: &str =
+    r#"class = "^(ghostex)$", initial_title = "negative:^(Ghostex|Beads.*)$""#;
+const OWNED_WINDOW_MATCH_V2: &str = "class:^(ghostex)$, initialTitle:negative:^(Ghostex|Beads.*)$";
+
+/// The requests that keep Ghostex's dialogs and menus floating and undecorated, newest syntax
+/// first, as `rule_requests`.
+///
+/// CDXC:PlatformSupport 2026-11-14 DECISION:
+/// User (Omarchy audit Q10): Ghostex adds its own Hyprland runtime rules for its menus and dialogs, with no Omarchy titlebar or border, like the terminal tag it already adds; and "windows that SHOULD float (Settings, onboarding, dialogs, pages and the like) must open floating even on Omarchy's tiled and scrolling workspaces, not only on floating ones". Every Ghostex window but a main window or the detached board floats with no border (`border_size = 0`; 0.56 has no `no_border`) and no shadow; the titlebar Omarchy's floating workspaces add (its hyprbars plugin) is turned off in a request of its own, which a Hyprland without the plugin refuses.
+fn owned_window_rule_requests() -> [String; 2] {
+    [
+        format!(
+            "eval hl.window_rule({{ match = {{ {OWNED_WINDOW_MATCH_LUA} }}, float = true, border_size = 0, no_shadow = true }})"
+        ),
+        format!(
+            "[[BATCH]]keyword windowrulev2 float, {OWNED_WINDOW_MATCH_V2}; keyword windowrulev2 noborder, {OWNED_WINDOW_MATCH_V2}; keyword windowrulev2 noshadow, {OWNED_WINDOW_MATCH_V2}"
+        ),
+    ]
+}
+
+/// Ghostex's menus, popovers and dropdowns: its own windows that open without a title (the app
+/// modals, onboarding and the like open titled).
+const MENU_WINDOW_MATCH_LUA: &str = r#"class = "^(ghostex)$", initial_title = "^$""#;
+const MENU_WINDOW_MATCH_V2: &str = "class:^(ghostex)$, initialTitle:^$";
+
+/// CDXC:PlatformSupport 2026-11-14 DECISION:
+/// User, of a chat message's ⋯ menu opening with Omarchy's titlebar, a grey border and Hyprland's open animation: "Menus, popovers and dropdowns must open with no animation (Hyprland's noanim or equivalent), no titlebar buttons and no border. Dialogs that should be windows keep what you decide in Q10, but ... avoid the top-right buttons there too if possible." Menus get `no_anim` on top of the rules every Ghostex dialog and menu gets (no titlebar, which carries the buttons, no border); dialogs keep Hyprland's animation.
+fn menu_window_rule_requests() -> [String; 2] {
+    [
+        format!("eval hl.window_rule({{ match = {{ {MENU_WINDOW_MATCH_LUA} }}, no_anim = true }})"),
+        format!("keyword windowrulev2 noanim, {MENU_WINDOW_MATCH_V2}"),
+    ]
+}
+
+fn owned_window_titlebar_requests() -> [String; 2] {
+    [
+        format!(
+            r#"eval hl.window_rule({{ match = {{ {OWNED_WINDOW_MATCH_LUA} }}, ["hyprbars:no_bar"] = true }})"#
+        ),
+        format!("keyword windowrulev2 plugin:hyprbars:nobar, {OWNED_WINDOW_MATCH_V2}"),
+    ]
+}
+
+/// Whether Hyprland blurs what is behind a see-through window (`decoration:blur:enabled`): 0
+/// not asked yet, 1 off, 2 on.
+static BLUR: AtomicU8 = AtomicU8::new(0);
+static BLUR_WATCHERS: Mutex<Vec<UnboundedSender<()>>> = Mutex::new(Vec::new());
+
+/// Whether this Hyprland blurs behind see-through windows, `None` outside Hyprland or before it
+/// answered.
+///
+/// CDXC:Theming 2026-11-14 SEE-ALSO: app/helpers/window_glass.rs (`desktop_withholds_blur`) paints the window opaque while this is `Some(false)`.
+pub(crate) fn blurs_windows() -> Option<bool> {
+    match BLUR.load(Ordering::Relaxed) {
+        1 => Some(false),
+        2 => Some(true),
+        _ => None,
+    }
+}
+
+/// A message each time `blurs_windows` changes (Omarchy's Glassy Windows reloads the config).
+pub(crate) fn watch_blur() -> UnboundedReceiver<()> {
+    let (sender, receiver) = futures::channel::mpsc::unbounded();
+    if let Ok(mut watchers) = BLUR_WATCHERS.lock() {
+        watchers.push(sender);
+    }
+    receiver
+}
+
+fn read_blur(directory: &PathBuf) {
+    let Ok(answer) = send_request(directory, "j/getoption decoration:blur:enabled") else {
+        return;
+    };
+    let Some(enabled) = parse_blur_answer(&answer) else {
+        return;
+    };
+    let value = if enabled { 2 } else { 1 };
+    if BLUR.swap(value, Ordering::Relaxed) != value
+        && let Ok(mut watchers) = BLUR_WATCHERS.lock()
+    {
+        watchers.retain(|watcher| watcher.unbounded_send(()).is_ok());
+    }
+}
+
+/// `{"option": …, "bool": false}` on Hyprland 0.56, `{"option": …, "int": 0}` before it.
+fn parse_blur_answer(answer: &str) -> Option<bool> {
+    let value: serde_json::Value = serde_json::from_str(answer.trim()).ok()?;
+    value
+        .get("bool")
+        .and_then(serde_json::Value::as_bool)
+        .or_else(|| {
+            value
+                .get("int")
+                .and_then(serde_json::Value::as_i64)
+                .map(|value| value != 0)
+        })
+}
+
+/// Starts Ghostex's Hyprland rules and watches its blur; does nothing anywhere else. The blur is
+/// read before this returns, so the first window opens with the right glass.
+pub(crate) fn start_hyprland_integration() {
     let Some(directory) = instance_directory() else {
         return;
     };
+    read_blur(&directory);
     let spawned = std::thread::Builder::new()
-        .name("hyprland-terminal-tag".to_string())
+        .name("hyprland-integration".to_string())
         .spawn(move || {
             apply_rule(&directory);
             watch_reloads(&directory);
@@ -49,6 +160,12 @@ pub(crate) fn start_terminal_tag() {
             &error.to_string(),
         );
     }
+}
+
+/// Whether Ghostex runs inside a Hyprland session (its request socket answers to the signature).
+pub(crate) fn running_on_hyprland() -> bool {
+    static ON_HYPRLAND: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON_HYPRLAND.get_or_init(|| instance_directory().is_some())
 }
 
 /// `$XDG_RUNTIME_DIR/hypr/<signature>` (Hyprland 0.40 and later), else `/tmp/hypr/<signature>`.
@@ -68,10 +185,28 @@ fn instance_directory() -> Option<PathBuf> {
 }
 
 fn apply_rule(directory: &PathBuf) {
+    apply_first_accepted(directory, &rule_requests(), "the terminal tag");
+    apply_first_accepted(directory, &owned_window_rule_requests(), "the dialog rules");
+    apply_first_accepted(directory, &menu_window_rule_requests(), "the menu rule");
+    // Refused where the titlebar plugin is not loaded, which needs no rule.
+    for request in owned_window_titlebar_requests() {
+        if send_request(directory, &request).is_ok_and(|answer| answer.trim() == "ok") {
+            break;
+        }
+    }
+}
+
+fn apply_first_accepted(directory: &PathBuf, requests: &[String], what: &str) {
     let mut answers = Vec::new();
-    for request in rule_requests() {
-        match send_request(directory, &request) {
-            Ok(answer) if answer.trim() == "ok" => return,
+    for request in requests {
+        match send_request(directory, request) {
+            // A batch answers one `ok` per command.
+            Ok(answer)
+                if !answer.trim().is_empty()
+                    && answer.split_whitespace().all(|word| word == "ok") =>
+            {
+                return;
+            }
             Ok(answer) => answers.push(answer.trim().chars().take(160).collect::<String>()),
             Err(error) => {
                 log_failure("Hyprland's socket did not answer", &error.to_string());
@@ -80,7 +215,7 @@ fn apply_rule(directory: &PathBuf) {
         }
     }
     log_failure(
-        "this Hyprland accepted no known window rule syntax",
+        &format!("this Hyprland accepted no known window rule syntax for {what}"),
         &answers.join(" | "),
     );
 }
@@ -106,6 +241,7 @@ fn watch_reloads(directory: &PathBuf) {
         };
         if is_config_reloaded_event(&line) {
             apply_rule(directory);
+            read_blur(directory);
         }
     }
 }

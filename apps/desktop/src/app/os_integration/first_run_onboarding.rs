@@ -667,7 +667,11 @@ impl GhostexGpuiApp {
 
     fn open_queued_add_computer(&mut self, cx: &mut gpui::Context<Self>) {
         set_add_computer_after_first_reply(false);
-        self.open_gpui_settings_remote_section(Some("addComputer"), cx);
+        // The Connect a computer window, with SSH details one link away in it.
+        self.open_app_modal_from_bridge(
+            serde_json::json!({ "type": "open", "modal": "remoteSetup", "device": "computer" }),
+            cx,
+        );
     }
 
     /// CDXC:Onboarding 2026-11-11 WHY:

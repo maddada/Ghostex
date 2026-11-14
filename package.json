@@ -45,6 +45,7 @@
     "@types/react-dom": "^19.3.0",
     "@typescript/typescript6": "~6.0.2",
     "esbuild": "0.28.2",
+    "oxfmt": "0.76.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"

@@ -156,6 +156,8 @@ pub(super) struct FallbackWatch {
     checked_at: Option<Instant>,
     /// When each session was first seen unseen, and why.
     unseen_since: HashMap<(String, String), (Unseen, Instant)>,
+    /// Codex sessions found waiting on a terminal dialog, so the wait is logged once.
+    waiting: HashSet<(String, String)>,
 }
 
 impl FallbackWatch {
@@ -244,6 +246,16 @@ impl FallbackWatch {
                 continue;
             };
             live.insert(pane.clone());
+            if why == Unseen::NoProgramStatus && codex_waits_on_screen(&name) {
+                // Codex reports its status once its session starts: the time starts when the
+                // user has answered the dialog.
+                self.unseen_since.remove(&pane);
+                if self.waiting.insert(pane.clone()) {
+                    log_waiting_on_dialog(state, agent, &pane);
+                }
+                continue;
+            }
+            self.waiting.remove(&pane);
             let since = match self.unseen_since.get(&pane) {
                 Some((known, since)) if *known == why => *since,
                 _ => {
@@ -279,6 +291,7 @@ impl FallbackWatch {
             }
         }
         self.unseen_since.retain(|pane, _| live.contains(pane));
+        self.waiting.retain(|pane| live.contains(pane));
         // A question about an agent its watcher sees again, or that stopped, goes away.
         let gone: Vec<(String, String)> = lock(&ASK_CARDS)
             .keys()
@@ -293,7 +306,6 @@ impl FallbackWatch {
             )();
         }
     }
-
 }
 
 /// Installs `agent`'s hook for the session (the user said Turn on hooks) and says so in its chat.
@@ -339,6 +351,42 @@ fn hook_noun(agent: &str) -> &'static str {
     } else {
         "hooks"
     }
+}
+
+/// CDXC:AgentHooks 2026-11-13 WHY:
+/// Codex writes no OSC 7501 status while a terminal dialog that comes before its session holds the screen ("Hooks need review", sign-in, sandbox setup, a migration choice), so a Codex waiting there for the user looked exactly like one that never reports its status. After the 11.6.0 update Codex stopped on "Hooks need review" in every new session (the hook-free cleanup had moved another tool's hooks off their trusted slots), and after `UNSEEN_FOR` this watch put Ghostex's Codex hook back for each of those sessions (it now asks in the chat first), though nothing was wrong with Codex's status: it was waiting for an answer the chat already asks for (session_chat_codex_blocking.rs, the "Codex is waiting for hook review" card). So the screen is read on every check while a Codex reports no status: while such a dialog holds it (the detector's dialog and its own key-hint footer) nothing is counted, and the 90 seconds start only once it is gone.
+/// SEE-ALSO: server/src/session_chat_codex_blocking.rs (`detect_codex_blocking_screen`, the dialogs it knows).
+fn codex_waits_on_screen(zmx_name: &str) -> bool {
+    // The styled capture, so the detector tells Codex's input box (and a draft that merely quotes
+    // a dialog's words) from a dialog, as the chat's own checks do.
+    crate::session_chat_composer::read_session_composer_verdict_capture(zmx_name, Some("codex"))
+        .is_some_and(|capture| {
+            crate::session_chat_codex_blocking::codex_dialog_holds_screen(&capture.text)
+        })
+}
+
+/// One routine line (Hook-free activity comparison) for a Codex whose missing status was a dialog
+/// waiting for the user, not a reason to fall back.
+fn log_waiting_on_dialog(state: &AppState, agent: &str, pane: &(String, String)) {
+    let _ = state.logger.log_routine(
+        DiagnosticLogScenario::HooklessActivityComparison,
+        GxserverLogInput {
+            level: LogLevel::Info,
+            event: "hooklessActivity.fallback".to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({
+                "agent": agent,
+                "projectId": pane.0,
+                "sessionId": pane.1,
+                "reason": Unseen::NoProgramStatus.code(),
+                "outcome": "waitingOnDialog",
+            })),
+        },
+    );
 }
 
 fn log_fallback(

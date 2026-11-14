@@ -58,6 +58,17 @@ struct OutgoingPairing {
     address: String,
     /// The other computer's gxserver port, recorded with it.
     gxserver_port: u16,
+    /// Connect both ways: once approved, this computer's desktop adds the other computer to its
+    /// sidebar (`connect_back.rs`); `None` when the desktop that asked saves it itself.
+    add_machine: Option<AddMachine>,
+}
+
+/// What this computer's desktop needs to add the other computer once the pairing is approved: the
+/// sign-in user and SSH port its code named.
+#[derive(Clone, Debug)]
+pub struct AddMachine {
+    pub user: String,
+    pub ssh_port: u16,
 }
 
 fn outgoing() -> &'static Mutex<HashMap<String, OutgoingPairing>> {
@@ -273,7 +284,11 @@ fn free_local_port() -> Result<u16> {
 
 /// `/api/pairComputer`: starts pairing this computer with the one behind `code`; answers
 /// `{ pendingId, words, computerName }` once that computer shows it as Pending.
-pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) -> Result<Value> {
+pub fn start_computer_pairing(
+    paths: &GxserverPaths,
+    code: ComputerPairingCode,
+    add_machine: Option<AddMachine>,
+) -> Result<Value> {
     let binary = crate::tailcat::resolve_client_tailcat_binary().ok_or_else(|| {
         anyhow!("Install the Easy Connect helper first (Settings > Remote > Easy Connect).")
     })?;
@@ -291,19 +306,21 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
     };
     let tunnel = start_tailcat_tunnel(&binary, &plan).map_err(|error| anyhow!("{error}"))?;
     let identity = super::probe_cache::cached_remote_access_identity()?;
-    let started = post(
-        local_port,
-        "/api/pairDevice",
-        json!({
-            "kind": "computer",
-            "secret": code.secret,
-            "deviceName": identity.computer_name,
-            "platform": platform_name(),
-            "tailcatClientKey": tailcat_client_key,
-            "deviceKey": { "algorithm": DEVICE_KEY_ALGORITHM, "publicKey": public_key },
-        }),
-        ASK_TIMEOUT,
-    );
+    let mut ask = json!({
+        "kind": "computer",
+        "secret": code.secret,
+        "deviceName": identity.computer_name,
+        "platform": platform_name(),
+        "tailcatClientKey": tailcat_client_key,
+        "deviceKey": { "algorithm": DEVICE_KEY_ALGORITHM, "publicKey": public_key },
+    });
+    // This computer's own sign-in key (CDXC:RemotePairing 2026-11-14 in computer_ssh_key.rs). Without
+    // one the pairing still works and this computer signs in with the saved password there.
+    match super::computer_ssh_key::load_or_create_computer_ssh_public_key(paths) {
+        Ok(line) => ask["sshPublicKey"] = json!(line),
+        Err(error) => eprintln!("[gxserver] computer pairing: no SSH key to send ({error:#})"),
+    }
+    let started = post(local_port, "/api/pairDevice", ask, ASK_TIMEOUT);
     let started = match started {
         Ok(started) => started,
         Err(error) => {
@@ -346,6 +363,7 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
                 computer_name: computer_name.clone(),
                 address: code.address.clone(),
                 gxserver_port: code.port,
+                add_machine,
             },
         );
     Ok(json!({ "pendingId": pending_id, "words": words, "computerName": computer_name }))
@@ -355,7 +373,7 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
 /// `{ status: "pending" | "approved" | "denied" | "expired", computerName }`. The tunnel closes
 /// once it is over.
 pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Result<Value> {
-    let (local_port, key_pkcs8, timestamp_ms, computer_name, address, gxserver_port) = {
+    let (local_port, key_pkcs8, timestamp_ms, computer_name, address, gxserver_port, add_machine) = {
         let mut map = outgoing()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -371,6 +389,7 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
             pairing.computer_name.clone(),
             pairing.address.clone(),
             pairing.gxserver_port,
+            pairing.add_machine.clone(),
         )
     };
     let signature = device_sign(
@@ -399,10 +418,26 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
         cancel_computer_pairing(pending_id);
     }
     let answer = answer?;
+    let ssh_key_installed = answer.get("sshKeyInstalled").and_then(Value::as_bool) == Some(true);
+    // The other computer for this computer's desktop to add (the HTTP route hands it over).
+    let add_machine = add_machine.filter(|_| status == "approved").map(|machine| {
+        json!({
+            "name": computer_name,
+            "easyConnectAddress": address,
+            "sshUser": answer.get("user").and_then(Value::as_str).unwrap_or(&machine.user),
+            "sshPort": machine.ssh_port,
+            "sshKeyInstalled": ssh_key_installed,
+        })
+    });
     Ok(json!({
         "status": status,
         "computerName": computer_name,
         "deviceId": answer.get("deviceId"),
+        // The other computer wrote this computer's key (Ghostex from 2026-11-14): it signs in with
+        // it, and needs no password there. Absent, it signs in with that computer's SSH login.
+        "sshKeyInstalled": ssh_key_installed,
+        "user": answer.get("user"),
+        "addMachine": add_machine,
     }))
 }
 

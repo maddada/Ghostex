@@ -518,13 +518,47 @@ impl Start {
         !writable(&target)
     }
 
+    /// Opens the installed app in the desktop session (crate::linux_desktop holds the why).
     fn launch_linux_app(&self) -> Res {
         let executable = self.installed_app_path.join("Ghostex");
-        let mut launch = Command::new(&executable);
+        let desktop = crate::linux_desktop::find().map_err(|why| {
+            format!(
+                "{} is installed at {}, but was not opened: {why}.",
+                self.app_name,
+                self.installed_app_path.display()
+            )
+        })?;
+        let mut launch = if desktop.via_systemd {
+            let mut scope = Command::new("systemd-run");
+            scope
+                .args(["--user", "--scope", "--collect", "--quiet"])
+                .arg(format!(
+                    "--unit=app-ghostex-{}-{}.scope",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|elapsed| elapsed.as_secs())
+                        .unwrap_or_default()
+                ))
+                .arg(format!("--description={}", self.app_name))
+                .arg("--")
+                .arg(&executable);
+            scope
+        } else {
+            Command::new(&executable)
+        };
+        launch.env_clear().envs(desktop.env);
+        if let Some(home) = util::env_trimmed("GHOSTEX_HOME") {
+            launch.env("GHOSTEX_HOME", home);
+        }
+        if let Some(config) = &self.isolated {
+            launch.envs(config.environment.iter().map(|(k, v)| (*k, v.as_str())));
+        }
         launch.current_dir(&self.app_path);
         if self.opts.profile {
             launch.arg("--profile");
         }
+        self.log.detail(&format!("Opening in {}.", desktop.summary));
         launch
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())

@@ -195,6 +195,13 @@ pub struct GroupedTurn {
     pub artifacts: Vec<ProjectedMessage>,
     #[serde(rename = "final", default, skip_serializing_if = "Option::is_none")]
     pub final_message: Option<ProjectedMessage>,
+    /// Where the turn's rows start in the line's `work`, which a Quiet View line marks
+    /// (`quiet_view::QuietTurnMark`). Never on the wire.
+    #[serde(skip)]
+    pub work_start: usize,
+    /// The turn's own "Worked for 22s", as its `completed-work` row had it. Never on the wire.
+    #[serde(skip)]
+    pub label: String,
 }
 
 /// A finished turn's numbers, kept beside its `completed-work` row so a Reduced line can add them

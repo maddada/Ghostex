@@ -953,7 +953,7 @@ Shortcuts: `focusNextSession`, `focusPreviousSession`, `focusNextPaneTab`,
 `focusPreviousPaneTab`; setting: `sidebarSessionCycleSkipsSleeping`.
 Top chrome holds tag filters, Spaces, and the sidebar's menu (More Options, the
 three-lines button at the top of the sidebar): Sort & Filter and Collapse All;
-then Commands, Agents Hub, All Automations, Connect a Device and Keep Awake
+then Commands, Agents Hub, All Automations, Connect a Phone, Connect a Computer and Keep Awake
 (while it is switched on); then, between lines, Ask Ghostex AI, Join Discord and
 Send Bug / Feedback; then two submenus: Tools (Search by Prompt, Import Sessions,
 Extensions, Dev servers, Resources) and, in the desktop app, Ghostex (New Window, Check
@@ -1783,7 +1783,8 @@ previous always type into the chat box, and so does every dictation in 11.3.0
 and earlier. Dictate records first and
 transcribes second: your voice is saved as a recording while you talk, and only
 after you stop is it turned into text by the engine you picked in Settings >
-Dictation: Hex, the recommended engine, or OpenAI's or xAI's speech-to-text
+Dictation: Hex, the recommended engine, Superwhisper on Linux, or OpenAI's or
+xAI's speech-to-text
 (both need that provider's API key, which stays on this computer). Hex 3 is the
 free local dictation app from anomalyco/hex (macOS on Apple silicon, Windows and
 Linux): it transcribes with its own models while it runs on that computer, with
@@ -1806,11 +1807,20 @@ recording is transcribed anyway (from the phone too). On Windows and Linux, turn
 on Open at login in Hex so dictation keeps working after a restart. When Hex
 isn't running, the row says "Hex isn't running" with Open Hex and Check again
 buttons.
+On a Linux computer with Superwhisper installed (Omarchy comes with it), the
+engine picker also offers Superwhisper: Ghostex hands each recording to
+Superwhisper on that computer and puts the text it returns into the chat box,
+including dictations from the phone, without Superwhisper pasting anything
+itself. Superwhisper uses its own processing mode, language, tone and
+vocabulary, so Dictation's Language row is hidden while it is the engine; change
+them in Superwhisper's settings (or ask an agent to, with the `superwhisper`
+command). Ghostex starts Superwhisper's service when needed.
 A computer that used Ghostex's old built-in model moves to Hex (never to a paid
 engine), and Ghostex deletes the speech models that model downloaded by itself.
 A new install
-picks the xAI or OpenAI key when one is saved, and Hex otherwise, then keeps
-that choice until you change it; Dictate never switches engine by itself. Each
+picks the xAI or OpenAI key when one is saved, Superwhisper when there is no key
+and it is installed (Linux), and Hex otherwise, then keeps that choice until you
+change it; Dictate never switches engine by itself. Each
 computer has its own engine, and the phone changes it for each computer in its
 Settings > Voice. The phone has no engine of its own: it records and the
 computer transcribes, so with Hex picked there, the phone's dictation uses Hex
@@ -1997,7 +2007,14 @@ Plan) is the Mode button beside the model pill. Claude can also put itself into
 Plan mode on its own, for example when a message asks it to plan something;
 Ghostex then switches the session straight back to the mode you had, so only you
 change it. Plan mode you pick yourself (the Mode button, `/plan`, or Shift+Tab in
-the terminal) stays on. From the CLI:
+the terminal) stays on. Claude can only use Bypass permissions when it was started
+with it allowed (Settings > Agents > Agent approvals > Accept all does that for new
+chats). For a chat started without it, the Mode menu greys Bypass out and shows a
+Restart in Bypass when idle switch under it: turn it on and Ghostex restarts Claude
+in Bypass as soon as it has finished what it is doing (at once if it is idle), on
+the same conversation, and that chat keeps starting in Bypass from then on. While it
+waits, the Mode button says "Bypass when idle"; turn the switch off to cancel. Only
+that chat changes, and only you can turn it on (agents can't). From the CLI:
 `ghostex select-session-chat-model <session> --mode bypass|auto|manual|accept-edits|plan`.
 Codex chats have a Mode button too, for what Codex is allowed to do: Ask for
 approval (it asks before editing outside the project or using the
@@ -2706,7 +2723,7 @@ A call that is still running shows a light sweeping across its words in every lo
 
 Chat look (Settings > Chat > Advanced) has five opt-in settings for a quieter, Slack or Claude Code style chat. With all five at Default the chat looks as it always has. Message layout set to Left aligned starts every message at the same left edge instead of putting yours on the right. Your messages set to Band puts yours on a soft full-width strip and also left-aligns them. Status line in the chat shows what the agent is doing as the last line of the chat instead of above the chat box. Chat box matches transcript width makes the chat box as wide as the transcript when Transcript width is set to a percentage (computer only). Message spacing set to Compact puts messages closer together and keeps a small row under each message for its time and ⋯ menu; on the phone that row shows the time. The phone follows the computer's choices for all but the chat box width, and picks up a changed look the next time a chat opens or catches up after a lost connection (`chatMessageLayout`, `chatUserMessageStyle`, `chatStatusInTranscript`, `chatComposerMatchesTranscriptWidth`, `chatMessageSpacing`).
 
-Quiet View makes a chat read as the conversation: your messages, the agent's replies, Ghostex pages and forms, questions and your answers, approvals waiting on you, errors and messages that were not sent stay in view, and everything between two of them (reports from threads, messages sent to them, tool calls, the line that says which work items changed, turns that ended without a reply) folds into one quiet line that counts it, for example "3 reports · 1 message sent · 3 tool calls · 1 item updated". Click the line to see all of it in order, as the full chat shows it; an open line drops its counts and says only "Working", how long the agent worked, or "Reports", since what it holds is in view. Click it again to shut it. While the agent works the line counts up instead of the cards piling up. Every chat opens in Quiet View; More actions > View > Quiet View turns it on or off for any chat, and the chat remembers that choice. When a chat's view differs from its default, a small Quiet view or Full view chip at the left of the chat box's pill row switches it back in one click. Summary view, which folds more, wins while it is on, and Detailed view is Quiet View with every line open. Agent work Reduced and Quiet and the Tool call cards preview are gone: Quiet View replaced them, and a chat that used one of them opens in Quiet View. Settings > Chat > Advanced has the defaults: Coordinators open in Quiet View (on), Other chats open in Quiet View (on; turn it off to have other chats open in the full Normal view), and Expand the last turn in Quiet View (on), which shows the work after the newest reply, or the running turn, open until a newer reply comes. Quiet View is on the computer, in Ghostex in a browser and on the phone, which follows the computer's three settings and has the same Quiet View row in its chat box's More actions > View; with a computer on an older Ghostex the phone shows the full chat (`chatQuietViewCoordinators`, `chatQuietViewChats`, `chatQuietViewExpandLast`).
+Quiet View makes a chat read as the conversation: your messages, the agent's replies, Ghostex pages and forms, questions and your answers, approvals waiting on you, errors and messages that were not sent stay in view, and everything between two of them (reports from threads, messages sent to them, tool calls, the line that says which work items changed, turns that ended without a reply) folds into one quiet line that counts it, for example "3 reports · 1 message sent · 3 tool calls · 1 item updated". Click the line to see all of it in order, as the full chat shows it; an open line drops its counts and says only "Working", how long the agent worked, or "Reports", since what it holds is in view. Inside, a single turn's card says what it did ("4 tool calls") instead of repeating the time, and when the line holds several turns their tool calls sit right under it, with a small "Then · 22s" mark where the agent picked up again. Click it again to shut it. While the agent works the line counts up instead of the cards piling up. Every chat opens in Quiet View; More actions > View > Quiet View turns it on or off for any chat, and the chat remembers that choice. When a chat's view differs from its default, a small Quiet view or Full view chip at the left of the chat box's pill row switches it back in one click. Summary view, which folds more, wins while it is on, and Detailed view is Quiet View with every line open. Agent work Reduced and Quiet and the Tool call cards preview are gone: Quiet View replaced them, and a chat that used one of them opens in Quiet View. Settings > Chat > Advanced has the defaults: Coordinators open in Quiet View (on), Other chats open in Quiet View (on; turn it off to have other chats open in the full Normal view), and Expand the last turn in Quiet View (on), which shows the work after the newest reply, or the running turn, open until a newer reply comes. Quiet View is on the computer, in Ghostex in a browser and on the phone, which follows the computer's three settings and has the same Quiet View row in its chat box's More actions > View; with a computer on an older Ghostex the phone shows the full chat (`chatQuietViewCoordinators`, `chatQuietViewChats`, `chatQuietViewExpandLast`).
 
 Marked handovers: your coordinators and their threads begin each part of the reply
 they hand back with a marker (a coordinator's work items show above the chat box and in the Work panel either way, see Coordinators). What happened comes first: ✅ Done, 🚀 Shipped,
@@ -2785,8 +2802,9 @@ box the session runs in, its folder, branch and account, the agent's version, an
 the session's processes use while it runs on this computer); Changes (lines changed on the
 branch against main, uncommitted edits included, with Commit, Create PR or View
 PR); Context (how full the context window is, with Claude's own breakdown into
-messages, memory files, skills, tools and free space; it is always open, and
-Compact context sits under the breakdown; Ghostex asks a silent read-only copy
+messages, memory files, skills, tools and free space; it starts folded, still
+showing how full the window is, its bar and Compact context, and clicking its
+title shows the breakdown, a choice Ghostex remembers; Ghostex asks a silent read-only copy
 of the session, so nothing is typed into it and no tokens are spent, and it
 counts again after a turn ends at most every ten minutes, or when you press the
 refresh button); Tasks (Claude's task list; clicking the chat's Tasks pill opens
@@ -5045,7 +5063,7 @@ Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `
 Ghostex is a client/server system: gxserver runs on each computer and owns its
 sessions, so any client can control agents on any machine.
 
-- **From a phone**: sidebar More Options > Connect a Device. One window,
+- **From a phone**: sidebar More Options > Connect a Phone. One window,
   Connect a device, opens with three ways listed at its left (Phone, Computer,
   Tailscale) and turns Easy Connect on by itself (if SSH access is off, it asks
   for an admin password once), then shows the code under Phone. The code there
@@ -5063,7 +5081,8 @@ sessions, so any client can control agents on any machine.
   network can still connect. Turning Easy Connect on any other way (its
   switch, `ghostex tailcat enable`) also starts the helper's install when it
   is missing, and Easy Connect starts on it once it is in. On the phone, the first screen lists the steps (get Ghostex
-  on the computer, open Connect a Device there, scan its code here) and Scan
+  on the computer, open Connect a Phone there (older phone apps say Connect a
+  Device), scan its code here) and Scan
   the code opens the scanner: two steps, with the camera in the second (on an
   iPhone, Open the scanner there opens Apple's scanner; on Android the camera
   is right in the step, with a light button). It won't scan gives tips. If the
@@ -5080,12 +5099,12 @@ sessions, so any client can control agents on any machine.
   the bottom left of the window, opens Settings > Remote, where the paired
   devices are.
   Settings > Remote shows, on one screen: Phones and computers that can reach
-  this machine (Easy Connect's switch, Connect a Device, Connect a Computer and
+  this machine (Easy Connect's switch, Connect a Phone, Connect a Computer and
   every paired or waiting device, whether Easy Connect is on or off; while SSH
   access is off it says so with Turn on, and while the Easy Connect helper
   isn't installed it says so with Install, the install's step while it runs,
   and Try again when it failed), Computers this machine connects to
-  (the saved computers and Add a computer), and three rows that open in place:
+  (the saved computers and Add a computer, which opens Connect a Computer), and three rows that open in place:
   This computer (its name, set by the system, its icon and SSH access,
   with the macOS, Windows or Linux steps to turn SSH on by hand), Tailscale
   (another way in for tailnets; its code sits behind a click-to-show QR with
@@ -5229,15 +5248,26 @@ sessions, so any client can control agents on any machine.
   reach the computer through Easy Connect, and a new phone gets in only while
   the Connect a device window is open or it waits for approval (paired phones
   reconnect once when the window opens and about a minute after it closes).
-  Another computer connects the same way: on this computer click Connect a
-  computer (Settings > Remote, or Computer in the Connect a device window's
-  list), then Copy the code, and on the other computer paste it in Settings >
-  Remote > Add a computer. When you click Add computer, both computers show
-  three words; check they match and approve the request here.
-  Then the other computer can reach this one through Easy Connect, and still
-  signs in with this computer's SSH username and password. To re-pair a
-  computer paired before 11.1.0, open it there and paste a new code the same
-  way.
+  Another computer connects with one window on both: open Connect a Computer
+  (sidebar More Options, Settings > Remote's Connect a Computer or Add a
+  computer, or Computer in the Connect a device window's list) on both
+  computers. Each shows its own code with Copy, and a box for the other
+  computer's code with Connect: copy the code on one computer, paste it on the
+  other and click Connect (either way round works). Both computers then show
+  the same three words; click Approve on the computer whose code it was only if
+  they match. The computer that pasted shows each step in one list (Approved,
+  signing in) until "<computer> is connected". It signs in with its own key,
+  sent when it paired, so no password is asked; only when the other computer
+  runs a Ghostex from before this release, which doesn't keep that key, does
+  the window ask once for that computer's username and password, and a key
+  that stops working falls back to that saved password. Its Done screen offers
+  Connect both ways: one click makes the other computer connect back to this
+  one too, with no second code (the other computer must run this release as
+  well; an older one says to update it first). A failure says what happened in
+  a line or two with one button that fixes it (Try another code, Reconnect,
+  Try again). Use SSH details in the window adds a computer by its address,
+  username and password instead. To re-pair a computer paired before 11.1.0,
+  open it in Settings > Remote there and paste a new code.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;
@@ -7084,9 +7114,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   the Browser is always there. Then your devices: your phone, your other
   computers and Cloud Boxes, how they connect (Easy Connect by default,
   Tailscale for devices already on a tailnet), and two switches, both off
-  until you turn them on: Pair my phone after setup (opens Connect a Device)
-  and Add another computer after setup (opens Settings > Remote on Add a
-  computer), each after your first agent reply. Last, the default session view
+  until you turn them on: Pair my phone after setup (opens Connect a Phone)
+  and Add another computer after setup (opens Connect a Computer), each after
+  your first agent reply. Last, the default session view
   and Agent approvals (Keep default or Skip permissions, the same setting as
   Settings > Agents, `agentAcceptAllEnabled`), with a small preview window
   that shows your picks at once, next to the look: Appearance, the theme
@@ -7426,7 +7456,7 @@ transparency on or off, or changing any of its choices, applies to every open Gh
 window at once, without restarting. On Windows the corners of menus and pop-ups follow
 Windows' own rounding.
 Behind the glass (on macOS, Windows and Linux) is four cards: Desktop and windows (the default) shows everything behind Ghostex; on macOS, in full screen (where nothing sits behind the window) it shows your desktop wallpaper blurred and tinted the same way, and leaving full screen shows everything behind Ghostex again (a solid color wallpaper stays black in full screen). Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Live shows something moving behind the glass, chosen for dark mode and for light mode (only dark mode with Transparency set to Dark only): one of eight calm animations drawn in your theme's colours (Aurora, Ink, Drift, Nebula, Silk, Bokeh, Waves, Mesh), so switching themes or Colourfulness recolours it at once, or, on macOS and Linux, Your video, a .mov, .mp4 or .m4v file you choose, which plays muted, looping and blurred (a mode set to Your video with no file shows everything behind the window). On Windows, Live pauses when Show animations is off in Windows Settings > Accessibility > Visual effects (showing a still frame) and in battery saver. Speed sets how fast the animation moves (a quarter of its pace to twice as fast) and Brightness how bright it glows (60% by default, a soft glow that shows through the tints; every animation is about as bright as the others at the same setting); your own video plays as it is. An animation loops every two minutes without a seam, and changing the animation, theme or brightness, or switching between an animation and your video, fades rather than jumping. Nothing is downloaded. Live pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Your video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassLiveStyleDark`, `windowGlassLiveStyleLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassLiveSpeed`, `windowGlassLiveBrightness`, `windowGlassVideoOnlyOnPower`).
-On Linux, transparency works on Xorg and Wayland desktops (the desktop app currently uses XWayland for its embedded pages). Desktop and windows uses your compositor's blur: on Hyprland, keep background blur enabled; on Xorg, run a compositor with transparency and blur support. The compositor controls the blur's strength. Picture and Live animations work without compositor blur. Wallpaper only reads the picture reported by Hyprpaper, swww/awww, GNOME, Cinnamon, MATE or a single-screen Plasma desktop; when no readable picture is available it shows Desktop and windows. Stays with the desktop works on X11 and Hyprland; other native Wayland compositors cannot report the position needed for this mode, so use Moves with the window. Your video requires FFmpeg (included as a Linux package dependency). Live respects battery power, the power-saver profile, and disabled desktop animations (`windowGlass`, `windowGlassSource`, `windowGlassImagePlacement`, `windowGlassVideoOnlyOnPower`).
+On Linux, transparency works on Xorg and Wayland desktops (the desktop app currently uses XWayland for its embedded pages). Desktop and windows uses your compositor's blur: on Hyprland, keep background blur enabled; on Xorg, run a compositor with transparency and blur support. The compositor controls the blur's strength. Where the desktop does not blur windows (Hyprland with blur off, which is Omarchy's default, and GNOME), Ghostex keeps the window solid instead of showing what is behind it sharp, and the Transparency row's info says so; on Omarchy, turn on Glassy Windows (Omarchy menu > Appearance > Windows > Window Opacity) and the glass comes back at once. Picture and Live animations work without compositor blur. Wallpaper only reads the picture reported by Hyprpaper, swww/awww, GNOME, Cinnamon, MATE or a single-screen Plasma desktop; when no readable picture is available it shows Desktop and windows. Stays with the desktop works on X11 and Hyprland; other native Wayland compositors cannot report the position needed for this mode, so use Moves with the window. Your video requires FFmpeg (included as a Linux package dependency). Live respects battery power, the power-saver profile, and disabled desktop animations (`windowGlass`, `windowGlassSource`, `windowGlassImagePlacement`, `windowGlassVideoOnlyOnPower`).
 While glass is on, four sliders tune it, each in dark mode and in light mode: Sidebar tint and Work area tint set how much of the desktop each area hides, independently, so either can be the darker one; lower shows more of your desktop.
 Keep Awake (Power, macOS) prevents sleep while agents work; it is experimental:
 switch it on in Settings > Extensions > Experimental (`keepAwakeEnabled`).

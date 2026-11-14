@@ -90,6 +90,11 @@ async fn handle_http_request_inner(
         details["requestBytes"] = json!(size.size_bytes);
         details["limitBytes"] = json!(size.limit_bytes);
     }
+    if let Some(failure) = routed.response.extensions().get::<BodyReadFailure>() {
+        details["errorCode"] = json!(failure.code);
+        details["receivedBytes"] = json!(failure.received_bytes);
+        details["declaredBytes"] = json!(failure.declared_bytes);
+    }
     if let Some(size) = routed.response.extensions().get::<ImageSizeLimit>() {
         details["imageBytes"] = json!(size.size_bytes);
         details["imageLimitBytes"] = json!(size.limit_bytes);

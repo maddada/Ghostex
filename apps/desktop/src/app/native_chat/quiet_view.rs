@@ -9,7 +9,7 @@ use super::completed_work_row::{WorkTail, spaced_tail};
 use super::quiet_work::{QuietSegment, line_icon, loader, styled_segments};
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use ghostex_gx_chat_core::transcript::quiet_view::{
-    QuietAnswers, QuietStretch, QuietTail, QuietTurnTail,
+    QuietAnswers, QuietStretch, QuietTail, QuietTurnLook, QuietTurnTail,
 };
 use ghostex_gx_chat_core::{ProjectedMessage, TranscriptItem};
 use gpui::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, Window, div, px};
@@ -27,6 +27,9 @@ pub(super) struct QuietLines {
     after: HashMap<usize, usize>,
     /// The work item lines the lines hold, which the replies no longer draw.
     cards: HashSet<String>,
+    /// How each finished turn row an opened line holds draws, by row (gx-chat-core
+    /// `QuietTurnLook`).
+    turns: HashMap<usize, QuietTurnLook>,
     /// The answers cards drawn shut as a line of their own, by row id (`<turn id>#questions` for a
     /// turn's answered questions).
     answers: HashMap<String, QuietAnswers>,
@@ -45,6 +48,7 @@ impl QuietLines {
         let mut rows = HashMap::new();
         let mut after = HashMap::new();
         let mut cards = HashSet::new();
+        let mut turns = HashMap::new();
         for (at, line) in lines.iter().enumerate() {
             for row in line.start..line.end {
                 rows.insert(row, at);
@@ -53,12 +57,16 @@ impl QuietLines {
                 after.insert(row, at);
             }
             cards.extend(line.cards.iter().cloned());
+            for look in &line.turns {
+                turns.insert(look.row, look.clone());
+            }
         }
         Self {
             lines,
             rows,
             after,
             cards,
+            turns,
             answers,
         }
     }
@@ -360,7 +368,14 @@ impl NativeChatView {
                         p.row_gap() + top_leading(items.get(line.end))
                     };
                     let shift = (below - (TIME_ROW_SLACK + p.row_gap())) / 2.0;
-                    let drawn = self.quiet_view_line(line, open, p, cx);
+                    // Opening it reads back the rows of the turns it draws straight on its rail (gx-chat-core
+                    // `QuietStretch::loads`).
+                    let loads = line
+                        .loads
+                        .iter()
+                        .map(|load| serde_json::json!({"type":"loadWork","id":load.id,"work":load.work}))
+                        .collect();
+                    let drawn = self.quiet_view_line(line, open, loads, p, cx);
                     parts.push((balanced_line(drawn, shift, p), 0.0));
                 }
                 let tail = line.tail.as_ref().filter(|tail| tail.row == index);
@@ -375,6 +390,7 @@ impl NativeChatView {
                         }
                     }
                     self.quiet_boxed = true;
+                    self.quiet_turn = lines.turns.get(&index).cloned();
                     let content = match tail {
                         Some(tail) => {
                             let folded = fold_part(item, tail);
@@ -383,6 +399,7 @@ impl NativeChatView {
                         None => self.item_content(item, next, true, p, window, cx),
                     };
                     self.quiet_boxed = false;
+                    self.quiet_turn = None;
                     nested.push(content);
                     // The rail runs on to the next row of the line, as far below as its parts sit
                     // apart.
@@ -483,7 +500,7 @@ impl NativeChatView {
             let open = self.quiet_open(line);
             // Under its reply's time line, 8px below it and a row gap above the next row: midway
             // between the two.
-            let drawn = self.quiet_view_line(line, open, p, cx);
+            let drawn = self.quiet_view_line(line, open, Vec::new(), p, cx);
             let below = p.row_gap() + top_leading(items.get(index + 1));
             let shift = (below - (TIME_ROW_SLACK + LINE_TO_REPLY)) / 2.0;
             parts.push((balanced_line(drawn, shift, p), LINE_TO_REPLY));
@@ -522,6 +539,25 @@ impl NativeChatView {
         )
     }
 
+    /// "Then · 22s" over a turn an opened line draws straight on its rail after another one
+    /// (gx-chat-core `QuietTurnMark`): the count pills' small type in the muted tone, then a
+    /// hairline to the column's end.
+    pub(super) fn quiet_turn_mark(&self, text: &str, p: &ChatAppearance) -> AnyElement {
+        let s = p.scale;
+        let card = &*super::cards::SINGLE_LINE_CARD;
+        div()
+            .flex()
+            .items_center()
+            .w_full()
+            .min_w_0()
+            .gap(px(8.0 * s))
+            .text_size(px(card.pill_text_size() * s))
+            .text_color(p.muted)
+            .child(div().flex_shrink_0().child(text.to_string()))
+            .child(div().flex_1().h(px(s)).bg(card.hairline(p)))
+            .into_any_element()
+    }
+
     /// Whether the tool calls drawn now sit in the "Message to" card's shell: in an opened Quiet
     /// View line's rows, but not in a finished turn's log under its "Worked for" card (already a
     /// card) nor as quiet steps.
@@ -554,6 +590,7 @@ impl NativeChatView {
         &self,
         line: &QuietStretch,
         open: bool,
+        actions: Vec<Value>,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -596,7 +633,7 @@ impl NativeChatView {
             styled_segments(segments),
             open,
             true,
-            Vec::new(),
+            actions,
             p,
             cx,
         )
@@ -616,11 +653,13 @@ impl NativeChatView {
         let s = p.scale;
         let open = self.quiet_open(line);
         let frame = self.disclosure_frame(&line.key, open, cx);
-        let mut column = div()
-            .flex()
-            .flex_col()
-            .w_full()
-            .child(self.quiet_view_line(line, open, p, cx));
+        let mut column = div().flex().flex_col().w_full().child(self.quiet_view_line(
+            line,
+            open,
+            Vec::new(),
+            p,
+            cx,
+        ));
         if open || frame.is_some() {
             let drawn: Vec<AnyElement> = rows
                 .iter()

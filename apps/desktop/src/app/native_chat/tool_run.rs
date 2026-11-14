@@ -183,7 +183,15 @@ impl NativeChatView {
         // Agent work Reduced or Quiet: the run is one live quiet line in every view, open in
         // Detailed (quiet_work.rs).
         let quiet = p.quiet_style();
-        if (p.simple || quiet) && !show_all {
+        // CDXC:SessionChat 2026-11-14 DECISION: User, of an opened Quiet View line whose one call
+        // sat on its rail as a bare row: "when there's only 1 tool call, still show 1 tool call
+        // card that you expand to see that tool call, because all the ones there are cards now,
+        // not tool calls shown directly". In the boxed card (`quiet_card_header`) a run that has
+        // no fold of its own (one call, or none hidden) gets the same shut "1 tool call" card as a
+        // longer run, opening onto its rows; the lone call is no longer the card's header. The
+        // phone matches (ToolRows.tsx).
+        let unfolded = message["toolFold"]["hiddenCount"].as_u64().unwrap_or(0) == 0;
+        if ((p.simple || quiet) || (card_header && unfolded)) && !show_all {
             // Under kept words the line has a key of its own, apart from their chevron's
             // (gx-chat-core `grouped_work::only_what_waits`).
             let key = message["toolsLineKey"]
@@ -674,8 +682,9 @@ impl NativeChatView {
             .collect()
     }
 
-    /// A folded or opened group's "3 tool calls" as the header of its Quiet View card: the
-    /// disclosure's chevron and words at the card's inset and height, filling the card.
+    /// A folded or opened group's "3 tool calls" as the header of its Quiet View card, filling it.
+    ///
+    /// CDXC:SessionChat 2026-11-14 DECISION: User, of a shut "5 tool calls" card in an opened Reports line drawn with a chevron and no icon beside "Work item added …" and "Message from …": make it match them. It is a one-line card like they are (`SINGLE_LINE_CARD`): the tools icon in the neutral tile on the left, the card's title type, its height and padding, and no chevron; the whole card still opens and shuts. The phone matches (ToolRows.tsx).
     fn boxed_card_heading(
         &self,
         key: String,
@@ -698,22 +707,21 @@ impl NativeChatView {
                 .items_center()
                 .w_full()
                 .min_w_0()
-                .gap(px(6.0 * s))
+                .gap(px(10.0 * s))
                 .px(px(shape.padding_x * s))
                 .h(px(shape.header_height(s)))
-                .text_color(p.primary)
+                .text_color(p.foreground)
                 .chat_cursor_pointer()
                 .hover(move |style| style.bg(hover)),
             expanded,
             p,
         )
+        .child(shape.tile("titlebar/tool.svg", p))
         .child(
-            super::disclosure_motion::turned_chevron(self.fold_turn(&key, expanded, cx), true)
-                .size(px(14.0 * s))
-                .flex_shrink_0()
-                .text_color(p.primary),
+            shape
+                .title(div().flex_1().min_w_0().truncate(), p)
+                .child(self.find_label(&key, label)),
         )
-        .child(div().flex_1().min_w_0().child(self.find_label(&key, label)))
         .on_click(cx.listener(move |this, _, _, cx| {
             this.toggle_marker_disclosure(toggle_key.clone(), expanded, cx)
         }))

@@ -441,7 +441,7 @@ impl Render for ChatOptionMenuPanel {
                                 .mt(px(2.0 * scale))
                                 .text_size(px(12.0 * scale))
                                 .line_height(px(16.0 * scale))
-                                .when(!disabled, |line| line.truncate())
+                                .when(!disabled && row["toggle"] != true, |line| line.truncate())
                                 .text_color(foreground.opacity(0.58))
                                 .child(description),
                         )
@@ -458,7 +458,32 @@ impl Render for ChatOptionMenuPanel {
             // An unchecked row with a hotkey drops its empty check slot, so the hotkey sits on the
             // right edge like the hotkeys of rows that cannot be checked.
             let empty_check_beside_hotkey = row["checked"] == false && row["detail"].is_string();
-            if children || (row.get("checked").is_some() && !empty_check_beside_hotkey) {
+            if row["toggle"] == true {
+                // A row that turns something on or off draws the app's switch (the Mode menu's
+                // "Restart in Bypass when idle", chat core `menus/mode_restart.rs`).
+                use crate::app::window::native_modal_kit::{SwitchOff, SwitchShape, draw_switch};
+                let light = appearance.light;
+                item = item.role(gpui::Role::Switch).child(
+                    draw_switch(
+                        SwitchShape::REGULAR.scaled(scale),
+                        SwitchOff {
+                            track: gpui::Hsla::from(gpui::rgb(if light {
+                                0x000000
+                            } else {
+                                0xffffff
+                            }))
+                            .opacity(if light { 0.144 } else { 0.135 })
+                            .into(),
+                            edge: None,
+                            thumb: gpui::rgb(if light { 0xfcfcfc } else { 0x292929 }),
+                        },
+                        light,
+                        row["checked"] == true,
+                        disabled,
+                    )
+                    .flex_shrink_0(),
+                );
+            } else if children || (row.get("checked").is_some() && !empty_check_beside_hotkey) {
                 item = item.child(div().flex_shrink_0().size(px(m.icon * scale)).when(
                     children || row["checked"] == true,
                     |item| {

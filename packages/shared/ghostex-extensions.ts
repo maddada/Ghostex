@@ -66,7 +66,9 @@ export interface GhostexExtensionUrlServer {
 }
 
 export type GhostexExtensionServer =
-  GhostexExtensionStaticServer | GhostexExtensionCommandServer | GhostexExtensionUrlServer;
+  | GhostexExtensionStaticServer
+  | GhostexExtensionCommandServer
+  | GhostexExtensionUrlServer;
 
 export interface GhostexExtensionTerminal {
   command: string;

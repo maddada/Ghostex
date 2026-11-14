@@ -757,6 +757,25 @@ impl Element for CefElement {
             }
         }
         let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
+        Some(hitbox)
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        hitbox: &mut Self::PrepaintState,
+        window: &mut Window,
+        _: &mut App,
+    ) {
+        let Some(hitbox) = hitbox.as_ref() else {
+            window.with_content_mask(Some(ContentMask { bounds }), |_window| {});
+            return;
+        };
+        let bounds = hitbox.bounds;
+        // Mouse listeners may only be registered while painting (gpui `debug_assert_paint`).
         let browser = self.browser.clone();
         let focus_handle = self.focus_handle.clone();
         let surface_id = self.surface_id.clone();
@@ -789,23 +808,6 @@ impl Element for CefElement {
                 window.refresh();
             }
         });
-        Some(hitbox)
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        hitbox: &mut Self::PrepaintState,
-        window: &mut Window,
-        _: &mut App,
-    ) {
-        let bounds = hitbox
-            .as_ref()
-            .map(|hitbox| hitbox.bounds)
-            .unwrap_or(bounds);
         window.with_content_mask(Some(ContentMask { bounds }), |_window| {});
     }
 }

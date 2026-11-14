@@ -213,6 +213,40 @@ fn is_structured_request_user_input(lines: &[String], selected_index: usize) -> 
     })
 }
 
+/// Whether a Codex dialog holds the screen with positive evidence of its own: a blocking screen
+/// this detector names, plus the key-hint footer only a live dialog draws in its last rows, and no
+/// draft in Codex's input box. Text that merely quotes a dialog's words has no such footer, and a
+/// draft that quotes the footer too still sits in the input box (seen on the VT-styled capture),
+/// which a dialog that holds the screen has replaced. A dialog's highlighted row draws the same
+/// bold `›` as the input box ("› 1. Review hooks"), so an "input" that is a numbered choice is
+/// that row, not a draft.
+pub(crate) fn codex_dialog_holds_screen(text: &str) -> bool {
+    let draft = crate::session_chat_composer::session_chat_composer_input("codex", text)
+        .is_some_and(|input| !is_numbered_choice_text(&input.text));
+    if draft || detect_codex_blocking_screen(text).is_none() {
+        return false;
+    }
+    let lines = scan_lines(text);
+    latest_modal_footer(&lines).is_some() || onboarding_continue_footer(&lines)
+}
+
+/// A menu row's words after its marker: digits, then `.` or `)`.
+fn is_numbered_choice_text(text: &str) -> bool {
+    let text = text.trim_start();
+    let digits = text.chars().take_while(char::is_ascii_digit).count();
+    digits > 0 && matches!(text[digits..].chars().next(), Some('.' | ')'))
+}
+
+/// CDXC:AgentScreenDetection 2026-11-13 WHY:
+/// Codex's sign-in screens offer no Escape: the sign-in picker and the "Signed in with your ChatGPT account" confirmation end on a hint row that reads exactly "Press enter to continue" (codex-rs tui/src/onboarding/auth.rs, its rendered snapshots), so the Escape footer rule (`is_codex_modal_footer`) never sees them. That whole row, among the last four, is their footer.
+fn onboarding_continue_footer(lines: &[String]) -> bool {
+    lines[lines.len().saturating_sub(4)..].iter().any(|line| {
+        strip_box_border(line)
+            .trim()
+            .eq_ignore_ascii_case("press enter to continue")
+    })
+}
+
 /// Classify a live Codex screen that has replaced the ordinary composer with a
 /// decision surface. `None` means either the composer is live, the selected UI
 /// is stale scrollback, or the structured request_user_input path owns it.

@@ -54,6 +54,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             params: Box::new(serde_json::json!({})),
         }],
         ActionKind::SelectOption => select_option(state, action, context),
+        ActionKind::RestartInMode => crate::menus::mode_restart::toggle(state, action),
 
         _ => Vec::new(),
     }

@@ -60,6 +60,7 @@ use gpui::{
 };
 use gpui_component::v_flex;
 use model::*;
+pub(crate) use model::{connect_back_code_params, easy_connect_join_target};
 use serde_json::{Value, json};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -1054,10 +1055,10 @@ impl RemoteTab {
                 request.initial_remote_machine_id.clone(),
             )
         };
-        // `addComputer` (setup's "Add another computer after setup") opens the empty Add a
-        // computer dialog.
-        if section.as_deref() == Some("addComputer")
-            && self.targeted_section.as_deref() != Some("addComputer")
+        // `addComputerSsh` (Connect a computer's Use SSH details) opens the empty Add a computer
+        // dialog, which adds a computer over SSH; `addComputer` is its older name.
+        if matches!(section.as_deref(), Some("addComputer" | "addComputerSsh"))
+            && self.targeted_section != section
         {
             self.targeted_section = section.clone();
             self.open_machine_dialog(None, window, cx);

@@ -484,9 +484,15 @@ impl GhostexGpuiApp {
     /// Where a submenu may open beside its menu, in the menu's window `window`
     /// (`SidebarMenuPlacement::Beside` says why): the whole window while each panel is drawn in a
     /// frosted host window of its own and in the web page, otherwise the sidebar alone.
+    ///
+    /// CDXC:ContextMenus 2026-11-14 DECISION:
+    /// User (Omarchy audit Q11, "open beside their menu (whole window) whenever no Browser/Files/Kanban page is showing"): where the panels are drawn in the main window (Linux), a submenu has the whole window too while no native page view covers any of it (`Window::native_occlusions`), so Tools, Help and Ghostex open beside the sidebar menu instead of on top of it; with a page showing it keeps to the sidebar as before.
     fn native_sidebar_submenu_room(&self, window: &Window) -> Bounds<Pixels> {
         use crate::app::window::frosted_host::frosted_hosting_active;
-        if frosted_hosting_active() || cfg!(ghostex_web) {
+        if frosted_hosting_active()
+            || cfg!(ghostex_web)
+            || (cfg!(target_os = "linux") && window.native_occlusions().is_empty())
+        {
             Bounds {
                 origin: Point::default(),
                 size: window.viewport_size(),

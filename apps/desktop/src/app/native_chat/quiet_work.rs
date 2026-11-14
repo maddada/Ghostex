@@ -509,6 +509,9 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // Inside an opened Quiet View line (gx-chat-core `QuietTurnLook`, where the user's decision
+        // is): its steps straight on that line's rail, or its line titled by its calls.
+        let look = self.quiet_turn.take();
         // Agent work Quiet: no line, the work in the reply's hover row (hidden_work.rs).
         if p.hidden_work() {
             return self.hidden_work_row(item, p, window, cx);
@@ -545,7 +548,9 @@ impl NativeChatView {
                 )
             })
             .collect();
-        let expanded = self.is_expanded(&key, p.work_open);
+        let flat = look.as_ref().filter(|look| look.flat);
+        let title = look.as_ref().filter(|look| !look.title.is_empty());
+        let expanded = flat.is_some() || self.is_expanded(&key, p.work_open);
         // One read per section still on the server: several wake-up turns can share their
         // prompt's section, which is read once, through the turn that first holds it.
         let mut sections: Vec<(&str, &Value)> = Vec::new();
@@ -567,7 +572,17 @@ impl NativeChatView {
             .iter()
             .map(|(owner, work)| json!({"type":"loadWork","id":owner,"work":work}))
             .collect();
-        let mut segments = quiet_segments(label, stats, p);
+        let mut segments = match title {
+            Some(look) => {
+                let rest: Vec<Value> = stats
+                    .iter()
+                    .filter(|stat| stat["kind"] != look.title_kind.as_str())
+                    .cloned()
+                    .collect();
+                quiet_segments(&look.title, &rest, p)
+            }
+            None => quiet_segments(label, stats, p),
+        };
         if stats.iter().any(|stat| stat["kind"] == "files") {
             let (_, _, _, _, plus, minus) = super::file_change_card::card_colors(p);
             let added = files_card["added"].as_u64().unwrap_or(0);
@@ -592,7 +607,12 @@ impl NativeChatView {
             p,
             cx,
         );
-        let mut row = div().flex().flex_col().w_full().min_w_0().child(line);
+        let mut row = div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .min_w_0()
+            .when(flat.is_none(), |row| row.child(line));
         self.hide_file_changes = true;
         if expanded {
             let mut steps: Vec<AnyElement> = Vec::new();
@@ -609,7 +629,15 @@ impl NativeChatView {
             }
             self.in_work_fold = true;
             self.quiet_steps = true;
-            for message in work {
+            for (at, message) in work.iter().enumerate() {
+                for mark in flat
+                    .iter()
+                    .flat_map(|look| &look.marks)
+                    .filter(|mark| mark.at == at)
+                {
+                    let mark = self.quiet_turn_mark(&mark.text, p);
+                    steps.push(div().py(px(4.0 * s)).child(mark).into_any_element());
+                }
                 steps.push(self.message_row(message, p, window, cx));
             }
             self.quiet_steps = false;
@@ -623,7 +651,9 @@ impl NativeChatView {
                         .into_any_element(),
                 );
             }
-            if !steps.is_empty() {
+            if flat.is_some() {
+                row = row.children(steps);
+            } else if !steps.is_empty() {
                 row = row.child(self.quiet_steps(&key, steps, p, cx));
             }
         } else if let Some(strip) = self.read_picture_strip(

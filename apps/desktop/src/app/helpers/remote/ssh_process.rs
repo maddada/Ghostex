@@ -107,6 +107,16 @@ pub(crate) fn gpui_read_remote_ssh_password_from_keychain(
     Ok(password)
 }
 
+/// The saved password reaches ssh's askpass helper through a named pipe in a private (0700)
+/// folder: the helper reads it with `/bin/cat` and this app's broker thread answers each read
+/// with the password from the system keyring.
+///
+/// CDXC:RemoteMachines 2026-11-14 WHY: The helper used to read a Unix socket with `nc -U`, which
+/// Linux distributions don't install by default (Arch/Omarchy has no `nc` at all), so a computer
+/// added through Easy Connect, which signs in with its saved SSH password, failed with "requires
+/// netcat-openbsd" until the user installed it by hand. A pipe needs only `cat`, on macOS and on
+/// every Linux, with the same access rule (only this user can open the folder) and nothing
+/// written to disk. Don't bring back a helper that needs a program the system may lack.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn gpui_remote_ssh_askpass_script(
     config: &GpuiRemoteMachineConfig,
@@ -114,34 +124,25 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
     if !config.has_saved_password {
         return Ok(None);
     }
-    #[cfg(target_os = "linux")]
-    if !Command::new("/usr/bin/nc")
-        .arg("-h")
-        .output()
-        .is_ok_and(|output| {
-            String::from_utf8_lossy(&output.stdout).contains("-U")
-                || String::from_utf8_lossy(&output.stderr).contains("-U")
-        })
-    {
-        return Err("SSH password authentication on Linux requires netcat-openbsd (nc with Unix socket support).".to_string());
-    }
     let unique_id = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
     let directory = env::temp_dir().join(format!("gxap-{}-{unique_id:x}", std::process::id()));
     let script = directory.join("a");
-    let socket = directory.join("s");
+    let pipe = directory.join("p");
+    let prepare_failed = |directory: &Path| {
+        let _ = fs::remove_dir_all(directory);
+        "Could not prepare SSH password helper.".to_string()
+    };
     fs::create_dir_all(&directory)
         .map_err(|_| "Could not prepare SSH password helper.".to_string())?;
-    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(|_| {
-        let _ = fs::remove_dir_all(&directory);
-        "Could not prepare SSH password helper.".to_string()
-    })?;
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
+        .map_err(|_| prepare_failed(&directory))?;
     let contents = format!(
         concat!(
             "#!/bin/sh\n",
-            "password=$(/usr/bin/nc -U {} </dev/null) || exit 1\n",
+            "password=$(/bin/cat {} </dev/null) || exit 1\n",
             "if [ -z \"$password\" ]; then\n",
             "  printf '%s\\n' 'Ghostex saved SSH password unavailable.' >&2\n",
             "  exit 1\n",
@@ -149,35 +150,31 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
             "printf '%s\\n' \"$password\"\n",
             "unset password\n",
         ),
-        gpui_shell_single_quote(gpui_path_string(socket.as_path()).as_str())
+        gpui_shell_single_quote(gpui_path_string(pipe.as_path()).as_str())
     );
     if fs::write(&script, contents).is_err()
         || fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).is_err()
     {
-        let _ = fs::remove_dir_all(&directory);
-        return Err("Could not prepare SSH password helper.".to_string());
+        return Err(prepare_failed(&directory));
     }
-
-    let listener = match std::os::unix::net::UnixListener::bind(&socket) {
-        Ok(listener) => listener,
-        Err(_) => {
-            let _ = fs::remove_dir_all(&directory);
-            return Err("Could not prepare SSH password helper.".to_string());
-        }
+    let Ok(pipe_path) = std::ffi::CString::new(gpui_path_string(pipe.as_path())) else {
+        return Err(prepare_failed(&directory));
     };
-    if listener.set_nonblocking(true).is_err() {
-        let _ = fs::remove_dir_all(&directory);
-        return Err("Could not prepare SSH password helper.".to_string());
+    // SAFETY: `pipe_path` is a valid NUL-terminated path inside the private folder made above.
+    if unsafe { libc::mkfifo(pipe_path.as_ptr(), 0o600) } != 0 {
+        return Err(prepare_failed(&directory));
     }
 
     let cancel = Arc::new(AtomicBool::new(false));
     let server_cancel = cancel.clone();
     let remote_machine_id = config.remote_machine_id.clone();
+    let server_pipe = pipe.clone();
     let password_server = thread::spawn(move || {
         while !server_cancel.load(Ordering::Acquire) {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+            // A non-blocking open for writing succeeds only while the helper has the pipe open
+            // for reading (ENXIO otherwise), so the loop never blocks and stops when cancelled.
+            match gpui_open_askpass_pipe_for_writing(server_pipe.as_path()) {
+                Ok(mut stream) => {
                     if let Ok(mut password) =
                         gpui_read_remote_ssh_password_from_keychain(remote_machine_id.as_str())
                     {
@@ -185,12 +182,16 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
                         let _ = stream.write_all(b"\n");
                         password.fill(0);
                     }
+                    // Closing the pipe ends the helper's read; with nothing written it reports the
+                    // password as unavailable.
+                    drop(stream);
                     // CDXC:RemoteMachines 2026-09-23 WHY:
                     // The retained terminal wrapper retries SSH after a disconnect. Keep this broker available until its owner drops it so every handshake can read the current saved password.
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(error) if error.raw_os_error() == Some(libc::ENXIO) => {
                     thread::sleep(Duration::from_millis(10));
                 }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(_) => break,
             }
         }
@@ -201,6 +202,17 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
         password_server: Some(password_server),
         script,
     }))
+}
+
+/// Opens the askpass pipe for writing without waiting for a reader (see
+/// `gpui_remote_ssh_askpass_script`).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn gpui_open_askpass_pipe_for_writing(pipe: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    fs::OpenOptions::new()
+        .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(pipe)
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]

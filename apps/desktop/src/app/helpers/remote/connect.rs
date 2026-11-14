@@ -502,9 +502,6 @@ pub(crate) fn gpui_remote_sanitized_process_failure(
             "{who}, so Ghostex did not send it the access token. Stop that program on the machine (an administrator can find it with `sudo lsof -nP -iTCP:58744 -sTCP:LISTEN`), then reconnect."
         );
     }
-    if stderr.contains("netcat-openbsd") {
-        return "SSH password authentication on Linux requires netcat-openbsd. Install it on this computer, then reconnect.".to_string();
-    }
     if stderr.contains("saved ssh password") || stderr.contains("ssh password helper") {
         return "Ghostex could not read the saved SSH password from secure system storage. Open Remote settings and save the password again.".to_string();
     }
@@ -605,7 +602,6 @@ pub(crate) fn gpui_remote_process_failure_is_ssh_transport(
     [
         "saved ssh password",
         "ssh password helper",
-        "netcat-openbsd",
         "permission denied",
         "could not resolve hostname",
         "connection refused",

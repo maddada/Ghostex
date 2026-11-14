@@ -49,8 +49,10 @@ fn record(paths: &crate::paths::GxserverPaths, id: &str) {
 
 fn choose(paths: &crate::paths::GxserverPaths, engine: &str) {
     let patch = json!({"engine": engine});
-    super::settings::update(paths, patch.as_object().expect("object"), || (false, false))
-        .expect("settings");
+    super::settings::update(paths, patch.as_object().expect("object"), || {
+        (false, false, false)
+    })
+    .expect("settings");
 }
 
 #[tokio::test]
@@ -101,7 +103,7 @@ async fn a_cloud_engine_with_no_key_names_that_key() {
 fn the_tooltip_names_the_engine_and_model_and_what_is_missing() {
     let temp = tempfile::tempdir().expect("temp");
     let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
-    let mut settings = super::settings::DictateSettings::first_run(false, false);
+    let mut settings = super::settings::DictateSettings::first_run(false, false, false);
     assert_eq!(super::dictate::engine_label(&settings), "Hex");
     let not_running = super::hex::State::NotRunning;
     // A Mac with Hex 3 installed opens it for the transcription, so the mic is ready.

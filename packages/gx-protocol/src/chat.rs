@@ -263,6 +263,23 @@ pub struct StartupDelivery {
 pub struct UnavailableMode {
     pub value: String,
     pub why: String,
+    /// Set when Ghostex can restart the agent in this mode once it is idle (Claude's Bypass,
+    /// server/src/session_chat_mode_restart.rs). Absent from older computers, and wherever a
+    /// restart can't bring the mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart: Option<ModeRestart>,
+}
+
+/// The "restart in this mode when idle" switch beside an [`UnavailableMode`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeRestart {
+    /// The user turned it on: the agent restarts in the mode as soon as it is idle.
+    #[serde(default)]
+    pub pending: bool,
+    /// Why the last restart did not happen, in the user's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

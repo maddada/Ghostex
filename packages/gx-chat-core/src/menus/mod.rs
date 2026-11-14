@@ -22,6 +22,7 @@ pub mod dispatch_run;
 pub mod document;
 pub mod draft_worktree;
 pub mod lifecycle;
+pub mod mode_restart;
 pub mod native_accounts;
 pub mod option_catalog;
 pub mod option_dispatch;

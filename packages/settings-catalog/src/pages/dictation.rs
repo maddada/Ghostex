@@ -1,7 +1,7 @@
 use crate::json::opt;
 use crate::rows::{row, section, Page, Section};
 
-/// Settings › Dictation: speech to text in the chat box, with its engine (Hex, OpenAI or xAI) and
+/// Settings › Dictation: speech to text in the chat box, with its engine (Hex, Superwhisper, OpenAI or xAI) and
 /// the key a cloud engine needs right under it, and the Dictation history.
 ///
 /// CDXC:VoiceMode 2026-11-08 DECISION:
@@ -23,7 +23,7 @@ pub(crate) fn dictate() -> Section {
         "dictate",
         "Speech to text",
         vec![
-            row("dictateEngine", "Engine", "Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI) and Hex when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer."),
+            row("dictateEngine", "Engine", "Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), Superwhisper when it is installed on a Linux computer (Omarchy comes with it), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI); with no key it picks Superwhisper when it is installed, and Hex otherwise; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer."),
             row("dictateOpenaiKey", "OpenAI API key", "Shown under the engine when it is OpenAI: paste your key from platform.openai.com. It is the same key the Voice Agent uses on GPT Realtime, kept encrypted on this computer."),
             row("dictateXaiKey", "xAI API key", "Shown under the engine when it is xAI: paste your key from console.x.ai. It is the same key the Voice Agent uses on Grok Voice, kept encrypted on this computer."),
             row("dictateLanguage", "Language", "Auto works for most people. Pick one when short phrases come out in the wrong language."),

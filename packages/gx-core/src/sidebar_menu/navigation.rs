@@ -285,9 +285,16 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         "clock",
         MenuCommand::command(message::open_automations_page()),
     ));
-    // CDXC:RemotePairing 2026-11-11 DECISION: User: "rename it in the menu to Connect a Device". The
-    // window it opens keeps its own title until the window's mockup decides it.
-    more.push(intent("Connect a Device", "devices", "remoteSetup"));
+    // CDXC:RemotePairing 2026-11-14 DECISION: User, on the Easy Connect page (Q4 "Two items"):
+    // separate Connect a Phone and Connect a Computer, here and on Settings > Remote. Connect a
+    // Computer opens the Connect a computer window. Supersedes the 2026-11-11 single "Connect a
+    // Device" row.
+    more.push(intent("Connect a Phone", "devices", "remoteSetup"));
+    more.push(intent(
+        "Connect a Computer",
+        "device-laptop",
+        "connectComputer",
+    ));
     if input.settings.keep_awake_enabled && !input.settings.hide_keep_awake_titlebar_control {
         let active = input.host.keep_awake_minutes;
         let mut children: Vec<MenuItem> = KEEP_AWAKE_OPTIONS

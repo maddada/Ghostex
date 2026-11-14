@@ -12434,7 +12434,7 @@
     {
       "key": "easyConnectEnabled",
       "title": "Easy Connect",
-      "subtitle": "Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself.",
+      "subtitle": "Reach this machine from anywhere; only the devices in the list get in. Connect a Phone or Connect a Computer turns it on by itself.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
@@ -12444,8 +12444,8 @@
     },
     {
       "key": "pairingCode",
-      "title": "Connect a Device",
-      "subtitle": "Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes.",
+      "title": "Connect a Phone",
+      "subtitle": "Opens the Connect a device window with the code a phone scans; Connect a Computer opens the window where two computers swap a code.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
@@ -12467,7 +12467,7 @@
     {
       "key": "tailscaleEnabled",
       "title": "Tailscale on or off",
-      "subtitle": "Offer the Tailscale path; off leaves it out of the Connect a Device window.",
+      "subtitle": "Offer the Tailscale path; off leaves it out of the Connect a device window.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "tailscale",
@@ -12512,7 +12512,7 @@
     {
       "key": "addMachine",
       "title": "Add a computer",
-      "subtitle": "Add a computer by SSH details or its code; saved computers appear as sidebar sections.",
+      "subtitle": "Opens Connect a Computer to add a computer with its code, or with SSH details; saved computers appear as sidebar sections.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
@@ -13282,7 +13282,7 @@
     {
       "key": "dictateEngine",
       "title": "Engine",
-      "subtitle": "Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI) and Hex when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.",
+      "subtitle": "Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), Superwhisper when it is installed on a Linux computer (Omarchy comes with it), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI); with no key it picks Superwhisper when it is installed, and Hex otherwise; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.",
       "tab": "dictation",
       "tabTitle": "Dictation",
       "section": "dictate",

@@ -188,6 +188,7 @@ mod mode_menu {
         vec![UnavailableMode {
             value: "bypass".into(),
             why: "This session wasn't started with the skip-permissions flag.".into(),
+            restart: None,
         }]
     }
 
