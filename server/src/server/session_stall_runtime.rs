@@ -223,8 +223,8 @@ fn announce_stuck(
     // moving is its coordinator's to heal (it was nudged and told at 8 minutes); the user sees the
     // red dot, a row only while Workers brings them back, and a push by the phone's Workers choice.
     // A thread Ghostex's restarts gave up on (`Heal`) is still the user's.
-    let worker = owner == QuietOwner::Threads
-        && crate::worker_alerts::is_worker(db, project_id, session_id);
+    let worker =
+        owner == QuietOwner::Threads && crate::worker_alerts::is_worker(db, project_id, session_id);
     let route = if worker {
         crate::push::PushRoute::worker()
     } else {

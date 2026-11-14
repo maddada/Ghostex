@@ -36,9 +36,12 @@ impl Render for BrowserRouteIconDemo {
                         .border_b_1()
                         .border_color(rgb(border))
                         .child(
-                            div().flex().flex_shrink_0().px(px(9.0)).items_center().child(
-                                svg().path(asset).size(px(14.0)).text_color(rgb(icon)),
-                            ),
+                            div()
+                                .flex()
+                                .flex_shrink_0()
+                                .px(px(9.0))
+                                .items_center()
+                                .child(svg().path(asset).size(px(14.0)).text_color(rgb(icon))),
                         )
                         .child(
                             div()

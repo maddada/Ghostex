@@ -241,17 +241,17 @@ pub(crate) fn store_failure_notice(
             } else {
                 record_failed_row(repository, session, None).map(Some)
             })
-                .and_then(|row| {
-                    committed_row = row;
-                    if let Some(recovery) = runtime.get_mut("accountRecovery") {
-                        recovery[crate::accounts::api_errors::FAILURE_NOTIFIED_AT] =
-                            json!(Utc::now().to_rfc3339());
-                    }
-                    crate::accounts::endpoint::update_session_members(
-                        repository, session, &runtime, members,
-                    )
-                })
-                .and_then(|_| repository.db.execute_batch(commit).map_err(sql));
+            .and_then(|row| {
+                committed_row = row;
+                if let Some(recovery) = runtime.get_mut("accountRecovery") {
+                    recovery[crate::accounts::api_errors::FAILURE_NOTIFIED_AT] =
+                        json!(Utc::now().to_rfc3339());
+                }
+                crate::accounts::endpoint::update_session_members(
+                    repository, session, &runtime, members,
+                )
+            })
+            .and_then(|_| repository.db.execute_batch(commit).map_err(sql));
             if written.is_err() {
                 let _ = repository.db.execute_batch(rollback);
             }

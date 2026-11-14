@@ -97,8 +97,7 @@ pub(crate) fn update_agent_activity_endpoint(
     }
     // A coordinator's turn that ends while its threads still work is stored as seen
     // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
-    let quiet_turn_end =
-        crate::coordinators::quiet_turn_end(repository, &current, &mut update);
+    let quiet_turn_end = crate::coordinators::quiet_turn_end(repository, &current, &mut update);
     let mut runtime_settings = object_field(&current, "runtimeSettings");
     runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
     promote_draft_on_first_activity(
@@ -339,8 +338,7 @@ pub(crate) fn ingest_agent_hook_event(
         if !is_stale_activity_event(&session, now_ms) {
             // A coordinator's turn that ends while its threads still work is stored as seen
             // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
-            quiet_turn_end =
-                crate::coordinators::quiet_turn_end(repository, &session, &mut update);
+            quiet_turn_end = crate::coordinators::quiet_turn_end(repository, &session, &mut update);
             let next_activity_name = update
                 .activity
                 .get("activity")

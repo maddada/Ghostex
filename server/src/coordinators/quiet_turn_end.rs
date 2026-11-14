@@ -69,7 +69,11 @@ pub(crate) fn quiet_thread_turn_end(
         return false;
     }
     let text = |key: &str| session.get(key).and_then(Value::as_str).unwrap_or_default();
-    if !crate::worker_alerts::is_worker(repository.connection(), text("projectId"), text("sessionId")) {
+    if !crate::worker_alerts::is_worker(
+        repository.connection(),
+        text("projectId"),
+        text("sessionId"),
+    ) {
         return false;
     }
     settle_entered_turn_end_as_seen(update);

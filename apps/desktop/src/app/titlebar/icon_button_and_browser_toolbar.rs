@@ -66,9 +66,9 @@ impl GhostexGpuiApp {
             .active_tab_for_pane(pane_id)
             .and_then(|tab| Some((tab.remote_machine_id.as_deref()?, tab.url.as_str())))
             .map(|(id, url)| {
-                let from_this_computer =
-                    gpui_remote_browser_route_for_machine(id).url_goes_through_machine(url)
-                        == Some(false);
+                let from_this_computer = gpui_remote_browser_route_for_machine(id)
+                    .url_goes_through_machine(url)
+                    == Some(false);
                 self.browser_source_mark(if from_this_computer { None } else { Some(id) })
             });
         let feedback_tool_unavailable = browser_feedback_tool_unavailable_url(&address_value);

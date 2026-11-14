@@ -185,25 +185,22 @@ pub(crate) fn alert_message(
         json!(alert_title(leading_name, &event.project_name)),
     );
     message.insert("body".into(), json!(event.kind.words(has_question)));
-    message.insert(
-        "data".into(),
-        {
-            let mut data = json!({
-                "kind": event.kind.wire(),
-                "machineId": machine_id,
-                "sessionId": event.session_id,
-                "notificationId": event.notification_id,
-            });
-            if let Some(open) = event.open_session_id.as_deref().filter(|id| !id.is_empty()) {
-                data["openSessionId"] = json!(open);
-            }
-            // A worker's news, which the phone shows by its Workers choice as it came.
-            if event.worker {
-                data["worker"] = json!(true);
-            }
-            data
-        },
-    );
+    message.insert("data".into(), {
+        let mut data = json!({
+            "kind": event.kind.wire(),
+            "machineId": machine_id,
+            "sessionId": event.session_id,
+            "notificationId": event.notification_id,
+        });
+        if let Some(open) = event.open_session_id.as_deref().filter(|id| !id.is_empty()) {
+            data["openSessionId"] = json!(open);
+        }
+        // A worker's news, which the phone shows by its Workers choice as it came.
+        if event.worker {
+            data["worker"] = json!(true);
+        }
+        data
+    });
     message.insert(CONTENT_AVAILABLE_FIELD.into(), json!(true));
     // A Silent kind, or a notice right after another one sounded, shows without the sound.
     if sound {

@@ -380,13 +380,13 @@ pub(super) fn announce_limit_gave_up(
     broadcast_notification_feed_changed(state);
     if let Some(id) = item["id"].as_str() {
         crate::push::announce_blocked(
-                state,
-                repo,
-                session,
-                id,
-                crate::push::BlockedWhy::Usage,
-                crate::push::PushRoute::default(),
-            );
+            state,
+            repo,
+            session,
+            id,
+            crate::push::BlockedWhy::Usage,
+            crate::push::PushRoute::default(),
+        );
     }
 }
 

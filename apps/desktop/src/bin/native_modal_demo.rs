@@ -64,12 +64,12 @@ mod agent_hooks_required_modal;
 mod agents_hub_demo;
 #[path = "../app/window/agents_hub/mod.rs"]
 mod agents_hub_modal;
+#[path = "native_modal_demo/browser_route_icon.rs"]
+mod browser_route_icon_demo;
 #[path = "native_modal_demo/chief_row.rs"]
 mod chief_row_demo;
 #[path = "../app/native_sidebar/chief_row_view.rs"]
 mod chief_row_view;
-#[path = "native_modal_demo/browser_route_icon.rs"]
-mod browser_route_icon_demo;
 #[path = "native_modal_demo/close_buttons.rs"]
 mod close_buttons_demo;
 #[path = "native_modal_demo/connect_device.rs"]

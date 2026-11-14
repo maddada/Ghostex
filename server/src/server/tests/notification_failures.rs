@@ -256,7 +256,11 @@ async fn hook_driven_thread_questions_approvals_and_failures_reach_the_feed() {
         )
         .await;
     // Its error is the coordinator's to handle: no row while Workers is Off (Q3245).
-    assert!(fixture.rows(&thread, "failed").is_empty(), "{:?}", fixture.feed());
+    assert!(
+        fixture.rows(&thread, "failed").is_empty(),
+        "{:?}",
+        fixture.feed()
+    );
 }
 
 #[tokio::test]
@@ -347,8 +351,16 @@ async fn a_coordinators_threads_leave_no_rows_for_finished_turns_or_errors() {
 
     // CDXC:Notifications 2026-11-14 (Q3241, Q3245 in server/src/worker_alerts.rs): with Workers
     // Off (the default) a thread's finished turn leaves no row and no dot, and its error no row.
-    assert!(fixture.rows(&finished, "finished").is_empty(), "{:?}", fixture.feed());
-    assert!(fixture.rows(&failed, "failed").is_empty(), "{:?}", fixture.feed());
+    assert!(
+        fixture.rows(&finished, "finished").is_empty(),
+        "{:?}",
+        fixture.feed()
+    );
+    assert!(
+        fixture.rows(&failed, "failed").is_empty(),
+        "{:?}",
+        fixture.feed()
+    );
     let db = open_gxserver_database(&fixture.state.paths).expect("db");
     let session = DomainRepository::new(&db, fixture.state.metadata.server_id.as_str())
         .get_session(&fixture.project_id, &finished)
