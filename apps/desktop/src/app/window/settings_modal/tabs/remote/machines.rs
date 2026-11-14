@@ -973,14 +973,17 @@ fn machine_tile(
                 .on_click(cx.listener(move |tab, _: &ClickEvent, window, cx| {
                     tab.open_machine_dialog(Some(&open_machine), window, cx);
                 }))
-                // Its icon as last read on that computer (gx-core computer_icons.rs).
+                // Its icon as last read on that computer, else its system's logo (gx-core
+                // computer_icons.rs).
                 .child(tile_icon(
                     t,
                     tab.computer_icons
                         .picked(&id)
                         .or_else(|| machine.get("icon").and_then(Value::as_str))
                         .and_then(ghostex_gx_core::computer_icons::computer_icon)
-                        .map_or(ICON_DEVICE_DESKTOP, |icon| icon.asset),
+                        .map(|icon| icon.asset)
+                        .or_else(|| tab.computer_icons.default_asset(&id))
+                        .unwrap_or(ICON_DEVICE_DESKTOP),
                 ))
                 .child(tile_text_with_dot(
                     t,

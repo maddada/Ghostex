@@ -103,7 +103,7 @@ impl GhostexGpuiApp {
         match systems.get(&machine.id).copied() {
             Some("windows") => "titlebar/brand-windows.svg",
             Some("macos") => "titlebar/brand-apple.svg",
-            Some("linux") => "titlebar/brand-ubuntu.svg",
+            Some("linux") => "titlebar/brand-linux.svg",
             _ => "titlebar/cloud.svg",
         }
     }

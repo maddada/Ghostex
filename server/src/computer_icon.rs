@@ -102,12 +102,49 @@ fn platform() -> &'static str {
     }
 }
 
-/// What every caller gets: the picked icon (`null` when none), the computer's kind and its system.
+/// This computer's system logo, an id among gx-core's computer icons.
+fn system_logo() -> &'static str {
+    static LOGO: OnceLock<&'static str> = OnceLock::new();
+    LOGO.get_or_init(|| {
+        if platform() == "linux" {
+            if running_in_wsl() {
+                return "windows";
+            }
+            let release = std::fs::read_to_string("/etc/os-release")
+                .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
+                .unwrap_or_default();
+            let field = |name: &str| {
+                release
+                    .lines()
+                    .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
+                    .unwrap_or_default()
+                    .trim()
+                    .trim_matches('"')
+                    .to_string()
+            };
+            return ghostex_gx_core::computer_icons::linux_distribution_logo(
+                &field("ID"),
+                &field("ID_LIKE"),
+            );
+        }
+        ghostex_gx_core::computer_icons::system_logo(Some(platform()), None).unwrap_or("linux")
+    })
+}
+
+fn running_in_wsl() -> bool {
+    std::env::var_os("WSL_DISTRO_NAME").is_some()
+        || std::fs::read_to_string("/proc/sys/kernel/osrelease")
+            .is_ok_and(|release| release.to_ascii_lowercase().contains("microsoft"))
+}
+
+/// What every caller gets: the picked icon (`null` when none), the computer's kind, its system and
+/// its system's logo.
 fn answer(state_dir: &Path) -> Value {
     json!({
         "icon": read_picked_icon(state_dir),
         "kind": computer_kind(),
         "platform": platform(),
+        "logo": system_logo(),
     })
 }
 
