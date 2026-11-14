@@ -167,7 +167,7 @@ impl GpuiOnboardingWindow {
             "mobile-phone",
             "phone",
             "Pair my phone after setup",
-            "Opens Connect a Device after your first agent reply.",
+            "Opens Connect a Phone after your first agent reply.",
             phone_queued,
             false,
             cx,
@@ -203,7 +203,7 @@ impl GpuiOnboardingWindow {
             abs(s, 46.0, 756.0, None, None)
                 .flex()
                 .child(sans(s, 15.5, 400.0, hex(0xaeb6c4)).child("Anytime later: "))
-                .child(sans(s, 15.5, 600.0, hex(0xeef1f7)).child("Ghostex menu → Connect a Device"))
+                .child(sans(s, 15.5, 600.0, hex(0xeef1f7)).child("Ghostex menu → Connect a Phone"))
                 .child(sans(s, 15.5, 400.0, hex(0xaeb6c4)).child(", or "))
                 .child(sans(s, 15.5, 600.0, hex(0xeef1f7)).child("Settings → Remote"))
                 .child(sans(s, 15.5, 400.0, hex(0xaeb6c4)).child("."))
