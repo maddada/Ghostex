@@ -13,6 +13,7 @@ use super::disclosure_motion::{FoldFrame, FoldMotionKind, motion_clip};
 use super::transcript::text;
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
+use ghostex_gx_chat_core::transcript::quiet_view::QuietTurnLook;
 use ghostex_gx_chat_core::{ProjectedMessage, TranscriptItem};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -24,6 +25,8 @@ use std::{cell::Cell, rc::Rc};
 
 /// Space between the rows of an opened turn's log.
 const LOG_GAP: f32 = 8.0;
+/// Space between a "Then · 22s" mark and the turn's first row under it (`flat_turn_row`).
+pub(super) const FLAT_MARK_GAP: f32 = 4.0;
 /// Space between the parts of a finished turn, at Message spacing Default (`part_gap`).
 const PART_GAP: f32 = 10.0;
 
@@ -166,6 +169,23 @@ impl NativeChatView {
         // `folded_cards.rs`, where the user's decision is): drawn at the top of the opened row and
         // never after it.
         let folded = FoldedCards::of(*cards_in_fold, artifacts, questions, sent_messages);
+        // Inside an opened Quiet View line (gx-chat-core `QuietTurnLook`, where the user's decision
+        // is): straight on its rail, or titled by its calls.
+        let look = self.quiet_turn.take();
+        if let Some(look) = look.as_ref().filter(|look| look.flat) {
+            let tail = WorkTail {
+                key: &id,
+                artifacts: &folded.kept,
+                questions: folded.tail_questions,
+                sent_messages: folded.tail_sent,
+                gbot_cards,
+                workflows,
+                final_message: final_message.as_deref(),
+            };
+            let log = self.opened_log(item, &id, &folded, p, window, cx);
+            return self.flat_turn_row(look, log.unwrap_or_default(), tail, p, window, cx);
+        }
+        let title = look.filter(|look| !look.title.is_empty());
         let expanded = self.is_expanded(&id, p.work_open);
         self.disclosure_motion
             .borrow_mut()
@@ -181,7 +201,7 @@ impl NativeChatView {
                 self.read_picture_strip(&format!("{id}:read"), &pictures, 0.0, card_fill, p, cx)
             })
             .flatten();
-        let heading = self.work_summary(item, &id, expanded, pictures, p, cx);
+        let heading = self.work_summary(item, &id, expanded, pictures, title.as_ref(), p, cx);
         // Every row of a finished turn hides its own writes; they belong to the turn's
         // "N files changed" fold, drawn right under the heading while the turn is open
         // (file_change_card.rs, gx-chat-core `turn_files_fold`). Rows that are still folding keep
@@ -197,75 +217,7 @@ impl NativeChatView {
             }
             (!rows.is_empty()).then_some(rows)
         } else if expanded || motion.is_some() {
-            // The files fold leads the opened turn, collapsed, then the log; both ease in and out
-            // together with the turn.
-            let mut parts: Vec<AnyElement> = Vec::new();
-            // Whether the part right above the log is a stack of one-line cards.
-            let mut cards_above = false;
-            if let Some(cards) = self.folded_cards(&id, &folded, p, window, cx) {
-                parts.push(cards);
-                cards_above = true;
-            }
-            if let Some(files) = self.completed_files_fold(item, true, p, cx) {
-                parts.push(files);
-                cards_above = false;
-            }
-            // The log starts at the turn's left edge, under the folded cards and the files fold.
-            //
-            // CDXC:SessionChat 2026-11-10 DECISION: User, of the opened turn's "Used N tools" card:
-            // "why do i see a line next to the used tools card". React hung the log off a rail under
-            // a heading whose chevron sat in the marker column (`SessionChatExpansion`); the heading
-            // is a card at the left edge now, and the folded messages, answers and files fold above
-            // the log stand outside any rail, so the line only set the log apart from the rest of
-            // its own turn. The log has no rail or indent; the heading closes the turn.
-            self.hide_file_changes = true;
-            let mut log: Vec<AnyElement> = Vec::new();
-            if let Some(notice) = self.deferred_work_notice(item, p, cx) {
-                log.push(notice);
-            }
-            self.in_work_fold = true;
-            // A row that opens on its tool card right under one that closes on its own is a row gap
-            // away from it, like any two one-line cards (`SINGLE_LINE_CARD.gap_above`); the log
-            // already puts its own 8px between rows.
-            let mut card_above = false;
-            for message in work {
-                let row = self.message_row(message, p, window, cx);
-                let card_first = message["toolCard"].is_object()
-                    && super::transcript::text(message, "text").trim().is_empty();
-                let extra =
-                    SINGLE_LINE_CARD.gap_above(card_above, card_first, LOG_GAP, p) - LOG_GAP;
-                log.push(if extra > 0.0 {
-                    div().mt(px(extra * s)).child(row).into_any_element()
-                } else {
-                    row
-                });
-                card_above = message["toolCard"].is_object();
-            }
-            self.in_work_fold = false;
-            // A log that opens on a tool card right under the folded cards is a row gap below
-            // them, like any two one-line cards (`SINGLE_LINE_CARD.gap_above`), not a part gap.
-            let log_opens_on_card = log.len() == work.len()
-                && work.first().is_some_and(|message| {
-                    message["toolCard"].is_object()
-                        && super::transcript::text(message, "text").trim().is_empty()
-                });
-            let log_extra =
-                SINGLE_LINE_CARD.gap_above(cards_above, log_opens_on_card, part_gap(p), p)
-                    - part_gap(p);
-            if !log.is_empty() {
-                parts.push(
-                    div()
-                        .when(log_extra > 0.0, |log| log.mt(px(log_extra * s)))
-                        .flex()
-                        .flex_col()
-                        .w_full()
-                        .min_w_0()
-                        .gap(px(LOG_GAP * s))
-                        .children(log)
-                        .into_any_element(),
-                );
-            }
-            (!parts.is_empty()).then_some(parts)
+            self.opened_log(item, &id, &folded, p, window, cx)
         } else {
             None
         };
@@ -298,6 +250,140 @@ impl NativeChatView {
                 .into_any_element();
         };
         self.moving_completed_work_row(&id, frame, heading, log, tail, p)
+    }
+
+    /// A finished turn an opened Quiet View line draws straight on its rail (gx-chat-core
+    /// `QuietTurnLook::flat`, where the user's decision is): its "Then · 22s" mark when it is not
+    /// the line's first turn, its opened log with no card above it, then what it keeps out of its
+    /// fold. A Reduced line's turns draw the same way (quiet_work.rs).
+    pub(super) fn flat_turn_row(
+        &mut self,
+        look: &QuietTurnLook,
+        log: Vec<AnyElement>,
+        tail: WorkTail<'_>,
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let mut parts: Vec<(AnyElement, f32)> = look
+            .marks
+            .iter()
+            .map(|mark| (self.quiet_turn_mark(&mark.text, p), 0.0))
+            .collect();
+        let marked = !parts.is_empty();
+        for part in log {
+            let gap = match (parts.is_empty(), marked && parts.len() == 1) {
+                (true, _) => 0.0,
+                (false, true) => FLAT_MARK_GAP,
+                (false, false) => part_gap(p),
+            };
+            parts.push((part, gap));
+        }
+        self.hide_file_changes = true;
+        let tail = self.work_tail_parts(tail, p, window, cx);
+        self.hide_file_changes = false;
+        let opens = parts.is_empty();
+        for (at, (part, gap)) in spaced_tail(tail, false, None, p).into_iter().enumerate() {
+            parts.push((part, if opens && at == 0 { 0.0 } else { gap }));
+        }
+        div()
+            .flex()
+            .flex_col()
+            .w_full()
+            .min_w_0()
+            .children(
+                parts
+                    .into_iter()
+                    .map(|(part, gap)| div().w_full().min_w_0().pt(px(gap * s)).child(part)),
+            )
+            .into_any_element()
+    }
+
+    /// An opened finished turn's parts under its heading: its folded cards, its files fold, then
+    /// its log. A turn an opened Quiet View line draws straight on its rail is only these
+    /// (`flat_completed_work_row`).
+    fn opened_log(
+        &mut self,
+        item: &TranscriptItem,
+        id: &str,
+        folded: &FoldedCards<'_>,
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Vec<AnyElement>> {
+        let TranscriptItem::CompletedWork { work, .. } = item else {
+            return None;
+        };
+        let s = p.scale;
+        let id = id.to_string();
+        // The files fold leads the opened turn, collapsed, then the log; both ease in and out
+        // together with the turn.
+        let mut parts: Vec<AnyElement> = Vec::new();
+        // Whether the part right above the log is a stack of one-line cards.
+        let mut cards_above = false;
+        if let Some(cards) = self.folded_cards(&id, folded, p, window, cx) {
+            parts.push(cards);
+            cards_above = true;
+        }
+        if let Some(files) = self.completed_files_fold(item, true, p, cx) {
+            parts.push(files);
+            cards_above = false;
+        }
+        // The log starts at the turn's left edge, under the folded cards and the files fold.
+        //
+        // CDXC:SessionChat 2026-11-10 DECISION: User, of the opened turn's "Used N tools" card:
+        // "why do i see a line next to the used tools card". React hung the log off a rail under
+        // a heading whose chevron sat in the marker column (`SessionChatExpansion`); the heading
+        // is a card at the left edge now, and the folded messages, answers and files fold above
+        // the log stand outside any rail, so the line only set the log apart from the rest of
+        // its own turn. The log has no rail or indent; the heading closes the turn.
+        self.hide_file_changes = true;
+        let mut log: Vec<AnyElement> = Vec::new();
+        if let Some(notice) = self.deferred_work_notice(item, p, cx) {
+            log.push(notice);
+        }
+        self.in_work_fold = true;
+        // A row that opens on its tool card right under one that closes on its own is a row gap
+        // away from it, like any two one-line cards (`SINGLE_LINE_CARD.gap_above`); the log
+        // already puts its own 8px between rows.
+        let mut card_above = false;
+        for message in work {
+            let row = self.message_row(message, p, window, cx);
+            let card_first = message["toolCard"].is_object()
+                && super::transcript::text(message, "text").trim().is_empty();
+            let extra = SINGLE_LINE_CARD.gap_above(card_above, card_first, LOG_GAP, p) - LOG_GAP;
+            log.push(if extra > 0.0 {
+                div().mt(px(extra * s)).child(row).into_any_element()
+            } else {
+                row
+            });
+            card_above = message["toolCard"].is_object();
+        }
+        self.in_work_fold = false;
+        // A log that opens on a tool card right under the folded cards is a row gap below
+        // them, like any two one-line cards (`SINGLE_LINE_CARD.gap_above`), not a part gap.
+        let log_opens_on_card = log.len() == work.len()
+            && work.first().is_some_and(|message| {
+                message["toolCard"].is_object()
+                    && super::transcript::text(message, "text").trim().is_empty()
+            });
+        let log_extra = SINGLE_LINE_CARD.gap_above(cards_above, log_opens_on_card, part_gap(p), p)
+            - part_gap(p);
+        if !log.is_empty() {
+            parts.push(
+                div()
+                    .when(log_extra > 0.0, |log| log.mt(px(log_extra * s)))
+                    .flex()
+                    .flex_col()
+                    .w_full()
+                    .min_w_0()
+                    .gap(px(LOG_GAP * s))
+                    .children(log)
+                    .into_any_element(),
+            );
+        }
+        (!parts.is_empty()).then_some(parts)
     }
 
     /// The folded messages and answers at the top of an opened row, one card under another:
@@ -388,6 +474,7 @@ impl NativeChatView {
         id: &str,
         expanded: bool,
         pictures: Option<AnyElement>,
+        title: Option<&QuietTurnLook>,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -404,10 +491,15 @@ impl NativeChatView {
         };
         let s = p.scale;
         let expandable = *expandable;
-        let label = label.clone();
+        // Titled by its calls, the card leads with that count's icon and leaves it out of the pills.
+        let (label, tile) = match title {
+            Some(look) => (look.title.clone(), stat_icon(&look.title_kind)),
+            None => (label.clone(), "titlebar/chat-card-clock.svg"),
+        };
         let stats: Vec<(String, String)> = stats
             .iter()
             .map(|stat| (text(stat, "kind"), text(stat, "label")))
+            .filter(|(kind, _)| title.is_none_or(|look| *kind != look.title_kind))
             .collect();
         let spoken = std::iter::once(label.clone())
             .chain(stats.iter().map(|(_, label)| label.clone()))
@@ -432,10 +524,7 @@ impl NativeChatView {
                     .h(px(card.header_height(s)))
                     .gap(px(10.0 * s))
                     .px(px(card.padding_x * s))
-                    .child(
-                        card.tile("titlebar/chat-card-clock.svg", p)
-                            .child(card.check_badge(p)),
-                    )
+                    .child(card.tile(tile, p).child(card.check_badge(p)))
                     .child(
                         card.title(div().flex_shrink_0(), p)
                             .text_color(p.foreground)
@@ -498,14 +587,7 @@ impl NativeChatView {
         use super::pills_strip::{PILL_GAP, plan_strip};
         let s = p.scale;
         let card = &*SINGLE_LINE_CARD;
-        let icon = |kind: &str| match kind {
-            "files" => "titlebar/pencil.svg",
-            "images" => "titlebar/photo.svg",
-            "messages" => "titlebar/messages.svg",
-            "answers" => "titlebar/chat-card-question.svg",
-            "failed" | "recovered" => "titlebar/alert-triangle.svg",
-            _ => "titlebar/tool.svg",
-        };
+        let icon = stat_icon;
         let tone = |kind: &str| {
             if matches!(kind, "failed" | "recovered") {
                 p.error()
@@ -675,4 +757,17 @@ impl NativeChatView {
 fn text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
     super::fonts::label_width(label, &p.font, gpui::FontWeight::NORMAL, size * p.scale, cx)
         / p.scale
+}
+
+/// The icon of a "Worked for" count (`kind` of gx-chat-core `work_summary::counted_work_stats` and
+/// its neighbours).
+fn stat_icon(kind: &str) -> &'static str {
+    match kind {
+        "files" => "titlebar/pencil.svg",
+        "images" => "titlebar/photo.svg",
+        "messages" => "titlebar/messages.svg",
+        "answers" => "titlebar/chat-card-question.svg",
+        "failed" | "recovered" => "titlebar/alert-triangle.svg",
+        _ => "titlebar/tool.svg",
+    }
 }

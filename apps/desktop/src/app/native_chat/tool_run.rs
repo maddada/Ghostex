@@ -183,7 +183,15 @@ impl NativeChatView {
         // Agent work Reduced or Quiet: the run is one live quiet line in every view, open in
         // Detailed (quiet_work.rs).
         let quiet = p.quiet_style();
-        if (p.simple || quiet) && !show_all {
+        // CDXC:SessionChat 2026-11-14 DECISION: User, of an opened Quiet View line whose one call
+        // sat on its rail as a bare row: "when there's only 1 tool call, still show 1 tool call
+        // card that you expand to see that tool call, because all the ones there are cards now,
+        // not tool calls shown directly". In the boxed card (`quiet_card_header`) a run that has
+        // no fold of its own (one call, or none hidden) gets the same shut "1 tool call" card as a
+        // longer run, opening onto its rows; the lone call is no longer the card's header. The
+        // phone matches (ToolRows.tsx).
+        let unfolded = message["toolFold"]["hiddenCount"].as_u64().unwrap_or(0) == 0;
+        if ((p.simple || quiet) || (card_header && unfolded)) && !show_all {
             // Under kept words the line has a key of its own, apart from their chevron's
             // (gx-chat-core `grouped_work::only_what_waits`).
             let key = message["toolsLineKey"]

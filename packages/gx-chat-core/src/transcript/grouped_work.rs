@@ -67,6 +67,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
     for item in run {
         let TranscriptItem::CompletedWork {
             id: turn_id,
+            label: turn_label,
             files: turn_files,
             expandable: turn_expandable,
             deferred,
@@ -149,6 +150,8 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             push_once(&mut read_images, image);
         }
         turns.push(GroupedTurn {
+            work_start: turn_start,
+            label: turn_label,
             id: turn_id,
             deferred,
             questions,
