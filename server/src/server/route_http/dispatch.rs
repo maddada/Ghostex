@@ -642,6 +642,10 @@ pub(in crate::server) async fn route_http(
         Ok(response) => return response,
         Err(request) => request,
     };
+    let request = match route_theme_http(request).await {
+        Ok(response) => return response,
+        Err(request) => request,
+    };
     let request = match route_connectors_http(request).await {
         Ok(response) => return response,
         Err(request) => request,

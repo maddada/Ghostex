@@ -304,6 +304,7 @@ pub mod telemetry;
 pub mod terminal_ws;
 #[cfg(test)]
 mod test_home;
+pub(crate) mod theme;
 pub(crate) mod ticks;
 pub mod toolchain;
 pub mod typed_operations;

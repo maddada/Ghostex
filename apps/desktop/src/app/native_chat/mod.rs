@@ -109,6 +109,7 @@ mod strip_overflow;
 mod subagent_view;
 mod system_cards;
 mod terminal_ready;
+mod theme_card;
 mod thinking;
 mod thinking_card;
 mod tool_card;

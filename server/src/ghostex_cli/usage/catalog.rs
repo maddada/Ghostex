@@ -414,6 +414,10 @@ pub fn usage() -> String {
             "Apply a settings export here through the running desktop app and list what changed",
         ),
         format_help_command(
+            "theme [read|set <key>=<value> ...|undo|redo|history] [--json]",
+            "Read the look settings, change several as one change, undo or redo it, list the last 20 changes",
+        ),
+        format_help_command(
             "guide [overview|features|settings|hotkeys]",
             "Print the built-in Ghostex guide, or one chapter of it",
         ),

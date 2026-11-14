@@ -62,7 +62,37 @@ they ask for one.
    exactly like a save in the Settings modal and the command prints the old and
    new value once the app has written it. Report that line to the user.
 
-4. Hotkeys have their own commands. Find the action id with `list` (it
+4. To restyle Ghostex ("make it darker", "a blue theme", "more see-through",
+   "a bigger font"), use `ghostex theme`. It changes the look settings of
+   Settings > Interface, several at once as one change the user can undo:
+
+   ```bash
+   ghostex theme read                          # every look setting, grouped, with what it does
+   ghostex theme set darkThemePreset=blue themeSidebarContrast=-6
+   ghostex theme undo                          # puts the last change back; redo applies it again
+   ghostex theme history                       # the last 20 changes, who made them, what changed
+   ```
+
+   - Read first: `read` lists each key with its value, its allowed values and
+     what it does, grouped (colours, chat and terminal colours, fonts, size,
+     transparency, window). Values are read as `ghostex settings set` reads
+     them; quote a value with spaces (`terminalFontFamily="JetBrains Mono"`).
+   - You can't see the result. Make one small change at a time, tell the user
+     what you changed, and ask how it looks before the next.
+   - The change applies at once and your chat shows a Theme changed card with
+     Undo. When the command says something is hard to read (a glass tint so low
+     that text sits on the desktop, an outline that barely shows), the change
+     is saved anyway: tell the user, and offer to change it back.
+   - Only the settings `read` lists can change. Borders, dividers and grey
+     text have no setting yet: say so instead of editing files.
+   - To make Ghostex look like a known theme, the Presets on Settings >
+     Interface do it in one click (Catppuccin, Dracula, Solarized, Tokyo Night,
+     Nord, Kanagawa, Everforest, Gruvbox); `ghostex settings open --tab theme`
+     opens the page.
+   - `ghostex theme` needs a Ghostex newer than 11.6.1. If it is unknown,
+     change one look setting at a time with `ghostex settings set`.
+
+5. Hotkeys have their own commands. Find the action id with `list` (it
    searches titles too), then change it; `none` unassigns and `reset` restores
    the default. `set` refuses keys another hotkey already uses unless you add
    `--replace`, so tell the user which hotkey loses them before using it:
@@ -82,7 +112,7 @@ they ask for one.
    normal one again). `--terminal` needs a Ghostex newer than 10.36.0; on an
    older one, change Terminal focused keys in Settings > Hotkeys.
 
-5. When a row is not agent-writable (accounts, remote pairing, structured
+6. When a row is not agent-writable (accounts, remote pairing, structured
    values such as tag lists, or rows that are only buttons in the UI), do not
    try to edit files or JSON. Open the right Settings page with the row already
    searched and tell the user what to click:
@@ -91,7 +121,7 @@ they ask for one.
    ghostex settings open <key>
    ```
 
-6. For a question about coordinators (their threads, the board, threads on
+7. For a question about coordinators (their threads, the board, threads on
    another computer, goal and memory), answer from the Coordinators section of
    `ghostex guide features`; `ghostex coordinator --help` has every verb and
    flag. When the user asks what a coordinator knows or will do, read the
@@ -104,7 +134,7 @@ they ask for one.
    Remote > Remote machines with Agent access on (`ghostex computers` lists
    them) and Ghostex 10.44 or later on both computers.
 
-7. For anything beyond settings (start or steer agents, sessions, automations,
+8. For anything beyond settings (start or steer agents, sessions, automations,
    the project board, prompt history, servers, diagnostics), route to the
    ghostex-cli skill and its `ghostex --help` catalog. Use ghostex-help to
    explain, ghostex-cli to operate. Name a skill the way the user's agent runs

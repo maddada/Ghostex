@@ -58,6 +58,10 @@ impl NativeChatView {
     }
 
     fn gbot_card(&self, card: &Value, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
+        // A "Theme changed" card rides these cards' pipeline (theme_card.rs).
+        if text(card, "kind") == "themeChanged" {
+            return self.theme_card(card, p, cx);
+        }
         let s = p.scale;
         let change_id = text(card, "changeId");
         let bot_id = text(card, "botId");

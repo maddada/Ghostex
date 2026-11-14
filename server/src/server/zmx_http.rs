@@ -623,20 +623,56 @@ pub(crate) async fn handle_renderer_command_http(
             );
         }
     };
-    // A settings save on a computer without the desktop app is gxserver's (headless_settings.rs).
-    let settings_patch = (action == "updateSettingsPatch")
-        .then(|| payload.get("patch").and_then(Value::as_object).cloned())
-        .flatten();
-    match state
-        .event_hub
-        .dispatch_renderer_command(action, payload, timeout_ms)
-        .await
-    {
+    let answer = if action == "updateSettingsPatch" {
+        save_settings_patch(state, payload, timeout_ms).await
+    } else {
+        state
+            .event_hub
+            .dispatch_renderer_command(action, payload, timeout_ms)
+            .await
+            .map_err(|error| SettingsSaveError {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code: error.code.to_string(),
+                message: error.message,
+            })
+    };
+    match answer {
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
             rpc_success(request_id, result),
         ),
+        Err(error) => routed_json(
+            Some(endpoint_path),
+            error.status,
+            rpc_error(error.code, error.message, Some(request_id)),
+        ),
+    }
+}
+
+/// Why a settings save did not go through, with the status the API answers it with.
+pub(crate) struct SettingsSaveError {
+    pub(crate) status: StatusCode,
+    pub(crate) code: String,
+    pub(crate) message: String,
+}
+
+/// Saves an `updateSettingsPatch` payload (`{patch, source}`) the way every API write does: the
+/// running desktop app saves it with the Settings window's own save path, or, on a computer without
+/// the app, gxserver itself (headless_settings.rs). Callers check the keys first
+/// (settings_agent_writable.rs).
+pub(crate) async fn save_settings_patch(
+    state: &AppState,
+    payload: Map<String, Value>,
+    timeout_ms: u64,
+) -> Result<Value, SettingsSaveError> {
+    let settings_patch = payload.get("patch").and_then(Value::as_object).cloned();
+    match state
+        .event_hub
+        .dispatch_renderer_command("updateSettingsPatch".to_string(), payload, timeout_ms)
+        .await
+    {
+        Ok(result) => Ok(result),
         Err(error) if error.code == "dependencyUnavailable" && settings_patch.is_some() => {
             let paths = state.paths.clone();
             let patch = settings_patch.unwrap_or_default();
@@ -646,28 +682,24 @@ pub(crate) async fn handle_renderer_command_http(
             .await
             .unwrap_or_else(|join| Err(join.to_string()))
             {
-                Ok(Some(result)) => routed_json(
-                    Some(endpoint_path),
-                    StatusCode::OK,
-                    rpc_success(request_id, result),
-                ),
-                Ok(None) => routed_json(
-                    Some(endpoint_path),
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    rpc_error(error.code, error.message, Some(request_id)),
-                ),
-                Err(message) => routed_json(
-                    Some(endpoint_path),
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    rpc_error("internalError", message, Some(request_id)),
-                ),
+                Ok(Some(result)) => Ok(result),
+                Ok(None) => Err(SettingsSaveError {
+                    status: StatusCode::SERVICE_UNAVAILABLE,
+                    code: error.code.to_string(),
+                    message: error.message,
+                }),
+                Err(message) => Err(SettingsSaveError {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    code: "internalError".to_string(),
+                    message,
+                }),
             }
         }
-        Err(error) => routed_json(
-            Some(endpoint_path),
-            StatusCode::SERVICE_UNAVAILABLE,
-            rpc_error(error.code, error.message, Some(request_id)),
-        ),
+        Err(error) => Err(SettingsSaveError {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: error.code.to_string(),
+            message: error.message,
+        }),
     }
 }
 

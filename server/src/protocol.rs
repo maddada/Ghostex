@@ -911,6 +911,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         "/api/gbots" => full_local(path),
         /*
+        CDXC:Theming 2026-11-14 WHY:
+        The look is this computer's settings, changed through its own desktop app; the "Theme changed" card's Undo reaches it from the chat that shows the card, like the "GBot added" card's.
+        */
+        "/api/theme" => full_local(path),
+        /*
         CDXC:PiChatChannel 2026-11-05 WHY:
         The Ghostex Pi and OMP extensions poll it from inside the agent process on this computer, with the same token their hook reports use; it hands them chat commands for their own session only, so no other computer has any business with it.
         */
@@ -943,14 +948,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // Claude Code's idle compaction settings, which the phone's Settings › Chat shows per
         // computer (agents/claude_idle_compaction.rs); it changes them with `updateSettingsPatch`.
         "/api/readClaudeCompaction" => remote_allowed(path),
+        // The memory guard's switches, which the phone's Settings › Connection shows per computer
+        // (memory_guard/mod.rs); it changes them with `updateSettingsPatch`.
+        "/api/readMemoryGuard" => remote_allowed(path),
         // A recorded or typed turn for a call the client opened (`voice_agent/clip.rs`): any client that may call.
         "/api/voiceAgentClip" | "/api/voiceAgentText" => remote_allowed(path),
         "/api/setVoiceAgentKey" => full_local(path),
         /*
         CDXC:Secrets 2026-11-02 WHY:
-        // The memory guard's switches, which the phone's Settings › Connection shows per computer
-        // (memory_guard/mod.rs); it changes them with `updateSettingsPatch`.
-        "/api/readMemoryGuard" => remote_allowed(path),
         A secret request is created and waited for by the `ghostex secret request` an agent runs on this computer, and answered from any chat that shows the session, the phone included (the value only travels to this computer). Secret providers are a setting of this computer's: only its own clients list, change or test them.
         */
         "/api/answerSecretRequest" => remote_allowed(path),

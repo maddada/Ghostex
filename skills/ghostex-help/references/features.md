@@ -7255,6 +7255,19 @@ way back). While a Settings confirmation such as this one, Skip permissions? or
 Install Hex? is open, the keys you type stay in it instead of going into the
 Settings search behind it.
 
+Any agent can restyle Ghostex when you ask it ("make it darker", "give it a blue theme",
+"let more of my desktop show through"). It changes the settings on the Interface page with
+`ghostex theme set`, several at once as one change, and they apply at once, as a change in
+Settings does. The agent's chat shows a Theme changed card naming the agent and listing what
+changed, with Undo. When a change makes something hard to read (a sidebar or work area tint so
+low that text sits on the desktop, an outline colour that barely shows), it is still saved, and
+the card and the command say what is hard to read. `ghostex theme undo` and `ghostex theme redo`
+step through the last 20 changes, kept across restarts, and `ghostex theme history` lists them
+with when they were made, by which agent or by you, and what changed; Undo is refused once a
+setting it would put back was changed again. Borders, dividers and grey text have no setting
+yet, so an agent can't change them.
+Commands: `ghostex theme read`, `ghostex theme set <key>=<value> ...`, `ghostex theme undo`, `ghostex theme redo`, `ghostex theme history`.
+
 Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
 It has Text, UI Scale, Presets, Colours and Transparency sections, with Advanced controls and links

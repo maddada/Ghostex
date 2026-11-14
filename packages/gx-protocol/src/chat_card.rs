@@ -4,7 +4,8 @@
 //! gets the card the same way.
 //!
 //! Kinds: `gbotAdded` (`ghostex gbots create` run by Chief of Staff): `{ kind, changeId, botId,
-//! name, title, icon, color, colorHex, agentId }`; `routineSet` ([`ROUTINE_SET`]).
+//! name, title, icon, color, colorHex, agentId }`; `routineSet` ([`ROUTINE_SET`]); `themeChanged`
+//! ([`THEME_CHANGED`]).
 //!
 //! CDXC:GBots 2026-11-09 SEE-ALSO: server/src/gbots/card.rs (writes it), server/src/ghostex_cli/gbots_cli.rs (prints it), packages/gx-chat-core/src/transcript/gbot_cards.rs (reads it).
 
@@ -19,6 +20,12 @@ pub const GBOT_ADDED: &str = "gbotAdded";
 /// The `routineSet` kind (`ghostex gbots routine add` run in an agent's chat): `{ kind, changeId,
 /// routineId, botId, botName, icon, colorHex, name, scheduleSentence, precheckSentence }`.
 pub const ROUTINE_SET: &str = "routineSet";
+
+/// The `themeChanged` kind (`ghostex theme set` run in an agent's chat): `{ kind, changeId,
+/// agentId, by, items: [{ title, before, after }], warnings }`; `by` is who changed it (the agent's
+/// name), `items` the settings it changed in the words Settings shows them in, `warnings` what it
+/// made hard to read (server/src/theme/).
+pub const THEME_CHANGED: &str = "themeChanged";
 
 /// The line a command prints for `card`.
 pub fn chat_card_line(card: &Value) -> String {

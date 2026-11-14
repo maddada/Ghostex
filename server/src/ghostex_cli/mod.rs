@@ -32,6 +32,7 @@ pub mod extensions;
 mod feedback;
 mod gbots_api_cli;
 mod gbots_cli;
+mod theme_cli;
 mod gbots_computer_cli;
 mod gbots_day_watch_cli;
 mod gbots_department_cli;
@@ -70,8 +71,8 @@ pub mod sessions;
 mod sessions_brief;
 pub mod settings;
 mod settings_hotkeys;
-mod show;
 mod settings_transfer;
+mod show;
 mod side_chats;
 pub mod skills;
 pub mod tailcat;
@@ -129,6 +130,7 @@ pub fn run() -> i32 {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "theme",
     "chief",
     "security",
     "agent-guide",
@@ -276,6 +278,7 @@ fn exit_code() -> i32 {
 fn is_known_command(name: &str) -> bool {
     const NAMES: &[&str] = &[
         "account-login",
+        "theme",
         "accounts",
         "agent-cli",
         "agent-hooks",
@@ -1058,6 +1061,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "agent-sync" => agent_sync::agent_sync_command(args),
         "install-help-skill" => skills::install_help_skill_command(args),
         "settings" => settings::settings_command(args),
+        "theme" => theme_cli::run(args),
         "toggle-sidebar" => run_bridge_action("toggleSidebarCollapsed", Parser::None, plain, args),
         "assert-card" => {
             run_bridge_action("assertSidebarCard", Parser::AssertCard, assert_ok, args)
