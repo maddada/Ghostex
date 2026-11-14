@@ -13,11 +13,19 @@
 //!    B's own SSH key. A's desktop approves the request on A (the click was the owner's; the
 //!    approvals rule still applies there), and once A approves, B's gxserver has B's desktop add
 //!    A to its sidebar (renderer command `addRemoteMachine`).
-//! An older B answers the second call as unknown, and A says to update Ghostex there. The same
-//! two steps are what a phone paired with both computers will run later (Q5: "let a phone paired
-//! with both computers link them to each other, behind an 'are you sure?' confirmation"): it asks
-//! one computer for a code and hands it to the other; the signed ask here is only the computer's
-//! way of proving who asks, and a phone proves it with its device token instead.
+//! An older B answers the second call as unknown, and A says to update Ghostex there.
+//!
+//! CDXC:RemotePairing 2026-11-14 DECISION:
+//! User, on the Easy Connect page (Q5: "let a phone paired with both computers link them to each
+//! other", and "make this require an are you sure?"): after the phone's own confirmation, it runs
+//! the same steps for each direction. It asks one computer for its code (`/api/remotePairingCode`
+//! with `openTunnel`, which already answers a paired phone: CDXC:Security 2026-11-10 in
+//! security/policy.rs), hands it to the other here, approves that computer's request on the first
+//! with its usual Approve (Face ID when that computer asks for it), and waits until the second has
+//! added the first. A paired phone proves who asks with its own device token
+//! (`Principal::Device`), so it sends no signature; the token file and agents still can't start
+//! one. An older computer answers this route as unknown, and the phone says to update it there.
+//! SEE-ALSO: apps/mobile/app/src/machines/linkComputers.ts (the phone's side).
 //! SEE-ALSO: server/src/remote_access/computer_pairing.rs, apps/desktop/src/app/connect_computer_lifecycle.rs,
 //! packages/gx-core/src/renderer_commands/verbs.rs (`addRemoteMachine`).
 
@@ -32,6 +40,7 @@ use sha2::{Digest, Sha256};
 use ghostex_gx_protocol::pairing::DEVICE_KEY_ALGORITHM;
 
 use crate::paths::GxserverPaths;
+use crate::security::Principal;
 
 use super::computer_pairing::{
     device_public_key, device_sign, load_or_create_device_key, start_computer_pairing, AddMachine,
@@ -96,7 +105,12 @@ fn port(params: &Value, key: &str) -> Option<u16> {
 /// `/api/connectBackToComputer`: a computer paired with this one asks it to pair back with that
 /// computer's code and add it to this computer's sidebar once approved there. Answers what
 /// `/api/pairComputer` answers, plus `addsMachine`.
-pub fn connect_back(db: &Connection, paths: &GxserverPaths, params: &Value) -> Result<Value> {
+pub fn connect_back(
+    db: &Connection,
+    paths: &GxserverPaths,
+    params: &Value,
+    caller: &Principal,
+) -> Result<Value> {
     let public_key = params
         .pointer("/deviceKey/publicKey")
         .and_then(Value::as_str)
@@ -128,7 +142,13 @@ pub fn connect_back(db: &Connection, paths: &GxserverPaths, params: &Value) -> R
     if user.starts_with('-') || user.chars().any(char::is_control) {
         bail!("The other computer's user is not valid.");
     }
-    // Only a computer paired with this one may ask, proven by its pairing device key.
+    // A paired phone has proven itself with its device token (CDXC:RemotePairing 2026-11-14 above).
+    if matches!(caller, Principal::Device { .. }) {
+        let mut answer = start_computer_pairing(paths, code, Some(AddMachine { user, ssh_port }))?;
+        answer["addsMachine"] = json!(true);
+        return Ok(answer);
+    }
+    // Otherwise only a computer paired with this one may ask, proven by its pairing device key.
     let asker = RemotePairingRepository::new(db)
         .list_devices()?
         .into_iter()

@@ -655,10 +655,8 @@ pub(crate) async fn handle_remote_access_http(
             // (CDXC:RemotePairing 2026-11-14 in connect_back.rs).
             match answer {
                 Ok(Ok(mut answer)) => {
-                    if let Some(machine) = answer
-                        .get("addMachine")
-                        .and_then(Value::as_object)
-                        .cloned()
+                    if let Some(machine) =
+                        answer.get("addMachine").and_then(Value::as_object).cloned()
                     {
                         let added = state
                             .event_hub
@@ -684,9 +682,10 @@ pub(crate) async fn handle_remote_access_http(
             .await
         }
         crate::remote_access::connect_back::CONNECT_BACK_ENDPOINT => {
+            let caller = caller.clone();
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                let started = super::connect_back::connect_back(&db, &paths, &params);
+                let started = super::connect_back::connect_back(&db, &paths, &params, &caller);
                 crate::audit::record(
                     crate::audit::Action::new(
                         "pairing.computerRequest",
