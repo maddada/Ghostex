@@ -81,8 +81,8 @@ pub use daemon_wait::{
     SESSIONS_LOADING_TITLE,
 };
 pub use draft_arrivals::{
-    open_draft_headings, project_draft_rows, DraftArrival, DraftArrivals, DraftRow,
-    DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
+    open_draft_headings, project_draft_rows, project_session_rows, DraftArrival, DraftArrivals,
+    DraftRow, DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use drop_landing::{DropLanding, DropWrites, TreeDropTarget};
 pub use gbots::{

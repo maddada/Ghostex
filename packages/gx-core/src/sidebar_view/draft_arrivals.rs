@@ -131,6 +131,25 @@ pub fn project_draft_rows(view: &SidebarView, enable_parking: bool, now_ms: u64)
         .collect()
 }
 
+/// Every row the Project sidebar's list holds, whatever heading it falls under, read by the same
+/// tracker as the drafts so a created session that is not a draft (a terminal, a fork) is put on
+/// screen too.
+///
+/// CDXC:Sidebar 2026-11-14 DECISION:
+/// User: "i had sessions area in the sidebar collapsed and i clicked on new terminal it created the terminal but didn't expand the sessions section please fix". A new row that becomes the open session within the focus wait is revealed with `reveal_plan`: its heading (Sessions, Pinned, Drafts), its group, its owning project and its collection open, and nothing else. Only the session this client opened is revealed; a session another client or an agent creates only opens Drafts under the Drafts rule above.
+pub fn project_session_rows(view: &SidebarView) -> Vec<DraftRow> {
+    view.groups
+        .iter()
+        .flat_map(|group| {
+            group.core.sessions.iter().map(move |session| DraftRow {
+                sidebar_session_id: session.row.sidebar_session_id.clone(),
+                storage_id: group.core.storage_id.clone(),
+                created_ms: session.row.timing.created_ms,
+            })
+        })
+        .collect()
+}
+
 /// The changes that open the Drafts heading of every group an arrival landed in, where it is
 /// collapsed.
 pub fn open_draft_headings(arrivals: &[DraftArrival], ui: &SidebarUiState) -> Vec<SidebarUiIntent> {
