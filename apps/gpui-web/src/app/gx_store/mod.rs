@@ -4,6 +4,7 @@
 mod client_document;
 mod cloud_boxes;
 mod collection_menu;
+mod computer_icons;
 mod coordinator_actions;
 mod create;
 mod custom_tags_sync;
