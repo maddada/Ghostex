@@ -497,17 +497,17 @@ impl NativeChatView {
             return;
         }
         // Up recalls this chat's sent messages (CDXC:SessionChat 2026-11-13 in
-        // packages/gx-chat-core/src/composer/history.rs): in an empty box, with the caret at the
-        // very start of a draft, or while a recalled message shows. It never takes a queued
-        // message back any more; that is the queued bubble's Back to composer button.
-        let caret_at_start = {
-            let range = input.read(cx).selected_range();
-            range.start == 0 && range.end == 0
-        };
+        // packages/gx-chat-core/src/composer/history.rs): only in an empty box, or while an
+        // unedited recalled message shows (`historyActive`; any edit clears it), so Up/Down keep
+        // stepping once started. It never takes a queued message back; that is the queued
+        // bubble's Back to composer button.
+        // CDXC:SessionChat 2026-11-14 DECISION: User: "when i have new text that i wrote inside
+        // the composer, then pressing up while im at the top of the text shouldn't start showing
+        // me older stuff". A typed or edited draft keeps Up and Down as plain caret movement (Up
+        // on the first line goes to the start of the text); it is never replaced. Supersedes
+        // the 2026-11-13 "caret at the very start of a draft" trigger.
         if (key.key == "up"
-            && (this.draft.trim().is_empty()
-                || this.snapshot["historyActive"] == true
-                || caret_at_start && !key.modifiers.alt)
+            && (this.draft.trim().is_empty() || this.snapshot["historyActive"] == true)
             || key.key == "down" && this.snapshot["historyActive"] == true)
             && !key.modifiers.shift
             && !key.modifiers.control

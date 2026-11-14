@@ -606,6 +606,12 @@ fn save_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
 fn recall_history(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let up = action.param("direction").and_then(Value::as_str) == Some("up");
     if up && state.composer.history.index.is_none() {
+        // CDXC:SessionChat 2026-11-14 DECISION: User: Up must not start history over text the user
+        // wrote. Only an empty box starts a walk (a recalled entry already has an index), whatever
+        // client asks, so a typed draft is never replaced.
+        if !state.composer.text.trim().is_empty() {
+            return Vec::new();
+        }
         state.composer.history.loading = true;
         // Down past the newest entry gives this back (a draft Up started from at its start).
         state.composer.history.draft = state.composer.text.clone();
