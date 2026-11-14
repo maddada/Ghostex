@@ -169,6 +169,9 @@ async fn call_once(
         Engine::Hex => {
             return transcribe_with_hex(paths, recording, settings, &audio_path, language).await
         }
+        Engine::Superwhisper => {
+            return transcribe_with_superwhisper(paths, recording, &audio_path).await
+        }
         Engine::Xai => Provider::Xai,
         Engine::OpenAi => Provider::OpenAi,
     };
@@ -271,6 +274,48 @@ async fn transcribe_with_hex(
         code: failure.code.to_string(),
         message: failure.message,
         provider: Some("hex".to_string()),
+        detail: None,
+    }
+    .with_detail(failure.detail);
+    if failure.transient {
+        Outcome::Transient(problem)
+    } else {
+        Outcome::Final(problem)
+    }
+}
+
+/// Transcribes with Superwhisper on this computer (`speech/superwhisper.rs`), which uses its own
+/// language and tone. Never falls back to another engine.
+async fn transcribe_with_superwhisper(
+    paths: &crate::paths::GxserverPaths,
+    recording: &Recording,
+    audio_path: &std::path::Path,
+) -> Outcome {
+    let home = paths.home_dir.clone();
+    let audio = audio_path.to_path_buf();
+    let timeout = Duration::from_secs(60 + recording.duration_ms / 2_000);
+    let result = tokio::task::spawn_blocking(move || {
+        super::speech::superwhisper::transcribe(&home, &audio, timeout)
+    })
+    .await;
+    let failure = match result {
+        Ok(Ok(text)) => return Outcome::Text(text),
+        Ok(Err(failure)) => failure,
+        Err(error) => {
+            return Outcome::Transient(
+                problem(
+                    "superwhisperUnavailable",
+                    None,
+                    "Ghostex couldn't reach Superwhisper. Transcribe again.",
+                )
+                .with_detail(Some(error.to_string())),
+            )
+        }
+    };
+    let problem = Problem {
+        code: failure.code.to_string(),
+        message: failure.message,
+        provider: Some("superwhisper".to_string()),
         detail: None,
     }
     .with_detail(failure.detail);

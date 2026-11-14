@@ -1,4 +1,4 @@
-//! Dictate's settings on this computer: which engine transcribes (Hex, OpenAI or xAI), the Hex
+//! Dictate's settings on this computer: which engine transcribes (Hex, Superwhisper, OpenAI or xAI), the Hex
 //! model and the language hint. gxserver keeps them in its own file
 //! (`<gxserver state>/voice-agent/dictate-settings.json`) and is their only writer.
 //!
@@ -23,6 +23,8 @@ pub(crate) enum Engine {
     Xai,
     /// Hex 3's local API on this computer (`hex.rs`).
     Hex,
+    /// Superwhisper on this Linux computer (`superwhisper.rs`).
+    Superwhisper,
 }
 
 impl Engine {
@@ -31,6 +33,7 @@ impl Engine {
             Engine::OpenAi => "openai",
             Engine::Xai => "xai",
             Engine::Hex => "hex",
+            Engine::Superwhisper => "superwhisper",
         }
     }
 
@@ -39,6 +42,7 @@ impl Engine {
             "openai" => Some(Engine::OpenAi),
             "xai" => Some(Engine::Xai),
             "hex" => Some(Engine::Hex),
+            "superwhisper" => Some(Engine::Superwhisper),
             _ => None,
         }
     }
@@ -98,9 +102,9 @@ impl DictateSettings {
                 "engine" => {
                     next.engine = value.as_str().and_then(Engine::from_id).ok_or(
                         if value.as_str() == Some("local") {
-                            "Ghostex no longer has its own speech model: pick hex, openai or xai."
+                            "Ghostex no longer has its own speech model: pick hex, superwhisper, openai or xai."
                         } else {
-                            "engine must be hex, openai or xai."
+                            "engine must be hex, superwhisper, openai or xai."
                         },
                     )?;
                 }

@@ -1783,7 +1783,8 @@ previous always type into the chat box, and so does every dictation in 11.3.0
 and earlier. Dictate records first and
 transcribes second: your voice is saved as a recording while you talk, and only
 after you stop is it turned into text by the engine you picked in Settings >
-Dictation: Hex, the recommended engine, or OpenAI's or xAI's speech-to-text
+Dictation: Hex, the recommended engine, Superwhisper on Linux, or OpenAI's or
+xAI's speech-to-text
 (both need that provider's API key, which stays on this computer). Hex 3 is the
 free local dictation app from anomalyco/hex (macOS on Apple silicon, Windows and
 Linux): it transcribes with its own models while it runs on that computer, with
@@ -1806,6 +1807,14 @@ recording is transcribed anyway (from the phone too). On Windows and Linux, turn
 on Open at login in Hex so dictation keeps working after a restart. When Hex
 isn't running, the row says "Hex isn't running" with Open Hex and Check again
 buttons.
+On a Linux computer with Superwhisper installed (Omarchy comes with it), the
+engine picker also offers Superwhisper: Ghostex hands each recording to
+Superwhisper on that computer and puts the text it returns into the chat box,
+including dictations from the phone, without Superwhisper pasting anything
+itself. Superwhisper uses its own processing mode, language, tone and
+vocabulary, so Dictation's Language row is hidden while it is the engine; change
+them in Superwhisper's settings (or ask an agent to, with the `superwhisper`
+command). Ghostex starts Superwhisper's service when needed.
 A computer that used Ghostex's old built-in model moves to Hex (never to a paid
 engine), and Ghostex deletes the speech models that model downloaded by itself.
 A new install

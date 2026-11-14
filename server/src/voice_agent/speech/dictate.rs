@@ -3,8 +3,8 @@
 
 use serde_json::{json, Value};
 
-use super::hex;
 use super::settings::{self, DictateSettings, Engine};
+use super::{hex, superwhisper};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
 use crate::voice_agent::keys::{self, KeyState};
@@ -30,7 +30,7 @@ pub(crate) fn hint_words() -> Vec<String> {
 
 pub(crate) fn provider_of(engine: Engine) -> Option<Provider> {
     match engine {
-        Engine::Hex => None,
+        Engine::Hex | Engine::Superwhisper => None,
         Engine::OpenAi => Some(Provider::OpenAi),
         Engine::Xai => Some(Provider::Xai),
     }
@@ -45,6 +45,7 @@ pub(crate) fn engine_label(settings: &DictateSettings) -> String {
             Some(model) => format!("Hex, {model}"),
             None => "Hex".to_string(),
         },
+        Engine::Superwhisper => "Superwhisper".to_string(),
     }
 }
 
@@ -87,6 +88,9 @@ pub(crate) fn engine_problem(
             return None;
         }
         return hex::problem(state, settings.hex_model.as_deref());
+    }
+    if settings.engine == Engine::Superwhisper {
+        return superwhisper::problem(&superwhisper::state(&paths.home_dir));
     }
     let provider = provider_of(settings.engine)?;
     match keys::key_state(paths, provider) {

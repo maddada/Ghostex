@@ -1,4 +1,4 @@
-//! Settings › Dictation's Speech to text section: the engine (Hex, OpenAI, xAI) with the key a
+//! Settings › Dictation's Speech to text section: the engine (Hex, Superwhisper, OpenAI, xAI) with the key a
 //! cloud engine needs right under it, the language, the hotkey and its mode, the microphone and
 //! Insert with spacing.
 //!
@@ -320,8 +320,14 @@ impl VoiceAgentTab {
         // Hex first, as the recommended engine, where Hex 3 ships for the shown computer
         // (CDXC:Dictate 2026-11-07); a computer already set to it keeps the choice in view.
         let hex = (Self::hex_offered(&answer) || engine == "hex").then_some(("Hex", "hex"));
+        // Superwhisper where it is installed on the shown computer (Linux, Omarchy ships it;
+        // CDXC:Dictate 2026-11-14 in server/src/voice_agent/speech/superwhisper.rs).
+        let superwhisper = (answer["superwhisper"]["available"] == true
+            || engine == "superwhisper")
+            .then_some(("Superwhisper", "superwhisper"));
         let options = hex
             .into_iter()
+            .chain(superwhisper)
             .chain([("OpenAI", "openai"), ("xAI", "xai")])
             .map(|(label, value)| SettingOption {
                 label: label.to_string(),
@@ -348,6 +354,9 @@ impl VoiceAgentTab {
                 }
                 _ => message.to_string(),
             },
+            None if engine == "superwhisper" => {
+                "Transcribes with Superwhisper, in the language, tone and vocabulary set in Superwhisper.".to_string()
+            }
             None => match answer["engine"]["label"].as_str() {
                 Some(label) => format!("Transcribes with {label}."),
                 None => String::new(),
@@ -376,6 +385,10 @@ impl VoiceAgentTab {
     ) -> Option<AnyElement> {
         let (title, subtitle, _) = Self::catalog_row(LANGUAGE)?;
         let answer = self.dictate.answer.clone()?;
+        // Superwhisper dictates in its own language setting.
+        if answer["settings"]["engine"] == "superwhisper" {
+            return None;
+        }
         let options: Vec<SettingOption> = answer["languages"]
             .as_array()
             .into_iter()

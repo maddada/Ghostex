@@ -13268,7 +13268,7 @@
     {
       "key": "dictateEngine",
       "title": "Engine",
-      "subtitle": "Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI) and Hex when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.",
+      "subtitle": "Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), Superwhisper when it is installed on a Linux computer (Omarchy comes with it), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI) and Hex when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.",
       "tab": "dictation",
       "tabTitle": "Dictation",
       "section": "dictate",

@@ -107,10 +107,16 @@ pub(super) fn failure_actions(failure: &DictateFailure) -> FailureActions {
     let (key, models, retry, recording_kept) = match failure.code.as_str() {
         "noKey" => (Some(("Add key", provider)), None, true, true),
         "badKey" => (Some(("Check key", provider)), None, true, true),
-        "hexUnsupported" | "hexNotInstalled" | "hexNotRunning" | "hexNoModels"
-        | "hexModelNotReady" | "hexVersion" | "keyUnreadable" | "notReady" => {
-            (None, Some("Open settings"), true, true)
-        }
+        "hexUnsupported"
+        | "hexNotInstalled"
+        | "hexNotRunning"
+        | "hexNoModels"
+        | "hexModelNotReady"
+        | "hexVersion"
+        | "superwhisperNotInstalled"
+        | "superwhisperUnsupported"
+        | "keyUnreadable"
+        | "notReady" => (None, Some("Open settings"), true, true),
         "audioMissing" => (None, None, false, false),
         _ => (None, None, true, true),
     };
@@ -136,6 +142,7 @@ fn provider_label(provider: &str) -> &'static str {
     match provider {
         "openai" => "OpenAI",
         "hex" => "Hex",
+        "superwhisper" => "Superwhisper",
         _ => "xAI",
     }
 }
@@ -196,6 +203,8 @@ pub(super) fn unavailable_title(code: &str) -> &'static str {
         "hexNotRunning" => "Hex isn't running",
         "hexNoModels" | "hexModelNotReady" => "Hex has no model ready",
         "hexUnsupported" => "Hex can't run here",
+        "superwhisperNotInstalled" => "Superwhisper isn't installed",
+        "superwhisperUnsupported" => "Superwhisper can't run here",
         "noKey" => "No API key added",
         "keyUnreadable" => "The API key can't be read",
         _ => "Dictation isn't ready",
