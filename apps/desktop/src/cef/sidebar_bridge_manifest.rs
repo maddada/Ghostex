@@ -249,7 +249,10 @@ pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"
     if (search.get('session')) query.session = search.get('session');
     return query;
   };
-  const ext = async (method, route, { query = {}, body } = {}) => {
+  // A token gxserver revoked (the extension was turned off or updated) answers 401: ask once for a
+  // new one, which gxserver gives only while the extension is on.
+  const ext = async (method, route, options = {}, retried = false) => {
+    const { query = {}, body } = options;
     const { token, api } = await pageSession();
     const url = new URL(api + route, location.origin);
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
@@ -258,6 +261,10 @@ pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"
       headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    if (response.status === 401 && !retried) {
+      session = null;
+      return ext(method, route, options, true);
+    }
     const answer = await response.json().catch(() => ({}));
     if (!response.ok || answer.ok === false) {
       throw Object.assign(new Error(answer.message || 'Ghostex refused the extension call'), { code: answer.error || 'operationFailed' });
@@ -276,6 +283,7 @@ pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"
       try {
         const { token, api } = await pageSession();
         const response = await fetch(new URL(api + 'events', location.origin), { headers: { Authorization: `Bearer ${token}` } });
+        if (response.status === 401) session = null;
         if (!response.ok || !response.body) throw new Error('events');
         const reader = response.body.getReader();
         const decoder = new TextDecoder();

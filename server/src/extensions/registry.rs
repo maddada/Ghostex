@@ -103,6 +103,7 @@ impl ExtensionRegistry {
     pub(crate) fn uninstall(&self, id: &str) -> ExtensionResult<()> {
         validate_extension_id(id)?;
         self.runtime.stop(id)?;
+        self.runtime.forget_page_token(id);
         let _guard = self.lock()?;
         let destination = self.installed_dir().join(id);
         let metadata = fs::symlink_metadata(&destination).map_err(|error| {
@@ -163,6 +164,7 @@ impl ExtensionRegistry {
         apply_state_patch(&manifest, state, patch)?;
         if !state.enabled {
             self.runtime.stop(id)?;
+            self.runtime.forget_page_token(id);
         }
         let installed = InstalledExtension {
             runtime: self.runtime_status(id, &manifest, state),
@@ -204,6 +206,7 @@ impl ExtensionRegistry {
         let previous_manifest = read_manifest(&self.installed_dir().join(&id), Some(&id)).ok();
         check_install_approval(&manifest, previous_manifest.as_ref(), approval)?;
         self.runtime.stop(&id)?;
+        self.runtime.forget_page_token(&id);
         let mut store = read_store(&self.store_file)?;
         let state = store_entry_for_install(&manifest, store.get(&id), approval);
         activate_staged_payload(&self.installed_dir(), &id, staged_payload)?;

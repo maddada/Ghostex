@@ -89,6 +89,17 @@ impl ExtensionRuntime {
             .clone()
     }
 
+    /// Revokes the extension's page token: its web pages get 401 until the desktop asks for a new
+    /// one, which gxserver gives only while the extension is on.
+    ///
+    /// CDXC:Extensions 2026-11-14 WHY:
+    /// The coordinator's follow-up to phase 4: a turned-off extension's page token must stop working, not only its reads and writes. Turning it off, uninstalling it and installing over it (an update, which may change its permissions) all revoke it.
+    pub(crate) fn forget_page_token(&self, id: &str) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.page_tokens.remove(id);
+        }
+    }
+
     /// The extension whose page token this request carries.
     pub(crate) fn extension_for_page_token(&self, headers: &HeaderMap) -> Option<String> {
         let provided = request_bearer_token(headers)?;
