@@ -21,6 +21,7 @@ mod refs;
 mod rows;
 mod surface;
 mod text;
+mod web;
 
 use std::sync::Arc;
 

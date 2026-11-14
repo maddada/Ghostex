@@ -302,7 +302,10 @@ impl GhostexGpuiApp {
                 appearance,
                 cx,
             ),
-            PanelBlockBody::Web { .. } | PanelBlockBody::Unknown => div().into_any_element(),
+            PanelBlockBody::Web { path, height } => {
+                self.render_native_panel_web(block, path, *height, place, appearance)
+            }
+            PanelBlockBody::Unknown => div().into_any_element(),
         };
         // An empty block's title is its message, drawn by empty.rs.
         let heading = block

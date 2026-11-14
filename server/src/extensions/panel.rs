@@ -22,7 +22,7 @@ use std::{
 
 use ghostex_gx_protocol::extension_panel::{
     ChecklistItem, PanelAction, PanelBlockBody, PanelDocument, PanelMenuItem, PanelRow,
-    EXTENSION_PANEL_SCHEMA,
+    EXTENSION_PANEL_SCHEMA, WEB_BLOCK_HEIGHT_MAX, WEB_BLOCK_HEIGHT_MIN,
 };
 use serde_json::{json, Map, Value};
 use tokio::sync::broadcast;
@@ -992,14 +992,23 @@ impl<F: Fn(ExtensionPermission) -> bool> Checker<'_, F> {
                 icon("icon", empty_icon.as_deref())?;
                 self.optional_action(action.as_ref())?;
             }
-            PanelBlockBody::Web { .. } => {
-                return Err(bad(
-                    "web blocks come in a later version of Ghostex; use the native blocks for now.",
-                ));
+            PanelBlockBody::Web { path, height } => {
+                let lower = path.to_ascii_lowercase();
+                if !(lower.ends_with(".html") || lower.ends_with(".htm")) {
+                    return Err(bad("A web block's path is an .html file in the extension."));
+                }
+                validate_relative_path(path, "web block path")?;
+                if height.is_some_and(|height| {
+                    !(WEB_BLOCK_HEIGHT_MIN..=WEB_BLOCK_HEIGHT_MAX).contains(&height)
+                }) {
+                    return Err(bad(format!(
+                        "A web block's height is {WEB_BLOCK_HEIGHT_MIN} to {WEB_BLOCK_HEIGHT_MAX}."
+                    )));
+                }
             }
             PanelBlockBody::Unknown => {
                 return Err(bad(format!(
-                    "block {id:?} has an unknown type; the v1 types are rows, checklist, map, progress, text, buttons and empty."
+                    "block {id:?} has an unknown type; the types are rows, checklist, map, progress, text, buttons, empty and web."
                 )));
             }
         }

@@ -95,6 +95,11 @@ fn resolve_caller(state: &AppState, headers: &HeaderMap) -> Option<Caller> {
     if let Some(id) = state.extension_registry.extension_for_token(headers) {
         return Some(Caller::Extension(id));
     }
+    // A web block's page is the extension's own code: it calls with the extension's scope and
+    // permissions (`/api/extensionPageToken`).
+    if let Some(id) = state.extension_registry.extension_for_page_token(headers) {
+        return Some(Caller::Extension(id));
+    }
     if crate::auth::is_authorized_headers(headers, &state.auth_token) {
         return Some(Caller::Owner);
     }
@@ -313,6 +318,7 @@ fn handle(
         }
         (&Method::GET, "projects") => {
             only_the_extension(caller, &id)?;
+            require_enabled(&extension)?;
             require_permission(&extension, ExtensionPermission::ProjectsRead)?;
             let snapshot = presentation_snapshot(state)?;
             Ok((
@@ -322,6 +328,7 @@ fn handle(
         }
         (&Method::GET, "sessions") => {
             only_the_extension(caller, &id)?;
+            require_enabled(&extension)?;
             require_permission(&extension, ExtensionPermission::SessionsRead)?;
             let snapshot = presentation_snapshot(state)?;
             let project = query_param(query, "project");
@@ -503,6 +510,75 @@ pub(crate) async fn handle_panel_action_rpc(
             )
         }
         Err(error) => error_response(error),
+    }
+}
+
+/// The RPC that gives the desktop the token a sidebar extension's web pages call the extension
+/// API with. Only your own apps get it; the page itself never sees another extension's.
+pub(crate) const PAGE_TOKEN_RPC_ENDPOINT: &str = "/api/extensionPageToken";
+
+/// CDXC:Extensions 2026-11-14 WHY:
+/// Phase 4's brief: a `web` block's page talks through the extension bridge with "the same /api/ext/v1 calls with the same permissions" as the extension's server. The page is served from gxserver's own origin, so the bridge (cef/sidebar_bridge_manifest.rs) calls those routes itself with this token, which carries the extension's scope (`Caller::Extension`) and nothing else: it opens no other `/api` door, unlike the server's token.
+pub(crate) async fn handle_page_token_rpc(
+    state: Arc<AppState>,
+    caller: &crate::security::Principal,
+    endpoint_path: String,
+    request_id: String,
+    body: Value,
+) -> RoutedResponse {
+    let refuse_rpc = |status: StatusCode, error: ExtensionError| {
+        routed_json(
+            Some(endpoint_path.clone()),
+            status,
+            crate::protocol::rpc_error(error.code, error.message, Some(request_id.clone())),
+        )
+    };
+    if !caller.is_owner_device() {
+        return refuse_rpc(
+            StatusCode::FORBIDDEN,
+            forbidden("Only your Ghostex apps open an extension's web pages."),
+        );
+    }
+    let id = crate::domain::read_domain_rpc_params(&body)
+        .ok()
+        .and_then(|params| {
+            params
+                .get("extension")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+    let Some(id) = id else {
+        return refuse_rpc(
+            StatusCode::BAD_REQUEST,
+            ExtensionError::bad_request("Name the extension."),
+        );
+    };
+    let registry = state.extension_registry.clone();
+    let outcome = tokio::task::spawn_blocking(move || registry.sidebar_page_token(&id))
+        .await
+        .unwrap_or_else(|error| {
+            Err(ExtensionError::internal(format!(
+                "Extension API task failed: {error}"
+            )))
+        });
+    match outcome {
+        Ok(token) => routed_json(
+            Some(endpoint_path.clone()),
+            StatusCode::OK,
+            crate::protocol::rpc_success(
+                request_id.clone(),
+                json!({ "token": token, "api": EXT_API_ROUTE_PREFIX }),
+            ),
+        ),
+        Err(error) => {
+            let status = match error.code {
+                "notFound" => StatusCode::NOT_FOUND,
+                "conflict" => StatusCode::CONFLICT,
+                "badRequest" => StatusCode::BAD_REQUEST,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
+            refuse_rpc(status, error)
+        }
     }
 }
 

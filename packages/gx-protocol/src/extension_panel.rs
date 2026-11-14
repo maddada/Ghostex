@@ -18,6 +18,10 @@ use serde_json::Value;
 
 /// The panel document schema this build reads and writes.
 pub const EXTENSION_PANEL_SCHEMA: u64 = 1;
+/// A `web` block's height when it gives none, and the bounds gxserver accepts.
+pub const WEB_BLOCK_HEIGHT: u32 = 120;
+pub const WEB_BLOCK_HEIGHT_MIN: u32 = 40;
+pub const WEB_BLOCK_HEIGHT_MAX: u32 = 480;
 /// The frame gxserver broadcasts with the whole `extensionPanels` map whenever a panel changes.
 pub const EXTENSION_PANELS_CHANGED_EVENT_TYPE: &str = "extensionPanelsChanged";
 
@@ -98,7 +102,9 @@ pub enum PanelBlockBody {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         action: Option<PanelAction>,
     },
-    /// Reserved: a small page of the extension's own (phase 4).
+    /// A small page of the extension's own (an `.html` file in its folder), [`WEB_BLOCK_HEIGHT`]
+    /// points tall unless `height` says otherwise. The desktop draws it as a web page in its own
+    /// frame; a client that can't (the phone, the GPUI web build) shows an Open on computer row.
     Web {
         path: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -329,6 +335,10 @@ pub struct ExtensionPanelEntry {
     pub sidebar: Option<ExtensionSidebarPanel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub side_panel: Option<ExtensionSidePanel>,
+    /// Where the extension's `web` blocks load from (`http://127.0.0.1:<port>/ext/<id>/`): a
+    /// block's page is this plus its `path`. Absent from gxservers older than the web block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_base: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

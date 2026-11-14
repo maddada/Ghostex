@@ -34,6 +34,9 @@ struct ExtensionRuntimeInner {
     badges: HashMap<String, ExtensionBadge>,
     processes: HashMap<String, ProcessControl>,
     tokens: HashMap<String, ExtensionToken>,
+    /// By extension id: the token its web pages (`web` blocks) call `/api/ext/v1` with, for the
+    /// life of this gxserver. Kept apart from the server tokens, which open more doors.
+    page_tokens: HashMap<String, String>,
 }
 
 struct ProcessControl {
@@ -64,9 +67,37 @@ impl ExtensionRuntime {
                 badges: HashMap::new(),
                 processes: HashMap::new(),
                 tokens: HashMap::new(),
+                page_tokens: HashMap::new(),
             })),
             api_url,
         }
+    }
+
+    pub(crate) fn api_url(&self) -> &str {
+        &self.api_url
+    }
+
+    /// The extension's page token, made on first use.
+    pub(crate) fn page_token(&self, id: &str) -> String {
+        let Ok(mut inner) = self.inner.lock() else {
+            return new_extension_token();
+        };
+        inner
+            .page_tokens
+            .entry(id.to_string())
+            .or_insert_with(new_extension_token)
+            .clone()
+    }
+
+    /// The extension whose page token this request carries.
+    pub(crate) fn extension_for_page_token(&self, headers: &HeaderMap) -> Option<String> {
+        let provided = request_bearer_token(headers)?;
+        let inner = self.inner.lock().ok()?;
+        inner
+            .page_tokens
+            .iter()
+            .find(|(_, token)| tokens_equal(provided, token))
+            .map(|(id, _)| id.clone())
     }
 
     pub(crate) fn status(&self, id: &str, manifest: &ExtensionManifest) -> ExtensionRuntimeStatus {

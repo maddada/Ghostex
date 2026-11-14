@@ -230,6 +230,8 @@ export type GhostexPanelBlock = GhostexPanelBlockBase &
         }[];
       }
     | { type: 'empty'; subtitle?: string; icon?: string; action?: GhostexPanelAction }
+    /** A small page of the extension's own (an .html file in its folder), 40 to 480 points tall (120 when absent). */
+    | { type: 'web'; path: string; height?: number }
   );
 
 export interface GhostexPanelDocument {
@@ -258,6 +260,8 @@ export interface GhostexExtensionPanelEntry {
     document: GhostexPanelDocument;
     sessions?: Record<string, { revision: number; document: GhostexPanelDocument }>;
   };
+  /** Where the extension's `web` blocks load from (`http://127.0.0.1:<port>/ext/<id>/`). */
+  pageBase?: string;
 }
 
 export type GhostexExtensionPanels = Record<string, GhostexExtensionPanelEntry>;

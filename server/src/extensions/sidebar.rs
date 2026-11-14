@@ -18,6 +18,11 @@ use super::{
 /// Where gxserver posts a tap on an `extension` action on the extension's own server.
 pub(crate) const PANEL_ACTION_SERVER_PATH: &str = "/ghostex/panel-action";
 
+/// What `/ext/<id>/…` serves from a sidebar extension's folder for its web blocks.
+const SIDEBAR_PAGE_FILE_TYPES: &[&str] = &[
+    "html", "htm", "js", "mjs", "css", "svg", "png", "jpg", "jpeg", "gif", "webp", "woff", "woff2",
+];
+
 /// An installed sidebar extension, as a panel call sees it.
 pub(crate) struct SidebarExtension {
     pub(crate) manifest: ExtensionManifest,
@@ -193,7 +198,72 @@ impl ExtensionRegistry {
                 .collect(),
             sidebar,
             side_panel,
+            page_base: Some(format!("{}/ext/{id}/", self.runtime.api_url())),
         })
+    }
+
+    /// A file of an enabled sidebar extension's own web pages (`web` blocks), for
+    /// `GET /ext/<id>/<path>`: a page or what it loads, inside the extension's folder. Not a
+    /// sidebar extension: `None`, and the static-extension rules apply instead (serve.rs).
+    ///
+    /// CDXC:Extensions 2026-11-14 WHY:
+    /// A sidebar extension usually runs a command server, so it has no static folder to serve its web blocks from; its pages and their scripts, styles, fonts and pictures come from its own folder instead, by file type, so its manifest, panel and data files are not served (its scripts are, which is what a page needs).
+    pub(crate) fn sidebar_page_file(
+        &self,
+        id: &str,
+        relative: &std::path::Path,
+    ) -> Option<ExtensionResult<PathBuf>> {
+        let extension = self.sidebar_extension(id).ok()?;
+        if !extension.state.enabled {
+            return Some(Err(ExtensionError::not_found(format!(
+                "Extension {id:?} is disabled."
+            ))));
+        }
+        let allowed = relative
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase)
+            .is_some_and(|extension| SIDEBAR_PAGE_FILE_TYPES.contains(&extension.as_str()));
+        if !allowed {
+            return Some(Err(ExtensionError::bad_request(
+                "Only an extension's web pages and what they load are served.",
+            )));
+        }
+        let root = match std::fs::canonicalize(&extension.payload_dir) {
+            Ok(root) => root,
+            Err(_) => {
+                return Some(Err(ExtensionError::not_found(
+                    "The extension has no folder.",
+                )))
+            }
+        };
+        Some(match std::fs::canonicalize(root.join(relative)) {
+            Ok(path) if path.starts_with(&root) && path.is_file() => Ok(path),
+            Ok(_) => Err(ExtensionError::bad_request(
+                "The file is outside the extension folder.",
+            )),
+            Err(_) => Err(ExtensionError::not_found("No such file.")),
+        })
+    }
+
+    /// The token a sidebar extension's web pages call `/api/ext/v1` with (ext_api.rs).
+    pub(crate) fn sidebar_page_token(&self, id: &str) -> ExtensionResult<String> {
+        let extension = self.sidebar_extension(id)?;
+        if !extension.state.enabled {
+            return Err(ExtensionError {
+                code: "conflict",
+                message: format!("{id} is turned off."),
+            });
+        }
+        Ok(self.runtime.page_token(id))
+    }
+
+    /// The extension whose web page holds this request's page token.
+    pub(crate) fn extension_for_page_token(
+        &self,
+        headers: &axum::http::HeaderMap,
+    ) -> Option<String> {
+        self.runtime.extension_for_page_token(headers)
     }
 
     /// Starts the server of every enabled sidebar extension that has a command server, each on

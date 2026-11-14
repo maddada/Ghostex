@@ -298,12 +298,7 @@ fn surface_view(
             (Some(tab), Some(selected)) => tab == selected,
             _ => true,
         })
-        .filter(|block| {
-            !matches!(
-                block.body,
-                PanelBlockBody::Unknown | PanelBlockBody::Web { .. }
-            )
-        })
+        .filter(|block| !matches!(block.body, PanelBlockBody::Unknown))
         .map(|block| block_view(block, extension_id, surface, ui, width))
         .collect();
     ExtensionSurfaceView {

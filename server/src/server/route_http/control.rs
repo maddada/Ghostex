@@ -158,6 +158,16 @@ pub(super) async fn route_control_http(
             )
             .await
         }
+        crate::extensions::ext_api::PAGE_TOKEN_RPC_ENDPOINT => {
+            crate::extensions::ext_api::handle_page_token_rpc(
+                state.clone(),
+                &caller,
+                endpoint.path,
+                request_id,
+                body_json,
+            )
+            .await
+        }
         crate::extensions::ext_api::PANEL_ACTION_RPC_ENDPOINT => {
             crate::extensions::ext_api::handle_panel_action_rpc(
                 state.clone(),

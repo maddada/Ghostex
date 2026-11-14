@@ -220,8 +220,98 @@ pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"
       close: () => call('ui.close'),
       setBadge: (lines) => call('ui.setBadge', { lines }),
     },
+    sidebar: {
+      get: () => ext('GET', 'panel', { query: place() }),
+      set: (document, revision) => ext('PUT', 'panel', { query: place(), body: { document, ...(revision === undefined ? {} : { baseRevision: revision }) } }),
+      patch: (patch, revision) => ext('PATCH', 'panel', { query: place(), body: { ...patch, ...(revision === undefined ? {} : { baseRevision: revision }) } }),
+      onAction: (callback) => listen('action', callback),
+    },
+    projects: () => ext('GET', 'projects').then((answer) => answer.projects),
+    sessions: (project) => ext('GET', 'sessions', { query: project ? { project } : {} }).then((answer) => answer.sessions),
+    on: (name, callback) => listen(name, callback),
+  };
+  /*
+  A sidebar extension's web block (app/extensions/web_blocks.rs): the page is served from
+  gxserver's own origin, so it calls the extension API (/api/ext/v1) itself with the token
+  `page.session` gives it, which carries its extension's scope and permissions.
+  */
+  let session = null;
+  const pageSession = () => {
+    session ??= call('page.session').catch((error) => {
+      session = null;
+      throw error;
+    });
+    return session;
+  };
+  const place = () => {
+    const search = new URLSearchParams(location.search);
+    const query = { surface: search.get('surface') || 'sidebar' };
+    if (search.get('session')) query.session = search.get('session');
+    return query;
+  };
+  const ext = async (method, route, { query = {}, body } = {}) => {
+    const { token, api } = await pageSession();
+    const url = new URL(api + route, location.origin);
+    for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+    const response = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const answer = await response.json().catch(() => ({}));
+    if (!response.ok || answer.ok === false) {
+      throw Object.assign(new Error(answer.message || 'Ghostex refused the extension call'), { code: answer.error || 'operationFailed' });
+    }
+    return answer;
+  };
+  // `on(name)`: sessions, projects, panel (it changed, or a checklist was edited) and action (a
+  // tap on one of its `extension` actions).
+  const EVENT_NAMES = { sessionsChanged: 'sessions', projectsChanged: 'projects', panelChanged: 'panel', checklistEdited: 'panel', panelAction: 'action' };
+  const listeners = new Map();
+  let streaming = false;
+  const stream = async () => {
+    if (streaming) return;
+    streaming = true;
+    for (;;) {
+      try {
+        const { token, api } = await pageSession();
+        const response = await fetch(new URL(api + 'events', location.origin), { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok || !response.body) throw new Error('events');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let end;
+          while ((end = buffer.indexOf('\n\n')) >= 0) {
+            const chunk = buffer.slice(0, end);
+            buffer = buffer.slice(end + 2);
+            const data = chunk.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
+            if (!data) continue;
+            let event;
+            try { event = JSON.parse(data); } catch { continue; }
+            const name = EVENT_NAMES[event?.type];
+            for (const callback of (name && listeners.get(name)) || []) {
+              try { callback(event); } catch (error) { console.error(error); }
+            }
+          }
+        }
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  };
+  const listen = (name, callback) => {
+    if (!listeners.has(name)) listeners.set(name, new Set());
+    listeners.get(name).add(callback);
+    stream();
+    return () => listeners.get(name)?.delete(callback);
   };
   Object.defineProperty(window, 'ghostex', { configurable: false, enumerable: true, value: Object.freeze(api) });
+  // The bridge arrives when the page has loaded, after its own scripts ran: a page that needs it
+  // at start waits for this event when `window.ghostex` is not there yet.
+  window.dispatchEvent(new Event('ghostexready'));
 })();
 "#;
 
