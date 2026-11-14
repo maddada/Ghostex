@@ -160,6 +160,8 @@ pub(crate) fn text_style(p: &ChatAppearance) -> TextViewStyle {
             .max(0.0)
             * p.scale))
         .pb(px(VISUAL.paragraph_gap * p.scale));
+    // Bold words in the bright ink with the headings, unless a lane sets its own (Grey thinking).
+    style.strong_color = p.lane_heading.is_none().then_some(p.foreground);
     style.inline_code_style = Some(inline_code(p));
     style.prose_swatch = Some(prose_swatch(p));
     style.link = super::markdown_links::transcript_link_color(p);
