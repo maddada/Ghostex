@@ -237,6 +237,15 @@ impl NativeChatView {
         };
         // Greyed, still pressed: a press says why (the Unavailable card in `dictation.rs`).
         let dimmed = action == "dictate" && !pressed && super::dictation::dictation_unready(cx);
+        // ••• turns red and says why while the terminal, off the row, reads not ready
+        // (CDXC:Experience 2026-11-15 in gx-chat-core composer/row.rs).
+        let issue = (action == "moreActions")
+            .then(|| self.snapshot["composerRow"]["terminalIssue"].as_str())
+            .flatten()
+            .map(|reason| format!("Terminal problem: {reason}"));
+        let issue_tint = issue
+            .as_ref()
+            .map(|_| gpui::Hsla::from(gpui::rgb(0xf0a3a3)));
         div()
             .id(action)
             .relative()
@@ -250,18 +259,17 @@ impl NativeChatView {
             .rounded_full()
             .when(pressed, |this| this.bg(p.border))
             .hover(|style| style.bg(p.border))
-            .child(
-                gpui::svg()
-                    .path(icon)
-                    .size(px(16.0 * p.scale))
-                    .text_color(if pressed {
-                        p.control_primary
-                    } else if dimmed {
-                        p.primary.opacity(0.38)
-                    } else {
-                        p.primary
-                    }),
-            )
+            .child(gpui::svg().path(icon).size(px(16.0 * p.scale)).text_color(
+                if let Some(tint) = issue_tint {
+                    tint
+                } else if pressed {
+                    p.control_primary
+                } else if dimmed {
+                    p.primary.opacity(0.38)
+                } else {
+                    p.primary
+                },
+            ))
             .when_some(badge, |this, badge| {
                 let dot = badge.is_empty();
                 this.child(
@@ -282,6 +290,11 @@ impl NativeChatView {
                 )
             })
             .tooltip(move |window, cx| {
+                if let Some(issue) = issue.clone() {
+                    return crate::app::native_sidebar::tooltips::compact_card_tooltip(
+                        issue, 280.0, window, cx,
+                    );
+                }
                 // The microphone says what will transcribe (dictation.rs).
                 if action == "dictate" {
                     let text = super::dictation::dictation_tooltip_text(

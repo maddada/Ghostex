@@ -9,6 +9,7 @@
 mod chat_tools;
 mod commands_pane;
 mod computer_startup;
+mod experience;
 mod marked_sections_preview;
 mod memory_guard;
 mod powershell;
@@ -370,6 +371,7 @@ impl Render for GeneralTab {
         let sections =
             |page: &mut Self, g: &GeneralCx, window: &mut Window, cx: &mut Context<Self>| match tab
             {
+                SettingsTabId::Experience => experience::sections(page, g, window, cx),
                 SettingsTabId::Chat => chat_tools::chat_sections(page, g, window, cx),
                 SettingsTabId::Sidebar => sidebar::sections(page, g, window, cx),
                 SettingsTabId::Terminal => terminal::sections(page, g, window, cx),

@@ -3,6 +3,122 @@
   "generatedBy": "packages/settings-catalog",
   "settings": [
     {
+      "key": "experiencePreset",
+      "title": "Experience",
+      "subtitle": "How many buttons and details Ghostex shows. Chill: a simple chat box and a calm chat. Regular: pick the model, the mode and the effort as you chat. Advanced: for people who use terminals more. Each area below follows it; change one and it says Custom.",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
+      "key": "experienceChatBox",
+      "title": "Chat box",
+      "subtitle": "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize; the terminal is in •••. Advanced adds the terminal button and the context ring.",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
+      "key": "experienceChat",
+      "title": "Chat",
+      "subtitle": "Chill: Quiet View keeps the running turn as one line with its time and names only reports. Regular and Advanced: Quiet View with the last turn open.",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
+      "key": "experienceSessionsList",
+      "title": "Sessions list",
+      "subtitle": "Chill is the Sidebar's Minimal preset (no project icons, times or git numbers), Regular its Recommended, Advanced its Detailed (with last-active times).",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
       "key": "preferredAgentInterface",
       "title": "Default view for compatible agents",
       "subtitle": "Automatically switch to chat as soon as Ghostex detects that an agent session supports it.",
@@ -200,6 +316,19 @@
       "agentWritable": true
     },
     {
+      "key": "chatQuietViewCalm",
+      "title": "Calm Quiet View",
+      "subtitle": "Keep the turn that is running as one line that counts its time (Working · 1m 12s), and have each line name only its reports; open a line to see the tool calls and messages sent inside it. Experience's Chill turns it on.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatDetailedView",
       "title": "Default to Detailed view",
       "subtitle": "New chats open in Detailed view: Quiet View with every line open, so all the work between replies shows. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
@@ -209,6 +338,58 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerModePicker",
+      "title": "Mode in the chat box",
+      "subtitle": "Show the mode picker (Auto, Plan, Bypass permissions and the like) in the chat box. Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on. The phone has its own switch.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerTerminalButton",
+      "title": "Terminal button in the chat box",
+      "subtitle": "Show the Terminal View button in the chat box. Off, Terminal View is in the ••• menu, and the ••• button turns red with the reason when the terminal has a problem.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerContextRing",
+      "title": "Context ring in the chat box",
+      "subtitle": "Show how full the agent's context is as a ring in the chat box. Off, it stays in ••• › More › Context window.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerMaximize",
+      "title": "Maximize button in the chat box",
+      "subtitle": "Show the button that makes the chat box fill the chat.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
       "advanced": true,
       "agentWritable": true
     },

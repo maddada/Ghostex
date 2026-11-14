@@ -44,7 +44,8 @@ pub(crate) fn settings_tab_view(
     cx: &mut App,
 ) -> AnyView {
     match tab {
-        SettingsTabId::Chat
+        SettingsTabId::Experience
+        | SettingsTabId::Chat
         | SettingsTabId::Sidebar
         | SettingsTabId::Terminal
         | SettingsTabId::Notifications

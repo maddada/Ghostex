@@ -31,6 +31,7 @@ pub(super) const SETTINGS_UPDATE_SOURCE: &str = "cli:settings";
 /// packages/gx-core/src/renderer_commands/verbs.rs, which the desktop app checks again.
 const SETTINGS_MODAL_TABS: &[&str] = &[
     "settings",
+    "experience",
     "chat",
     "sidebar",
     "terminal",

@@ -648,7 +648,13 @@ impl NativeChatView {
         } else {
             &line.text
         };
-        let mut segments: Vec<QuietSegment> = vec![(text.clone(), None)];
+        // Calm Quiet View's running line counts its time, "Working · 1m 12s" (gx-chat-core
+        // `quiet_view.rs`, CDXC:Experience 2026-11-15); the phone counts the same way.
+        let text = match line.started_at.filter(|_| line.running && !open) {
+            Some(start) => format!("{text} \u{b7} {}", self.quiet_clock(start, cx)),
+            None => text.clone(),
+        };
+        let mut segments: Vec<QuietSegment> = vec![(text, None)];
         if !line.time.is_empty() {
             segments.push((format!("\u{2002}{}", line.time), None));
         }
@@ -736,5 +742,29 @@ impl NativeChatView {
             p,
             cx,
         )
+    }
+}
+
+impl NativeChatView {
+    /// How long Calm Quiet View's running line has run ("12s", "1m 12s"), redrawn each second
+    /// through the tool cards' clock (`live_time` in tool_card.rs).
+    fn quiet_clock(&self, started_at: i64, cx: &Context<Self>) -> String {
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|since| since.as_millis() as i64)
+            .unwrap_or(started_at);
+        let ran = (now - started_at).max(0);
+        if !self.tool_clock_tick.replace(true) {
+            let wait = std::time::Duration::from_millis((1_000 - ran % 1_000).max(50) as u64);
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(wait).await;
+                let _ = this.update(cx, |this, cx| {
+                    this.tool_clock_tick.set(false);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+        ghostex_gx_chat_core::extras::activity::format_activity_elapsed(ran as f64 / 1_000.0)
     }
 }

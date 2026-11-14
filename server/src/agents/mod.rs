@@ -19,6 +19,7 @@ mod home_secret_folders;
 pub mod identity;
 pub mod launch_plan;
 mod marked_handovers;
+mod mode_picker_off;
 pub(crate) mod opencode_session_id;
 pub(crate) mod pi_session_id;
 pub mod resume_plan;

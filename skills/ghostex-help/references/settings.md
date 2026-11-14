@@ -9,6 +9,14 @@ How to use this file:
 - Rows marked `not agent-writable`, `structured value`, or `Settings UI row` must be changed by the user in Settings. Open the right page with `ghostex settings open <key>`.
 - The desktop app must be running for `set`; it applies the change exactly like a save in the Settings modal.
 
+## Experience (tab `experience`)
+
+### Experience
+
+- **Experience** `experiencePreset` (Settings UI row without a settings key; use `ghostex settings open`): How many buttons and details Ghostex shows. Chill: a simple chat box and a calm chat. Regular: pick the model, the mode and the effort as you chat. Advanced: for people who use terminals more. Each area below follows it; change one and it says Custom.
+- **Chat box** `experienceChatBox` (Settings UI row without a settings key; use `ghostex settings open`): Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize; the terminal is in •••. Advanced adds the terminal button and the context ring.
+- **Chat** `experienceChat` (Settings UI row without a settings key; use `ghostex settings open`): Chill: Quiet View keeps the running turn as one line with its time and names only reports. Regular and Advanced: Quiet View with the last turn open.
+- **Sessions list** `experienceSessionsList` (Settings UI row without a settings key; use `ghostex settings open`): Chill is the Sidebar's Minimal preset (no project icons, times or git numbers), Regular its Recommended, Advanced its Detailed (with last-active times).
 ## Chat (tab `chat`)
 
 ### Chat
@@ -25,7 +33,12 @@ How to use this file:
 - **Coordinators open in Quiet View** `chatQuietViewCoordinators` (boolean, default true) [advanced]: A coordinator's chat shows your messages, its replies, pages and questions, and folds everything between two replies (reports from threads, messages it sent, tool calls) into one line you can click open. A chat's own choice in More actions > View comes first.
 - **Other chats open in Quiet View** `chatQuietViewChats` (boolean, default true) [advanced]: Every other chat opens in Quiet View too: the work between two replies folds into one line you can click open. A chat's own choice in More actions > View comes first.
 - **Expand the last turn in Quiet View** `chatQuietViewExpandLast` (boolean, default true) [advanced]: Show the work after the newest reply, or the turn that is running, open instead of as one line. It folds once a newer reply comes.
+- **Calm Quiet View** `chatQuietViewCalm` (boolean, default false) [advanced]: Keep the turn that is running as one line that counts its time (Working · 1m 12s), and have each line name only its reports; open a line to see the tool calls and messages sent inside it. Experience's Chill turns it on.
 - **Default to Detailed view** `sessionChatDetailedView` (boolean, default false) [advanced]: New chats open in Detailed view: Quiet View with every line open, so all the work between replies shows. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.
+- **Mode in the chat box** `chatComposerModePicker` (boolean, default true) [advanced]: Show the mode picker (Auto, Plan, Bypass permissions and the like) in the chat box. Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on. The phone has its own switch.
+- **Terminal button in the chat box** `chatComposerTerminalButton` (boolean, default true) [advanced]: Show the Terminal View button in the chat box. Off, Terminal View is in the ••• menu, and the ••• button turns red with the reason when the terminal has a problem.
+- **Context ring in the chat box** `chatComposerContextRing` (boolean, default true) [advanced]: Show how full the agent's context is as a ring in the chat box. Off, it stays in ••• › More › Context window.
+- **Maximize button in the chat box** `chatComposerMaximize` (boolean, default true) [advanced]: Show the button that makes the chat box fill the chat.
 - **Keep chat box expanded while scrolling** `sessionChatKeepComposerExpanded` (boolean, default false) [advanced]: Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.
 - **Press Escape twice to interrupt** `sessionChatConfirmEscapeInterrupt` (boolean, default true) [advanced]: While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.
 - **Catch me up button** `chatCatchMeUp` (boolean, default false): Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.

@@ -371,6 +371,7 @@ pub(crate) mod tests {
                 coordinators: Some(flag),
                 chats: Some(!flag),
                 expand_last: Some(true),
+                calm: Some(flag),
             }),
             status_line_pins: Some(
                 [(

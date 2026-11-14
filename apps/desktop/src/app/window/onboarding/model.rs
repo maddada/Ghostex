@@ -222,6 +222,9 @@ pub(crate) struct OnboardingSettings {
     pub(crate) spaces_on: bool,
     /// The Unified sidebar (`sidebarView` = `unified`); Settings > Sidebar writes the same key.
     pub(crate) unified_sidebar: bool,
+    /// The settings Settings > Experience's presets set, each its value or its default, so the
+    /// Workspace step shows which preset they match (`ghostex_settings_catalog::experience`).
+    pub(crate) experience_values: Map<String, Value>,
     pub(crate) notify: bool,
     pub(crate) preferred_interface: String,
     pub(crate) default_prompt_agent_id: String,
@@ -366,6 +369,20 @@ impl OnboardingSettings {
             view_hidden: VIEW_KEYS.map(|key| read_bool(object, key.hidden_key(), false)),
             spaces_on: read_bool(object, "sidebarSpacesEnabled", false),
             unified_sidebar: text("sidebarView") == Some("unified"),
+            experience_values: ghostex_settings_catalog::experience::AREAS
+                .iter()
+                .flat_map(|area| area.keys())
+                .map(|key| {
+                    let value = object.get(key).cloned().unwrap_or_else(|| {
+                        ghostex_settings_catalog::default_value(key)
+                            .map(|value| {
+                                ghostex_settings_catalog::json::ToJson::to_json(value).to_value()
+                            })
+                            .unwrap_or(Value::Null)
+                    });
+                    (key.to_string(), value)
+                })
+                .collect(),
             notify: read_bool(object, "showMacOSAttentionNotifications", true),
             preferred_interface: match text("preferredAgentInterface") {
                 Some("terminal") => "terminal".to_string(),
@@ -422,6 +439,11 @@ impl OnboardingSettings {
         }
         if let Some(value) = patch.get("sidebarView").and_then(Value::as_str) {
             self.unified_sidebar = value == "unified";
+        }
+        for (key, value) in patch {
+            if let Some(kept) = self.experience_values.get_mut(key) {
+                *kept = value.clone();
+            }
         }
         let text = |key: &str| patch.get(key).and_then(Value::as_str).map(str::to_string);
         let number = |key: &str| patch.get(key).and_then(Value::as_f64);
@@ -1096,5 +1118,17 @@ mod tests {
             tints(&transparency_strength_patch(100.0, &settings)),
             [0.0, 0.0, 0.0, 2.0]
         );
+    }
+}
+
+impl OnboardingSettings {
+    /// The Experience preset every area's settings match, or `None` (Custom).
+    pub(crate) fn experience(&self) -> Option<ghostex_settings_catalog::experience::Preset> {
+        ghostex_settings_catalog::experience::overall(&|key: &str| {
+            self.experience_values
+                .get(key)
+                .cloned()
+                .unwrap_or(Value::Null)
+        })
     }
 }

@@ -644,6 +644,12 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionChat 2026-11-02 DECISION: User: "in settings i think we have setting for verbose, make that about defaulting to detailed view but make sure it's in advanced". Off, new chats open Normal (supersedes 2026-09-27's Simple mode by default, which this inherits as the off state); a saved `sessionChatVerboseMode` true or `sessionChatSimpleMode` false reads as on (`migrate_chat_view_default`).
     ("sessionChatDetailedView", J::Bool(false)),
     ("sessionChatFileEditPreviews", J::Bool(false)),
+    // CDXC:Experience 2026-11-15 SEE-ALSO: the chat box switches and Chill's Quiet View that Settings > Experience sets (packages/settings-catalog/src/experience.rs, where the user's decisions are). On by default except the calm Quiet View, so nothing moves on update (Q3287).
+    ("chatComposerModePicker", J::Bool(true)),
+    ("chatComposerTerminalButton", J::Bool(true)),
+    ("chatComposerContextRing", J::Bool(true)),
+    ("chatComposerMaximize", J::Bool(true)),
+    ("chatQuietViewCalm", J::Bool(false)),
     // CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." Off keeps the unified look; on, thinking takes the theme's muted text colour and replies its full foreground, in the desktop, web and phone chats.
     ("sessionChatMutedThinking", J::Bool(false)),
     ("sessionChatKeepComposerExpanded", J::Bool(false)),

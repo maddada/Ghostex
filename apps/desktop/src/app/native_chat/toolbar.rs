@@ -77,6 +77,15 @@ impl NativeChatView {
         self.snapshot["composerOverflow"]["overflowed"]
             .as_array()
             .is_some_and(|ids| ids.iter().any(|value| value.as_str() == Some(id)))
+            || self.composer_control_folded(id)
+    }
+
+    /// A control Settings > Experience keeps in More actions instead of the row (gx-chat-core
+    /// `composer/row.rs`).
+    pub(super) fn composer_control_folded(&self, id: &str) -> bool {
+        self.snapshot["composerRow"]["folded"]
+            .as_array()
+            .is_some_and(|ids| ids.iter().any(|value| value.as_str() == Some(id)))
     }
 
     /// React rendered each of these controls only when the host handed it the handler
@@ -216,16 +225,19 @@ impl NativeChatView {
         // A control the host cannot serve is never drawn, so it must not claim room either.
         let controls: Vec<Value> = COMPOSER_CONTROLS
             .iter()
-            .filter(|(id, _, _, _)| self.composer_control_available(id))
+            .filter(|(id, _, _, _)| {
+                self.composer_control_available(id) && !self.composer_control_folded(id)
+            })
             .map(|(id, _, _, _)| json!({"id":id,"width":28.0*scale}))
             .collect();
         // More actions, each drawn control, Dictate (never folded) and Send, with the gaps between them.
         let buttons = 1 + controls.len() + usize::from(self.composer_control_available("dictate"));
-        let report_pill = if self.copy_report_pill_shown() {
-            COPY_REPORT_PILL_WIDTH + 6.0
-        } else {
-            0.0
-        };
+        let report_pill =
+            if self.copy_report_pill_shown() && !self.composer_control_folded("terminal") {
+                COPY_REPORT_PILL_WIDTH + 6.0
+            } else {
+                0.0
+            };
         let actions_width = (buttons as f32 * (28.0 + 6.0) + 24.0 + report_pill) * scale;
         let chat = cx.weak_entity();
         gpui::canvas(

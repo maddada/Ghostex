@@ -440,6 +440,10 @@ pub struct ChatQuietViewSettings {
     pub chats: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expand_last: Option<bool>,
+    /// Calm Quiet View (`chatQuietViewCalm`, Settings > Experience's Chill); absent from an older
+    /// computer, which is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calm: Option<bool>,
 }
 
 /// One of a chat's view records as the session's computer keeps it: the value the user picked
