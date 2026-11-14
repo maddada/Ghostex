@@ -129,6 +129,16 @@ pub enum ExtensionPermission {
     SessionsOpen,
     #[serde(rename = "agents.start")]
     AgentsStart,
+    /// An agent may send the extension messages about its own thread (`/api/ext/v1/agentMessage`).
+    ///
+    /// CDXC:Extensions 2026-11-14 WHY:
+    /// The coordinator's Thread brief brief: only an extension's own process changes its panel (the Q28 default), so an agent keeps its brief by talking to the extension, never by writing the panel. These two permissions are the smallest doors for that, each one the user grants at install: an agent reaches only the extension it names and only about its own session (gxserver attaches the session from the agent's token), and an extension sends a thread one short message only right after the user tapped that thread's panel.
+    #[serde(rename = "agents.message")]
+    AgentsMessage,
+    /// After a tap on a thread's panel, the extension may send that thread one short message
+    /// (`/api/ext/v1/sessionMessage`).
+    #[serde(rename = "sessions.message")]
+    SessionsMessage,
 }
 
 impl ExtensionPermission {
@@ -144,6 +154,8 @@ impl ExtensionPermission {
             Self::SessionsRead => "sessions.read",
             Self::SessionsOpen => "sessions.open",
             Self::AgentsStart => "agents.start",
+            Self::AgentsMessage => "agents.message",
+            Self::SessionsMessage => "sessions.message",
         }
     }
 

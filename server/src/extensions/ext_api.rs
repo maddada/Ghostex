@@ -58,8 +58,9 @@ enum Caller {
     Extension(String),
     /// You: the desktop app, the web build, a paired phone, the CLI with the token file.
     Owner,
-    /// An agent, through its session token: may read.
-    Agent,
+    /// An agent, through its session token: may read, and send its own extension messages about
+    /// its own session (`<projectId>:<sessionId>`, from the token, never from the request).
+    Agent { session: String },
 }
 
 fn answer(status: StatusCode, body: Value) -> RoutedResponse {
@@ -109,7 +110,13 @@ fn resolve_caller(state: &AppState, headers: &HeaderMap) -> Option<Caller> {
     }
     match state.security.session_tokens.resolve(token)? {
         crate::security::Principal::Owner { .. } => Some(Caller::Owner),
-        crate::security::Principal::Session { .. } => Some(Caller::Agent),
+        crate::security::Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => Some(Caller::Agent {
+            session: format!("{project_id}:{session_id}"),
+        }),
         _ => None,
     }
 }
@@ -176,8 +183,12 @@ pub(crate) async fn serve_ext_api(
         (&Method::GET, "events") => return events(state, caller, query).await,
         (&Method::GET, "panel" | "projects" | "sessions")
         | (&Method::PUT | &Method::PATCH, "panel")
-        | (&Method::POST, "panelAction") => {}
-        (_, "panel" | "projects" | "sessions" | "events" | "panelAction") => {
+        | (&Method::POST, "panelAction" | "agentMessage" | "sessionMessage") => {}
+        (
+            _,
+            "panel" | "projects" | "sessions" | "events" | "panelAction" | "agentMessage"
+            | "sessionMessage",
+        ) => {
             return refuse(
                 StatusCode::METHOD_NOT_ALLOWED,
                 "methodNotAllowed",
@@ -332,10 +343,69 @@ fn handle(
             require_permission(&extension, ExtensionPermission::SessionsRead)?;
             let snapshot = presentation_snapshot(state)?;
             let project = query_param(query, "project");
+            let forks = forked_from(state);
             Ok((
-                json!({ "ok": true, "sessions": sessions(&snapshot, project.as_deref()) }),
+                json!({ "ok": true, "sessions": sessions(&snapshot, project.as_deref(), &forks) }),
                 false,
             ))
+        }
+        (&Method::POST, "agentMessage") => {
+            let Caller::Agent { session } = caller else {
+                return Err(forbidden(
+                    "Only an agent sends this, about its own session: run `ghostex extensions message` inside the agent's session.",
+                ));
+            };
+            require_enabled(&extension)?;
+            require_permission(&extension, ExtensionPermission::AgentsMessage)?;
+            let name = body_text("name")
+                .filter(|name| {
+                    name.len() <= 64
+                        && name.bytes().all(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+                        })
+                })
+                .ok_or_else(|| {
+                    ExtensionError::bad_request(
+                        "Name the message: 1-64 letters, digits, '.', '_' or '-'.",
+                    )
+                })?;
+            let data = body.get("data").cloned().unwrap_or(Value::Null);
+            if data.to_string().len() > AGENT_MESSAGE_DATA_MAX_BYTES {
+                return Err(ExtensionError::bad_request(format!(
+                    "The message's data is over {AGENT_MESSAGE_DATA_MAX_BYTES} bytes."
+                )));
+            }
+            let event =
+                json!({ "type": "agentMessage", "session": session, "name": name, "data": data });
+            let answer = registry.send_agent_message(&id, &event)?;
+            Ok((json!({ "ok": true, "answer": answer }), false))
+        }
+        (&Method::POST, "sessionMessage") => {
+            if !matches!(caller, Caller::Extension(_)) {
+                return Err(forbidden("Only the extension's own process sends this."));
+            }
+            require_enabled(&extension)?;
+            require_permission(&extension, ExtensionPermission::SessionsMessage)?;
+            let session = body_text("session").ok_or_else(|| {
+                ExtensionError::bad_request("Name the session: <projectId>:<sessionId>.")
+            })?;
+            let text = body_text("text")
+                .filter(|text| text.chars().count() <= SESSION_MESSAGE_MAX_CHARS)
+                .ok_or_else(|| {
+                    ExtensionError::bad_request(format!(
+                        "The message is 1 to {SESSION_MESSAGE_MAX_CHARS} characters."
+                    ))
+                })?;
+            let (project_id, session_id) = session.split_once(':').ok_or_else(|| {
+                ExtensionError::bad_request("session must be <projectId>:<sessionId>.")
+            })?;
+            if !registry.take_session_panel_tap(&id, &session) {
+                return Err(forbidden(
+                    "A thread gets a message only right after you tap a button in its panel.",
+                ));
+            }
+            send_session_message(state, project_id, session_id, &text)?;
+            Ok((json!({ "ok": true, "sent": true }), false))
         }
         (&Method::POST, "panelAction") => {
             if !matches!(caller, Caller::Owner) {
@@ -429,6 +499,15 @@ fn panel_action(
         return Err(ExtensionError::bad_request(format!(
             "Block {block_id:?} offers no extension action {name:?}."
         )));
+    }
+    if let PanelSurface::SessionSidePanel {
+        project_id,
+        session_id,
+    } = surface
+    {
+        state
+            .extension_registry
+            .note_session_panel_tap(id, &format!("{project_id}:{session_id}"));
     }
     let mut event = Map::new();
     event.insert("type".into(), json!("panelAction"));
@@ -647,7 +726,75 @@ fn projects(snapshot: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn sessions(snapshot: &Value, project: Option<&str>) -> Vec<Value> {
+/// A message an agent sends its extension carries at most this much data.
+const AGENT_MESSAGE_DATA_MAX_BYTES: usize = 32 * 1024;
+/// The longest message an extension sends a thread after a tap.
+const SESSION_MESSAGE_MAX_CHARS: usize = 500;
+
+/// Sends `text` to the thread as if typed in its chat box (the path the memory guard's Resume
+/// takes), from the blocking task the extension API runs on.
+fn send_session_message(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+) -> Result<(), ExtensionError> {
+    let body = json!({ "params": {
+        "projectId": project_id,
+        "sessionId": session_id,
+        "text": text,
+        "sendRequestId": uuid::Uuid::new_v4().to_string(),
+    }});
+    let routed = tokio::runtime::Handle::current().block_on(
+        crate::session_chat_send::handle_send_session_chat_message_http(
+            state,
+            "/api/sendSessionChatMessage".to_string(),
+            uuid::Uuid::new_v4().to_string(),
+            &body,
+        ),
+    );
+    if routed.response.status().is_success() {
+        Ok(())
+    } else {
+        Err(ExtensionError {
+            code: "conflict",
+            message: "The thread couldn't take the message right now.".to_string(),
+        })
+    }
+}
+
+/// `<projectId>:<sessionId>` of each forked session, by its own ref: the session it was forked from.
+fn forked_from(state: &AppState) -> std::collections::HashMap<String, String> {
+    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+        return Default::default();
+    };
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    repository
+        .map_session_fork_rows(|row| {
+            let project_id = row.get("projectId")?.as_str()?.to_string();
+            let session_id = row.get("sessionId")?.as_str()?;
+            let parent = ["runtimeSettings", "launchSettings"]
+                .iter()
+                .find_map(|key| {
+                    row.get(*key)?
+                        .get("forkedFromSessionId")?
+                        .as_str()
+                        .map(str::to_string)
+                })?;
+            Some((
+                format!("{project_id}:{session_id}"),
+                format!("{project_id}:{parent}"),
+            ))
+        })
+        .map(|rows| rows.into_iter().flatten().collect())
+        .unwrap_or_default()
+}
+
+fn sessions(
+    snapshot: &Value,
+    project: Option<&str>,
+    forks: &std::collections::HashMap<String, String>,
+) -> Vec<Value> {
     snapshot
         .get("sessions")
         .and_then(Value::as_array)
@@ -671,8 +818,10 @@ fn sessions(snapshot: &Value, project: Option<&str>) -> Vec<Value> {
                                 .filter(|title| !title.trim().is_empty())
                         })
                         .unwrap_or_default();
+                    let reference = format!("{project_id}:{session_id}");
                     json!({
-                        "session": format!("{project_id}:{session_id}"),
+                        "forkedFrom": forks.get(&reference),
+                        "session": reference,
                         "projectId": project_id,
                         "sessionId": session_id,
                         "title": title,

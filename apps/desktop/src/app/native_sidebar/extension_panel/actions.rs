@@ -50,6 +50,8 @@ fn permission_label(permission: &str) -> &'static str {
         "agents.start" => "Start agents",
         "projects.read" => "See your projects",
         "sessions.read" => "See your sessions",
+        "agents.message" => "Hear from your agents",
+        "sessions.message" => "Message a thread when you tap its panel",
         _ => "this permission",
     }
 }

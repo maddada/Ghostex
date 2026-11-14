@@ -17,6 +17,7 @@ pub fn extensions_command(args: &[String]) -> CliResult<()> {
         Some("uninstall") => uninstall_command(&args[1..]),
         Some("state") => state_command(&args[1..]),
         Some("panel") => crate::ghostex_cli::extension_panel::panel_command(&args[1..]),
+        Some("message") => crate::ghostex_cli::extension_panel::message_command(&args[1..]),
         None | Some("help") | Some("-h") | Some("--help") => {
             println!("{}", crate::ghostex_cli::usage::extensions_usage());
             Ok(())

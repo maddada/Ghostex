@@ -6768,7 +6768,13 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   on screen and closes after your Project Auto Sleep time once it is out of
   sight. What a panel may do is limited to what you allowed when you installed
   it: See your projects, See your sessions, Open projects and sessions, Start
-  agents. Turn its sidebar button or its sections off on its page in Settings >
+  agents, Hear from your agents (an agent can tell it about its own thread
+  only) and Message a thread when you tap its panel (one short message, right
+  after your tap). A panel's section can fold under its heading, and a long list
+  shows its first items with "N more". The Thread brief extension uses these: a
+  side panel view with each thread's objective, status, next up, done, blocked
+  and parked items, kept by the thread's agent through its skill, with Refresh
+  to ask the thread for an update. Turn its sidebar button or its sections off on its page in Settings >
   Extensions (Sidebar mode, Sections in Projects). On the phone, the extension's
   button sits in the sessions list's header, its sections show in the Project
   list, a tap ticks an item or opens it, and a long press opens its options
@@ -6776,7 +6782,8 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   Open on computer; side panel views stay on the computer. Agents and scripts can read a
   panel with `ghostex extensions panel get <id>`; only the extension itself
   changes it. Settings: `sidebarModeHidden`, `sidebarSectionsHidden` (extension
-  state); CLI: `ghostex extensions panel get|set|patch|events`.
+  state); CLI: `ghostex extensions panel get|set|patch|events`, and inside an
+  agent's session `ghostex extensions message <id> <name>`.
   The Edit (pencil) button on a tile chooses where that view, header button, or
   extension appears. Pick **Everywhere** or **Only in selected places**, then
   choose projects and spaces from the dropdown next to **Except in** (or

@@ -55,6 +55,14 @@ pub struct PanelBlock {
     pub tab: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The block folds under its heading: `true` starts folded, `false` starts open. Absent, it
+    /// does not fold. Needs a `title`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folded: Option<bool>,
+    /// A `rows` or `checklist` block shows its first `show` items and folds the rest behind a
+    /// "N more" row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show: Option<u32>,
     #[serde(flatten)]
     pub body: PanelBlockBody,
 }

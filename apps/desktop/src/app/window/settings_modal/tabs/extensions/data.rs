@@ -756,6 +756,8 @@ pub(crate) fn permission_label(permission: &str) -> String {
         "sessions.read" => "See your sessions",
         "sessions.open" => "Open projects and sessions",
         "agents.start" => "Start agents",
+        "agents.message" => "Hear from your agents",
+        "sessions.message" => "Message a thread when you tap its panel",
         other => other,
     }
     .to_string()
@@ -773,6 +775,10 @@ pub(crate) fn permission_description(permission: &str) -> &'static str {
         "sessions.read" => "Read your sessions' titles and what they are doing.",
         "sessions.open" => "Open a project or session when you click it in its panel.",
         "agents.start" => "Start a new agent when you click it in its panel.",
+        "agents.message" => "An agent can send it updates about its own thread.",
+        "sessions.message" => {
+            "When you tap a button in a thread's panel, it can send that thread one short message."
+        }
         _ => "",
     }
 }

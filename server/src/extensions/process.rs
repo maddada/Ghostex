@@ -57,6 +57,9 @@ struct LaunchSpec {
     timeout: Duration,
     token: String,
     context: ExtensionLaunchContext,
+    /// The extension's own folder for what it keeps (`<extensions>/data/<id>`), kept across
+    /// updates and removed with the extension.
+    data_dir: PathBuf,
 }
 
 impl ExtensionRuntime {
@@ -186,6 +189,11 @@ impl ExtensionRuntime {
             timeout,
             token: token.clone(),
             context,
+            data_dir: payload_dir
+                .parent()
+                .and_then(Path::parent)
+                .map(|extensions_dir| extensions_dir.join("data").join(id))
+                .unwrap_or_default(),
         };
 
         {
@@ -562,6 +570,9 @@ fn spawnless_server_url(id: &str, manifest: &ExtensionManifest, api_url: &str) -
 }
 
 fn spawn_child(api_url: &str, spec: &LaunchSpec) -> io::Result<Child> {
+    if !spec.data_dir.as_os_str().is_empty() {
+        std::fs::create_dir_all(&spec.data_dir)?;
+    }
     let shell = command_shell();
     let mut command = Command::new(&shell.executable);
     command
@@ -580,6 +591,7 @@ fn spawn_child(api_url: &str, spec: &LaunchSpec) -> io::Result<Child> {
         )
         .env("GHOSTEX_WORKTREE_BRANCH", &spec.context.worktree_branch)
         .env("GHOSTEX_API_URL", api_url)
+        .env("GHOSTEX_EXTENSION_DATA_DIR", &spec.data_dir)
         .env("GHOSTEX_API_TOKEN", &spec.token);
     configure_process_group(&mut command);
     command.spawn()

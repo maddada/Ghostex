@@ -254,13 +254,35 @@ impl GhostexGpuiApp {
             )),
             _ => None,
         };
+        let fold_key = Self::native_panel_text_key(place, &block.id);
+        let ui = &self.native_sidebar.extension_panel_ui;
+        // `Some(true)` while the block is folded under its heading.
+        let folded = block
+            .folded
+            .map(|starts_folded| starts_folded != ui.flipped_folds.contains(&fold_key));
+        // How many of a list's items show, and how many fold behind "N more".
+        let list_len = match &block.body {
+            PanelBlockBody::Rows { items } => items.len(),
+            PanelBlockBody::Checklist { items, .. } => items.len(),
+            _ => 0,
+        };
+        let lists_open = ui.expanded_lists.contains(&fold_key);
+        let shown = block
+            .show
+            .map(|show| show as usize)
+            .filter(|show| !lists_open && *show < list_len)
+            .unwrap_or(list_len);
+        let hidden_items = block
+            .show
+            .map(|show| list_len.saturating_sub(show as usize))
+            .unwrap_or(0);
         let body = match &block.body {
             PanelBlockBody::Rows { items } => {
-                self.render_native_panel_rows(block, items, place, appearance, cx)
+                self.render_native_panel_rows(block, &items[..shown], place, appearance, cx)
             }
             PanelBlockBody::Checklist { editable, items } => self.render_native_panel_checklist(
                 block,
-                items,
+                &items[..shown],
                 editable.unwrap_or(false),
                 place,
                 appearance,
@@ -312,13 +334,106 @@ impl GhostexGpuiApp {
             .title
             .as_deref()
             .filter(|_| !matches!(block.body, PanelBlockBody::Empty { .. }))
-            .map(|title| block_heading(title, heading_trailing, appearance));
+            .map(|title| match folded {
+                Some(is_folded) => {
+                    let key = fold_key.clone();
+                    let id = SharedString::from(format!("ext-fold-{fold_key}"));
+                    self.render_native_panel_fold_heading(
+                        id,
+                        title,
+                        heading_trailing,
+                        is_folded,
+                        appearance,
+                        cx.listener(move |app, _, _, cx| {
+                            cx.stop_propagation();
+                            let flipped = &mut app.native_sidebar.extension_panel_ui.flipped_folds;
+                            if !flipped.remove(&key) {
+                                flipped.insert(key.clone());
+                            }
+                            cx.notify();
+                        }),
+                    )
+                }
+                None => block_heading(title, heading_trailing, appearance),
+            });
+        // "N more" under a list that shows only its first items, and "Show less" once open.
+        let more = (hidden_items > 0 && folded != Some(true)).then(|| {
+            let key = fold_key.clone();
+            div()
+                .id(SharedString::from(format!("ext-list-more-{fold_key}")))
+                .role(gpui::Role::Button)
+                .px(px(6.0 * appearance.scale))
+                .py(px(3.0 * appearance.scale))
+                .text_size(px(12.0 * appearance.scale))
+                .text_color(appearance.muted)
+                .cursor_pointer()
+                .hover(|more| more.text_color(appearance.foreground))
+                .child(if lists_open {
+                    "Show less".to_string()
+                } else {
+                    format!("{hidden_items} more")
+                })
+                .on_click(cx.listener(move |app, _, _, cx| {
+                    cx.stop_propagation();
+                    let lists = &mut app.native_sidebar.extension_panel_ui.expanded_lists;
+                    if !lists.remove(&key) {
+                        lists.insert(key.clone());
+                    }
+                    cx.notify();
+                }))
+        });
         v_flex()
             .w_full()
             .min_w_0()
             .pb(px(8.0 * appearance.scale))
             .children(heading)
-            .child(body)
+            .when(folded != Some(true), |column| {
+                column.child(body).children(more)
+            })
+            .into_any_element()
+    }
+
+    /// A folding block's heading: a chevron, the title and its count; a click folds or opens it.
+    fn render_native_panel_fold_heading(
+        &self,
+        id: SharedString,
+        title: &str,
+        trailing: Option<String>,
+        folded: bool,
+        appearance: &SidebarAppearance,
+        on_click: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+    ) -> AnyElement {
+        let scale = appearance.scale;
+        h_flex()
+            .id(id)
+            .role(gpui::Role::Button)
+            .aria_label(SharedString::from(title.to_string()))
+            .aria_expanded(!folded)
+            .w_full()
+            .min_w_0()
+            .h(px(24.0 * scale))
+            .px(px(6.0 * scale))
+            .gap(px(4.0 * scale))
+            .rounded(px(5.0 * scale))
+            .cursor_pointer()
+            .hover(|row| row.bg(appearance.hover))
+            .text_size(px(11.5 * scale))
+            .text_color(appearance.muted)
+            .font_weight(FontWeight::MEDIUM)
+            .child(crate::app::helpers::titlebar_svg_icon(
+                if folded {
+                    "titlebar/chevron-right.svg"
+                } else {
+                    "titlebar/chevron-down.svg"
+                },
+                12.0 * scale,
+                appearance.chrome_icon,
+            ))
+            .child(div().flex_1().min_w_0().truncate().child(title.to_string()))
+            .when_some(trailing, |row, trailing| {
+                row.child(div().flex_shrink_0().child(trailing))
+            })
+            .on_click(on_click)
             .into_any_element()
     }
 

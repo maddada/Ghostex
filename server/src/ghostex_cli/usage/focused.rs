@@ -44,6 +44,8 @@ Commands:
   state <id> [--set k=v] [--json]       Read or update extension state
   panel get|set|patch|events <id>       Read, write or follow a sidebar extension's panel
                                         (ghostex extensions panel --help)
+  message <id> <name> [<json>|-]        Inside an agent: send the extension a message about
+                                        this session and print its answer
 
 Only the user installs extensions, from Settings > Extensions, where Ghostex shows what each
 one may do before it is installed. The CLI, agents and other computers are refused: tell the

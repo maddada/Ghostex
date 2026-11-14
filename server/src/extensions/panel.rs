@@ -886,6 +886,24 @@ impl<F: Fn(ExtensionPermission) -> bool> Checker<'_, F> {
             if let Some(title) = &block.title {
                 label("block title", title)?;
             }
+            if block.folded.is_some() && block.title.is_none() {
+                return Err(bad(format!(
+                    "Block {:?} folds, so it needs a title to open it with.",
+                    block.id
+                )));
+            }
+            if let Some(show) = block.show {
+                let lists = matches!(
+                    block.body,
+                    PanelBlockBody::Rows { .. } | PanelBlockBody::Checklist { .. }
+                );
+                if !lists || show == 0 || show as usize > ITEMS_MAX {
+                    return Err(bad(format!(
+                        "Block {:?}: show is 1 to {ITEMS_MAX}, on a rows or checklist block.",
+                        block.id
+                    )));
+                }
+            }
             self.block(&block.id, block.title.as_deref(), &block.body)
                 .map_err(|error| bad(format!("Block {:?}: {}", block.id, error.message)))?;
         }

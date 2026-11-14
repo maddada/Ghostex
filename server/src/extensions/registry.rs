@@ -15,6 +15,12 @@ use super::{
     ExtensionStoreEntry, InstalledExtension,
 };
 
+/// How long after the user's tap on a thread's panel the extension may message that thread.
+const SESSION_TAP_WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
+/// Where gxserver posts an agent's message on the extension's own server.
+pub(crate) const AGENT_MESSAGE_SERVER_PATH: &str = "/ghostex/agent-message";
+const AGENT_MESSAGE_ANSWER_MAX_BYTES: u64 = 64 * 1024;
+
 #[derive(Clone)]
 pub(crate) struct ExtensionRegistry {
     pub(super) extensions_dir: PathBuf,
@@ -25,6 +31,9 @@ pub(crate) struct ExtensionRegistry {
     pub(super) panels: super::PanelStore,
     /// The home folder whose agents get an extension's skill (skills.rs).
     agent_home: PathBuf,
+    /// By `(extension, <projectId>:<sessionId>)`: when the user last tapped that thread's panel,
+    /// which lets the extension send that thread one message (ext_api.rs `sessionMessage`).
+    taps: Arc<Mutex<std::collections::HashMap<(String, String), std::time::Instant>>>,
 }
 
 impl ExtensionRegistry {
@@ -36,6 +45,7 @@ impl ExtensionRegistry {
             runtime: ExtensionRuntime::new(api_url),
             panels: super::PanelStore::new(&paths.extensions_dir),
             agent_home: paths.agent_config_home_dir().to_path_buf(),
+            taps: Arc::default(),
         };
         // CDXC:Workarea 2026-09-22 DECISION:
         // User: remove the original Storybook extension and keep only the built-in view.
@@ -144,7 +154,83 @@ impl ExtensionRegistry {
             })
         })?;
         self.panels.remove_extension(id)?;
+        // Its own data folder (GHOSTEX_EXTENSION_DATA_DIR) goes with it.
+        let _ = fs::remove_dir_all(self.extensions_dir.join("data").join(id));
         Ok(())
+    }
+
+    /// Notes the user's tap on a thread's panel of this extension.
+    pub(crate) fn note_session_panel_tap(&self, id: &str, session: &str) {
+        if let Ok(mut taps) = self.taps.lock() {
+            taps.retain(|_, at| at.elapsed() < SESSION_TAP_WINDOW);
+            taps.insert(
+                (id.to_string(), session.to_string()),
+                std::time::Instant::now(),
+            );
+        }
+    }
+
+    /// Uses up a tap the user made on this thread's panel in the last minute, if there is one.
+    pub(crate) fn take_session_panel_tap(&self, id: &str, session: &str) -> bool {
+        self.taps.lock().is_ok_and(|mut taps| {
+            taps.remove(&(id.to_string(), session.to_string()))
+                .is_some_and(|at| at.elapsed() < SESSION_TAP_WINDOW)
+        })
+    }
+
+    /// Posts an agent's message to the extension's server and returns its JSON answer.
+    pub(crate) fn send_agent_message(
+        &self,
+        id: &str,
+        event: &serde_json::Value,
+    ) -> ExtensionResult<serde_json::Value> {
+        let (url, token) = self
+            .runtime
+            .server_and_token(id)
+            .ok_or_else(|| ExtensionError {
+                code: "conflict",
+                message: format!("{id} isn't running right now. Try again in a moment."),
+            })?;
+        let response = crate::http_agent::agent()
+            .post(format!(
+                "{}{AGENT_MESSAGE_SERVER_PATH}",
+                url.trim_end_matches('/')
+            ))
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .config()
+            .http_status_as_error(false)
+            .timeout_global(Some(std::time::Duration::from_secs(15)))
+            .build()
+            .send(event.to_string().as_str())
+            .map_err(|error| ExtensionError::internal(format!("{id} didn't answer: {error}")))?;
+        let status = response.status().as_u16();
+        let text = response
+            .into_body()
+            .with_config()
+            .limit(AGENT_MESSAGE_ANSWER_MAX_BYTES)
+            .read_to_string()
+            .map_err(|error| {
+                ExtensionError::internal(format!("{id}'s answer was unreadable: {error}"))
+            })?;
+        let answer: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::json!({ "text": text }));
+        if (200..300).contains(&status) {
+            Ok(answer)
+        } else {
+            Err(ExtensionError {
+                code: if status == 409 {
+                    "conflict"
+                } else {
+                    "badRequest"
+                },
+                message: answer
+                    .get("message")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("The extension refused the message.")
+                    .to_string(),
+            })
+        }
     }
 
     pub(crate) fn update_state(

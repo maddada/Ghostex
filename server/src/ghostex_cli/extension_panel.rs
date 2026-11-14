@@ -74,6 +74,32 @@ pub fn panel_command(args: &[String]) -> CliResult<()> {
     }
 }
 
+/// `ghostex extensions message <id> <name> [<file.json>|-] [--data <json>]`: inside an agent's
+/// session, sends the extension a message about this session (gxserver attaches which one) and
+/// prints its answer as JSON (`/api/ext/v1/agentMessage`).
+pub fn message_command(args: &[String]) -> CliResult<()> {
+    let parsed = parse_args(args);
+    let usage = "Usage: ghostex extensions message <id> <name> [<file.json>|-] [--data <json>]\n\nRun inside an agent's session: the extension hears the message about that session only, if you allowed it to hear from your agents.";
+    let (Some(id), Some(name)) = (parsed.rest.first(), parsed.rest.get(1)) else {
+        println!("{usage}");
+        return Ok(());
+    };
+    let data = match (parsed.flags.string_value("data"), parsed.rest.get(2)) {
+        (Some(text), _) => serde_json::from_str(text)
+            .map_err(|error| CliError::Other(format!("--data is not JSON: {error}")))?,
+        (None, Some(source)) => read_json_input(source)?,
+        (None, None) => Value::Null,
+    };
+    let api = ExtApi::resolve()?;
+    let answer = api.call(
+        "POST",
+        &format!("agentMessage?extension={}", encode(id)),
+        Some(&json!({ "name": name, "data": data })),
+    )?;
+    print_json(answer.get("answer").unwrap_or(&answer));
+    Ok(())
+}
+
 pub fn panel_usage() -> String {
     "Ghostex extension panels - read, write and follow a sidebar extension's panel
 

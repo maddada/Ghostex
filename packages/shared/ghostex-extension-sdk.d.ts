@@ -59,7 +59,9 @@ export interface GhostexBridgeError extends Error {
     | 'projects.read'
     | 'sessions.read'
     | 'sessions.open'
-    | 'agents.start';
+    | 'agents.start'
+    | 'agents.message'
+    | 'sessions.message';
 }
 
 export interface GhostexExtensionApi {
@@ -97,9 +99,7 @@ export interface GhostexExtensionApi {
     Array<{ projectId: string; title: string; path: string; isPinned: boolean; isFavorite: boolean }>
   >;
   /** This computer's sessions, of one project when given (needs `sessions.read`). */
-  sessions(
-    project?: string
-  ): Promise<
+  sessions(project?: string): Promise<
     Array<{
       session: string;
       projectId: string;

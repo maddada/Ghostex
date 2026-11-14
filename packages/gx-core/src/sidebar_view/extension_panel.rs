@@ -114,6 +114,11 @@ pub struct TextSpan {
 pub struct ExtensionPanelUiState {
     pub selected_tabs: BTreeMap<String, String>,
     pub expanded_texts: std::collections::BTreeSet<String>,
+    /// Blocks whose fold the user flipped from how the panel starts it (`folded`), by
+    /// `<extension>|<surface>|<block>`.
+    pub flipped_folds: std::collections::BTreeSet<String>,
+    /// `rows` and `checklist` blocks whose items past `show` the user opened, by the same key.
+    pub expanded_lists: std::collections::BTreeSet<String>,
 }
 
 impl ExtensionPanelUiState {
