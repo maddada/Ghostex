@@ -1,10 +1,13 @@
-//! `cargo xtask rebuild` (macOS): one unattended `cargo xtask start` for a coordinator's background shell. It refuses to build other sessions' uncommitted edits, checks that this shell can sign, writes the start into a numbered log, retries kache's known flake once, and ends with a short summary.
+//! `cargo xtask rebuild` (macOS and Linux): one unattended `cargo xtask start` for a coordinator's background shell. It refuses to build other sessions' uncommitted edits, checks that this shell can sign (macOS) or that there is a desktop to open the app in (Linux), writes the start into a numbered log, retries kache's known flake once, and ends with a short summary.
 //!
 //! CDXC:Build 2026-11-05 DECISION:
 //! User (Q1233): the coordinator's rebuild should be "just a command for this repo", not a ghostex CLI verb, so a coordinator no longer starts a thread per rebuild only to run `cargo xtask start` into a log and check what restarted.
 //! Building only committed code: the build has to read its sources from this checkout, because cargo's incremental caches, kache, build-cache.sh stamps and the signed staged bundle are all keyed to these paths. A worktree, stash or exported copy would either touch other sessions' live edits or rebuild from cold in a folder the user has to manage, so instead the command refuses while an uncommitted file would feed the build, lists those files, and waits for them to be committed with `--wait` (a thread's edit is usually minutes from its commit) or builds them anyway with `--allow-dirty`. Notes and docs (`*.md` outside `skills/`, `ai/`, `docs/`) and trees the desktop start never builds (`apps/mobile/`, `apps/gpui-web/`) don't count.
 //! Signing: a shell whose macOS security session ended (a gxserver that outlived a logout, or one restarted from such a shell, starts its sessions there) cannot reach the keychain, so codesign fails with errSecInternalComponent after the whole build, and `launchctl print gui/<uid>` answers "141: Reentrancy avoided". A start from such a shell would also relaunch the app and gxserver into that dead session, so the command runs itself again as a launchd job in the current login (rebuild/relay.rs) and passes on its output and exit code, and stops before building, saying where to run it instead, only when launchd won't start that job.
 //! SEE-ALSO: server/src/server/macos_login_recovery.rs, tooling/xtask/src/codesign.rs, tooling/xtask/src/rebuild/relay.rs.
+//!
+//! CDXC:Build 2026-11-14 DECISION:
+//! User: the coordinator should rebuild and relaunch Ghostex on their Omarchy (Arch Linux) computer by itself "like I do on mac and windows". The Linux rebuild keeps the same contract and exit codes; there is nothing to sign, so exit 3 instead means there is no desktop session to open the app in (tooling/xtask/src/linux_desktop.rs), checked before building. It installs over the packaged app (/opt/ghostex) as the start does, and without kache on PATH it builds with cargo's wrapper turned off (RUSTC_WRAPPER empty) and says so, instead of failing every crate with "could not execute process `kache`".
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -28,7 +31,11 @@ const USAGE: &str = "cargo xtask rebuild [--dry-run] [--allow-dirty] [--no-healt
 const KACHE_FLAKE: &str = "cannot read compiler process identity";
 const DEFAULT_WAIT_MINUTES: u64 = 20;
 const WAIT_POLL: Duration = Duration::from_secs(20);
+#[cfg(target_os = "macos")]
 const APP_EXECUTABLE: &str = "/Applications/Ghostex.app/Contents/MacOS/Ghostex";
+/// How to get kache on Linux (CONTRIBUTING.md names the AUR and APT packages and cargo binstall).
+const LINUX_KACHE_HINT: &str =
+    "install it (Arch: `yay -S kache-bin && kache init`; others: CONTRIBUTING.md, Building from source)";
 
 struct Options {
     dry_run: bool,
@@ -40,8 +47,8 @@ struct Options {
 }
 
 pub fn run(args: &[String]) -> Res<i32> {
-    if !cfg!(target_os = "macos") {
-        bail!("cargo xtask rebuild is macOS only; use cargo xtask start elsewhere.");
+    if !(cfg!(target_os = "macos") || cfg!(target_os = "linux")) || crate::start::runs_in_wsl() {
+        bail!("cargo xtask rebuild runs on macOS and Linux; use cargo xtask start elsewhere.");
     }
     let opts = parse_options(args)?;
     let began = Instant::now();
@@ -97,7 +104,46 @@ pub fn run(args: &[String]) -> Res<i32> {
         println!("Rebuild refused: {}", stale_session_advice(&problem));
         return Ok(3);
     }
-    let identity = env_trimmed("GHOSTEX_GPUI_SIGN_IDENTITY").or_else(codesign::remembered);
+    // Linux: nothing to sign, but the build needs its tools and the app has to open in the desktop session.
+    let desktop = if cfg!(target_os = "linux") {
+        let missing = missing_linux_build_tools();
+        if !missing.is_empty() {
+            println!(
+                "Rebuild refused: the Linux build needs {} on PATH (Arch: `sudo pacman -S {}`; bun from bun.sh, cargo from rustup).",
+                missing.join(", "),
+                missing
+                    .iter()
+                    .filter(|tool| ["cmake", "go", "ninja"].contains(*tool))
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            return Ok(3);
+        }
+        let installed = crate::start::linux_installed_app_path();
+        if !user_can_write(&installed) {
+            println!(
+                "Rebuild refused: {} isn't writable by this user, so the install would ask for sudo, which an unattended rebuild can't answer; make it yours once (`sudo chown -R \"$USER\": {}`) or run cargo xtask start in a terminal.",
+                installed.display(),
+                installed.display()
+            );
+            return Ok(3);
+        }
+        match crate::linux_desktop::find() {
+            Ok(desktop) => Some(desktop.summary),
+            Err(why) => {
+                println!("Rebuild refused: {why}.");
+                return Ok(3);
+            }
+        }
+    } else {
+        None
+    };
+    let identity = if cfg!(target_os = "macos") {
+        env_trimmed("GHOSTEX_GPUI_SIGN_IDENTITY").or_else(codesign::remembered)
+    } else {
+        None
+    };
     if let Some(identity) = identity.as_deref().filter(|identity| *identity != "-") {
         if let Some(failure) = codesign::signing_failure(identity) {
             println!("Rebuild refused: {}", signing_advice(&failure));
@@ -115,6 +161,10 @@ pub fn run(args: &[String]) -> Res<i32> {
     start.env_remove("GHOSTEX_ZIG").env_remove("ZIG");
     if let Some(identity) = &identity {
         start.env("GHOSTEX_GPUI_SIGN_IDENTITY", identity);
+    }
+    let kache = build_cache();
+    if kache.is_none() && cfg!(target_os = "linux") {
+        start.env("RUSTC_WRAPPER", "");
     }
     let head = git_head_summary();
     let built = if dirty.is_empty() {
@@ -145,10 +195,16 @@ pub fn run(args: &[String]) -> Res<i32> {
             );
             print_paths(&dirty);
         }
-        println!(
-            "Signing: {} (this shell can sign; login session is current)",
-            identity.as_deref().unwrap_or("resolved by the start")
-        );
+        match &desktop {
+            Some(desktop) => println!("Opens in: {desktop}"),
+            None => println!(
+                "Signing: {} (this shell can sign; login session is current)",
+                identity.as_deref().unwrap_or("resolved by the start")
+            ),
+        }
+        if cfg!(target_os = "linux") {
+            println!("Build cache: {}", describe_build_cache(&kache));
+        }
         println!("Would run: cargo xtask start {}", opts.start_args.join(" "));
         println!("Log: {}", log_path.display());
         println!("gxserver now: {}", describe_gxserver(read_gxserver()));
@@ -202,6 +258,9 @@ pub fn run(args: &[String]) -> Res<i32> {
         );
     }
     println!("Built: {built}");
+    if kache.is_none() && cfg!(target_os = "linux") {
+        println!("Build cache: {}", describe_build_cache(&kache));
+    }
     let gxserver_after = wait_for_gxserver();
     println!(
         "gxserver: {}",
@@ -360,14 +419,14 @@ fn print_paths(paths: &[String]) {
     }
 }
 
-/// Why this shell is outside the current desktop login, when it is: `launchctl print gui/<uid>` fails ("141: Reentrancy avoided") from a security session that ended.
-#[cfg(not(unix))]
+/// Why this shell is outside the current desktop login, when it is: `launchctl print gui/<uid>` fails ("141: Reentrancy avoided") from a security session that ended. macOS only: a Linux rebuild checks for a desktop to open the app in instead (linux_desktop::find).
+#[cfg(not(target_os = "macos"))]
 fn stale_login_session() -> Option<String> {
     None
 }
 
 /// Why this shell is outside the current desktop login, when it is: `launchctl print gui/<uid>` fails ("141: Reentrancy avoided") from a security session that ended.
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 fn stale_login_session() -> Option<String> {
     let uid = unsafe { libc::getuid() };
     let out = output(Command::new("launchctl").args(["print", &format!("gui/{uid}")])).ok()?;
@@ -555,10 +614,76 @@ fn describe_gxserver(run: Option<GxserverRun>) -> String {
     run.map_or_else(gxserver_missing, |run| format!("pid {}", run.pid))
 }
 
+#[cfg(target_os = "macos")]
 fn app_pid() -> Option<u32> {
     stdout_if_ok(Command::new("pgrep").args(["-f", &format!("^{APP_EXECUTABLE}$")]))?
         .lines()
         .find_map(|line| line.trim().parse().ok())
+}
+
+/// The installed app's main process: its launcher (`Ghostex`) replaces itself with `ghostex-gpui-runtime` in a release package, so either name counts; the CEF helpers don't.
+#[cfg(not(target_os = "macos"))]
+fn app_pid() -> Option<u32> {
+    let installed = crate::start::linux_installed_app_path();
+    let main = [
+        installed.join("Ghostex"),
+        installed.join("ghostex-gpui-runtime"),
+    ];
+    let mut pids: Vec<u32> = fs::read_dir("/proc")
+        .ok()?
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
+        .filter(|pid| {
+            fs::read_link(format!("/proc/{pid}/exe")).is_ok_and(|exe| main.contains(&exe))
+        })
+        .collect();
+    pids.sort_unstable();
+    pids.first().copied()
+}
+
+/// Whether this user can write `path` (or, before the first install, its parent folder), as the start's own sudo check decides.
+#[cfg(unix)]
+fn user_can_write(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let target = if path.exists() {
+        path
+    } else {
+        path.parent().unwrap_or(path)
+    };
+    std::ffi::CString::new(target.as_os_str().as_bytes())
+        .is_ok_and(|c| unsafe { libc::access(c.as_ptr(), libc::W_OK) } == 0)
+}
+
+#[cfg(not(unix))]
+fn user_can_write(_path: &Path) -> bool {
+    true
+}
+
+fn on_path(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(name))
+        .find(|candidate| candidate.is_file())
+}
+
+/// kache, which the crates' `.cargo/config.toml` name as cargo's rustc wrapper.
+fn build_cache() -> Option<PathBuf> {
+    on_path("kache")
+}
+
+/// What the Linux start runs that a desktop install often lacks: cmake and ninja build CEF's wrapper (cef-dll-sys), go builds tailcat (server/package-remote-linux.mjs).
+fn missing_linux_build_tools() -> Vec<&'static str> {
+    ["cargo", "bun", "cmake", "ninja", "go"]
+        .into_iter()
+        .filter(|tool| on_path(tool).is_none())
+        .collect()
+}
+
+fn describe_build_cache(kache: &Option<PathBuf>) -> String {
+    match kache {
+        Some(path) => format!("kache ({})", path.display()),
+        None => format!("none: kache isn't on PATH, so Rust builds run without it (RUSTC_WRAPPER empty) and take longer; {LINUX_KACHE_HINT}"),
+    }
 }
 
 fn wait_for_app() -> Option<u32> {

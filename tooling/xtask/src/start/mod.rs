@@ -64,12 +64,7 @@ pub fn run(args: &[String]) -> Res<i32> {
     }
     let is_darwin = cfg!(target_os = "macos");
     let is_windows = cfg!(windows);
-    let is_wsl = cfg!(target_os = "linux")
-        && (env_trimmed("WSL_DISTRO_NAME").is_some()
-            || fs::read_to_string("/proc/sys/kernel/osrelease")
-                .unwrap_or_default()
-                .to_lowercase()
-                .contains("microsoft"));
+    let is_wsl = runs_in_wsl();
     let targets_windows = is_windows || is_wsl;
 
     let isolated = resolve_isolated_variant(args)?
@@ -776,6 +771,25 @@ fn macos_arch() -> Res<String> {
     } else {
         machine
     })
+}
+
+/// Linux under WSL, where the start builds and installs the Windows app instead.
+pub fn runs_in_wsl() -> bool {
+    cfg!(target_os = "linux")
+        && (env_trimmed("WSL_DISTRO_NAME").is_some()
+            || fs::read_to_string("/proc/sys/kernel/osrelease")
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("microsoft"))
+}
+
+/// The installed app a plain (not isolated) native Linux start replaces and opens: the packaged copy (/opt/ghostex) unless INSTALL_DIR says otherwise, else XDG data.
+pub fn linux_installed_app_path() -> PathBuf {
+    env_trimmed("INSTALL_DIR")
+        .is_none()
+        .then(install::resolve_linux_packaged_app_path)
+        .flatten()
+        .unwrap_or_else(|| resolve_gpui_install_dir(false).join("Ghostex"))
 }
 
 fn resolve_gpui_install_dir(is_darwin: bool) -> PathBuf {

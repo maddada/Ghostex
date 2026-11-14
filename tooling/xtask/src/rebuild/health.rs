@@ -6,14 +6,30 @@
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::gxserver;
+#[cfg(target_os = "macos")]
 use crate::util::stdout_if_ok;
 
 /// launchd's default soft limit, used when `launchctl limit maxfiles` can't be read.
+#[cfg(target_os = "macos")]
 const DEFAULT_FD_LIMIT: u64 = 256;
+/// The usual Linux soft limit, used when /proc/<pid>/limits can't be read.
+#[cfg(not(target_os = "macos"))]
+const DEFAULT_FD_LIMIT: u64 = 1024;
+#[cfg(target_os = "macos")]
+const OS_LIMIT_SOURCE: (&str, &str) = (
+    "launchctl (gxserver didn't report one)",
+    "launchd's default (gxserver didn't report one)",
+);
+#[cfg(not(target_os = "macos"))]
+const OS_LIMIT_SOURCE: (&str, &str) = (
+    "/proc/<pid>/limits (gxserver didn't report one)",
+    "the usual Linux default (gxserver didn't report one)",
+);
 pub const SETTLE: Duration = Duration::from_secs(60);
 pub const SAMPLE_GAP: Duration = Duration::from_secs(15);
 
@@ -200,10 +216,7 @@ pub fn check(pid: Option<u64>, marks: &LogMarks, settle: Duration, gap: Duration
         answering
             .as_ref()
             .and_then(|run| reported_open_files(&run.health).0),
-        || {
-            stdout_if_ok(Command::new("launchctl").args(["limit", "maxfiles"]))
-                .and_then(|text| parse_maxfiles_soft(&text))
-        },
+        || os_fd_limit(pid),
     );
     let mut verdict = judge(
         answering.is_some(),
@@ -227,7 +240,7 @@ pub fn reported_open_files(health: &serde_json::Value) -> (Option<u64>, Option<u
     (field("softLimit"), field("open"))
 }
 
-/// gxserver's own soft limit (it raises it at start, CDXC:ServerDaemon 2026-11-05), else launchctl's, else launchd's default.
+/// gxserver's own soft limit (it raises it at start, CDXC:ServerDaemon 2026-11-05), else the OS's (launchctl's, or /proc/<pid>/limits on Linux), else that OS's default.
 pub fn fd_limit(
     reported: Option<u64>,
     launchctl: impl FnOnce() -> Option<u64>,
@@ -236,15 +249,13 @@ pub fn fd_limit(
         return (limit, "gxserver");
     }
     match launchctl() {
-        Some(limit) => (limit, "launchctl (gxserver didn't report one)"),
-        None => (
-            DEFAULT_FD_LIMIT,
-            "launchd's default (gxserver didn't report one)",
-        ),
+        Some(limit) => (limit, OS_LIMIT_SOURCE.0),
+        None => (DEFAULT_FD_LIMIT, OS_LIMIT_SOURCE.1),
     }
 }
 
 /// The soft limit from `launchctl limit maxfiles` ("\tmaxfiles    256            unlimited").
+#[cfg(target_os = "macos")]
 pub fn parse_maxfiles_soft(text: &str) -> Option<u64> {
     text.lines().find_map(|line| {
         let mut fields = line.split_whitespace();
@@ -342,9 +353,34 @@ pub fn open_descriptors(pid: u64) -> Option<u64> {
     (written > 0).then(|| written as u64 / entry as u64)
 }
 
+/// Open descriptors of `pid`, from /proc/<pid>/fd.
 #[cfg(not(target_os = "macos"))]
-pub fn open_descriptors(_pid: u64) -> Option<u64> {
-    None
+pub fn open_descriptors(pid: u64) -> Option<u64> {
+    Some(fs::read_dir(format!("/proc/{pid}/fd")).ok()?.count() as u64)
+}
+
+/// The soft descriptor limit launchd gives processes.
+#[cfg(target_os = "macos")]
+fn os_fd_limit(_pid: Option<u64>) -> Option<u64> {
+    stdout_if_ok(Command::new("launchctl").args(["limit", "maxfiles"]))
+        .and_then(|text| parse_maxfiles_soft(&text))
+}
+
+/// gxserver's soft descriptor limit from /proc/<pid>/limits.
+#[cfg(not(target_os = "macos"))]
+fn os_fd_limit(pid: Option<u64>) -> Option<u64> {
+    parse_proc_limits_soft(&fs::read_to_string(format!("/proc/{}/limits", pid?)).ok()?)
+}
+
+/// The soft limit from /proc/<pid>/limits ("Max open files            1024                 524288               files").
+#[cfg(not(target_os = "macos"))]
+fn parse_proc_limits_soft(text: &str) -> Option<u64> {
+    text.lines()
+        .find_map(|line| line.strip_prefix("Max open files"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
 }
 
 #[cfg(test)]
@@ -354,6 +390,7 @@ mod tests {
     const GAP: Duration = Duration::from_secs(15);
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn reads_the_soft_maxfiles_limit() {
         assert_eq!(
             parse_maxfiles_soft("\tmaxfiles    256            unlimited\n"),
@@ -399,6 +436,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn falls_back_to_launchctl_for_an_older_gxserver() {
         let health = serde_json::json!({"product": "gxserver", "pid": 84393});
         assert_eq!(reported_open_files(&health), (None, None));
