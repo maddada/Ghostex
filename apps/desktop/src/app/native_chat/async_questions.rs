@@ -274,6 +274,7 @@ impl NativeChatView {
             active,
             self.async_answer_input.as_ref().map(|(key, _)| key.clone()),
             state["submitting"] == true || state["loading"] == true,
+            Vec::new(),
             p,
             cx,
         ) {

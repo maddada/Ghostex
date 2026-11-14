@@ -238,6 +238,8 @@ pub(crate) struct NativeChatView {
     /// The composer pastes this view has started and the chat host may not have counted yet
     /// (clipboard.rs `PasteTiles`).
     pub(super) paste_tiles: super::clipboard::PasteTiles,
+    /// Pictures and files whose upload failed twice, still in the chat box (composer_attach.rs).
+    pub(super) failed_uploads: Vec<super::composer_attach::FailedUpload>,
     /// A send from the chat box waiting for a paste or drop to land (`composer_attach.rs`): its mode.
     pub(super) held_send: Option<String>,
     /// The timer that looks at a held send again while a clipboard read is pending.
@@ -635,6 +637,7 @@ impl NativeChatView {
             composer_held_key: None,
             paste_started: None,
             paste_tiles: Default::default(),
+            failed_uploads: Vec::new(),
             held_send: None,
             held_send_recheck: None,
             carry: Default::default(),

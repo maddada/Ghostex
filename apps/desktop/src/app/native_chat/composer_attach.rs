@@ -16,6 +16,128 @@ use serde_json::json;
 /// How long a paste whose clipboard read has not answered still holds a send.
 const PASTE_READ_LIMIT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// The wait before an upload's second try, so a link that was waking up has come back.
+const UPLOAD_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// The words under the failed tiles: what happened, and that Send uploads them again.
+pub(super) const UPLOAD_FAILED_WORDS: &str = "Couldn't upload. Press Send to try again.";
+
+/// One thing pasted, dropped or picked into the chat box, uploaded on its own.
+#[derive(Clone)]
+pub(super) enum Upload {
+    /// A pasted picture, saved onto the session's machine.
+    Picture(gpui::Image),
+    /// A dropped or picked file, copied onto the session's machine.
+    File(String),
+}
+
+/// A picture or file whose upload failed twice: it stays in the chat box until Send uploads it
+/// again or its remove button drops it.
+pub(super) struct FailedUpload {
+    /// The upload's id, which names its tile.
+    pub(super) key: u64,
+    pub(super) upload: Upload,
+    /// Why the last try failed (the tile's tooltip).
+    pub(super) error: String,
+}
+
+/// The error card's words when a message's picture failed to upload twice: Send uploads it again.
+fn picture_failed_message(reason: &str) -> String {
+    let reason = reason.trim().trim_end_matches(['.', ' ']);
+    let why = if reason.is_empty() {
+        String::new()
+    } else {
+        format!(" ({reason})")
+    };
+    format!(
+        "The picture couldn't be uploaded{why}. It is still in the chat box: press Send to try again."
+    )
+}
+
+/// Where an upload goes: the parts of the chat's config it needs, which cross threads.
+#[derive(Clone)]
+struct UploadTarget {
+    remote: Option<crate::app::model::GpuiRemoteGxserverRequestTarget>,
+    project_id: String,
+    session_id: String,
+}
+
+/// One try at saving a picture or copying a file onto the session's machine.
+async fn upload_once(config: UploadTarget, upload: &Upload) -> Attached {
+    let image = match upload {
+        Upload::File(path) => {
+            let external_paths = vec![path.clone()];
+            let params = json!({"paths":external_paths,"projectId":config.project_id,"sessionId":config.session_id});
+            return match super::attachments::import_paths(&config.remote, &params) {
+                Ok(paths) => {
+                    let paths: Vec<String> = paths
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|path| path.as_str().map(str::to_owned))
+                        .collect();
+                    let pictures = local_pictures(&external_paths, &paths);
+                    Attached {
+                        paths,
+                        pictures,
+                        error: None,
+                    }
+                }
+                Err(error) => Attached {
+                    paths: Vec::new(),
+                    pictures: Vec::new(),
+                    error: Some(error),
+                },
+            };
+        }
+        Upload::Picture(image) => image,
+    };
+    let failed = |error: String| Attached {
+        paths: Vec::new(),
+        pictures: Vec::new(),
+        error: Some(error),
+    };
+    let prepared = match crate::app::helpers::clipboard_image::prepare_clipboard_image(
+        image.bytes(),
+        image.format(),
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => return failed(error),
+    };
+    let result = super::rpc::request(
+        config.remote.clone(),
+        "/api/saveSessionChatImage",
+        &json!({
+            "projectId":config.project_id, "sessionId":config.session_id,
+            "base64Data":base64::engine::general_purpose::STANDARD.encode(&prepared.bytes),
+            "suggestedName":format!("clipboard-image-1.{}", prepared.extension),
+        }),
+    )
+    .await;
+    match result {
+        Ok(value) if value["path"].is_string() => {
+            let path = value["path"].as_str().unwrap_or_default().to_owned();
+            let format = match prepared.extension {
+                "png" => gpui::ImageFormat::Png,
+                "jpg" => gpui::ImageFormat::Jpeg,
+                _ => image.format(),
+            };
+            Attached {
+                paths: vec![path.clone()],
+                pictures: vec![(path, gpui::Image::from_bytes(format, prepared.bytes))],
+                error: None,
+            }
+        }
+        Ok(_) => failed("The session machine did not return an image path".to_owned()),
+        Err(error) => failed(
+            error["message"]
+                .as_str()
+                .unwrap_or("The image could not be attached")
+                .to_owned(),
+        ),
+    }
+}
+
 struct Attached {
     paths: Vec<String>,
     pictures: Vec<(String, gpui::Image)>,
@@ -36,9 +158,11 @@ impl NativeChatView {
         .any(|since| since.elapsed() < PASTE_READ_LIMIT)
     }
 
-    /// Pictures or files on their way into the chat box, which a send from it takes along.
+    /// Pictures or files on their way into the chat box, which a send from it takes along; a
+    /// failed one counts too, since Send uploads it again (`retry_failed_uploads`).
     pub(super) fn attachments_on_their_way(&self) -> bool {
         self.paste_tiles.in_flight() > 0
+            || !self.failed_uploads.is_empty()
             || self.snapshot["pendingAttachments"].as_u64().unwrap_or(0) > 0
     }
 
@@ -83,7 +207,9 @@ impl NativeChatView {
 
     /// Saves pasted pictures, or copies pasted, dropped or picked files, onto the session's
     /// machine and writes their references into the chat box, or into the message a send took
-    /// them with. The uploading tile shows on this frame.
+    /// them with. Each picture or file is its own upload with its own tile, so one that fails
+    /// stays in the chat box on its own while the others land. The uploading tiles show on this
+    /// frame.
     pub(super) fn attach_to_composer(
         &mut self,
         images: Vec<gpui::Image>,
@@ -91,105 +217,71 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         let external_paths = self.import_exported_answers(external_paths, cx);
-        if images.is_empty() && external_paths.is_empty() {
-            return;
+        let uploads = images
+            .into_iter()
+            .map(Upload::Picture)
+            .chain(external_paths.into_iter().map(Upload::File));
+        for upload in uploads {
+            self.start_upload(upload, cx);
         }
+    }
+
+    /// One picture's or file's upload, tried once more by itself after a short wait (a link that
+    /// was waking up, a dropped transfer). One that fails twice stays in the chat box, marked
+    /// failed (`failed_uploads`), and the next Send uploads it again.
+    ///
+    /// CDXC:Clipboard 2026-11-15 DECISION (issue #618, Q3274 A): a failed picture never leaves the chat box; Ghostex retries once by itself, then shows it failed ("Couldn't upload. Press Send to try again."); pressing Send again retries the upload (no "tap to retry"). A message a send took it with ends as a refused send does: its words back in the chat box with the error card saying why.
+    /// SEE-ALSO: apps/mobile/app/src/chat/rust/host.ts (`attachOne`, `retryFailedPictures`).
+    fn start_upload(&mut self, upload: Upload, cx: &mut Context<Self>) {
         let paste = self.paste_tiles.started();
         cx.notify();
         // The core's own count (the collapse gate, the phone's spinner) follows in its own turn,
         // and a send made before this lands takes it by this id.
         self.invoke(json!({"type":"attachmentsStarted","id":paste}), cx);
-        let config = self.config.clone();
+        let config = UploadTarget {
+            remote: self.config.remote.clone(),
+            project_id: self.config.project_id.clone(),
+            session_id: self.config.session_id.clone(),
+        };
         let started = web_time::Instant::now();
-        let task = cx.background_executor().spawn(async move {
-            if images.is_empty() {
-                let params = json!({"paths":external_paths,"projectId":config.project_id,"sessionId":config.session_id});
-                return match super::attachments::import_paths(&config.remote, &params) {
-                    Ok(paths) => {
-                        let paths: Vec<String> = paths
-                            .as_array()
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|path| path.as_str().map(str::to_owned))
-                            .collect();
-                        let pictures = local_pictures(&external_paths, &paths);
-                        Attached {
-                            paths,
-                            pictures,
-                            error: None,
-                        }
-                    }
-                    Err(error) => Attached {
-                        paths: Vec::new(),
-                        pictures: Vec::new(),
-                        error: Some(error),
-                    },
-                };
-            }
-            let mut attached = Attached {
-                paths: Vec::new(),
-                pictures: Vec::new(),
-                error: None,
-            };
-            for (index, image) in images.into_iter().enumerate() {
-                let prepared = match crate::app::helpers::clipboard_image::prepare_clipboard_image(
-                    image.bytes(),
-                    image.format(),
-                ) {
-                    Ok(prepared) => prepared,
-                    Err(error) => {
-                        attached.error = Some(error);
-                        return attached;
-                    }
-                };
-                let result = super::rpc::request(config.remote.clone(), "/api/saveSessionChatImage", &json!({
-                    "projectId":config.project_id, "sessionId":config.session_id,
-                    "base64Data":base64::engine::general_purpose::STANDARD.encode(&prepared.bytes),
-                    "suggestedName":format!("clipboard-image-{}.{}", index+1, prepared.extension),
-                })).await;
-                match result {
-                    Ok(value) if value["path"].is_string() => {
-                        let path = value["path"].as_str().unwrap_or_default().to_owned();
-                        let format = match prepared.extension {
-                            "png" => gpui::ImageFormat::Png,
-                            "jpg" => gpui::ImageFormat::Jpeg,
-                            _ => image.format(),
-                        };
-                        attached
-                            .pictures
-                            .push((path.clone(), gpui::Image::from_bytes(format, prepared.bytes)));
-                        attached.paths.push(path);
-                    }
-                    Ok(_) => {
-                        attached.error =
-                            Some("The session machine did not return an image path".to_owned());
-                        return attached;
-                    }
-                    Err(error) => {
-                        attached.error = Some(
-                            error["message"]
-                                .as_str()
-                                .unwrap_or("The image could not be attached")
-                                .to_owned(),
-                        );
-                        return attached;
-                    }
-                }
-            }
-            attached
-        });
         cx.spawn(async move |chat, cx| {
-            let attached = task.await;
+            let attempt = |upload: Upload| {
+                let config = config.clone();
+                cx.background_executor().spawn(async move {
+                    let attached = upload_once(config, &upload).await;
+                    (attached, upload)
+                })
+            };
+            let (mut attached, mut upload) = attempt(upload).await;
+            if attached.error.is_some() {
+                cx.background_executor().timer(UPLOAD_RETRY_DELAY).await;
+                (attached, upload) = attempt(upload).await;
+            }
             let _ = chat.update(cx, |chat, cx| {
-                chat.finish_composer_attach(attached, paste, started, cx)
+                chat.finish_composer_attach(attached, upload, paste, started, cx)
             });
         })
         .detach();
     }
 
+    /// Send: the pictures and files whose upload failed go up again, and the send takes them
+    /// along as it takes any upload still on its way (Q3274 A).
+    pub(super) fn retry_failed_uploads(&mut self, cx: &mut Context<Self>) {
+        for failed in std::mem::take(&mut self.failed_uploads) {
+            self.start_upload(failed.upload, cx);
+        }
+    }
+
+    /// A failed tile's remove button: it leaves the chat box.
+    pub(super) fn drop_failed_upload(&mut self, key: u64, cx: &mut Context<Self>) {
+        self.failed_uploads.retain(|failed| failed.key != key);
+        cx.notify();
+    }
+
     fn finish_composer_attach(
         &mut self,
         attached: Attached,
+        upload: Upload,
         paste: u64,
         started: web_time::Instant,
         cx: &mut Context<Self>,
@@ -236,9 +328,19 @@ impl NativeChatView {
                 "sent": sent,
             }),
         );
-        // The core counts the upload down and shows the error. The chat box's references are
-        // already in; a sent message's go with this answer, and a send whose picture failed
-        // comes back to the box with the error card (attaching.rs).
+        // Failed twice: it stays in the chat box, marked failed, and its own words say so; a
+        // message that waited for it comes back to the box with the error card (attaching.rs).
+        let error = error.map(|reason| {
+            self.failed_uploads.push(FailedUpload {
+                key: paste,
+                upload,
+                error: reason.clone(),
+            });
+            picture_failed_message(&reason)
+        });
+        let error = if sent { error } else { None };
+        // The core counts the upload down. The chat box's references are already in; a sent
+        // message's go with this answer.
         let paths = if sent { paths } else { Vec::new() };
         self.invoke(
             json!({"type":"attachmentsFinished","id":paste,"paths":paths,"error":error}),
@@ -329,4 +431,23 @@ pub(super) fn local_pictures(
             Some((imported.clone(), gpui::Image::from_bytes(format, bytes)))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{UPLOAD_FAILED_WORDS, picture_failed_message};
+
+    #[test]
+    fn a_failed_picture_says_send_tries_again_never_tap_to_retry() {
+        assert_eq!(
+            UPLOAD_FAILED_WORDS,
+            "Couldn't upload. Press Send to try again."
+        );
+        assert_eq!(
+            picture_failed_message("Connection reset."),
+            "The picture couldn't be uploaded (Connection reset). It is still in the chat box: press Send to try again."
+        );
+        assert!(!picture_failed_message("").contains("()"));
+        assert!(!picture_failed_message("x").to_lowercase().contains("tap"));
+    }
 }

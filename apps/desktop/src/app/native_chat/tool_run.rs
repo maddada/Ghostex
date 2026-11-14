@@ -526,10 +526,11 @@ impl NativeChatView {
             if band {
                 frame.w_full().rounded(px(8.0 * s)).bg(p.user_band)
             } else {
+                // Your bubble's soft blue, as your typed messages have (`user_message`).
                 frame
                     .max_w(gpui::relative(0.8))
                     .rounded(px(16.0 * s))
-                    .bg(p.input)
+                    .bg(p.user_message)
             }
         };
         // The copy button floats beside the bubble on its inner side, the message action of an
