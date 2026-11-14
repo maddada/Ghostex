@@ -3439,7 +3439,9 @@ outside a terminal; in a terminal Paste is Ctrl+Shift+V, as in Ghostty, and
 Ctrl+V goes to the program there (an image on the clipboard still pastes as a
 link). Ctrl+Shift+V pastes from the client computer's clipboard, including into
 a remote terminal. Change or clear either Paste key in Settings > Hotkeys. Shift+Insert also pastes, in terminals
-and in text fields such as the chat composer and dialogs. A configured hotkey
+and in text fields such as the chat composer and dialogs. On Linux, Ctrl+Shift+V
+also pastes and Ctrl+Shift+C copies in those text fields, so Omarchy's Super+V
+and Super+C and Superwhisper dictation reach the chat box. A configured hotkey
 using the same chord takes precedence. In an agent's terminal prompt, use
 Prompt Editor in the terminal toolbar, Ctrl+G on macOS, or Ctrl+Shift+G on
 Windows and Linux (in chat view the same shortcut maximizes the chat box) to open the Ghostex prompt editor or your machine default

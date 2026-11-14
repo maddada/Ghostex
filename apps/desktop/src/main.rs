@@ -331,10 +331,15 @@ fn main() {
         // A session pill's tooltip is its hover card (native_chat/session_card.rs).
         crate::app::native_chat::session_card::install(cx);
         crate::app::native_docs::grammars::register();
-        // CDXC:Clipboard 2026-10-28 WHY: the CUA clipboard keys work in every text field on
-        // Windows and Linux as they do in the terminal (Ctrl+Insert / Shift+Insert there).
-        // Omarchy's Super+C / Super+V send exactly these to windows it tags as terminals, the
-        // only way its universal copy reaches Ghostex without sending Ctrl+C to a running command.
+        // CDXC:Clipboard 2026-11-14 WHY: the terminal's copy and paste keys work in every text
+        // field as they do in the terminal: the CUA keys (Ctrl+Insert / Shift+Insert) on Windows
+        // and Linux, and on Linux Ghostty's Ctrl+Shift+C / Ctrl+Shift+V too. Ghostex tags its
+        // window `terminal` for Hyprland (linux_hyprland.rs), so Omarchy's Super+C / Super+V send
+        // Ctrl+Shift+C / Ctrl+Shift+V to it (Ctrl+Insert / Shift+Insert before Omarchy changed
+        // them), and Superwhisper pastes a dictation with Ctrl+Shift+V; without these the chat
+        // box ignored both (CDXC:Clipboard 2026-11-14 DECISION in
+        // packages/settings-catalog/src/hotkeys.rs). Supersedes the 2026-10-28 version, which
+        // bound the CUA keys only.
         #[cfg(not(target_os = "macos"))]
         cx.bind_keys([KeyBinding::new(
             "ctrl-insert",
@@ -346,6 +351,11 @@ fn main() {
             gpui_component::input::Paste,
             Some("Input"),
         )]);
+        #[cfg(target_os = "linux")]
+        cx.bind_keys([
+            KeyBinding::new("ctrl-shift-c", gpui_component::input::Copy, Some("Input")),
+            KeyBinding::new("ctrl-shift-v", gpui_component::input::Paste, Some("Input")),
+        ]);
         ui_fonts::register(cx);
         crate::app::window::frosted_host::register_frosted_tooltip_root_plugin(cx);
         crate::app::window::modal_popover_host::install_frosted_modal_popover_host();

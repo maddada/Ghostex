@@ -3,16 +3,19 @@
 //! Hyprland blurs see-through windows (`blurs_windows`).
 //!
 //! CDXC:Clipboard 2026-10-28 WHY:
-//! Omarchy's universal copy and paste (Super+C / Super+V) send Ctrl+Insert / Shift+Insert to windows
-//! tagged `terminal` and Ctrl+C / Ctrl+V to every other window, so in a Ghostex terminal Super+C
+//! Omarchy's universal copy and paste (Super+C / Super+V) send Ctrl+Shift+C / Ctrl+Shift+V
+//! (Ctrl+Insert / Shift+Insert in the Omarchy of 2026-10-28) to windows tagged `terminal` and
+//! Ctrl+C / Ctrl+V to every other window, and Superwhisper pastes into a `terminal` with
+//! Ctrl+Shift+V, so in an untagged Ghostex terminal Super+C
 //! sent ^C and stopped the running command. The user chose to add the tag from Ghostex itself
 //! ("we add the rules for users on launch just for ghostex"): a window rule for Ghostex's own class
 //! only, added at runtime over Hyprland's request socket, so no config file of the user's is
 //! rewritten and the rule is gone once Hyprland reloads without Ghostex. A config reload drops
 //! runtime rules, so the rules are added again (and the blur read again) on each `configreloaded`
 //! event. Text fields and the
-//! terminal take Ctrl+Insert / Shift+Insert (main.rs, terminal_element.rs, zorite-editor), so a
-//! tagged Ghostex copies and pastes everywhere. Hyprland 0.56 reads its config as Lua and takes the
+//! terminal take Ctrl+Insert / Shift+Insert (main.rs, terminal_element.rs, zorite-editor), and
+//! the terminal (Settings > Hotkeys) and text fields (main.rs) take Ctrl+Shift+C / Ctrl+Shift+V, so a tagged Ghostex
+//! copies and pastes in them. Hyprland 0.56 reads its config as Lua and takes the
 //! rule through `eval`; older versions take `keyword windowrule` (0.53 syntax) or `windowrulev2`.
 //! Nothing here runs outside Hyprland, and it never fails the launch; the one blur read at start
 //! waits at most `REQUEST_TIMEOUT` on a socket that does not answer.
