@@ -1,7 +1,8 @@
 //! Preview fixtures for the Extensions and Accounts Settings pages: the settings and hydrate fields
 //! they read (`customViews`, `hud.projectViewProjects`, `hud.projectViewSpaces`), a scripted
-//! gxserver for `/api/listExtensions`, `/api/extensionsCatalog`, the extension state calls and
-//! `/api/agentAccounts`, and the catalog files the page fetches (README, CHANGELOG, icons). The
+//! gxserver for `/api/listExtensions`, `/api/extensionsCatalog`, `/api/extensionStoreContent` (a
+//! Store entry's README and CHANGELOG), the extension state calls and `/api/agentAccounts`, and the
+//! icons the page fetches. The
 //! fixtures are the ones the React reference screenshots were taken with
 //! (settings_fixture/extensions.json and accounts.json).
 //!
@@ -175,6 +176,14 @@ pub(super) fn rpc(state: &str, path: &str, params: &Value) -> Answer {
                 "url": fixture["catalogUrl"],
             })))
         }
+        "/api/extensionStoreContent" => {
+            let fixture = extensions();
+            Answer::Reply(Ok(json!({
+                "id": params["id"],
+                "readme": fixture["readme"],
+                "changelog": fixture["changelog"],
+            })))
+        }
         "/api/updateExtensionState" => {
             let id = params["id"].as_str().unwrap_or_default();
             let mut list = installed();
@@ -321,15 +330,11 @@ fn accounts_rpc(state: &str, params: &Value) -> Answer {
     Answer::Reply(Ok(data))
 }
 
-/// The catalog files the page fetches (README, CHANGELOG, icons).
+/// The files the page fetches over HTTP (icons).
 pub(super) fn http_get(url: &str) -> Result<Vec<u8>, String> {
     let fixture = extensions();
     let text = if url.starts_with("/ext/") {
         fixture["icon"].as_str().unwrap_or_default()
-    } else if url.ends_with("README.md") {
-        fixture["readme"].as_str().unwrap_or_default()
-    } else if url.ends_with("CHANGELOG.md") {
-        fixture["changelog"].as_str().unwrap_or_default()
     } else {
         return Err("The request failed with HTTP 404.".to_string());
     };

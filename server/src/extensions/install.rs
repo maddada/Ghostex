@@ -408,3 +408,67 @@ fn copy_directory(source: &Path, destination: &Path) -> ExtensionResult<()> {
     }
     Ok(())
 }
+
+const MAX_STORE_TEXT_BYTES: u64 = 2 * 1024 * 1024;
+
+/// The README and changelog a Store entry shows before it is installed.
+#[derive(Clone, Debug)]
+pub(crate) struct StoreEntryContent {
+    pub(crate) readme: String,
+    pub(crate) changelog: String,
+}
+
+/*
+CDXC:Extensions 2026-11-14 WHY:
+The catalog's `readme` and `changelog` are paths inside the extensions repository
+(`extensions/btop/README.md`), but the `store` release only publishes the zips, so resolving them
+against the catalog URL is a 404 for every entry and the Store page said "Extension README could
+not be loaded." The publisher already requires both files in every zip, so the hash-verified zip
+is the one place they are always shipped; read them from there, without unpacking anything.
+*/
+pub(crate) fn read_zip_store_content(
+    extensions_dir: &Path,
+    url: &str,
+    expected_sha256: &str,
+) -> ExtensionResult<StoreEntryContent> {
+    validate_sha256(expected_sha256)?;
+    let work_dir = install_work_dir(extensions_dir)?;
+    let archive_path = work_dir.join("payload.zip");
+    let outcome = (|| {
+        download_archive(url, &archive_path)?;
+        verify_archive_sha256(&archive_path, expected_sha256)?;
+        let file = fs::File::open(&archive_path).map_err(|error| {
+            ExtensionError::internal(format!("Could not open extension archive: {error}"))
+        })?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|error| {
+            ExtensionError::bad_request(format!("Extension archive is not a valid ZIP: {error}"))
+        })?;
+        Ok(StoreEntryContent {
+            readme: read_zip_text(&mut archive, "README.md")?,
+            changelog: read_zip_text(&mut archive, "CHANGELOG.md")?,
+        })
+    })();
+    let _ = fs::remove_dir_all(&work_dir);
+    outcome
+}
+
+fn read_zip_text(archive: &mut zip::ZipArchive<fs::File>, name: &str) -> ExtensionResult<String> {
+    let entry = archive.by_name(name).map_err(|error| {
+        ExtensionError::not_found(format!("Extension archive has no {name}: {error}"))
+    })?;
+    let mut bytes = Vec::new();
+    entry
+        .take(MAX_STORE_TEXT_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            ExtensionError::internal(format!(
+                "Could not read {name} from the extension archive: {error}"
+            ))
+        })?;
+    if bytes.len() as u64 > MAX_STORE_TEXT_BYTES {
+        return Err(ExtensionError::bad_request(format!(
+            "{name} exceeds the {MAX_STORE_TEXT_BYTES} byte limit."
+        )));
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}

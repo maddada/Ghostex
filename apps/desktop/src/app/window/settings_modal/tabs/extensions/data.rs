@@ -528,14 +528,6 @@ impl CatalogEntry {
         text(&self.raw, "icon")
     }
 
-    pub(crate) fn readme(&self) -> String {
-        text(&self.raw, "readme")
-    }
-
-    pub(crate) fn changelog(&self) -> String {
-        text(&self.raw, "changelog")
-    }
-
     pub(crate) fn categories(&self) -> Vec<String> {
         string_list(self.raw.get("categories"))
     }

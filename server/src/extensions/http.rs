@@ -112,6 +112,16 @@ fn dispatch_extension_operation(
         "/api/extensionsCatalog" => serde_json::to_value(registry.catalog()?).map_err(|error| {
             ExtensionError::internal(format!("Could not encode catalog: {error}"))
         }),
+        "/api/extensionStoreContent" => {
+            reject_extension_token(token_extension_id)?;
+            let id = required_text(&params, "id")?;
+            let content = registry.store_entry_content(&id)?;
+            Ok(json!({
+                "id": id,
+                "readme": content.readme,
+                "changelog": content.changelog,
+            }))
+        }
         "/api/installExtension" => {
             let installed = install_extension(registry, &params)?;
             Ok(json!({ "extension": installed }))

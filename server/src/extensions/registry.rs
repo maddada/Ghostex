@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -8,11 +9,12 @@ use crate::paths::GxserverPaths;
 
 use super::{
     activate_staged_payload, apply_state_patch, catalog_zip_url, check_install_approval,
-    default_store_entry, fetch_catalog, read_manifest, read_store, stage_local_payload,
-    stage_zip_payload, store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
-    ExtensionCatalogSnapshot, ExtensionError, ExtensionInstallApproval, ExtensionLaunchContext,
-    ExtensionResult, ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch,
-    ExtensionStoreEntry, InstalledExtension,
+    default_store_entry, fetch_catalog, read_manifest, read_store, read_zip_store_content,
+    stage_local_payload, stage_zip_payload, store_entry_for_install, validate_extension_id,
+    write_store, ExtensionBadge, ExtensionCatalogSnapshot, ExtensionError,
+    ExtensionInstallApproval, ExtensionLaunchContext, ExtensionResult, ExtensionRuntime,
+    ExtensionRuntimeStatus, ExtensionStatePatch, ExtensionStoreEntry, InstalledExtension,
+    StoreEntryContent,
 };
 
 #[derive(Clone)]
@@ -21,6 +23,8 @@ pub(crate) struct ExtensionRegistry {
     store_file: PathBuf,
     gate: Arc<Mutex<()>>,
     runtime: ExtensionRuntime,
+    /// Store README and changelog by zip SHA-256: a published zip never changes under its hash.
+    store_content: Arc<Mutex<HashMap<String, StoreEntryContent>>>,
 }
 
 impl ExtensionRegistry {
@@ -30,6 +34,7 @@ impl ExtensionRegistry {
             store_file: paths.extensions_store_file.clone(),
             gate: Arc::new(Mutex::new(())),
             runtime: ExtensionRuntime::new(api_url),
+            store_content: Arc::new(Mutex::new(HashMap::new())),
         };
         // CDXC:Workarea 2026-09-22 DECISION:
         // User: remove the original Storybook extension and keep only the built-in view.
@@ -49,6 +54,43 @@ impl ExtensionRegistry {
     pub(crate) fn catalog(&self) -> ExtensionResult<ExtensionCatalogSnapshot> {
         let _guard = self.lock()?;
         fetch_catalog(&self.extensions_dir)
+    }
+
+    /// The README and changelog of a Store entry, read from its hash-verified zip, so the Store
+    /// page shows them before the extension is installed.
+    pub(crate) fn store_entry_content(&self, id: &str) -> ExtensionResult<StoreEntryContent> {
+        validate_extension_id(id)?;
+        let (zip_url, sha256) = {
+            let _guard = self.lock()?;
+            let snapshot = fetch_catalog(&self.extensions_dir)?;
+            let entry = snapshot
+                .catalog
+                .extensions
+                .iter()
+                .find(|entry| entry.manifest.name == id)
+                .ok_or_else(|| {
+                    ExtensionError::not_found(format!(
+                        "Extension {id:?} was not found in the configured catalog."
+                    ))
+                })?;
+            (
+                catalog_zip_url(&snapshot.url, &entry.zip)?,
+                entry.sha256.to_ascii_lowercase(),
+            )
+        };
+        if let Some(content) = self
+            .store_content
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(&sha256).cloned())
+        {
+            return Ok(content);
+        }
+        let content = read_zip_store_content(&self.extensions_dir, &zip_url, &sha256)?;
+        if let Ok(mut cache) = self.store_content.lock() {
+            cache.insert(sha256, content.clone());
+        }
+        Ok(content)
     }
 
     pub(crate) fn install_local(

@@ -834,6 +834,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/lookupRepository"
         | "/api/listExtensions"
         | "/api/extensionsCatalog"
+        | "/api/extensionStoreContent"
         | "/api/installExtension"
         | "/api/uninstallExtension"
         | "/api/updateExtensionState"
