@@ -461,6 +461,7 @@ impl ExtensionsTab {
                 editing,
                 enabled,
                 dragging: false,
+                source_url: None,
                 open: None,
             },
         );
@@ -805,6 +806,10 @@ impl ExtensionsTab {
                 editing,
                 enabled: extension.enabled(),
                 dragging: false,
+                source_url: self
+                    .browser
+                    .catalog_entry(&id)
+                    .and_then(|entry| entry.source_url()),
                 open: Some(Box::new(cx.listener(
                     move |page, _: &ClickEvent, _window, cx| {
                         page.browser.selected_installed = Some(open_id.clone());
@@ -885,6 +890,7 @@ impl ExtensionsTab {
                 editing: false,
                 enabled: true,
                 dragging: false,
+                source_url: entry.source_url(),
                 open: Some(Box::new(cx.listener(
                     move |page, _: &ClickEvent, _window, cx| {
                         page.select_store_entry(Some(open_name.clone()), cx);
@@ -1074,6 +1080,7 @@ impl ExtensionsTab {
                     .is_some_and(|editor| editor.id.as_deref() == Some(id.as_str())),
                 enabled: view.enabled(),
                 dragging,
+                source_url: None,
                 open: None,
             },
         )

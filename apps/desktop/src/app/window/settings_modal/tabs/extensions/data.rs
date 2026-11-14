@@ -587,6 +587,14 @@ impl CatalogEntry {
         string_list(self.raw.get("permissions"))
     }
 
+    /// Its folder in the source repository (`sourceUrl`, gxserver keeps only https addresses).
+    pub(crate) fn source_url(&self) -> Option<String> {
+        self.raw["sourceUrl"]
+            .as_str()
+            .filter(|url| url.starts_with("https://"))
+            .map(str::to_string)
+    }
+
     /// The name of the agent skill the extension ships (`skill.name`), if any.
     pub(crate) fn skill_name(&self) -> Option<String> {
         self.raw["skill"]["name"]

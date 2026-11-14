@@ -62,6 +62,7 @@ impl ExtensionsTab {
         icon: AnyElement,
         title: String,
         description: String,
+        source_url: Option<String>,
         on_back: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -89,14 +90,29 @@ impl ExtensionsTab {
                     .flex_1()
                     .min_w_0()
                     .child(
-                        div()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .text_size(px(16.0))
-                            .line_height(px(24.0))
-                            .text_color(hsla(p.foreground))
-                            .child(title),
+                        h_flex()
+                            .min_w_0()
+                            .items_center()
+                            .gap(px(6.0))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(px(16.0))
+                                    .line_height(px(24.0))
+                                    .text_color(hsla(p.foreground))
+                                    .child(title),
+                            )
+                            .children(source_url.map(|url| {
+                                super::cards::github_source_button(
+                                    p,
+                                    "extension-detail-github",
+                                    url,
+                                    16.0,
+                                )
+                            })),
                     )
                     .child(
                         div()
@@ -296,6 +312,9 @@ impl ExtensionsTab {
             extension_icon_tile(p, icon_bytes, has_source, true),
             extension.title(),
             extension.description(),
+            self.browser
+                .catalog_entry(&id)
+                .and_then(|entry| entry.source_url()),
             |page: &mut Self, _window, cx| {
                 page.browser.selected_installed = None;
                 page.preferences_draft = None;
@@ -836,6 +855,7 @@ impl ExtensionsTab {
             extension_icon_tile(p, icon_bytes, has_source, true),
             entry.title(),
             entry.description(),
+            entry.source_url(),
             |page: &mut Self, _window, cx| page.select_store_entry(None, cx),
             cx,
         );

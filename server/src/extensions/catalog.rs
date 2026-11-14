@@ -17,6 +17,29 @@ const PREVIOUS_EXTENSIONS_CATALOG_URL: &str =
 const CATALOG_CACHE_FILE: &str = "catalog-cache.json";
 const CATALOG_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
 
+/// Where the official catalog's extensions live: `extensions/<id>` in the Ghostex-extensions repo.
+const OFFICIAL_EXTENSIONS_SOURCE_BASE: &str =
+    "https://github.com/maddada/Ghostex-extensions/tree/main/extensions";
+
+/// Each entry's `sourceUrl`: kept when it is an https address, dropped otherwise, and, for the
+/// official repository's catalogs, the extension's folder there when the catalog has none.
+///
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// User: "for all community extensions we have to have a small github logo on their card that takes you to their folder in the github repo for ghostex-extensions". build-catalog.mjs writes `sourceUrl`; the published catalogs built before it get the same address here, so every Community card links its folder as soon as this Ghostex runs. A catalog from another address (GHOSTEX_EXTENSIONS_CATALOG_URL) gets a link only when it says where its source is.
+fn fill_source_urls(catalog: &mut super::ExtensionCatalog, url: &str) {
+    let official = url == DEFAULT_EXTENSIONS_CATALOG_URL || url == PREVIOUS_EXTENSIONS_CATALOG_URL;
+    for entry in &mut catalog.extensions {
+        entry.source_url = entry
+            .source_url
+            .take()
+            .filter(|source| url::Url::parse(source).is_ok_and(|parsed| parsed.scheme() == "https"))
+            .or_else(|| {
+                official
+                    .then(|| format!("{OFFICIAL_EXTENSIONS_SOURCE_BASE}/{}", entry.manifest.name))
+            });
+    }
+}
+
 pub(crate) fn catalog_url() -> String {
     std::env::var("GHOSTEX_EXTENSIONS_CATALOG_URL")
         .ok()
@@ -33,7 +56,8 @@ pub(crate) fn fetch_catalog(extensions_dir: &Path) -> ExtensionResult<ExtensionC
         fetched = fetch_remote_catalog(&url);
     }
     match fetched {
-        Ok(catalog) => {
+        Ok(mut catalog) => {
+            fill_source_urls(&mut catalog, &url);
             write_catalog_cache(extensions_dir, &catalog)?;
             Ok(ExtensionCatalogSnapshot {
                 catalog,
@@ -49,12 +73,13 @@ pub(crate) fn fetch_catalog(extensions_dir: &Path) -> ExtensionResult<ExtensionC
                     cache_path.display()
                 ))
             })?;
-            let catalog = parse_catalog(&bytes).map_err(|cache_error| {
+            let mut catalog = parse_catalog(&bytes).map_err(|cache_error| {
                 ExtensionError::internal(format!(
                     "Could not fetch extension catalog from {url}: {remote_error}. The last-good cache at {} is invalid: {cache_error}",
                     cache_path.display()
                 ))
             })?;
+            fill_source_urls(&mut catalog, &url);
             Ok(ExtensionCatalogSnapshot {
                 catalog,
                 source: ExtensionCatalogSource::Cache,

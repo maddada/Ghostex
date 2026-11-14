@@ -394,6 +394,11 @@ pub struct ExtensionCatalogEntry {
     pub screenshots: Vec<String>,
     pub zip: String,
     pub sha256: String,
+    /// The extension's folder in its source repository (`https://github.com/…/extensions/<id>`),
+    /// which Settings > Extensions links from its card (catalog.rs fills it for the official
+    /// repository's catalogs built before the field existed). Older Ghostex ignores it.
+    #[serde(rename = "sourceUrl", default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
