@@ -1233,19 +1233,6 @@
       "agentWritable": true
     },
     {
-      "key": "sessionsBoldCoordinatorTitle",
-      "title": "Bold coordinator title",
-      "subtitle": "Draw each coordinator's title in bold in the sidebar. Off, a coordinator stands apart from its threads by its crown, its brighter title and its threads' dimmer titles.",
-      "tab": "sidebar",
-      "tabTitle": "Sidebar & Sessions",
-      "section": "sessionCards",
-      "sectionTitle": "Session Cards",
-      "type": "boolean",
-      "default": false,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
       "key": "sidebarSessionTagListItems",
       "title": "Tag filter list",
       "subtitle": "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.",

@@ -28,8 +28,8 @@ use crate::app::native_sidebar::threads::{
     unified_fold_key,
 };
 
-/// The overlapping dots of everything under a card, folded or open, with its own status (gx-core
-/// `UnifiedCrew::team_status`), in its status dot's spot; its own working timer stays to the
+/// The overlapping dots of everything a folded card hides, with its own status (gx-core
+/// `UnifiedCrew::folded_status`), in its status dot's spot; its own working timer stays to the
 /// left so the dots never move.
 ///
 /// CDXC:Coordinators 2026-10-24 SEE-ALSO: the user's decision on gx-core `RowNesting::folded_status` ("show 2 dots (yellow and blue) in this case (they need to be overlapping dots pls)"), which a folded Unified card follows.
@@ -37,9 +37,8 @@ pub(super) fn folded_slot(
     card: &UnifiedCard,
     appearance: &SidebarAppearance,
 ) -> Option<AnyElement> {
-    // Open or folded, a card with threads draws its whole team's dots (CDXC:Coordinators
-    // 2026-11-15 in gx-core `RowNesting::team_status`).
-    let folded = card.crew.as_ref()?.team_status;
+    let crew = card.crew.as_ref().filter(|crew| !crew.open)?;
+    let folded = crew.folded_status;
     if !folded.any() {
         return None;
     }

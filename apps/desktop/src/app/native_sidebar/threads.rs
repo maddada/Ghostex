@@ -502,12 +502,8 @@ impl GhostexGpuiApp {
     }
 }
 
-/// The overlapping dots a coordinator draws for its threads, with its own status: folded, the
-/// threads its fold hides (gx-core `RowNesting::folded_status`); open, its whole team
-/// (`RowNesting::team_status`); `None` while none has a dot.
-///
-/// CDXC:Coordinators 2026-11-15 DECISION (issue #618, Q3275): coloured status dots on each
-/// coordinator, open or folded, sub-coordinators' threads included; the phone does the same.
+/// The overlapping dots a folded coordinator draws for the threads its fold hides, with its own
+/// status (gx-core `RowNesting::folded_status`); `None` while its threads are open or none has a dot.
 ///
 /// CDXC:Coordinators 2026-10-24 SEE-ALSO: the user's decision on gx-core `RowNesting::folded_status` ("show 2 dots (yellow and blue) in this case (they need to be overlapping dots pls)"); the phone draws the same stack in apps/mobile/app/src/components/sessions/SessionRow.tsx.
 pub(crate) fn folded_status_indicator(
@@ -515,13 +511,10 @@ pub(crate) fn folded_status_indicator(
     scale: f32,
     ring: gpui::Hsla,
 ) -> Option<AnyElement> {
-    // Folded, the threads the fold hides; unfolded, the whole team (gx-core
-    // `RowNesting::team_status`), so a coordinator with sub-coordinators under it still says its
-    // team works or needs you.
-    let threads = session.details.get("coordinatorThreads")?;
-    let status = threads
-        .get("foldedStatus")
-        .or_else(|| threads.get("teamStatus"))?;
+    let status = session
+        .details
+        .get("coordinatorThreads")?
+        .get("foldedStatus")?;
     let flag = |name: &str| status.get(name).and_then(Value::as_bool) == Some(true);
     Some(super::status::folded_status_indicator(
         flag("working"),

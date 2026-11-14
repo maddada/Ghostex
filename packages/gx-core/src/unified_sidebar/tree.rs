@@ -70,8 +70,6 @@ pub struct UnifiedCrew {
     pub threads: ThreadTally,
     /// While it is not open: the dots of every session under it, with its own.
     pub folded_status: FoldedStatus,
-    /// Open or not: the dots of every session under it, with its own (`RowNesting::team_status`).
-    pub team_status: FoldedStatus,
     /// The focused session is under it and not drawn, so this row carries the active highlight.
     pub contains_active: bool,
 }
@@ -88,7 +86,6 @@ impl UnifiedCrew {
             older_threads_shown: self.older_shown,
             contains_active_session: self.contains_active,
             folded_status: self.folded_status,
-            team_status: self.team_status,
             ..RowNesting::default()
         }
     }
@@ -330,17 +327,14 @@ fn lay_out(
         };
     }
     tally.approval = approvals_below(row);
-    let mut team_status = FoldedStatus::default();
-    let mut stack: Vec<&UnifiedRow> = vec![row];
-    while let Some(next) = stack.pop() {
-        team_status.add(&next.session.row);
-        stack.extend(next.threads.iter());
+    let mut folded_status = FoldedStatus::default();
+    if !open {
+        let mut stack: Vec<&UnifiedRow> = vec![row];
+        while let Some(next) = stack.pop() {
+            folded_status.add(&next.session.row);
+            stack.extend(next.threads.iter());
+        }
     }
-    let folded_status = if open {
-        FoldedStatus::default()
-    } else {
-        team_status
-    };
     row.crew = Some(UnifiedCrew {
         key,
         open,
@@ -358,7 +352,6 @@ fn lay_out(
         .coordinator_badge(),
         threads: tally,
         folded_status,
-        team_status,
         contains_active: false,
     });
     for child in &mut row.threads {

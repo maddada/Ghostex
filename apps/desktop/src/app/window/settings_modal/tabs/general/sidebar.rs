@@ -605,18 +605,6 @@ fn session_cards_section(
         false,
         cx,
     ));
-    // CDXC:Coordinators 2026-11-15 DECISION (issue #618, Q3275): coordinators stand apart without
-    // bold; bold is opt-in. The phone has it under Settings > Advanced > Sessions list; the computer
-    // has no Sessions list section, so it sits with the other session-card looks here.
-    rows.extend(page.toggle(
-        g,
-        s,
-        "sessionsBoldCoordinatorTitle",
-        "Bold coordinator title",
-        "Draw each coordinator's title in bold in the sidebar. Off, a coordinator stands apart from its threads by its crown, its brighter title and its threads' dimmer titles.",
-        false,
-        cx,
-    ));
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q13): Session tooltips and Tooltip Delay are one
     // select: Off, or the delay before the tooltip shows.
     if g.any_visible(s, &["showSidebarSessionTooltips", "sidebarTooltipDelayMs"])
