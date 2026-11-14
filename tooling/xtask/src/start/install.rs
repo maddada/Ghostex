@@ -212,6 +212,13 @@ impl Start {
         // A package-owned folder stays root-owned, like the package manager left it.
         let source = format!("{}/", self.app_path.display());
         let target = format!("{}/", self.installed_app_path.display());
+        let keep_gxserver_bin = self.installed_linux_gxserver_package_is_current();
+        if keep_gxserver_bin {
+            self.log.detail(
+                "Installed gxserver package already matches this build; leaving its binaries in place.",
+            );
+        }
+        let exclude = keep_gxserver_bin.then_some("--exclude=/gxserver/bin/");
         if self.log.verbose || as_root {
             let mut rsync = if as_root {
                 util::command("sudo")
@@ -223,11 +230,12 @@ impl Start {
             } else {
                 rsync.args(["-a", "--delete"]);
             }
-            util::check(rsync.arg(&source).arg(&target))?;
+            util::check(rsync.args(exclude).arg(&source).arg(&target))?;
         } else {
             let mut rsync = util::command("rsync");
             rsync
                 .args(["-a", "--delete", "--itemize-changes"])
+                .args(exclude)
                 .arg(&source)
                 .arg(&target);
             self.log.run(
@@ -504,6 +512,22 @@ impl Start {
             self.app_path.join("gxserver").join("build-identity.json")
         };
         gxserver::read_build_identity(&identity_path)
+    }
+
+    /// Whether the installed Linux app already carries this build's gxserver package, byte for byte.
+    ///
+    /// CDXC:ServerDaemon 2026-11-14 WHY: every Linux start rewrites the staged gxserver package with fresh mtimes (package-remote-linux.mjs rebuilds it, build-linux-app.sh copies it), so rsync replaced the installed binary even when the start had just kept the running gxserver for an unchanged build identity. The kept daemon's `/proc/self/exe` then read `(deleted)`, it reported a superseded identity (`running_image_superseded` in server/src/platform/process.rs), and the relaunched app restarted it as a build mismatch (rebuild-009). The identity fingerprint hashes every package file except build-identity.json, so equal identities mean identical binaries and the sync can leave `gxserver/bin/` alone.
+    fn installed_linux_gxserver_package_is_current(&self) -> bool {
+        if self.is_darwin || self.is_windows {
+            return false;
+        }
+        let installed = gxserver::read_build_identity(
+            &self
+                .installed_app_path
+                .join("gxserver")
+                .join("build-identity.json"),
+        );
+        installed.is_some() && installed == self.bundled_gxserver_build_identity()
     }
 
     fn linux_install_needs_root(&self) -> bool {
