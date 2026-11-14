@@ -1,4 +1,7 @@
-//! Local SOCKS facade over the owning gxserver's authenticated TCP connector.
+//! The local SOCKS proxy a remote computer's Browser tabs use: the computer's own and
+//! private-network addresses go through the remote route (its gxserver's authenticated TCP
+//! connector, or SSH's dynamic forward), every other address opens from this computer
+//! (CDXC:Browser 2026-11-14 in `../browser_route.rs`).
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpListener},
@@ -16,11 +19,30 @@ use tokio_tungstenite::tungstenite::{
     Message, client::IntoClientRequest, http::HeaderValue, protocol::WebSocketConfig,
 };
 
-use crate::app::helpers::GPUI_GXSERVER_PROTOCOL_VERSION;
+use crate::app::helpers::{GPUI_GXSERVER_PROTOCOL_VERSION, RemoteBrowserRoute};
 use crate::app::model::GpuiRemoteGxserverRequestTarget;
 
 const FRAME_BYTES: usize = 64 * 1024;
 const CONNECTION_LIMIT: usize = 64;
+/// How long opening a connection may take, here or through the remote route (an Easy Connect
+/// relay answers its first byte in about a second).
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// SOCKS5 replies (RFC 1928 section 6).
+const REPLY_SUCCEEDED: u8 = 0;
+const REPLY_GENERAL_FAILURE: u8 = 1;
+const REPLY_NETWORK_UNREACHABLE: u8 = 3;
+const REPLY_HOST_UNREACHABLE: u8 = 4;
+const REPLY_CONNECTION_REFUSED: u8 = 5;
+
+/// How an address the route sends to the remote computer gets there.
+#[derive(Clone)]
+pub(super) enum BrowserUpstream {
+    /// The owning gxserver's authenticated TCP connector (a Windows computer).
+    Gxserver(GpuiRemoteGxserverRequestTarget),
+    /// A SOCKS5 server on this computer's loopback that reaches the computer: SSH's dynamic
+    /// forward on this port.
+    Socks(u16),
+}
 
 pub(super) struct BrowserTcpProxy {
     shutdown: watch::Sender<bool>,
@@ -30,7 +52,8 @@ pub(super) struct BrowserTcpProxy {
 impl BrowserTcpProxy {
     pub(super) fn start(
         listener: TcpListener,
-        target: GpuiRemoteGxserverRequestTarget,
+        upstream: BrowserUpstream,
+        route: RemoteBrowserRoute,
     ) -> Result<Self> {
         listener.set_nonblocking(true)?;
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -56,10 +79,11 @@ impl BrowserTcpProxy {
                                     drop(stream);
                                     continue;
                                 }
-                                let target = target.clone();
+                                let upstream = upstream.clone();
+                                let route = route.clone();
                                 connections.spawn(async move {
                                     // Errors are returned to SOCKS callers; page traffic and auth stay out of logs.
-                                    let _ = serve_connection(stream, target).await;
+                                    let _ = serve_connection(stream, upstream, route).await;
                                 });
                             },
                         }
@@ -144,11 +168,128 @@ async fn socks_destination(stream: &mut TcpStream) -> Result<(String, u16)> {
 
 async fn serve_connection(
     mut browser: TcpStream,
-    target: GpuiRemoteGxserverRequestTarget,
+    upstream: BrowserUpstream,
+    route: RemoteBrowserRoute,
 ) -> Result<()> {
     browser.set_nodelay(true)?;
     let (host, port) =
         tokio::time::timeout(Duration::from_secs(5), socks_destination(&mut browser)).await??;
+    if !route.host_goes_through_machine(&host) {
+        return serve_from_this_computer(browser, &host, port).await;
+    }
+    match upstream {
+        BrowserUpstream::Gxserver(target) => {
+            serve_through_gxserver(browser, &host, port, target).await
+        }
+        BrowserUpstream::Socks(socks_port) => {
+            serve_through_socks(browser, &host, port, socks_port).await
+        }
+    }
+}
+
+/// Answers the browser's CONNECT with `reply` (no bound address).
+async fn reply(browser: &mut TcpStream, reply: u8) -> io::Result<()> {
+    browser.write_all(&[5, reply, 0, 1, 0, 0, 0, 0, 0, 0]).await
+}
+
+/// Opens `host:port` from this computer (its own DNS and network) and relays the bytes.
+async fn serve_from_this_computer(mut browser: TcpStream, host: &str, port: u16) -> Result<()> {
+    let mut destination =
+        match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect((host, port))).await {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(error)) => {
+                let code = match error.kind() {
+                    io::ErrorKind::ConnectionRefused => REPLY_CONNECTION_REFUSED,
+                    io::ErrorKind::NetworkUnreachable => REPLY_NETWORK_UNREACHABLE,
+                    _ => REPLY_HOST_UNREACHABLE,
+                };
+                reply(&mut browser, code).await?;
+                bail!("The destination could not be reached from this computer.");
+            }
+            Err(_) => {
+                reply(&mut browser, REPLY_HOST_UNREACHABLE).await?;
+                bail!("The destination did not answer in time.");
+            }
+        };
+    destination.set_nodelay(true)?;
+    reply(&mut browser, REPLY_SUCCEEDED).await?;
+    tokio::io::copy_bidirectional(&mut browser, &mut destination).await?;
+    Ok(())
+}
+
+/// Opens `host:port` through the SOCKS5 server on this computer's `socks_port` (SSH's dynamic
+/// forward to the remote computer, which resolves the name there) and relays the bytes.
+async fn serve_through_socks(
+    mut browser: TcpStream,
+    host: &str,
+    port: u16,
+    socks_port: u16,
+) -> Result<()> {
+    let connect = async {
+        let mut remote = TcpStream::connect((Ipv4Addr::LOCALHOST, socks_port)).await?;
+        remote.set_nodelay(true)?;
+        remote.write_all(&[5, 1, 0]).await?;
+        let mut choice = [0; 2];
+        remote.read_exact(&mut choice).await?;
+        if choice != [5, 0] {
+            bail!("The remote route refused the SOCKS greeting.");
+        }
+        let mut request = vec![5, 1, 0];
+        match host.parse::<IpAddr>() {
+            Ok(IpAddr::V4(ip)) => {
+                request.push(1);
+                request.extend(ip.octets());
+            }
+            Ok(IpAddr::V6(ip)) => {
+                request.push(4);
+                request.extend(ip.octets());
+            }
+            Err(_) => {
+                let name = host.as_bytes();
+                let length = u8::try_from(name.len()).context("SOCKS hostname too long.")?;
+                request.push(3);
+                request.push(length);
+                request.extend(name);
+            }
+        }
+        request.extend(port.to_be_bytes());
+        remote.write_all(&request).await?;
+        let mut header = [0; 4];
+        remote.read_exact(&mut header).await?;
+        let bound_length = match header[3] {
+            1 => 4,
+            4 => 16,
+            3 => remote.read_u8().await? as usize,
+            _ => bail!("Invalid SOCKS reply."),
+        };
+        let mut bound = vec![0; bound_length + 2];
+        remote.read_exact(&mut bound).await?;
+        Ok::<_, anyhow::Error>((remote, header[1]))
+    };
+    let mut remote = match tokio::time::timeout(CONNECT_TIMEOUT, connect).await {
+        Ok(Ok((remote, REPLY_SUCCEEDED))) => remote,
+        Ok(Ok((_, code))) => {
+            reply(&mut browser, code).await?;
+            bail!("The remote computer could not reach the destination.");
+        }
+        _ => {
+            reply(&mut browser, REPLY_GENERAL_FAILURE).await?;
+            bail!("The remote route did not answer.");
+        }
+    };
+    reply(&mut browser, REPLY_SUCCEEDED).await?;
+    tokio::io::copy_bidirectional(&mut browser, &mut remote).await?;
+    Ok(())
+}
+
+/// Opens `host:port` through the remote gxserver's authenticated TCP connector and relays the
+/// bytes as WebSocket frames.
+async fn serve_through_gxserver(
+    mut browser: TcpStream,
+    host: &str,
+    port: u16,
+    target: GpuiRemoteGxserverRequestTarget,
+) -> Result<()> {
     let connect = async {
         let mut url = gpui::http_client::Url::parse(&format!(
             "ws://127.0.0.1:{}/api/browserTcp",
@@ -159,7 +300,7 @@ async fn serve_connection(
                 "protocolVersion",
                 &GPUI_GXSERVER_PROTOCOL_VERSION.to_string(),
             )
-            .append_pair("host", &host)
+            .append_pair("host", host)
             .append_pair("port", &port.to_string());
         ghostex_paths::loopback_owner::check_host_port("127.0.0.1", target.local_port)?;
         let mut request = url.as_str().into_client_request()?;
@@ -179,11 +320,11 @@ async fn serve_connection(
     let socket = match tokio::time::timeout(Duration::from_secs(12), connect).await {
         Ok(Ok(socket)) => socket,
         _ => {
-            browser.write_all(&[5, 5, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
+            reply(&mut browser, REPLY_CONNECTION_REFUSED).await?;
             bail!("The remote browser destination could not be reached.");
         }
     };
-    browser.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
+    reply(&mut browser, REPLY_SUCCEEDED).await?;
     let (mut browser_rx, mut browser_tx) = browser.into_split();
     let (mut remote_tx, mut remote_rx) = socket.split();
     let upload = async {

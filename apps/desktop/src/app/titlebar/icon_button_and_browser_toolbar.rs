@@ -24,6 +24,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui::rgb;
 use gpui_component::h_flex;
+use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 
 use crate::app::consts::*;
 use crate::app::helpers::*;
@@ -53,13 +54,16 @@ impl GhostexGpuiApp {
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.
         */
         let address_value = self.browser_tabs.address_value_for_pane(pane_id);
-        let remote_machine_name = self
+        let remote_route_chip = self
             .browser_tabs
             .active_tab_for_pane(pane_id)
-            .and_then(|tab| tab.remote_machine_id.as_deref())
-            .map(|id| {
-                gpui_remote_machine_name_from_settings(id)
-                    .unwrap_or_else(|| "Remote computer".into())
+            .and_then(|tab| Some((tab.remote_machine_id.as_deref()?, tab.url.as_str())))
+            .map(|(id, url)| {
+                let name = gpui_remote_machine_name_from_settings(id)
+                    .unwrap_or_else(|| "Remote computer".into());
+                let through_machine =
+                    gpui_remote_browser_route_for_machine(id).url_goes_through_machine(url);
+                browser_remote_route_chip(&name, url, through_machine)
             });
         let feedback_tool_unavailable = browser_feedback_tool_unavailable_url(&address_value);
         let feedback_tooltip = if feedback_tool_unavailable {
@@ -127,27 +131,34 @@ impl GhostexGpuiApp {
             .bg(browser_toolbar_background())
             .border_b_1()
             .border_color(chrome_color(0x252525, 0xd4d4d4))
-            .when_some(remote_machine_name, |bar, name| {
+            .when_some(remote_route_chip, |bar, chip| {
+                let tooltip = chip.tooltip;
                 bar.child(
                     h_flex()
+                        .id(format!("ghostex-gpui-browser-route-chip-{}", pane_id.0))
+                        .managed_tooltip_with_placement(
+                            ManagedTooltipPlacement::Below,
+                            move |window, cx| titlebar_tooltip(tooltip.clone(), window, cx),
+                        )
                         .max_w(px(160.0))
                         .flex_shrink_0()
                         .px(px(9.0))
                         .gap(px(5.0))
                         .items_center()
-                        .child(
-                            svg()
-                                .path(BROWSER_ICON_WORLD)
-                                .size(px(13.0))
-                                .text_color(rgb(0x7acb9d)),
-                        )
+                        .child(svg().path(BROWSER_ICON_WORLD).size(px(13.0)).text_color(
+                            if chip.through_machine {
+                                rgb(0x7acb9d)
+                            } else {
+                                chrome_color(0x8a8a8a, 0x737373)
+                            },
+                        ))
                         .child(
                             div()
                                 .min_w_0()
                                 .truncate()
                                 .text_size(px(11.0))
                                 .text_color(chrome_color(0xb7b7b7, 0x525252))
-                                .child(name),
+                                .child(chip.label),
                         ),
                 )
             })
@@ -264,5 +275,56 @@ impl GhostexGpuiApp {
                     ))
                     .child(self.render_browser_toolbar_overflow_button(pane_id, cx)),
             )
+    }
+}
+
+/// What the route chip of a remote machine's Browser tab says.
+struct BrowserRemoteRouteChip {
+    label: gpui::SharedString,
+    tooltip: gpui::SharedString,
+    /// The page goes through the machine (green globe); else it opens from this computer.
+    through_machine: bool,
+}
+
+/// CDXC:Browser 2026-11-14 DECISION:
+/// User (Q3200): a public page of a remote project's Browser opens from this computer, and the
+/// browser must say so, so a name only the remote's network knows that fails here does not read as
+/// the remote failing. The chip names the machine while the page goes through it (and on a tab with
+/// no page yet), and says "From this Mac" while the page opens from this computer
+/// (helpers/remote/browser_route.rs).
+fn browser_remote_route_chip(
+    machine: &str,
+    url: &str,
+    through_machine: Option<bool>,
+) -> BrowserRemoteRouteChip {
+    let this_computer = if cfg!(target_os = "macos") {
+        "this Mac"
+    } else {
+        "this computer"
+    };
+    let private = format!(
+        "{machine}'s own and private addresses (localhost, 10.x, 172.16-31.x, 192.168.x, 100.64-127.x, *.local and its host names)"
+    );
+    if through_machine == Some(false) {
+        let host = url::Url::parse(url)
+            .ok()
+            .and_then(|parsed| parsed.host_str().map(str::to_string))
+            .unwrap_or_else(|| "This page".into());
+        return BrowserRemoteRouteChip {
+            label: format!("From {this_computer}").into(),
+            tooltip: format!(
+                "{host} opens from {this_computer}'s network. Only {private} go through {machine}."
+            )
+            .into(),
+            through_machine: false,
+        };
+    }
+    BrowserRemoteRouteChip {
+        label: machine.to_string().into(),
+        tooltip: format!(
+            "This page goes through {machine}. Only {private} go through {machine}; public sites open from {this_computer}."
+        )
+        .into(),
+        through_machine: true,
     }
 }

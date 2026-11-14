@@ -367,13 +367,17 @@ impl GhostexGpuiApp {
             .remote_gxserver_connect_generations
             .get(machine_id)
             .copied();
+        let route = gpui_remote_browser_route_for_machine(machine_id);
         let machine_id = machine_id.to_string();
         self.remote_browser.pending.insert(machine_id.clone());
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move { start_remote_browser_tunnel(&config, &target).map(Arc::new) })
-                .await;
+            let result =
+                background
+                    .spawn(async move {
+                        start_remote_browser_tunnel(&config, &target, route).map(Arc::new)
+                    })
+                    .await;
             let _ = this.update_in(cx, |this, window, cx| {
                 if this
                     .remote_gxserver_connect_generations
