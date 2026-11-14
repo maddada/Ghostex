@@ -12,8 +12,11 @@ use crate::app::helpers::*;
 /// Maintainer on GitHub issue #407: "Sure go ahead and implement the frame effect as an option in settings but please test it well and send me screenshots of the final thing in the PR. I want the current one I have now to remain default though please (should remain as it looks now)". The frame is an opt-in setting, off by default, and off the window's elements, styles and native clipping are exactly what they were.
 ///
 /// CDXC:Workarea 2026-11-05 WHY:
-/// The gutter is 6pt on every side, enough to read the card as its own surface without taking room from the work area. The card's radius is the window's corner radius less the gutter (10.5pt), so the two corners run at the same distance, and it stays 10.5pt in full screen, where the window has no corner; what sits inside the card's 1pt border rounds at 9.5pt. The border is the chrome ink at 6% in dark mode and under dark glass and the theme's divider line in light mode, and the shadow is light. The card keeps its background and the glass keeps its tints, and the frame stays with the sidebar hidden and in full screen. macOS only: elsewhere the work area's web pages cannot be clipped to the card's corners (packages/settings-catalog/src/availability.rs).
-/// SEE-ALSO: app/element/work_area_frame.rs (the card and its glass gutter), app/element/window_corner_pane.rs (panes round to the card), native/macos/GpuiWindowCorners.h (web pages clip to the card).
+/// The gutter is 6pt on every side, enough to read the card as its own surface without taking room from the work area. The card's radius is the window's corner radius less the gutter (10.5pt), so the two corners run at the same distance, and it stays 10.5pt in full screen, where the window has no corner; what sits inside the card's 1pt border rounds at 9.5pt. The border is the chrome ink at 6% in dark mode and under dark glass and the theme's divider line in light mode, and the shadow is light. The card keeps its background and the glass keeps its tints, and the frame stays with the sidebar hidden and in full screen. Linux keeps the same 10.5pt card radius although its windows are usually square (Omarchy's Hyprland rounds them 0) or rounded by the compositor: the card is its own surface inside the window, and one radius keeps the panes and pages that round to it identical on every platform.
+/// SEE-ALSO: app/element/work_area_frame.rs (the card and its glass gutter), app/element/window_corner_pane.rs (panes round to the card), native/macos/GpuiWindowCorners.h, cef/linux_x11.rs and cef/windows.rs (web pages clip to the card).
+///
+/// CDXC:Workarea 2026-11-15 DECISION:
+/// User, about Frame the work area: "i like this setting but can't set it on linux (and maybe on win also) please fix this". The frame exists on Linux too (WORK_AREA_FRAME_PLATFORMS below), now that the work area's web pages are clipped to the card's corners there (an XShape on each page's X11 window). Supersedes the 2026-11-05 macOS-only rule.
 ///
 /// CDXC:Workarea 2026-11-08 DECISION:
 /// User: "make frame around work area toggle enabled by default for new users please". Supersedes the off default above: a new install starts with the frame on, and anyone who already had a settings file keeps it off, because the first start of this version writes `workAreaFrame` false into their file (shared_settings/work_area_frame_default.rs). The setting is read as on when the file does not carry it.
@@ -65,9 +68,13 @@ pub(crate) fn show_window_buttons_when_sidebar_collapsed() -> bool {
     cfg!(target_os = "macos") && SHOW_WINDOW_BUTTONS_WHEN_SIDEBAR_COLLAPSED.load(Ordering::Relaxed)
 }
 
-/// Whether the work area is drawn as a card. The setting exists on macOS only.
+/// Whether this platform has the frame: where the work area's web pages can be clipped to the
+/// card's corners (packages/settings-catalog/src/availability.rs lists the same platforms).
+const WORK_AREA_FRAME_PLATFORMS: bool = cfg!(any(target_os = "macos", target_os = "linux"));
+
+/// Whether the work area is drawn as a card.
 pub(crate) fn work_area_frame_active() -> bool {
-    cfg!(target_os = "macos") && WORK_AREA_FRAME.load(Ordering::Relaxed)
+    WORK_AREA_FRAME_PLATFORMS && WORK_AREA_FRAME.load(Ordering::Relaxed)
 }
 
 /// The width the frame's gutter takes from the work area beside the sidebar: a gutter on each side

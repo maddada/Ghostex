@@ -39,10 +39,10 @@ const ROWS: &[RowAvailability] = &[
         only_on: &[Platform::MacOs],
         hidden_while: None,
     },
-    // CDXC:Workarea 2026-11-05 WHY: Frame the work area clips the work area's web pages to the card's rounded corners with a native layer mask, which exists on macOS only; on Windows and Linux the pages would keep square corners over the card, so the row is macOS-only until they can be clipped there too.
+    // CDXC:Workarea 2026-11-15 DECISION: User: "i like this setting but can't set it on linux (and maybe on win also) please fix this". Frame the work area clips the work area's web pages to the card's rounded corners (a layer mask on macOS, an XShape on Linux), so the row exists on macOS and Linux; on Windows the pages would keep square corners over the card until their clip is proven there. Supersedes the 2026-11-05 macOS-only row. SEE-ALSO: apps/desktop/src/app/helpers/work_area_frame.rs (`WORK_AREA_FRAME_PLATFORMS`).
     RowAvailability {
         key: "workAreaFrame",
-        only_on: &[Platform::MacOs],
+        only_on: &[Platform::MacOs, Platform::Linux],
         hidden_while: None,
     },
     // CDXC:Settings 2026-11-08 WHY: Windows and Linux have no window buttons on the left to keep or hide, so the row exists on macOS only.

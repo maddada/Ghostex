@@ -15,13 +15,15 @@ counter. Runtime behavior needs device verification.
 */
 
 use anyhow::{Context as _, Result};
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
-    CreateSolidBrush, DCX_CACHE, DeleteObject, FillRect, GetDCEx, HBRUSH, ReleaseDC,
+    CombineRgn, CreateEllipticRgn, CreateRectRgn, CreateSolidBrush, DCX_CACHE, DeleteObject,
+    FillRect, GetDCEx, HBRUSH, HRGN, RGN_AND, RGN_DIFF, RGN_OR, ReleaseDC, SetWindowRgn,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
@@ -326,16 +328,161 @@ pub(super) fn set_native_view_frame(
     ensure_child_composited_by_dwm(hwnd);
     let scale = unsafe { GetDpiForWindow(hwnd) } as f64 / USER_DEFAULT_SCREEN_DPI as f64;
     let scale = if scale > 0.0 { scale } else { 1.0 };
+    let physical_width = (width * scale).round().max(0.0) as i32;
+    let physical_height = (height * scale).round().max(0.0) as i32;
     unsafe {
         SetWindowPos(
             hwnd,
             std::ptr::null_mut(),
             (x * scale).round() as i32,
             (y * scale).round() as i32,
-            ((width * scale).round().max(0.0)) as i32,
-            ((height * scale).round().max(0.0)) as i32,
+            physical_width,
+            physical_height,
             SWP_NOZORDER | SWP_NOACTIVATE,
         );
+    }
+    reshape_corners_for_frame(hwnd, physical_width, physical_height);
+}
+
+/// A CEF window's rounded corners: physical radii (top-left, top-right, bottom-right, bottom-left)
+/// and the frame size they were last cut for.
+#[derive(Clone, Copy, Default, PartialEq)]
+struct CornerShape {
+    radii: [i32; 4],
+    width: i32,
+    height: i32,
+}
+
+/// Each CEF window's frame size and corner radii, by HWND, from its first frame until it closes.
+static CORNER_SHAPES: Mutex<Option<HashMap<usize, CornerShape>>> = Mutex::new(None);
+
+/// CDXC:Workarea 2026-11-15 WHY:
+/// A page is a child HWND over the GPUI window, so nothing GPUI paints can round it; with the work area frame on, its square corners would sit over the card's rounded ones. The page's HWND takes a window region cut to the card's inner corners (its child windows are clipped by it), so the card's corner and border show through and clicks there reach the card. The region is recut whenever the page's frame changes size. Written without Windows hardware.
+/// SEE-ALSO: app/element/work_area_frame.rs (`clip_native_view_to_work_area_frame`), cef/linux_x11.rs (`set_native_view_corner_radii`), native/macos/GpuiWindowCorners.h (the macOS clip).
+pub(super) fn set_native_view_corner_radii(
+    native_view: *mut c_void,
+    radii: [f32; 4],
+    _scale_factor: f32,
+) {
+    let hwnd: HWND = native_view.cast();
+    if hwnd.is_null() {
+        return;
+    }
+    // Physical pixels at the window's own DPI, as `set_native_view_frame` places it.
+    let scale = unsafe { GetDpiForWindow(hwnd) } as f32 / USER_DEFAULT_SCREEN_DPI as f32;
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let radii = radii.map(|radius| (radius.max(0.0) * scale).round() as i32);
+    let shape = {
+        let mut shapes = CORNER_SHAPES
+            .lock()
+            .expect("CEF corner-shape mutex should not be poisoned");
+        let shape = shapes
+            .get_or_insert_with(HashMap::new)
+            .entry(hwnd as usize)
+            .or_default();
+        if shape.radii == radii {
+            return;
+        }
+        shape.radii = radii;
+        *shape
+    };
+    if shape.width > 0 && shape.height > 0 {
+        apply_corner_shape(hwnd, shape);
+    }
+}
+
+/// Records a CEF window's new frame size and recuts its region when it has rounded corners.
+fn reshape_corners_for_frame(hwnd: HWND, width: i32, height: i32) {
+    let shape = {
+        let mut shapes = CORNER_SHAPES
+            .lock()
+            .expect("CEF corner-shape mutex should not be poisoned");
+        let shape = shapes
+            .get_or_insert_with(HashMap::new)
+            .entry(hwnd as usize)
+            .or_default();
+        if shape.width == width && shape.height == height {
+            return;
+        }
+        shape.width = width;
+        shape.height = height;
+        *shape
+    };
+    if shape.radii != [0; 4] {
+        apply_corner_shape(hwnd, shape);
+    }
+}
+
+fn forget_corner_shape(hwnd: HWND) {
+    if let Some(shapes) = CORNER_SHAPES
+        .lock()
+        .expect("CEF corner-shape mutex should not be poisoned")
+        .as_mut()
+    {
+        shapes.remove(&(hwnd as usize));
+    }
+}
+
+/// Gives the window a region with `shape`'s rounded corners, or removes its region when every
+/// corner is square.
+fn apply_corner_shape(hwnd: HWND, shape: CornerShape) {
+    if shape.radii == [0; 4] {
+        unsafe { SetWindowRgn(hwnd, std::ptr::null_mut(), 1) };
+        return;
+    }
+    let CornerShape {
+        radii,
+        width,
+        height,
+    } = shape;
+    let limit = width.min(height) / 2;
+    let [top_left, top_right, bottom_right, bottom_left] =
+        radii.map(|radius| radius.clamp(0, limit));
+    unsafe {
+        let region: HRGN = CreateRectRgn(0, 0, width, height);
+        if region.is_null() {
+            return;
+        }
+        // Each rounded corner: cut its square out, then add back the quarter of a circle that
+        // fills it.
+        let corners = [
+            (top_left, 0, 0),
+            (top_right, width - top_right, 0),
+            (bottom_right, width - bottom_right, height - bottom_right),
+            (bottom_left, 0, height - bottom_left),
+        ];
+        for (radius, left, top) in corners {
+            if radius <= 0 {
+                continue;
+            }
+            let square = CreateRectRgn(left, top, left + radius, top + radius);
+            let circle_left = if left == 0 { 0 } else { width - 2 * radius };
+            let circle_top = if top == 0 { 0 } else { height - 2 * radius };
+            let circle = CreateEllipticRgn(
+                circle_left,
+                circle_top,
+                circle_left + 2 * radius + 1,
+                circle_top + 2 * radius + 1,
+            );
+            if !square.is_null() {
+                CombineRgn(region, region, square, RGN_DIFF);
+                DeleteObject(square);
+            }
+            if !circle.is_null() {
+                let corner = CreateRectRgn(left, top, left + radius, top + radius);
+                if !corner.is_null() {
+                    // Only the circle's quarter inside this corner's square.
+                    CombineRgn(corner, corner, circle, RGN_AND);
+                    CombineRgn(region, region, corner, RGN_OR);
+                    DeleteObject(corner);
+                }
+                DeleteObject(circle);
+            }
+        }
+        // The system owns the region once it is set.
+        if SetWindowRgn(hwnd, region, 1) == 0 {
+            DeleteObject(region);
+        }
     }
 }
 
@@ -572,6 +719,7 @@ pub(super) fn release_native_view(native_view: *mut c_void) {
     if hwnd.is_null() {
         return;
     }
+    forget_corner_shape(hwnd);
     unsafe {
         // Win32 recycles HWND values. If the parent GPUI window was destroyed
         // first, Win32 already destroyed this child and the handle may now name

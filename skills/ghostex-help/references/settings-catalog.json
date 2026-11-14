@@ -8704,7 +8704,7 @@
       "default": true,
       "advanced": true,
       "agentWritable": true,
-      "availability": "Only on macOS."
+      "availability": "Only on macOS and Linux."
     },
     {
       "key": "showWindowButtonsWhenSidebarCollapsed",
