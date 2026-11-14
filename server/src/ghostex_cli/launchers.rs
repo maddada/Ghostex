@@ -660,6 +660,11 @@ fn linux_ghostex_desktop_process_running() -> bool {
         return false;
     };
     let own_pid = std::process::id();
+    let own_ghostex_home = std::env::var("GHOSTEX_HOME").ok();
+    let own_ghostex_home = own_ghostex_home
+        .as_deref()
+        .map(str::as_bytes)
+        .filter(|home| !home.is_empty());
     entries.filter_map(Result::ok).any(|entry| {
         let file_name = entry.file_name();
         let Some(pid) = file_name.to_str().and_then(|name| name.parse::<u32>().ok()) else {
@@ -670,7 +675,20 @@ fn linux_ghostex_desktop_process_running() -> bool {
         }
         std::fs::read_link(entry.path().join("exe"))
             .is_ok_and(|exe| is_linux_ghostex_desktop_executable(&exe))
+            && std::fs::read(entry.path().join("environ"))
+                .is_ok_and(|environ| linux_environ_ghostex_home(&environ) == own_ghostex_home)
     })
+}
+
+/// CDXC:PlatformSupport 2026-11-14 WHY:
+/// A Ghostex app started for another Ghostex home (a throwaway test gxserver's app, which runs with its own `GHOSTEX_HOME`) is not this user's app, so it must not count as "already running".
+/// On 2026-11-14 three test-server apps from dev builds made the desktop entry print "already running" and exit, so the installed app would not start at all.
+#[cfg(any(target_os = "linux", test))]
+fn linux_environ_ghostex_home(environ: &[u8]) -> Option<&[u8]> {
+    environ
+        .split(|byte| *byte == 0)
+        .find_map(|entry| entry.strip_prefix(b"GHOSTEX_HOME="))
+        .filter(|home| !home.is_empty())
 }
 
 /// Raise the window of the Ghostex desktop process that is already running.
