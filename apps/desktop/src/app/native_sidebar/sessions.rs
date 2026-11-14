@@ -290,7 +290,8 @@ impl GhostexGpuiApp {
                 ),
             ));
         }
-        trailing.extend(folded_dots);
+        // CDXC:Sidebar 2026-11-14 DECISION: User, of a pinned coordinator that kept its folded status dot beside the hover buttons: "we should make hovering on this show same on the right side like we show here" (a project row, whose status dot gives way to "<" and "x"). A folded coordinator's dots give way to the hover strip like the activity dot and the age do; the question and approval dots keep showing, as on every row.
+        trailing.extend(folded_dots.filter(|_| !buttons_shown));
         // What an assistive client or an e2e run reads after the title: the row's state words, which the pixels convey by colour and glyph.
         let a11y_description = [
             session.lifecycle_state.as_deref().unwrap_or(""),
