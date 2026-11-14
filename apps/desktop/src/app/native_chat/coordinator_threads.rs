@@ -108,7 +108,10 @@ fn worker_pill(row: &Value, title: &str, elsewhere: bool, p: &ChatAppearance) ->
         .when(elsewhere, |pill| {
             pill.child(
                 gpui::svg()
-                    .path("titlebar/device-desktop.svg")
+                    // That computer's own icon (CDXC:SessionChat 2026-11-14 in session_directory.rs).
+                    .path(crate::app::gx_chat::session_directory::computer_icon(
+                        row["serverId"].as_str().unwrap_or_default(),
+                    ))
                     .size(px(11.0 * s))
                     .flex_shrink_0()
                     .text_color(p.muted),

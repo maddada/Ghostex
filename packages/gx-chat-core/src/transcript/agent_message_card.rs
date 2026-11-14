@@ -63,7 +63,14 @@ fn session_target(reference: &str) -> Value {
     if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
         return Value::Null;
     }
-    json!({ "projectId": parts[1], "sessionId": parts[2], "label": GO_TO_SESSION })
+    // `serverId` names the computer: project and session ids are only unique on one gxserver, so
+    // the renderers find the session (its state, its computer's icon) by the whole ref.
+    json!({
+        "serverId": parts[0],
+        "projectId": parts[1],
+        "sessionId": parts[2],
+        "label": GO_TO_SESSION,
+    })
 }
 
 /// The other session's pill after `prefix`, when the card can open it; `Null` otherwise, and the
@@ -84,14 +91,19 @@ fn titled_pill(
         "" => "another agent",
         title => title,
     };
-    card_pill(
+    let mut pill = card_pill(
         prefix,
         title,
         agent_icon.clone(),
         coordinator,
         session,
         gone,
-    )
+    );
+    // CDXC:SessionChat 2026-11-14 DECISION:
+    // User, of a "Message to Arch Chungus" card (a Claude coordinator) whose tile showed the crown and whose pill only the name and dot: "also doesn't show icon of agent". A card's tile shows a coordinator's crown in place of its agent's logo (`crowned`), so the pill of a coordinator draws the agent's logo, never a second crown; any other session's tile already is its agent's logo and its pill keeps leaving it out (CDXC:SessionChat 2026-10-28 on `card_pill`).
+    pill["logo"] = coordinator.into();
+    pill["coordinator"] = false.into();
+    pill
 }
 
 /// A session title in a row's sentence, quoted so it reads as a name (`Message from "Fix login"`).
@@ -643,6 +655,32 @@ mod pill_logo_tests {
         dress_sent(&mut single);
         assert_eq!(single["card"]["agentIcon"], "codex");
         assert_eq!(single["card"]["pill"]["logo"], false);
+    }
+
+    /// A coordinator's card wears the crown in its tile, so its pill draws the agent's logo, and
+    /// the pill's session keeps the computer (`serverId`) the ref named.
+    #[test]
+    fn a_coordinators_card_pill_shows_its_agents_logo_and_keeps_its_computer() {
+        let mut sent = json!({
+            "recipients": [{
+                "name": "Arch Chungus",
+                "titled": true,
+                "agentId": "claude",
+                "coordinator": true,
+                "globalRef": "S1u:P2alb:G5a3u",
+                "status": "delivered",
+            }],
+        });
+        dress_sent(&mut sent);
+        let card = &sent["card"];
+        assert_eq!(card["coordinator"], true);
+        let pill = &card["pill"];
+        assert_eq!(pill["logo"], true);
+        assert_eq!(pill["coordinator"], false);
+        assert_eq!(pill["agentIcon"], "claude");
+        assert_eq!(pill["session"]["serverId"], "S1u");
+        assert_eq!(pill["session"]["projectId"], "P2alb");
+        assert_eq!(pill["session"]["sessionId"], "G5a3u");
     }
 
     /// A card whose other session has no title still draws its name as the clickable pill.

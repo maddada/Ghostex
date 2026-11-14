@@ -514,6 +514,7 @@ impl NativeChatView {
         let card = (!missing && session.is_object())
             .then(|| {
                 super::session_card::card_for(
+                    session["serverId"].as_str().unwrap_or_default(),
                     session["projectId"].as_str().unwrap_or_default(),
                     session["sessionId"].as_str().unwrap_or_default(),
                 )

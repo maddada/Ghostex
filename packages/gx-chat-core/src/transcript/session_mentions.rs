@@ -270,6 +270,9 @@ pub struct MentionCard {
     pub computer: String,
     /// The session runs on another computer than the home one: its pill draws the computer icon.
     pub elsewhere: bool,
+    /// The gxserver the session runs on (`S1u` of `S1u:P2alb:G5a3u`), which the renderers draw
+    /// that computer's own icon for; empty when its ref names none.
+    pub server_id: String,
     /// `Working`, `Needs you`, `Idle` or `Sleeping`.
     pub state: String,
     /// The dot: `working`, `attention` or `idle` (idle and sleeping draw the same hollow ring).
@@ -326,6 +329,7 @@ pub fn mention_card(
         project_name: js_trim(&session.project_name).to_string(),
         computer: js_trim(&session.computer).to_string(),
         elsewhere,
+        server_id: server.to_string(),
         state: choice.state,
         dot: dot.to_string(),
     })

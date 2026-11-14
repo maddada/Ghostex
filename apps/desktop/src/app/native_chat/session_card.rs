@@ -86,9 +86,13 @@ pub(super) fn card(global_ref: &str) -> Option<MentionCard> {
     )
 }
 
-/// The card for the session a message card's pill names (`session` with `projectId` and
-/// `sessionId`, no server part).
-pub(super) fn card_for(project_id: &str, session_id: &str) -> Option<MentionCard> {
+/// The card for the session a message card's pill names (`session` with `serverId`, `projectId`
+/// and `sessionId`). Project and session ids are only unique on one gxserver, so the server part
+/// picks the computer; a card written before it carried one matches the ids alone.
+pub(super) fn card_for(server_id: &str, project_id: &str, session_id: &str) -> Option<MentionCard> {
+    if !server_id.is_empty() {
+        return card(&format!("{server_id}:{project_id}:{session_id}"));
+    }
     let (_, sessions) = crate::app::gx_chat::session_directory::current();
     let session = sessions
         .iter()
@@ -120,7 +124,8 @@ pub(super) fn marks(card: &MentionCard, p: &ChatAppearance) -> Vec<PillMark> {
     let mut marks = vec![dot];
     if card.elsewhere {
         marks.push(PillMark::Icon {
-            path: "titlebar/device-desktop.svg".into(),
+            // That computer's own icon (CDXC:SessionChat 2026-11-14 in session_directory.rs).
+            path: crate::app::gx_chat::session_directory::computer_icon(&card.server_id).into(),
             size: px(11.0 * s),
             color: p.muted,
         });
