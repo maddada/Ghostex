@@ -88,7 +88,11 @@ fn pill(
         .min_w_0()
         .max_w(px(pill_max_width(kind) * scale))
         .h(px(24.0 * scale))
-        .px(px(if icon_only { 6.0 } else { 10.0 } * scale))
+        .px(px(if icon_only {
+            ICON_PILL_PADDING
+        } else {
+            PILL_PADDING
+        } * scale))
         .flex()
         .items_center()
         .justify_center()
@@ -333,7 +337,32 @@ impl NativeChatView {
         {
             width += 30.0 * scale;
         }
-        width
+        width - self.option_pills_lead_in(values) * scale
+    }
+
+    /// CDXC:SessionChat 2026-11-14 DECISION: User: the first pill's icon sits as far from the box's
+    /// left border as the send/stop button sits from its right one. The row starts at the box's
+    /// 16px inset like the toolbar, but the first pill carries its own inner padding (its hover
+    /// background) before the icon, so the row is pulled left by that padding. The hover
+    /// background then reaches out to 6px from the border, inside the 22px rounded corner.
+    fn option_pills_lead_in(&self, values: &Value) -> f32 {
+        if values["agentChip"]["name"].as_str().is_some() {
+            AGENT_CHIP_PADDING
+        } else if values["showModel"] == true {
+            PILL_PADDING
+        } else if values["showOptions"] == true
+            && !values["modelMenu"].is_object()
+            && self.snapshot["composerOverflow"]["optionsOverflowed"] != true
+        {
+            PILL_PADDING
+        } else if self.snapshot["optionMenus"]["mode"]
+            .as_array()
+            .is_some_and(|rows| !rows.is_empty())
+        {
+            ICON_PILL_PADDING
+        } else {
+            0.0
+        }
     }
 
     pub(super) fn render_option_pills(
@@ -350,6 +379,7 @@ impl NativeChatView {
         div()
             .flex()
             .min_w_0()
+            .ml(px(-self.option_pills_lead_in(values) * appearance.scale))
             .overflow_hidden()
             .items_center()
             .gap(px(2.0 * appearance.scale))
@@ -431,6 +461,9 @@ fn agent_accent(icon: &str, appearance: &ChatAppearance) -> u32 {
 }
 
 const AGENT_CHIP_PADDING: f32 = 8.0;
+/// A pill's inner padding either side of its label, and of an icon-only pill.
+const PILL_PADDING: f32 = 10.0;
+const ICON_PILL_PADDING: f32 = 6.0;
 const AGENT_TILE: f32 = 14.0;
 const AGENT_CHIP_GAP: f32 = 4.0;
 
