@@ -24,25 +24,46 @@ pub(crate) fn gpui_powershell_quote(value: &str) -> String {
 
 pub(crate) const GPUI_REMOTE_POWERSHELL_PRELUDE: &str = "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $OutputEncoding=[Console]::OutputEncoding; ";
 
-/// CDXC:RemoteMachines 2026-09-14 WHY:
-/// Native Windows OpenSSH can use cmd or PowerShell as its login shell and limits command-line length.
-/// Compress the script before encoding it so both shells see a fixed invocation and attachment stdin remains available to the terminal or upload.
-pub(crate) fn gpui_remote_powershell_command(script: &str) -> String {
-    let mut compressed = GzEncoder::new(Vec::new(), Compression::fast());
-    compressed
-        .write_all(script.as_bytes())
-        .expect("compress remote script");
-    let payload = STANDARD.encode(compressed.finish().expect("finish remote script"));
-    let bootstrap = format!(
-        "{GPUI_REMOTE_POWERSHELL_PRELUDE}$gxBytes=[Convert]::FromBase64String('{payload}'); $gxStream=[IO.MemoryStream]::new($gxBytes); $gxZip=[IO.Compression.GZipStream]::new($gxStream,[IO.Compression.CompressionMode]::Decompress); $gxReader=[IO.StreamReader]::new($gxZip,[Text.Encoding]::UTF8); $gxScript=$gxReader.ReadToEnd(); $gxReader.Dispose(); & ([ScriptBlock]::Create($gxScript))"
-    );
+/// The longest command `gpui_remote_powershell_command` sends without the gzip loader: cmd.exe,
+/// which Windows OpenSSH runs commands through unless `DefaultShell` names another shell, refuses
+/// a command line over 8,191 characters.
+const GPUI_REMOTE_POWERSHELL_PLAIN_COMMAND_MAX_CHARS: usize = 8_000;
+
+fn gpui_powershell_encoded_command(script: &str) -> String {
     let encoded = STANDARD.encode(
-        bootstrap
+        script
             .encode_utf16()
             .flat_map(u16::to_le_bytes)
             .collect::<Vec<_>>(),
     );
     format!("powershell.exe -NoLogo -NoProfile -EncodedCommand {encoded}")
+}
+
+/// CDXC:RemoteMachines 2026-09-14 WHY:
+/// Native Windows OpenSSH can use cmd or PowerShell as its login shell and limits command-line length.
+/// `-EncodedCommand` gives both shells a fixed invocation with no quoting and leaves stdin free for the terminal or an upload.
+///
+/// CDXC:RemoteMachines 2026-11-14 WHY (GitHub #613):
+/// Microsoft Defender's AMSI scan reports "base64 text, gunzipped in memory, run through
+/// `[ScriptBlock]::Create`" as `VirTool:PowerShell/MaleficAms.W` and blocks it before anything runs,
+/// so every terminal attach to a Windows host with Defender on failed, and the reconnect loop
+/// raised an alert every few seconds. A script that fits encodes as itself, which Defender reads as
+/// the plain command it is; only a script too long for cmd.exe's command line still goes through
+/// the gzip loader. The terminal attach is a few hundred characters and never takes the loader.
+pub(crate) fn gpui_remote_powershell_command(script: &str) -> String {
+    let plain =
+        gpui_powershell_encoded_command(&format!("{GPUI_REMOTE_POWERSHELL_PRELUDE}{script}"));
+    if plain.len() <= GPUI_REMOTE_POWERSHELL_PLAIN_COMMAND_MAX_CHARS {
+        return plain;
+    }
+    let mut compressed = GzEncoder::new(Vec::new(), Compression::fast());
+    compressed
+        .write_all(script.as_bytes())
+        .expect("compress remote script");
+    let payload = STANDARD.encode(compressed.finish().expect("finish remote script"));
+    gpui_powershell_encoded_command(&format!(
+        "{GPUI_REMOTE_POWERSHELL_PRELUDE}$gxBytes=[Convert]::FromBase64String('{payload}'); $gxStream=[IO.MemoryStream]::new($gxBytes); $gxZip=[IO.Compression.GZipStream]::new($gxStream,[IO.Compression.CompressionMode]::Decompress); $gxReader=[IO.StreamReader]::new($gxZip,[Text.Encoding]::UTF8); $gxScript=$gxReader.ReadToEnd(); $gxReader.Dispose(); & ([ScriptBlock]::Create($gxScript))"
+    ))
 }
 
 pub(crate) const GPUI_REMOTE_WINDOWS_STORAGE: &str = r#"
@@ -176,4 +197,62 @@ try { [Console]::OpenStandardInput().CopyTo($output) } finally { $output.Dispose
         "$gxDir=Join-Path ([IO.Path]::GetTempPath()) 'ghostex-gpui-attachments'; [IO.Directory]::CreateDirectory($gxDir) | Out-Null; $gxPath=Join-Path $gxDir {};\n{operation}\nWrite-Output ('__GHOSTEX_UPLOAD__'+$gxPath)",
         gpui_powershell_quote(name)
     )
+}
+
+#[cfg(test)]
+mod powershell_command_tests {
+    use super::*;
+
+    fn decoded_script(command: &str) -> String {
+        let encoded = command
+            .strip_prefix("powershell.exe -NoLogo -NoProfile -EncodedCommand ")
+            .expect("a fixed powershell.exe -EncodedCommand invocation");
+        let bytes = STANDARD.decode(encoded).expect("base64");
+        let units = bytes
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        String::from_utf16(&units).expect("UTF-16LE")
+    }
+
+    /// GitHub #613: Defender blocks the gzip + `ScriptBlock::Create` loader as
+    /// `VirTool:PowerShell/MaleficAms.W`, so the terminal attach must reach the host as the plain
+    /// command it is.
+    #[test]
+    fn a_terminal_attach_is_sent_as_its_own_plain_script() {
+        let attach = format!(
+            "[Console]::Write([string][char]27 + ']2;{}' + [char]7); $env:WMX_DIR='C:\\Users\\Some One\\AppData\\Local\\Ghostex\\Runtime\\windows-sessions'; & 'C:\\Users\\Some One\\AppData\\Local\\Ghostex\\current\\resources\\native\\wmx.exe' attach --require-existing 'S27-P9m6x-G94id' --prompt-editor 'code-server'",
+            super::super::ssh_process::TEMP_REMOTE_SSH_READY_TITLE
+        );
+        let command = gpui_remote_powershell_command(&attach);
+        let script = decoded_script(&command);
+        assert_eq!(script, format!("{GPUI_REMOTE_POWERSHELL_PRELUDE}{attach}"));
+        for loader_part in [
+            "FromBase64String",
+            "GZipStream",
+            "ScriptBlock",
+            "MemoryStream",
+        ] {
+            assert!(!script.contains(loader_part), "{loader_part} in {script}");
+        }
+        assert!(command.len() <= GPUI_REMOTE_POWERSHELL_PLAIN_COMMAND_MAX_CHARS);
+    }
+
+    #[test]
+    fn only_a_script_too_long_for_cmd_goes_through_the_gzip_loader() {
+        let long = "Write-Output 'x'\n".repeat(400);
+        let command = gpui_remote_powershell_command(&long);
+        assert!(decoded_script(&command).contains("GZipStream"));
+        assert!(command.len() <= GPUI_REMOTE_POWERSHELL_PLAIN_COMMAND_MAX_CHARS);
+        // The setup probes the connection runs on every connect stay plain too.
+        for script in [
+            gpui_remote_windows_environment_probe(),
+            gpui_remote_windows_token_read_command(),
+            GPUI_REMOTE_WINDOWS_PLATFORM_PROBE.to_string(),
+        ] {
+            assert!(
+                !decoded_script(&gpui_remote_powershell_command(&script)).contains("GZipStream")
+            );
+        }
+    }
 }
