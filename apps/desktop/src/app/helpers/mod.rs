@@ -19,6 +19,7 @@ pub(crate) mod manage_docs;
 pub(crate) mod manage_docs_chat_files;
 pub(crate) mod manage_docs_listing;
 pub(crate) mod manage_docs_resources;
+pub(crate) mod manage_embed_page_rules;
 pub(crate) mod markdown_table_csv;
 pub(crate) mod os_cli;
 pub(crate) mod project;

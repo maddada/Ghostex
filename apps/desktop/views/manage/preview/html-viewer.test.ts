@@ -78,7 +78,8 @@ describe('Agentation bootstrap', () => {
     expect(script).not.toContain('esm.sh');
     expect(script).toContain('screenshotReference');
     expect(script).toContain('ghostex-annotation-screenshot:');
-    expect(script).toContain('window.__ghostexSendAnnotation');
+    expect(script).not.toContain('__ghostexSendAnnotation');
+    expect(script).toContain('"ghostex-send-annotation"');
   });
 
   test('puts the bundle before the bootstrap without closing the script tag early', () => {

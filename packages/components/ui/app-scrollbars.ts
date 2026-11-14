@@ -1,10 +1,6 @@
 import { useEffect } from 'react';
 import './app-scrollbars.css';
 
-const MODAL =
-  '[data-slot="dialog-content"], [role="dialog"], [role="menu"], [role="listbox"], [data-slot="popover-content"], .confirm-modal';
-const PRESERVE = '.sidebar-reference-layout, .manage-sidebar';
-const BAR = '[data-app-scrollbar]';
 let users = 0;
 let dispose: (() => void) | undefined;
 
@@ -29,7 +25,15 @@ export function retainAppScrollbars() {
   };
 }
 
+/**
+ * CDXC:Docs 2026-11-14 WHY:
+ * The Files HTML preview runs in its own sealed origin, so Files can no longer reach into it to install these scrollbars; the preview's helper script runs this function's source inside the frame instead (`buildManageHtmlFrameHelperScript`). Keep it self-contained: everything it uses is declared inside it or read from `ownerWindow`.
+ */
 export function installAppScrollbars(ownerWindow: Window & typeof globalThis = globalThis.window) {
+  const MODAL =
+    '[data-slot="dialog-content"], [role="dialog"], [role="menu"], [role="listbox"], [data-slot="popover-content"], .confirm-modal';
+  const PRESERVE = '.sidebar-reference-layout, .manage-sidebar';
+  const BAR = '[data-app-scrollbar]';
   const window = ownerWindow;
   const { document, HTMLElement, Element, ResizeObserver, MutationObserver } = window;
   const getComputedStyle = window.getComputedStyle.bind(window);

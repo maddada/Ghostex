@@ -66,6 +66,7 @@ pub(crate) fn prepare_sign_in_popup(
         None,
         None,
         None,
+        None,
         Some(GhostexGpuiCefFocusHandler::new()),
         None,
         None,

@@ -119,6 +119,13 @@ impl CefBrowser {
         }
         let keyboard_zoom_enabled =
             page_metadata_handler.is_some() || project_workarea_bridge_event_handler.is_some();
+        // The page the project bridge belongs to; the Code view (the one surface with a trusted
+        // clipboard origin and a Code window route) gets none (CDXC:CefRuntime 2026-11-14 in
+        // GhostexGpuiProjectWorkareaBridgeLoadHandler).
+        let project_workarea_bridge_page = project_workarea_bridge_event_handler
+            .as_ref()
+            .filter(|_| trusted_clipboard_origin.is_none() && code_window_popup_handler.is_none())
+            .map(|_| first_party_page_entry_identity(url));
         /*
         CDXC:CefRuntime 2026-10-01 DECISION:
         User: disable two-finger zoom in every built-in CEF view and modal, including Code, but preserve it in browser pages and custom views (2026-09-09); and "please allow me to pinch zoom in/out in Excalidraw" (2026-10-01). The Files embed showing a drawing lets the pinch reach the page, which cancels the browser's page zoom and leaves the pinch to Excalidraw's own canvas zoom (apps/desktop/views/manage/embed.tsx). Browser pages and custom views use system page appearance; extension payloads also keep their own gesture behavior.
@@ -283,6 +290,7 @@ impl CefBrowser {
         } else if project_workarea_bridge_event_handler.is_some() {
             Some(GhostexGpuiProjectWorkareaBridgeLoadHandler::new(
                 manage_docs_resource_base_url,
+                project_workarea_bridge_page.clone(),
                 page_load_end_handler,
             ))
         } else if page_metadata_handler.is_some() || trusted_clipboard_origin.is_some() {
@@ -317,6 +325,7 @@ impl CefBrowser {
             find_handler,
             load_handler,
             project_workarea_bridge_event_handler,
+            project_workarea_bridge_page,
             extension_bridge_surface.clone(),
             extension_bridge_event_handler,
             request_handler,
