@@ -19,6 +19,7 @@ use std::time::Duration;
 /// `fetch` has no time limit of its own; a download or an install can take a while.
 const LIST_TIMEOUT: Duration = Duration::from_secs(60);
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(600);
+const STORE_CONTENT_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// `CatalogSnapshot`: the catalog and the URL its relative paths resolve against.
 pub(crate) struct CatalogSnapshot {
@@ -345,18 +346,16 @@ impl ExtensionsTab {
     }
 
     /// Opens a Store entry's page and reads its README and changelog.
+    ///
+    /// CDXC:Extensions 2026-11-14 WHY: gxserver reads both from the entry's hash-verified zip
+    /// (`/api/extensionStoreContent`); the catalog's `readme`/`changelog` paths name files in the
+    /// extensions repository that the store release never publishes, so fetching them from the
+    /// catalog URL failed for every entry, installed or not.
     pub(crate) fn select_store_entry(&mut self, name: Option<String>, cx: &mut Context<Self>) {
         self.browser.selected_store = name;
         self.browser.content_generation += 1;
         let generation = self.browser.content_generation;
-        let urls = self.browser.selected_store().and_then(|entry| {
-            let base = self.browser.catalog.as_ref()?.url.clone();
-            Some((
-                catalog_asset_url(&base, &entry.readme())?,
-                catalog_asset_url(&base, &entry.changelog())?,
-            ))
-        });
-        let Some((readme_url, changelog_url)) = urls else {
+        let Some(id) = self.browser.selected_store().map(|entry| entry.name()) else {
             self.browser.readme = None;
             self.browser.changelog = None;
             self.browser.loading_content = false;
@@ -364,63 +363,31 @@ impl ExtensionsTab {
             return;
         };
         self.browser.loading_content = true;
-        let results: Rc<
-            RefCell<(
-                Option<Result<Vec<u8>, String>>,
-                Option<Result<Vec<u8>, String>>,
-            )>,
-        > = Rc::new(RefCell::new((None, None)));
         let this = cx.weak_entity();
-        let finish = Rc::new({
-            let results = results.clone();
-            move |cx: &mut gpui::App| {
-                let (readme, changelog) = {
-                    let results = results.borrow();
-                    match (&results.0, &results.1) {
-                        (Some(readme), Some(changelog)) => (readme.clone(), changelog.clone()),
-                        _ => return,
-                    }
-                };
+        store_gxserver_rpc(
+            &self.store.clone(),
+            "/api/extensionStoreContent",
+            json!({ "id": id }),
+            STORE_CONTENT_TIMEOUT,
+            move |result, cx| {
                 let _ = this.update(cx, |page, cx| {
                     if page.browser.content_generation != generation {
                         return;
                     }
                     page.browser.loading_content = false;
-                    match (readme, changelog) {
-                        (Ok(readme), Ok(changelog)) => {
-                            page.browser.readme = Some(String::from_utf8_lossy(&readme).into());
-                            page.browser.changelog =
-                                Some(String::from_utf8_lossy(&changelog).into());
+                    let text = |value: &Value, key: &str| value[key].as_str().map(str::to_string);
+                    match result {
+                        Ok(value) => {
+                            page.browser.readme = text(&value, "readme");
+                            page.browser.changelog = text(&value, "changelog");
                         }
-                        _ => {
+                        Err(_) => {
                             page.browser.readme = None;
                             page.browser.changelog = None;
                         }
                     }
                     cx.notify();
                 });
-            }
-        });
-        let store = self.store.clone();
-        {
-            let results = results.clone();
-            let finish = finish.clone();
-            store_http_get(
-                &store,
-                readme_url,
-                move |result, cx| {
-                    results.borrow_mut().0 = Some(result);
-                    finish(cx);
-                },
-                cx,
-            );
-        }
-        store_http_get(
-            &store,
-            changelog_url,
-            move |result, cx| {
-                results.borrow_mut().1 = Some(result);
-                finish(cx);
             },
             cx,
         );
@@ -464,6 +431,59 @@ impl ExtensionsTab {
             cx,
         );
         None
+    }
+
+    /// The icon of a Store entry that is not installed, read once from its zip through gxserver
+    /// (`/api/extensionStoreContent`): it has no static files to serve the icon from yet.
+    /// `None` while it loads or when there is nothing to draw.
+    pub(crate) fn store_icon(
+        &mut self,
+        id: &str,
+        icon: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<Arc<[u8]>> {
+        if !self.has_transport(cx) || icon.is_empty() {
+            return None;
+        }
+        let key = format!("store:{id}");
+        match self.browser.icons.get(&key) {
+            Some(IconSlot::Ready(bytes)) => return Some(bytes.clone()),
+            Some(IconSlot::Loading | IconSlot::Missing) => return None,
+            None => {}
+        }
+        self.browser.icons.insert(key.clone(), IconSlot::Loading);
+        let this = cx.weak_entity();
+        store_gxserver_rpc(
+            &self.store.clone(),
+            "/api/extensionStoreContent",
+            json!({ "id": id }),
+            STORE_CONTENT_TIMEOUT,
+            move |result, cx| {
+                let slot = match result
+                    .ok()
+                    .and_then(|value| value["icon"].as_str().map(|icon| icon.as_bytes().to_vec()))
+                {
+                    Some(bytes) if !bytes.is_empty() && looks_like_svg(&bytes) => {
+                        IconSlot::Ready(Arc::from(bytes.into_boxed_slice()))
+                    }
+                    _ => IconSlot::Missing,
+                };
+                let _ = this.update(cx, |page, cx| {
+                    page.browser.icons.insert(key, slot);
+                    cx.notify();
+                });
+            },
+            cx,
+        );
+        None
+    }
+
+    /// Whether [`Self::store_icon`] is still reading this entry's icon.
+    pub(crate) fn store_icon_loading(&self, id: &str) -> bool {
+        matches!(
+            self.browser.icons.get(&format!("store:{id}")),
+            Some(IconSlot::Loading)
+        )
     }
 
     /// A Store screenshot (`<img src>` from the catalog), decoded once.

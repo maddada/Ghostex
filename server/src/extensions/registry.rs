@@ -1,18 +1,21 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use crate::paths::GxserverPaths;
 
 use super::{
     activate_staged_payload, apply_state_patch, catalog_zip_url, check_install_approval,
-    default_store_entry, fetch_catalog, read_manifest, read_store, stage_local_payload,
-    stage_zip_payload, store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
-    ExtensionCatalogSnapshot, ExtensionError, ExtensionInstallApproval, ExtensionLaunchContext,
-    ExtensionResult, ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch,
-    ExtensionStoreEntry, InstalledExtension,
+    default_store_entry, fetch_catalog, read_manifest, read_store, read_zip_store_content,
+    stage_local_payload, stage_zip_payload, store_entry_for_install, validate_extension_id,
+    write_store, ExtensionBadge, ExtensionCatalogSnapshot, ExtensionError,
+    ExtensionInstallApproval, ExtensionLaunchContext, ExtensionResult, ExtensionRuntime,
+    ExtensionRuntimeStatus, ExtensionStatePatch, ExtensionStoreEntry, InstalledExtension,
+    StoreEntryContent,
 };
 
 /// How long after the user's tap on a thread's panel the extension may message that thread.
@@ -34,7 +37,22 @@ pub(crate) struct ExtensionRegistry {
     /// By `(extension, <projectId>:<sessionId>)`: when the user last tapped that thread's panel,
     /// which lets the extension send that thread one message (ext_api.rs `sessionMessage`).
     taps: Arc<Mutex<std::collections::HashMap<(String, String), std::time::Instant>>>,
+    /// Store README, changelog and icon by zip SHA-256: a published zip never changes under its hash.
+    store_content: Arc<Mutex<HashMap<String, StoreEntryContent>>>,
+    /// The last catalog read and when, for [`Self::store_entry_content`]. Its own lock, held
+    /// while a fetch runs, so Store requests that arrive together wait for one fetch and share it
+    /// instead of queueing behind an install on `gate`.
+    recent_catalog: Arc<Mutex<Option<(Instant, ExtensionCatalogSnapshot)>>>,
 }
+
+/*
+CDXC:Extensions 2026-11-14 WHY:
+The Store asks gxserver once per extension that is not installed (README, changelog, icon). Each
+request fetched catalog.json again, one at a time under the registry lock, so the icons appeared
+one after another. They reuse a catalog read in the last few minutes instead. Installing still
+reads the catalog fresh, so a zip is always checked against the current hash.
+*/
+const RECENT_CATALOG_TTL: Duration = Duration::from_secs(5 * 60);
 
 impl ExtensionRegistry {
     pub(crate) fn new_with_api_url(paths: &GxserverPaths, api_url: String) -> Self {
@@ -43,6 +61,8 @@ impl ExtensionRegistry {
             store_file: paths.extensions_store_file.clone(),
             gate: Arc::new(Mutex::new(())),
             runtime: ExtensionRuntime::new(api_url),
+            store_content: Arc::new(Mutex::new(HashMap::new())),
+            recent_catalog: Arc::new(Mutex::new(None)),
             panels: super::PanelStore::new(&paths.extensions_dir),
             agent_home: paths.agent_config_home_dir().to_path_buf(),
             taps: Arc::default(),
@@ -64,7 +84,65 @@ impl ExtensionRegistry {
 
     pub(crate) fn catalog(&self) -> ExtensionResult<ExtensionCatalogSnapshot> {
         let _guard = self.lock()?;
-        fetch_catalog(&self.extensions_dir)
+        let snapshot = fetch_catalog(&self.extensions_dir)?;
+        if let Ok(mut recent) = self.recent_catalog.lock() {
+            *recent = Some((Instant::now(), snapshot.clone()));
+        }
+        Ok(snapshot)
+    }
+
+    /// The catalog read in the last [`RECENT_CATALOG_TTL`], or a fresh read that the next Store
+    /// requests reuse.
+    fn recent_catalog(&self) -> ExtensionResult<ExtensionCatalogSnapshot> {
+        let mut recent = self
+            .recent_catalog
+            .lock()
+            .map_err(|_| ExtensionError::internal("Extension catalog cache lock is poisoned."))?;
+        if let Some((read_at, snapshot)) = recent.as_ref() {
+            if read_at.elapsed() < RECENT_CATALOG_TTL {
+                return Ok(snapshot.clone());
+            }
+        }
+        let snapshot = fetch_catalog(&self.extensions_dir)?;
+        *recent = Some((Instant::now(), snapshot.clone()));
+        Ok(snapshot)
+    }
+
+    /// The README, changelog and icon of a Store entry, read from its hash-verified zip, so the
+    /// Store shows them before the extension is installed.
+    pub(crate) fn store_entry_content(&self, id: &str) -> ExtensionResult<StoreEntryContent> {
+        validate_extension_id(id)?;
+        let (zip_url, sha256, icon) = {
+            let snapshot = self.recent_catalog()?;
+            let entry = snapshot
+                .catalog
+                .extensions
+                .iter()
+                .find(|entry| entry.manifest.name == id)
+                .ok_or_else(|| {
+                    ExtensionError::not_found(format!(
+                        "Extension {id:?} was not found in the configured catalog."
+                    ))
+                })?;
+            (
+                catalog_zip_url(&snapshot.url, &entry.zip)?,
+                entry.sha256.to_ascii_lowercase(),
+                entry.manifest.icon.clone(),
+            )
+        };
+        if let Some(content) = self
+            .store_content
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(&sha256).cloned())
+        {
+            return Ok(content);
+        }
+        let content = read_zip_store_content(&self.extensions_dir, &zip_url, &sha256, &icon)?;
+        if let Ok(mut cache) = self.store_content.lock() {
+            cache.insert(sha256, content.clone());
+        }
+        Ok(content)
     }
 
     pub(crate) fn install_local(

@@ -142,6 +142,7 @@ pub(super) async fn route_control_http(
         }
         "/api/listExtensions"
         | "/api/extensionsCatalog"
+        | "/api/extensionStoreContent"
         | "/api/installExtension"
         | "/api/uninstallExtension"
         | "/api/updateExtensionState"

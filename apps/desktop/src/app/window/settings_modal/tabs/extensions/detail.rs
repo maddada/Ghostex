@@ -847,9 +847,14 @@ impl ExtensionsTab {
         let icon_bytes = if installed_version.is_some() {
             self.extension_icon(&name, &entry.icon(), cx)
         } else {
-            None
+            self.store_icon(&name, &entry.icon(), cx)
         };
-        let has_source = installed_version.is_some() && self.has_transport(cx);
+        // An empty tile while the icon loads; the puzzle piece once it turns out to have none.
+        let has_source = if installed_version.is_some() {
+            self.has_transport(cx) && !entry.icon().is_empty()
+        } else {
+            self.store_icon_loading(&name)
+        };
         let header = self.detail_header(
             p,
             extension_icon_tile(p, icon_bytes, has_source, true),
