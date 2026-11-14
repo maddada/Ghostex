@@ -9915,6 +9915,18 @@
       "agentWritable": true
     },
     {
+      "key": "compactWorkersBeforeReturn",
+      "title": "Compact workers before a coordinator returns to them",
+      "subtitle": "When a coordinator messages one of its workers after the worker sat idle longer than its prompt cache lasts (5 minutes or 1 hour for Claude, about a day for Codex), Ghostex compacts a worker at or above Compact chats above first, then hands it the message, to save tokens. Messages you type are never held.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "claudeOneHourPromptCache",
       "title": "Use a 1-hour prompt cache",
       "subtitle": "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry, which otherwise get 5 minutes, so idle compaction runs there too. 1-hour cache writes cost more than 5-minute ones. A subscription already gets 1 hour.",

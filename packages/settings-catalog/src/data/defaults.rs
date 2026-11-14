@@ -653,6 +653,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("claudeIdleCompaction", J::Bool(true)),
     ("claudeIdleCompactAbove", J::Str("200000")),
     ("claudeOneHourPromptCache", J::Bool(false)),
+    ("compactWorkersBeforeReturn", J::Bool(true)),
     // CDXC:VoiceMode 2026-10-20 WHY:
     // xAI is the default provider: Grok Voice is billed per minute at a known price, and Grok dictation already needs the xAI key. Each provider keeps its own voice; the API keys are not settings (gxserver seals them, see server/src/voice_agent/keys.rs).
     ("voiceAgentProvider", J::Str("xai")),

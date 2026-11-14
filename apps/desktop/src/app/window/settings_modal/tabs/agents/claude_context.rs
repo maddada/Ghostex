@@ -17,6 +17,8 @@ use serde_json::json;
 const IDLE_COMPACTION: &str = "claudeIdleCompaction";
 const MIN_TOKENS: &str = "claudeIdleCompactAbove";
 const ONE_HOUR_CACHE: &str = "claudeOneHourPromptCache";
+/// CDXC:Coordinators 2026-11-15 DECISION in server/src/carry_on_compaction.rs: on by default.
+const COMPACT_WORKERS: &str = "compactWorkersBeforeReturn";
 
 /// The agent whose panel holds the group.
 pub(super) const CLAUDE_AGENT_ID: &str = "claude";
@@ -78,6 +80,16 @@ impl AgentsTab {
                 cx,
             ));
         }
+        rows.push(toggle_field(
+            self,
+            p,
+            COMPACT_WORKERS,
+            RowSpec::new("Compact workers before a coordinator returns to them")
+                .description("When a coordinator messages one of its workers after the worker sat idle longer than its prompt cache lasts (5 minutes or 1 hour for Claude, about a day for Codex), Ghostex compacts a worker at or above Compact chats above first, then hands it the message, to save tokens. Messages you type are never held.")
+                .keyed(&values, COMPACT_WORKERS),
+            values.bool(COMPACT_WORKERS),
+            cx,
+        ));
         rows.push(toggle_field(
             self,
             p,
