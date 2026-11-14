@@ -257,6 +257,12 @@ pub struct ExtensionStoreEntry {
     pub version: String,
     #[serde(default)]
     pub granted_permissions: Vec<ExtensionPermission>,
+    /// A sidebar extension's own sidebar mode is turned off in Settings > Extensions.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sidebar_mode_hidden: bool,
+    /// A sidebar extension's sections in the Projects list are turned off in Settings > Extensions.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sidebar_sections_hidden: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -277,6 +283,8 @@ pub struct ExtensionStatePatch {
     pub preferences: Option<BTreeMap<String, Value>>,
     pub storage: Option<BTreeMap<String, Value>>,
     pub granted_permissions: Option<Vec<ExtensionPermission>>,
+    pub sidebar_mode_hidden: Option<bool>,
+    pub sidebar_sections_hidden: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]

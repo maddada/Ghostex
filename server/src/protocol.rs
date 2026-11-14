@@ -842,6 +842,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/stopExtension"
         | "/api/extensionStatus"
         | "/api/extensionBadge"
+        // A tap on a sidebar extension's panel from a client (extensions/ext_api.rs).
+        | "/api/extensionPanelAction"
         /*
         CDXC:WorkMode 2026-10-09 WHY:
         A sidebar showing a remote machine's projects can flip their Work mode switch and set a

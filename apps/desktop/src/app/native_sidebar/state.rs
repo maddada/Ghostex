@@ -54,6 +54,12 @@ pub(crate) struct NativeSidebarState {
     /// The list's scroll offset the last frame of a drag drew (scroll.rs).
     pub(crate) drag_scroll_offset: Option<gpui::Point<gpui::Pixels>>,
     pub(crate) name_editor: Option<super::rename::SidebarNameEditor>,
+    /// The tab each extension panel shows and the text blocks expanded (extension_panel/).
+    pub(crate) extension_panel_ui: ghostex_gx_core::extension_panel::ExtensionPanelUiState,
+    /// The checklist an Add item field is open on, by `<extension>|<surface>|<block>`.
+    pub(crate) extension_add_item: Option<String>,
+    /// The side panel view's width as last drawn, which decides a map's layout there.
+    pub(crate) extension_side_panel_width: f32,
     pub(crate) pointer_inside: bool,
     /// Whether last frame's rows carried their hover tooltips; see `render_native_sidebar`.
     pub(crate) row_tooltips_attached: bool,

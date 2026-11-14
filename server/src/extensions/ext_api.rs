@@ -434,8 +434,76 @@ fn panel_action(
     if let Some(data) = body.get("data").filter(|data| !data.is_null()) {
         event.insert("data".into(), data.clone());
     }
-    panels.emit(id, Value::Object(event));
+    let event = Value::Object(event);
+    panels.emit(id, event.clone());
+    state.extension_registry.post_panel_action(id, event);
     Ok((json!({ "ok": true, "delivered": true }), false))
+}
+
+/// The RPC door for clients' taps (the desktop, the web build and phones call gxserver through
+/// `/api/...` RPCs): the same as `POST /api/ext/v1/panelAction`, for your own devices only.
+pub(crate) const PANEL_ACTION_RPC_ENDPOINT: &str = "/api/extensionPanelAction";
+
+pub(crate) async fn handle_panel_action_rpc(
+    state: Arc<AppState>,
+    caller: &crate::security::Principal,
+    endpoint_path: String,
+    request_id: String,
+    body: Value,
+) -> RoutedResponse {
+    let error_response = |error: ExtensionError| {
+        let status = match error.code {
+            "badRequest" => StatusCode::BAD_REQUEST,
+            "notFound" => StatusCode::NOT_FOUND,
+            "conflict" => StatusCode::CONFLICT,
+            "forbidden" => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        routed_json(
+            Some(endpoint_path.clone()),
+            status,
+            crate::protocol::rpc_error(error.code, error.message, Some(request_id.clone())),
+        )
+    };
+    if !caller.is_owner_device() {
+        return error_response(forbidden(
+            "Panel taps come from your Ghostex apps and phones; an extension or an agent can't send them.",
+        ));
+    }
+    let params = match crate::domain::read_domain_rpc_params(&body) {
+        Ok(params) => Value::Object(params),
+        Err(error) => return error_response(ExtensionError::bad_request(error.message)),
+    };
+    let blocking_state = state.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        handle(
+            &blocking_state,
+            &Caller::Owner,
+            &Method::POST,
+            "panelAction",
+            None,
+            &params,
+        )
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(ExtensionError::internal(format!(
+            "Extension API task failed: {error}"
+        )))
+    });
+    match outcome {
+        Ok((result, panels_changed)) => {
+            if panels_changed {
+                publish_extension_panels(&state);
+            }
+            routed_json(
+                Some(endpoint_path.clone()),
+                StatusCode::OK,
+                crate::protocol::rpc_success(request_id.clone(), result),
+            )
+        }
+        Err(error) => error_response(error),
+    }
 }
 
 /// Whether `{"extension": name}` (or `{"extension": {"name": name, …}}`) appears in the block.

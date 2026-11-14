@@ -56,6 +56,8 @@ impl GhostexGpuiApp {
         silently parking the user on a view they turned off.
         */
         let available = match mode {
+            // A sidebar extension's side panel view is drawn natively and needs no project.
+            TitlebarMode::Extension(id) if self.extension_side_panel_offered(id) => true,
             TitlebarMode::Extension(id) => {
                 if gpui_custom_view(id).is_some() {
                     gpui_enabled_custom_view(id)
@@ -131,6 +133,16 @@ impl GhostexGpuiApp {
                 Some((title, id, installed_extension_available))
             })
             .collect::<Vec<_>>();
+        extension_modes.extend(
+            self.extension_side_panel_modes()
+                .into_iter()
+                .filter_map(|mode| {
+                    let TitlebarMode::Extension(id) = mode else {
+                        return None;
+                    };
+                    Some((mode.tab_label(), id, true))
+                }),
+        );
         extension_modes.sort_by(|left, right| left.0.cmp(&right.0));
         items.extend(extension_modes.into_iter().map(|(_, id, is_available)| {
             TitlebarModeSwitcherItem {

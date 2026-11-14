@@ -548,6 +548,17 @@ impl Core {
                 SideStateUpdate::Workspaces(frame.sidebar_workspaces),
                 output,
             ),
+            // State, not a delta: it carries no presentation revision.
+            ServerEvent::ExtensionPanelsChanged(frame) => {
+                let frame = *frame;
+                self.handle_side_state(
+                    machine,
+                    &frame.header.server_id,
+                    None,
+                    SideStateUpdate::ExtensionPanels(frame.extension_panels),
+                    output,
+                )
+            }
             ServerEvent::CustomSessionTagsChanged(frame) => self.handle_side_state(
                 machine,
                 &frame.header.server_id,
@@ -607,8 +618,6 @@ impl Core {
             | ServerEvent::ApiRequestHandled(_)
             | ServerEvent::RendererCommand(_)
             | ServerEvent::CloudBoxesChanged(_)
-            // Sidebar extensions are drawn from phase 2 (docs/2026-11-14/sidebar-extensions/).
-            | ServerEvent::ExtensionPanelsChanged(_)
             | ServerEvent::SettingsSyncNote(_)
             | ServerEvent::SessionChatSnapshot(_)
             | ServerEvent::SessionChatReplaced(_)

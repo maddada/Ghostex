@@ -6753,6 +6753,21 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
   `keepAwakeEnabled`, `allAutomationsEnabled`, `terminalShadersEnabled`, `fasterRendering`,
   `chatToolCallLines`, `securityLogsEnabled`.
+  **Sidebar extensions** (such as Workbench) put their own content in the
+  sidebar, drawn by Ghostex with its own rows and menus. One can add a button to
+  the sidebar's top row that shows its panel instead of your projects (press it
+  again, or open a project from the panel, to go back), sections above or below
+  your projects (a Today list, for example), and a view in the side panel's
+  view list. In an editable list, click an item's circle to tick it, use Add
+  item, and right-click an item to rename or delete it; the extension sees your
+  changes. A project or session in a panel shows its live status and opens on a
+  click. What a panel may do is limited to what you allowed when you installed
+  it: See your projects, See your sessions, Open projects and sessions, Start
+  agents. Turn its sidebar button or its sections off on its page in Settings >
+  Extensions (Sidebar mode, Sections in Projects). Agents and scripts can read a
+  panel with `ghostex extensions panel get <id>`; only the extension itself
+  changes it. Settings: `sidebarModeHidden`, `sidebarSectionsHidden` (extension
+  state); CLI: `ghostex extensions panel get|set|patch|events`.
   The Edit (pencil) button on a tile chooses where that view, header button, or
   extension appears. Pick **Everywhere** or **Only in selected places**, then
   choose projects and spaces from the dropdown next to **Except in** (or

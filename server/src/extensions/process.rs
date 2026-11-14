@@ -261,6 +261,16 @@ impl ExtensionRuntime {
             .map(|entry| entry.extension_id.clone())
     }
 
+    /// The running server's address and token, for gxserver's own calls to it.
+    pub(crate) fn server_and_token(&self, id: &str) -> Option<(String, String)> {
+        let inner = self.inner.lock().ok()?;
+        let status = inner.statuses.get(id)?;
+        if status.state != ExtensionRuntimeState::Ready {
+            return None;
+        }
+        Some((status.url.clone()?, inner.tokens.get(id)?.token.clone()))
+    }
+
     /// The extension whose running server holds this request's bearer token.
     pub(crate) fn extension_for_token(&self, headers: &HeaderMap) -> Option<String> {
         let provided = request_bearer_token(headers)?;

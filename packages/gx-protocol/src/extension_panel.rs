@@ -291,6 +291,9 @@ pub enum SidebarSectionPlace {
 #[serde(transparent)]
 pub struct ExtensionPanels(pub BTreeMap<String, ExtensionPanelEntry>);
 
+/// gxserver accepts only finite numbers in a panel, so equality is total.
+impl Eq for ExtensionPanels {}
+
 impl<'de> Deserialize<'de> for ExtensionPanels {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = Value::deserialize(deserializer)?;

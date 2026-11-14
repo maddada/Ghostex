@@ -38,11 +38,17 @@ pub struct SideStateChanges {
     pub project_collections: bool,
     pub spaces: bool,
     pub custom_session_tags: bool,
+    #[serde(default)]
+    pub extension_panels: bool,
 }
 
 impl SideStateChanges {
     pub fn any(&self) -> bool {
-        self.workspace_groups || self.project_collections || self.spaces || self.custom_session_tags
+        self.workspace_groups
+            || self.project_collections
+            || self.spaces
+            || self.custom_session_tags
+            || self.extension_panels
     }
 }
 
@@ -183,6 +189,7 @@ impl ChangeSummary {
         self.side_state.project_collections |= other.side_state.project_collections;
         self.side_state.spaces |= other.side_state.spaces;
         self.side_state.custom_session_tags |= other.side_state.custom_session_tags;
+        self.side_state.extension_panels |= other.side_state.extension_panels;
         self.focus_changed |= other.focus_changed;
         self.displayed_changed |= other.displayed_changed;
         self.cloud_boxes_changed |= other.cloud_boxes_changed;

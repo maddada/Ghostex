@@ -781,6 +781,13 @@ pub(crate) fn validate_panel_document(
             "The panel is {size} bytes; the limit is {PANEL_DOCUMENT_MAX_BYTES}."
         )));
     }
+    // A panel file may name its schema for editors (`"$schema": "…/ghostex-sidebar-panel.schema.json"`),
+    // as the extensions repo's validator allows; it is not part of the document.
+    let mut value = value.clone();
+    if let Some(object) = value.as_object_mut() {
+        object.remove("$schema");
+    }
+    let value = &value;
     let document: PanelDocument = serde_json::from_value(value.clone()).map_err(|error| {
         ExtensionError::bad_request(format!(
             "The panel does not match the panel schema: {error}"

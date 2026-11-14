@@ -287,6 +287,20 @@ impl SidebarUiHost {
 }
 
 impl GhostexGpuiApp {
+    /// The sidebar's mode (Projects, Bots or an extension's), as the UI store holds it. The web
+    /// build has the same accessor over its own store (apps/gpui-web/src/app/gx_store/host.rs).
+    pub(crate) fn gx_store_sidebar_mode(&self) -> ghostex_gx_core::SidebarMode {
+        self.gx_store
+            .sidebar_ui
+            .store
+            .state()
+            .collapse
+            .sidebar_mode
+            .clone()
+    }
+}
+
+impl GhostexGpuiApp {
     /// Reads the sidebar's own state from client storage. Runs once; a failed read books its own
     /// retry, because the only other caller runs inside the first second and would otherwise be
     /// the last attempt the run ever makes.

@@ -24,6 +24,9 @@ impl GhostexGpuiApp {
             if let Some(id) = action.command["collectionId"].as_str() {
                 self.begin_native_collection_rename(id, window, cx);
             }
+        } else if action.command["type"] == "extensionPanel" {
+            // A row of a sidebar extension's panel menu (extension_panel/actions.rs).
+            self.run_native_sidebar_extension_panel_command(&action.command, window, cx);
         } else if action.command["type"] == "beadsMenu" {
             // A row of a Beads view menu (native_beads/menus.rs) shown with this menu.
             self.run_beads_menu_command(&action.command, window, cx);

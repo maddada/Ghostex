@@ -7,7 +7,12 @@ use super::{
     ExtensionError, ExtensionResult,
 };
 
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// Coordinator's phase 2 brief, taking the phase 1 suggestion: sidebar extensions go in a separate catalog file that only this gxserver and newer read, so the stores of 11.7 and older (which reject the whole catalog over one entry they can't read) never see them. The extensions repo's `tooling/build-catalog.mjs` writes `catalog.json` without them and `catalog-v2.json` with every extension, both into the rolling `store` release. Until that release carries `catalog-v2.json`, the old `catalog.json` is read instead.
 pub(crate) const DEFAULT_EXTENSIONS_CATALOG_URL: &str =
+    "https://github.com/maddada/Ghostex-extensions/releases/download/store/catalog-v2.json";
+/// The catalog of 11.7 and older, without sidebar extensions.
+const PREVIOUS_EXTENSIONS_CATALOG_URL: &str =
     "https://github.com/maddada/Ghostex-extensions/releases/download/store/catalog.json";
 const CATALOG_CACHE_FILE: &str = "catalog-cache.json";
 const CATALOG_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
@@ -21,8 +26,13 @@ pub(crate) fn catalog_url() -> String {
 }
 
 pub(crate) fn fetch_catalog(extensions_dir: &Path) -> ExtensionResult<ExtensionCatalogSnapshot> {
-    let url = catalog_url();
-    match fetch_remote_catalog(&url) {
+    let mut url = catalog_url();
+    let mut fetched = fetch_remote_catalog(&url);
+    if fetched.is_err() && url == DEFAULT_EXTENSIONS_CATALOG_URL {
+        url = PREVIOUS_EXTENSIONS_CATALOG_URL.to_string();
+        fetched = fetch_remote_catalog(&url);
+    }
+    match fetched {
         Ok(catalog) => {
             write_catalog_cache(extensions_dir, &catalog)?;
             Ok(ExtensionCatalogSnapshot {

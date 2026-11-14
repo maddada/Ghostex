@@ -259,7 +259,7 @@ impl SourceFilter {
 }
 
 /// `EXTENSION_TYPE_FILTERS`.
-pub(crate) const EXTENSION_TYPE_FILTERS: [&str; 8] = [
+pub(crate) const EXTENSION_TYPE_FILTERS: [&str; 9] = [
     "all",
     "view",
     "header-button",
@@ -268,6 +268,7 @@ pub(crate) const EXTENSION_TYPE_FILTERS: [&str; 8] = [
     "popup",
     "modal",
     "terminal-pane",
+    "sidebar",
 ];
 
 /// `extensionTypeLabel`.
@@ -432,6 +433,31 @@ impl InstalledExtension {
         self.manifest()["kind"].as_str() == Some("terminal-pane")
     }
 
+    /// A sidebar extension (`kind: "sidebar"`): its panel is drawn in the sidebar and side panel.
+    pub(crate) fn is_sidebar(&self) -> bool {
+        self.manifest()["kind"].as_str() == Some("sidebar")
+    }
+
+    /// The sidebar extension has its own sidebar mode.
+    pub(crate) fn declares_sidebar_mode(&self) -> bool {
+        self.manifest()["sidebar"]["mode"].is_object()
+    }
+
+    /// The sidebar extension adds sections to the Projects list.
+    pub(crate) fn declares_sidebar_sections(&self) -> bool {
+        self.manifest()["sidebar"]["sections"]
+            .as_array()
+            .is_some_and(|sections| !sections.is_empty())
+    }
+
+    pub(crate) fn sidebar_mode_hidden(&self) -> bool {
+        self.state()["sidebarModeHidden"].as_bool() == Some(true)
+    }
+
+    pub(crate) fn sidebar_sections_hidden(&self) -> bool {
+        self.state()["sidebarSectionsHidden"].as_bool() == Some(true)
+    }
+
     pub(crate) fn placements(&self) -> Vec<String> {
         string_list(self.manifest().get("placements"))
     }
@@ -577,6 +603,8 @@ impl CatalogEntry {
 pub(crate) fn catalog_types(manifest: &Value) -> Vec<String> {
     if manifest["kind"].as_str() == Some("terminal-pane") {
         vec!["terminal-pane".to_string()]
+    } else if manifest["kind"].as_str() == Some("sidebar") {
+        vec!["sidebar".to_string()]
     } else {
         string_list(manifest.get("placements"))
     }

@@ -189,7 +189,7 @@ fn parse_state_patch(args: &[String]) -> CliResult<Value> {
             continue;
         }
         match key {
-            "enabled" | "pinned" => {
+            "enabled" | "pinned" | "sidebarModeHidden" | "sidebarSectionsHidden" => {
                 if !value.is_boolean() {
                     return Err(CliError::Other(format!("{key} must be true or false.")));
                 }

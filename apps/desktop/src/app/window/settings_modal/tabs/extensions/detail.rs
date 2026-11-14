@@ -515,7 +515,9 @@ impl ExtensionsTab {
             .child(settings_icon("modals/settings/pin.svg", 16.0, p.muted))
             .into_any_element();
         // A terminal pane has no view tab, so its page says where it opens from.
-        let enabled_subtitle = if extension.is_terminal_pane() {
+        let enabled_subtitle = if extension.is_sidebar() {
+            "Shows its panel in the sidebar and the side panel.".to_string()
+        } else if extension.is_terminal_pane() {
             format!(
                 "Open it from its header icon while pinned, Quick Access (Open {}), or Tools > Extensions in the sidebar's menu.",
                 extension.title()
@@ -523,18 +525,70 @@ impl ExtensionsTab {
         } else {
             "Available from its configured placement.".to_string()
         };
-        let mut status_rows = vec![
-            Self::detail_control_row(p, Some(dot), "Enabled", &enabled_subtitle, enabled_switch),
-            Self::detail_control_row(
+        let mut status_rows = vec![Self::detail_control_row(
+            p,
+            Some(dot),
+            "Enabled",
+            &enabled_subtitle,
+            enabled_switch,
+        )];
+        // A sidebar extension has no header icon to pin.
+        if !extension.is_sidebar() {
+            status_rows.push(Self::detail_control_row(
                 p,
                 Some(pin),
                 "Pinned",
                 "Show its icon in the work area header.",
                 pinned_switch,
-            ),
-            Self::detail_row(p, "Author", extension.author()),
-            Self::detail_row(p, "Installed version", format!("v{}", extension.version())),
-        ];
+            ));
+        }
+        // CDXC:Extensions 2026-11-14 WHY:
+        // The coordinator's phase 2 brief: Settings > Extensions turns a sidebar extension's own mode and its Projects-list sections on or off, each only when its manifest has one. They depend on Enabled, so they show only while it is on (CDXC:Settings 2026-11-14, dependent rows hidden while their parent is off).
+        if extension.is_sidebar() && extension.enabled() {
+            let switches = [
+                (
+                    extension.declares_sidebar_mode(),
+                    "Sidebar mode",
+                    "A button in the sidebar's top row that shows its panel instead of your projects.",
+                    "extension-detail-sidebar-mode",
+                    "sidebarModeHidden",
+                    extension.sidebar_mode_hidden(),
+                ),
+                (
+                    extension.declares_sidebar_sections(),
+                    "Sections in Projects",
+                    "Its sections above or below your projects.",
+                    "extension-detail-sidebar-sections",
+                    "sidebarSectionsHidden",
+                    extension.sidebar_sections_hidden(),
+                ),
+            ];
+            for (declared, title, caption, element_id, key, hidden) in switches {
+                if !declared {
+                    continue;
+                }
+                let id = id.clone();
+                let switch = small_switch_control(
+                    p,
+                    element_id,
+                    title,
+                    !hidden,
+                    pending,
+                    None,
+                    move |page: &mut Self, next, _window, cx| {
+                        page.set_extension_state(id.clone(), json!({ key: !next }), cx)
+                    },
+                    cx,
+                );
+                status_rows.push(Self::detail_control_row(p, None, title, caption, switch));
+            }
+        }
+        status_rows.push(Self::detail_row(p, "Author", extension.author()));
+        status_rows.push(Self::detail_row(
+            p,
+            "Installed version",
+            format!("v{}", extension.version()),
+        ));
         if update_available {
             let name = id.clone();
             status_rows.push(
@@ -984,7 +1038,7 @@ impl ExtensionsTab {
                 .map(|permission| {
                     item(
                         "modals/settings/shield-check.svg",
-                        capitalize(permission),
+                        permission_label(permission),
                         permission_description(permission).to_string(),
                     )
                 })

@@ -51,7 +51,8 @@ user which extension to install there.
 
 State keys:
   enabled, pinned, placement, terminalPlacement,
-  preferences.<name>, preferences, grantedPermissions
+  preferences.<name>, preferences, grantedPermissions,
+  sidebarModeHidden, sidebarSectionsHidden (a sidebar extension's mode and sections)
 Turning an extension on and granting it a permission are the user's too (Settings >
 Extensions); turning one off and the other keys stay open.
 "

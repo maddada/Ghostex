@@ -15,6 +15,9 @@ use super::{
     ExtensionStoreEntry, PanelStore, PanelSurface,
 };
 
+/// Where gxserver posts a tap on an `extension` action on the extension's own server.
+pub(crate) const PANEL_ACTION_SERVER_PATH: &str = "/ghostex/panel-action";
+
 /// An installed sidebar extension, as a panel call sees it.
 pub(crate) struct SidebarExtension {
     pub(crate) manifest: ExtensionManifest,
@@ -102,14 +105,21 @@ impl ExtensionRegistry {
                     .panels
                     .read(manifest, payload_dir, &PanelSurface::Sidebar)
                     .ok()?;
+                // CDXC:Extensions 2026-11-14 WHY:
+                // The coordinator's phase 2 brief: Settings > Extensions turns a sidebar extension's mode and its sections on or off. They are left out here, where every client reads them, so the desktop and the phone agree.
                 Some(ExtensionSidebarPanel {
-                    mode: sidebar.mode.as_ref().map(|mode| ExtensionSidebarMode {
-                        title: mode.title.clone(),
-                        icon: Some(icon_url(mode.icon.as_deref().unwrap_or(&manifest.icon))),
-                    }),
+                    mode: sidebar
+                        .mode
+                        .as_ref()
+                        .filter(|_| !state.sidebar_mode_hidden)
+                        .map(|mode| ExtensionSidebarMode {
+                            title: mode.title.clone(),
+                            icon: Some(icon_url(mode.icon.as_deref().unwrap_or(&manifest.icon))),
+                        }),
                     sections: sidebar
                         .sections
                         .iter()
+                        .filter(|_| !state.sidebar_sections_hidden)
                         .map(|section| ExtensionSidebarSection {
                             block: section.block.clone(),
                             place: section.place.clone(),
@@ -198,6 +208,29 @@ impl ExtensionRegistry {
         for extension in installed {
             self.start_sidebar_server(&extension.id, &extension.manifest, &extension.state);
         }
+    }
+
+    /// Hands a tap on an `extension` action to the extension's own server as well as to its event
+    /// stream: `POST <server>/ghostex/panel-action` with the event as the body and the
+    /// extension's own token, so the server knows it is gxserver calling. Best effort, off the
+    /// caller's thread: a server that is not running or does not answer misses only this copy.
+    pub(crate) fn post_panel_action(&self, id: &str, event: Value) {
+        let Some((url, token)) = self.runtime.server_and_token(id) else {
+            return;
+        };
+        std::thread::spawn(move || {
+            let _ = crate::http_agent::agent()
+                .post(format!(
+                    "{}{PANEL_ACTION_SERVER_PATH}",
+                    url.trim_end_matches('/')
+                ))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .config()
+                .timeout_global(Some(std::time::Duration::from_secs(5)))
+                .build()
+                .send(event.to_string().as_str());
+        });
     }
 
     pub(crate) fn start_sidebar_server(

@@ -509,13 +509,22 @@ impl GhostexGpuiApp {
             .gx_store_bot_name(&project_id, &agent.agent_id)
             .unwrap_or_else(|| agent.name.clone());
         let title = agent_session_default_title(Some(&title_name));
-        let params = with_moved_draft_text(
+        let mut params = with_moved_draft_text(
             replacing_empty_sessions(with_run_location(
                 local_agent_launch_params(&agent, &project_id, title_settings, account_id, &title),
                 run_location,
             )),
             &draft_move,
         );
+        if let Some(draft) = self
+            .gx_store
+            .create
+            .pending_first_input_draft
+            .take()
+            .filter(|draft| !draft.trim().is_empty())
+        {
+            params["runtimeSettings"]["firstUserInputDraft"] = json!(draft);
+        }
         let preferred_interface = if is_agentbox_run_location(run_location) {
             "terminal".to_string()
         } else {

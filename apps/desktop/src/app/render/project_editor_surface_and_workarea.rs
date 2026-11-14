@@ -339,6 +339,9 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        if self.extension_side_panel_offered(id) {
+            return self.render_native_extension_side_panel(id, window, cx);
+        }
         if self.website_home_setup_visible(TitlebarMode::Extension(id)) {
             return self.render_website_home_setup(id, window, cx);
         }

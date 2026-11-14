@@ -247,10 +247,7 @@ impl MachinePresentation {
             sidebar_spaces_enabled: self.side_state().spaces_enabled,
             sidebar_workspaces: self.side_state().workspaces.clone(),
             custom_session_tags: self.side_state().custom_session_tags.clone(),
-            // Not kept by the store yet: sidebar extensions are drawn from phase 2
-            // (docs/2026-11-14/sidebar-extensions/). gxserver sends the field only while a
-            // sidebar extension is on, so recorded snapshots without one still round-trip.
-            extension_panels: None,
+            extension_panels: self.side_state().extension_panels.clone(),
         })
     }
 }
