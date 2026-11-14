@@ -67,6 +67,11 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "chatQuietViewCoordinators",
     "chatQuietViewChats",
     "chatQuietViewExpandLast",
+    "chatQuietViewCalm",
+    "chatComposerModePicker",
+    "chatComposerTerminalButton",
+    "chatComposerContextRing",
+    "chatComposerMaximize",
     "sessionCardHoverButtons",
     "unifiedSessionCardHoverButtons",
     "showSessionCardHoverButtonsInContextMenu",
@@ -376,6 +381,15 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
 ]);
 
 pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
+    (
+        "experience",
+        &[
+            "experiencePreset",
+            "experienceChatBox",
+            "experienceChat",
+            "experienceSessionsList",
+        ],
+    ),
     ("agents", &["agentAcceptAllEnabled"]),
     (
         "appearance",
@@ -445,7 +459,12 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "chatQuietViewCoordinators",
             "chatQuietViewChats",
             "chatQuietViewExpandLast",
+            "chatQuietViewCalm",
             "sessionChatDetailedView",
+            "chatComposerModePicker",
+            "chatComposerTerminalButton",
+            "chatComposerContextRing",
+            "chatComposerMaximize",
             "sessionChatKeepComposerExpanded",
             "sessionChatConfirmEscapeInterrupt",
             "chatCatchMeUp",
@@ -831,6 +850,15 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
 ];
 
 pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
+    (
+        "experience",
+        &[
+            "experiencePreset",
+            "experienceChatBox",
+            "experienceChat",
+            "experienceSessionsList",
+        ],
+    ),
     ("agents", &["agentAcceptAllEnabled"]),
     (
         "appearance",
@@ -900,7 +928,12 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "chatQuietViewCoordinators",
             "chatQuietViewChats",
             "chatQuietViewExpandLast",
+            "chatQuietViewCalm",
             "sessionChatDetailedView",
+            "chatComposerModePicker",
+            "chatComposerTerminalButton",
+            "chatComposerContextRing",
+            "chatComposerMaximize",
             "sessionChatKeepComposerExpanded",
             "sessionChatConfirmEscapeInterrupt",
             "chatCatchMeUp",
