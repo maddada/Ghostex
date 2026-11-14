@@ -201,25 +201,56 @@ impl GhostexGpuiApp {
         } else {
             GpuiWindowCaptionControl::Maximize
         };
+        // Only a Linux client-decorated window draws its own rounded frame for the buttons to sit
+        // inside; elsewhere (Windows, Hyprland) they fill the band to the window's corner.
+        #[cfg(target_os = "windows")]
+        let full_height = true;
+        #[cfg(target_os = "linux")]
+        let full_height = !matches!(
+            window.window_decorations(),
+            gpui::Decorations::Client { .. }
+        );
         h_flex()
             .id("ghostex-gpui-titlebar-window-controls")
             .flex_shrink_0()
             .h_full()
             .items_center()
-            .child(self.render_titlebar_window_control(GpuiWindowCaptionControl::Minimize, cx))
-            .child(self.render_titlebar_window_control(maximize_control, cx))
-            .child(self.render_titlebar_window_control(GpuiWindowCaptionControl::Close, cx))
+            .when(self.window_minimize_available(), |this| {
+                this.child(self.render_titlebar_window_control(
+                    GpuiWindowCaptionControl::Minimize,
+                    full_height,
+                    cx,
+                ))
+            })
+            .child(self.render_titlebar_window_control(maximize_control, full_height, cx))
+            .child(self.render_titlebar_window_control(
+                GpuiWindowCaptionControl::Close,
+                full_height,
+                cx,
+            ))
+    }
+
+    /// Whether the window has somewhere to minimize to. On Hyprland that is Omarchy's dock
+    /// (`linux_hyprland::omarchy_minimize_available`); plain Hyprland has no minimize at all.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    pub(crate) fn window_minimize_available(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        if crate::linux_hyprland::running_on_hyprland() {
+            return crate::linux_hyprland::omarchy_minimize_available();
+        }
+        true
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     pub(crate) fn render_titlebar_window_control(
         &self,
         control: GpuiWindowCaptionControl,
+        full_height: bool,
         _cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
         CDXC:Titlebar 2026-10-03 DECISION:
-        User: on Windows the maximize, minimize and close buttons reach the very top right corner of the app while their icons stay centered. Each button fills the band's full height instead of a 27px button centered in it, so throwing the pointer into the top-right corner lands on Close. Linux client decorations keep the 27px button inside their rounded frame.
+        User: on Windows the maximize, minimize and close buttons reach the very top right corner of the app while their icons stay centered. Each button fills the band's full height instead of a 27px button centered in it, so throwing the pointer into the top-right corner lands on Close. Linux client decorations keep the 27px button inside their rounded frame; Hyprland, which gives the window no frame of ours, fills the band as on Windows (2026-11-15, "like on windows").
         User: "yes" to making the Close button turn red on hover like standard Windows. On Windows, hovering Close fills it with the Windows close red (#C42B1C, pressed #B22A1B) and turns the glyph white in light and dark themes; minimize and maximize keep the shared titlebar hover. Linux keeps the shared hover for Close too, because GNOME and KDE style it differently.
         */
         let windows_close =
@@ -231,10 +262,8 @@ impl GhostexGpuiApp {
             .relative()
             .flex()
             .flex_shrink_0()
-            .when(cfg!(target_os = "windows"), |this| this.h_full())
-            .when(!cfg!(target_os = "windows"), |this| {
-                this.h(px(TITLEBAR_CONTROL_HEIGHT))
-            })
+            .when(full_height, |this| this.h_full())
+            .when(!full_height, |this| this.h(px(TITLEBAR_CONTROL_HEIGHT)))
             .w(px(TITLEBAR_WINDOW_BUTTON_WIDTH))
             .items_center()
             .justify_center()
@@ -279,8 +308,13 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         match control {
                             GpuiWindowCaptionControl::Minimize => window.minimize_window(),
+                            // Hyprland's maximize can leave the window's size unchanged, so
+                            // the icon is redrawn from the new state rather than a resize.
                             GpuiWindowCaptionControl::Maximize
-                            | GpuiWindowCaptionControl::Restore => window.zoom_window(),
+                            | GpuiWindowCaptionControl::Restore => {
+                                window.zoom_window();
+                                cx.notify();
+                            }
                             // The same question and clean-up as the window manager's close
                             // (app/workspace_windows/close.rs).
                             GpuiWindowCaptionControl::Close => {

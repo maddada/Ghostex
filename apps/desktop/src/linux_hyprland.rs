@@ -54,7 +54,7 @@ const OWNED_WINDOW_MATCH_V2: &str = "class:^(ghostex)$, initialTitle:negative:^(
 /// first, as `rule_requests`.
 ///
 /// CDXC:PlatformSupport 2026-11-14 DECISION:
-/// User (Omarchy audit Q10): Ghostex adds its own Hyprland runtime rules for its menus and dialogs, with no Omarchy titlebar or border, like the terminal tag it already adds; and "windows that SHOULD float (Settings, onboarding, dialogs, pages and the like) must open floating even on Omarchy's tiled and scrolling workspaces, not only on floating ones". Every Ghostex window but a main window or the detached board floats with no border (`border_size = 0`; 0.56 has no `no_border`) and no shadow; the titlebar Omarchy's floating workspaces add (its hyprbars plugin) is turned off in a request of its own, which a Hyprland without the plugin refuses.
+/// User (Omarchy audit Q10): Ghostex adds its own Hyprland runtime rules for its menus and dialogs, with no Omarchy titlebar or border, like the terminal tag it already adds; and "windows that SHOULD float (Settings, onboarding, dialogs, pages and the like) must open floating even on Omarchy's tiled and scrolling workspaces, not only on floating ones". Every Ghostex window but a main window or the detached board floats with no border (`border_size = 0`; 0.56 has no `no_border`) and no shadow; the titlebar Omarchy's floating workspaces add (its hyprbars plugin) is turned off, for every Ghostex window, in a request of its own (`titlebar_requests`), which a Hyprland without the plugin refuses.
 fn owned_window_rule_requests() -> [String; 2] {
     [
         format!(
@@ -80,12 +80,15 @@ fn menu_window_rule_requests() -> [String; 2] {
     ]
 }
 
-fn owned_window_titlebar_requests() -> [String; 2] {
+/// CDXC:Titlebar 2026-11-15 WHY:
+/// Ghostex draws its own minimize, maximize and close buttons on Hyprland (the decision in app/helpers/titlebar/window_caption.rs), so the titlebar Omarchy's floating workspaces add (its hyprbars plugin, with its own `− □ ×`) is turned off for every Ghostex window, main windows too, and the buttons never show twice. Before, only the dialogs and menus turned it off, so a main window that opened titled `Ghostex` got Omarchy's bar over its own header while one that opened with a project in its title did not.
+fn titlebar_requests() -> [String; 2] {
+    let class = format!("^({WINDOW_CLASS})$");
     [
         format!(
-            r#"eval hl.window_rule({{ match = {{ {OWNED_WINDOW_MATCH_LUA} }}, ["hyprbars:no_bar"] = true }})"#
+            r#"eval hl.window_rule({{ match = {{ class = "{class}" }}, ["hyprbars:no_bar"] = true }})"#
         ),
-        format!("keyword windowrulev2 plugin:hyprbars:nobar, {OWNED_WINDOW_MATCH_V2}"),
+        format!("keyword windowrulev2 plugin:hyprbars:nobar, class:{class}"),
     ]
 }
 
@@ -171,6 +174,24 @@ pub(crate) fn running_on_hyprland() -> bool {
     *ON_HYPRLAND.get_or_init(|| instance_directory().is_some())
 }
 
+/// Omarchy's minimize command, which moves a window to its dock (the titlebar `−` of Omarchy's
+/// floating workspaces and Super+M run it).
+pub(crate) const OMARCHY_MINIMIZE_COMMAND: &str = "omarchy-hyprland-window-minimize";
+
+/// Whether this Hyprland has somewhere to minimize a window to: Omarchy's minimize command is on
+/// `PATH`. Hyprland itself has no minimize, so without it the minimize button would do nothing.
+///
+/// CDXC:Titlebar 2026-11-15 SEE-ALSO: .dependencies/zed/crates/gpui_linux/src/linux/x11/window.rs (`minimize` runs this command on Hyprland), app/titlebar/open_targets_and_window_controls.rs (`window_minimize_available` hides the button without it).
+pub(crate) fn omarchy_minimize_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        std::env::var_os("PATH").is_some_and(|path| {
+            std::env::split_paths(&path)
+                .any(|directory| directory.join(OMARCHY_MINIMIZE_COMMAND).is_file())
+        })
+    })
+}
+
 /// `$XDG_RUNTIME_DIR/hypr/<signature>` (Hyprland 0.40 and later), else `/tmp/hypr/<signature>`.
 fn instance_directory() -> Option<PathBuf> {
     let signature = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
@@ -192,7 +213,7 @@ fn apply_rule(directory: &PathBuf) {
     apply_first_accepted(directory, &owned_window_rule_requests(), "the dialog rules");
     apply_first_accepted(directory, &menu_window_rule_requests(), "the menu rule");
     // Refused where the titlebar plugin is not loaded, which needs no rule.
-    for request in owned_window_titlebar_requests() {
+    for request in titlebar_requests() {
         if send_request(directory, &request).is_ok_and(|answer| answer.trim() == "ok") {
             break;
         }

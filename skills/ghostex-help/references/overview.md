@@ -29,6 +29,10 @@ hotkeys Every shortcut and its default binding
   Panel and the buttons drop their labels and the breadcrumb drops the project
   name. There is no line under the header: your chat fades out beneath it. Drag
   the header, or the sidebar's Search row, to move the window.
+  On Windows, and on Linux where the desktop draws no title bar (Hyprland and
+  Omarchy), the window's minimize, maximize and close buttons sit at the right
+  end of that row. On Omarchy, minimize sends the window to the dock, which
+  Omarchy has only on floating workspaces.
 - **Sidebar** (left by default): projects, their sessions, tags and filters,
   remote machines, and the More Options menu under the three-lines button at
   the top right (Sort & Filter, Collapse All, Commands, Agents Hub, All Automations,
