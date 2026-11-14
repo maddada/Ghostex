@@ -664,18 +664,18 @@ How to use this file:
 - **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.
 ### Phones and computers that can reach this machine
 
-- **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself.
-- **Connect a Device** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes.
+- **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Reach this machine from anywhere; only the devices in the list get in. Connect a Phone or Connect a Computer turns it on by itself.
+- **Connect a Phone** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Opens the Connect a device window with the code a phone scans; Connect a Computer opens the window where two computers swap a code.
 - **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off.
 ### Tailscale
 
-- **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off leaves it out of the Connect a Device window.
+- **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off leaves it out of the Connect a device window.
 - **Tailscale checklist** `tailscaleSteps` (Settings UI row without a settings key; use `ghostex settings open`): Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone.
 - **Tailscale code** `tailscaleCode` (Settings UI row without a settings key; use `ghostex settings open`): Scan the Tailscale code with the Ghostex app, or type the host, IP and username.
 - **Tailscale on or off** `remoteTailscaleEnabled` (boolean, default true) [not agent-writable]: Offer the Tailscale path in Remote setup.
 ### Computers this machine connects to
 
-- **Add a computer** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Add a computer by SSH details or its code; saved computers appear as sidebar sections.
+- **Add a computer** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Opens Connect a Computer to add a computer with its code, or with SSH details; saved computers appear as sidebar sections.
 - **Show in sidebar** `showInSidebar` (Settings UI row without a settings key; use `ghostex settings open`): Hide a saved remote machine from the sidebar without deleting it.
 - **Computer icons** `machineIcon` (Settings UI row without a settings key; use `ghostex settings open`): Each saved computer's icon in the sidebar, picked in its settings while it is connected; it is kept on that computer.
 - **SSH host** `sshHost` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH host.
@@ -792,7 +792,7 @@ How to use this file:
 
 ### Speech to text
 
-- **Engine** `dictateEngine` (Settings UI row without a settings key; use `ghostex settings open`): Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI) and Hex when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.
+- **Engine** `dictateEngine` (Settings UI row without a settings key; use `ghostex settings open`): Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), Superwhisper when it is installed on a Linux computer (Omarchy comes with it), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI) and Hex when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.
 - **OpenAI API key** `dictateOpenaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Shown under the engine when it is OpenAI: paste your key from platform.openai.com. It is the same key the Voice Agent uses on GPT Realtime, kept encrypted on this computer.
 - **xAI API key** `dictateXaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Shown under the engine when it is xAI: paste your key from console.x.ai. It is the same key the Voice Agent uses on Grok Voice, kept encrypted on this computer.
 - **Language** `dictateLanguage` (Settings UI row without a settings key; use `ghostex settings open`): Auto works for most people. Pick one when short phrases come out in the wrong language.

@@ -614,7 +614,7 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let name = code.name.clone();
-                let started = super::computer_pairing::start_computer_pairing(&paths, code);
+                let started = super::computer_pairing::start_computer_pairing(&paths, code, None);
                 crate::audit::record(
                     crate::audit::Action::new(
                         "pairing.computerRequest",
@@ -642,13 +642,71 @@ pub(crate) async fn handle_remote_access_http(
                     .into_response(endpoint_path, request_id);
             };
             let cancel = endpoint_path == "/api/cancelComputerPairing";
-            tokio::task::spawn_blocking(move || {
+            let answer = tokio::task::spawn_blocking(move || {
                 if cancel {
                     super::computer_pairing::cancel_computer_pairing(&pending_id);
                     return Ok(json!({ "status": "cancelled" }));
                 }
                 super::computer_pairing::computer_pairing_status(&paths, &pending_id)
                     .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await;
+            // Connect both ways: this computer's desktop adds the computer that asked
+            // (CDXC:RemotePairing 2026-11-14 in connect_back.rs).
+            match answer {
+                Ok(Ok(mut answer)) => {
+                    if let Some(machine) = answer
+                        .get("addMachine")
+                        .and_then(Value::as_object)
+                        .cloned()
+                    {
+                        let added = state
+                            .event_hub
+                            .dispatch_renderer_command(
+                                "addRemoteMachine".to_string(),
+                                machine,
+                                15_000,
+                            )
+                            .await
+                            .is_ok();
+                        answer["machineAdded"] = json!(added);
+                    }
+                    Ok(Ok(answer))
+                }
+                other => other,
+            }
+        }
+        crate::remote_access::connect_back::SIGN_CONNECT_BACK_ENDPOINT => {
+            tokio::task::spawn_blocking(move || {
+                super::connect_back::sign_connect_back(&paths, &params)
+                    .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await
+        }
+        crate::remote_access::connect_back::CONNECT_BACK_ENDPOINT => {
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths)?;
+                let started = super::connect_back::connect_back(&db, &paths, &params);
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "pairing.computerRequest",
+                        "A connected computer asked this one to connect back to it through Easy Connect",
+                    )
+                    .target(
+                        params
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string(),
+                    ),
+                    actor,
+                    match &started {
+                        Ok(_) => crate::audit::Outcome::Pending,
+                        Err(error) => crate::audit::Outcome::Failed(format!("{error:#}")),
+                    },
+                    None,
+                );
+                started.map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
             })
             .await
         }

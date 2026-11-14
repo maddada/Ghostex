@@ -136,6 +136,10 @@ fn plan_sidebar_action(view: &SidebarView, action: &str) -> Option<SidebarAction
         "agentsHub" | "remoteSetup" | "hotkeys" | "settings" => {
             json!({ "type": "open", "modal": action })
         }
+        // The More menu's Connect a Computer: the same window, on its computer pane.
+        "connectComputer" => {
+            json!({ "type": "open", "modal": "remoteSetup", "device": "computer" })
+        }
         // The More menu's Send Bug / Feedback row (CDXC:Feedback, apps/desktop/src/app/window/feedback_modal/).
         "feedback" => json!({ "type": "open", "modal": "feedback" }),
         _ => return None,

@@ -336,6 +336,8 @@ impl GhostexGpuiApp {
                 self.open_gpui_settings_remote_section(Some("tailscale"), cx);
             }
             ConnectDeviceCommand::Close => self.connect_device_window_closed(cx),
+            // Connect a computer's own commands (connect_computer_lifecycle.rs).
+            other => self.handle_gpui_connect_computer_command(other, cx),
         }
     }
 

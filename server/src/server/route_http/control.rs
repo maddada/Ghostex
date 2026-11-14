@@ -82,6 +82,8 @@ pub(super) async fn route_control_http(
         | "/api/pairComputer"
         | "/api/computerPairingStatus"
         | "/api/cancelComputerPairing"
+        | crate::remote_access::connect_back::SIGN_CONNECT_BACK_ENDPOINT
+        | crate::remote_access::connect_back::CONNECT_BACK_ENDPOINT
         | "/api/pairedDeviceSeen"
         | "/api/easyConnectAddresses"
         | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT

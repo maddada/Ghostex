@@ -49,6 +49,7 @@ pub(crate) mod claude_cloud_sign_in_return;
 pub(crate) mod claude_web;
 pub(crate) mod command_pane_auto_minimize;
 pub(crate) mod command_pane_remote_action;
+pub(crate) mod connect_computer_lifecycle;
 pub(crate) mod connect_device_modal_lifecycle;
 pub(crate) mod coordinator_details_modal_lifecycle;
 pub(crate) mod create_linear_ticket_modal_lifecycle;

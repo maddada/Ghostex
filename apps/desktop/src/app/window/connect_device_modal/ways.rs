@@ -87,12 +87,16 @@ impl GpuiConnectDeviceWindow {
 
     /// Which screen shows, for sizing the window again when it changes.
     pub(super) fn screen(&self) -> u8 {
+        if let Some(flow) = &self.join {
+            return 20 + flow.step.screen();
+        }
         match (&self.stage, &self.waiting) {
             (Stage::Connected(_), _) => 3,
             (Stage::Finishing { .. }, _) => 2,
             (Stage::Ready, Some(_)) => 1,
             _ if self.shows_large_code() => 4,
             _ if self.way == ConnectWay::Tailscale => 10 + self.tailscale.screen(),
+            (Stage::Ready, None) if self.code.is_some() && self.code_error.is_some() => 19,
             (Stage::Ready, None) if self.code.is_some() => 5,
             (Stage::NeedsHelper(None), _) => 6,
             (Stage::NeedsHelper(Some(_)), _) => 7,
@@ -236,89 +240,19 @@ impl GpuiConnectDeviceWindow {
             .into_any_element()
     }
 
-    /// The Computer way: this computer and the code on one line, Copy the code as the main button,
-    /// the waiting line and the steps.
-    fn computer_way(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let p = self.palette;
-        let ready = self.stage == Stage::Ready && self.code.is_some();
-        if !ready {
-            return v_flex()
-                .w_full()
-                .gap(px(16.0))
-                .child(self.code_placeholder(140.0, cx))
-                .child(self.steps())
-                .into_any_element();
-        }
-        let text = self
-            .code
-            .as_ref()
-            .map(|code| code.text.clone())
-            .unwrap_or_default();
-        let width = CONNECT_DEVICE_MODAL_WIDTH - MODAL_WINDOW_PADDING * 2.0 - WAYS_WIDTH - WAYS_GAP;
-        v_flex()
-            .w_full()
-            .gap(px(12.0))
-            .child(
-                v_flex()
-                    .w_full()
-                    .gap(px(8.0))
-                    .p(px(14.0))
-                    .rounded(px(MODAL_RADIUS_CONTROL))
-                    .border_1()
-                    .border_color(hsla(p.hairline))
-                    .bg(hsla(p.panel))
-                    .child(
-                        h_flex()
-                            .gap(px(8.0))
-                            .items_center()
-                            .child(modal_icon(ICON_COMPUTER, 16.0, p.foreground))
-                            .child(self.computer_name.clone()),
-                    )
-                    .child(
-                        div()
-                            .w_full()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .font_family(MODAL_MONO_FONT)
-                            .text_size(px(12.0))
-                            .line_height(px(17.0))
-                            .text_color(hsla(p.muted))
-                            .child(text),
-                    ),
-            )
-            .children(self.copy_button(width, cx))
-            .child(self.waiting_line("Waiting for the other computer…"))
-            .child(self.steps())
-            .into_any_element()
-    }
-
+    /// The phone's two steps (a computer's pane says its own, computer_way.rs).
     fn steps(&self) -> AnyElement {
-        let steps = match self.kind() {
-            ConnectDeviceKind::Phone => vec![
-                self.step(1, vec![("Open Ghostex on your phone.", false)]),
-                self.step(
-                    2,
-                    vec![
-                        ("Tap ", false),
-                        ("Scan the code ", true),
-                        ("and point it here.", false),
-                    ],
-                ),
-            ],
-            ConnectDeviceKind::Computer => vec![
-                self.step(1, vec![("Open Ghostex on the other computer.", false)]),
-                self.step(
-                    2,
-                    vec![
-                        ("In Settings > Remote, click ", false),
-                        ("Add a computer ", true),
-                        ("and paste this code.", false),
-                    ],
-                ),
-            ],
-        };
+        let steps = vec![
+            self.step(1, vec![("Open Ghostex on your phone.", false)]),
+            self.step(
+                2,
+                vec![
+                    ("Tap ", false),
+                    ("Scan the code ", true),
+                    ("and point it here.", false),
+                ],
+            ),
+        ];
         v_flex()
             .w_full()
             .gap(px(8.0))
@@ -400,9 +334,8 @@ impl GpuiConnectDeviceWindow {
                     cx,
                 ))
                 .into_any_element(),
-            ConnectWay::Computer => self
-                .muted("The code works once, for five minutes.")
-                .into_any_element(),
+            // The pane says how long its code works (computer_way.rs).
+            ConnectWay::Computer => div().into_any_element(),
         };
         h_flex()
             .w_full()
@@ -435,10 +368,10 @@ impl GpuiConnectDeviceWindow {
     }
 
     /// The list of ways, the picked way beside it, and the footer under both.
-    pub(super) fn ways_body(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn ways_body(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let way = match self.way {
             ConnectWay::Phone => self.phone_way(cx),
-            ConnectWay::Computer => self.computer_way(cx),
+            ConnectWay::Computer => self.computer_way(window, cx),
             ConnectWay::Tailscale => self.tailscale_way(cx),
         };
         v_flex()

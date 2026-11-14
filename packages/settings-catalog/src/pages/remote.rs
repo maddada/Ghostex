@@ -31,8 +31,8 @@ pub(crate) fn easy_connect() -> Section {
         "easyConnect",
         "Phones and computers that can reach this machine",
         vec![
-            row("easyConnectEnabled", "Easy Connect", "Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself."),
-            row("pairingCode", "Connect a Device", "Opens the Connect a Device window with the code to scan; Connect a Computer shows the code another computer pastes."),
+            row("easyConnectEnabled", "Easy Connect", "Reach this machine from anywhere; only the devices in the list get in. Connect a Phone or Connect a Computer turns it on by itself."),
+            row("pairingCode", "Connect a Phone", "Opens the Connect a device window with the code a phone scans; Connect a Computer opens the window where two computers swap a code."),
             row("pairedDevices", "Paired devices", "Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off."),
         ],
     )
@@ -43,7 +43,7 @@ pub(crate) fn tailscale() -> Section {
         "tailscale",
         "Tailscale",
         vec![
-            row("tailscaleEnabled", "Tailscale on or off", "Offer the Tailscale path; off leaves it out of the Connect a Device window."),
+            row("tailscaleEnabled", "Tailscale on or off", "Offer the Tailscale path; off leaves it out of the Connect a device window."),
             row("tailscaleSteps", "Tailscale checklist", "Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone."),
             row("tailscaleCode", "Tailscale code", "Scan the Tailscale code with the Ghostex app, or type the host, IP and username."),
         ],
@@ -55,7 +55,7 @@ pub(crate) fn remote_machines() -> Section {
         "remoteMachines",
         "Computers this machine connects to",
         vec![
-            row("addMachine", "Add a computer", "Add a computer by SSH details or its code; saved computers appear as sidebar sections."),
+            row("addMachine", "Add a computer", "Opens Connect a Computer to add a computer with its code, or with SSH details; saved computers appear as sidebar sections."),
             row("showInSidebar", "Show in sidebar", "Hide a saved remote machine from the sidebar without deleting it."),
             row("machineIcon", "Computer icons", "Each saved computer's icon in the sidebar, picked in its settings while it is connected; it is kept on that computer."),
             row("sshHost", "SSH host", "Remote machine SSH host."),

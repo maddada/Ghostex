@@ -281,7 +281,7 @@ pub(super) fn reach_card(
             .child(settings_button_sized(
                 &t.p,
                 "remote-connect-phone",
-                "Connect a Device",
+                "Connect a Phone",
                 Some(ICON_QRCODE),
                 ButtonVariant::Default,
                 ButtonSize::Sm,

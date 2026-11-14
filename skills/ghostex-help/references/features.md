@@ -953,7 +953,7 @@ Shortcuts: `focusNextSession`, `focusPreviousSession`, `focusNextPaneTab`,
 `focusPreviousPaneTab`; setting: `sidebarSessionCycleSkipsSleeping`.
 Top chrome holds tag filters, Spaces, and the sidebar's menu (More Options, the
 three-lines button at the top of the sidebar): Sort & Filter and Collapse All;
-then Commands, Agents Hub, All Automations, Connect a Device and Keep Awake
+then Commands, Agents Hub, All Automations, Connect a Phone, Connect a Computer and Keep Awake
 (while it is switched on); then, between lines, Ask Ghostex AI, Join Discord and
 Send Bug / Feedback; then two submenus: Tools (Search by Prompt, Import Sessions,
 Extensions, Dev servers, Resources) and, in the desktop app, Ghostex (New Window, Check
@@ -5052,7 +5052,7 @@ Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `
 Ghostex is a client/server system: gxserver runs on each computer and owns its
 sessions, so any client can control agents on any machine.
 
-- **From a phone**: sidebar More Options > Connect a Device. One window,
+- **From a phone**: sidebar More Options > Connect a Phone. One window,
   Connect a device, opens with three ways listed at its left (Phone, Computer,
   Tailscale) and turns Easy Connect on by itself (if SSH access is off, it asks
   for an admin password once), then shows the code under Phone. The code there
@@ -5070,7 +5070,8 @@ sessions, so any client can control agents on any machine.
   network can still connect. Turning Easy Connect on any other way (its
   switch, `ghostex tailcat enable`) also starts the helper's install when it
   is missing, and Easy Connect starts on it once it is in. On the phone, the first screen lists the steps (get Ghostex
-  on the computer, open Connect a Device there, scan its code here) and Scan
+  on the computer, open Connect a Phone there (older phone apps say Connect a
+  Device), scan its code here) and Scan
   the code opens the scanner: two steps, with the camera in the second (on an
   iPhone, Open the scanner there opens Apple's scanner; on Android the camera
   is right in the step, with a light button). It won't scan gives tips. If the
@@ -5087,12 +5088,12 @@ sessions, so any client can control agents on any machine.
   the bottom left of the window, opens Settings > Remote, where the paired
   devices are.
   Settings > Remote shows, on one screen: Phones and computers that can reach
-  this machine (Easy Connect's switch, Connect a Device, Connect a Computer and
+  this machine (Easy Connect's switch, Connect a Phone, Connect a Computer and
   every paired or waiting device, whether Easy Connect is on or off; while SSH
   access is off it says so with Turn on, and while the Easy Connect helper
   isn't installed it says so with Install, the install's step while it runs,
   and Try again when it failed), Computers this machine connects to
-  (the saved computers and Add a computer), and three rows that open in place:
+  (the saved computers and Add a computer, which opens Connect a Computer), and three rows that open in place:
   This computer (its name, set by the system, its icon and SSH access,
   with the macOS, Windows or Linux steps to turn SSH on by hand), Tailscale
   (another way in for tailnets; its code sits behind a click-to-show QR with
@@ -5236,15 +5237,26 @@ sessions, so any client can control agents on any machine.
   reach the computer through Easy Connect, and a new phone gets in only while
   the Connect a device window is open or it waits for approval (paired phones
   reconnect once when the window opens and about a minute after it closes).
-  Another computer connects the same way: on this computer click Connect a
-  computer (Settings > Remote, or Computer in the Connect a device window's
-  list), then Copy the code, and on the other computer paste it in Settings >
-  Remote > Add a computer. When you click Add computer, both computers show
-  three words; check they match and approve the request here.
-  Then the other computer can reach this one through Easy Connect, and still
-  signs in with this computer's SSH username and password. To re-pair a
-  computer paired before 11.1.0, open it there and paste a new code the same
-  way.
+  Another computer connects with one window on both: open Connect a Computer
+  (sidebar More Options, Settings > Remote's Connect a Computer or Add a
+  computer, or Computer in the Connect a device window's list) on both
+  computers. Each shows its own code with Copy, and a box for the other
+  computer's code with Connect: copy the code on one computer, paste it on the
+  other and click Connect (either way round works). Both computers then show
+  the same three words; click Approve on the computer whose code it was only if
+  they match. The computer that pasted shows each step in one list (Approved,
+  signing in) until "<computer> is connected". It signs in with its own key,
+  sent when it paired, so no password is asked; only when the other computer
+  runs a Ghostex from before this release, which doesn't keep that key, does
+  the window ask once for that computer's username and password, and a key
+  that stops working falls back to that saved password. Its Done screen offers
+  Connect both ways: one click makes the other computer connect back to this
+  one too, with no second code (the other computer must run this release as
+  well; an older one says to update it first). A failure says what happened in
+  a line or two with one button that fixes it (Try another code, Reconnect,
+  Try again). Use SSH details in the window adds a computer by its address,
+  username and password instead. To re-pair a computer paired before 11.1.0,
+  open it in Settings > Remote there and paste a new code.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;
@@ -7091,9 +7103,9 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   the Browser is always there. Then your devices: your phone, your other
   computers and Cloud Boxes, how they connect (Easy Connect by default,
   Tailscale for devices already on a tailnet), and two switches, both off
-  until you turn them on: Pair my phone after setup (opens Connect a Device)
-  and Add another computer after setup (opens Settings > Remote on Add a
-  computer), each after your first agent reply. Last, the default session view
+  until you turn them on: Pair my phone after setup (opens Connect a Phone)
+  and Add another computer after setup (opens Connect a Computer), each after
+  your first agent reply. Last, the default session view
   and Agent approvals (Keep default or Skip permissions, the same setting as
   Settings > Agents, `agentAcceptAllEnabled`), with a small preview window
   that shows your picks at once, next to the look: Appearance, the theme

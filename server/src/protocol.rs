@@ -1171,6 +1171,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/pairComputer"
         | "/api/computerPairingStatus"
         | "/api/cancelComputerPairing"
+        // CDXC:RemotePairing 2026-11-14 WHY: Connect both ways (remote_access/connect_back.rs): this computer signs its ask with its pairing key, and the computer it connected to takes the ask from its desktop's connection; the ask is checked against that computer's paired computers, so the token alone can't start one.
+        | crate::remote_access::connect_back::SIGN_CONNECT_BACK_ENDPOINT
+        | crate::remote_access::connect_back::CONNECT_BACK_ENDPOINT
         /*
         CDXC:RemotePairing 2026-11-06 WHY:
         A paired phone asks for this computer's Easy Connect addresses with its device token, through the tunnel, which lands on the local listener; the addresses dial this computer, so like the tailcat status they never reach the remote listener.

@@ -6,6 +6,10 @@
 //! `helper-failed` (its install failed), `helper-installing` (an install that already runs),
 //! `large` (the phone's code filling the window, as after a click on it), `tailscale` (the
 //! Tailscale way with its checklist), `tailscale-off` (the way while Tailscale is switched off).
+//! Connect a computer: `computer` (its code and the box for the other computer's code),
+//! `computer-words` (a pasted code, waiting for Approve there), `computer-done` (connected, with
+//! Connect both ways), `computer-password` (the other computer kept no key: its password),
+//! `computer-both` (Connect both ways finished).
 use super::connect_device_modal::*;
 use super::settings_modal::tabs::remote::tailscale_checklist_of_status;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
@@ -31,6 +35,28 @@ fn with_view(
         });
     }
 }
+
+fn with_view_window(
+    slot: &Slot,
+    cx: &mut gpui::AsyncApp,
+    run: impl FnOnce(
+        &mut GpuiConnectDeviceWindow,
+        &mut gpui::Window,
+        &mut gpui::Context<GpuiConnectDeviceWindow>,
+    ),
+) {
+    let target = slot.borrow().clone();
+    if let Some((window, view)) = target {
+        let _ = cx.update(|cx| {
+            let _ = window.update(cx, |_root, window, cx| {
+                view.update(cx, |modal, cx| run(modal, window, cx))
+            });
+        });
+    }
+}
+
+/// The other computer's code the `computer-*` states paste.
+const OTHER_CODE: &str = "ghostex-ec1:eyJ2IjoxLCJhZGRyZXNzIjoidGNEYW1CMGhNYWdibU05aDdCTERBbmo1d0U0cjdKLUdmUTdCWTBUay1Ya2dWUHh1cmxvc0EwUTFNWDV4MUxNRCIsIm5hbWUiOiJNYWNCb29rIFBybyIsInVzZXIiOiJtYWRkYSIsInBvcnQiOjU4NzQ0LCJzc2hQb3J0IjoyMiwic2VjcmV0IjoiUHZOcUtlSndMeEJIM195dFY5c0E2cFIifQ";
 
 fn poll_answer(state: &str) -> ConnectPoll {
     let waiting = if matches!(state, "ask" | "presence" | "connected") {
@@ -135,6 +161,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     with_view(&slot, cx, |modal, cx| {
                         modal.poll_answered(poll_answer(&state), cx)
                     });
+                    if state.starts_with("computer-") {
+                        with_view_window(&slot, cx, |modal, window, cx| {
+                            modal.preview_join(OTHER_CODE, window, cx)
+                        });
+                    }
                     // `connected` approves the waiting phone, which then shows as paired.
                     if state == "connected" {
                         with_view(&slot, cx, |modal, cx| {
@@ -192,11 +223,95 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 eprintln!("close");
                 cx.quit();
             }
+            ConnectDeviceCommand::JoinComputer { code } => {
+                eprintln!("join {} chars", code.len());
+                cx.spawn(async move |cx| {
+                    with_view(&slot, cx, |modal, cx| {
+                        modal.join_started(
+                            Ok((
+                                "pd_demo".to_string(),
+                                vec!["amber".into(), "falcon".into(), "river".into()],
+                                JoinTarget {
+                                    name: "MacBook Pro".to_string(),
+                                    address: "tcDemo".to_string(),
+                                    user: "madda".to_string(),
+                                    ssh_port: 22,
+                                },
+                            )),
+                            cx,
+                        )
+                    });
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::JoinStatus { .. } => {
+                cx.spawn(async move |cx| {
+                    let answer = if state == "computer-words" {
+                        serde_json::json!({ "status": "pending" })
+                    } else {
+                        serde_json::json!({
+                            "status": "approved",
+                            "sshKeyInstalled": state != "computer-password",
+                            "user": "madda",
+                        })
+                    };
+                    with_view(&slot, cx, |modal, cx| modal.join_status(Ok(answer), cx));
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::SaveJoined { key_installed, .. } => {
+                cx.spawn(async move |cx| {
+                    with_view_window(&slot, cx, |modal, window, cx| {
+                        modal.join_saved("remote-demo".to_string(), key_installed, window, cx)
+                    });
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::ReadSignIn { .. } => {
+                cx.spawn(async move |cx| {
+                    with_view(&slot, cx, |modal, cx| {
+                        modal.sign_in_state(Some("connected".to_string()), None, cx)
+                    });
+                    if state == "computer-both" {
+                        with_view(&slot, cx, |modal, cx| modal.preview_connect_back(cx));
+                    }
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::ConnectBack { .. } => {
+                cx.spawn(async move |cx| {
+                    for step in [BackStep::Approving, BackStep::Adding] {
+                        cx.background_executor()
+                            .timer(Duration::from_millis(400))
+                            .await;
+                        with_view(&slot, cx, |modal, cx| {
+                            modal.connect_back_progress(Ok(Some(step)), cx)
+                        });
+                    }
+                    cx.background_executor()
+                        .timer(Duration::from_millis(400))
+                        .await;
+                    with_view(&slot, cx, |modal, cx| {
+                        modal.connect_back_progress(Ok(None), cx)
+                    });
+                })
+                .detach();
+            }
+            other => eprintln!(
+                "{}",
+                match other {
+                    ConnectDeviceCommand::OpenAddComputerSsh => "open Add a computer (SSH)",
+                    ConnectDeviceCommand::CancelJoin { .. } => "cancel join",
+                    ConnectDeviceCommand::SubmitPassword { .. } => "submit password",
+                    ConnectDeviceCommand::Reconnect { .. } => "reconnect",
+                    _ => "command",
+                }
+            ),
         }
     });
     let config = ConnectDeviceConfig {
         palette: demo.palette,
-        kind: if demo.state == "computer" {
+        kind: if demo.state.starts_with("computer") {
             ConnectDeviceKind::Computer
         } else {
             ConnectDeviceKind::Phone

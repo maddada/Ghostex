@@ -16,6 +16,7 @@ pub(crate) mod clone_job_and_preview;
 pub(crate) mod connected_computers;
 pub(crate) mod coordinator_catalog;
 pub(crate) mod dispatch_results;
+pub(crate) mod easy_connect_machines;
 pub(crate) mod native_action;
 pub(crate) mod presentation_and_watchdog;
 pub(crate) mod project_browse_and_add;
