@@ -224,11 +224,9 @@ impl GpuiNotificationFeedItem {
                 .get("awaitingApproval")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
-            open_on: text("openProjectId")
-                .zip(text("openSessionId"))
-                .filter(|(project_id, session_id)| {
-                    !project_id.is_empty() && !session_id.is_empty()
-                }),
+            open_on: text("openProjectId").zip(text("openSessionId")).filter(
+                |(project_id, session_id)| !project_id.is_empty() && !session_id.is_empty(),
+            ),
             id,
         })
     }
