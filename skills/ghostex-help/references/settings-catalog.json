@@ -9856,8 +9856,8 @@
     },
     {
       "key": "claudeIdleCompactAbove",
-      "title": "Only above",
-      "subtitle": "Compact only chats whose context is at least this size. Claude Code's default is 200K. Shown while Compact idle chats is on.",
+      "title": "Compact chats above",
+      "subtitle": "The size at and above which Claude Code compacts an idle chat, and Ghostex compacts any session before carrying it on after a restart or a usage-limit reset. Claude Code's default is 200K.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",

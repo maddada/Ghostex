@@ -1,5 +1,6 @@
 //! The Context group of Claude Code's row panel in Settings > Agents: Compact idle chats before the
-//! prompt cache expires, Only above (shown while that switch is on) and Use a 1-hour prompt cache.
+//! prompt cache expires, Compact chats above (also the size Ghostex compacts at before carrying a
+//! session on) and Use a 1-hour prompt cache.
 //! gxserver hands them to each Claude launch and resume (server/src/agents/claude_idle_compaction.rs,
 //! where the user's decision is).
 //!
@@ -51,7 +52,10 @@ impl AgentsTab {
             idle_compaction,
             cx,
         )];
-        if idle_compaction {
+        // CDXC:AgentProviders 2026-11-14 DECISION in server/src/carry_on_compaction.rs (Q3239): the
+        // size also decides which sessions Ghostex compacts before carrying them on, so it shows
+        // whether or not idle compaction is on (superseding Q3103's hide for this row).
+        {
             let options = settings_catalog()
                 .options(module::SETTINGS, "CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS");
             let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
@@ -60,11 +64,10 @@ impl AgentsTab {
                 self,
                 p,
                 MIN_TOKENS,
-                RowSpec::new("Only above")
+                RowSpec::new("Compact chats above")
                     .description(
-                        "Compact only chats whose context is at least this size. Claude Code's default is 200K.",
+                        "The size at and above which Claude Code compacts an idle chat, and Ghostex compacts any session before carrying it on after a restart or a usage-limit reset. Claude Code's default is 200K.",
                     )
-                    .dependent()
                     .keyed(&values, MIN_TOKENS),
                 Some(reset_key::<Self>(MIN_TOKENS)),
                 &options,

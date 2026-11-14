@@ -113,6 +113,11 @@ pub(crate) fn blocked_state(session: &Value) -> Option<(String, String)> {
     if let Some(blocked) = crate::memory_guard::blocked_by_memory_guard(session) {
         return Some(blocked);
     }
+    // A coordinator thread a restart cut off, until it is carried on or dismissed
+    // (CDXC:Coordinators 2026-11-14 in server/src/coordinators/stopped_by_restart.rs).
+    if let Some(blocked) = crate::coordinators::blocked_by_restart(session) {
+        return Some(blocked);
+    }
     let runtime = session.get("runtimeSettings")?;
     if runtime["accountRecoverySuppressed"] == true {
         return None;

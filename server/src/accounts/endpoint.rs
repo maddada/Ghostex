@@ -517,7 +517,7 @@ pub(crate) fn dispatch(
             )?;
             changed_sessions.push(session);
         }
-        "sessionPolicy" | "select" | "stopRecovery" | "resumeRecovery" => {
+        "sessionPolicy" | "select" | "stopRecovery" | "resumeRecovery" | "compactFirst" => {
             let session = get_session(&repository, params)?;
             let project = repository
                 .get_project(required(params, "projectId")?)?
@@ -544,6 +544,26 @@ pub(crate) fn dispatch(
                 // settings stop retrying is announced once (CDXC:Notifications 2026-10-31 in
                 // api_errors.rs).
                 super::api_errors::save_settings(state, &repository, &session, runtime)?;
+            } else if operation == "compactFirst" {
+                // The Compact first checkbox on a limit card a restart paused
+                // (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs).
+                let checked = params.get("checked").and_then(Value::as_bool) == Some(true);
+                let mut recovery = runtime
+                    .get("accountRecovery")
+                    .cloned()
+                    .unwrap_or(Value::Null);
+                if recovery["status"] != "paused" {
+                    return Err(DomainStateError::bad_request(
+                        "This session is not waiting to continue.",
+                    ));
+                }
+                recovery["compactFirst"] = json!(checked);
+                if recovery["accountWait"]["compact"].is_object() {
+                    recovery["accountWait"]["compact"]["checked"] = json!(checked);
+                }
+                runtime.insert("accountRecovery".into(), recovery);
+                let row = update_session(&repository, &session, runtime)?;
+                super::limit_wait::restore(&row);
             } else if operation == "resumeRecovery" {
                 // The limit card's Continue on a wait a restart paused (CDXC:AgentProviders
                 // 2026-11-14 in recovery.rs, Q3228): the wait goes on as if the restart had not

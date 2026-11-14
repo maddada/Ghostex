@@ -613,6 +613,18 @@ fn supervise(
             // `missing` / `unknown`: the provider has not been probed or died; nothing to report yet.
             continue;
         }
+        // CDXC:Coordinators 2026-11-14 DECISION in coordinators/stopped_by_restart.rs (GitHub #608,
+        // Q3234): a thread a restart cut off gets no nudge and no report until it works again.
+        if coordinators::held_by_restart(&session) {
+            if coordinators::worked_since_restart(&session) {
+                coordinators::release_thread(repository, &session);
+            } else {
+                memory.not_working_since.remove(&key);
+                memory.stalls.remove(&key);
+                memory.idle_waits.remove(&key);
+                continue;
+            }
+        }
         // Its terminal ended under it: the self-heal restarts it and sends the one report about it,
         // so its stale "working" hooks neither count as quiet nor end as a finished turn.
         let heal_report = crate::session_self_heal::pending_report(&key);

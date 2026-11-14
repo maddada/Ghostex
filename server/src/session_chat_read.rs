@@ -1011,7 +1011,8 @@ pub(crate) async fn handle_read_session_chat_http(
                         .get_session(&project_id, &session_id)
                         .ok()??;
                     crate::memory_guard::card_from_record(&session)
-                });
+                })
+                .or_else(|| crate::coordinators::stopped_threads_card(&project_id, &session_id));
         if let Some(notice) = stopped_card {
             result.insert("terminalNotice".to_string(), notice.to_value());
         }

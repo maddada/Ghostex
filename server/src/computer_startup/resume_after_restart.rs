@@ -27,6 +27,12 @@ pub(crate) struct SessionToResume {
     session_id: String,
 }
 
+impl SessionToResume {
+    pub(crate) fn key(&self) -> (String, String) {
+        (self.project_id.clone(), self.session_id.clone())
+    }
+}
+
 /// CDXC:ComputerStartup 2026-11-06 WHY: the record of what was running is the session rows themselves. While gxserver runs, the provider pass marks a session whose daemon ended `missing` (session_state_sync.rs), sleeping writes `sleeping` and closing writes `stopped`. A shutdown or power loss takes gxserver down with the daemons, so nothing marks those rows: they still say `running` with the daemon `exists`. On the first start after the computer restarted (`boot_mark.rs`), before any client can trigger that pass, the agent rows still saying so whose daemon is gone are the sessions that were running. A session the user closed, slept or that ended by itself before the shutdown is already marked otherwise and is never picked, and nothing is picked when gxserver merely restarted, since the daemons outlive that.
 pub(crate) fn find_sessions_to_resume(
     paths: &GxserverPaths,
@@ -96,7 +102,19 @@ pub(crate) fn resume_sessions(state: Arc<AppState>, sessions: Vec<SessionToResum
                     continue;
                 }
                 match wake_session(&state, &session.project_id, &session.session_id).await {
-                    WakeOutcome::Woke | WakeOutcome::AlreadyWaking => {}
+                    WakeOutcome::Woke | WakeOutcome::AlreadyWaking => {
+                        // CDXC:Coordinators 2026-11-14 DECISION in coordinators/stopped_by_restart.rs
+                        // (Q3235, Q3237): a thread this switch carries on compacts first when big.
+                        if crate::coordinators::take_compact_after_resume(&session.key()) {
+                            let _ = crate::carry_on_compaction::send_like_coordinator(
+                                &state,
+                                &session.project_id,
+                                &session.session_id,
+                                "/compact",
+                            )
+                            .await;
+                        }
+                    }
                     WakeOutcome::Blocked(why) => log(
                         &state,
                         LogLevel::Warn,

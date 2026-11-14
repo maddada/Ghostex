@@ -267,6 +267,11 @@ pub(crate) fn project_presentation_session(
                 "blockedAlertedBy".to_string(),
                 Value::String(crate::memory_guard::BLOCKED_ALERTED_BY.to_string()),
             );
+        } else if crate::coordinators::blocked_by_restart(session).is_some() {
+            output.insert(
+                "blockedAlertedBy".to_string(),
+                Value::String(crate::coordinators::STOPPED_BY_RESTART_ALERTED_BY.to_string()),
+            );
         }
     }
     // Present only while true (CDXC:SessionStatus 2026-10-31 in server/src/session_approval.rs).

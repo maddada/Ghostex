@@ -232,6 +232,44 @@ async fn answer_session_chat_prompt(
         .unwrap_or_default();
     // The limit card's "Continue with Opus 5.5 on ST" (server/src/accounts/model_fallback.rs):
     // the same step as `agentAccounts` `continueWithModel`, so it runs where account switches run.
+    // The Compact first checkbox on the coordinator's stopped-threads card or on the limit card
+    // after a restart (CDXC:AgentProviders 2026-11-14 in server/src/carry_on_compaction.rs).
+    if kind == "compactFirst" {
+        let checked = params.get("checked").and_then(Value::as_bool) == Some(true);
+        let coordinator = (target.project_id.clone(), target.session_id.clone());
+        let result = if crate::coordinators::set_stopped_threads_compact(&coordinator, checked) {
+            Ok(())
+        } else {
+            let mut request = params.clone();
+            request.insert("operation".to_string(), json!("compactFirst"));
+            let state = state.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::accounts::endpoint::dispatch(&state, &request).map(|_| ())
+            })
+            .await
+            .unwrap_or_else(|_| {
+                Err(DomainStateError {
+                    code: "internalError",
+                    message: "Could not change Compact first.".to_string(),
+                })
+            })
+        };
+        let agent = session_chat_agent_for_session(&target.session);
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            agent.as_deref(),
+        );
+        return match result {
+            Ok(()) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "queued": false })),
+            ),
+            Err(error) => domain_error_response(endpoint_path, request_id, error),
+        };
+    }
     // The limit card's Continue (a wait a restart paused), Not now and Stop (CDXC:AgentProviders
     // 2026-11-14 in server/src/accounts/recovery.rs): the same steps as `agentAccounts`.
     if matches!(

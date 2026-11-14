@@ -83,13 +83,28 @@ pub(super) fn stays_stopped_at_limit(
             .any(|account| account.provider == provider)
 }
 /// Q3228: a usage-limit wait found at gxserver start waits for the user's Continue on its card.
-fn pause_after_restart(recovery: &mut Value) {
+/// The card's Compact first checkbox (CDXC:AgentProviders 2026-11-14 in
+/// server/src/carry_on_compaction.rs): shown when the agent has a compact command, ticked when the
+/// last known context is at or above the size.
+fn pause_after_restart(repo: &DomainRepository<'_>, session: &Value, recovery: &mut Value) {
     let now = Utc::now().to_rfc3339();
     recovery["status"] = json!("paused");
     recovery["reason"] = json!(PAUSED_AFTER_RESTART);
     recovery["nextAttemptAt"] = Value::Null;
     recovery["updatedAt"] = json!(now);
-    recovery["accountWait"] = json!({ "mode": "afterRestart", "since": now });
+    let mut wait = json!({ "mode": "afterRestart", "since": now });
+    if crate::carry_on_compaction::compact_command(session).is_some() {
+        let tokens = crate::carry_on_compaction::context_tokens(repo, session);
+        let checked =
+            tokens.is_some_and(|tokens| tokens >= crate::carry_on_compaction::threshold());
+        wait["compact"] = json!({
+            "tokens": tokens,
+            "checked": checked,
+            "hint": crate::carry_on_compaction::COMPACT_HINT,
+        });
+        recovery["compactFirst"] = json!(checked);
+    }
+    recovery["accountWait"] = wait;
 }
 /// Q3229: the prompt names who sent it, so the transcript says why the agent started a turn.
 fn continue_prompt(trigger: Option<&str>) -> String {
@@ -553,17 +568,22 @@ fn restore_session(
                     &launch::effective_policy(registry, provider, &session),
                 )
             });
-        let recovery = if leaves_alone {
-            Value::Null
-        } else {
-            let mut recovery = session["runtimeSettings"]["accountRecovery"].clone();
-            pause_after_restart(&mut recovery);
-            recovery
-        };
-        super::limit_wait::forget(state, repo, &session);
-        save(state, repo, &session, recovery)?;
-        if let Some(row) = repo.get_session(pid, sid)? {
-            super::limit_wait::restore(&row);
+        // Q3235: with "Resume sessions after a restart" on, the wait carries on without the card.
+        let carries_on =
+            crate::computer_startup::ComputerStartupSettings::read(&state.paths).resume_sessions;
+        if leaves_alone || !carries_on {
+            let recovery = if leaves_alone {
+                Value::Null
+            } else {
+                let mut recovery = session["runtimeSettings"]["accountRecovery"].clone();
+                pause_after_restart(repo, &session, &mut recovery);
+                recovery
+            };
+            super::limit_wait::forget(state, repo, &session);
+            save(state, repo, &session, recovery)?;
+            if let Some(row) = repo.get_session(pid, sid)? {
+                super::limit_wait::restore(&row);
+            }
         }
     } else if matches!(
         session
@@ -1179,6 +1199,65 @@ pub(crate) fn plan_session(
         prompt: queue.deliverable_head().map(|p| p.id.clone()),
     }))
 }
+/// The compact command to send before this continuation, if any (`compactFirst` from the card, or
+/// the size rule).
+fn compaction_before_continue(state: &AppState, plan: &Plan) -> Option<&'static str> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    let repo = DomainRepository::new(&db, &state.metadata.server_id);
+    let row = repo.get_session(&plan.project, &plan.session).ok()??;
+    let command = crate::carry_on_compaction::compact_command(&row)?;
+    match row
+        .pointer("/runtimeSettings/accountRecovery/compactFirst")
+        .and_then(Value::as_bool)
+    {
+        Some(checked) => checked.then_some(command),
+        None => crate::carry_on_compaction::worth_compacting(&repo, &row).map(|_| command),
+    }
+}
+/// Waits until the compaction's turn has ended and the composer takes input again, up to 15
+/// minutes. False when the continuation is no longer ours (Stop, or another pass took it).
+async fn wait_for_compaction(
+    state: &Arc<AppState>,
+    detector: &SessionChatOptionDetector,
+    plan: &Plan,
+) -> bool {
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    for _ in 0..300 {
+        let row = {
+            let Ok(db) = open_gxserver_database(&state.paths) else {
+                return false;
+            };
+            let repo = DomainRepository::new(&db, &state.metadata.server_id);
+            let Ok(Some(row)) = repo.get_session(&plan.project, &plan.session) else {
+                return false;
+            };
+            row
+        };
+        if row
+            .pointer("/runtimeSettings/accountRecovery/claim")
+            .and_then(Value::as_str)
+            != Some(&plan.claim)
+        {
+            return false;
+        }
+        let working =
+            crate::presentation::presentation_activity(&row, &Utc::now().to_rfc3339()) == "working";
+        if !working {
+            let agent = crate::session_chat_composer::session_chat_composer_agent_id(&row);
+            let detection = detector
+                .detect(&plan.project, &plan.session, agent.as_deref(), true)
+                .await;
+            if detection.captured
+                && detection.composer.state
+                    == crate::session_chat_composer::SessionChatComposerState::Ready
+            {
+                return true;
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+    true
+}
 pub(super) fn relevant(window: &UsageWindow, model: &str) -> bool {
     window.model.as_ref().is_none_or(|m| {
         !model.contains("claude")
@@ -1385,6 +1464,26 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
             break;
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+    // Q3237: a usage-limit continuation compacts first when the card's checkbox said so, or, with
+    // no card, when the chat is at or above the size (CDXC:AgentProviders 2026-11-14 in
+    // server/src/carry_on_compaction.rs).
+    if trigger.as_deref() == Some("usageLimit") {
+        let command = compaction_before_continue(&state, &plan);
+        if let Some(command) = command {
+            let _ = send_session_chat_message_internal(
+                &state,
+                &plan.project,
+                &plan.session,
+                command,
+                &[],
+                SessionChatMessageSource::AutomaticRecovery,
+            )
+            .await;
+            if !wait_for_compaction(&state, &detector, &plan).await {
+                return;
+            }
+        }
     }
     let result = if let Some(prompt) = &plan.prompt {
         let owned = state.clone();

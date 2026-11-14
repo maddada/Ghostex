@@ -62,6 +62,28 @@ pub fn decorate(
         );
         object.insert("actions".to_string(), Value::Array(actions));
     }
+    // The Compact first checkbox on a wait a restart paused (CDXC:AgentProviders 2026-11-14 in
+    // server/src/carry_on_compaction.rs, Q3238): ticked for a chat at or above the compaction size,
+    // with the (i) tooltip saying why.
+    if paused {
+        if let Some(compact) = wait.get("compact").and_then(Value::as_object) {
+            let checked = compact.get("checked").and_then(Value::as_bool) == Some(true);
+            let label = match compact.get("tokens").and_then(Value::as_u64) {
+                Some(tokens) => format!("Compact first ({} of context)", short_tokens(tokens)),
+                None => "Compact first".to_string(),
+            };
+            object.insert(
+                "checkbox".to_string(),
+                json!({
+                    "id": "compactFirst",
+                    "label": label,
+                    "checked": checked,
+                    "hint": compact.get("hint").cloned().unwrap_or(Value::Null),
+                    "answer": { "kind": "compactFirst", "checked": !checked },
+                }),
+            );
+        }
+    }
     // Every wait can be ended from its card: Stop while Ghostex waits to continue, Not now on a
     // wait a restart paused (CDXC:AgentProviders 2026-11-14 in server/src/accounts/recovery.rs).
     let mut actions = object
@@ -234,6 +256,15 @@ pub fn wait_words(
         title: format!("No account has room for {model}"),
         detail: format!("{why} {when}"),
         action,
+    }
+}
+
+/// "312K" for 312,400 tokens (server/src/carry_on_compaction.rs `short_tokens`).
+fn short_tokens(tokens: u64) -> String {
+    if tokens >= 1_000_000 {
+        format!("{:.1}M", tokens as f64 / 1_000_000.0)
+    } else {
+        format!("{}K", (tokens + 500) / 1_000)
     }
 }
 
