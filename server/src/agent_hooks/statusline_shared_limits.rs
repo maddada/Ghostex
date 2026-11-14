@@ -1,7 +1,10 @@
-//! The newest 5h / 7d reading from any Claude session on one login.
+//! The furthest-along 5h / 7d reading from any Claude session on one login.
 //!
 //! CDXC:AgentProviders 2026-11-09 WHY:
-//! GitHub #514: without a saved account a session's limits are the numbers its own Claude last piped to the statusline command. A coordinator that sits idle for hours reports nothing new, so its chat kept showing the percentages from before the window reset even while other sessions on the same login had reported fresh ones. The limits belong to the login, not to the session, so a session's reading takes each window from the newest payload any session on its login stored, when that payload is newer than its own.
+//! GitHub #514: without a saved account a session's limits are the numbers its own Claude last piped to the statusline command. A coordinator that sits idle for hours reports nothing new, so its chat kept showing the percentages from before the window reset even while other sessions on the same login had reported fresh ones. The limits belong to the login, not to the session, so a session's reading takes each window from the furthest-along reading any session on its login stored, when that reading is further along than its own.
+//!
+//! CDXC:AgentProviders 2026-11-13 DECISION:
+//! The user saw the chat's usage bar flip between 7d 26% and 7d 19% ("the bar keeps switching ... conflicting information"). The shared reading is chosen by its window, never by payload file time: a later `resets_at` wins, and inside the same window the higher `used_percentage` wins, because usage never falls inside a window. Idle sessions rewrite their payload every few seconds with old rate-limit headers, so file time picked a stale lower percentage whenever an idle session wrote last. A session never swaps its own reading for one that is not further along. `resets_at` is handed over as a whole number (epoch seconds) because the status mapper in `session_chat_options/selection_sources.rs` reads it as an integer and drops the reset row for a float.
 
 use std::{
     collections::HashMap,
@@ -29,19 +32,26 @@ const RESCAN_INTERVAL: Duration = Duration::from_secs(10);
 /// left by a statusline command that died between the write and the rename.
 const TEMP_LEFTOVER_AGE: Duration = Duration::from_secs(10 * 60);
 
-/// One window's reading and when the payload that carried it was written.
+/// One window's reading.
 #[derive(Clone, Copy)]
 struct WindowReading {
     used: f64,
     resets_at: f64,
-    modified: SystemTime,
+}
+
+impl WindowReading {
+    /// Whether this reading is further along than `known`: a later window, or the same window with more used.
+    fn supersedes(self, known: Self) -> bool {
+        self.resets_at > known.resets_at
+            || (self.resets_at == known.resets_at && self.used > known.used)
+    }
 }
 
 /// What one payload file version says about the shared limits.
 struct PayloadSummary {
     modified: SystemTime,
     login: Option<String>,
-    windows: [Option<(f64, f64)>; 2],
+    windows: [Option<WindowReading>; 2],
 }
 
 /*
@@ -89,22 +99,19 @@ fn payload_login(
         .clone()
 }
 
-fn window_reading(payload: &serde_json::Map<String, Value>, key: &str) -> Option<(f64, f64)> {
+fn window_reading(payload: &serde_json::Map<String, Value>, key: &str) -> Option<WindowReading> {
     let window = payload.get("rate_limits")?.get(key)?;
     let used = window.get("used_percentage")?.as_f64()?;
     let resets_at = window.get("resets_at")?.as_f64()?;
-    (used.is_finite() && resets_at.is_finite()).then_some((used, resets_at))
+    (used.is_finite() && resets_at.is_finite()).then_some(WindowReading { used, resets_at })
 }
 
-/// Replaces `own`'s 5h / 7d windows with the newest same-login reading, window by window, from the
-/// folder index (rebuilt at most every [`RESCAN_INTERVAL`]).
+/// Replaces `own`'s 5h / 7d windows with the furthest-along same-login reading, window by window,
+/// from the folder index (rebuilt at most every [`RESCAN_INTERVAL`]).
 pub(crate) fn adopt_same_login_rate_limits(
     hook_state_directory: &Path,
     own: &mut ClaudeStatuslinePayload,
 ) {
-    let Some(own_modified) = own.modified else {
-        return;
-    };
     let home = ghostex_paths::user_home_dir();
     let Some(own_login) = payload_login(&own.payload, &home, &mut HashMap::new()) else {
         return;
@@ -132,11 +139,11 @@ pub(crate) fn adopt_same_login_rate_limits(
         return;
     };
     for (key, reading) in RATE_LIMIT_WINDOWS.iter().zip(newest) {
-        let Some(reading) = reading.filter(|reading| reading.modified > own_modified) else {
+        let Some(reading) = reading else {
             continue;
         };
-        // A window only moves forward: a reading of an earlier window than the one this session already knows is not newer news.
-        if window_reading(&own.payload, key).is_some_and(|(_, known)| reading.resets_at < known) {
+        // A window only moves forward, and usage never falls inside one: a reading that is not further along than the session's own is not news.
+        if window_reading(&own.payload, key).is_some_and(|known| !reading.supersedes(known)) {
             continue;
         }
         let Some(limits) = own
@@ -149,14 +156,18 @@ pub(crate) fn adopt_same_login_rate_limits(
         };
         limits.insert(
             key.to_string(),
-            serde_json::json!({"used_percentage": reading.used, "resets_at": reading.resets_at}),
+            // Epoch seconds as a whole number: the status mapper reads `resets_at` as an integer and drops a float.
+            serde_json::json!({
+                "used_percentage": reading.used,
+                "resets_at": reading.resets_at.round() as i64,
+            }),
         );
     }
 }
 
 /// Lists the payload folder once: reads only payload files that are new or changed since the last
 /// listing, forgets the ones that are gone or older than [`NEWER_PAYLOAD_MAX_AGE`], removes
-/// temporary files a dead write left behind, and rebuilds the newest reading per login.
+/// temporary files a dead write left behind, and rebuilds the furthest-along reading per login.
 fn rescan_folder(index: &mut FolderIndex, folder: &Path, home: &Path) {
     index.scanned_at = Some(Instant::now());
     let Ok(entries) = fs::read_dir(folder) else {
@@ -209,18 +220,145 @@ fn rescan_folder(index: &mut FolderIndex, folder: &Path, home: &Path) {
         };
         let newest = newest_by_login.entry(login.clone()).or_default();
         for (slot, window) in newest.iter_mut().zip(summary.windows) {
-            let Some((used, resets_at)) = window else {
+            let Some(reading) = window else {
                 continue;
             };
-            if slot.is_none_or(|known| summary.modified > known.modified) {
-                *slot = Some(WindowReading {
-                    used,
-                    resets_at,
-                    modified: summary.modified,
-                });
+            if slot.is_none_or(|known| reading.supersedes(known)) {
+                *slot = Some(reading);
             }
         }
     }
     index.files = files;
     index.newest_by_login = newest_by_login;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::time::Duration;
+
+    const RESET: i64 = 1_795_078_800;
+
+    /// Writes a login's account file and one session payload with the given 7d reading.
+    fn write_payload(
+        hooks: &Path,
+        root: &Path,
+        session: &str,
+        used: f64,
+        resets_at: i64,
+        age: Duration,
+    ) {
+        let folder = hooks.join(CLAUDE_STATUSLINE_STATE_DIRECTORY);
+        fs::create_dir_all(&folder).unwrap();
+        let path = folder.join(format!("{session}.json"));
+        let payload = json!({
+            "transcript_path": root.join("projects/p/t.jsonl"),
+            "rate_limits": {"seven_day": {"used_percentage": used, "resets_at": resets_at}},
+        });
+        fs::write(
+            &path,
+            json!({"payload": payload, "updatedAt": ""}).to_string(),
+        )
+        .unwrap();
+        let file = fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(SystemTime::now() - age).unwrap();
+    }
+
+    fn own_payload(hooks: &Path, session: &str) -> ClaudeStatuslinePayload {
+        read_statusline_payload_file(
+            &hooks
+                .join(CLAUDE_STATUSLINE_STATE_DIRECTORY)
+                .join(format!("{session}.json")),
+        )
+        .unwrap()
+    }
+
+    fn seven_day(payload: &ClaudeStatuslinePayload) -> Value {
+        payload.payload["rate_limits"]["seven_day"].clone()
+    }
+
+    fn login_root(base: &Path) -> PathBuf {
+        let root = base.join("claude-login");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join(".claude.json"),
+            json!({"oauthAccount": {"emailAddress": "a@example.test", "organizationUuid": "org"}})
+                .to_string(),
+        )
+        .unwrap();
+        root
+    }
+
+    #[test]
+    fn a_later_window_wins_then_the_higher_percentage() {
+        let reading = |used, resets_at| WindowReading { used, resets_at };
+        assert!(reading(1.0, 200.0).supersedes(reading(90.0, 100.0)));
+        assert!(!reading(90.0, 100.0).supersedes(reading(1.0, 200.0)));
+        assert!(reading(26.0, 100.0).supersedes(reading(19.0, 100.0)));
+        assert!(!reading(19.0, 100.0).supersedes(reading(26.0, 100.0)));
+        assert!(!reading(26.0, 100.0).supersedes(reading(26.0, 100.0)));
+    }
+
+    #[test]
+    fn an_idle_session_written_later_does_not_lower_a_busy_sessions_reading() {
+        let base = tempfile::tempdir().unwrap();
+        let root = login_root(base.path());
+        let hooks = base.path().join("hooks");
+        // The busy session wrote 26% ten minutes ago; the idle one wrote 19% just now.
+        write_payload(&hooks, &root, "busy", 26.0, RESET, Duration::from_secs(600));
+        write_payload(&hooks, &root, "idle", 19.0, RESET, Duration::from_secs(1));
+        write_payload(&hooks, &root, "mine", 5.0, RESET, Duration::from_secs(3600));
+
+        let mut mine = own_payload(&hooks, "mine");
+        adopt_same_login_rate_limits(&hooks, &mut mine);
+        let window = seven_day(&mine);
+        assert_eq!(window["used_percentage"], json!(26.0));
+        // A whole number, so the status mapper keeps the reset row.
+        assert_eq!(window["resets_at"].as_i64(), Some(RESET));
+
+        // A session already at 26% is not pulled down to the idle session's 19%.
+        let mut busy = own_payload(&hooks, "busy");
+        adopt_same_login_rate_limits(&hooks, &mut busy);
+        assert_eq!(seven_day(&busy)["used_percentage"], json!(26.0));
+    }
+
+    #[test]
+    fn a_later_window_replaces_the_own_reading_whatever_the_percentage() {
+        let base = tempfile::tempdir().unwrap();
+        let root = login_root(base.path());
+        let hooks = base.path().join("hooks");
+        write_payload(
+            &hooks,
+            &root,
+            "fresh",
+            2.0,
+            RESET + 604_800,
+            Duration::from_secs(5),
+        );
+        write_payload(&hooks, &root, "mine", 80.0, RESET, Duration::from_secs(5));
+
+        let mut mine = own_payload(&hooks, "mine");
+        adopt_same_login_rate_limits(&hooks, &mut mine);
+        let window = seven_day(&mine);
+        assert_eq!(window["used_percentage"], json!(2.0));
+        assert_eq!(window["resets_at"].as_i64(), Some(RESET + 604_800));
+    }
+
+    #[test]
+    fn a_handed_over_reading_keeps_its_reset_row_in_the_chat_status() {
+        let base = tempfile::tempdir().unwrap();
+        let root = login_root(base.path());
+        let hooks = base.path().join("hooks");
+        write_payload(&hooks, &root, "busy", 26.0, RESET, Duration::from_secs(600));
+        write_payload(&hooks, &root, "mine", 5.0, RESET, Duration::from_secs(3600));
+
+        // The chat's status goes through the handover and then the status mapper.
+        let (selection, _) =
+            crate::session_chat_options::read_claude_statusline_reading(&hooks, "mine", true)
+                .expect("a stored payload reads as a selection");
+        let window = &selection.claude_status.expect("status")["rateLimits"]["sevenDay"];
+        assert_eq!(window["usedPercentage"], json!(26.0));
+        assert_eq!(window["resetsAt"], json!(RESET));
+    }
 }
