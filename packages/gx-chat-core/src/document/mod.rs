@@ -19,8 +19,8 @@ pub use crate::document::composer::{
 };
 pub use crate::document::frame::{Frame, ItemsSplice, MinimapMarker, RowDetails};
 pub use crate::document::panels::{
-    AccountStatus, ChatPill, DeferredWorkRow, HostAction, PillDot, SavedDraftPill, TerminalTail,
-    TerminalTailNotice, ViewChip, WorkingCard, WorkingStrip,
+    AccountStatus, ChatPill, CompactHint, DeferredWorkRow, HostAction, PillDot, SavedDraftPill,
+    TerminalTail, TerminalTailNotice, ViewChip, WorkingCard, WorkingStrip,
 };
 pub use crate::document::question::{
     AsyncQuestions, PendingAsyncQuestion, QuestionCard, QuestionControls, QuestionDraft,

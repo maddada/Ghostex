@@ -172,6 +172,10 @@ pub struct Document {
     /// Family d.
     #[serde(default)]
     pub saved_draft_pill: Option<super::panels::SavedDraftPill>,
+    /// The "Option + Enter to compact then send" hint on a Codex chat idle for over a day, pinned
+    /// at the left of the pill strip, or absent (`composer::compact_hint`). Family d.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_hint: Option<super::panels::CompactHint>,
     pub note: Note,
     /// The Catch me up button and card. Family d.
     #[serde(default)]

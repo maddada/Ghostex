@@ -2526,6 +2526,8 @@ wait until it finishes without a delivery warning.
 To compact before sending a new prompt, press `⌥Enter` on macOS or `Alt+Enter` on Windows and Linux in the chat box,
 Option-click Send (Alt-click on Windows and Linux), or right-click Send and choose Compact & Send. Ghostex sends `/compact` first,
 then puts your written prompt in the queue above the input to send after compaction.
+On a Codex chat whose last turn is more than a day old (its prompt cache is gone by then), the chat box
+shows an "Option + Enter to compact then send" hint ("Alt + Enter" on Windows and Linux) until the next turn.
 Compact context in Session details (the context ring) sends `/compact` the same way a typed
 `/compact` goes, and says why in the chat box when it can't run.
 Approval and dialog cards (Claude Code, Codex and the other agents) list the

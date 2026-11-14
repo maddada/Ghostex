@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Compact an idle Codex chat before you send:** when a Codex chat's last turn is more than a day old, the chat box shows "Option + Enter to compact then send" ("Alt + Enter" on Windows and Linux), so the next message doesn't re-read the whole conversation uncached. The hint goes once a new turn starts.
+
 ## 11.6.1 - 2026-11-13
 
 **Ghostex 11.6.1 is out.** Codex on Windows recovers when it quits, model lists read live from each agent, a coordinator on any agent with a clearer setup, fewer coordinator notifications, a limit card that can continue on Opus, folded sent answers, and many fixes, on the computer and the Android app.

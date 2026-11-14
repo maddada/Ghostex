@@ -155,6 +155,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         composer.incoming_draft.as_ref(),
         &composer.text,
     );
+    into.compact_hint = crate::composer::compact_hint::compact_hint(state, context);
     into.interaction = Interaction {
         queue_long_press_ms: QUEUE_LONG_PRESS_MS,
         stop_button_cooldown_ms: STOP_BUTTON_COOLDOWN_MS,

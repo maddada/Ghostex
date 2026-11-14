@@ -13,6 +13,8 @@
 //! while the pills scroll (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
 //! Before it, while a draft saved elsewhere is offered, the Saved draft pill (saved_draft_pill.rs),
 //! which alone is enough to show the strip, also on a chat with no rows yet.
+//! After the view chips, on a Codex chat idle for over a day, the "Option + Enter to compact then
+//! send" hint (`compact_hint_chip`).
 //!
 //! CDXC:SessionChat 2026-10-29 SEE-ALSO:
 //! The user's words (option E) are on packages/gx-chat-core/src/extras/chat_pills.rs. The phone draws the same strip in apps/mobile/app/src/chat/native/cards/PillsStrip.tsx.
@@ -435,6 +437,48 @@ impl NativeChatView {
             .collect()
     }
 
+    /// The "Option + Enter to compact then send" hint at the strip's left, after the view chips,
+    /// on a Codex chat idle for over a day (gx-chat-core composer/compact_hint.rs has the user's
+    /// words). It only names the key, so it takes no click; it reads "Alt" off a Mac keyboard.
+    fn compact_hint_chip(&self, p: &ChatAppearance) -> Option<AnyElement> {
+        let hint = Some(&self.snapshot["compactHint"]).filter(|hint| hint.is_object())?;
+        let s = p.scale;
+        let key = if super::keyboard::chat_mac_keys() {
+            "macLabel"
+        } else {
+            "label"
+        };
+        Some(
+            div()
+                .id("chat-compact-hint")
+                .aria_label(hint["ariaLabel"].as_str().unwrap_or_default().to_string())
+                .flex()
+                .items_center()
+                .flex_shrink_0()
+                .gap(px(5.0 * s))
+                .px(px(8.0 * s))
+                .py(px(2.0 * s))
+                .rounded_full()
+                // The view chips' quiet look: a pill's height, a faint fill, no outline.
+                .border(px(s))
+                .border_color(gpui::transparent_black())
+                .bg(p.foreground.opacity(0.04))
+                .text_size(px(13.0 * s))
+                .line_height(px(19.0 * s))
+                .whitespace_nowrap()
+                .text_color(p.card_muted.opacity(0.85))
+                .child(
+                    svg()
+                        .path("titlebar/arrows-diagonal-minimize.svg")
+                        .size(px(14.0 * s))
+                        .flex_shrink_0()
+                        .text_color(p.card_muted.opacity(0.85)),
+                )
+                .child(hint[key].as_str().unwrap_or_default().to_string())
+                .into_any_element(),
+        )
+    }
+
     /// Whether the strip shows: a draft is offered, or the transcript has rows and a pill, timer or
     /// view chip calls for it.
     pub(super) fn pills_strip_shown(&self) -> bool {
@@ -447,7 +491,8 @@ impl NativeChatView {
             .is_some_and(|actions| !actions.is_empty());
         let chips = self.snapshot["viewChips"]
             .as_array()
-            .is_some_and(|chips| !chips.is_empty());
+            .is_some_and(|chips| !chips.is_empty())
+            || self.snapshot["compactHint"].is_object();
         self.list.item_count() > 0
             && (armed
                 || chips
@@ -501,6 +546,7 @@ impl NativeChatView {
             let mut chips: Vec<AnyElement> =
                 self.saved_draft_pill_element(p, cx).into_iter().collect();
             chips.extend(self.view_chips(p, cx));
+            chips.extend(self.compact_hint_chip(p));
             (chips, self.strip_pills(p, cx))
         } else {
             (Vec::new(), Vec::new())
