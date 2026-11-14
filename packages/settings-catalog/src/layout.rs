@@ -59,7 +59,7 @@ pub const GENERAL_GROUPS: &[GeneralGroup] = &[
     group(
         "system",
         "Power & Sleep",
-        &["computerStartup", "autoSleep", "power"],
+        &["computerStartup", "memoryGuard", "autoSleep", "power"],
     ),
 ];
 

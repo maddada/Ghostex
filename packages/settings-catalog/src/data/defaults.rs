@@ -511,6 +511,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("startServerAtLogin", J::Bool(false)),
     ("openAppAtLogin", J::Bool(false)),
     ("resumeSessionsAfterRestart", J::Bool(false)),
+    ("memoryGuardEnabled", J::Bool(true)),
+    ("memoryGuardNotify", J::Bool(true)),
     ("keepAwakeActivateOnExternalDisplay", J::Bool(false)),
     ("keepAwakeActivateOnLaunch", J::Bool(false)),
     ("keepAwakeAllowDisplaySleep", J::Bool(false)),

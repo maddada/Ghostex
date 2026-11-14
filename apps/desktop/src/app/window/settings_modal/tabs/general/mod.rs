@@ -2,7 +2,7 @@
 //! per page: Chat; Sidebar & Sessions (Sidebar, Session Cards, Sidebar Tags, Sleeping Sessions);
 //! Terminal (Terminal, Terminal Behavior, Terminal Scrolling); Notifications (Sounds); Files &
 //! Links (File opening, Browser, Editor, Dev Servers); Power & Sleep (When your computer starts,
-//! Auto Sleep, Power). They
+//! Memory, Auto Sleep, Power). They
 //! share the General search (`GeneralSearch`). Each page's advanced rows render in a second pass
 //! into a collapsed Advanced fold at its bottom (CDXC:Settings 2026-10-29 in search.rs).
 //! Experimental and Reset to defaults moved to About.
@@ -10,6 +10,7 @@ mod chat_tools;
 mod commands_pane;
 mod computer_startup;
 mod marked_sections_preview;
+mod memory_guard;
 mod powershell;
 mod sidebar;
 mod system;

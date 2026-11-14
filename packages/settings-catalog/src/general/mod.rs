@@ -15,6 +15,7 @@ pub fn sections(platform: Platform) -> Vec<Section> {
         tools::browser(),
         tools::editor(),
         system::computer_startup(),
+        system::memory_guard(),
         system::auto_sleep(),
         system::power(),
         sidebar::session_cards(),

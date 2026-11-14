@@ -7433,6 +7433,22 @@ plain terminal sessions come back when you open them. Restarting only Ghostex's 
 nothing, because sessions keep running through it.
 Settings: `startServerAtLogin`, `openAppAtLogin`, `resumeSessionsAfterRestart`.
 
+### Memory guard (when the computer runs out of memory)
+
+Settings > Power & Sleep > Memory > **Stop sessions that run the computer out of memory** is on by
+default. When the system says memory is critically low (macOS's red memory pressure, or Linux's
+memory stall and available-memory readings) for 10 seconds, Ghostex looks at the agent session
+using the most memory, counting the agent and everything it started, dev servers and test runners
+included. It stops the biggest command that agent started (a build, a test run or a dev server)
+and tells the agent at once why it stopped, so it can carry on without it. If the agent itself is
+the one using the memory, Ghostex restarts it on the same conversation and asks it to carry on.
+If memory is still critical 30 seconds later, it stops that whole session, and the card in its
+chat has a Resume button. Sessions under 2 GB and apps outside Ghostex are never touched. Each
+step leaves a card in that chat and, while **Notify me when it steps in** is on, a notification on
+the computer and the phone. The switches follow you to your other computers when Settings > Sync
+> Agent defaults is on; each computer guards its own sessions. Windows is not guarded yet.
+Settings: `memoryGuardEnabled`, `memoryGuardNotify`.
+
 ## Data folders
 
 On macOS and Linux, Ghostex keeps its settings, sessions, chat history, pasted

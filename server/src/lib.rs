@@ -69,6 +69,7 @@ pub(crate) mod live_activity;
 pub mod logging;
 pub(crate) mod machine_integrations;
 pub(crate) mod managed_tools;
+pub(crate) mod memory_guard;
 pub mod navigation_history;
 pub(crate) mod network_status;
 pub mod notification_feed;

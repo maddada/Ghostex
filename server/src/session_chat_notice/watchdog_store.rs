@@ -26,6 +26,18 @@ entry is indistinguishable from an absent one for every consumer.
 */
 const WATCHDOG_NOTICE_MAX_AGE: Duration = Duration::from_secs(600);
 
+/// CDXC:MemoryGuard 2026-11-14 WHY:
+/// The memory guard's card (server/src/server/memory_guard_runtime.rs) reports what it stopped, often while the user is away, so it outlives the ten minutes a lost send gets; it is still retired by the next send, and it never hides a card about what the agent's screen shows now (`merge_session_chat_terminal_notices`).
+const MEMORY_GUARD_NOTICE_MAX_AGE: Duration = Duration::from_secs(6 * 3600);
+
+fn max_age(notice: &SessionChatTerminalNotice) -> Duration {
+    if notice.kind == crate::memory_guard::NOTICE_KIND {
+        MEMORY_GUARD_NOTICE_MAX_AGE
+    } else {
+        WATCHDOG_NOTICE_MAX_AGE
+    }
+}
+
 fn watchdog_notices() -> &'static Mutex<HashMap<String, StoredWatchdogNotice>> {
     static NOTICES: OnceLock<Mutex<HashMap<String, StoredWatchdogNotice>>> = OnceLock::new();
     NOTICES.get_or_init(|| Mutex::new(HashMap::new()))
@@ -66,7 +78,7 @@ pub fn session_chat_watchdog_notice(
     let mut notices = watchdog_notices().lock().ok()?;
     let key = session_chat_notice_key(project_id, session_id);
     let stored = notices.get(&key)?;
-    if stored.stored_at.elapsed() >= WATCHDOG_NOTICE_MAX_AGE {
+    if stored.stored_at.elapsed() >= max_age(&stored.notice) {
         notices.remove(&key);
         return None;
     }
@@ -83,7 +95,27 @@ pub fn clear_session_chat_watchdog_notice(
     let stored = notices.remove(&session_chat_notice_key(project_id, session_id))?;
     // An entry that had already expired was invisible to every reader, so
     // removing it here is not a change anybody is owed a frame for.
-    (stored.stored_at.elapsed() < WATCHDOG_NOTICE_MAX_AGE).then_some(stored.notice)
+    (stored.stored_at.elapsed() < max_age(&stored.notice)).then_some(stored.notice)
+}
+
+/// Retires the send watchdog's own verdict when a send proves the session takes input. The memory
+/// guard's card is not a verdict about sends and stays: the guard's own note to the agent goes out
+/// right after it, and a send says nothing about what the guard stopped.
+pub fn clear_session_chat_send_verdict(
+    project_id: &str,
+    session_id: &str,
+) -> Option<SessionChatTerminalNotice> {
+    let key = session_chat_notice_key(project_id, session_id);
+    {
+        let notices = watchdog_notices().lock().ok()?;
+        if notices
+            .get(&key)
+            .is_some_and(|stored| stored.notice.kind == crate::memory_guard::NOTICE_KIND)
+        {
+            return None;
+        }
+    }
+    clear_session_chat_watchdog_notice(project_id, session_id)
 }
 
 /*
@@ -111,11 +143,12 @@ pub fn retire_session_chat_watchdog_notice_on_clean_screen(
         // that no screen capture can confirm or deny.
         stored.notice.kind == SESSION_CHAT_NOTICE_DELIVERY_FAILED
             || stored.notice.kind == SESSION_CHAT_NOTICE_API_REFUSAL
+            || stored.notice.kind == crate::memory_guard::NOTICE_KIND
     }) {
         return None;
     }
     let stored = notices.remove(&key)?;
-    (stored.stored_at.elapsed() < WATCHDOG_NOTICE_MAX_AGE).then_some(stored.notice)
+    (stored.stored_at.elapsed() < max_age(&stored.notice)).then_some(stored.notice)
 }
 
 /*
@@ -138,7 +171,12 @@ pub fn merge_session_chat_terminal_notices(
     screen: Option<SessionChatTerminalNotice>,
 ) -> Option<SessionChatTerminalNotice> {
     if let Some(screen) = screen {
-        if screen.is_answerable() {
+        // The memory guard's card reports a past step; what the screen shows now comes first.
+        if screen.is_answerable()
+            || watchdog
+                .as_ref()
+                .is_some_and(|notice| notice.kind == crate::memory_guard::NOTICE_KIND)
+        {
             return Some(screen);
         }
         return watchdog.or(Some(screen));

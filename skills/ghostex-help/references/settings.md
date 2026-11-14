@@ -200,6 +200,10 @@ How to use this file:
 - **Start Ghostex's server when you log in** `startServerAtLogin` (boolean, default false): Runs Ghostex's server in the background from the moment you log in, so your other computers, your phone and coordinators keep working while the app is closed.
 - **Also open the Ghostex app** `openAppAtLogin` (boolean, default false): Opens the Ghostex window after the server starts at login. Needs Start Ghostex's server when you log in.
 - **Resume sessions after a restart or power loss** `resumeSessionsAfterRestart` (boolean, default false): Continues the agent sessions that were running when the computer shut down, restarted or lost power, each in its own chat. Sessions you closed, slept or that had already ended stay as they were. Needs Start Ghostex's server when you log in.
+### Memory
+
+- **Stop sessions that run the computer out of memory** `memoryGuardEnabled` (boolean, default true): When this computer is about to run out of memory, Ghostex stops the build, test run or dev server an agent started that uses the most, restarts an agent that grew too big, and as a last step stops the session so you can resume it. Apps outside Ghostex are never touched.
+- **Notify me when it steps in** `memoryGuardNotify` (boolean, default true): A notification on this computer and your phone whenever Ghostex stops or restarts something to free memory. Needs Stop sessions that run the computer out of memory.
 ### Auto Sleep
 
 - **Views auto sleep after** `autoSleepViews` (Settings UI row without a settings key; use `ghostex settings open`): When inactive VS Code, Git, Project and Browser panes sleep, or Off. Sets the four per-view times below.
@@ -356,18 +360,17 @@ How to use this file:
 
 ### Autopilot
 
-- **Autopilot** `autopilotEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Keep sessions going while you are away: carry on a session that stopped while its background job finished or mid-task, interrupt one stuck on a hung command, reload one that stays frozen, move one at a usage limit to an account with room, restart one whose terminal ended. Stays on until you turn it off. Also from a coordinator's chat (its Autopilot pill) and ghostex autopilot on|off.
-- **Which sessions** `autopilotScope` (Settings UI row without a settings key; use `ghostex settings open`): Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, Advanced > Autopilot, does the same for the project and its worktrees.
-### What it may do
+- **Autopilot** `autopilotEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Off, Careful, Full or Custom. It keeps sessions going while you are away: carries on a session that stopped mid-task or while its background job finished, interrupts one stuck on a hung command, reloads one that stays frozen, moves one at a usage limit to an account with room, restarts one whose terminal ended. Careful also answers questions after 15 minutes and approves safe steps; Full answers questions after 10 minutes and approves anything that is not a hard limit. Stays on until you turn it off. Also from a coordinator's chat (its Autopilot pill) and ghostex autopilot on|off.
+- **Which sessions** `autopilotScope` (Settings UI row without a settings key; use `ghostex settings open`): Every session, only the projects you pick (and their worktrees), or only sessions you pick one by one. A session's Autopilot pill in its chat takes it out or puts it back; a project's right-click menu, Advanced > Autopilot, does the same for the project and its worktrees. The projects and sessions left out are listed here, each with a switch to put it back.
+### What it does
 
-- **What it may do on its own** `autopilotTier` (Settings UI row without a settings key; use `ghostex settings open`): Heal (carry on, interrupt, reload, switch account), Heal and decide (also answer with the recommended choice), or Everything (also approve any prompt that is not a hard limit).
-- **Hard limits it may cross** `autopilotHardLimits` (Settings UI row without a settings key; use `ghostex settings open`): Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done.
-- **Answer questions for me** `autopilotAnswerQuestions` (Settings UI row without a settings key; use `ghostex settings open`): After waiting 5, 10 or 15 minutes for you, pick each question's recommended choice. Off by default.
-- **Answer approval cards** `autopilotApprovals` (Settings UI row without a settings key; use `ghostex settings open`): Answer approval cards (permission prompts, Connectors cards, folder trust) within what it may do. On by default; a read-only thread's cards always wait for you, and while it is off only your click answers them.
-### Supervisor
+- **When it asks a question** `autopilotAnswerQuestions` (Settings UI row without a settings key; use `ghostex settings open`): Wait for me, or after 5, 10 or 15 minutes without your answer pick each question's recommended choice (a question with none goes to the supervisor).
+- **When it asks permission** `autopilotApprovals` (Settings UI row without a settings key; use `ghostex settings open`): Permission prompts, Connectors cards and folder trust: Wait for me, Safe steps (after a minute, approve reads, builds, tests, edits and local commits inside the project; anything else waits for you) or All but limits (after a minute, approve anything that is not a hard limit). A read-only thread's cards always wait for you.
+- **Hard limits it may cross** `autopilotHardLimits` (Settings UI row without a settings key; use `ghostex settings open`): With All but limits only. Each off until you turn it on: push a branch, finish a release you asked for, push main, merge pull requests, delete outside the project, post publicly. Sign-ins, 2FA, identity checks and payments are never done.
+### Advanced
 
-- **Supervisor model** `autopilotSupervisor` (Settings UI row without a settings key; use `ghostex settings open`): The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.
-- **Look at every session every** `autopilotSweep` (Settings UI row without a settings key; use `ghostex settings open`): How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.
+- **Supervisor model** `autopilotSupervisor` (Settings UI row without a settings key; use `ghostex settings open`) [advanced]: The agent that wakes for judgment calls: Claude Opus 5.5 at medium, or Codex GPT 6.1 Sol at high. It starts on an account with room.
+- **Look at every session every** `autopilotSweep` (Settings UI row without a settings key; use `ghostex settings open`) [advanced]: How often Autopilot sweeps every session it covers, from 1 to 10 minutes (2 by default). A session whose turn ends is looked at right away.
 ### What it did
 
 - **Summary and log** `autopilotLog` (Settings UI row without a settings key; use `ghostex settings open`): Every decision Autopilot made, newest first: the session, what it saw, what it did, and what happened. Kept 30 days. Also ghostex autopilot log.

@@ -610,6 +610,7 @@ pub(super) fn power_sleep_sections(
 ) -> Vec<PageBlock> {
     [
         super::computer_startup::computer_startup_section(page, g, cx),
+        super::memory_guard::memory_guard_section(page, g, cx),
         auto_sleep_section(page, g, window, cx),
         power_section(page, g, window, cx),
     ]

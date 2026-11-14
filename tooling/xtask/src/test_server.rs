@@ -770,6 +770,11 @@ fn is_inherited_variable(key: &str) -> bool {
     if key.starts_with("GHOSTEX_COLLAB_") {
         return false;
     }
+    // The memory guard's test pressure level and thresholds, read only by a debug gxserver
+    // (server/src/memory_guard/pressure.rs and usage.rs).
+    if key.starts_with("GHOSTEX_MEMORY_GUARD_TEST_") {
+        return false;
+    }
     INHERITED_PREFIXES.iter().any(|prefix| {
         if prefix.ends_with('_') {
             key.starts_with(prefix)

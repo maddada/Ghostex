@@ -47,6 +47,10 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
     "sessionTitleGenerationAgent",
     "agentAcceptAllEnabled",
     "showQuickModelPickerInTerminal",
+    // CDXC:MemoryGuard 2026-11-14 DECISION in server/src/memory_guard/mod.rs (Q3101): the switch
+    // follows the user to every computer, and each computer guards itself.
+    "memoryGuardEnabled",
+    "memoryGuardNotify",
 ];
 
 /// Sidebar organization: the settings that change how the sidebar is organized, synced with the

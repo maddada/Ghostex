@@ -27,6 +27,26 @@ pub(crate) fn computer_startup() -> Section {
     )
 }
 
+/// CDXC:MemoryGuard 2026-11-14 DECISION in server/src/memory_guard/mod.rs: on by default ("i want this on by default too"), its notification switch shown only while it is on.
+pub(crate) fn memory_guard() -> Section {
+    section(
+        "memoryGuard",
+        "Memory",
+        vec![
+            row(
+                "memoryGuardEnabled",
+                "Stop sessions that run the computer out of memory",
+                "When this computer is about to run out of memory, Ghostex stops the build, test run or dev server an agent started that uses the most, restarts an agent that grew too big, and as a last step stops the session so you can resume it. Apps outside Ghostex are never touched.",
+            ),
+            row(
+                "memoryGuardNotify",
+                "Notify me when it steps in",
+                "A notification on this computer and your phone whenever Ghostex stops or restarts something to free memory. Needs Stop sessions that run the computer out of memory.",
+            ),
+        ],
+    )
+}
+
 pub(crate) fn auto_sleep() -> Section {
     section(
         "autoSleep",

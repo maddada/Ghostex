@@ -998,6 +998,15 @@ pub(crate) async fn handle_read_session_chat_http(
                 result.insert("workflows".to_string(), workflows.to_value());
             }
         }
+        // CDXC:MemoryGuard 2026-11-14 WHY: a session the memory guard stopped is asleep, and its
+        // card (what was stopped, and Resume) is what the user opens the chat to read; no other
+        // notice outlives the screen it was read from.
+        if let Some(notice) =
+            crate::session_chat_notice::session_chat_watchdog_notice(&project_id, &session_id)
+                .filter(|notice| notice.kind == crate::memory_guard::NOTICE_KIND)
+        {
+            result.insert("terminalNotice".to_string(), notice.to_value());
+        }
         result.insert("screenProbed".to_string(), json!(true));
     }
     let stored_prompt = stored_prompt

@@ -34,6 +34,10 @@ pub(crate) enum AlertKind {
     /// A thread under a coordinator finished a turn: the alert rule keeps it quiet on the computer,
     /// and only a phone whose Thread reports choice is not Off hears of it.
     ThreadReport,
+    /// The memory guard stopped a command, restarted an agent or stopped a session because the
+    /// computer was running out of memory (server/src/memory_guard/): the phone's Error switch, as
+    /// `failed`, so phones of every version show it.
+    OutOfMemory,
 }
 
 impl AlertKind {
@@ -43,7 +47,7 @@ impl AlertKind {
             Self::NeedsInput => "needsInput",
             // CDXC:Notifications 2026-11-08: the red dots ride the phone's existing `failed`
             // kind (its Error switch and Failed section); only the words differ.
-            Self::Failed | Self::Stuck | Self::Blocked => "failed",
+            Self::Failed | Self::Stuck | Self::Blocked | Self::OutOfMemory => "failed",
             Self::Security => "security",
             Self::ThreadReport => "threadReport",
         }
@@ -59,6 +63,7 @@ impl AlertKind {
             Self::Stuck => "Not moving: it may be stuck",
             Self::Blocked => "Blocked: out of usage on every account",
             Self::ThreadReport => "Reported to its coordinator",
+            Self::OutOfMemory => "Stopped to free memory",
         }
     }
 
@@ -67,7 +72,7 @@ impl AlertKind {
         match self {
             Self::Finished => kinds.finished,
             Self::NeedsInput => kinds.waiting,
-            Self::Failed | Self::Stuck | Self::Blocked => kinds.error,
+            Self::Failed | Self::Stuck | Self::Blocked | Self::OutOfMemory => kinds.error,
             // CDXC:Security 2026-11-08 WHY: the point of the notice is that the owner sees every sensitive action at once, so no per-kind switch turns it off.
             Self::Security => true,
             // A phone older than the choices never asked for thread reports.
@@ -92,7 +97,7 @@ impl AlertKind {
         match self {
             Self::Finished => alerts.finished,
             Self::NeedsInput => alerts.needs_you,
-            Self::Failed | Self::Stuck | Self::Blocked => alerts.errors,
+            Self::Failed | Self::Stuck | Self::Blocked | Self::OutOfMemory => alerts.errors,
             Self::ThreadReport => alerts.thread_reports,
             Self::Security => match alerts.needs_you {
                 AlertChoice::Off => AlertChoice::Silent,

@@ -43,6 +43,8 @@ pub(crate) enum BlockedWhy {
     Stuck,
     /// Every account is out of usage.
     Usage,
+    /// The memory guard stopped something because the computer was running out of memory.
+    OutOfMemory,
 }
 
 /// CDXC:Notifications 2026-11-08 DECISION:
@@ -76,6 +78,7 @@ pub(crate) fn announce_blocked(
     let kind = match why {
         BlockedWhy::Stuck => AlertKind::Stuck,
         BlockedWhy::Usage => AlertKind::Blocked,
+        BlockedWhy::OutOfMemory => AlertKind::OutOfMemory,
     };
     enqueue_row_alert(state, repository, session, &row, kind);
 }
