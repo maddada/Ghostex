@@ -423,6 +423,59 @@ impl ExtensionsTab {
         None
     }
 
+    /// The icon of a Store entry that is not installed, read once from its zip through gxserver
+    /// (`/api/extensionStoreContent`): it has no static files to serve the icon from yet.
+    /// `None` while it loads or when there is nothing to draw.
+    pub(crate) fn store_icon(
+        &mut self,
+        id: &str,
+        icon: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<Arc<[u8]>> {
+        if !self.has_transport(cx) || icon.is_empty() {
+            return None;
+        }
+        let key = format!("store:{id}");
+        match self.browser.icons.get(&key) {
+            Some(IconSlot::Ready(bytes)) => return Some(bytes.clone()),
+            Some(IconSlot::Loading | IconSlot::Missing) => return None,
+            None => {}
+        }
+        self.browser.icons.insert(key.clone(), IconSlot::Loading);
+        let this = cx.weak_entity();
+        store_gxserver_rpc(
+            &self.store.clone(),
+            "/api/extensionStoreContent",
+            json!({ "id": id }),
+            STORE_CONTENT_TIMEOUT,
+            move |result, cx| {
+                let slot = match result
+                    .ok()
+                    .and_then(|value| value["icon"].as_str().map(|icon| icon.as_bytes().to_vec()))
+                {
+                    Some(bytes) if !bytes.is_empty() && looks_like_svg(&bytes) => {
+                        IconSlot::Ready(Arc::from(bytes.into_boxed_slice()))
+                    }
+                    _ => IconSlot::Missing,
+                };
+                let _ = this.update(cx, |page, cx| {
+                    page.browser.icons.insert(key, slot);
+                    cx.notify();
+                });
+            },
+            cx,
+        );
+        None
+    }
+
+    /// Whether [`Self::store_icon`] is still reading this entry's icon.
+    pub(crate) fn store_icon_loading(&self, id: &str) -> bool {
+        matches!(
+            self.browser.icons.get(&format!("store:{id}")),
+            Some(IconSlot::Loading)
+        )
+    }
+
     /// A Store screenshot (`<img src>` from the catalog), decoded once.
     pub(crate) fn screenshot(&mut self, url: &str, cx: &mut Context<Self>) -> ScreenshotSlot {
         if let Some(slot) = self.browser.screenshots.get(url) {

@@ -411,11 +411,13 @@ fn copy_directory(source: &Path, destination: &Path) -> ExtensionResult<()> {
 
 const MAX_STORE_TEXT_BYTES: u64 = 2 * 1024 * 1024;
 
-/// The README and changelog a Store entry shows before it is installed.
+/// The README, changelog and SVG icon a Store entry shows before it is installed.
 #[derive(Clone, Debug)]
 pub(crate) struct StoreEntryContent {
     pub(crate) readme: String,
     pub(crate) changelog: String,
+    /// The manifest's `icon`, when it is an SVG file in the zip.
+    pub(crate) icon: Option<String>,
 }
 
 /*
@@ -424,12 +426,15 @@ The catalog's `readme` and `changelog` are paths inside the extensions repositor
 (`extensions/btop/README.md`), but the `store` release only publishes the zips, so resolving them
 against the catalog URL is a 404 for every entry and the Store page said "Extension README could
 not be loaded." The publisher already requires both files in every zip, so the hash-verified zip
-is the one place they are always shipped; read them from there, without unpacking anything.
+is the one place they are always shipped; read them from there, without unpacking anything. The
+icon comes from the same zip: before install there are no static files to serve it from, so the
+Store showed a placeholder for every extension that was not installed.
 */
 pub(crate) fn read_zip_store_content(
     extensions_dir: &Path,
     url: &str,
     expected_sha256: &str,
+    icon: &str,
 ) -> ExtensionResult<StoreEntryContent> {
     validate_sha256(expected_sha256)?;
     let work_dir = install_work_dir(extensions_dir)?;
@@ -443,9 +448,15 @@ pub(crate) fn read_zip_store_content(
         let mut archive = zip::ZipArchive::new(file).map_err(|error| {
             ExtensionError::bad_request(format!("Extension archive is not a valid ZIP: {error}"))
         })?;
+        // The icon is optional: a missing or non-SVG one leaves the Store's placeholder tile.
+        let icon = icon.trim().trim_start_matches("./");
+        let icon = (!icon.is_empty() && icon.to_ascii_lowercase().ends_with(".svg"))
+            .then(|| read_zip_text(&mut archive, icon).ok())
+            .flatten();
         Ok(StoreEntryContent {
             readme: read_zip_text(&mut archive, "README.md")?,
             changelog: read_zip_text(&mut archive, "CHANGELOG.md")?,
+            icon,
         })
     })();
     let _ = fs::remove_dir_all(&work_dir);

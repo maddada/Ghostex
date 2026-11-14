@@ -23,7 +23,7 @@ pub(crate) struct ExtensionRegistry {
     store_file: PathBuf,
     gate: Arc<Mutex<()>>,
     runtime: ExtensionRuntime,
-    /// Store README and changelog by zip SHA-256: a published zip never changes under its hash.
+    /// Store README, changelog and icon by zip SHA-256: a published zip never changes under its hash.
     store_content: Arc<Mutex<HashMap<String, StoreEntryContent>>>,
 }
 
@@ -56,11 +56,11 @@ impl ExtensionRegistry {
         fetch_catalog(&self.extensions_dir)
     }
 
-    /// The README and changelog of a Store entry, read from its hash-verified zip, so the Store
-    /// page shows them before the extension is installed.
+    /// The README, changelog and icon of a Store entry, read from its hash-verified zip, so the
+    /// Store shows them before the extension is installed.
     pub(crate) fn store_entry_content(&self, id: &str) -> ExtensionResult<StoreEntryContent> {
         validate_extension_id(id)?;
-        let (zip_url, sha256) = {
+        let (zip_url, sha256, icon) = {
             let _guard = self.lock()?;
             let snapshot = fetch_catalog(&self.extensions_dir)?;
             let entry = snapshot
@@ -76,6 +76,7 @@ impl ExtensionRegistry {
             (
                 catalog_zip_url(&snapshot.url, &entry.zip)?,
                 entry.sha256.to_ascii_lowercase(),
+                entry.manifest.icon.clone(),
             )
         };
         if let Some(content) = self
@@ -86,7 +87,7 @@ impl ExtensionRegistry {
         {
             return Ok(content);
         }
-        let content = read_zip_store_content(&self.extensions_dir, &zip_url, &sha256)?;
+        let content = read_zip_store_content(&self.extensions_dir, &zip_url, &sha256, &icon)?;
         if let Ok(mut cache) = self.store_content.lock() {
             cache.insert(sha256, content.clone());
         }

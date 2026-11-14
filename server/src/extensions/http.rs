@@ -120,6 +120,7 @@ fn dispatch_extension_operation(
                 "id": id,
                 "readme": content.readme,
                 "changelog": content.changelog,
+                "icon": content.icon,
             }))
         }
         "/api/installExtension" => {
