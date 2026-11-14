@@ -4034,17 +4034,27 @@ version of the Projects features in Cursor and Claude Code.
   then **N more need you**: on the computer it opens the rest right there, under
   the first rows, and **Show fewer** folds them back (a long list scrolls inside
   the dock); on the phone it opens the Work panel at Needs you. Something
-  waiting more than a day moves below newer ones. Click a row to open it in
-  place: its full text, its links (thread, PR or issue, file), and **Reply** (your
-  own words, in the same reply bubble as a message's Reply; they reach the
-  coordinator as "W7 Q12: your words" and settle the question), **Open** for a
-  form or page, **Mention** (puts the item in the chat box to talk about it),
-  **Show in chat** (scrolls to the reply of the turn that asked it), **Dismiss**
-  (takes it away for good and tells the agent) and **Snooze** (1 hour, 6 hours
-  or 24 hours: it leaves the list and the counts and comes back by itself, also
-  after a restart). Click the row again to close it. On the computer, Mention,
-  Show in chat, Dismiss and Snooze are in the row's ⋯ menu, which takes the
-  place of the row's time while the pointer is over the row, open or closed. A
+  waiting more than a day moves below newer ones. Click a row to open its ask in
+  a floating panel over the chat, drawn like a Ghostex page's window: drag its
+  top band to move it and its edges to resize it, and the chat stays in view
+  behind it. The panel shows the ask's title, the work it belongs to, its full
+  text, its links (thread, PR or issue, file) and threads, its answers (the
+  recommended one has a small star), **Reply** (your own words, in the same
+  reply bubble as a message's Reply; they reach the coordinator as "W7 Q12:
+  your words" and settle the question), **Open** for a form or page, and a ⋯
+  menu with **Show in chat** (scrolls to the reply of the turn that asked it),
+  **Dismiss** (takes it away for good and tells the agent), **Snooze** (1 hour,
+  6 hours or 24 hours: it leaves the list and the counts and comes back by
+  itself, also after a restart), **Copy as Markdown** and **Mention** (puts the
+  item in the chat box to talk about it). An answer, Open, a link or a ⋯ pick
+  closes the panel, a Reply closes it once the reply is taken, and its X or
+  Escape close it too (Enter picks nothing). When the ask is settled somewhere
+  else (answered from the phone or another window, or withdrawn by the
+  coordinator), the panel closes by itself and a toast says **Answered** or
+  **Withdrawn**. On the phone a row opens the same ask in a sheet that works
+  the same way. On the computer, Mention, Show in chat, Dismiss and Snooze are
+  also in the row's own ⋯ menu, which takes the place of the row's time while
+  the pointer is over the row. A
   row's answers and Reply always stay on one line: when they don't fit, the
   answers fold into one **Choose an answer** dropdown beside Reply (the same on
   the Work panel's cards). Words you type in a Reply and don't send stay with
@@ -5498,6 +5508,13 @@ sessions, so any client can control agents on any machine.
   computer, so they show a warning with Copy Path.
   Remote localhost links open in the built-in Browser through that computer,
   even when ordinary web links are set to open in your external browser.
+  A remote project's Browser tab sends only that computer's own addresses
+  (localhost, its own name) and private network addresses through it; public
+  sites open from this computer, as in any other Browser tab. A chip in the
+  Browser toolbar says which: the remote computer's name with a green globe
+  while the page goes through it, or "From this Mac" ("From this computer" on Windows and
+  Linux) while it opens from here. Point at the chip to see which addresses go
+  through the remote computer.
   When a machine cannot connect, its tab's cloud turns red and its list says
   why in one line (hover it for the rest), with Reconnect and Details buttons.
   Details opens the machine in Settings > Remote, where its tile shows a short
@@ -7287,6 +7304,22 @@ that needs a second click (from 11.6.0; before, one click reset everything with 
 way back). While a Settings confirmation such as this one, Skip permissions? or
 Install Hex? is open, the keys you type stay in it instead of going into the
 Settings search behind it.
+
+Settings shows only the rows that apply: a setting that only matters while its
+parent switch is on is hidden while that switch is off, and comes back when you
+turn the switch on (for example Background opacity under Terminal Transparency,
+Continue on Opus under Switch accounts, or Autopilot's rows while Autopilot
+is off). An agent you turned off in Settings > Agents keeps only its switch,
+its command line group, Duplicate and Delete; its other rows come back when you
+turn it on. This is the same on the computer, in the browser and on the phone.
+
+Ghostex is free and open source. After you have sent a few messages, a small
+card in the sidebar asks for a star on GitHub: **Star on GitHub** opens
+Ghostex's GitHub page in your browser, and **Dismiss** puts the card away for
+good. Once you have starred, a later day may bring one more card asking whether
+you'd like to tell people about Ghostex on X (**Post on X** or Dismiss); it
+never comes back after that. Settings > About always has a **Star on GitHub**
+row.
 
 Any agent can restyle Ghostex when you ask it ("make it darker", "give it a blue theme",
 "let more of my desktop show through"). It changes the settings on the Interface page with
