@@ -51,6 +51,12 @@ pub(crate) fn start_terminal_tag() {
     }
 }
 
+/// Whether Ghostex runs inside a Hyprland session (its request socket answers to the signature).
+pub(crate) fn running_on_hyprland() -> bool {
+    static ON_HYPRLAND: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON_HYPRLAND.get_or_init(|| instance_directory().is_some())
+}
+
 /// `$XDG_RUNTIME_DIR/hypr/<signature>` (Hyprland 0.40 and later), else `/tmp/hypr/<signature>`.
 fn instance_directory() -> Option<PathBuf> {
     let signature = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
