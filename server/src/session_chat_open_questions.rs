@@ -506,9 +506,18 @@ impl Ledger {
                     if !(inline || text.contains("```") || text.contains("~~~")) {
                         continue;
                     }
-                    // Only a fenced block naming questions can ask or withdraw any; one naming
+                    // Only a fenced block naming questions can ask or withdraw any, or a page that
+                    // waits to be seen (`awaitsSeen`, gx-chat-core's `Asker::seen_only`); one naming
                     // a drawing or a page is a resource too (the index lists them all).
-                    let asks = inline || text.contains("questions");
+                    //
+                    // CDXC:Coordinators 2026-11-14 WHY:
+                    // User: "when i do snooze 1h on this guy it keeps coming back omg pls fix!!!",
+                    // of a page published with `awaitsSeen` and no questions. Its reply was never
+                    // kept here, so the page was not open to gxserver while every client showed it
+                    // waiting, and each refresh forgot its snooze (`leave_out_later` keeps the
+                    // marks of open forms and pages only): it came back at the next turn.
+                    let asks =
+                        inline || text.contains("questions") || text.contains("awaitsSeen");
                     if !asks && !text.contains("visual") && !text.contains("vega") {
                         continue;
                     }
@@ -791,7 +800,9 @@ because what the reading keeps may have changed with it; a change to what
 // again.
 // 5: a work item ask's answer ("W358 Q2783: words") answers its tag (gx-chat-core's
 // `without_work_ref`), so `observe` keeps those messages; a copy without them is read again.
-const SAVED_LEDGER_FORMAT: u32 = 5;
+// 6: `observe` keeps the replies whose page waits to be seen (`awaitsSeen`), so a copy without
+// them is read again (CDXC:Coordinators 2026-11-14 in `Ledger::observe`).
+const SAVED_LEDGER_FORMAT: u32 = 6;
 const SAVED_LEDGERS_DIR: &str = "open-questions";
 const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
 const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);
@@ -1148,10 +1159,12 @@ pub(crate) fn refresh(
         settle_board_items(state, &db, project_id, session_id);
     }
     // For later questions still wait, but they are not counted and never notify. A mark whose
-    // question was answered, withdrawn or asked again is forgotten.
+    // question was answered, withdrawn or asked again is forgotten; a snooze still running is
+    // kept until its end whatever this reading says (`leave_out_later`).
     let (open, newly) = leave_out_removed(open, newly, &removed_ids(&session));
     let later = later_ids(&session);
-    let (open, newly, still) = leave_out_later(open, newly, &later);
+    let snoozed = snoozes_running(session.pointer(&format!("/runtimeSettings/{LATER_UNTIL_KEY}")));
+    let (open, newly, still) = leave_out_later(open, newly, &later, &snoozed);
     if !is_thread && still.len() != later.len() {
         let _ = write_later(state, &db, project_id, session_id, &still);
     }
@@ -1190,16 +1203,37 @@ fn leave_out_removed(
     )
 }
 
+/// The ids whose snooze has not ended yet, from a `LATER_UNTIL_KEY` object.
+fn snoozes_running(until: Option<&Value>) -> HashSet<String> {
+    let now = now_ms();
+    until
+        .and_then(Value::as_object)
+        .map(|map| {
+            map.iter()
+                .filter(|(_, at)| at.as_i64().is_some_and(|at| at > now))
+                .map(|(id, _)| id.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Splits the For later questions off: what is counted, what may notify, and the marks still worth
-/// keeping (those whose question still waits).
+/// keeping: those whose question still waits, and every snooze still running (`snoozed`), so a
+/// snooze holds until its end even for a form or page this reading does not hold (a reply a
+/// saved ledger read past, one it never kept); the clients drop an answered one themselves.
+///
+/// CDXC:Coordinators 2026-11-14 DECISION:
+/// User: "when i do snooze 1h on this guy it keeps coming back omg pls fix!!!". A snoozed row of
+/// any kind stays hidden until its time, on the computer and the phone.
 fn leave_out_later(
     open: Vec<OpenAsker>,
     newly: Vec<OpenAsker>,
     later: &[String],
+    snoozed: &HashSet<String>,
 ) -> (Vec<OpenAsker>, Vec<OpenAsker>, Vec<String>) {
     let still: Vec<String> = later
         .iter()
-        .filter(|id| open.iter().any(|asker| asker.id == **id))
+        .filter(|id| snoozed.contains(*id) || open.iter().any(|asker| asker.id == **id))
         .cloned()
         .collect();
     let counted = |asker: &OpenAsker| !later.contains(&asker.id);
@@ -1432,13 +1466,39 @@ mod tests {
         let open = vec![asker("a", 2), asker("b", 3)];
         let newly = vec![asker("b", 3)];
         let later = vec!["b".to_string(), "answered-since".to_string()];
-        let (counted, notify, still) = leave_out_later(open, newly, &later);
+        let (counted, notify, still) = leave_out_later(open, newly, &later, &HashSet::new());
         assert_eq!(counted.iter().map(OpenAsker::count).sum::<usize>(), 2);
         assert!(notify.is_empty());
         assert_eq!(
             still,
             vec!["b".to_string()],
             "a mark whose question settled is forgotten"
+        );
+    }
+
+    /// A snooze still running holds until its end even for a page this reading does not hold, so a
+    /// refresh (a new turn, the sweep) never brings it back early; one whose end passed is not kept
+    /// for that alone.
+    #[test]
+    fn a_running_snooze_is_kept_until_its_end_whatever_the_reading() {
+        let later = vec!["unread-page".to_string(), "ended".to_string()];
+        let until = json!({ "unread-page": now_ms() + 3_600_000, "ended": now_ms() - 1 });
+        let snoozed = snoozes_running(Some(&until));
+        let (_, _, still) = leave_out_later(Vec::new(), Vec::new(), &later, &snoozed);
+        assert_eq!(still, vec!["unread-page".to_string()]);
+    }
+
+    /// A page published to be marked seen (`awaitsSeen`, no questions) waits like a page that asks,
+    /// as every client shows it, so its For later mark and snooze are kept.
+    #[test]
+    fn a_page_that_waits_to_be_seen_is_open() {
+        let page = "```visual\n{\"page\":{\"title\":\"Report\",\"url\":\"http://127.0.0.1:1/visual/0123456789abcdef0123456789abcdef\",\"awaitsSeen\":true}}\n```";
+        let mut ledger = Ledger::default();
+        ledger.observe(vec![message("p", "assistant", 1, page)]);
+        let open = ledger.open(&[], None, |_| false);
+        assert_eq!(
+            open.iter().map(|asker| (asker.id.as_str(), asker.count())).collect::<Vec<_>>(),
+            vec![("0123456789abcdef0123456789abcdef", 1)]
         );
     }
 
