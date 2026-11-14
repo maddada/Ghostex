@@ -215,7 +215,8 @@ THREADS
   resolve marks a finished thread done and closes its session, so it leaves the
   sidebar; it refuses while the thread is working or waiting for an answer.
   Mark Thread Done and Reopen Thread on a thread's sidebar menu do the same.
-  --keep-open only marks it done and parks the session. A closed thread keeps
+  --keep-open only marks it done: its session stays open under its coordinator
+  (a coordinator's threads are never moved to Parked). A closed thread keeps
   its conversation: reopen resumes the same session and puts it back under its
   coordinator, and a message sent to it in its chat, by you or by its coordinator
   (`ghostex agents send <thread-ref> "<text>"`), resumes it the same way and

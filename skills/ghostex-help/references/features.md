@@ -3935,7 +3935,9 @@ version of the Projects features in Cursor and Claude Code.
   messages it, and the same conversation resumes under the coordinator with
   everything it knew. A message you send it in its chat reopens it the same
   way (typing in its terminal does not). Ask the coordinator to keep a thread open if you want to
-  look at it. You can do it yourself too: right-click a thread and choose
+  look at it. A done thread kept open stays under its coordinator:
+  Ghostex never moves a coordinator's thread to Parked (you still can, by
+  hand). You can do it yourself too: right-click a thread and choose
   **Mark Thread Done** (greyed out while it is working or waiting on you) to
   mark it done and close its session, or **Reopen Thread** on a done thread to
   resume it under its coordinator. On the phone, long-press the thread.

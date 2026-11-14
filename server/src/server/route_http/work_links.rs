@@ -216,10 +216,18 @@ async fn answer_work_cleanup(
         }
     }
 
-    let parked = answer == "cleanUp";
+    let mut parked = answer == "cleanUp";
     {
         let db = open_repository_db(state)?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        // CDXC:Coordinators 2026-11-14 WHY: a coordinator's thread is never moved to Parked by
+        // Ghostex, so it stays under its coordinator (coordinators/endpoint.rs `set_parked`); Clean
+        // up still removes its worktree and puts it to sleep.
+        if parked
+            && crate::coordinators::read_thread(&db, &project_id, &session_id)?.is_some()
+        {
+            parked = false;
+        }
         if parked {
             let mut update = Map::new();
             update.insert("projectId".to_string(), json!(project_id));

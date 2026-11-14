@@ -1364,4 +1364,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0078_drop_gemini_cli_agent",
         sql: include_str!("migrations/0078_drop_gemini_cli_agent.sql"),
     },
+    Migration {
+        id: "0079_unpark_done_coordinator_threads",
+        sql: include_str!("migrations/0079_unpark_done_coordinator_threads.sql"),
+    },
 ];
