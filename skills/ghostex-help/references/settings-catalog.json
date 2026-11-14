@@ -8787,6 +8787,20 @@
       "agentWritable": true
     },
     {
+      "key": "themeRoles",
+      "title": "Theme colours",
+      "subtitle": "Borders, dividers, grey text, the accent and the other theme colours, set apart for dark and light mode; a colour not set keeps the theme's own. Change them with `ghostex theme set`.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "json",
+      "default": {},
+      "agentWritable": false
+    },
+    {
       "key": "customSidebarTitlebarBackgroundDarknessPercent",
       "title": "Custom dark mode depth (set by Colourfulness)",
       "subtitle": "How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",

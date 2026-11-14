@@ -48,6 +48,26 @@ impl FindPalette {
     /// `light` is the app appearance and `glass` window glass. The window is the theme's chrome
     /// colour; under glass it is the app's frosted fill of it, with ink washes for raised fills.
     pub(crate) fn resolve(light: bool, glass: bool) -> Self {
+        Self::derive(light, glass).with_theme_roles(light)
+    }
+
+    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs).
+    fn with_theme_roles(mut self, light: bool) -> Self {
+        use crate::app::helpers::theme_role_or_rgba;
+        for line in [
+            &mut self.border,
+            &mut self.hairline,
+            &mut self.popover_border,
+            &mut self.field_border,
+            &mut self.pill_outline,
+        ] {
+            *line = theme_role_or_rgba("border", light, *line);
+        }
+        self.muted = theme_role_or_rgba("mutedText", light, self.muted);
+        self
+    }
+
+    fn derive(light: bool, glass: bool) -> Self {
         let chrome: Rgba = if light {
             modal_rgba(0xffffff, 1.0)
         } else {

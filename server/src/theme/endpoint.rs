@@ -281,6 +281,37 @@ async fn set(
     let mut items = Vec::new();
     let mut problems = Vec::new();
     for (key, raw) in changes {
+        if let Some(targets) = look::role_targets(key) {
+            let paths = match targets {
+                Ok(paths) => paths,
+                Err(message) => {
+                    problems.push(message);
+                    continue;
+                }
+            };
+            let after = match look::role_value(&raw_value(raw)) {
+                Ok(value) => value,
+                Err(message) => {
+                    problems.push(message);
+                    continue;
+                }
+            };
+            for path in paths {
+                let before = look::current(&settings, &path);
+                if before == after {
+                    continue;
+                }
+                items.push(Item {
+                    title: look::role_title(&path),
+                    before_shown: look::role_shown(&before),
+                    after_shown: look::role_shown(&after),
+                    key: path,
+                    before,
+                    after: after.clone(),
+                });
+            }
+            continue;
+        }
         let entry = match look::look_entry(key, &settings) {
             Ok(entry) => entry,
             Err(message) => {
@@ -314,10 +345,10 @@ async fn set(
     if items.is_empty() {
         return Ok(json!({ "unchanged": true }));
     }
-    let patch: Map<String, Value> = items
-        .iter()
-        .map(|item| (item.key.clone(), item.after.clone()))
-        .collect();
+    let patch = look::patch_for(
+        &settings,
+        items.iter().map(|item| (item.key.as_str(), &item.after)),
+    );
     save(state, patch).await?;
     let saved = read_settings(state)?;
     let keys: Vec<String> = items.iter().map(|item| item.key.clone()).collect();
@@ -372,20 +403,15 @@ async fn undo_or_redo(
     if let Some((code, message)) = problem(&change, &settings, undo) {
         return Err(error(code, message));
     }
-    let patch: Map<String, Value> = change
-        .items
-        .iter()
-        .map(|item| {
+    let patch = look::patch_for(
+        &settings,
+        change.items.iter().map(|item| {
             (
-                item.key.clone(),
-                if undo {
-                    item.before.clone()
-                } else {
-                    item.after.clone()
-                },
+                item.key.as_str(),
+                if undo { &item.before } else { &item.after },
             )
-        })
-        .collect();
+        }),
+    );
     save(state, patch).await?;
     journal::mark(
         state_dir(state),

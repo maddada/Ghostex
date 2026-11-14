@@ -110,7 +110,7 @@ impl ChatAppearance {
             self.composer_border = wash(true, 0.08);
             self.card_row = self.input;
         }
-        self
+        self.with_theme_roles()
     }
 
     /// CDXC:Theming 2026-09-23 DECISION:
@@ -204,6 +204,25 @@ impl ChatAppearance {
     }
 
     fn resolve(state: &serde_json::Value, light: bool) -> Self {
+        Self::derive(state, light).with_theme_roles()
+    }
+
+    /// The theme roles the user or an agent set (helpers/theme_roles.rs) over the derived colours:
+    /// Borders paints every outline, Grey text the muted text. A role not set keeps the colour.
+    fn with_theme_roles(mut self) -> Self {
+        let light = self.light;
+        if let Some(border) = crate::app::helpers::theme_role_rgba("border", light) {
+            let border = Hsla::from(border);
+            self.border = border;
+            self.input_border = border;
+            self.control_border = border;
+            self.composer_border = border;
+        }
+        self.muted = crate::app::helpers::theme_role_or("mutedText", light, self.muted);
+        self
+    }
+
+    fn derive(state: &serde_json::Value, light: bool) -> Self {
         let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
         let settings = snapshot.object();
         let color = |dark, light_color| rgb(if light { light_color } else { dark }).into();

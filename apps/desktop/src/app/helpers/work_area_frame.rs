@@ -82,11 +82,13 @@ pub(crate) fn work_area_frame_gutter_width() -> f32 {
 
 /// The card's 1pt border: the theme's divider line in light mode (its glass variant under glass),
 /// the chrome ink at 6% in dark mode and under dark glass.
+/// The Dividers theme role replaces it when set (helpers/theme_roles.rs).
 pub(crate) fn work_area_frame_border_color() -> Hsla {
-    if chrome_uses_light_appearance() {
+    let light = chrome_uses_light_appearance();
+    if light {
         sidebar_divider_line_color()
     } else {
-        Hsla::from(chrome_ink()).opacity(0.06)
+        theme_role_or("divider", light, Hsla::from(chrome_ink()).opacity(0.06))
     }
 }
 

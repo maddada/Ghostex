@@ -94,6 +94,7 @@ pub(crate) fn refresh_gpui_visual_settings(
 ) {
     let object = settings.object();
     CHROME_LIGHT_APPEARANCE.store(sidebar_uses_light_theme(object), Ordering::Relaxed);
+    apply_theme_roles(object);
     SHOW_ACTIVE_PANE_OUTLINE.store(
         object
             .get("showActivePaneOutline")

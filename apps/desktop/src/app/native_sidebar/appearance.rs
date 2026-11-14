@@ -63,18 +63,23 @@ impl SidebarAppearance {
             } else {
                 rgb(0xffffff).opacity(0.12).into()
             },
-            session_outline: chrome_ink()
-                .opacity(if light_glass {
-                    0.10
-                } else if light {
-                    0.22
-                } else {
-                    0.08
-                })
-                .into(),
+            // The Borders and Grey text theme roles, when set (helpers/theme_roles.rs).
+            session_outline: theme_role_or(
+                "border",
+                light,
+                chrome_ink()
+                    .opacity(if light_glass {
+                        0.10
+                    } else if light {
+                        0.22
+                    } else {
+                        0.08
+                    })
+                    .into(),
+            ),
             tooltip_delay: tooltip_delay_from_hud(hud),
             foreground: chrome_color(0xb4b8c0, 0x262626).into(),
-            muted: chrome_color(0x7c828c, 0x6b7280).into(),
+            muted: theme_role_or("mutedText", light, chrome_color(0x7c828c, 0x6b7280).into()),
             chrome_icon: titlebar_icon_color(),
             chrome_label: titlebar_text_color(),
             selected: if light_glass {
@@ -82,7 +87,7 @@ impl SidebarAppearance {
             } else {
                 rgb(0xffffff).opacity(if light { 1.0 } else { 0.12 }).into()
             },
-            selected_outline: chrome_ink()
+            selected_outline: theme_role_or("border", light, chrome_ink()
                 .opacity(if light_glass {
                     0.10
                 } else if light {
@@ -90,7 +95,7 @@ impl SidebarAppearance {
                 } else {
                     0.08
                 })
-                .into(),
+                .into()),
             selected_highlight: rgb(0xffffff).opacity(if light { 0.6 } else { 0.04 }).into(),
             hover: rgb(0x808080).opacity(0.12).into(),
             // Under window glass these are washes of the same ink rather than opaque blends of the

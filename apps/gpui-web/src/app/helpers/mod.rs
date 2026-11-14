@@ -9,6 +9,7 @@ pub(crate) mod clipboard_read;
 pub(crate) mod drag_ghost;
 pub(crate) mod indicator_animation;
 pub(crate) mod markdown_table_csv;
+pub(crate) mod theme_roles;
 #[allow(dead_code, unused_imports)]
 pub(crate) mod titlebar {
     use crate::app::helpers::*;
@@ -47,6 +48,7 @@ pub(crate) use crate::data_url_image::{
 };
 pub(crate) use agents_hub::*;
 pub(crate) use chrome_palette::*;
+pub(crate) use theme_roles::*;
 pub(crate) use clipboard_read::*;
 pub(crate) use drag_ghost::*;
 pub(crate) use ids::*;

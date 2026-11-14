@@ -73,6 +73,19 @@ const DEFAULT_GHOSTEX_ACCENT: u32 = 0x86d3f8;
 
 impl SettingsPalette {
     pub(crate) fn resolve(modal: &ModalPalette) -> Self {
+        Self::derive(modal).with_theme_roles()
+    }
+
+    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs).
+    fn with_theme_roles(mut self) -> Self {
+        use crate::app::helpers::theme_role_or_rgba;
+        self.hairline = theme_role_or_rgba("border", self.light, self.hairline);
+        self.popup_border = theme_role_or_rgba("border", self.light, self.popup_border);
+        self.muted = theme_role_or_rgba("mutedText", self.light, self.muted);
+        self
+    }
+
+    fn derive(modal: &ModalPalette) -> Self {
         let modal = *modal;
         let foreground = modal.foreground;
         if modal.glass && !modal.light {
@@ -245,6 +258,7 @@ impl SettingsPalette {
             focus_border: css_mix(self.foreground, 0.58, washes.hairline),
             ..*self
         }
+        .with_theme_roles()
     }
 
     /// `color-mix(in srgb, var(--settings-raised) 82%, transparent)`: text inputs.

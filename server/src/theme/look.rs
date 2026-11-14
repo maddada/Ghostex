@@ -2,6 +2,10 @@
 //! agent may write, in the groups `ghostex theme read` shows them in, with the words each value is
 //! shown in.
 
+use ghostex_settings_catalog::theme_roles::{
+    appearance_key, format_role_value, parse_role_value, theme_role, ThemeRole, THEME_ROLES,
+    THEME_ROLES_SETTING,
+};
 use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::settings::{self as catalog, CatalogEntry};
@@ -114,8 +118,131 @@ pub(crate) fn look_entry(
     Ok(entry)
 }
 
-/// The value `key` has: the saved one, else its default.
+/// How a theme role is named in a change and the history: `themeRoles.<dark|light>.<role>`.
+const ROLE_PATH_PREFIX: &str = "themeRoles.";
+
+/// The appearance and role a `themeRoles.<dark|light>.<role>` path names.
+fn role_path(key: &str) -> Option<(bool, &'static ThemeRole)> {
+    let (appearance, role) = key.strip_prefix(ROLE_PATH_PREFIX)?.split_once('.')?;
+    let light = match appearance {
+        "dark" => false,
+        "light" => true,
+        _ => return None,
+    };
+    Some((light, theme_role(role)?))
+}
+
+/// The role paths a `set` key names, or `None` when it names no role: `dark.border` or
+/// `light.border` one appearance, a bare `border` both.
+pub(crate) fn role_targets(key: &str) -> Option<Result<Vec<String>, String>> {
+    let key = key.trim().trim_start_matches(ROLE_PATH_PREFIX);
+    let (appearances, role): (&[&str], &str) = match key.split_once('.') {
+        Some(("dark", role)) => (&["dark"], role),
+        Some(("light", role)) => (&["light"], role),
+        Some((other, _)) => {
+            return Some(Err(format!(
+                "\"{other}\" is not an appearance: write dark.<role> or light.<role>."
+            )))
+        }
+        None => (&["dark", "light"], key),
+    };
+    if theme_role(role).is_none() {
+        if key.contains('.') {
+            return Some(Err(format!(
+                "\"{role}\" is not a theme colour. `ghostex theme read` lists them: {}.",
+                THEME_ROLES
+                    .iter()
+                    .map(|role| role.id)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+        return None;
+    }
+    Some(Ok(appearances
+        .iter()
+        .map(|appearance| format!("{ROLE_PATH_PREFIX}{appearance}.{role}"))
+        .collect()))
+}
+
+/// "Borders in dark mode".
+pub(crate) fn role_title(key: &str) -> String {
+    role_path(key)
+        .map(|(light, role)| {
+            format!(
+                "{} in {} mode",
+                role.title,
+                if light { "light" } else { "dark" }
+            )
+        })
+        .unwrap_or_else(|| key.to_string())
+}
+
+/// A role's new value from what `set` was given: `default` (or `reset`) takes the role off.
+pub(crate) fn role_value(raw: &str) -> Result<Value, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "default" | "reset" | "none" => Ok(Value::Null),
+        _ => parse_role_value(raw).map(|value| Value::String(format_role_value(value))),
+    }
+}
+
+/// A role's value as the history and the card show it.
+pub(crate) fn role_shown(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| "default".to_string())
+}
+
+/// The settings patch that saves `values` (keys as changes name them): a role path goes into the
+/// one `themeRoles` setting, taken off when its value is `null`.
+pub(crate) fn patch_for<'a>(
+    settings: &Map<String, Value>,
+    values: impl IntoIterator<Item = (&'a str, &'a Value)>,
+) -> Map<String, Value> {
+    let mut patch = Map::new();
+    let mut roles: Option<Map<String, Value>> = None;
+    for (key, value) in values {
+        let Some((light, role)) = role_path(key) else {
+            patch.insert(key.to_string(), value.clone());
+            continue;
+        };
+        let roles = roles.get_or_insert_with(|| {
+            settings
+                .get(THEME_ROLES_SETTING)
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default()
+        });
+        let appearance = roles
+            .entry(appearance_key(light))
+            .or_insert_with(|| Value::Object(Map::new()));
+        if !appearance.is_object() {
+            *appearance = Value::Object(Map::new());
+        }
+        if let Some(appearance) = appearance.as_object_mut() {
+            if value.is_null() {
+                appearance.remove(role.id);
+            } else {
+                appearance.insert(role.id.to_string(), value.clone());
+            }
+        }
+    }
+    if let Some(mut roles) = roles {
+        roles.retain(|_, appearance| appearance.as_object().is_none_or(|map| !map.is_empty()));
+        patch.insert(THEME_ROLES_SETTING.to_string(), Value::Object(roles));
+    }
+    patch
+}
+
+/// The value `key` has: the saved one, else its default. A role path reads that role, `null`
+/// while it is not set.
 pub(crate) fn current(settings: &Map<String, Value>, key: &str) -> Value {
+    if let Some((light, role)) = role_path(key) {
+        return ghostex_settings_catalog::theme_roles::saved_role(settings, light, role.id)
+            .map(|value| Value::String(value.to_string()))
+            .unwrap_or(Value::Null);
+    }
     match settings.get(key) {
         Some(value) if !value.is_null() => value.clone(),
         _ => catalog::find_entry(key)
@@ -178,11 +305,34 @@ fn entry_json(entry: &CatalogEntry, settings: &Map<String, Value>) -> Value {
     object
 }
 
-/// Every look setting, grouped: `[{id, title, settings: [...]}]`.
+/// The theme colours as `ghostex theme read` lists them: each role with its dark and light value
+/// (`null` while it keeps the theme's own).
+fn roles_group(settings: &Map<String, Value>) -> Value {
+    let rows: Vec<Value> = THEME_ROLES
+        .iter()
+        .map(|role| {
+            json!({
+                "key": role.id,
+                "title": role.title,
+                "about": role.about,
+                "dark": current(settings, &format!("{ROLE_PATH_PREFIX}dark.{}", role.id)),
+                "light": current(settings, &format!("{ROLE_PATH_PREFIX}light.{}", role.id)),
+            })
+        })
+        .collect();
+    json!({
+        "id": "roles",
+        "title": "Theme colours",
+        "about": "Each one an opacity of the text colour over what is under it (4%), which stays see-through on glass, or a colour (#7dd3fc, or #7dd3fc80 with its opacity); default keeps the theme's own.",
+        "roles": rows,
+    })
+}
+
+/// Every look setting, grouped: `[{id, title, settings: [...]}]`, then the theme colours
+/// (`{id: "roles", roles: [...]}`).
 pub(crate) fn grouped(settings: &Map<String, Value>) -> Value {
     let entries = look_entries(settings);
-    Value::Array(
-        GROUPS
+    let mut groups: Vec<Value> = GROUPS
             .iter()
             .filter_map(|(id, title, _)| {
                 let rows: Vec<Value> = entries
@@ -192,6 +342,7 @@ pub(crate) fn grouped(settings: &Map<String, Value>) -> Value {
                     .collect();
                 (!rows.is_empty()).then(|| json!({ "id": id, "title": title, "settings": rows }))
             })
-            .collect(),
-    )
+            .collect();
+    groups.push(roles_group(settings));
+    Value::Array(groups)
 }

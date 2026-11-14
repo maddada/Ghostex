@@ -760,6 +760,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("lightThemePreset", J::Str("gray")),
     ("themeSidebarContrast", J::Num(0.0)),
     ("themeWorkAreaContrast", J::Num(0.0)),
+    ("themeRoles", J::Obj(&[])),
     (
         "customSidebarTitlebarLightBackgroundTintColor",
         J::Str("#808080"),

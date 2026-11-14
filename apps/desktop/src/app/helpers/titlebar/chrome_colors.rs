@@ -100,13 +100,14 @@ pub(crate) fn view_strip_drop_line_color() -> Hsla {
     .into()
 }
 
+/// The Dividers theme role replaces it when set (helpers/theme_roles.rs).
 pub(crate) fn titlebar_button_border_color() -> Hsla {
-    rgb(if titlebar_uses_light_theme() {
-        0xd4d4d4
-    } else {
-        0x252525
-    })
-    .into()
+    let light = titlebar_uses_light_theme();
+    theme_role_or(
+        "divider",
+        light,
+        rgb(if light { 0xd4d4d4 } else { 0x252525 }).into(),
+    )
 }
 
 pub(crate) fn titlebar_button_hover_color() -> Hsla {
@@ -184,10 +185,15 @@ pub(crate) fn titlebar_popup_menu_hover_color() -> Hsla {
 
 /// A menu's or tooltip's outline: a faint ink line, fainter still on the frosted menus of window
 /// glass, where it only has to catch the edge of the blur.
+/// The Borders theme role replaces it when set (helpers/theme_roles.rs).
 pub(crate) fn titlebar_popup_menu_border_color() -> Hsla {
-    titlebar_overlay_base()
-        .opacity(if window_glass_active() { 0.10 } else { 0.12 })
-        .into()
+    theme_role_or(
+        "border",
+        titlebar_uses_light_theme(),
+        titlebar_overlay_base()
+            .opacity(if window_glass_active() { 0.10 } else { 0.12 })
+            .into(),
+    )
 }
 
 pub(crate) fn apply_gpui_component_theme(cx: &mut App) {

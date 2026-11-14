@@ -97,7 +97,8 @@ impl KanbanPalette {
             control,
             control_hover,
             panel,
-            border,
+            // The Borders theme role, when set (helpers/theme_roles.rs).
+            border: crate::app::helpers::theme_role_or("border", light, border),
             border_strong: ink(light, if light { 0.16 } else { 0.18 }),
             foreground: chat.foreground,
             primary: chat.primary,

@@ -65,6 +65,18 @@ pub(crate) mod helpers {
     /// The app's spinner rate (app/helpers/indicator_animation.rs).
     pub(crate) const INDICATOR_MAX_FPS: f32 = 30.0;
 
+    /// The app's theme roles (app/helpers/theme_roles.rs): a preview sets none, so every palette
+    /// keeps the colour it derives.
+    pub(crate) fn theme_role_rgba(_id: &str, _light: bool) -> Option<gpui::Rgba> {
+        None
+    }
+    pub(crate) fn theme_role_or(_id: &str, _light: bool, fallback: Hsla) -> Hsla {
+        fallback
+    }
+    pub(crate) fn theme_role_or_rgba(_id: &str, _light: bool, fallback: gpui::Rgba) -> gpui::Rgba {
+        fallback
+    }
+
     pub(crate) fn titlebar_active_text_color() -> Hsla {
         rgb(0xffffff).into()
     }

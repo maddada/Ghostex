@@ -762,6 +762,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "themeRoles",
+        tab: THEME,
+        group: Some("appearance"),
+        section: "theming",
+        section_title: "Interface",
+        title: "Theme colours",
+        subtitle: "Borders, dividers, grey text, the accent and the other theme colours, set apart for dark and light mode; a colour not set keeps the theme's own. Change them with `ghostex theme set`.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "customSidebarTitlebarBackgroundDarknessPercent",
         tab: THEME,
         group: Some("appearance"),

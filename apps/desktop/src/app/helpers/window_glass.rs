@@ -994,12 +994,14 @@ pub(crate) fn glass_card(color: Hsla, strength: f32) -> Hsla {
 
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User picked "23a": under window glass the divider lines stay, but as faint see-through 1px lines like the chat composer's border (the chrome ink at 8%), instead of solid dark or light grey lines that read as grooves cut into the glass. Pane borders, resize rails, the sidebar edge and the command pane's edges all take it; focus and attention outlines and the resize hover highlight keep their colours. The opaque window keeps the given colour.
+/// The Dividers theme role replaces both when it is set (helpers/theme_roles.rs).
 pub(crate) fn glass_divider(color: Hsla) -> Hsla {
-    if window_glass_active() {
+    let derived = if window_glass_active() {
         Hsla::from(chrome_ink()).opacity(0.08)
     } else {
         color
-    }
+    };
+    theme_role_or("divider", chrome_uses_light_appearance(), derived)
 }
 
 /// The body row behind the sidebar, its divider and the workspace column. Opaque, it is the

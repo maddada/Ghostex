@@ -233,10 +233,24 @@ impl ModalPalette {
         palette.raised = washes.raised;
         palette.raised_hover = washes.raised_hover;
         palette.hairline = washes.hairline;
-        palette
+        palette.with_theme_roles()
+    }
+
+    /// The Borders and Grey text theme roles over the derived colours (helpers/theme_roles.rs):
+    /// Borders paints the hairlines and menu borders, Grey text the muted text.
+    pub(crate) fn with_theme_roles(mut self) -> Self {
+        use crate::app::helpers::theme_role_or_rgba;
+        self.hairline = theme_role_or_rgba("border", self.light, self.hairline);
+        self.menu_border = theme_role_or_rgba("border", self.light, self.menu_border);
+        self.muted = theme_role_or_rgba("mutedText", self.light, self.muted);
+        self
     }
 
     pub(crate) fn resolve(light: bool, sidebar_theme: Option<&str>) -> Self {
+        Self::derive(light, sidebar_theme).with_theme_roles()
+    }
+
+    fn derive(light: bool, sidebar_theme: Option<&str>) -> Self {
         if light {
             Self {
                 surface: rgb(0xffffff),

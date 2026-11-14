@@ -152,7 +152,12 @@ impl GhostexGpuiApp {
             .px(px(6.0))
             .bg(glass_clear(project_editor_shell_background_color()))
             .border_b_1()
-            .border_color(titlebar_split_button_border_color())
+            // The line under the strip is a divider (the Dividers theme role, helpers/theme_roles.rs).
+            .border_color(theme_role_or(
+                "divider",
+                chrome_uses_light_appearance(),
+                titlebar_split_button_border_color(),
+            ))
             .text_color(titlebar_text_color())
             .font_family(crate::ui_fonts::UI_FONT)
             // A page released over the row but not on a tab lands where the drop line is, as the

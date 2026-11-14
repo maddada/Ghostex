@@ -2,6 +2,7 @@
 //! own tokens; under window glass the fills become light washes of
 //! the text ink, the way the native Kanban's do, so the frosted work area shows through.
 
+use crate::app::helpers::theme_role_or;
 use gpui::{Hsla, rgb};
 
 #[derive(Clone)]
@@ -92,7 +93,7 @@ impl DocsPalette {
             floating: solid_chrome,
             raised: pick(light, 0xffffff, 0x161616),
             text: pick(light, 0x27272a, 0xe5e5e5),
-            muted: pick(light, 0x626269, 0xa3a3a3),
+            muted: theme_role_or("mutedText", light, pick(light, 0x626269, 0xa3a3a3)),
             subtle: pick(light, 0x71717a, 0x808080),
             accent: pick(light, 0x315d88, 0x9bbce0),
             row_surface: if glass {
@@ -111,18 +112,27 @@ impl DocsPalette {
             toolbar_icon: pick(light, 0x3f3f46, 0xa3a3a3),
             toolbar_disabled: pick(light, 0xb5b5bd, 0x55555d),
             control_hover: ink(light, 0.08),
-            border: ink(light, 0.11),
+            // The Borders, Dividers and Grey text theme roles, when set (helpers/theme_roles.rs).
+            border: theme_role_or("border", light, ink(light, 0.11)),
             border_strong: ink(light, 0.12),
-            rule: if glass {
-                ink(light, 0.08)
-            } else {
-                pick(light, 0xe5e5e5, 0x292929)
-            },
-            divider: if glass {
-                ink(light, 0.08)
-            } else {
-                pick(light, 0xe5e5e5, 0x212121)
-            },
+            rule: theme_role_or(
+                "divider",
+                light,
+                if glass {
+                    ink(light, 0.08)
+                } else {
+                    pick(light, 0xe5e5e5, 0x292929)
+                },
+            ),
+            divider: theme_role_or(
+                "divider",
+                light,
+                if glass {
+                    ink(light, 0.08)
+                } else {
+                    pick(light, 0xe5e5e5, 0x212121)
+                },
+            ),
             danger: pick(light, 0xbe123c, 0xfda4af),
             green: pick(light, 0x15803d, 0x86efac),
             amber: rgb(0xfbbf24).into(),

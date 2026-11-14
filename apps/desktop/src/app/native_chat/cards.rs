@@ -93,9 +93,14 @@ impl SingleLineCard {
         (self.height - 2.0) * s
     }
 
-    /// The shell's hairline colour, for a divider inside an opened card.
+    /// The shell's hairline colour, for a divider inside an opened card: the Borders theme role
+    /// when it is set (helpers/theme_roles.rs).
     pub(super) fn hairline(&self, p: &ChatAppearance) -> gpui::Hsla {
-        p.foreground.opacity(self.border_alpha)
+        crate::app::helpers::theme_role_or(
+            "border",
+            p.light,
+            p.foreground.opacity(self.border_alpha),
+        )
     }
 
     /// The shell's fill laid over the transcript, for an edge fade inside the card.
@@ -109,7 +114,7 @@ impl SingleLineCard {
         element
             .rounded(px(self.radius * p.scale))
             .border(px(p.scale))
-            .border_color(p.foreground.opacity(self.border_alpha))
+            .border_color(self.hairline(p))
             .bg(p.input.opacity(self.fill_input_alpha))
     }
 

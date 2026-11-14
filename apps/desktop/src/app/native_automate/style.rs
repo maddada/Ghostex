@@ -66,11 +66,12 @@ impl AutomatePalette {
             font: chat.font.clone(),
             page,
             card,
-            border: if glass {
-                ink.opacity(0.08)
-            } else {
-                chat.border
-            },
+            // The Borders theme role, when set (helpers/theme_roles.rs).
+            border: crate::app::helpers::theme_role_or(
+                "border",
+                chat.light,
+                if glass { ink.opacity(0.08) } else { chat.border },
+            ),
             hover: ink.opacity(0.04),
             selected: ink.opacity(if glass { 0.08 } else { 0.06 }),
             foreground: chat.foreground,

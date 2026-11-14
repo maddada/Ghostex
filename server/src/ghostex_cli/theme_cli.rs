@@ -13,15 +13,16 @@ pub(crate) const THEME_HELP: &str =
 
 Usage:
   gx theme [read] [--json]
-  gx theme set <key>=<value> [<key>=<value> ...] [--json]
+  gx theme set <key>=<value> [<key>=<value> ...] [--dark|--light] [--json]
   gx theme undo [<change-id>] [--json]
   gx theme redo [<change-id>] [--json]
   gx theme history [--json]
 
 read     Every look setting on Settings > Interface, grouped, with its current
          value and what it does, and anything the current look makes hard to read.
-set      Changes one or more look settings as one change, saved at once in the
-         running app. Values are read as `ghostex settings set` reads them.
+set      Changes one or more look settings or theme colours as one change, saved
+         at once in the running app. Values are read as `ghostex settings set`
+         reads them.
          Prints what changed and anything it made hard to read; the change is
          saved either way. In an agent's chat it shows a Theme changed card
          with Undo.
@@ -30,14 +31,23 @@ undo     Puts back what the newest change (or <change-id>) replaced. Refused
 redo     Applies the newest undone change (or <change-id>) again.
 history  The last 20 changes: when, who made them and what they changed.
 
+Theme colours:
+  border, divider, text, mutedText, accent, surface, control, menu, selection,
+  hover, focusRing, userMessage, chatBox, success, warning, danger. Name one
+  as dark.<colour> or light.<colour>; a bare name sets both, or the
+  appearance --dark or --light picks. A value is an opacity of the text
+  colour over what is under it (4%: see-through, right on glass and off it),
+  or a colour (#7dd3fc, #7dd3fc80 with its opacity); default puts the
+  theme's own back.
+
 Limits:
-  Only the settings `read` lists can change. Borders, dividers and grey text
-  have no setting yet. You can't see the result: make small changes and ask
-  the user how it looks.
+  Only the settings and colours `read` lists can change. You can't see the
+  result: make small changes and ask the user how it looks.
 
 Examples:
   gx theme set darkThemePreset=blue themeSidebarContrast=-6
-  gx theme set windowGlass=frosted windowGlassSidebarOpacityDark=85
+  gx theme set --dark border=4% divider=3%
+  gx theme set light.mutedText=#6b7280 accent=default
   gx theme undo
 ";
 
@@ -93,6 +103,22 @@ fn read(flags: &Flags) -> CliResult<()> {
     }
     for group in answer["groups"].as_array().into_iter().flatten() {
         println!("{}", text(group, "title"));
+        if let Some(roles) = group["roles"].as_array() {
+            println!("  {}", text(group, "about"));
+            for role in roles {
+                let shown = |value: &Value| value.as_str().unwrap_or("default").to_string();
+                println!(
+                    "  {}    {}: dark {}, light {}",
+                    text(role, "key"),
+                    text(role, "title"),
+                    shown(&role["dark"]),
+                    shown(&role["light"]),
+                );
+                println!("      {}", text(role, "about"));
+            }
+            println!();
+            continue;
+        }
         for setting in group["settings"].as_array().into_iter().flatten() {
             let options = setting["options"]
                 .as_array()
@@ -134,7 +160,25 @@ fn read(flags: &Flags) -> CliResult<()> {
     Ok(())
 }
 
-fn set(rest: &[String], flags: &Flags) -> CliResult<()> {
+/// `--dark` or `--light`: the appearance of the theme colours named without one. Taken out before
+/// the flags are read, since the generic reader would take the next `key=value` as its value.
+fn appearance_flag(args: &[String]) -> (Option<&'static str>, Vec<String>) {
+    let dark = args.iter().any(|arg| arg == "--dark");
+    let light = args.iter().any(|arg| arg == "--light");
+    let rest = args
+        .iter()
+        .filter(|arg| *arg != "--dark" && *arg != "--light")
+        .cloned()
+        .collect();
+    let appearance = match (dark, light) {
+        (true, false) => Some("dark"),
+        (false, true) => Some("light"),
+        _ => None,
+    };
+    (appearance, rest)
+}
+
+fn set(rest: &[String], flags: &Flags, appearance: Option<&str>) -> CliResult<()> {
     let mut changes = Map::new();
     for pair in rest {
         let Some((key, value)) = pair.split_once('=') else {
@@ -142,7 +186,16 @@ fn set(rest: &[String], flags: &Flags) -> CliResult<()> {
                 "\"{pair}\" is not <key>=<value>. Example: ghostex theme set darkThemePreset=blue"
             )));
         };
-        changes.insert(key.trim().to_string(), json!(value));
+        let key = key.trim();
+        let key = match appearance {
+            Some(appearance)
+                if ghostex_settings_catalog::theme_roles::theme_role(key).is_some() =>
+            {
+                format!("{appearance}.{key}")
+            }
+            _ => key.to_string(),
+        };
+        changes.insert(key, json!(value));
     }
     if changes.is_empty() {
         return Err(CliError::Other(
@@ -237,7 +290,8 @@ fn history(flags: &Flags) -> CliResult<()> {
 }
 
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
-    let parsed = parse_args(args);
+    let (appearance, args) = appearance_flag(args);
+    let parsed = parse_args(&args);
     let flags = parsed.flags.clone();
     if flags.contains("help") || flags.contains("h") {
         print!("{THEME_HELP}");
@@ -248,7 +302,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let tail = rest.get(1..).unwrap_or_default();
     match verb {
         "read" | "show" | "get" => read(&flags),
-        "set" => set(tail, &flags),
+        "set" => set(tail, &flags, appearance),
         "undo" => undo_or_redo("undo", tail, &flags),
         "redo" => undo_or_redo("redo", tail, &flags),
         "history" | "changes" => history(&flags),

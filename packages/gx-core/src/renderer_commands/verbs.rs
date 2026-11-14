@@ -431,6 +431,10 @@ pub fn settings_patch_value_allowed(key: &str, value: &Value) -> bool {
         Value::Object(hotkeys) if key == "hotkeys" => {
             hotkeys.len() <= SETTINGS_PATCH_MAX_HOTKEYS && hotkeys.values().all(Value::is_string)
         }
+        // The theme roles `ghostex theme set` saves whole (settings-catalog theme_roles.rs).
+        Value::Object(_) if key == ghostex_settings_catalog::theme_roles::THEME_ROLES_SETTING => {
+            ghostex_settings_catalog::theme_roles::theme_roles_value_allowed(value)
+        }
         // CDXC:SettingsSync 2026-11-12 WHY: Sidebar organization carries the sidebar's two list
         // settings (gx-core settings_sync/settings_keys.rs), so they are the lists a patch takes.
         Value::Array(order) if key == "unifiedProjectOrder" => {
