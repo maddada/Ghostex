@@ -14905,6 +14905,14 @@
       "noTerminalBinding": true
     },
     {
+      "id": "toggleAnnotate",
+      "title": "Annotate",
+      "description": "Turn Annotate on or off for the HTML file in Files or the Browser page you are on, or comment on the text you selected in a Markdown file in Files.",
+      "defaultKey": "cmd+ctrl+a",
+      "windowsLinuxDefaultKey": "alt+shift+a",
+      "noTerminalBinding": true
+    },
+    {
       "id": "sleepFocusedSessionSecondKey",
       "title": "Sleep Focused Session (Second Key)",
       "description": "A second key that sleeps the focused terminal session.",

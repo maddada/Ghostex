@@ -350,7 +350,7 @@ impl GhostexGpuiApp {
                            icon: &'static str,
                            color: &str,
                            light_color: &str,
-                           tooltip: &'static str| {
+                           tooltip: gpui::SharedString| {
             let tint = hex(if light { light_color } else { color }, 1.0);
             div()
                 .id(id)
@@ -362,7 +362,7 @@ impl GhostexGpuiApp {
                 .cursor_pointer()
                 .hover(move |style| style.bg(tint.opacity(0.16)))
                 .child(titlebar_svg_icon(icon, 17.0, tint))
-                .tooltip(move |window, cx| titlebar_tooltip(tooltip, window, cx))
+                .tooltip(move |window, cx| titlebar_tooltip(tooltip.clone(), window, cx))
         };
         let buttons: Vec<AnyElement> = if self.native_docs.toolbar_formatting {
             let format = |id: &'static str,
@@ -370,7 +370,7 @@ impl GhostexGpuiApp {
                           tooltip: &'static str,
                           before: &'static str,
                           after: &'static str| {
-                button(id, icon, "#ededed", "#3f3f46", tooltip)
+                button(id, icon, "#ededed", "#3f3f46", tooltip.into())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.native_docs_wrap_selection(before, after, window, cx);
                     }))
@@ -382,7 +382,7 @@ impl GhostexGpuiApp {
                     "files-view/t-messages-2.svg",
                     "#ededed",
                     "#3f3f46",
-                    "Annotations",
+                    "Annotations".into(),
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.native_docs.toolbar_formatting = false;
@@ -428,7 +428,7 @@ impl GhostexGpuiApp {
                          dark: &str,
                          light_color: &str,
                          tooltip: &'static str| {
-                button(id, icon, dark, light_color, tooltip)
+                button(id, icon, dark, light_color, tooltip.into())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.native_docs_quick_note(DocsAnnotationType::Comment, Some(label), cx);
                     }))
@@ -440,7 +440,12 @@ impl GhostexGpuiApp {
                     "files-view/t-message-plus-2.svg",
                     "#e2b340",
                     "#926b0e",
-                    "Comment (C)",
+                    // The Annotate hotkey comments on a keyboard selection too (CDXC:Docs
+                    // 2026-11-14 DECISION in packages/settings-catalog/src/hotkey_definitions.rs).
+                    crate::app::helpers::titlebar_tooltip_label(
+                        "Comment, or C",
+                        super::annotate::ANNOTATE_HOTKEY_ID,
+                    ),
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.native_docs_open_composer(None, None, "", cx);
@@ -451,7 +456,7 @@ impl GhostexGpuiApp {
                     "titlebar/typography.svg",
                     "#ededed",
                     "#3f3f46",
-                    "Formatting",
+                    "Formatting".into(),
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.native_docs.toolbar_formatting = true;
@@ -487,7 +492,7 @@ impl GhostexGpuiApp {
                     "titlebar/x.svg",
                     "#f87171",
                     "#dc2626",
-                    "Remove this (D)",
+                    "Remove this (D)".into(),
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.native_docs_quick_note(DocsAnnotationType::Redline, None, cx);

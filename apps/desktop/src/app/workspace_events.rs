@@ -112,6 +112,22 @@ impl GhostexGpuiApp {
                     }
                     return;
                 }
+                // Annotate on an HTML file (native_docs/annotate.rs): its state, notes, Copy and
+                // switch are app state, answered here.
+                if let Some(action) = manage_request_string(&request, "action")
+                    && matches!(
+                        action.as_str(),
+                        "annotateLoad"
+                            | "annotateState"
+                            | "annotateNotes"
+                            | "annotateToggle"
+                            | "copyPageAnnotation"
+                    )
+                {
+                    let response = self.native_docs_annotate_request(&action, &request, cx);
+                    self.dispatch_manage_files_answer(&page, &response.to_string(), cx);
+                    return;
+                }
                 // Annotation feedback never touches the file system: the target
                 // session and the delivery are app state, so both requests are
                 // answered here instead of through the git-backed file bridge.
@@ -127,8 +143,13 @@ impl GhostexGpuiApp {
                     if action == "sendPageAnnotation" {
                         // Annotate's Send in an HTML file (app/page_annotations.rs); answered
                         // at once, the delivery reports itself (chat, terminal or clipboard).
-                        let annotation =
-                            crate::app::page_annotations::page_annotation_from_fields(&request);
+                        let path = manage_request_string(&request, "path").unwrap_or_default();
+                        let annotation = self
+                            .native_docs_annotate_on(&path)
+                            .then(|| {
+                                crate::app::page_annotations::page_annotation_from_fields(&request)
+                            })
+                            .flatten();
                         let response = match annotation {
                             Some(_) => {
                                 serde_json::json!({"action": action, "requestId": request_id})

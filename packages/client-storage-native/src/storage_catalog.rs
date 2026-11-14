@@ -335,6 +335,24 @@ pub const CATALOG: &[CatalogStore] = &[
         true,
         Records,
     ),
+    store(
+        "docsAnnotatedFiles",
+        "ghostex.manage.annotatedFiles.",
+        true,
+        Records,
+    ),
+    store(
+        "docsAnnotateNotes",
+        "ghostex.manage.annotateNotes.",
+        true,
+        Records,
+    ),
+    store(
+        "docsAnnotateSettings",
+        "ghostex.manage.annotateSettings",
+        false,
+        Local,
+    ),
     store("commitAgent", "ghostex.promptAgent.gitCommit", false, Local),
     store(
         "renameAgent",

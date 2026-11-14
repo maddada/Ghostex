@@ -365,6 +365,12 @@ pub(crate) struct SleepBrowserTabInPane {
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunBrowserFeedbackTool;
 
+/// The Annotate hotkey: Files answers it for an HTML or Markdown file (`native_docs/annotate.rs`),
+/// the root for the Browser page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct ToggleAnnotate;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct ToggleBrowserDevTools;

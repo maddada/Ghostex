@@ -201,6 +201,8 @@ fn macos_normal_bindings_keep_their_chords() {
         ("terminalSelectAll", "cmd-a"),
         ("openBrowserHistory", "cmd-y"),
         ("reloadBrowserPage", "cmd-r"),
+        // New on 2026-11-14: Files' HTML and Markdown files and the Browser only.
+        ("toggleAnnotate", "cmd-ctrl-a"),
         ("sleepFocusedSessionSecondKey", "alt-shift-s"),
         // New on 2026-10-27; one key in and out of the terminal.
         ("unfocusTerminal", "cmd-shift-m"),
@@ -376,6 +378,7 @@ fn windows_and_linux_normal_bindings_are_the_ones_the_app_always_had() {
         ("toggleAgentsFocusMode", "ctrl-alt-f"),
         ("openBrowserHistory", "ctrl-h"),
         ("reloadBrowserPage", "ctrl-r"),
+        ("toggleAnnotate", "alt-shift-a"),
         ("sleepFocusedSessionSecondKey", "alt-shift-s"),
         ("focusLastTerminal", "ctrl-shift-m"),
         ("focusSidebar", "ctrl-shift-j"),
@@ -423,6 +426,7 @@ fn macos_hotkeys_keep_their_app_actions() {
     let expected = [
         ("openBrowserHistory", "OpenBrowserHistory"),
         ("reloadBrowserPage", "ReloadFocusedBrowser"),
+        ("toggleAnnotate", "ToggleAnnotate"),
         ("pasteIntoTerminal", "PasteIntoFocusedTerminal"),
         ("findInFocusedView", "FindInFocusedTerminal"),
         ("findNextInBrowser", "FindNextInFocusedBrowser"),

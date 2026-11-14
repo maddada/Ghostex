@@ -29,6 +29,8 @@ pub type BrowserPopupOpenHandler = Rc<dyn Fn(String, BrowserPopupPlacement)>;
 pub enum BrowserPageMetadataEvent {
     HistoryRequested,
     FindRequested,
+    /// The Annotate hotkey, pressed while the page had the keyboard.
+    AnnotateRequested,
     AddressChanged(String),
     CloseRequested,
     FaviconUrlChanged(Option<String>),

@@ -210,6 +210,7 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("findPreviousInBrowser"),
                 J::Str("openBrowserHistory"),
                 J::Str("reloadBrowserPage"),
+                J::Str("toggleAnnotate"),
                 J::Str("openHotkeys"),
                 J::Str("toggleSidebarCollapsed"),
                 J::Str("toggleViewPanel"),

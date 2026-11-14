@@ -62,6 +62,9 @@ pub const VIEW_SCOPED_HOTKEY_IDS: &[&str] = &[
     "findPreviousInBrowser",
     "openBrowserHistory",
     "reloadBrowserPage",
+    // Files' HTML and Markdown files and the Browser only (CDXC:Docs 2026-11-14 DECISION in
+    // hotkey_definitions.rs).
+    "toggleAnnotate",
 ];
 
 /// The settings key that holds the Terminal focused bindings, the way `hotkeys` holds the normal
@@ -82,6 +85,7 @@ const NO_TERMINAL_BINDING_HOTKEY_IDS: &[&str] = &[
     "openBrowserHistory",
     "reloadBrowserPage",
     "focusLastTerminal",
+    "toggleAnnotate",
 ];
 
 /// CDXC:Hotkeys 2026-10-27 WHY:

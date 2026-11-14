@@ -783,7 +783,8 @@ pub(crate) fn browser_agentation_feedback_injection_script() -> String {
 
     const findStartButton = function() {
       // Only the collapsed launcher matches, so a click can never close an
-      // active toolbar (see CDXC:Docs 2026-10-23 in html-viewer.tsx).
+      // active toolbar. (HTML files in Files mount the fork already active
+      // instead, with no toolbar: CDXC:Docs 2026-11-14 in html-viewer.tsx.)
       const host = document.querySelector('agentation-toolbar');
       return host && host.shadowRoot
         ? host.shadowRoot.querySelector('[data-agentation-toolbar] button[aria-expanded="false"][aria-label="Start feedback mode"]')
