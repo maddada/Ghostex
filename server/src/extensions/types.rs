@@ -33,6 +33,58 @@ pub struct ExtensionManifest {
     pub modal: Option<ExtensionSize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub popup: Option<ExtensionSize>,
+    /// `kind: "sidebar"`: its own sidebar mode and/or sections in the Projects list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sidebar: Option<ExtensionSidebarManifest>,
+    /// `kind: "sidebar"`: a side panel view drawn from the same panel blocks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side_panel: Option<ExtensionSidePanelManifest>,
+}
+
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// Sidebar extensions (Q23, user: native blocks plus a web block, option C): an extension sends a JSON panel document and Ghostex draws it with its own rows, menus and tooltips; a `web` block for what blocks can't draw comes later. Q24: a sidebar extension gets its own sidebar mode (a top-row button that swaps the whole list, like Bots); sections inside the Projects list are optional in the manifest. User: "I want to be able to use the same thing for the side panel views please (use the extensions api to get stuff from agent etc)", so `sidePanel` draws the same blocks from the same API, one document for the computer or one per session.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExtensionSidebarManifest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ExtensionSidebarModeManifest>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<ExtensionSidebarSectionManifest>,
+    /// The first panel document, a JSON file in the payload. An empty panel without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panel: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExtensionSidebarModeManifest {
+    pub title: String,
+    /// An SVG in the payload; the extension's icon when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExtensionSidebarSectionManifest {
+    /// The id of a block in the sidebar panel document.
+    pub block: String,
+    #[serde(rename = "where")]
+    pub place: ghostex_gx_protocol::extension_panel::SidebarSectionPlace,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExtensionSidePanelManifest {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// `global` (one document) when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ghostex_gx_protocol::extension_panel::SidePanelScope>,
+    /// The first document (and, for `scope: session`, the one a session starts from).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panel: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -52,6 +104,37 @@ pub enum ExtensionPermission {
     Ssh,
     Network,
     Clipboard,
+    /// CDXC:Extensions 2026-11-14 DECISION:
+    /// Q26 (user picked new scoped permissions over reusing `cli`): `cli` runs the whole CLI, including closing sessions and typing into agents, which is too much for a sidebar that only shows your projects. These four reach only `/api/ext/v1` (ext_api.rs) and the panel actions clients run (`PanelAction::required_permission` in gx-protocol), and the install card lists each one.
+    #[serde(rename = "projects.read")]
+    ProjectsRead,
+    #[serde(rename = "sessions.read")]
+    SessionsRead,
+    #[serde(rename = "sessions.open")]
+    SessionsOpen,
+    #[serde(rename = "agents.start")]
+    AgentsStart,
+}
+
+impl ExtensionPermission {
+    /// The wire name (`projects.read`, `exec`, …).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Exec => "exec",
+            Self::Cli => "cli",
+            Self::Ssh => "ssh",
+            Self::Network => "network",
+            Self::Clipboard => "clipboard",
+            Self::ProjectsRead => "projects.read",
+            Self::SessionsRead => "sessions.read",
+            Self::SessionsOpen => "sessions.open",
+            Self::AgentsStart => "agents.start",
+        }
+    }
+
+    pub fn from_wire(value: &str) -> Option<Self> {
+        serde_json::from_value(Value::String(value.to_string())).ok()
+    }
 }
 
 /// What the user agreed to in the install consent: the version and the capabilities it listed.
@@ -71,6 +154,7 @@ pub(crate) struct ExtensionInstallApproval {
 #[serde(rename_all = "kebab-case")]
 pub enum ExtensionKind {
     TerminalPane,
+    Sidebar,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -405,12 +489,23 @@ impl ExtensionManifest {
                     )));
                 }
             }
+            if self.kind == Some(ExtensionKind::Sidebar) {
+                self.validate_sidebar_payload(payload_dir)?;
+            }
         }
         Ok(())
     }
 
     fn validate_shape(&self) -> ExtensionResult<()> {
+        if self.kind != Some(ExtensionKind::Sidebar)
+            && (self.sidebar.is_some() || self.side_panel.is_some())
+        {
+            return Err(ExtensionError::bad_request(
+                "Only a kind \"sidebar\" extension can declare sidebar or sidePanel.",
+            ));
+        }
         match self.kind {
+            Some(ExtensionKind::Sidebar) => self.validate_sidebar_shape()?,
             Some(ExtensionKind::TerminalPane) => {
                 if self.terminal.is_none()
                     || self.server.is_some()
@@ -449,56 +544,7 @@ impl ExtensionManifest {
                         "A web extension requires server.",
                     ));
                 };
-                match (&server.static_dir, &server.command, &server.url) {
-                    (Some(static_dir), None, None) => {
-                        validate_relative_path(static_dir, "server.static")?;
-                        if server.readiness.is_some()
-                            || server.cwd.is_some()
-                            || !server.install.is_empty()
-                        {
-                            return Err(ExtensionError::bad_request(
-                                "A static server cannot declare command-server fields.",
-                            ));
-                        }
-                    }
-                    (None, None, Some(url)) => {
-                        validate_remote_server_url(url)?;
-                        if server.readiness.is_some()
-                            || server.cwd.is_some()
-                            || !server.install.is_empty()
-                        {
-                            return Err(ExtensionError::bad_request(
-                                "A URL server cannot declare command-server fields.",
-                            ));
-                        }
-                    }
-                    (None, Some(command), None) if !command.trim().is_empty() => {
-                        let readiness = server.readiness.as_ref().ok_or_else(|| {
-                            ExtensionError::bad_request(
-                                "A command server requires readiness.httpGet.",
-                            )
-                        })?;
-                        if !readiness.http_get.starts_with('/') {
-                            return Err(ExtensionError::bad_request(
-                                "readiness.httpGet must start with '/'.",
-                            ));
-                        }
-                        for install in server.install.values() {
-                            validate_sha256(&install.sha256)?;
-                            url::Url::parse(&install.url).map_err(|_| {
-                                ExtensionError::bad_request(format!(
-                                    "Invalid command-server install URL: {}",
-                                    install.url
-                                ))
-                            })?;
-                        }
-                    }
-                    _ => {
-                        return Err(ExtensionError::bad_request(
-                            "server must declare exactly one of static, command, or url.",
-                        ));
-                    }
-                }
+                validate_server(server)?;
             }
         }
         let unique_placements = self
@@ -538,6 +584,114 @@ impl ExtensionManifest {
         Ok(())
     }
 
+    /// `kind: "sidebar"`: a mode, sections or a side panel, an optional command or static server
+    /// (for outside data and, later, web blocks), and no web placements or terminal.
+    fn validate_sidebar_shape(&self) -> ExtensionResult<()> {
+        if self.terminal.is_some()
+            || !self.placements.is_empty()
+            || self.default_placement.is_some()
+            || self.modal.is_some()
+            || self.popup.is_some()
+        {
+            return Err(ExtensionError::bad_request(
+                "A sidebar extension cannot declare placements, defaultPlacement, terminal, modal or popup.",
+            ));
+        }
+        let sidebar_shows = self
+            .sidebar
+            .as_ref()
+            .is_some_and(|sidebar| sidebar.mode.is_some() || !sidebar.sections.is_empty());
+        if self.sidebar.is_some() && !sidebar_shows {
+            return Err(ExtensionError::bad_request(
+                "sidebar needs a mode, sections, or both.",
+            ));
+        }
+        if !sidebar_shows && self.side_panel.is_none() {
+            return Err(ExtensionError::bad_request(
+                "A sidebar extension needs sidebar (a mode or sections) or sidePanel.",
+            ));
+        }
+        if let Some(sidebar) = &self.sidebar {
+            if let Some(mode) = &sidebar.mode {
+                if mode.title.trim().is_empty() {
+                    return Err(ExtensionError::bad_request(
+                        "sidebar.mode.title must not be empty.",
+                    ));
+                }
+                if let Some(icon) = &mode.icon {
+                    validate_svg_path(icon, "sidebar.mode.icon")?;
+                }
+            }
+            let mut blocks = std::collections::BTreeSet::new();
+            for section in &sidebar.sections {
+                if section.block.trim().is_empty() || !blocks.insert(section.block.as_str()) {
+                    return Err(ExtensionError::bad_request(
+                        "sidebar.sections must name different, non-empty blocks.",
+                    ));
+                }
+            }
+            if let Some(panel) = &sidebar.panel {
+                validate_json_path(panel, "sidebar.panel")?;
+            }
+        }
+        if let Some(side_panel) = &self.side_panel {
+            if side_panel.title.trim().is_empty() {
+                return Err(ExtensionError::bad_request(
+                    "sidePanel.title must not be empty.",
+                ));
+            }
+            if let Some(icon) = &side_panel.icon {
+                validate_svg_path(icon, "sidePanel.icon")?;
+            }
+            if let Some(panel) = &side_panel.panel {
+                validate_json_path(panel, "sidePanel.panel")?;
+            }
+        }
+        if let Some(server) = &self.server {
+            if server.url.is_some() {
+                return Err(ExtensionError::bad_request(
+                    "A sidebar extension's server is a command or a static folder, not a url.",
+                ));
+            }
+            validate_server(server)?;
+        }
+        Ok(())
+    }
+
+    /// Checks the panel files a sidebar extension ships against the panel schema, and that its
+    /// sections name blocks of its sidebar document.
+    fn validate_sidebar_payload(&self, payload_dir: &Path) -> ExtensionResult<()> {
+        if let Some(sidebar) = &self.sidebar {
+            if let Some(icon) = sidebar.mode.as_ref().and_then(|mode| mode.icon.as_ref()) {
+                require_payload_file(payload_dir, icon, "sidebar.mode.icon")?;
+            }
+            if let Some(panel) = &sidebar.panel {
+                let document = super::read_panel_file(payload_dir, panel, "sidebar.panel", self)?;
+                for section in &sidebar.sections {
+                    if !document
+                        .blocks
+                        .iter()
+                        .any(|block| block.id == section.block)
+                    {
+                        return Err(ExtensionError::bad_request(format!(
+                            "sidebar.sections names block {:?}, which {panel} doesn't have.",
+                            section.block
+                        )));
+                    }
+                }
+            }
+        }
+        if let Some(side_panel) = &self.side_panel {
+            if let Some(icon) = &side_panel.icon {
+                require_payload_file(payload_dir, icon, "sidePanel.icon")?;
+            }
+            if let Some(panel) = &side_panel.panel {
+                super::read_panel_file(payload_dir, panel, "sidePanel.panel", self)?;
+            }
+        }
+        Ok(())
+    }
+
     fn validate_preferences(&self) -> ExtensionResult<()> {
         let mut names = std::collections::BTreeSet::new();
         for preference in &self.preferences {
@@ -572,6 +726,53 @@ impl ExtensionManifest {
         }
         Ok(())
     }
+}
+
+/// One of a static folder, a command server or a remote URL, with the fields that kind allows.
+fn validate_server(server: &ExtensionServer) -> ExtensionResult<()> {
+    match (&server.static_dir, &server.command, &server.url) {
+        (Some(static_dir), None, None) => {
+            validate_relative_path(static_dir, "server.static")?;
+            if server.readiness.is_some() || server.cwd.is_some() || !server.install.is_empty() {
+                return Err(ExtensionError::bad_request(
+                    "A static server cannot declare command-server fields.",
+                ));
+            }
+        }
+        (None, None, Some(url)) => {
+            validate_remote_server_url(url)?;
+            if server.readiness.is_some() || server.cwd.is_some() || !server.install.is_empty() {
+                return Err(ExtensionError::bad_request(
+                    "A URL server cannot declare command-server fields.",
+                ));
+            }
+        }
+        (None, Some(command), None) if !command.trim().is_empty() => {
+            let readiness = server.readiness.as_ref().ok_or_else(|| {
+                ExtensionError::bad_request("A command server requires readiness.httpGet.")
+            })?;
+            if !readiness.http_get.starts_with('/') {
+                return Err(ExtensionError::bad_request(
+                    "readiness.httpGet must start with '/'.",
+                ));
+            }
+            for install in server.install.values() {
+                validate_sha256(&install.sha256)?;
+                url::Url::parse(&install.url).map_err(|_| {
+                    ExtensionError::bad_request(format!(
+                        "Invalid command-server install URL: {}",
+                        install.url
+                    ))
+                })?;
+            }
+        }
+        _ => {
+            return Err(ExtensionError::bad_request(
+                "server must declare exactly one of static, command, or url.",
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn validate_extension_id(id: &str) -> ExtensionResult<()> {
@@ -684,7 +885,39 @@ fn validate_remote_server_url(value: &str) -> ExtensionResult<()> {
     }
 }
 
-fn validate_relative_path(value: &str, field: &str) -> ExtensionResult<()> {
+fn validate_svg_path(value: &str, field: &str) -> ExtensionResult<()> {
+    validate_relative_path(value, field)?;
+    if value.to_ascii_lowercase().ends_with(".svg") {
+        Ok(())
+    } else {
+        Err(ExtensionError::bad_request(format!(
+            "Extension {field} must reference an SVG file."
+        )))
+    }
+}
+
+fn validate_json_path(value: &str, field: &str) -> ExtensionResult<()> {
+    validate_relative_path(value, field)?;
+    if value.to_ascii_lowercase().ends_with(".json") {
+        Ok(())
+    } else {
+        Err(ExtensionError::bad_request(format!(
+            "Extension {field} must reference a JSON file."
+        )))
+    }
+}
+
+fn require_payload_file(payload_dir: &Path, relative: &str, field: &str) -> ExtensionResult<()> {
+    if payload_dir.join(relative).is_file() {
+        Ok(())
+    } else {
+        Err(ExtensionError::bad_request(format!(
+            "Extension {field} does not exist: {relative}"
+        )))
+    }
+}
+
+pub(crate) fn validate_relative_path(value: &str, field: &str) -> ExtensionResult<()> {
     let path = Path::new(value);
     if value.trim().is_empty()
         || path.is_absolute()

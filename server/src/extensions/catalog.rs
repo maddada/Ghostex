@@ -124,16 +124,34 @@ fn fetch_remote_catalog(url: &str) -> ExtensionResult<ExtensionCatalog> {
     parse_catalog(&bytes)
 }
 
+/// CDXC:Extensions 2026-11-14 WHY:
+/// The catalog used to be read in one piece, so one entry this build could not read (a newer `kind` such as `sidebar`, a newer permission) made the whole store fail. Entries are now read one by one and an unreadable one is left out; an entry this build can read is still checked as strictly as before. gxservers up to 11.7 still read the catalog in one piece, so a `kind: "sidebar"` entry must not reach the catalog they fetch until those are gone (Ghostex-extensions `tooling/build-catalog.mjs`).
 fn parse_catalog(bytes: &[u8]) -> ExtensionResult<ExtensionCatalog> {
-    let mut catalog: ExtensionCatalog = serde_json::from_slice(bytes).map_err(|error| {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RawCatalog {
+        schema_version: u64,
+        published_at: String,
+        extensions: Vec<serde_json::Value>,
+    }
+    let raw: RawCatalog = serde_json::from_slice(bytes).map_err(|error| {
         ExtensionError::bad_request(format!("Extension catalog is not valid JSON: {error}"))
     })?;
-    if catalog.schema_version != 1 {
+    if raw.schema_version != 1 {
         return Err(ExtensionError::bad_request(format!(
             "Unsupported extension catalog schema version {}.",
-            catalog.schema_version
+            raw.schema_version
         )));
     }
+    let mut catalog = ExtensionCatalog {
+        schema_version: raw.schema_version,
+        published_at: raw.published_at,
+        extensions: raw
+            .extensions
+            .into_iter()
+            .filter_map(|entry| serde_json::from_value(entry).ok())
+            .collect(),
+    };
     let mut ids = std::collections::BTreeSet::new();
     for entry in &catalog.extensions {
         entry.manifest.validate(None, None)?;

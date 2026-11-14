@@ -42,6 +42,8 @@ Commands:
   install-local <path> [--json]         Install a local extension folder (the user only)
   uninstall <id> [--json]               Remove an installed extension
   state <id> [--set k=v] [--json]       Read or update extension state
+  panel get|set|patch|events <id>       Read, write or follow a sidebar extension's panel
+                                        (ghostex extensions panel --help)
 
 Only the user installs extensions, from Settings > Extensions, where Ghostex shows what each
 one may do before it is installed. The CLI, agents and other computers are refused: tell the

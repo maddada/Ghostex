@@ -607,6 +607,8 @@ impl Core {
             | ServerEvent::ApiRequestHandled(_)
             | ServerEvent::RendererCommand(_)
             | ServerEvent::CloudBoxesChanged(_)
+            // Sidebar extensions are drawn from phase 2 (docs/2026-11-14/sidebar-extensions/).
+            | ServerEvent::ExtensionPanelsChanged(_)
             | ServerEvent::SettingsSyncNote(_)
             | ServerEvent::SessionChatSnapshot(_)
             | ServerEvent::SessionChatReplaced(_)

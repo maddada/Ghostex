@@ -692,7 +692,7 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
     let Ok(_event_sequence) = lock_presentation_event_sequence(state) else {
         return true;
     };
-    let Ok(snapshot) = read_presentation_snapshot(
+    let Ok(mut snapshot) = read_presentation_snapshot(
         &db,
         &state.metadata.server_id,
         auto_settle_after_days,
@@ -702,6 +702,7 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
     ) else {
         return true;
     };
+    crate::extensions::ext_api::insert_extension_panels_presentation_payload(&mut snapshot, state);
     let revision = snapshot
         .get("revision")
         .and_then(Value::as_i64)

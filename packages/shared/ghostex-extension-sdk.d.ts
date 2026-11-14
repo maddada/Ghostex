@@ -50,7 +50,16 @@ export interface GhostexExecResult extends GhostexCliResult {}
 
 export interface GhostexBridgeError extends Error {
   code: 'invalidRequest' | 'notFound' | 'permissionDenied' | 'operationFailed';
-  permission?: 'exec' | 'cli' | 'ssh' | 'network' | 'clipboard';
+  permission?:
+    | 'exec'
+    | 'cli'
+    | 'ssh'
+    | 'network'
+    | 'clipboard'
+    | 'projects.read'
+    | 'sessions.read'
+    | 'sessions.open'
+    | 'agents.start';
 }
 
 export interface GhostexExtensionApi {

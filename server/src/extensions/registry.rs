@@ -17,10 +17,12 @@ use super::{
 
 #[derive(Clone)]
 pub(crate) struct ExtensionRegistry {
-    extensions_dir: PathBuf,
-    store_file: PathBuf,
+    pub(super) extensions_dir: PathBuf,
+    pub(super) store_file: PathBuf,
     gate: Arc<Mutex<()>>,
-    runtime: ExtensionRuntime,
+    pub(super) runtime: ExtensionRuntime,
+    /// Sidebar and side panel documents (panel.rs).
+    pub(super) panels: super::PanelStore,
 }
 
 impl ExtensionRegistry {
@@ -30,6 +32,7 @@ impl ExtensionRegistry {
             store_file: paths.extensions_store_file.clone(),
             gate: Arc::new(Mutex::new(())),
             runtime: ExtensionRuntime::new(api_url),
+            panels: super::PanelStore::new(&paths.extensions_dir),
         };
         // CDXC:Workarea 2026-09-22 DECISION:
         // User: remove the original Storybook extension and keep only the built-in view.
@@ -43,7 +46,7 @@ impl ExtensionRegistry {
 
     pub(crate) fn list(&self) -> ExtensionResult<Vec<InstalledExtension>> {
         let _guard = self.lock()?;
-        self.list_locked()
+        self.scan_installed()
     }
 
     pub(crate) fn catalog(&self) -> ExtensionResult<ExtensionCatalogSnapshot> {
@@ -130,6 +133,7 @@ impl ExtensionRegistry {
                 None => format!("Could not uninstall extension {id}: {error}"),
             })
         })?;
+        self.panels.remove_extension(id)?;
         Ok(())
     }
 
@@ -214,7 +218,9 @@ impl ExtensionRegistry {
         })
     }
 
-    fn list_locked(&self) -> ExtensionResult<Vec<InstalledExtension>> {
+    /// The listing itself. Callers that must not wait behind an install (it holds the gate through
+    /// its download) call it without the gate: every write it could see is an atomic rename.
+    pub(super) fn scan_installed(&self) -> ExtensionResult<Vec<InstalledExtension>> {
         let installed_dir = self.installed_dir();
         match fs::create_dir_all(&installed_dir) {
             Ok(()) => {}
@@ -284,7 +290,7 @@ impl ExtensionRegistry {
         Ok(installed)
     }
 
-    fn installed_dir(&self) -> PathBuf {
+    pub(super) fn installed_dir(&self) -> PathBuf {
         self.extensions_dir.join("installed")
     }
 
@@ -350,10 +356,26 @@ impl ExtensionRegistry {
                 ExtensionError::not_found(format!("Extension {id:?} is not installed."))
             }
         })?;
-        let manifest_icon = PathBuf::from(manifest.icon);
-        if requested_relative != manifest_icon {
+        // The extension's icon, and a sidebar extension's mode and side panel icons.
+        let icons = std::iter::once(manifest.icon.clone())
+            .chain(
+                manifest
+                    .sidebar
+                    .as_ref()
+                    .and_then(|sidebar| sidebar.mode.as_ref())
+                    .and_then(|mode| mode.icon.clone()),
+            )
+            .chain(
+                manifest
+                    .side_panel
+                    .as_ref()
+                    .and_then(|panel| panel.icon.clone()),
+            )
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+        let Some(manifest_icon) = icons.into_iter().find(|icon| requested_relative == icon) else {
             return Ok(None);
-        }
+        };
         let canonical_payload = fs::canonicalize(&payload_dir).map_err(|error| {
             ExtensionError::internal(format!(
                 "Could not resolve installed extension {id}: {error}"
@@ -475,7 +497,7 @@ impl ExtensionRegistry {
         }
     }
 
-    fn lock(&self) -> ExtensionResult<std::sync::MutexGuard<'_, ()>> {
+    pub(super) fn lock(&self) -> ExtensionResult<std::sync::MutexGuard<'_, ()>> {
         self.gate
             .lock()
             .map_err(|_| ExtensionError::internal("Extension registry lock was poisoned."))

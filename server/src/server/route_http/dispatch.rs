@@ -139,6 +139,22 @@ pub(in crate::server) async fn route_http(
         .await;
     }
 
+    // The scoped extension API (server/src/extensions/ext_api.rs): it settles its own callers, so
+    // an extension's token reaches these routes and, at the token gate below, only its three old
+    // endpoints.
+    if path.starts_with(crate::extensions::ext_api::EXT_API_ROUTE_PREFIX) {
+        let query = parts.uri.query().map(str::to_string);
+        return crate::extensions::ext_api::serve_ext_api(
+            state.clone(),
+            method,
+            path,
+            query,
+            parts.headers,
+            body,
+        )
+        .await;
+    }
+
     if path.starts_with(crate::connected_computers::RELAY_ROUTE_PREFIX) {
         /*
         CDXC:SessionLinks 2026-11-08 FIX:

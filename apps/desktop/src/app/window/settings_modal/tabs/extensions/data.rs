@@ -694,6 +694,10 @@ pub(crate) fn permission_label(permission: &str) -> String {
         "exec" => "System commands",
         "network" => "Network access",
         "ssh" => "SSH access",
+        "projects.read" => "See your projects",
+        "sessions.read" => "See your sessions",
+        "sessions.open" => "Open projects and sessions",
+        "agents.start" => "Start agents",
         other => other,
     }
     .to_string()
@@ -707,6 +711,10 @@ pub(crate) fn permission_description(permission: &str) -> &'static str {
         "exec" => "Run system commands on this machine.",
         "network" => "Connect to services on your network or the internet.",
         "ssh" => "Use configured SSH access for remote machines.",
+        "projects.read" => "Read your project names and folders on this computer.",
+        "sessions.read" => "Read your sessions' titles and what they are doing.",
+        "sessions.open" => "Open a project or session when you click it in its panel.",
+        "agents.start" => "Start a new agent when you click it in its panel.",
         _ => "",
     }
 }

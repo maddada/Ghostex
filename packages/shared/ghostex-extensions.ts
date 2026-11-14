@@ -2,7 +2,22 @@ export const GHOSTEX_EXTENSION_PLACEMENTS = ['view', 'chat-bar', 'popup', 'modal
 
 export type GhostexExtensionPlacement = (typeof GHOSTEX_EXTENSION_PLACEMENTS)[number];
 
-export const GHOSTEX_EXTENSION_PERMISSIONS = ['exec', 'cli', 'ssh', 'network', 'clipboard'] as const;
+/**
+ * `projects.read`, `sessions.read`, `sessions.open` and `agents.start` are the scoped permissions of
+ * sidebar extensions (CDXC:Extensions 2026-11-14 in server/src/extensions/types.rs): they reach only
+ * `/api/ext/v1` and the panel actions clients run.
+ */
+export const GHOSTEX_EXTENSION_PERMISSIONS = [
+  'exec',
+  'cli',
+  'ssh',
+  'network',
+  'clipboard',
+  'projects.read',
+  'sessions.read',
+  'sessions.open',
+  'agents.start',
+] as const;
 
 export type GhostexExtensionPermission = (typeof GHOSTEX_EXTENSION_PERMISSIONS)[number];
 
@@ -109,7 +124,178 @@ export interface GhostexTerminalExtensionManifest extends GhostexExtensionManife
   popup?: never;
 }
 
-export type GhostexExtensionManifest = GhostexWebExtensionManifest | GhostexTerminalExtensionManifest;
+export type GhostexSidebarSectionPlace = 'projectsTop' | 'projectsBottom';
+
+export interface GhostexExtensionSidebar {
+  /** Its own sidebar mode: a top-row button that swaps the whole list, like Bots. */
+  mode?: { title: string; icon?: string };
+  /** Blocks of the sidebar panel shown inside the Projects list. */
+  sections?: { block: string; where: GhostexSidebarSectionPlace }[];
+  /** The first panel document, a JSON file in the extension. */
+  panel?: string;
+}
+
+export interface GhostexExtensionSidePanel {
+  title: string;
+  icon?: string;
+  /** One document for the computer (`global`, the default) or one per session. */
+  scope?: 'global' | 'session';
+  panel?: string;
+}
+
+/** Sidebar content drawn by Ghostex from a panel document (see `GhostexPanelDocument`). */
+export interface GhostexSidebarExtensionManifest extends GhostexExtensionManifestBase {
+  kind: 'sidebar';
+  sidebar?: GhostexExtensionSidebar;
+  sidePanel?: GhostexExtensionSidePanel;
+  /** Optional: a command server for outside data and custom actions, or static files. */
+  server?: GhostexExtensionStaticServer | GhostexExtensionCommandServer;
+  placements?: never;
+  defaultPlacement?: never;
+  terminal?: never;
+  modal?: never;
+  popup?: never;
+}
+
+export type GhostexExtensionManifest =
+  | GhostexWebExtensionManifest
+  | GhostexTerminalExtensionManifest
+  | GhostexSidebarExtensionManifest;
+
+// ---- sidebar and side panel panels (packages/gx-protocol/src/extension_panel.rs) ----------------
+
+export type GhostexPanelAction =
+  | { openProject: string }
+  | { focusSession: string }
+  | { newAgent: { project: string; draft?: string; agent?: string } }
+  | { openUrl: string }
+  | { openView: string }
+  | { extension: string | { name: string; data?: unknown } };
+
+export interface GhostexPanelMenuItem {
+  title: string;
+  icon?: string;
+  action: GhostexPanelAction;
+}
+
+export interface GhostexPanelRow {
+  id?: string;
+  icon?: string;
+  dot?: 'green' | 'yellow' | 'red' | 'blue' | 'gray';
+  title?: string;
+  subtitle?: string;
+  trailing?: string;
+  badge?: string;
+  /** A project path or id; Ghostex fills in its name, status and menu. */
+  project?: string;
+  /** A session ref `<projectId>:<sessionId>`. */
+  session?: string;
+  action?: GhostexPanelAction;
+  menu?: GhostexPanelMenuItem[];
+}
+
+export interface GhostexPanelChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  action?: GhostexPanelAction;
+  menu?: GhostexPanelMenuItem[];
+}
+
+interface GhostexPanelBlockBase {
+  id: string;
+  tab?: string;
+  title?: string;
+}
+
+export type GhostexPanelBlock = GhostexPanelBlockBase &
+  (
+    | { type: 'rows'; items: GhostexPanelRow[] }
+    | { type: 'checklist'; editable?: boolean; items: GhostexPanelChecklistItem[] }
+    | {
+        type: 'map';
+        root?: { title: string; subtitle?: string; icon?: string };
+        groups: { title: string; subtitle?: string; icon?: string; items: GhostexPanelRow[] }[];
+      }
+    | { type: 'progress'; value: number; max?: number; label?: string }
+    | { type: 'text'; text: string }
+    | {
+        type: 'buttons';
+        items: {
+          id?: string;
+          title: string;
+          icon?: string;
+          style?: 'primary' | 'default';
+          action: GhostexPanelAction;
+        }[];
+      }
+    | { type: 'empty'; subtitle?: string; icon?: string; action?: GhostexPanelAction }
+  );
+
+export interface GhostexPanelDocument {
+  schema: 1;
+  title?: string;
+  tabs?: { id: string; title: string; icon?: string }[];
+  blocks: GhostexPanelBlock[];
+}
+
+/** One sidebar extension in the presentation snapshot's optional `extensionPanels` field. */
+export interface GhostexExtensionPanelEntry {
+  title: string;
+  icon?: string;
+  grantedPermissions: GhostexExtensionPermission[];
+  sidebar?: {
+    mode?: { title: string; icon?: string };
+    sections: { block: string; where: GhostexSidebarSectionPlace }[];
+    revision: number;
+    document: GhostexPanelDocument;
+  };
+  sidePanel?: {
+    title: string;
+    icon?: string;
+    scope: 'global' | 'session';
+    revision: number;
+    document: GhostexPanelDocument;
+    sessions?: Record<string, { revision: number; document: GhostexPanelDocument }>;
+  };
+}
+
+export type GhostexExtensionPanels = Record<string, GhostexExtensionPanelEntry>;
+
+/** What an extension hears on `GET /api/ext/v1/events` (server-sent events, `event:` = `type`). */
+export type GhostexExtensionApiEvent =
+  | { type: 'ready'; extension: string }
+  | {
+      type: 'panelChanged';
+      surface: 'sidebar' | 'sidePanel';
+      session?: string;
+      revision: number;
+      by: 'extension' | 'user';
+    }
+  | {
+      type: 'checklistEdited';
+      surface: 'sidebar' | 'sidePanel';
+      session?: string;
+      blockId: string;
+      revision: number;
+      edit:
+        | { op: 'check'; itemId: string; done: boolean }
+        | { op: 'add'; text: string; itemId: string | null }
+        | { op: 'rename'; itemId: string; text: string }
+        | { op: 'delete'; itemId: string };
+    }
+  | {
+      type: 'panelAction';
+      surface: 'sidebar' | 'sidePanel';
+      session?: string;
+      blockId: string;
+      itemId?: string;
+      name: string;
+      data?: unknown;
+    }
+  | { type: 'projectsChanged'; projectIds: string[] }
+  | { type: 'sessionsChanged'; sessions: string[] }
+  | { type: 'lagged'; missed: number };
 
 export interface GhostexExtensionStoreEntry {
   enabled: boolean;

@@ -14,7 +14,7 @@ use super::super::super::palette::SettingsPalette;
 use super::super::super::store::store_gxserver_rpc;
 use super::ExtensionsTab;
 use super::data::{
-    CatalogEntry, InstalledExtension, capitalize, permission_description, replace_installed,
+    CatalogEntry, InstalledExtension, permission_description, permission_label, replace_installed,
 };
 use super::sections::error_banner;
 use gpui::{
@@ -298,7 +298,7 @@ impl ExtensionsTab {
                         .text_size(px(14.0))
                         .line_height(px(20.0))
                         .text_color(hsla(m.foreground))
-                        .child(capitalize(&permission)),
+                        .child(permission_label(&permission)),
                 )
                 .child(
                     div()

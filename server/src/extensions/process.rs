@@ -261,6 +261,17 @@ impl ExtensionRuntime {
             .map(|entry| entry.extension_id.clone())
     }
 
+    /// The extension whose running server holds this request's bearer token.
+    pub(crate) fn extension_for_token(&self, headers: &HeaderMap) -> Option<String> {
+        let provided = request_bearer_token(headers)?;
+        let inner = self.inner.lock().ok()?;
+        inner
+            .tokens
+            .values()
+            .find(|entry| tokens_equal(provided, &entry.token))
+            .map(|entry| entry.extension_id.clone())
+    }
+
     fn is_running(&self, id: &str) -> ExtensionResult<bool> {
         Ok(self.lock()?.processes.contains_key(id))
     }
