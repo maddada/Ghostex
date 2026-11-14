@@ -270,9 +270,10 @@ fn main() {
     // initialization or background work can read the environment.
     #[cfg(target_os = "linux")]
     force_gpui_x11_backend_for_windowed_cef();
-    // Omarchy's Super+C / Super+V reach Ghostex as Ctrl+Insert / Shift+Insert (linux_hyprland.rs).
+    // Omarchy's Super+C / Super+V reach Ghostex as Ctrl+Insert / Shift+Insert, its dialogs float
+    // undecorated, and glass follows Hyprland's blur (linux_hyprland.rs).
     #[cfg(target_os = "linux")]
-    linux_hyprland::start_terminal_tag();
+    linux_hyprland::start_hyprland_integration();
     /*
     CDXC:PlatformSupport 2026-07-25:
     Windowed CEF children are normal child HWNDs. GPUI's DirectComposition

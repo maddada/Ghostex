@@ -551,11 +551,21 @@ pub(super) fn child_window_info(
         .expect("pending CEF embed-host mutex should not be poisoned") = Some(host);
     // The CEF window fills the embed host; the host carries the surface
     // position within the GPUI window.
+    /*
+    CDXC:PlatformSupport 2026-11-14 WHY:
+    `bounds` is in physical pixels (the embed host's), but CEF on Linux reads a child's bounds as DIPs and makes Chromium's own window that size times its device scale. A Ghostex page, the one surface created at its real frame (cef/shell/browser.rs `initial_frame`), got a Chromium window 1.6x (or GDK_SCALE 2x) its host on Omarchy, laid out for that width and ran off the window's right edge; the host's later resize to the same pixels gave CEF no size change to correct it. CEF gets the frame in DIPs at the scale Chromium draws at (the one passed as --force-device-scale-factor).
+    */
+    let chromium_scale = crate::linux_x11_scale::pinned_scale_factor()
+        .or_else(|| {
+            crate::linux_x11_scale::detected_scale().and_then(|detected| detected.automatic)
+        })
+        .filter(|scale| scale.is_finite() && *scale > 0.0)
+        .unwrap_or(1.0) as f64;
     let cef_bounds = cef::Rect {
         x: 0,
         y: 0,
-        width: bounds.width.max(1),
-        height: bounds.height.max(1),
+        width: ((bounds.width as f64 / chromium_scale).round() as i32).max(1),
+        height: ((bounds.height as f64 / chromium_scale).round() as i32).max(1),
     };
     /*
     CEF's default runtime style is platform-dependent and can select Chrome

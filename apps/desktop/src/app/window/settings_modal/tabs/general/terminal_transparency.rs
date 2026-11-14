@@ -13,6 +13,7 @@ fn system_note(blocked: bool) -> &'static str {
         (true, true) => {
             " Transparency effects is off in Windows Settings > Personalization > Colors, so the window stays opaque until you turn it on there and restart Ghostex."
         }
+        (true, false) if cfg!(target_os = "linux") => super::super::theme::transparency::LINUX_NO_BLUR_NOTE,
         (true, false) => {
             " Reduce transparency is on in System Settings > Accessibility > Display, so the window stays opaque until you turn it off."
         }
