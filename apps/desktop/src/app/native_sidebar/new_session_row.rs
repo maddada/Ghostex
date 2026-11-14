@@ -8,6 +8,8 @@
 //! User: "i dont like new project shown like button without bg there fam add it to the top row instead please to the right of search". Add project left this row for the top row, right of Search (native_sidebar/navigation.rs), so the row holds only the New session button and its arrow, the row's full width, 28 high like every row at the top. This supersedes Add project sitting beside the button.
 //! CDXC:Sidebar 2026-11-11 DECISION:
 //! User: "dont show chevron down icon here, instead should be another icon that indicates we will show a menu of agents ... also please dont show the hotkey for new session unless i hover over it", then "also make icon for new session just + icon". The button leads with a plain plus, the arrow half shows a chevron pointing right (the user's pick, "chevron right", over a robot, sparkles or people icon) for the agent picker it opens, and the shortcut shows only while the pointer is over the button or it has the keyboard, keeping its room at rest so nothing moves. This supersedes the pencil-on-a-square, the chevron pointing down and the always-shown shortcut of 2026-11-10.
+//! CDXC:Sidebar 2026-11-14 DECISION:
+//! User: the button's background must match the usage section's exactly, in light and dark, glass on and off, reusing the usage section's colour token, with hover and pressed a sensible step from the new base. The button rests on the usage cards' resting fill and takes their hover and open fills for hover and press (`usage_card_fills`, native_sidebar/usage.rs); the light raised-white tile and its hairline are gone. This supersedes "a faint light fill" of 2026-11-10 only in which fill it is: it is still a faint wash, never a dark fill on glass.
 //! SEE-ALSO: native_sidebar/render.rs and selectors.rs (where the row goes), native_sidebar/unified/header.rs (the header it took the pencil and Add project from), apps/gpui-web/src/app/web_host/new_thread_picker.rs (the web build's `start_new_agent_session`).
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -89,13 +91,10 @@ impl GhostexGpuiApp {
             Some(key) => format!("Start your last agent in the open project ({key})"),
             None => "Start your last agent in the open project".to_string(),
         };
-        // A faint light wash on dark glass; on light chrome the raised white tile the sidebar's
-        // selected rows use, with its hairline.
-        let (fill, outline) = if appearance.light {
-            (appearance.selected, Some(appearance.selected_outline))
-        } else {
-            (rgb(0xffffff).opacity(0.11).into(), None)
-        };
+        // The usage section's own card fills (usage.rs), so the button is the same surface as
+        // those cards: the same ink and opacity in light and dark, with glass on or off. Each half
+        // carries the fill itself, so a hover or press replaces it as on a card, never stacking.
+        let fills = super::usage::usage_card_fills(appearance.light);
         let divider = if appearance.light {
             appearance.selected_outline
         } else {
@@ -124,7 +123,9 @@ impl GhostexGpuiApp {
             .px(px(LABEL_PADDING * scale))
             .gap(px(8.0 * scale))
             .rounded_l(px(BUTTON_RADIUS * scale))
-            .hover(|half| half.bg(appearance.hover))
+            .bg(fills.rest)
+            .hover(|half| half.bg(fills.hover))
+            .active(|half| half.bg(fills.open))
             .child(titlebar_svg_icon(
                 "titlebar/plus.svg",
                 15.0 * scale,
@@ -185,7 +186,9 @@ impl GhostexGpuiApp {
             .border_l_1()
             .border_color(divider)
             .rounded_r(px(BUTTON_RADIUS * scale))
-            .hover(|half| half.bg(appearance.hover))
+            .bg(fills.rest)
+            .hover(|half| half.bg(fills.hover))
+            .active(|half| half.bg(fills.open))
             .child(titlebar_svg_icon(
                 CHOOSE_ICON,
                 13.0 * scale,
@@ -219,10 +222,6 @@ impl GhostexGpuiApp {
                     .min_w_0()
                     .h(px(ROW_HEIGHT * scale))
                     .rounded(px(BUTTON_RADIUS * scale))
-                    .bg(fill)
-                    .when_some(outline, |button, outline| {
-                        button.border_1().border_color(outline)
-                    })
                     .text_size(px(13.0 * scale))
                     .font_weight(FontWeight::NORMAL)
                     .child(start)

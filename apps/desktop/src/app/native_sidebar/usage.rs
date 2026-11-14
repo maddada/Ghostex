@@ -74,6 +74,43 @@ const SIDEBAR_USAGE_BOTTOM_PADDING: f32 = 8.0;
 /// padding, so the cards sit exactly where the pinned strip puts them.
 const SIDEBAR_USAGE_FROSTED_PADDING: f32 = 4.0;
 
+/// The fills of a usage card, and of anything in the sidebar that has to read as the same surface
+/// (the New session button): one ink at three steps, so resting, hovered and pressed or open stay
+/// separable. The ink is white on the dark chrome and black on the light one; it is a faint wash,
+/// never a solid dark fill, so it reads the same on glass and off it.
+///
+/// CDXC:Sidebar 2026-11-14 DECISION:
+/// User: the New session button's background has to match the usage section's exactly, in light and
+/// dark, glass on and off, by reusing the usage section's colour token rather than copying a value.
+/// The usage strip's three fills moved here from the strip's body, and the button
+/// (native_sidebar/new_session_row.rs) draws with them, its hover and pressed fills being the
+/// cards' hover and open steps.
+pub(super) struct UsageCardFills {
+    pub(super) rest: gpui::Hsla,
+    pub(super) hover: gpui::Hsla,
+    pub(super) open: gpui::Hsla,
+}
+
+pub(super) fn usage_card_fills(light: bool) -> UsageCardFills {
+    /*
+    CDXC:Sidebar 2026-09-20 WHY:
+    Resting, hovered and popup-open have to stay three separable fills now that resting is a
+    filled card. The old neutral hover (grey at 0.12) landed within a point of the card on the
+    sidebar's dark fill and simply vanished, so each state is a step of the same ink instead.
+    */
+    let (ink, rest, hover, open) = if light {
+        (0x000000, 0.05, 0.10, 0.17)
+    } else {
+        (0xffffff, 0.05, 0.11, 0.20)
+    };
+    let fill = |opacity: f32| gpui::rgb(ink).opacity(opacity).into();
+    UsageCardFills {
+        rest: fill(rest),
+        hover: fill(hover),
+        open: fill(open),
+    }
+}
+
 impl GhostexGpuiApp {
     /// CDXC:Sidebar 2026-09-22 DECISION:
     /// User: hovering the account usage button at the bottom of the sidebar shows the accounts floating over the bottom of the list, without pushing the content or the scroll area, at exactly the place they take when pinned; clicking the button pins the strip there above the Commands row as before. The button keeps its bar-chart icon by default and only turns into a pin while hovered: an outline pin while unpinned (the Tabler pin, the exact outline twin of the filled pin, not the old `pin.svg` shape the user rejected), a filled pin while pinned. The near-limit dot the button carried is gone. This supersedes the 2026-09-20 rule that the chart button was a plain show/hide toggle: a click still pins and unpins, and a hover now peeks.
@@ -327,31 +364,23 @@ impl GhostexGpuiApp {
         filled card. The old neutral hover (grey at 0.12) landed within a point of the card on the
         sidebar's dark fill and simply vanished, so each state is a step of the same ink instead.
         */
-        let (card, card_hover, card_open) = if appearance.light {
-            (
-                gpui::rgb(0x000000).opacity(0.05),
-                gpui::rgb(0x000000).opacity(0.10),
-                gpui::rgb(0x000000).opacity(0.17),
-            )
-        } else {
-            (
-                gpui::rgb(0xffffff).opacity(0.05),
-                gpui::rgb(0xffffff).opacity(0.11),
-                gpui::rgb(0xffffff).opacity(0.20),
-            )
-        };
+        let UsageCardFills {
+            rest: card,
+            hover: card_hover,
+            open: card_open,
+        } = usage_card_fills(appearance.light);
         let host = GpuiAccountUsageMeterHost {
             element_id_prefix: "native-sidebar-usage-meter",
             anchor_key_prefix: "native-sidebar-usage-meter-anchor",
             height: SIDEBAR_USAGE_METER_HEIGHT * scale,
             padding_x: 4.0 * scale,
             corner_radius: 7.0 * scale,
-            background: card.into(),
+            background: card,
             fill_width: true,
-            hover_background: card_hover.into(),
+            hover_background: card_hover,
             // Brighter than the hovered card, so the account whose popup is open
             // stays distinct from the one merely under the pointer.
-            open_background: card_open.into(),
+            open_background: card_open,
             scale,
             route,
         };
