@@ -2802,8 +2802,9 @@ box the session runs in, its folder, branch and account, the agent's version, an
 the session's processes use while it runs on this computer); Changes (lines changed on the
 branch against main, uncommitted edits included, with Commit, Create PR or View
 PR); Context (how full the context window is, with Claude's own breakdown into
-messages, memory files, skills, tools and free space; it is always open, and
-Compact context sits under the breakdown; Ghostex asks a silent read-only copy
+messages, memory files, skills, tools and free space; it starts folded, still
+showing how full the window is, its bar and Compact context, and clicking its
+title shows the breakdown, a choice Ghostex remembers; Ghostex asks a silent read-only copy
 of the session, so nothing is typed into it and no tokens are spent, and it
 counts again after a turn ends at most every ten minutes, or when you press the
 refresh button); Tasks (Claude's task list; clicking the chat's Tasks pill opens

@@ -54,11 +54,13 @@ pub fn read_collapsed(value: Option<&str>) -> Vec<String> {
         .collect()
 }
 
-/// CDXC:SessionDetails 2026-11-12 DECISION:
-/// User: the Context card is folded by default when Session details opens, and folded it still
-/// shows its usage line and bar, so usage reads at a glance; unfolding shows the breakdown. The
-/// fold stays one remembered choice for the whole app (as every card's fold is): a user who never
-/// touched Context's fold sees it folded, one who unfolded it keeps it open.
+/// CDXC:SessionDetails 2026-11-14 DECISION:
+/// User: "please let me collapse this one, and it should start collapsed, and when it's collapsed
+/// it should still show the big bar up top". The Context card folds again (it had been pinned open
+/// with the Overview tab, Q2763) and starts folded; folded it still shows its usage line, the
+/// overall bar and Compact context, and unfolding shows the breakdown. The fold stays one
+/// remembered choice for the whole app (as every card's fold is): a user who never touched
+/// Context's fold sees it folded, one who unfolded it keeps it open.
 pub const FOLDED_BY_DEFAULT: &[&str] = &["context"];
 
 /// The stored mark of a section folded by default that the user unfolded.

@@ -739,8 +739,8 @@ fn background(
 /// details: final phone sheet and desktop match" page, the merged panel as drawn (Q2755, Q2762) with "i dont like that
 /// we lost the stuff that's below the context fam" and the Context card moved to the first tab, the desktop taking the
 /// same tabs in its panel while the chat box's Context window popover goes (Q2763, option A), and the names "Overview |
-/// Limits" (Q2769). The first tab is what the session is (`OVERVIEW_ORDER`, the Context card always open in it,
-/// `pinnedOpen`); the second lists the context meter's More details rows (the ones Choose details picks, which also pin
+/// Limits" (Q2769). The first tab is what the session is (`OVERVIEW_ORDER`; its Context card folds again since
+/// 2026-11-14, see `FOLDED_BY_DEFAULT` in `state.rs`); the second lists the context meter's More details rows (the ones Choose details picks, which also pin
 /// the status line) as cards (`USAGE_CARDS`). Rows another place already shows are not listed (`SHOWN_ELSEWHERE`).
 pub const TABS: [(&str, &str); 2] = [("overview", "Overview"), ("usage", "Limits")];
 
@@ -982,9 +982,7 @@ pub fn document(state: &ChatState, context: &ChatContext, meter: Option<&Value>)
             collapsed,
             context_card(state, data, &usage, now_ms, offset),
         );
-        // Always open, with no fold (the decision at `TABS`), and the meter's Compact context under it.
-        card["collapsed"] = json!(false);
-        card["pinnedOpen"] = json!(true);
+        // Folded by default (`FOLDED_BY_DEFAULT`); the meter's Compact context rides under its bar.
         if let Some(meter) = meter {
             card["compact"] = json!({
                 "label": "Compact context",
