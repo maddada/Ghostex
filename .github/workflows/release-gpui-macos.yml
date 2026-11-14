@@ -55,8 +55,9 @@ permissions:
 
 # Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
 # signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+# The key itself is set only on the steps that publish or seal a component, never workflow-wide, so
+# third-party actions and other steps never see it.
 env:
-  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
   # The app's sealed on-demand-resources.json must carry every archive's signature.
   GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
 
@@ -115,7 +116,7 @@ jobs:
           github-cache: 'false'
           max-size: 1536MiB
           pr-comment: 'false'
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # CDXC:Release 2026-09-15 WHY:
@@ -310,13 +311,11 @@ jobs:
       - name: Prepare references and GhosttyKit
         env:
           GH_TOKEN: ${{ github.token }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase prepare-sources "${{ inputs.version }}"
       - name: Cargo build gxserver (server crates)
         env:
           GH_TOKEN: ${{ github.token }}
           GHOSTEX_CARGO_TIMINGS: '1'
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase build-server "${{ inputs.version }}"
       # CDXC:Release 2026-10-07 WHY:
       # The runtime artifacts are awaited after the gxserver cargo build, not
@@ -381,7 +380,6 @@ jobs:
       - name: Resolve code-server archives and remote gxserver packages
         env:
           GH_TOKEN: ${{ github.token }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase prepare-runtime "${{ inputs.version }}"
       # The macOS code-server component is published by its own job; staging
       # only needs the tag to be live, which the artifact upload proves.
@@ -396,30 +394,27 @@ jobs:
             --timeout-minutes 45
       - name: Stage macOS runtime (code-server, zmx, gxserver package)
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase stage-runtime "${{ inputs.version }}"
       - name: Cargo build ghostex-gpui (desktop crate)
         env:
           GH_TOKEN: ${{ github.token }}
           GHOSTEX_CARGO_TIMINGS: '1'
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase build-desktop "${{ inputs.version }}"
       - name: Assemble, sign, and validate Ghostex.app
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
           COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase assemble "${{ inputs.version }}"
       - name: Create DMG
         env:
           GH_TOKEN: ${{ github.token }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase dmg "${{ inputs.version }}"
       - name: Notarize and staple DMG
         env:
           GH_TOKEN: ${{ github.token }}
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: tooling/release-gpui/macos.sh --phase notarize "${{ inputs.version }}"
       - name: Generate appcast and write release manifest
         env:

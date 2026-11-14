@@ -75,6 +75,9 @@ CEF_RUST_TARGET="$(uname -m)-unknown-linux-gnu"
 # (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.17.x for
 # libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
 (
+	# The component signing key (release workflows set it on the steps that publish components)
+	# never reaches cargo, build scripts or the compiler wrapper; the component publishing below still has it.
+	unset GHOSTEX_COMPONENT_SIGNING_KEY
 	cd "$GPUI_DIR"
 	cargo build --release --bins
 )

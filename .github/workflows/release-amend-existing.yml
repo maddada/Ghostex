@@ -189,7 +189,7 @@ jobs:
       - name: Check the Ghostty Zig toolchain pin against the vendored source
         if: ${{ steps.scope.outputs.GHOSTEX_RELEASE_MACOS == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_DEB == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_RPM == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_LINUX_TAR == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_X64 == 'true' || steps.scope.outputs.GHOSTEX_RELEASE_WINDOWS_ARM64 == 'true' }}
         run: node tooling/release-gpui/check-ghostty-zig-pin.mjs
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Restore release-test prerequisites

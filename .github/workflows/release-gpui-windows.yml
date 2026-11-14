@@ -108,8 +108,9 @@ permissions:
 
 # Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
 # signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+# The key itself is set only on the steps that publish or seal a component, never workflow-wide, so
+# third-party actions and other steps never see it.
 env:
-  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
   # The app's sealed on-demand-resources.json must carry every archive's signature.
   GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
 
@@ -175,7 +176,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # signer: none when signing was not requested; else certum (both
@@ -423,6 +424,7 @@ jobs:
         if: ${{ ! inputs.runtime_artifacts_ready }}
         shell: bash
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
@@ -530,6 +532,7 @@ jobs:
         if: ${{ steps.signing.outputs.signer != 'signpath' }}
         shell: pwsh
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GHOSTEX_WINDOWS_SIGNER: ${{ steps.signing.outputs.signer }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
@@ -555,6 +558,7 @@ jobs:
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
         shell: pwsh
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
           COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
@@ -577,7 +581,7 @@ jobs:
           retention-days: 1
       - name: Sign the binaries with SignPath
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -609,7 +613,7 @@ jobs:
           retention-days: 1
       - name: Sign the Velopack setup with SignPath
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -639,7 +643,7 @@ jobs:
           retention-days: 1
       - name: Sign the installer with SignPath
         if: ${{ steps.signing.outputs.signer == 'signpath' }}
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -759,7 +763,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # Same Node.js as jobs.build, which pins it from the code-server checkout.

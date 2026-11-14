@@ -143,7 +143,7 @@ jobs:
           max-size: 1536MiB
           pr-comment: 'false'
       # macos.sh requires `bun` on PATH in its prologue.
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Resolve dependency cache keys
@@ -280,7 +280,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Resolve dependency cache keys
@@ -383,7 +383,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       - name: Resolve dependency cache keys
@@ -483,7 +483,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
@@ -634,7 +634,7 @@ jobs:
             ~/.cache/zig
           key: zig-gxserver-${{ runner.os }}-x64-${{ steps.cache_keys.outputs.zig }}
           restore-keys: zig-gxserver-${{ runner.os }}-x64-
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
@@ -749,7 +749,7 @@ jobs:
             ~/.cache/zig
           key: zig-gxserver-${{ runner.os }}-arm64-${{ steps.cache_keys.outputs.zig }}
           restore-keys: zig-gxserver-${{ runner.os }}-arm64-
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.

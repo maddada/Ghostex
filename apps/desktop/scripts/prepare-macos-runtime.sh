@@ -439,6 +439,9 @@ EOF
 	fi
 	(
 		cd "$GXSERVER_RS_ROOT"
+		# The component signing key (release workflows set it on the steps that publish components)
+		# never reaches cargo, build scripts or the compiler wrapper.
+		unset GHOSTEX_COMPONENT_SIGNING_KEY
 		GHOSTEX_GPUI_MARKETING_VERSION="$marketing_version" \
 			"$cargo_bin" build --release --bin gxserver --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target" ${cargo_profile_args[@]+"${cargo_profile_args[@]}"}
 	)

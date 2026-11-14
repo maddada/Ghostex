@@ -78,8 +78,9 @@ permissions:
 
 # Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
 # signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+# The key itself is set only on the steps that publish or seal a component, never workflow-wide, so
+# third-party actions and other steps never see it.
 env:
-  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
   # The app's sealed on-demand-resources.json must carry every archive's signature.
   GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
 
@@ -118,7 +119,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
       # kache (CDXC:ReleaseKache 2026-11-04, replacing sccache's GitHub Actions backend). The registry cache below
@@ -306,6 +307,7 @@ jobs:
       - name: Reuse the published Source component for standalone runs
         if: ${{ ! inputs.runtime_artifacts_ready }}
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
@@ -330,6 +332,7 @@ jobs:
           tar -xzf "build/runtime-artifacts/$LINUX_ARCH/gxserver-linux-$LINUX_ARCH.tar.gz" -C "build/remote-gxserver-linux/$LINUX_ARCH/package"
       - name: Stage the Linux desktop payload once
         env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
           COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}

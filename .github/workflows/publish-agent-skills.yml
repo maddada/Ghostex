@@ -11,9 +11,6 @@ name: Publish agent skills
 on:
   workflow_dispatch:
 
-env:
-  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
-
 permissions:
   contents: write
 
@@ -29,6 +26,8 @@ jobs:
         with:
           submodules: false
       - name: Sign the bundled skills
+        env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
         run: node tooling/release-gpui/sign-agent-skills.mjs "$RUNNER_TEMP/ghostex-skills.json"
       - name: Publish the signed skill list
         env:
