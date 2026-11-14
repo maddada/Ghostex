@@ -354,7 +354,16 @@ impl Engine<'_> {
         if first && self.enabled("spaces/") {
             self.spaces_named_apart |= spaces_named_apart(&self.store.entries, &incoming);
         }
+        let tag_list_key = super::sidebar_tags::tag_list_key();
+        let tag_list_before = self
+            .store
+            .entries
+            .get(&tag_list_key)
+            .and_then(|entry| entry.value.clone());
         let outcome = merge_entries(&mut self.store.entries, incoming);
+        if outcome.changed.contains(&tag_list_key) {
+            self.keep_status_entries_merged(tag_list_before);
+        }
         if first && self.enabled("spaces/") {
             for (key, value) in merge_spaces_by_name(&self.store.entries) {
                 self.edit(&key, value);

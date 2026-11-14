@@ -4,13 +4,17 @@
 //!
 //! Keys: `spaces/sessionTag/<tagId>` (the tag's name, colour and icon; deleted with the tag) and
 //! `spaces/sessionTagOrder` (the ids in order). The Session Tags list in Settings, which places
-//! these tags among the built-in ones, syncs as the `sidebarSessionTagListItems` setting.
+//! these tags among the built-in ones, syncs as the `sidebarSessionTagListItems` setting; its six
+//! computed status entries are kept here through a write by an app that predates them
+//! (`keep_status_entries_merged`, `keep_status_entries_exported`).
 //!
 //! CDXC:SettingsSync 2026-11-12 WHY:
 //! A tag id is random (`custom-<token>`), so the tags two computers made apart never share a key and both survive their first sync; a whole-catalog value would have let the older catalog's tags vanish, and with them the tag on every session that carried one. A tag deleted on one computer is deleted on the others, as the Session Tags editor does on one computer. Supersedes "a remote daemon's tags stay that daemon's own" (CDXC:Sessions 2026-09-11 in custom_session_tags.rs) while Sidebar organization sync is on.
 
 use std::collections::BTreeMap;
 
+use ghostex_gx_core::settings_sync::setting_sync_key;
+use ghostex_gx_core::{keep_status_entries, without_status_entries};
 use serde_json::{json, Map, Value};
 
 use crate::custom_session_tags::{read_custom_session_tags, write_custom_session_tags_and_publish};
@@ -20,6 +24,13 @@ use super::engine::Engine;
 
 const TAG_KEY_PREFIX: &str = "spaces/sessionTag/";
 const TAG_ORDER_KEY: &str = "spaces/sessionTagOrder";
+/// The Session Tags list setting, which holds the status entries.
+const TAG_LIST_SETTING: &str = "sidebarSessionTagListItems";
+
+/// The synced key of the Session Tags list.
+pub(super) fn tag_list_key() -> String {
+    setting_sync_key("spaces", TAG_LIST_SETTING)
+}
 
 /// A Session Tags key (rather than a Space, a group, a project's place or a setting).
 pub(super) fn is_session_tag_key(key: &str) -> bool {
@@ -104,5 +115,72 @@ impl Engine<'_> {
         let repository = DomainRepository::new(self.db, &self.server_id);
         write_custom_session_tags_and_publish(self.state, self.db, &repository, &params)?;
         Ok(())
+    }
+
+    /// After a merge in which another computer's write of the Session Tags list won: when it lacks
+    /// status entries the list held here before (`previous`), puts them back where they were, as a
+    /// new edit made here, so the repaired list wins everywhere and replaying the stripped write
+    /// changes nothing (its stamp is older now).
+    ///
+    /// CDXC:SettingsSync 2026-11-14 WHY: an older phone or desktop drops the status entries from the list it writes back after a tag switch (gx-core sidebar_view/status_tags.rs `keep_status_entries`). The repair is an ordinary newer edit with this computer as its writer, not a rewrite under the incoming stamp, so newest-write-wins, conflict notes and Undo work as for every other key.
+    pub(super) fn keep_status_entries_merged(&mut self, previous: Option<Value>) {
+        let key = tag_list_key();
+        let Some(previous) = previous else {
+            return;
+        };
+        let Some(won) = self
+            .store
+            .entries
+            .get(&key)
+            .and_then(|entry| entry.value.clone())
+        else {
+            return;
+        };
+        if let Some(repaired) = keep_status_entries(&previous, &won) {
+            self.edit(&key, Some(repaired));
+        }
+    }
+
+    /// Before this computer's own values are taken into the entries: a Session Tags list saved here
+    /// since the last step that lacks status entries the synced list holds gets them back where the
+    /// synced list has them, and the app saves the repaired list (an older desktop app saved it).
+    /// A list still at its default whose only difference from the last step is the status entries
+    /// the default gained is no edit made here.
+    pub(super) fn keep_status_entries_exported(&mut self, current: &mut BTreeMap<String, Value>) {
+        let key = tag_list_key();
+        let Some(value) = current.get(&key).cloned() else {
+            return;
+        };
+        let saved_here = self
+            .settings()
+            .and_then(|settings| settings.get(TAG_LIST_SETTING))
+            .is_some();
+        let Some(baseline) = self.store.value_baselines.get_mut("spaces") else {
+            return;
+        };
+        let before = baseline.get(&key);
+        if before == Some(&value) {
+            return;
+        }
+        // CDXC:SettingsSync 2026-11-14 WHY: the shipped default of the list starts with the status entries now, so on a computer that never saved the list the update alone changed what it reads; taking that in as an edit would replace a list another computer arranged while this one's app was closed.
+        if !saved_here
+            && before.is_some_and(|before| {
+                without_status_entries(before) == without_status_entries(&value)
+            })
+        {
+            baseline.insert(key, value);
+            return;
+        }
+        let synced = self
+            .store
+            .entries
+            .get(&key)
+            .and_then(|entry| entry.value.clone());
+        let Some(repaired) = synced.and_then(|synced| keep_status_entries(&synced, &value)) else {
+            return;
+        };
+        self.settings_patch
+            .insert(TAG_LIST_SETTING.to_string(), repaired.clone());
+        current.insert(key, repaired);
     }
 }
