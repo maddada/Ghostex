@@ -682,8 +682,9 @@ impl NativeChatView {
             .collect()
     }
 
-    /// A folded or opened group's "3 tool calls" as the header of its Quiet View card: the
-    /// disclosure's chevron and words at the card's inset and height, filling the card.
+    /// A folded or opened group's "3 tool calls" as the header of its Quiet View card, filling it.
+    ///
+    /// CDXC:SessionChat 2026-11-14 DECISION: User, of a shut "5 tool calls" card in an opened Reports line drawn with a chevron and no icon beside "Work item added …" and "Message from …": make it match them. It is a one-line card like they are (`SINGLE_LINE_CARD`): the tools icon in the neutral tile on the left, the card's title type, its height and padding, and no chevron; the whole card still opens and shuts. The phone matches (ToolRows.tsx).
     fn boxed_card_heading(
         &self,
         key: String,
@@ -706,22 +707,21 @@ impl NativeChatView {
                 .items_center()
                 .w_full()
                 .min_w_0()
-                .gap(px(6.0 * s))
+                .gap(px(10.0 * s))
                 .px(px(shape.padding_x * s))
                 .h(px(shape.header_height(s)))
-                .text_color(p.primary)
+                .text_color(p.foreground)
                 .chat_cursor_pointer()
                 .hover(move |style| style.bg(hover)),
             expanded,
             p,
         )
+        .child(shape.tile("titlebar/tool.svg", p))
         .child(
-            super::disclosure_motion::turned_chevron(self.fold_turn(&key, expanded, cx), true)
-                .size(px(14.0 * s))
-                .flex_shrink_0()
-                .text_color(p.primary),
+            shape
+                .title(div().flex_1().min_w_0().truncate(), p)
+                .child(self.find_label(&key, label)),
         )
-        .child(div().flex_1().min_w_0().child(self.find_label(&key, label)))
         .on_click(cx.listener(move |this, _, _, cx| {
             this.toggle_marker_disclosure(toggle_key.clone(), expanded, cx)
         }))
