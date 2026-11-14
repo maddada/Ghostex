@@ -7344,6 +7344,29 @@ Updates does the same; a dismissed failure stays hidden in every window until
 that item's next update. An item only the page can finish (Needs you) opens
 Settings > Updates.
 
+## Experience (Settings > Experience: Chill, Regular, Advanced)
+
+Experience sets how many buttons and details Ghostex shows, on the computer and
+on the phone, each device on its own. Chill is a simple chat box (the field,
+the model, the effort, •••, attach, the mic and Send) and a calm chat: in Quiet
+View the turn that is running stays one line that counts its time ("Working ·
+1m 12s") and each line names only its reports. Regular adds the mode picker
+(and Maximize on the computer); the terminal is a Terminal View row in the •••
+menu. Advanced is for people who use terminals more: the terminal button and
+the context ring in the chat box, and last-active times in the sessions list.
+The sessions list uses the Sidebar's presets (Chill is Minimal, Regular is
+Recommended, Advanced is Detailed). The page has one row for the whole app and
+one per area (Chat box, Chat, Sessions list); picking a preset writes its
+settings, every switch stays in Settings, and a row whose settings were changed
+by hand says Custom. While the terminal button is off the chat box, the •••
+button turns red when the terminal has a problem, and pointing at it says why.
+With the mode picker off, new Claude sessions on that computer start in Auto,
+or in Bypass permissions while Skip permissions is on. A new phone asks once
+after pairing, with Regular picked. Settings keys: `chatComposerModePicker`,
+`chatComposerTerminalButton`, `chatComposerContextRing`, `chatComposerMaximize`,
+`chatQuietViewCalm`, plus the Quiet View and Card details keys; open the page
+with `ghostex settings open --tab experience`.
+
 ## Appearance and app
 
 Reset all settings to defaults (Settings > About) puts every setting and the app
