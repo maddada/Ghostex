@@ -232,9 +232,14 @@ async fn answer_session_chat_prompt(
         .unwrap_or_default();
     // The limit card's "Continue with Opus 5.5 on ST" (server/src/accounts/model_fallback.rs):
     // the same step as `agentAccounts` `continueWithModel`, so it runs where account switches run.
-    if kind == "continueWithModel" {
+    // The limit card's Continue (a wait a restart paused), Not now and Stop (CDXC:AgentProviders
+    // 2026-11-14 in server/src/accounts/recovery.rs): the same steps as `agentAccounts`.
+    if matches!(
+        kind,
+        "continueWithModel" | "resumeRecovery" | "stopRecovery"
+    ) {
         let mut request = params.clone();
-        request.insert("operation".to_string(), json!("continueWithModel"));
+        request.insert("operation".to_string(), json!(kind));
         let state = state.clone();
         let result = tokio::task::spawn_blocking(move || {
             crate::accounts::endpoint::dispatch(&state, &request)

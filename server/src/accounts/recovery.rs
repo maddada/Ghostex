@@ -64,6 +64,42 @@ impl RecoverySignals {
     }
 }
 const CONTINUE: &str = "Continue the unfinished task from the last confirmed progress after the temporary error or usage limit. Check the current state first and do not repeat completed actions. If the task is already complete, report that and stop.";
+/// CDXC:AgentProviders 2026-11-14 DECISION:
+/// GitHub #608: a user with no saved accounts left Ghostex closed overnight, and on launch account recovery restarted their orchestrator and typed the Continue prompt, about 10% of their usage, with nothing in the app saying so. From the decision page (i608-fix), the user picked: with no saved account recovery does nothing at a usage limit, so the session stays at the agent's own limit notice (Q3227 "stay stopped"; "Wait for reset", picked on purpose, still waits); a limit wait left from before a gxserver restart never sends on its own, the limit card asks instead (Q3228 "ask first"); every wait shows on the limit card with Stop, and the prompt Ghostex types says Ghostex sent it (Q3229 "card and line"); Switch accounts stays the default (Q3230).
+/// SEE-ALSO: server/src/accounts/limit_wait.rs (the card's facts), packages/gx-chat-core/src/questions/account_wait.rs (its words and buttons), server/src/session_chat_send/answer_http.rs (Continue, Not now and Stop).
+pub(crate) const PAUSED_AFTER_RESTART: &str =
+    "Ghostex restarted while this session waited for its usage limit.";
+/// Q3227: at a usage limit with Switch accounts and no saved account of this provider there is
+/// nothing to switch to, so recovery leaves the session where the agent stopped it.
+pub(super) fn stays_stopped_at_limit(
+    registry: &Registry,
+    provider: Provider,
+    policy: &Policy,
+) -> bool {
+    policy.at_limit == LimitAction::Switch
+        && !registry
+            .accounts
+            .iter()
+            .any(|account| account.provider == provider)
+}
+/// Q3228: a usage-limit wait found at gxserver start waits for the user's Continue on its card.
+fn pause_after_restart(recovery: &mut Value) {
+    let now = Utc::now().to_rfc3339();
+    recovery["status"] = json!("paused");
+    recovery["reason"] = json!(PAUSED_AFTER_RESTART);
+    recovery["nextAttemptAt"] = Value::Null;
+    recovery["updatedAt"] = json!(now);
+    recovery["accountWait"] = json!({ "mode": "afterRestart", "since": now });
+}
+/// Q3229: the prompt names who sent it, so the transcript says why the agent started a turn.
+fn continue_prompt(trigger: Option<&str>) -> String {
+    let lead = if trigger == Some("usageLimit") {
+        "Ghostex sent this automatically after the usage limit reset."
+    } else {
+        "Ghostex sent this automatically after a temporary error."
+    };
+    format!("{lead} {CONTINUE}")
+}
 /// CDXC:AgentProviders 2026-10-16 DECISION:
 /// User (2026-10-16) picked "Don't count blocked tries": when something on the agent's screen blocks a quick retry (a Claude popup, for example), that try must not use up one of the five quick tries; only a try that actually reached the agent counts. A blocked try waits and tries again once the screen is clear, the card's countdown and try number stay true, and a screen that stays blocked is shown on the card by what blocks it (`screen_block` in api_errors.rs, from what the chat already knows) instead of looping unseen. This extends the 2026-10-15 decision below.
 /// User (2026-10-15): "also i noticed you didn't retry when i got this error please fix! should've retried!", then chose "fast first then the existing schedule: wait for the network, retry after 5s, 15s, 1m, 2m, 5m; if all fail, fall back to the 5/10/20/40/60-minute schedule until it works or Stop; report to the orchestrator once the fast stage gives up", and "keep the one existing 'Retry after temporary errors' switch". This extends the 2026-09-05 decision ("automatic continuation after errors with increasingly slower retries so unattended work can recover. Temporary errors retry after 5, 10, 20, 40, then 60 minutes; the one-hour cap continues until recovery or Stop"): a connection or server error (`streamError`) now gets the five quick tries first, each one sent only once the provider's API host answers again, and other temporary errors keep the slow schedule alone. Schedule and detection: api_errors.rs.
@@ -447,6 +483,7 @@ fn restore_may_apply(registry: &Registry, session: &Value) -> bool {
         || runtime["accountRecovery"]["accountWait"].is_object()
         || runtime.get("accountSuppressedUsageNoticeAt").is_some()
         || runtime["accountRecovery"]["status"] == "retrying"
+        || runtime["accountRecovery"]["status"] == "waiting"
         || matches!(
             runtime["accountSwitch"]["phase"].as_str(),
             Some("switching" | "resuming" | "continuing")
@@ -496,6 +533,38 @@ fn restore_session(
         recovery["reason"] = json!("Ghostex restarted during a recovery attempt. Check the conversation before continuing.");
         recovery["updatedAt"] = json!(Utc::now().to_rfc3339());
         save(state, repo, &session, recovery)?;
+    } else if session
+        .pointer("/runtimeSettings/accountRecovery/status")
+        .and_then(Value::as_str)
+        == Some("waiting")
+        && session
+            .pointer("/runtimeSettings/accountRecovery/trigger")
+            .and_then(Value::as_str)
+            == Some("usageLimit")
+    {
+        // CDXC:AgentProviders 2026-11-14 DECISION in `pause_after_restart`.
+        let leaves_alone = repo
+            .get_project(pid)?
+            .and_then(|project| launch::provider(&project, &session))
+            .is_some_and(|provider| {
+                stays_stopped_at_limit(
+                    registry,
+                    provider,
+                    &launch::effective_policy(registry, provider, &session),
+                )
+            });
+        let recovery = if leaves_alone {
+            Value::Null
+        } else {
+            let mut recovery = session["runtimeSettings"]["accountRecovery"].clone();
+            pause_after_restart(&mut recovery);
+            recovery
+        };
+        super::limit_wait::forget(state, repo, &session);
+        save(state, repo, &session, recovery)?;
+        if let Some(row) = repo.get_session(pid, sid)? {
+            super::limit_wait::restore(&row);
+        }
     } else if matches!(
         session
             .pointer("/runtimeSettings/accountSwitch/phase")
@@ -647,6 +716,14 @@ pub(crate) fn plan_session(
     let usage_limit = detection.notice.as_ref().is_some_and(|notice| {
         notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT
     });
+    // Q3228: a wait paused by a restart sends nothing; it ends once the agent works again (the
+    // user continued it), or through its card (Continue, Not now).
+    if recovery["status"].as_str() == Some("paused") {
+        if !usage_limit && working {
+            save(state, repo, &session, Value::Null)?;
+        }
+        return Ok(None);
+    }
     if !usage_limit
         && (live_activity || (working && !detection.notice.as_ref().is_some_and(retryable)))
     {
@@ -707,6 +784,13 @@ pub(crate) fn plan_session(
             // An error recovery never retries because retries are off, whatever an earlier
             // recovery that ended left behind: announced once.
             super::api_errors::announce_episode(state, repo, &session)?;
+        }
+        return Ok(None);
+    }
+    // Q3227: nothing to switch to; a wait left from before this rule ends with it.
+    if notice.kind == "usageLimit" && stays_stopped_at_limit(&registry, provider, &policy) {
+        if recovery["trigger"].as_str() == Some("usageLimit") {
+            save(state, repo, &session, Value::Null)?;
         }
         return Ok(None);
     }
@@ -845,6 +929,15 @@ pub(crate) fn plan_session(
     if time(recovery.get("nextAttemptAt")).is_some_and(|t| t > now)
         && !(attempts == 0 && switch_account.is_some())
     {
+        // Q3229: a usage-limit wait that no every-account-full card covers (Wait for reset, or a
+        // login Ghostex does not track) shows on the limit card when it will continue, with Stop.
+        let next_at = time(recovery.get("nextAttemptAt"));
+        if notice.kind == "usageLimit"
+            && (policy.at_limit == LimitAction::Wait || current_id.is_none())
+            && super::limit_wait::enter_reset(&session, &mut recovery, next_at)
+        {
+            save(state, repo, &session, recovery)?;
+        }
         return Ok(None);
     }
     // A try the agent's screen would refuse (a popup, a dialog, a question) never reaches it, so
@@ -1249,6 +1342,8 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
     let detector = SessionChatOptionDetector::new(&state);
     // What the screen showed while the composer was not ready, for a try it turns away.
     let mut screen_block = None;
+    // What the recovery waited on, for the words the Continue prompt opens with.
+    let mut trigger: Option<String> = None;
     for _ in 0..30 {
         let row = {
             let Ok(db) = open_gxserver_database(&state.paths) else {
@@ -1267,6 +1362,10 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
         {
             return;
         }
+        trigger = row
+            .pointer("/runtimeSettings/accountRecovery/trigger")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         let agent = crate::session_chat_composer::session_chat_composer_agent_id(&row);
         let detection = detector
             .detect(&plan.project, &plan.session, agent.as_deref(), true)
@@ -1331,12 +1430,13 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
             }
         })
     } else {
-        super::api_errors::note_continuation(&plan.project, &plan.session, &plan.claim, CONTINUE);
+        let prompt = continue_prompt(trigger.as_deref());
+        super::api_errors::note_continuation(&plan.project, &plan.session, &plan.claim, &prompt);
         send_session_chat_message_internal(
             &state,
             &plan.project,
             &plan.session,
-            CONTINUE,
+            &prompt,
             &[],
             SessionChatMessageSource::AutomaticRecovery,
         )
