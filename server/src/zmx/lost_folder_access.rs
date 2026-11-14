@@ -81,15 +81,9 @@ pub(crate) fn start_lost_folder_access_watch(state: Arc<AppState>) {
 
 /// Puts the card on newly found sessions and takes it off recovered ones; returns the sessions whose card changed. BLOCKING.
 fn check(state: &AppState) -> Vec<(String, String)> {
-    let Ok(ps_output) = super::wire_cycle::read_process_snapshot() else {
+    let Some(lost) = lost_daemons(&format!("{}-", state.metadata.server_id)) else {
         return Vec::new();
     };
-    let prefix = format!("{}-", state.metadata.server_id);
-    let lost: HashSet<String> = super::process_identity::zmx_daemon_processes(&ps_output)
-        .into_iter()
-        .filter(|(pid, name)| name.starts_with(&prefix) && program_is_gone(*pid))
-        .map(|(_, name)| name)
-        .collect();
     let announced = ANNOUNCED
         .lock()
         .map(|announced| announced.clone())
@@ -137,6 +131,25 @@ fn check(state: &AppState) -> Vec<(String, String)> {
     changed
 }
 
+/// The zmx names of this server's daemons whose program file is gone, or None when the process list can't be read.
+#[cfg(unix)]
+fn lost_daemons(prefix: &str) -> Option<HashSet<String>> {
+    let ps_output = super::wire_cycle::read_process_snapshot().ok()?;
+    Some(
+        super::process_identity::zmx_daemon_processes(&ps_output)
+            .into_iter()
+            .filter(|(pid, name)| name.starts_with(prefix) && program_is_gone(*pid))
+            .map(|(_, name)| name)
+            .collect(),
+    )
+}
+
+/// Windows has no such daemons: the watch never starts there, and this keeps it compiling.
+#[cfg(not(unix))]
+fn lost_daemons(_prefix: &str) -> Option<HashSet<String>> {
+    None
+}
+
 /// Whether the program a process was started from has been deleted (macOS answers ENOENT for it, ESRCH for a process that ended).
 #[cfg(target_os = "macos")]
 fn program_is_gone(pid: i64) -> bool {
@@ -149,7 +162,7 @@ fn program_is_gone(pid: i64) -> bool {
     length <= 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn program_is_gone(_pid: i64) -> bool {
     false
 }
