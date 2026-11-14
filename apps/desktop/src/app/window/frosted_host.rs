@@ -91,6 +91,16 @@ pub(crate) fn frosted_hosting_active() -> bool {
     )) && window_glass_active()
 }
 
+/// Whether a hidden host keeps its window, hidden, for its next use; elsewhere hiding closes it and
+/// the next use opens a new one.
+///
+/// CDXC:PlatformSupport 2026-11-14 WHY:
+/// The floating Ghostex page window's ⋯ menu could not be opened on Omarchy. Its page is a native browser view nothing in the window can draw over, so that menu always asks for a host window of its own (more_menu.rs), on every platform; the host only knew how to attach to a macOS view or a Windows HWND, so on Linux it opened nothing and the ⋯ press went nowhere. On Linux a host is an override-redirect pop-up owned by its window through `x11_parent` (clickable on Hyprland, placed where the app puts it, never focused) and moved against that window. X11 gives no way here to hide one and show it again where it was, so hiding closes it.
+const HIDDEN_HOSTS_KEEP_THEIR_WINDOW: bool = cfg!(any(
+    all(target_os = "macos", not(ghostex_web)),
+    all(target_os = "windows", not(ghostex_web))
+));
+
 #[derive(Default)]
 struct HostSlot {
     handle: Option<WindowHandle<FrostedHostView>>,
@@ -257,11 +267,17 @@ fn apply(kind: FrostedHostKind, cx: &mut App) {
         let handle = handle.filter(|handle| handle.update(cx, |_, _, _| ()).is_ok());
         match wanted {
             None => {
-                if let Some(handle) = handle
-                    && shown.is_some()
-                {
-                    set_visible(handle.into(), None, false, cx);
-                }
+                let handle = match handle {
+                    Some(handle) if shown.is_some() && !HIDDEN_HOSTS_KEEP_THEIR_WINDOW => {
+                        let _ = handle.update(cx, |_, window, _| window.remove_window());
+                        None
+                    }
+                    Some(handle) if shown.is_some() => {
+                        set_visible(handle.into(), None, false, cx);
+                        Some(handle)
+                    }
+                    handle => handle,
+                };
                 with_slot(kind, |slot| {
                     slot.handle = handle;
                     slot.shown = None;
@@ -321,7 +337,11 @@ fn open_host(
     frame: Bounds<Pixels>,
     cx: &mut App,
 ) -> Option<WindowHandle<FrostedHostView>> {
+    // On Linux the host is owned through `x11_parent` below, not attached to a native view.
+    #[cfg(not(all(target_os = "linux", not(ghostex_web))))]
     let parent_view = native_view_of(parent, cx)?;
+    #[cfg(all(target_os = "linux", not(ghostex_web)))]
+    let parent_view = std::ptr::null_mut();
     let (origin, owner) = parent
         .update(cx, |_, window, cx| {
             (
@@ -338,6 +358,9 @@ fn open_host(
             display_id,
             titlebar: None,
             kind: gpui::WindowKind::PopUp,
+            // Owned by the window it sits over, so `move_host` can place it against that window.
+            #[cfg(all(target_os = "linux", not(ghostex_web)))]
+            x11_parent: Some(parent),
             focus: false,
             show: true,
             is_movable: false,
@@ -445,6 +468,8 @@ impl Render for FrostedHostView {
     }
 }
 
+// Linux hosts are owned through `x11_parent` and never need a native view.
+#[cfg_attr(all(target_os = "linux", not(ghostex_web)), allow(dead_code))]
 fn native_view_of(window: AnyWindowHandle, cx: &mut App) -> Option<*mut std::ffi::c_void> {
     window
         .update(cx, |_, window, _| native_view(window))
@@ -474,6 +499,7 @@ fn native_view(window: &Window) -> Option<*mut std::ffi::c_void> {
     all(target_os = "macos", not(ghostex_web)),
     all(target_os = "windows", not(ghostex_web))
 )))]
+#[cfg_attr(all(target_os = "linux", not(ghostex_web)), allow(dead_code))]
 fn native_view(_: &Window) -> Option<*mut std::ffi::c_void> {
     None
 }
@@ -545,9 +571,22 @@ fn move_host(
     .detach();
 }
 
+/// Moves an open host onto `frame` in the content coordinates of the window it was opened over
+/// (its `x11_parent`).
+#[cfg(all(target_os = "linux", not(ghostex_web)))]
+fn move_host(handle: AnyWindowHandle, _: AnyWindowHandle, frame: Bounds<Pixels>, cx: &mut App) {
+    crate::app::native_chat::child_window::move_child_window(
+        handle,
+        std::ptr::null_mut(),
+        frame,
+        cx,
+    );
+}
+
 #[cfg(not(any(
     all(target_os = "macos", not(ghostex_web)),
-    all(target_os = "windows", not(ghostex_web))
+    all(target_os = "windows", not(ghostex_web)),
+    all(target_os = "linux", not(ghostex_web))
 )))]
 fn move_host(_: AnyWindowHandle, _: AnyWindowHandle, _: Bounds<Pixels>, _: &mut App) {}
 

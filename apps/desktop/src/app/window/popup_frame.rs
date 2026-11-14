@@ -241,6 +241,20 @@ pub(crate) fn child_window_kind() -> gpui::WindowKind {
     }
 }
 
+/// The window kind of a chat menu (the composer's model and Mode selectors and the other option
+/// menus): `child_window_kind()`, except on Hyprland, where it is an override-redirect pop-up like
+/// the work area's Commit dropdown.
+///
+/// CDXC:PlatformSupport 2026-11-14 WHY:
+/// On Omarchy the chat box's model selector, its Mode selector and the menus like them showed an empty window away from the button for a moment before it jumped into place; the Commit dropdown did not. Omarchy's floating workspaces give every managed window that opens on them a rule that floats, sizes and centres it, so a menu opened as a managed Floating window mapped where that rule put it, and gpui_linux's x11 window then moved it back to the app's frame (`restore_app_frame`): two frames in the wrong place. Hyprland never places an override-redirect window, so the Commit dropdown, which is one, opens at its place from its first frame. The menus open the same way there; they still take the keyboard (`focus: true`) and close on a press in the main window as before. App modals and other dialogs stay managed windows: they are dragged and take focus as windows.
+pub(crate) fn menu_window_kind() -> gpui::WindowKind {
+    #[cfg(all(target_os = "linux", not(ghostex_web)))]
+    if crate::linux_hyprland::running_on_hyprland() {
+        return gpui::WindowKind::PopUp;
+    }
+    child_window_kind()
+}
+
 /// CDXC:PlatformSupport 2026-09-29 WHY:
 /// GPUI gives a Linux window server-side decorations unless it asks otherwise, so KWin drew a title bar with minimize and close buttons on the chat menus, the account popover and the app modals, which all draw their own panel. Child windows opened with `child_window_kind()` and no titlebar ask for client decorations, which on X11 means no window-manager frame, the borderless window they are on macOS and Windows. Their `Root` is built with `bordered(false)`: gpui-component otherwise wraps a client-decorated window in its Linux shadow and resize edges, which shrank the menus and pushed the account popover's Add account button out of its window.
 pub(crate) fn child_window_decorations() -> Option<gpui::WindowDecorations> {

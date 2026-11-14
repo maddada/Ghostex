@@ -22,7 +22,12 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
 ) -> Result<GpuiRemoteGxserverConnection, String> {
     let code_server_component_platform =
         gpui_remote_code_server_component_platform(config, execution_target);
-    for local_port in gpui_remote_gxserver_candidate_ports() {
+    let mut candidates = gpui_remote_gxserver_candidate_ports();
+    if let Some(kept) = gpui_remote_gxserver_kept_port(&config.remote_machine_id) {
+        candidates.retain(|port| *port != kept);
+        candidates.insert(0, kept);
+    }
+    for local_port in candidates {
         let mut tunnel =
             match gpui_spawn_remote_gxserver_tunnel(config, execution_target, local_port) {
                 Ok(tunnel) => tunnel,
@@ -31,6 +36,7 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
         if let Some(capabilities) =
             gpui_wait_for_remote_authenticated_health(local_port, token, tunnel.child.as_mut())
         {
+            gpui_remote_gxserver_keep_port(&config.remote_machine_id, local_port);
             return Ok(GpuiRemoteGxserverConnection {
                 _base_url: format!("http://127.0.0.1:{local_port}"),
                 capabilities,
@@ -179,6 +185,31 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
         forward: None,
         _askpass: askpass,
     })
+}
+
+/// The local port each machine's gxserver tunnel last listened on, while this app runs.
+///
+/// CDXC:RemoteMachines 2026-11-14 WHY:
+/// A page from another computer is opened at this machine's tunnel address (`gpui_remote_machine_url`) and posts its drafts and answers back to the address it was loaded from. Each time the link dropped and came back (an Easy Connect helper that ended, a tunnel that exited) the rebuilt tunnel listened on a new random port, so every page window opened before it, shown or hidden, kept posting to a port nothing listened on and said "Not sent yet: Ghostex can't be reached. Trying again…" for good (seen on Omarchy with a page from the user's Mac). A rebuilt tunnel now asks for its previous port first, as the phone's forward keeps its port across reconnects (GhostexPortForward.kt), so the addresses already handed out work again once the link is back; a port something else took meanwhile falls back to a new one.
+static GPUI_REMOTE_GXSERVER_KEPT_PORTS: std::sync::Mutex<
+    Option<std::collections::HashMap<String, u16>>,
+> = std::sync::Mutex::new(None);
+
+fn gpui_remote_gxserver_kept_port(remote_machine_id: &str) -> Option<u16> {
+    GPUI_REMOTE_GXSERVER_KEPT_PORTS
+        .lock()
+        .ok()?
+        .as_ref()?
+        .get(remote_machine_id)
+        .copied()
+}
+
+fn gpui_remote_gxserver_keep_port(remote_machine_id: &str, port: u16) {
+    if let Ok(mut ports) = GPUI_REMOTE_GXSERVER_KEPT_PORTS.lock() {
+        ports
+            .get_or_insert_with(Default::default)
+            .insert(remote_machine_id.to_string(), port);
+    }
 }
 
 pub(crate) fn gpui_remote_gxserver_candidate_ports() -> Vec<u16> {
