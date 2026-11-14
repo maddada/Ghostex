@@ -447,6 +447,11 @@ fn tick(state: &AppState, memory: &Mutex<Memory>) -> Vec<Plan> {
 /// Signals a session again once its turn's settle has passed, so a turn end is acted on within
 /// a minute instead of at the next sweep.
 fn requeue_after_settle(key: SessionKey) {
+    requeue_after(key, coordinators::test_scaled(SETTLE_MS) + 2_000);
+}
+
+/// Signals a session again after `after_ms`, once per session at a time.
+fn requeue_after(key: SessionKey, after_ms: i64) {
     static WAITING: OnceLock<std::sync::Mutex<HashSet<SessionKey>>> = OnceLock::new();
     let waiting = WAITING.get_or_init(Default::default);
     if !waiting
@@ -457,10 +462,7 @@ fn requeue_after_settle(key: SessionKey) {
         return;
     }
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(
-            coordinators::test_scaled(SETTLE_MS) as u64 + 2_000,
-        ))
-        .await;
+        tokio::time::sleep(Duration::from_millis(after_ms.max(0) as u64)).await;
         waiting
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -603,6 +605,10 @@ fn decide(
         use super::autopilot_answers::PromptAct;
         let act = match prompt.act {
             PromptAct::Wait => return None,
+            PromptAct::Hold { after_ms } => {
+                requeue_after(key.clone(), after_ms + 1_000);
+                return None;
+            }
             PromptAct::Answer { params, did } => Act::Answer { params, did },
             PromptAct::Decline {
                 params,

@@ -232,8 +232,8 @@ fn is_read_only_thread(project_id: &str, session_id: &str) -> bool {
 }
 
 /// Whether Autopilot answers this session's approval cards itself: it covers the session, may
-/// answer approvals, and on Everything settles every one (approves it, or declines a hard limit),
-/// where Heal and decide leaves some for the user. Not while the user took the session back, and
+/// answer approvals, and on All but limits settles every one (approves it, or declines a hard
+/// limit), where Safe steps leaves some for the user. Not while the user took the session back, and
 /// never for a read-only thread, whose cards wait for the user (server/src/server/autopilot_answers.rs).
 pub fn answers_approvals(project_id: &str, session_id: &str) -> bool {
     let config = current();

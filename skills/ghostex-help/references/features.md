@@ -4310,10 +4310,13 @@ itself ("what's stuck?", "how do I pair my phone?").
 Autopilot keeps your agent sessions moving while you are away, until you turn it
 off. Turn it on in **Settings > Autopilot** (on the phone too: Settings ›
 Autopilot, per computer), from the **Autopilot** pill in any coordinator's chat
-(above its chat box, beside Board), or with `ghostex autopilot on`. While it is
-on, Ghostex looks at every session it covers as soon as an agent finishes a
-turn, and sweeps all of them every 2 minutes (1 to 10 minutes on the page). It
-then:
+(above its chat box, beside Board), or with `ghostex autopilot on`. The top of
+the page picks how much it does: **Off**, **Careful** (answers questions after
+15 minutes and approves safe steps), **Full** (answers questions after 10
+minutes and approves anything that is not a hard limit), or **Custom** (your own
+mix of the rows below; changing a row makes it Custom). While it is on, Ghostex
+looks at every session it covers as soon as an agent finishes a turn, and sweeps
+all of them every 2 minutes (1 to 10 minutes under **Advanced**). It then:
 
 - **Carries on** a session that stopped while its background job finished, that
   stopped mid-task right after saying what it does next, or whose turn was cut
@@ -4327,22 +4330,22 @@ then:
   when its own account policy would wait, and sends "." so it carries on.
 - **Restarts a session whose terminal ended** when Ghostex's own restarts gave
   up, and **skips Codex's update prompt** when it holds a session.
-- **Answers questions for you** when **Answer questions for me** is on (off by
-  default): after you leave a question unanswered for 5, 10 or 15 minutes, it
-  picks each question's recommended choice, for an agent's own question and for
-  a question form in its chat alike.
-- **Answers approval cards** when **Answer approval cards** is on (on by
-  default; while it is off only your click answers them): permission prompts,
-  Connectors cards and folder trust, within its tier. **Heal** answers none,
-  **Heal and decide** approves only what is on its allow list (reads, builds,
-  tests, edits and local commits inside the project), and **Everything** (the
-  default) approves anything that crosses no hard limit. A read-only thread's
-  cards (leaving Plan mode, or a step out of Codex's read-only sandbox) always
-  wait for you.
+- **Answers questions for you**, as **When it asks a question** says: **Wait
+  for me** (the default), or after you leave a question unanswered for 5, 10 or
+  15 minutes it picks each question's recommended choice, for an agent's own
+  question and for a question form in its chat alike.
+- **Answers approval cards** (permission prompts, Connectors cards and folder
+  trust), as **When it asks permission** says: **Wait for me** (only your click
+  answers them), **Safe steps** (approves reads, builds, tests, edits and local
+  commits inside the project; anything else waits for you and every hard limit
+  is declined) or **All but limits** (the default; approves anything that
+  crosses no hard limit). Each card waits a minute for you first, so at your
+  desk you answer it yourself. A read-only thread's cards (leaving Plan mode, or
+  a step out of Codex's read-only sandbox) always wait for you.
 
-**Hard limits it may cross** are each a switch, off until you turn it on: push
-a branch, finish a release you asked for, push main, merge pull requests,
-delete outside the project, post publicly. A prompt that would cross one you
+**Hard limits it may cross** show with **All but limits** only, each a switch
+off until you turn it on: push a branch, finish a release you asked for, push
+main, merge pull requests, delete outside the project, post publicly. A prompt that would cross one you
 left off, or that asks for a sign-in, 2FA, an identity check or a payment
 (never done), is declined: the agent is told to carry on without it, and the
 log notes it for you.
@@ -4350,7 +4353,7 @@ log notes it for you.
 **The supervisor** is an agent that wakes only for judgment calls: a question
 with no recommended choice, or a session the rules could not keep moving. It
 starts the first time it is needed, in an **Autopilot** project in your
-sidebar, on the **Supervisor model** you pick (Claude Opus 5.5 at medium or
+sidebar, on the **Supervisor model** you pick under **Advanced** (Claude Opus 5.5 at medium or
 Codex GPT 6.1 Sol at high; the other one when that agent has no account with
 room), and you can read its chat to see why it did each thing. It keeps notes
 (one running file, and one per session) that every wake reads first, so it
@@ -4358,9 +4361,10 @@ never starts from scratch, and it acts only through Ghostex: it answers a
 question, tells a session how to carry on, or leaves it for you with a note. It
 never approves a prompt itself.
 
-Which sessions: **Every session** (coordinators and threads included), only
-**Projects I pick** (their switches show on the page, worktrees included), or
-only **Sessions I pick**. Each session's chat shows an **Autopilot** pill while
+Which sessions: **Every session** (coordinators and threads included; the
+projects and sessions you took out are listed under it, each with a switch to
+put it back), only **Projects I pick** (their switches show on the page,
+worktrees included), or only **Sessions I pick**. Each session's chat shows an **Autopilot** pill while
 Autopilot is on (on the phone too): tap it to leave that session out (it reads
 **Autopilot off**) or put it back. Right-click a project in the sidebar and use
 **Advanced > Autopilot** to take the project and its worktrees out, or put them

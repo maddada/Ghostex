@@ -37,15 +37,19 @@ pub enum Scope {
     Sessions,
 }
 
-/// What Autopilot may do on its own.
+/// Which approval cards Autopilot approves while "Answer approval cards" (the page's "When it
+/// asks permission") is on.
+///
+/// CDXC:Autopilot 2026-11-14 DECISION:
+/// User, on the Autopilot design page: layout C (Off / Careful / Full presets over one row per situation, Q3030) and "merge" for the level and the two Answer switches that set the same thing (Q3031). The level is no longer a choice of its own: questions are "Wait for me" or a wait (`answer_questions`), approval cards are "Wait for me", "Safe steps" ([`Tier::Decide`]) or "All but limits" ([`Tier::Everything`]). Heal is kept only so an older phone or a saved file that sends it still reads: it becomes Decide with both answer choices on "Wait for me", which is what Heal did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Tier {
-    /// Only what any human would do without thinking: carry on, interrupt, reload, switch account.
+    /// Old: questions and approvals wait for the user. Read as Decide with both answers off.
     Heal,
-    /// Heal, plus answer what the agent asks with its recommended choice.
+    /// Safe steps: reads, builds, tests, edits and local commits inside the project.
     Decide,
-    /// Decide, plus approve any prompt that is not a hard limit.
+    /// All but limits: any card that is not a hard limit.
     #[default]
     Everything,
 }
@@ -157,6 +161,12 @@ impl AutopilotConfig {
         }
         if !self.answer_approvals_set {
             self.answer_approvals = true;
+        }
+        if self.tier == Tier::Heal {
+            self.tier = Tier::Decide;
+            self.answer_questions = false;
+            self.answer_approvals = false;
+            self.answer_approvals_set = true;
         }
         self
     }

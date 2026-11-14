@@ -11,7 +11,7 @@ use super::super::catalog::SettingOption;
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ROW_PADDING_X, ROW_PADDING_Y, RowSpec, SettingsPage, SliderBinding,
-    SliderSaver, segmented_field, select_field, settings_button, settings_section,
+    SliderSaver, advanced_fold_header, segmented_field, select_field, settings_button, settings_section,
     slider_number_field_with, static_note, toggle_field_with,
 };
 use super::super::model::SettingsTabId;
@@ -187,9 +187,11 @@ impl AutopilotTab {
         let on = config["enabled"].as_bool() == Some(true);
         let view = self.view.clone().unwrap_or(Value::Null);
         let covered = view["watching"]["covered"].as_u64().unwrap_or(0);
+        let preset = preset_of(&config);
         let status = if on {
             format!(
-                "On since {}, keeping {} going. Turn it off here, from a coordinator's chat, or with ghostex autopilot off.",
+                "{} On since {}, keeping {} going. Turn it off here, from a coordinator's chat, or with ghostex autopilot off.",
+                preset_line(preset),
                 when(config["enabledAt"].as_str()),
                 match covered {
                     1 => "1 session".to_string(),
@@ -197,19 +199,26 @@ impl AutopilotTab {
                 }
             )
         } else {
-            "Keeps your sessions going while you are away: it carries on a session that stopped while its background job finished or mid-task, interrupts one stuck on a hung command, reloads one that stays frozen, moves one at a usage limit to an account with room, and restarts one whose terminal ended. It stays on until you turn it off.".to_string()
+            "Keeps your sessions going while you are away: it carries on a session that stopped while its background job finished or mid-task, interrupts one stuck on a hung command, reloads one that stays frozen, moves one at a usage limit to an account with room, and restarts one whose terminal ended. Careful and Full also answer for you; it stays on until you turn it off.".to_string()
         };
-        let mut rows = vec![toggle_field_with(
+        let mut rows = vec![segmented_field(
             p,
             "autopilotEnabled",
             RowSpec::new("Autopilot").description(status),
-            on,
             None,
-            |page: &mut Self, checked, _, cx| page.set(json!({ "enabled": checked }), cx),
+            &[
+                option("Off", "off"),
+                option("Careful", "careful"),
+                option("Full", "full"),
+                option("Custom", "custom"),
+            ],
+            Some(preset),
+            None,
+            |page: &mut Self, value, _, cx| page.set(preset_patch(&value), cx),
             cx,
         )];
         // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): while Autopilot is off its page is
-        // this one switch (and what it did); every choice under it shows once it is on.
+        // this one choice (and what it did); every choice under it shows once it is on.
         if !on {
             return settings_section(p, "", None, None, rows);
         }
@@ -220,7 +229,7 @@ impl AutopilotTab {
             RowSpec::new("Which sessions").description(match scope.as_str() {
                 "projects" => "Only the projects switched on below, with their worktrees. A session's Autopilot pill takes it out or puts it back.",
                 "sessions" => "Only sessions you put in one by one, with the Autopilot pill in their chat.",
-                _ => "Every session, coordinators and threads included, except the projects switched off below (a project's right-click menu, Advanced > Autopilot, does the same). A session's Autopilot pill in its chat takes it out or puts it back.",
+                _ => "Every session, coordinators and threads included. A project's right-click menu (Advanced > Autopilot) or a session's Autopilot pill takes it out; what is left out is listed below.",
             }),
             None,
             &[
@@ -233,45 +242,42 @@ impl AutopilotTab {
             |page: &mut Self, value, _, cx| page.set(json!({ "scope": value }), cx),
             cx,
         ));
-        // The project switches only for "Projects I pick", the session ones only for "Sessions I
-        // pick" (in Every session, a project's menu and a session's pill take them out).
-        if scope == "projects" {
-            let projects = list(&view, "projects");
-            let named = |name: &str| {
-                projects
-                    .iter()
-                    .filter(|project| text(project, "name").eq_ignore_ascii_case(name))
-                    .count()
-            };
-            for project in &projects {
-                let project_id = text(project, "projectId");
-                let name = text(project, "name");
-                let inside = project["in"].as_bool() == Some(true);
-                let id = row_id(format!("autopilot-project-{project_id}"));
-                // Two projects with one name ("Ghostex", "ghostex") show their folders.
-                let mut spec = RowSpec::new(name.clone()).dependent();
-                if named(&name) > 1 {
-                    spec = spec.description(home_relative(&text(project, "path")));
-                }
-                rows.push(toggle_field_with(
-                    p,
-                    id,
-                    spec,
-                    inside,
-                    None,
-                    move |page: &mut Self, checked, _, cx| {
-                        page.set_project(&project_id, checked, cx)
-                    },
-                    cx,
-                ));
-            }
-        }
-        let sessions = if scope == "sessions" {
-            list(&view, "sessions")
-        } else {
-            Vec::new()
+        // Projects I pick lists every project with its switch; Every session lists only the ones
+        // taken out (CDXC:Autopilot 2026-11-14 on `left_out_note`).
+        let projects: Vec<Value> = list(&view, "projects")
+            .into_iter()
+            .filter(|project| scope == "projects" || (scope == "all" && project["in"] == false))
+            .collect();
+        let named = |name: &str| {
+            list(&view, "projects")
+                .iter()
+                .filter(|project| text(project, "name").eq_ignore_ascii_case(name))
+                .count()
         };
-        for session in sessions {
+        for project in &projects {
+            let project_id = text(project, "projectId");
+            let name = text(project, "name");
+            let inside = project["in"].as_bool() == Some(true);
+            let id = row_id(format!("autopilot-project-{project_id}"));
+            let mut spec = RowSpec::new(name.clone()).dependent();
+            // Two projects with one name ("Ghostex", "ghostex") show their folders.
+            if named(&name) > 1 {
+                spec = spec.description(home_relative(&text(project, "path")));
+            } else if scope == "all" {
+                spec = spec.description(left_out_note(true));
+            }
+            rows.push(toggle_field_with(
+                p,
+                id,
+                spec,
+                inside,
+                None,
+                move |page: &mut Self, checked, _, cx| page.set_project(&project_id, checked, cx),
+                cx,
+            ));
+        }
+        // A session set one by one shows in every scope: in Every session that is one taken out.
+        for session in list(&view, "sessions") {
             let project_id = text(&session, "projectId");
             let session_id = text(&session, "sessionId");
             let session_on = session["on"].as_bool() == Some(true);
@@ -284,7 +290,11 @@ impl AutopilotTab {
                     text(&session, "title"),
                     text(&session, "project")
                 ))
-                .description("Set from its chat's Autopilot pill.")
+                .description(if scope == "all" && !session_on {
+                    left_out_note(false)
+                } else {
+                    "Set from its chat's Autopilot pill."
+                })
                 .dependent(),
                 session_on,
                 None,
@@ -325,85 +335,71 @@ impl AutopilotTab {
         );
     }
 
+    /// One row per situation: stuck sessions (always), questions, permission.
+    ///
+    /// CDXC:Autopilot 2026-11-14 DECISION:
+    /// User, on the Autopilot design page: layout C, a preset on top with one plain row per situation under it (Q3030), the level merged into those rows (Q3031), and Heal and decide's words fixed rather than its behaviour (Q3032): "Safe steps" says it approves reads, builds, tests, edits and local commits inside the project. SEE-ALSO: server/src/autopilot/config.rs (`Tier`), apps/mobile/app/src/screens/settings/AutopilotPage.tsx.
     fn allowed_section(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Option<Div> {
         let config = self.config();
-        let tier = config["tier"].as_str().unwrap_or("everything").to_string();
-        let mut rows = vec![segmented_field(
+        let mut rows = vec![padded_text(
             p,
-            "autopilotTier",
-            RowSpec::new("What it may do on its own").description(match tier.as_str() {
-                "heal" => "Only what anyone would do without thinking: carry on, interrupt a hung command, reload, switch account. Questions and approvals wait for you.",
-                "decide" => "Heal, plus answer what an agent asks with its recommended choice when you allow it below. Approvals wait for you.",
-                _ => "Heal and decide, plus approve any prompt that is not a hard limit when you allow approval cards below.",
+            &[(
+                "Stuck sessions: it carries on, interrupts a hung command, reloads, switches account and restarts an ended terminal. Always.",
+                false,
+            )],
+        )];
+        let question = question_choice(&config);
+        rows.push(segmented_field(
+            p,
+            "autopilotAnswerQuestions",
+            RowSpec::new("When it asks a question").description(match question.as_str() {
+                "wait" => "Questions wait for you.".to_string(),
+                minutes => format!(
+                    "After {minutes} minutes without your answer, it picks each question's recommended choice and says so in the chat. A question with none goes to the supervisor."
+                ),
             }),
             None,
             &[
-                option("Heal", "heal"),
-                option("Heal and decide", "decide"),
-                option("Everything", "everything"),
+                option("Wait for me", "wait"),
+                option("5 min", "5"),
+                option("10 min", "10"),
+                option("15 min", "15"),
             ],
-            Some(tier.as_str()),
+            Some(question.as_str()),
             None,
-            |page: &mut Self, value, _, cx| page.set(json!({ "tier": value }), cx),
-            cx,
-        )];
-        // Heal leaves questions and approvals for you (server/src/server/autopilot_answers.rs), so
-        // their switches show only on Heal and decide or Everything (CDXC:Settings 2026-11-14).
-        if tier == "heal" {
-            return settings_section(p, "What it may do", None, None, rows);
-        }
-        let answer_questions = config["answerQuestions"].as_bool() == Some(true);
-        rows.push(toggle_field_with(
-            p,
-            "autopilotAnswerQuestions",
-            RowSpec::new("Answer questions for me").description(
-                "When an agent asks something and you don't answer in time, Autopilot picks its recommended choice for each question, and says so in the chat.",
-            ),
-            answer_questions,
-            None,
-            |page: &mut Self, checked, _, cx| page.set(json!({ "answerQuestions": checked }), cx),
+            |page: &mut Self, value, _, cx| page.set(question_patch(&value), cx),
             cx,
         ));
-        if answer_questions {
-            let wait = config["answerAfterMinutes"]
-                .as_u64()
-                .unwrap_or(10)
-                .to_string();
-            rows.push(segmented_field(
-                p,
-                "autopilotAnswerAfter",
-                RowSpec::new("Wait for me first").dependent(),
-                None,
-                &[
-                    option("5 min", "5"),
-                    option("10 min", "10"),
-                    option("15 min", "15"),
-                ],
-                Some(wait.as_str()),
-                None,
-                |page: &mut Self, value, _, cx| {
-                    let minutes = value.parse::<u64>().unwrap_or(10);
-                    page.set(json!({ "answerAfterMinutes": minutes }), cx)
-                },
-                cx,
-            ));
-        }
-        rows.push(toggle_field_with(
+        let permission = permission_choice(&config);
+        rows.push(segmented_field(
             p,
             "autopilotApprovals",
-            RowSpec::new("Answer approval cards").description(
-                "Permission prompts, Connectors cards and folder trust, within what it may do. A read-only thread's cards always wait for you; while this is off, only your click answers them.",
-            ),
-            config["answerApprovals"].as_bool() == Some(true),
+            RowSpec::new("When it asks permission").description(match permission {
+                "safe" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves reads, builds, tests, edits and local commits inside the project; anything else waits for you, and hard limits are declined. A read-only thread's cards always wait for you.",
+                "all" => "Permission prompts, Connectors cards and folder trust. After a minute without your answer, it approves anything that is not a hard limit below and declines the rest. A read-only thread's cards always wait for you.",
+                _ => "Permission prompts, Connectors cards and folder trust wait for you.",
+            }),
             None,
-            |page: &mut Self, checked, _, cx| page.set(json!({ "answerApprovals": checked }), cx),
+            &[
+                option("Wait for me", "wait"),
+                option("Safe steps", "safe"),
+                option("All but limits", "all"),
+            ],
+            Some(permission),
+            None,
+            |page: &mut Self, value, _, cx| page.set(permission_patch(&value), cx),
             cx,
         ));
-        settings_section(p, "What it may do", None, None, rows)
+        settings_section(p, "What it does", None, None, rows)
     }
 
     fn limits_section(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Option<Div> {
         let config = self.config();
+        // CDXC:Autopilot 2026-11-14 DECISION: user (Q3033, "only full"): the hard limits show and
+        // count only with All but limits (server/src/server/autopilot_answers.rs `verdict`).
+        if permission_choice(&config) != "all" {
+            return None;
+        }
         let limits = &config["limits"];
         let mut rows: Vec<AnyElement> = Vec::new();
         for (key, label, description) in HARD_LIMITS {
@@ -496,11 +492,11 @@ impl AutopilotTab {
             // User, on the old "It hasn't been needed yet" line: "why has this never been
             // needed??" It wakes only for what the rules can't settle, so the line says which.
             None => format!(
-                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice. Until then the rules handle everything. It starts in an Autopilot project in your sidebar.{}",
-                if config["answerQuestions"].as_bool() == Some(true) {
-                    ""
+                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice (when it answers questions). Until then the rules handle everything. It starts in an Autopilot project in your sidebar.{}",
+                if question_choice(&config) == "wait" {
+                    " Questions wait for you, so they stay with you."
                 } else {
-                    " Answer questions is off, so questions stay with you."
+                    ""
                 }
             ),
             Some(agent) => {
@@ -575,6 +571,98 @@ const HARD_LIMITS: &[(&str, &str, &str)] = &[
         "Post on Discord or X, comment on GitHub, or send email.",
     ),
 ];
+
+/// The preset the choices add up to: `off`, `careful`, `full` or `custom`. The hard limits do not
+/// count: Careful never crosses one, and on Full they are extras the user turns on.
+fn preset_of(config: &Value) -> &'static str {
+    if config["enabled"].as_bool() != Some(true) {
+        return "off";
+    }
+    match (question_choice(config).as_str(), permission_choice(config)) {
+        ("15", "safe") => "careful",
+        ("10", "all") => "full",
+        _ => "custom",
+    }
+}
+
+/// The preset's sentence at the start of the switch row's line.
+fn preset_line(preset: &str) -> &'static str {
+    match preset {
+        "careful" => "Careful: answers questions after 15 minutes and approves safe steps after a minute.",
+        "full" => "Full: answers questions after 10 minutes and approves anything that is not a hard limit after a minute.",
+        _ => "Custom: your own choices below.",
+    }
+}
+
+/// What picking a preset changes. Custom turns Autopilot on and keeps the choices below.
+///
+/// CDXC:Autopilot 2026-11-14 DECISION: user (Q3030, layout C): Off / Careful / Full on top. Careful answers questions after 15 minutes and approves safe steps; Full answers after 10 minutes and approves anything that is not a hard limit; any other mix reads Custom. SEE-ALSO: apps/mobile/app/src/screens/settings/AutopilotPage.tsx (the same table).
+fn preset_patch(preset: &str) -> Value {
+    match preset {
+        "off" => json!({ "enabled": false }),
+        "careful" => json!({
+            "enabled": true,
+            "answerQuestions": true,
+            "answerAfterMinutes": 15,
+            "answerApprovals": true,
+            "tier": "decide",
+        }),
+        "full" => json!({
+            "enabled": true,
+            "answerQuestions": true,
+            "answerAfterMinutes": 10,
+            "answerApprovals": true,
+            "tier": "everything",
+        }),
+        _ => json!({ "enabled": true }),
+    }
+}
+
+/// When it asks a question: `wait`, or the minutes it waits before answering. An old saved Heal
+/// level answers nothing (gxserver reads it that way too).
+fn question_choice(config: &Value) -> String {
+    if config["answerQuestions"].as_bool() != Some(true) || config["tier"] == "heal" {
+        return "wait".to_string();
+    }
+    match config["answerAfterMinutes"].as_u64() {
+        Some(minutes @ (5 | 15)) => minutes.to_string(),
+        _ => "10".to_string(),
+    }
+}
+
+fn question_patch(choice: &str) -> Value {
+    match choice.parse::<u64>() {
+        Ok(minutes) => json!({ "answerQuestions": true, "answerAfterMinutes": minutes }),
+        Err(_) => json!({ "answerQuestions": false }),
+    }
+}
+
+/// When it asks permission: `wait`, `safe` (Safe steps) or `all` (All but limits).
+fn permission_choice(config: &Value) -> &'static str {
+    if config["answerApprovals"].as_bool() != Some(true) || config["tier"] == "heal" {
+        return "wait";
+    }
+    if config["tier"] == "decide" { "safe" } else { "all" }
+}
+
+fn permission_patch(choice: &str) -> Value {
+    match choice {
+        "safe" => json!({ "answerApprovals": true, "tier": "decide" }),
+        "all" => json!({ "answerApprovals": true, "tier": "everything" }),
+        _ => json!({ "answerApprovals": false }),
+    }
+}
+
+/// The line under a project or session that Every session leaves out.
+///
+/// CDXC:Autopilot 2026-11-14 DECISION: user (Q3036, "list"): on Every session the page lists the projects and sessions taken out (from a project's sidebar menu or a session's chat pill), each with a switch to put it back, so nothing left out is hidden.
+fn left_out_note(project: bool) -> &'static str {
+    if project {
+        "Left out, with its worktrees. Switch on to put it back."
+    } else {
+        "Left out from its chat's Autopilot pill. Switch on to put it back."
+    }
+}
 
 /// A row id for a project's or a session's switch. Rows need `'static` ids, so each one is made
 /// once per page process and kept, not once per frame.
@@ -785,16 +873,48 @@ impl Render for AutopilotTab {
         {
             blocks.push(PageBlock::section("limits", section));
         }
-        if enabled
-            && shown("supervisor")
-            && let Some(section) = self.supervisor_section(&p, window, cx)
-        {
-            blocks.push(PageBlock::section("supervisor", section));
-        }
         if shown("activity")
             && let Some(section) = self.log_section(&p, cx)
         {
             blocks.push(PageBlock::section("activity", section));
+        }
+        // The supervisor and the sweep sit in the collapsed Advanced fold at the bottom, or in
+        // place while a search matches them (CDXC:Autopilot 2026-11-14 in
+        // packages/settings-catalog/src/pages/autopilot.rs).
+        if enabled {
+            let tab = SettingsTabId::Autopilot;
+            if search.tab.is_searching {
+                if shown("supervisor")
+                    && let Some(section) = self.supervisor_section(&p, window, cx)
+                {
+                    blocks.push(PageBlock::section("supervisor", section));
+                }
+            } else {
+                // A deep link to the section opens the fold, as Appearance's does.
+                let pending = self.store.update(cx, |store, _| {
+                    store.tracker(tab).borrow().pending_scroll.clone()
+                });
+                if pending.as_deref() == Some("supervisor") {
+                    self.store
+                        .update(cx, |store, _| store.open_advanced_fold(tab));
+                }
+                let open = self.store.read(cx).advanced_fold_open(tab);
+                blocks.push(PageBlock::section(
+                    "advancedFold",
+                    advanced_fold_header(
+                        &p,
+                        open,
+                        move |page: &mut Self, _window, cx| {
+                            let store = page.store.clone();
+                            store.update(cx, |store, cx| store.toggle_advanced_fold(tab, cx));
+                        },
+                        cx,
+                    ),
+                ));
+                if open && let Some(section) = self.supervisor_section(&p, window, cx) {
+                    blocks.push(PageBlock::section("supervisor", section));
+                }
+            }
         }
         settings_page(&self.store, SettingsTabId::Autopilot, &p, blocks, cx)
     }
