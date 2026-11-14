@@ -330,6 +330,9 @@ pub struct Document {
     /// The dock above a coordinator's chat box (`extras::work_cards::dock`): `{cards, line}`, or
     /// `null` for a chat with no work. Family f.
     pub work_dock: Tri<Value>,
+    /// How each ask settled in the last hour went, by dock row key
+    /// (`extras::work_cards::settled_asks`): `"answered"` or `"withdrawn"`. Family f.
+    pub work_asks_settled: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

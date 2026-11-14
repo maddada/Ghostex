@@ -14,8 +14,10 @@
 //! An answer, Open, a link to the work or a pick in the ⋯ closes it as it goes, back to the dock;
 //! a Reply sent closes it once the row says it was replied to (the reply box opens over the panel,
 //! so the panel stays while it is typed). Escape and the X close it; Enter picks nothing. It closes
-//! by itself when its row leaves the dock (answered elsewhere, dismissed, snoozed) and when the chat
-//! is put away for another session. It opens over the chat at the ask's own height (it fits itself
+//! by itself, whole (its glass goes with its ask), when its row leaves the dock (answered or
+//! withdrawn elsewhere, dismissed, snoozed, its item dropped or done) and when the chat is put away
+//! for another session; an ask settled elsewhere while it was open says so in a toast, "Answered"
+//! or "Withdrawn". It opens over the chat at the ask's own height (it fits itself
 //! to its text, up to most of the main window, until the reader resizes it).
 //!
 //! CDXC:Coordinators 2026-11-14 DECISION:
@@ -85,6 +87,16 @@ fn wrap_menu_rows(rows: Vec<Value>) -> Vec<Value> {
 fn fitted_height(natural: f32, main_height: f32) -> f32 {
     let most = (main_height * PANEL_MAX_SHARE).max(PANEL_MIN_HEIGHT);
     natural.clamp(PANEL_MIN_HEIGHT, most)
+}
+
+/// The toast an ask settled while its panel was open shows (`sync_dock_ask_modal`), from how
+/// the core says it went (`workAsksSettled`): its level and title.
+fn settled_toast(how: &str) -> Option<(&'static str, &'static str)> {
+    match how {
+        "answered" => Some(("success", "Answered")),
+        "withdrawn" => Some(("info", "Withdrawn")),
+        _ => None,
+    }
 }
 
 /// The picture the panel paints behind itself under window glass (`panel_backdrop`).
@@ -225,7 +237,11 @@ impl Render for DockAskPanel {
                 .map(|content| (content, p.light, p.font.clone()))
         });
         let Some((content, light, font)) = content else {
-            // Its row left the dock, or the panel is closing: nothing is left to show.
+            // Its row left the dock, or the panel is closing: nothing is left to show, so the
+            // window goes with it. The backdrop is this window's own (its blur and picture), so a
+            // panel with no ask removes itself here instead of waiting on the chat to close it;
+            // an empty glass window must never stay over the chat.
+            window.remove_window();
             return div().size_full().into_any_element();
         };
         let chat = self.chat.clone();
@@ -279,6 +295,34 @@ impl NativeChatView {
             .iter()
             .find(|row| row["key"].as_str() == Some(key))
             .cloned()
+    }
+
+    /// Closes the panel once its ask has left the dock or a Reply sent from it was taken, as soon
+    /// as the chat's snapshot says so (`NativeChatView::apply_output`), whether or not the panel's
+    /// own window draws again. An ask the coordinator, the phone or another computer settled while
+    /// it was open says how it went in a toast: "Answered" (an answer, a Reply or Mark done) or
+    /// "Withdrawn". A row that left for another reason (snoozed elsewhere, a refresh) closes it
+    /// quietly.
+    pub(super) fn sync_dock_ask_modal(&mut self, cx: &mut Context<Self>) {
+        let Some(key) = self.board.dock_modal.clone() else {
+            return;
+        };
+        match self.dock_ask_row() {
+            Some(row) if text(&row, "replied") == self.board.dock_modal_replied => {}
+            // The Reply sent from the panel was taken: the reader did it, no toast.
+            Some(_) => self.close_dock_ask_modal(cx),
+            None => {
+                let how = self.snapshot["workAsksSettled"][key.as_str()]
+                    .as_str()
+                    .and_then(settled_toast);
+                self.close_dock_ask_modal(cx);
+                if let Some((level, title)) = how {
+                    cx.emit(super::state::NativeChatEvent::Host(
+                        json!({ "type": "toast", "level": level, "title": title }),
+                    ));
+                }
+            }
+        }
     }
 
     /// Shows the row `key`'s ask in the panel, opening the panel over the chat when it is not up.
@@ -511,9 +555,11 @@ impl NativeChatView {
         let row = self.dock_ask_row();
         let replied = row.as_ref().map(|row| text(row, "replied"));
         if row.is_none() || replied.is_some_and(|now| now != self.board.dock_modal_replied) {
+            // The snapshot's own check (`sync_dock_ask_modal`) normally closes it first; this one
+            // covers a row that went without a new snapshot, with the same toast.
             let chat = cx.weak_entity();
             cx.defer(move |cx| {
-                let _ = chat.update(cx, |chat, cx| chat.close_dock_ask_modal(cx));
+                let _ = chat.update(cx, |chat, cx| chat.sync_dock_ask_modal(cx));
             });
             return None;
         }

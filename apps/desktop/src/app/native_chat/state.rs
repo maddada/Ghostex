@@ -1123,6 +1123,7 @@ impl NativeChatView {
             self.remeasure_on_look_change(&before);
             self.adopt_board_focus(&before, cx);
             self.prune_kept_replies(&before, cx);
+            self.sync_dock_ask_modal(cx);
             drop_off_main_thread(before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);

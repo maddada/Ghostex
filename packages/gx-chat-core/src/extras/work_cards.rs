@@ -775,6 +775,52 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
     })
 }
 
+/// How long after an ask is settled its outcome stays in [`settled_asks`].
+const SETTLED_KEPT_MS: i64 = 3_600_000;
+
+/// The asks settled in the last hour, by dock row key (`work-ask:<item>:<tag>`): `"answered"`
+/// (an answer, a Reply or Mark done) or `"withdrawn"` (the coordinator's `--withdraw`, or the item
+/// dropped or done with the ask still open). An ask's floating panel reads it when its row leaves
+/// the dock while it is open, to say how it went (native_chat/dock_ask_modal.rs). An object,
+/// empty when none.
+///
+/// CDXC:Coordinators 2026-11-14 DECISION:
+/// User, after the coordinator settled an ask open in the floating panel and the panel's empty
+/// glass stayed over the chat: "when question is marked as answered give a toast at least that it
+/// has been answered, and always close the bg when u close the question". The panel closes whole
+/// and a toast says "Answered" or "Withdrawn".
+pub fn settled_asks(state: &ChatState, context: &ChatContext) -> Value {
+    let now_ms = context.now_millis();
+    let mut out = serde_json::Map::new();
+    let items = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .and_then(|work| work["items"].as_array());
+    for item in items.into_iter().flatten() {
+        for ask in item["asks"].as_array().into_iter().flatten() {
+            if ask["open"] == true {
+                continue;
+            }
+            let Some(at) = at_ms(text(ask, "settledAt")) else {
+                continue;
+            };
+            if now_ms - at > SETTLED_KEPT_MS {
+                continue;
+            }
+            let key = format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag"));
+            let how = if ask["withdrawn"] == true {
+                "withdrawn"
+            } else {
+                "answered"
+            };
+            out.insert(key, json!(how));
+        }
+    }
+    Value::Object(out)
+}
+
 /// A Work panel row's actions for its opened card, the same as the dock's opened row: an ask's
 /// Reply, Show in chat, Dismiss and Snooze; any other line of work's Show in chat. `null` for none.
 ///
