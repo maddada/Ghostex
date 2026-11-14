@@ -4,7 +4,7 @@
 
 use ghostex_gx_protocol::extension_panel::{MapGroup, MapRoot, PanelBlock};
 use gpui::prelude::FluentBuilder;
-use gpui::{AnyElement, FontWeight, IntoElement, ParentElement, Styled, div, px};
+use gpui::{AnyElement, FontWeight, IntoElement, ParentElement, Styled, div, px, relative};
 use gpui_component::{h_flex, v_flex};
 
 use super::PanelPlace;
@@ -41,10 +41,11 @@ impl GhostexGpuiApp {
                     15.0 * scale,
                     appearance.chrome_icon,
                 ))
+                // The title keeps its words; the subtitle gives way on a narrow sidebar.
                 .child(
                     div()
-                        .flex_1()
-                        .min_w_0()
+                        .flex_shrink_0()
+                        .max_w(relative(0.7))
                         .truncate()
                         .font_weight(FontWeight::MEDIUM)
                         .child(root.title.clone()),
@@ -52,7 +53,9 @@ impl GhostexGpuiApp {
                 .when_some(root.subtitle.clone(), |row, subtitle| {
                     row.child(
                         div()
-                            .flex_shrink_0()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
                             .text_color(appearance.muted)
                             .child(subtitle),
                     )

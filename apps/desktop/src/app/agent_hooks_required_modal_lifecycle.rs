@@ -10,6 +10,9 @@ struct GpuiAgentHookLaunch {
     hook_agent_id: String,
     group_id: Option<String>,
     account_id: Option<String>,
+    /// Text for the new agent's chat box (a sidebar extension's `newAgent` action), which rides
+    /// this launch only: closing the dialog drops it.
+    first_input_draft: Option<String>,
 }
 
 impl GhostexGpuiApp {
@@ -41,6 +44,7 @@ impl GhostexGpuiApp {
                 .get("accountId")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_string),
+            first_input_draft: text("firstInputDraft"),
         };
         let config = AgentHooksRequiredModalConfig {
             agent_name,
@@ -108,6 +112,9 @@ impl GhostexGpuiApp {
         }
         if let Some(account_id) = bounded(launch.account_id.as_deref(), 256) {
             message["accountId"] = serde_json::json!(account_id);
+        }
+        if let Some(draft) = bounded(launch.first_input_draft.as_deref(), 4000) {
+            message["firstInputDraft"] = serde_json::json!(draft);
         }
         self.dispatch_gpui_sidebar_host_message(message, cx);
     }

@@ -357,6 +357,42 @@ fn block_view(
     }
 }
 
+/// This computer's whole Projects list, whatever the sidebar shows right now: the Space, the tag
+/// filters, hidden items and projects without sessions lifted. A panel's `project` and `session`
+/// items read their hover text and right-click menu from it, so they don't depend on the Space on
+/// screen (or on the extension mode, which draws no list at all).
+pub fn unfiltered_local_view(
+    core: &crate::Core,
+    inputs: &super::inputs::SidebarInputs,
+    now_ms: u64,
+) -> super::view::SidebarView {
+    let mut probe = super::reveal::unfiltered(inputs, SidebarMode::Projects);
+    probe.ui.selected_machine_id = crate::LOCAL_MACHINE_ID.to_string();
+    probe.ui.show_all_projects = true;
+    super::model::SidebarViewModel::build_from_scratch(core, &probe, now_ms)
+}
+
+/// The hover text of every project and session row of `view`: by sidebar group id, and by
+/// sidebar session id.
+pub fn panel_ref_hover_texts(
+    view: &super::view::SidebarView,
+) -> (BTreeMap<String, String>, BTreeMap<String, String>) {
+    let mut projects = BTreeMap::new();
+    let mut sessions = BTreeMap::new();
+    for group in &view.groups {
+        if let Some(tooltip) = &group.core.title_tooltip {
+            projects.insert(group.core.group_id.clone(), tooltip.clone());
+        }
+        for session in &group.core.sessions {
+            sessions.insert(
+                session.row.sidebar_session_id.clone(),
+                session.row.title_tooltip.clone(),
+            );
+        }
+    }
+    (projects, sessions)
+}
+
 /// Whether the user granted what `action` needs.
 pub fn panel_action_allowed(action: &PanelAction, granted_permissions: &[String]) -> bool {
     action

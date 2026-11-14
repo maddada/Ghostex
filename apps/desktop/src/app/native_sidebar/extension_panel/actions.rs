@@ -96,13 +96,18 @@ impl GhostexGpuiApp {
                     .clone()
                     .or_else(crate::app::gx_store::read_primary_agent_launcher_id)
                     .unwrap_or_else(|| "claude".to_string());
-                self.gx_store.create.pending_first_input_draft = new_agent.draft.clone();
                 let group_id = ProjectKey {
                     machine: MachineId::Local,
                     project_id,
                 }
                 .to_sidebar_group_id();
-                self.gx_store_request_agent_launch(&agent_id, Some(&group_id), None, cx);
+                self.gx_store_request_agent_launch_with_draft(
+                    &agent_id,
+                    Some(&group_id),
+                    None,
+                    new_agent.draft.as_deref(),
+                    cx,
+                );
             }
             PanelAction::OpenUrl(url) => cx.open_url(url),
             PanelAction::OpenView(view) => self.open_native_panel_view(view, window, cx),
@@ -208,13 +213,18 @@ impl GhostexGpuiApp {
                     .map(|session| session.session_id.clone())
             });
         self.leave_native_extension_mode(place, cx);
-        if let Some(session_id) = latest {
-            self.focus_native_panel_session(
+        match latest {
+            Some(session_id) => self.focus_native_panel_session(
                 place,
                 &format!("{project_id}:{session_id}"),
                 window,
                 cx,
-            );
+            ),
+            // A project with no session yet still becomes the open one.
+            None => {
+                self.swap_agents_workspace_to_project_id(Some(project_id), cx);
+                cx.notify();
+            }
         }
     }
 

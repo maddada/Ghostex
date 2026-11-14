@@ -60,6 +60,9 @@ pub(crate) struct NativeSidebarState {
     pub(crate) extension_add_item: Option<String>,
     /// The side panel view's width as last drawn, which decides a map's layout there.
     pub(crate) extension_side_panel_width: f32,
+    /// The hover texts of panels' project and session items (gx_store/panel_refs.rs).
+    pub(crate) extension_ref_hover:
+        std::cell::RefCell<Option<crate::app::gx_store::panel_refs::PanelRefHoverCache>>,
     pub(crate) pointer_inside: bool,
     /// Whether last frame's rows carried their hover tooltips; see `render_native_sidebar`.
     pub(crate) row_tooltips_attached: bool,

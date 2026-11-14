@@ -354,7 +354,9 @@ impl ExtensionsTab {
                     ))
                     .into_any_element(),
             );
-        } else {
+        } else if !extension.placements().is_empty() {
+            // A sidebar extension lists no placements: its own mode and the side panel are where
+            // it opens, so it gets no empty picker.
             let options: Vec<(String, String)> = extension
                 .placements()
                 .into_iter()

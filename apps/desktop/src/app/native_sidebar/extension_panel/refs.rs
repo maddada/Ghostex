@@ -18,6 +18,14 @@ use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
 use crate::app::native_sidebar::status;
 
+/// Which Ghostex menu an item's right-click opens.
+#[derive(Clone, Debug)]
+enum RefMenu {
+    Project(String),
+    Session(String),
+    None,
+}
+
 /// What the store knows about a project a panel names.
 struct ProjectFacts {
     project_id: String,
@@ -116,40 +124,6 @@ impl GhostexGpuiApp {
         })
     }
 
-    /// The project's right-click menu as its header in the Projects list has it, while the list
-    /// on screen holds that project.
-    fn native_panel_project_menu(&self, project_id: &str) -> Option<Value> {
-        let snapshot = self.native_sidebar.snapshot.as_ref()?;
-        snapshot
-            .groups
-            .iter()
-            .find(|group| {
-                group
-                    .project_context
-                    .as_ref()
-                    .and_then(|context| context.get("projectId"))
-                    .and_then(Value::as_str)
-                    == Some(project_id)
-                    && group.remote_machine_context.is_none()
-            })
-            .map(|group| (*group.menu).clone())
-            .filter(|menu| menu.as_array().is_some_and(|items| !items.is_empty()))
-    }
-
-    /// The session's right-click menu as its card in the Projects list has it.
-    fn native_panel_session_menu(&self, sidebar_session_id: &str) -> Option<Value> {
-        let snapshot = self.native_sidebar.snapshot.as_ref()?;
-        let session = snapshot
-            .groups
-            .iter()
-            .flat_map(|group| group.sessions.iter())
-            .find(|session| session.session_id == sidebar_session_id)?;
-        Some(self.native_sidebar_session_menu_with_chief(
-            session,
-            session.details.get("menu").unwrap_or(&Value::Null),
-        ))
-    }
-
     /// A `project` or `session` row of a rows or map block.
     pub(super) fn render_native_panel_ref_row(
         &self,
@@ -176,22 +150,25 @@ impl GhostexGpuiApp {
                     } else {
                         None
                     };
-                    let mut hover = facts.title.clone();
-                    if let Some(path) = &facts.path {
-                        hover.push('\n');
-                        hover.push_str(path);
-                    }
-                    hover.push_str(&match (facts.sessions, facts.working) {
-                        (0, _) => "\nNo sessions".to_string(),
-                        (sessions, 0) => format!("\n{sessions} sessions"),
-                        (sessions, working) => format!("\n{sessions} sessions, {working} working"),
-                    });
+                    // The project header's own tooltip; this summary only while the list has
+                    // never been built.
+                    let hover = self
+                        .gx_store_panel_ref_hover(Some(&facts.project_id), None)
+                        .unwrap_or_else(|| {
+                            let mut hover = facts.title.clone();
+                            if let Some(path) = &facts.path {
+                                hover.push('\n');
+                                hover.push_str(path);
+                            }
+                            hover.push_str(&format!("\n{} sessions", facts.sessions));
+                            hover
+                        });
                     (
                         row.title.clone().unwrap_or(facts.title),
                         dot,
                         hover,
                         Some(PanelAction::OpenProject(facts.project_id.clone())),
-                        self.native_panel_project_menu(&facts.project_id),
+                        RefMenu::Project(facts.project_id.clone()),
                     )
                 }
                 None => (
@@ -199,7 +176,7 @@ impl GhostexGpuiApp {
                     None,
                     format!("{reference} isn't a project on this computer."),
                     None,
-                    None,
+                    RefMenu::None,
                 ),
             }
         } else {
@@ -220,9 +197,10 @@ impl GhostexGpuiApp {
                     (
                         row.title.clone().unwrap_or_else(|| facts.title.clone()),
                         dot,
-                        format!("{}\n{}", facts.title, facts.activity),
+                        self.gx_store_panel_ref_hover(None, Some(&facts.sidebar_session_id))
+                            .unwrap_or_else(|| format!("{}\n{}", facts.title, facts.activity)),
                         Some(PanelAction::FocusSession(reference.clone())),
-                        self.native_panel_session_menu(&facts.sidebar_session_id),
+                        RefMenu::Session(facts.sidebar_session_id.clone()),
                     )
                 }
                 None => (
@@ -232,7 +210,7 @@ impl GhostexGpuiApp {
                     None,
                     "This session isn't on this computer anymore.".to_string(),
                     None,
-                    None,
+                    RefMenu::None,
                 ),
             }
         };
@@ -298,25 +276,49 @@ impl GhostexGpuiApp {
                     );
                 }))
             })
-            .when_some(
-                menu.or_else(|| {
-                    row.menu.as_ref().map(|menu| {
+            .when(
+                !matches!(menu, RefMenu::None) || row.menu.is_some(),
+                |frame| {
+                    // The panel's own items first, then the row's Ghostex menu, built when it
+                    // opens from the whole Projects list (gx_store/panel_refs.rs).
+                    let own = row.menu.as_ref().map(|items| {
                         Self::native_panel_menu(
                             place,
                             block_id,
                             row.id.as_deref(),
-                            Some(menu),
+                            Some(items),
                             false,
                         )
-                    })
-                }),
-                |frame, menu| {
+                    });
                     frame.on_mouse_down(
                         MouseButton::Right,
-                        cx.listener(move |_, event: &gpui::MouseDownEvent, window, cx| {
+                        cx.listener(move |app, event: &gpui::MouseDownEvent, window, cx| {
                             cx.stop_propagation();
+                            let ghostex = match &menu {
+                                RefMenu::Project(project_id) => {
+                                    app.gx_store_panel_project_menu(project_id)
+                                }
+                                RefMenu::Session(session_id) => {
+                                    app.gx_store_panel_session_menu(session_id)
+                                }
+                                RefMenu::None => None,
+                            };
+                            let mut items: Vec<Value> = own
+                                .as_ref()
+                                .and_then(Value::as_array)
+                                .cloned()
+                                .unwrap_or_default();
+                            if let Some(Value::Array(ghostex)) = ghostex {
+                                if !items.is_empty() && !ghostex.is_empty() {
+                                    items.push(serde_json::json!({"separator": true}));
+                                }
+                                items.extend(ghostex);
+                            }
+                            if items.is_empty() {
+                                return;
+                            }
                             Self::show_native_sidebar_context_menu(
-                                &menu,
+                                &Value::Array(items),
                                 None,
                                 event.position,
                                 scale,

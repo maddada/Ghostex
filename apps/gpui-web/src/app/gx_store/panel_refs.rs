@@ -1,0 +1,1 @@
+../../../../desktop/src/app/gx_store/panel_refs.rs

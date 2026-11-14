@@ -30,9 +30,6 @@ pub(crate) struct CreateHost {
     pub(super) board_link_checks: super::board::LinkChecks,
     /// The Ask Ghostex open being timed (help_chat_timing.rs).
     pub(super) help_chat_timing: super::help_chat_timing::HelpChatTiming,
-    /// Text the next local agent launch puts in the new agent's chat box, not sent: a sidebar
-    /// extension's `newAgent` action (native_sidebar/extension_panel/actions.rs).
-    pub(crate) pending_first_input_draft: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -89,6 +89,7 @@ mod local_focus;
 pub(crate) mod machine_short_names;
 mod machine_switch;
 mod notifications;
+pub(crate) mod panel_refs;
 mod presentation_ready;
 mod primary_launcher;
 mod project_activation;
