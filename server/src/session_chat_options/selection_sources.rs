@@ -344,7 +344,7 @@ pub(crate) fn read_claude_statusline_reading(
         terminal_status_line: None,
         fast,
         context_usage: (!context_usage.is_empty()).then_some(context_usage),
-        claude_status: claude_statusline_status_value(payload),
+        claude_status: claude_statusline_status_value(payload).map(with_idle_compaction),
         codex_status: None,
         cursor_status: None,
         hermes_status: None,
@@ -359,6 +359,27 @@ pub(crate) fn read_claude_statusline_reading(
         || selection.context_usage.is_some()
         || selection.claude_status.is_some())
     .then_some((selection, stored.updated_at))
+}
+
+/// The prompt cache with the smallest context Claude compacts while idle, while Settings > Agents >
+/// Claude Code's Compact idle chats is on, for the context panel's Cache card (`idleCompactAt` in
+/// gx-chat-core menus/context/rows.rs). Unit tests read no settings file.
+fn with_idle_compaction(mut status: Value) -> Value {
+    if cfg!(test) {
+        return status;
+    }
+    let compaction = crate::agents::claude_idle_compaction::ClaudeCompaction::read();
+    if let Some(cache) = status
+        .get_mut("promptCache")
+        .and_then(Value::as_object_mut)
+        .filter(|_| compaction.idle_compaction)
+    {
+        cache.insert(
+            "idleCompactMinTokens".to_string(),
+            json!(compaction.min_tokens),
+        );
+    }
+    status
 }
 
 /*

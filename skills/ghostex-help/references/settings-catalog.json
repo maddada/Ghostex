@@ -9814,6 +9814,64 @@
       "agentWritable": false
     },
     {
+      "key": "claudeIdleCompaction",
+      "title": "Compact idle chats before the prompt cache expires",
+      "subtitle": "Claude Code compacts a long chat that has been idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message doesn't re-read the whole chat uncached. Runs only on a 1-hour cache. In Claude Code's row. Applies to Claude sessions started or resumed after you change it.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "claudeIdleCompactAbove",
+      "title": "Only above",
+      "subtitle": "Compact only chats whose context is at least this size. Claude Code's default is 200K. Shown while Compact idle chats is on.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "enum",
+      "default": "200000",
+      "options": [
+        {
+          "label": "100K",
+          "value": "100000"
+        },
+        {
+          "label": "200K",
+          "value": "200000"
+        },
+        {
+          "label": "300K",
+          "value": "300000"
+        },
+        {
+          "label": "400K",
+          "value": "400000"
+        },
+        {
+          "label": "500K",
+          "value": "500000"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "claudeOneHourPromptCache",
+      "title": "Use a 1-hour prompt cache",
+      "subtitle": "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry, which otherwise get 5 minutes, so idle compaction runs there too. 1-hour cache writes cost more than 5-minute ones. A subscription already gets 1 hour.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "preferredAgentInterfaceOverrides",
       "title": "Default view per agent",
       "subtitle": "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.",

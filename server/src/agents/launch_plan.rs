@@ -411,6 +411,25 @@ pub(crate) fn create_agent_session_params_for_project(
                     );
                     plan.insert("command".to_string(), Value::String(command));
                 }
+                // Claude's idle compaction and cache length from Settings (claude_idle_compaction.rs),
+                // in the same one `--settings` JSON.
+                if let Some(command) = plan
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .map(|command| {
+                        (
+                            command.to_string(),
+                            super::with_claude_compaction_settings(family.as_deref(), command),
+                        )
+                    })
+                    .and_then(|(before, after)| (after != before).then_some(after))
+                {
+                    plan.insert(
+                        "startupText".to_string(),
+                        Value::String(as_atuin_ignored_shell_input(&command)),
+                    );
+                    plan.insert("command".to_string(), Value::String(command));
+                }
                 // The home folder's secret folders, denied through the agent's own settings on
                 // this run (home_secret_folders.rs).
                 let launch_cwd =

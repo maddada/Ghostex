@@ -278,6 +278,49 @@ fn value_cache_time_left(input: &RowInput) -> Option<String> {
     Some(format!("{left} left"))
 }
 
+fn value_cache_ttl(input: &RowInput) -> Option<String> {
+    match input.status.prompt_cache.as_ref()?.ttl.as_deref()? {
+        "1h" => Some("1 hour".to_string()),
+        "5m" => Some("5 minutes".to_string()),
+        _ => None,
+    }
+}
+
+/// Claude Code compacts an idle chat at 90% of its one-hour cache's life (about 54 minutes after the
+/// last request), so 6 minutes before the cache expires.
+const IDLE_COMPACT_BEFORE_EXPIRY_SECONDS: f64 = 360.0;
+/// Claude's floor for `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`.
+const IDLE_COMPACT_MIN_TOKENS_FLOOR: f64 = 100_000.0;
+
+/// When Claude Code will compact this idle chat: a warm one-hour cache, Ghostex's Compact idle
+/// chats on, and a context at least its size (server/src/agents/claude_idle_compaction.rs has the
+/// user's decision).
+fn value_idle_compact_at(input: &RowInput) -> Option<String> {
+    let cache = input.status.prompt_cache.as_ref()?;
+    let min_tokens = cache
+        .idle_compact_min_tokens?
+        .max(IDLE_COMPACT_MIN_TOKENS_FLOOR);
+    if cache.ttl.as_deref() != Some("1h")
+        || cache.warm != Some(true)
+        || input.status.context_used_tokens? < min_tokens
+    {
+        return None;
+    }
+    let at_ms = (cache.expires_at? - IDLE_COMPACT_BEFORE_EXPIRY_SECONDS) * 1000.0;
+    (at_ms.is_finite() && at_ms > input.now()).then(|| {
+        format!(
+            "at {}",
+            crate::menus::context::time::clock_time(at_ms, input.utc_offset_minutes())
+        )
+    })
+}
+
+/// A five-minute cache, on which Claude Code never compacts an idle chat.
+fn value_idle_compaction_note(input: &RowInput) -> Option<String> {
+    (input.status.prompt_cache.as_ref()?.ttl.as_deref()? == "5m")
+        .then(|| "idle compaction doesn't run".to_string())
+}
+
 fn value_cache_hit_rate(input: &RowInput) -> Option<String> {
     let ratio = input
         .status
@@ -715,6 +758,33 @@ pub fn claude_rows() -> Vec<RowDefinition> {
             description: "Time before a warm prompt cache expires",
             recommended: true,
             value: value_cache_time_left,
+            copy: None,
+        },
+        RowDefinition {
+            id: "cacheTtl",
+            group: GroupId::Context,
+            label: "Cache length",
+            description: "How long the prompt cache lives: 1 hour or 5 minutes",
+            recommended: true,
+            value: value_cache_ttl,
+            copy: None,
+        },
+        RowDefinition {
+            id: "idleCompactAt",
+            group: GroupId::Context,
+            label: "Compacts while idle",
+            description: "When Claude Code compacts this chat if it stays idle, before the cache expires",
+            recommended: true,
+            value: value_idle_compact_at,
+            copy: None,
+        },
+        RowDefinition {
+            id: "idleCompactionNote",
+            group: GroupId::Context,
+            label: "5-minute cache",
+            description: "Claude Code compacts idle chats only on a 1-hour cache",
+            recommended: true,
+            value: value_idle_compaction_note,
             copy: None,
         },
         RowDefinition {

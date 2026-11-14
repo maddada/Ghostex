@@ -1,6 +1,7 @@
 pub mod accept_all;
 pub mod activity;
 mod bypass_consent;
+pub(crate) mod claude_idle_compaction;
 mod codex_daemon;
 mod draft_run_location;
 mod draft_switch;
@@ -35,6 +36,7 @@ pub mod zcode_titles;
 pub(crate) use accept_all::*;
 pub(crate) use activity::*;
 pub(crate) use bypass_consent::*;
+pub(crate) use claude_idle_compaction::with_claude_compaction_settings;
 pub(crate) use codex_daemon::*;
 pub(crate) use draft_run_location::*;
 pub(crate) use draft_switch::*;

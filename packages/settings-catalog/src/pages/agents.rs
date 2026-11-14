@@ -49,6 +49,10 @@ pub(crate) fn agent_list() -> Section {
         vec![
             row("agentSwitches", "Turn agents on or off", "Turn on the agents you use; they appear in the New session menu, the sidebar's Select Agent and on your phone. Drag to set their order. Agents you turned off but used before stay dimmed in the list; agents you never used wait under More agents. Expand a row to edit its command, permission mode and default view, or to install or update its CLI.").options_of(DEFAULT_SIDEBAR_AGENTS, "name", "name"),
             row("addCustomAgent", "Add custom agent", "Add your own command, or a variant of a built-in agent with other flags. Works like gives it that agent's logo, chat view, resume hook and permission handling. Custom agents can be turned off or deleted."),
+            // Claude Code's row panel, its Context group (apps/desktop settings_modal/tabs/agents/claude_context.rs).
+            row("claudeIdleCompaction", "Compact idle chats before the prompt cache expires", "Claude Code compacts a long chat that has been idle for about 54 minutes, just before its 1-hour prompt cache expires, so your next message doesn't re-read the whole chat uncached. Runs only on a 1-hour cache. In Claude Code's row. Applies to Claude sessions started or resumed after you change it."),
+            row("claudeIdleCompactAbove", "Only above", "Compact only chats whose context is at least this size. Claude Code's default is 200K. Shown while Compact idle chats is on.").options(CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS),
+            row("claudeOneHourPromptCache", "Use a 1-hour prompt cache", "Ask for Claude's 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry, which otherwise get 5 minutes, so idle compaction runs there too. 1-hour cache writes cost more than 5-minute ones. A subscription already gets 1 hour."),
             row("preferredAgentInterfaceOverrides", "Default view per agent", "Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting."),
         ],
     )

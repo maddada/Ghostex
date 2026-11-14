@@ -10,6 +10,7 @@
 //! Like the React tab panel, the page forgets its view state (open rows, the form, CLI answers,
 //! a dragged order) when another page is shown; hook status belongs to the modal and stays.
 mod chips;
+mod claude_context;
 mod cli;
 mod config;
 mod editor;
@@ -94,6 +95,9 @@ pub(crate) struct AgentsTab {
     hook_status_loading: bool,
     /// Agent ids whose row is expanded (CDXC:AgentHooks 2026-08-28: every row starts collapsed).
     expanded: Vec<String>,
+    /// A search found a row of Claude Code's Context group, so its panel shows open
+    /// (claude_context.rs `search_opens_claude`).
+    search_opens_claude: bool,
     /// `draftAgentIds`: the order after a drop, until the synced roster catches up.
     draft_agent_ids: Option<Vec<String>>,
     synced_agent_ids: Vec<String>,
@@ -182,6 +186,7 @@ impl AgentsTab {
             active: false,
             hook_status_loading: false,
             expanded: Vec::new(),
+            search_opens_claude: false,
             draft_agent_ids: None,
             synced_agent_ids: Vec::new(),
             editor: None,
@@ -458,6 +463,7 @@ impl Render for AgentsTab {
                 matching,
             )
         };
+        self.search_opens_claude = claude_context::search_opens_claude(&search);
         let mut blocks: Vec<PageBlock> = Vec::new();
         if search.tab.is_searching && !search.tab.has_visible() {
             let store = self.store.clone();

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Compact an idle Codex chat before you send:** when a Codex chat's last turn is more than a day old, the chat box shows "Option + Enter to compact then send" ("Alt + Enter" on Windows and Linux), so the next message doesn't re-read the whole conversation uncached. The hint goes once a new turn starts.
+- **Claude Code's idle compaction in Settings:** expand Claude Code in Settings > Agents to turn off compacting idle chats before the prompt cache expires, set the smallest chat it compacts (100K to 500K), or ask for the 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry. Session details' Cache card shows the cache length and when an idle chat will be compacted.
 
 ## 11.6.1 - 2026-11-13
 

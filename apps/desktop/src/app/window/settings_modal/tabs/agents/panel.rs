@@ -1,6 +1,7 @@
 //! The expanded panel of an Agents row (`settings-list-panel`), in three groups: Start (Name,
 //! Works like for custom agents, Command, Permission mode, Default interface for chat-capable
-//! agents, CDXC:AgentProviders 2026-08-27), CLI (the agent CLI controls) and Session resume hook;
+//! agents, CDXC:AgentProviders 2026-08-27), Context (Claude Code only, claude_context.rs), CLI (the
+//! agent CLI controls) and Session resume hook;
 //! then Duplicate as custom agent, Reset to defaults (built-in agents) and Delete agent (custom
 //! agents only: a built-in agent is turned off with its switch). Its rows sit inside the list
 //! inset, so they drop their own side padding and divide with hairlines.
@@ -300,6 +301,12 @@ impl AgentsTab {
                 select,
                 cx,
             )));
+        }
+        // Claude Code's idle compaction and prompt cache length (claude_context.rs).
+        if agent.is_default && agent_id == super::claude_context::CLAUDE_AGENT_ID {
+            children.push(group_title(p, "Context"));
+            let rows = self.claude_context_rows(p, window, cx);
+            children.extend(rows.into_iter().map(panel_child));
         }
         if let Some(controls) = self.render_cli_controls(p, cli_agent, window, cx) {
             children.push(group_title(p, "CLI"));

@@ -646,6 +646,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Onboarding 2026-11-11 SEE-ALSO: the tips card under a new chat's headline (packages/gx-chat-core/src/extras/new_chat_tips.rs, where the user's decision is); on by default, off from the card's Hide tips.
     ("newChatTips", J::Bool(true)),
     ("sessionDetailsClaudeTaskTools", J::Bool(true)),
+    // CDXC:AgentProviders 2026-11-14 SEE-ALSO: Claude Code's own idle compaction and prompt cache length, set per launch (server/src/agents/claude_idle_compaction.rs, where the user's decision is). Claude's defaults: on, 200K, its automatic cache length.
+    ("claudeIdleCompaction", J::Bool(true)),
+    ("claudeIdleCompactAbove", J::Str("200000")),
+    ("claudeOneHourPromptCache", J::Bool(false)),
     // CDXC:VoiceMode 2026-10-20 WHY:
     // xAI is the default provider: Grok Voice is billed per minute at a known price, and Grok dictation already needs the xAI key. Each provider keeps its own voice; the API keys are not settings (gxserver seals them, see server/src/voice_agent/keys.rs).
     ("voiceAgentProvider", J::Str("xai")),

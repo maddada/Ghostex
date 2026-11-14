@@ -623,6 +623,15 @@ pub const PREFERRED_AGENT_INTERFACE_OPTIONS: &[Opt] =
 
 /// `newSessionAgentScope`: how the agent a project's new-session button starts is remembered
 /// (gx-core `sidebar_menu/agent_choice.rs`, CDXC:AgentLauncher 2026-10-30).
+/// "Only above" for Claude's idle compaction (server/src/agents/claude_idle_compaction.rs).
+pub const CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS: &[Opt] = &[
+    opt("100K", "100000"),
+    opt("200K", "200000"),
+    opt("300K", "300000"),
+    opt("400K", "400000"),
+    opt("500K", "500000"),
+];
+
 pub const NEW_SESSION_AGENT_SCOPE_OPTIONS: &[Opt] = &[
     opt("Per project", "project"),
     opt("Per Space", "space"),

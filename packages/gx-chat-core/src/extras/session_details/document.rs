@@ -792,6 +792,9 @@ const USAGE_CARDS: [(&str, &str, &[&str]); 3] = [
         "Cache",
         &[
             "cacheState",
+            "cacheTtl",
+            "idleCompactAt",
+            "idleCompactionNote",
             "cacheHitRate",
             "cacheRatio",
             "cacheMisses",

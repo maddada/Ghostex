@@ -51,3 +51,17 @@ pub fn to_locale_string(epoch_ms: f64, utc_offset_minutes: i32) -> String {
     };
     format!("{month}/{day}/{year}, {hour12}:{minute:0>2}:{second:0>2} {suffix}")
 }
+
+/// The local clock time of an epoch-milliseconds instant: `h:mm AM/PM`.
+pub fn clock_time(epoch_ms: f64, utc_offset_minutes: i32) -> String {
+    let local_ms = epoch_ms + f64::from(utc_offset_minutes) * 60_000.0;
+    let time_of_day = (local_ms.floor() as i64).rem_euclid(86_400_000);
+    let hour24 = time_of_day / 3_600_000;
+    let minute = (time_of_day / 60_000) % 60;
+    let suffix = if hour24 < 12 { "AM" } else { "PM" };
+    let hour12 = match hour24 % 12 {
+        0 => 12,
+        hour => hour,
+    };
+    format!("{hour12}:{minute:0>2} {suffix}")
+}
