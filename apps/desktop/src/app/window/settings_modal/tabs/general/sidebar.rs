@@ -357,6 +357,19 @@ fn sidebar_section(
             false,
             cx,
         ));
+        // CDXC:RemoteMachines 2026-11-15 DECISION in gx-core sidebar_view/merged.rs (an advanced
+        // row, off by default); Separate by machine gives each computer its own tab instead.
+        if !g.values.bool("sidebarSeparateByMachine") {
+            rows.extend(page.toggle(
+                g,
+                s,
+                "sidebarHideDisconnectedMachines",
+                "Hide sessions and projects from computers that aren't connected",
+                "Leave a computer that isn't connected out of the Project sidebar: its sessions leave every project, and a project only it has is hidden. They come back when it reconnects. Off: its last sessions stay, faded. The Unified sidebar always leaves it out. The phone follows this.",
+                false,
+                cx,
+            ));
+        }
     }
     // CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs (an advanced row, Manual by
     // default); both sidebars and the phone follow it.

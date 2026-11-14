@@ -194,6 +194,16 @@ impl SidebarUiStore {
                 );
                 changed(SidebarPersistSet::collapse())
             }
+            SidebarUiIntent::ToggleProjectMachineHidden {
+                group_id,
+                machine_id,
+            } => {
+                toggle(
+                    &mut self.state.collapse.hidden_project_machines,
+                    crate::sidebar_view::project_machine_key(&group_id, &machine_id),
+                );
+                changed(SidebarPersistSet::collapse())
+            }
             SidebarUiIntent::SelectSpace { space_id } => {
                 let section_key = self.state.section_key();
                 // A Space shows projects, so picking one from Bots mode goes back to Projects.

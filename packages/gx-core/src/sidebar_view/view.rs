@@ -666,6 +666,12 @@ pub struct MachineChip {
     /// [`super::inputs::LOCAL_MACHINE_ID`] or the saved remote machine's id: the project menu's
     /// Clone on… offers the machines whose chips a project lacks.
     pub machine_id: String,
+    /// The user hid this computer's sessions in this project (a click on its icon); the icon
+    /// draws dimmed (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
+    pub hidden: bool,
+    /// While hidden, the most urgent wait among the rows it hides, so the dimmed icon carries
+    /// that dot.
+    pub hidden_needs_you: Option<NeedsYou>,
 }
 
 /// One session (or browser tab) as a sidebar row.

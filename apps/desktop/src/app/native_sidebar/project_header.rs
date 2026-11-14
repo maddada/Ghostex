@@ -125,7 +125,10 @@ impl GhostexGpuiApp {
             let computers = group
                 .machine_names
                 .iter()
-                .map(|(name, _)| format!("On {name}"))
+                .map(|chip| match chip.hidden {
+                    true => format!("On {} (sessions hidden)", chip.name),
+                    false => format!("On {}", chip.name),
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             Some(match &group.title_tooltip {
@@ -166,15 +169,15 @@ impl GhostexGpuiApp {
                         .truncate()
                         .child(home_title.clone().unwrap_or_else(|| group.title.clone())),
                 )
-                .children(group.machine_names.iter().filter(|_| home.is_none()).map(
-                    |(_, machine_id)| {
-                        machine_icon_chip(
-                            self.sidebar_machine_icon_asset(machine_id)
-                                .unwrap_or("titlebar/device-desktop.svg"),
-                            appearance,
-                        )
-                    },
-                ))
+                .children(
+                    group
+                        .machine_names
+                        .iter()
+                        .filter(|_| home.is_none())
+                        .map(|chip| {
+                            self.project_machine_toggle(&id, chip, tooltip_span, appearance, cx)
+                        }),
+                )
                 .when_some(tooltip.filter(|_| home.is_none()), |title, tooltip| {
                     title.when(
                         self.native_sidebar.pointer_inside
@@ -488,15 +491,105 @@ pub(in crate::app::native_sidebar) fn letter_tile(
         .into_any_element()
 }
 
-/// One machine a merged project is on, after its name (gx-core `sidebar_view/merged.rs`): a light
-/// outlined chip in the muted text colour, never a filled one, holding the machine's short name.
-/// The Unified sidebar's project headers draw the same chip (unified/groups.rs).
-pub(crate) fn machine_icon_chip(asset: &'static str, appearance: &SidebarAppearance) -> AnyElement {
-    let scale = appearance.scale;
-    div()
-        .flex_shrink_0()
-        .flex()
-        .items_center()
-        .child(titlebar_svg_icon(asset, 12.0 * scale, appearance.muted))
-        .into_any_element()
+impl GhostexGpuiApp {
+    /// One computer's icon after a project's name, as a button that hides or shows that
+    /// computer's sessions in this project (CDXC:RemoteMachines 2026-11-15 in gx-core
+    /// `sidebar_view/merged.rs`). A hidden computer's icon draws dimmed; while a row it hides
+    /// waits on the user, the icon carries that row's status dot at its top right.
+    fn project_machine_toggle(
+        &self,
+        group_id: &str,
+        chip: &super::model::SidebarMachineChip,
+        tooltip_span: super::tooltips::SidebarTooltipSpan,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let scale = appearance.scale;
+        let asset = self
+            .sidebar_machine_icon_asset(&chip.machine_id)
+            .unwrap_or("titlebar/device-desktop.svg");
+        let dot = chip
+            .hidden_needs_you
+            .as_deref()
+            .filter(|_| chip.hidden)
+            .map(|wait| match wait {
+                "approval" => rgb(super::status::APPROVAL_COLOR),
+                "question" => rgb(super::status::QUESTION_COLOR),
+                _ => rgb(0x95d7f6),
+            });
+        let tooltip = match (chip.hidden, dot.is_some()) {
+            (true, true) => format!(
+                "{}: sessions hidden, one needs you. Click to show",
+                chip.name
+            ),
+            (true, false) => format!("{}: sessions hidden, click to show", chip.name),
+            (false, _) => format!("{}: click to hide its sessions here", chip.name),
+        };
+        let command = json!({
+            "type": "toggleProjectMachine",
+            "groupId": group_id,
+            "machineId": chip.machine_id,
+        });
+        let hover = appearance.session_hover;
+        div()
+            .id(format!(
+                "native-project-machine-{group_id}-{}",
+                chip.machine_id
+            ))
+            .relative()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(16.0 * scale))
+            .rounded(px(3.0 * scale))
+            .cursor_pointer()
+            .role(gpui::Role::Button)
+            .aria_label(tooltip.clone())
+            .hover(move |chip| chip.bg(hover))
+            .child(
+                div()
+                    .when(chip.hidden, |icon| icon.opacity(0.35))
+                    .child(titlebar_svg_icon(asset, 12.0 * scale, appearance.muted)),
+            )
+            .when_some(dot, |chip, color| {
+                chip.child(
+                    div()
+                        .absolute()
+                        .top(px(0.0))
+                        .right(px(0.0))
+                        .size(px(5.0 * scale))
+                        .rounded_full()
+                        .bg(color),
+                )
+            })
+            // The header's own press starts a drag and its click folds the project; a click on
+            // the icon does neither.
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(cx.listener(move |app, _, _, cx| {
+                cx.stop_propagation();
+                app.dispatch_native_sidebar_ui(command.clone(), cx);
+            }))
+            .when(
+                self.native_sidebar.pointer_inside
+                    && self.native_sidebar.menu.is_none()
+                    && !cx.has_active_drag(),
+                |row| {
+                    row.managed_discrete_tooltip_with_placement(
+                        tooltip_span.placement(),
+                        appearance.tooltip_delay,
+                        move |window, cx| {
+                            super::tooltips::sidebar_tooltip(
+                                tooltip.clone(),
+                                tooltip_span,
+                                scale,
+                                window,
+                                cx,
+                            )
+                        },
+                    )
+                },
+            )
+            .into_any_element()
+    }
 }

@@ -857,6 +857,18 @@ turn off Merge copies of the same repository (Settings > Sidebar & Sessions,
 project with only its own sessions, and a copy on another computer still joins
 the one with its folder's name. The phone's project list follows the same
 switch.
+While another computer is in the list, every project header shows the icons of
+the computers it is on, a project on just one computer too. Click a computer's
+icon to hide that computer's sessions in that project (every section, Pinned
+included); click it again to show them. A hidden computer's icon is dimmed, and
+carries a status dot while one of the sessions it hides needs you. The choice is
+kept per project and computer across restarts. This is desktop only for now.
+To leave out computers that aren't connected, turn on Hide sessions and
+projects from computers that aren't connected (Settings > Sidebar & Sessions >
+Advanced, `sidebarHideDisconnectedMachines`, off by default): such a computer's
+sessions leave every project, and a project only it has is hidden, until it
+reconnects. Off, its last sessions stay, faded. The Unified sidebar always
+leaves a disconnected computer out. The phone follows this setting.
 To put a project on a computer that doesn't have it yet, right-click it and
 pick Clone on… and the computer: Ghostex clones its git remote into that
 computer's usual projects folder (Settings > Projects > Global settings > Default

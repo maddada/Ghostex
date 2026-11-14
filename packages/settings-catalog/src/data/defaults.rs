@@ -604,6 +604,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sidebarSeparateByMachine", J::Bool(false)),
     // CDXC:RemoteMachines 2026-11-09 DECISION in gx-core sidebar_view/merged.rs: on by default.
     ("sidebarMergeRepositoryCopies", J::Bool(true)),
+    // CDXC:RemoteMachines 2026-11-15 DECISION in gx-core sidebar_view/merged.rs: off by default.
+    ("sidebarHideDisconnectedMachines", J::Bool(false)),
     // CDXC:Worktrees 2026-11-06 DECISION in gx-core sidebar_view/worktree_fold.rs.
     ("worktreeSessionsInProject", J::Bool(true)),
     // CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs (Pinned order): Manual by default.
