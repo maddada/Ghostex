@@ -27,7 +27,7 @@ pub(super) const CLAUDE_AGENT_ID: &str = "claude";
 pub(super) fn search_opens_claude(search: &TabSearch) -> bool {
     let section = search.section("agentList");
     section.is_searching
-        && [IDLE_COMPACTION, MIN_TOKENS, ONE_HOUR_CACHE]
+        && [IDLE_COMPACTION, MIN_TOKENS, ONE_HOUR_CACHE, COMPACT_WORKERS]
             .iter()
             .any(|key| section.visible_keys.contains(*key))
 }
