@@ -399,33 +399,57 @@ Read its chat (ghostex read-session-chat {thread_ref} --last 2 --format text), t
 /// The first line worth reading: a report's "## Final Report" or "**Summary:**" heading says
 /// nothing, so the first plain sentence wins, with the heading as the fallback.
 pub fn report_headline(text: &str, max: usize) -> String {
-    let clean = |line: &str| {
-        line.trim()
-            .trim_start_matches(['#', '-', '*', '>', ' '])
-            .replace("**", "")
-            .replace('`', "")
-            .trim()
-            .to_string()
-    };
-    // A marked section's label (`✅ **Done:**`) is a heading too: judged after its bold is gone.
-    let is_heading = |line: &str| {
-        let trimmed = line.trim();
-        trimmed.starts_with('#')
-            || (trimmed.starts_with("**") && trimmed.ends_with("**"))
-            || trimmed.ends_with(':')
-            || clean(line).ends_with(':')
-    };
-    let lines = text.lines().filter(|line| !clean(line).is_empty());
+    let lines = text
+        .lines()
+        .filter(|line| !clean_report_line(line).is_empty());
     let line = lines
         .clone()
-        .find(|line| !is_heading(line))
+        .find(|line| !is_report_heading(line))
         .or_else(|| lines.clone().next())
-        .map(clean)
+        .map(clean_report_line)
         .unwrap_or_default();
+    cap_chars(line, max)
+}
+
+/// The report's plain lines (its headings and section labels left out) run together, for the
+/// Workers list's two-line preview: the headline and what follows it. The Markdown of links stays
+/// in; the chat core strips it for every client (gx-chat-core extras/coordinator_threads.rs).
+pub fn report_preview(text: &str, max: usize) -> String {
+    let plain: Vec<String> = text
+        .lines()
+        .filter(|line| !is_report_heading(line))
+        .map(clean_report_line)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if plain.is_empty() {
+        return report_headline(text, max);
+    }
+    cap_chars(plain.join(" "), max)
+}
+
+fn clean_report_line(line: &str) -> String {
+    line.trim()
+        .trim_start_matches(['#', '-', '*', '>', ' '])
+        .replace("**", "")
+        .replace('`', "")
+        .trim()
+        .to_string()
+}
+
+/// A marked section's label (`✅ **Done:**`) is a heading too: judged after its bold is gone.
+fn is_report_heading(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with('#')
+        || (trimmed.starts_with("**") && trimmed.ends_with("**"))
+        || trimmed.ends_with(':')
+        || clean_report_line(line).ends_with(':')
+}
+
+fn cap_chars(line: String, max: usize) -> String {
     if line.chars().count() > max {
         format!("{}…", line.chars().take(max).collect::<String>())
     } else {
-        line.to_string()
+        line
     }
 }
 

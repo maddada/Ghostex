@@ -19,7 +19,7 @@ use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
-use super::brief::report_headline;
+use super::brief::{report_headline, report_preview};
 use super::endpoint::session_title_of;
 use super::live::{thread_live, ThreadLive};
 use super::records::{list_coordinators, SessionKey, ThreadRecord};
@@ -33,6 +33,31 @@ use crate::presentation::{effective_lifecycle_state, now_iso};
 
 /// How long after its last activity a thread that neither works nor waits is still listed.
 const RECENT_THREAD_MS: i64 = 2 * 60 * 60 * 1000;
+
+/// How much of a finished thread's report its Workers row previews (`preview`): two lines of the
+/// desktop popover, with the link targets the chat core strips taken into account.
+const PREVIEW_CHARS: usize = 320;
+
+/// The threads active since this computer's midnight, which the Workers popover's header counts
+/// ("30 today").
+fn active_today(threads: &[Value], now: chrono::DateTime<chrono::Local>) -> usize {
+    let Some(midnight) = now
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .and_then(|midnight| midnight.and_local_timezone(chrono::Local).earliest())
+    else {
+        return 0;
+    };
+    threads
+        .iter()
+        .filter(|row| {
+            row["activeAt"]
+                .as_str()
+                .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+                .is_some_and(|at| at >= midnight)
+        })
+        .count()
+}
 
 fn is_recent(active_at: &str, now: chrono::DateTime<chrono::Utc>) -> bool {
     chrono::DateTime::parse_from_rfc3339(active_at)
@@ -90,10 +115,12 @@ fn cached_panel(
                 .cmp(left["activeAt"].as_str().unwrap_or_default())
         })
     });
-    // The summary is a function of the sorted list alone, so an unchanged list keeps it without
-    // serialising every thread again for the revision.
+    let today = active_today(&threads, chrono::Local::now());
+    // The summary is a function of the sorted list (and the day) alone, so an unchanged list keeps
+    // it without serialising every thread again for the revision.
     if let Some(previous) = previous.filter(|previous| {
         previous.threads == threads
+            && previous.summary["today"] == today
             && previous.summary["board"] == board
             && previous.summary["work"] == work
             && previous.summary["approvals"] == approvals
@@ -115,6 +142,10 @@ fn cached_panel(
             .filter(|row| panel_rank(row) < 2 || row["recent"] == true)
             .collect::<Vec<_>>(),
         "total": threads.len(),
+        // CDXC:Coordinators 2026-11-14 DECISION: the Workers popover's header counts what ran today
+        // beside what is live ("2 running · 1 needs you · 30 today", Q3212); see gx-chat-core
+        // extras/coordinator_threads.rs.
+        "today": today,
         "revision": format!("{:016x}", hasher.finish()),
         // The coordinator's board, capped per group (board.rs); it rides on this field so every
         // client that carries the Workers list carries it too.
@@ -503,6 +534,15 @@ fn build_row(
         .filter(|report| !report.trim().is_empty())
         .map(|report| report_headline(report, 140));
     let report_line = last_report.clone();
+    // The line is the report itself (not a live activity, a prompt or the brief): its preview may
+    // run on past the headline.
+    let detail_is_report = match state {
+        ThreadState::Waiting => false,
+        ThreadState::Working => {
+            live.and_then(|live| live.activity.as_ref()).is_none() && last_report.is_some()
+        }
+        _ => last_report.is_some(),
+    };
     let detail = match state {
         ThreadState::Waiting => session
             .and_then(waiting_prompt)
@@ -541,6 +581,11 @@ fn build_row(
     if let Some(report) = &report_line {
         row["lastReport"] = json!(report);
     }
+    // The longer line the desktop's Workers popover previews in two lines (Q3215); older clients
+    // read `detail` only.
+    if let Some(report) = thread.last_report.as_deref().filter(|_| detail_is_report) {
+        row["preview"] = json!(report_preview(report, PREVIEW_CHARS));
+    }
     if is_recent(&active_at, now) {
         row["recent"] = json!(true);
     }
@@ -565,12 +610,14 @@ fn build_row(
     {
         // Its terminal ended and Ghostex could not restart it (session_self_heal.rs).
         row["detail"] = json!(detail);
+        drop_preview(&mut row);
         row["stuck"] = json!(true);
     } else if state == ThreadState::Working {
         if let Some(quiet) = super::stall::session_quiet(&thread.project_id, &thread.session_id)
             .filter(|quiet| quiet.stalled)
         {
             row["detail"] = json!(super::stall::quiet_detail(&quiet, now.timestamp_millis()));
+            drop_preview(&mut row);
             row["stalled"] = json!(true);
             if quiet.stuck {
                 row["stuck"] = json!(true);
@@ -688,6 +735,9 @@ fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::U
         .filter(|report| !report.trim().is_empty())
     {
         row["lastReport"] = json!(report_headline(report, 140));
+        if !unreachable && !matches!(state, "working" | "waiting") {
+            row["preview"] = json!(report_preview(report, PREVIEW_CHARS));
+        }
     }
     if is_recent(&thread.updated_at, now) {
         row["recent"] = json!(true);
@@ -704,6 +754,13 @@ fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::U
         row["lifecycleState"] = json!(lifecycle);
     }
     row
+}
+
+/// A row whose line was replaced by a warning previews that warning, not its report.
+fn drop_preview(row: &mut Value) {
+    if let Some(row) = row.as_object_mut() {
+        row.remove("preview");
+    }
 }
 
 /// When `is_recent` turns false for this row, if it is true now.
@@ -1052,5 +1109,48 @@ mod tests {
         assert_eq!(away["state"], "sleeping");
         assert_eq!(away["detail"], "Its computer isn't connected");
         assert_eq!(away["lifecycleState"], "sleeping");
+    }
+
+    /// The header's "N today" counts the threads active since this computer's midnight.
+    #[test]
+    fn today_counts_the_threads_active_since_midnight() {
+        use chrono::TimeZone as _;
+        let now = chrono::Local
+            .with_ymd_and_hms(2026, 11, 14, 15, 0, 0)
+            .earliest()
+            .unwrap();
+        let at = |hour: u32, day: u32| {
+            let at = chrono::Local
+                .with_ymd_and_hms(2026, 11, day, hour, 30, 0)
+                .earliest()
+                .unwrap();
+            json!({"activeAt": at.with_timezone(&chrono::Utc).to_rfc3339()})
+        };
+        let threads = vec![
+            at(14, 14),
+            at(0, 14),
+            at(23, 13),
+            json!({"activeAt": "never"}),
+        ];
+        assert_eq!(active_today(&threads, now), 2);
+    }
+
+    /// A finished remote thread previews its report past the headline; a working one has none.
+    #[test]
+    fn a_finished_thread_previews_its_report() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-04T17:30:00.000Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let mut thread = remote_thread(Some("finished"));
+        thread.last_report =
+            Some("✅ **Done:**\n- Fixed the [pill](https://x.y/1).\n- Added a test.".to_string());
+        let row = build_remote_row(&thread, now);
+        assert_eq!(row["detail"], "Fixed the [pill](https://x.y/1).");
+        assert_eq!(
+            row["preview"],
+            "Fixed the [pill](https://x.y/1). Added a test."
+        );
+        let working = build_remote_row(&remote_thread(Some("working")), now);
+        assert!(working.get("preview").is_none());
     }
 }
