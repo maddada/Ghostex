@@ -99,6 +99,8 @@ impl GpuiNewThreadPickerWindow {
     pub(super) fn render_search(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors;
         let has_query = !self.query.is_empty();
+        let place_hint = self.render_project_search_hint();
+        let glyph = has_query || place_hint.is_none();
         h_flex()
             .flex_shrink_0()
             .h(px(NEW_THREAD_PICKER_SEARCH_HEIGHT))
@@ -127,26 +129,29 @@ impl GpuiNewThreadPickerWindow {
                         .text_color(hsla(c.item)),
                 ),
             )
-            .child(if has_query {
-                div()
-                    .id("ghostex-gpui-new-thread-picker-clear")
-                    .flex()
-                    .flex_shrink_0()
-                    .size(px(24.0))
-                    .items_center()
-                    .justify_center()
-                    .text_color(hsla(c.muted))
-                    .hover(|this| this.text_color(hsla(c.foreground)))
-                    .child(modal_icon(ICON_CLEAR, 16.0, c.muted))
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.clear_query(window, cx);
-                        this.selected = 0;
-                        this.input.update(cx, |input, cx| input.focus(window, cx));
-                        cx.notify();
-                    }))
-                    .into_any_element()
-            } else {
-                modal_icon(ICON_SEARCH, 16.0, rgba_of(c.muted, 0.5)).into_any_element()
+            .children(place_hint)
+            .when(glyph, |field| {
+                field.child(if has_query {
+                    div()
+                        .id("ghostex-gpui-new-thread-picker-clear")
+                        .flex()
+                        .flex_shrink_0()
+                        .size(px(24.0))
+                        .items_center()
+                        .justify_center()
+                        .text_color(hsla(c.muted))
+                        .hover(|this| this.text_color(hsla(c.foreground)))
+                        .child(modal_icon(ICON_CLEAR, 16.0, c.muted))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.clear_query(window, cx);
+                            this.selected = 0;
+                            this.input.update(cx, |input, cx| input.focus(window, cx));
+                            cx.notify();
+                        }))
+                        .into_any_element()
+                } else {
+                    modal_icon(ICON_SEARCH, 16.0, rgba_of(c.muted, 0.5)).into_any_element()
+                })
             })
     }
 
@@ -607,12 +612,9 @@ impl Render for GpuiNewThreadPickerWindow {
                 !choosing && self.place.is_none() && self.run_on.shown(),
                 |root| root.child(self.render_run_on(cx)),
             )
-            .map(|root| {
-                if choosing {
-                    root.child(self.render_project_hints().into_any_element())
-                } else {
-                    root.child(self.render_hints().into_any_element())
-                }
+            // The project list keeps only its ←→ hint, inside the search field.
+            .when(!choosing, |root| {
+                root.child(self.render_hints().into_any_element())
             })
             .child(
                 div()
