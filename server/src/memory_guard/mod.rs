@@ -25,7 +25,8 @@ mod usage;
 mod words;
 
 pub(crate) use card::{
-    blocked_by_memory_guard, card, card_from_record, stop_record, stopped_parts, STOP_RECORD,
+    blocked_by_memory_guard, card, card_from_record, stop_record, stopped_parts,
+    BLOCKED_ALERTED_BY, STOP_RECORD,
 };
 pub(crate) use pressure::{read_pressure_level, PressureLevel};
 pub(crate) use processes::{

@@ -262,6 +262,12 @@ pub(crate) fn project_presentation_session(
     if let Some((since, reason)) = super::blocked_state(session) {
         output.insert("blockedSince".to_string(), Value::String(since));
         output.insert("blockedReason".to_string(), Value::String(reason));
+        if crate::memory_guard::blocked_by_memory_guard(session).is_some() {
+            output.insert(
+                "blockedAlertedBy".to_string(),
+                Value::String(crate::memory_guard::BLOCKED_ALERTED_BY.to_string()),
+            );
+        }
     }
     // Present only while true (CDXC:SessionStatus 2026-10-31 in server/src/session_approval.rs).
     if crate::session_approval::session_awaits_answer(session) {

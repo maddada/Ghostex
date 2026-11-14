@@ -25,7 +25,10 @@
 //! - Blocked (every account out of usage; an API, login, overload or rate-limit error account
 //!   recovery could not get past) is a red dot that always alerts, Autopilot or not, unless
 //!   Ghostex fixed it right away (an automatic switch to an account with room, a quick retry that
-//!   got through), in which case it never became blocked.
+//!   got through), in which case it never became blocked. Since 2026-11-14 (CDXC:MemoryGuard
+//!   DECISION in server/src/memory_guard/card.rs, Q3190, "only the guard's alert"), a session the
+//!   memory guard stopped shows the blocked red dot without this sound and banner
+//!   (`blockedAlertedBy`): the guard's own notification, under its switch, is its only alert.
 //! - Every other session keeps its finished-turn alert, under Alert me for (All, or Needs you only).
 //! Supersedes the parts of the 2026-11-07 Alert me for decision (attention.rs) that let a thread's
 //! or a coordinator's finished turn alert under All.
@@ -214,6 +217,10 @@ pub fn stuck_alerts(session: &PresentationSession) -> bool {
 /// Whether a row is blocked (and so alerts).
 pub fn blocked_alerts(session: &PresentationSession) -> bool {
     session.blocked_since.is_some()
+        && session
+            .blocked_alerted_by
+            .as_deref()
+            .is_none_or(|by| by.trim().is_empty())
         && should_alert(
             presentation_role(session),
             AlertTrigger::Blocked,

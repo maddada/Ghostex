@@ -1032,6 +1032,11 @@ pub struct PresentationSession {
     /// Why the session is blocked, in a few plain words; present with `blocked_since`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
+    /// Who already alerted for this blocked state, so clients draw the red dot without their own
+    /// sound and banner: `memoryGuard` for a session the memory guard stopped, which notifies under
+    /// its own switch. Absent otherwise and on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_alerted_by: Option<String>,
     /// A running session holds a question card (an ask-user tool call) only the user can answer,
     /// also while its agent reads as working. Absent (false) otherwise and on daemons without
     /// [`PresentationCapabilities::awaiting_answer`]. Independent of `pending_question_count`.
