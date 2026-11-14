@@ -813,9 +813,9 @@ described below, shows one Space at a time, project by project, with every
 connected computer's projects in one list (see One list for every computer below).
 The Unified sidebar shows every session from every machine, Space and project
 in one list (only the active Space's while Spaces is on, see below): each session is a card with its project,
-its status on the right (Working with a timer,
-Waiting, Question, Approval, Failed or Done), its title, and its branch (followed
-by the computer's name when it runs on another computer, as in "main · Windows"),
+its status on the right as a coloured dot or icon (with a timer while it works;
+no word is shown, a screen reader reads it), its title, and its branch (followed
+by the computer's icon when more than one computer is in the sidebar),
 pull request and agent. Under a project header the project line is left out, so
 every card there is two lines. A project is named after its repository there, so the same
 repository on this computer and a remote one is one project. Sessions are
@@ -850,7 +850,7 @@ or Unified, Group by project, the Moving section, the project order and the rest
 change on the phone when you change them on a computer, and its Settings >
 Sidebar & Sessions (or Sort & Filter in its ⋯ menu) changes them on your
 computers too. On the phone, hold a project group's header in the Unified list
-for Move Up and Move Down. A computer without Sidebar organization sync keeps
+for Move Up and Move Down (while Group sessions by tags is off). A computer without Sidebar organization sync keeps
 what the phone had before. On the phone, Unified hides the computer tabs: Computers in the menu at the top
 of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
@@ -889,7 +889,7 @@ shows the strip of the sidebar you are using, and the button beside it copies th
 other sidebar's. Group by Project (`unifiedGroupByProject`, in Settings and Sort &
 Filter) puts every machine's sessions of one repository under one header, with
 that project's Working, Snoozed and Parked inside it; Drafts stay above the groups.
-Drag a header to arrange the groups; the order is saved per repository across
+Drag a header to arrange the groups (while Group sessions by tags is off); the order is saved per repository across
 machines, and a new project lands after the arranged ones, A to Z. The
 chat-bubble split button on a hovered header starts a new chat draft in that
 project (on the computer you last used for it), and its chevron opens the
@@ -900,8 +900,32 @@ or right-click a session in a worktree for its own Delete Worktree. Both open th
 same Delete worktree dialog as the Project sidebar.
 A project you hid in the Project sidebar leaves this
 list and its filter too, until you turn on Show Hidden. In the More menu, Sort &
-Filter offers Show Hidden, Group by Project and Moving Section here, and Collapse
-All folds the project groups while they are on.
+Filter offers Show Hidden, Group by Project, Group sessions by tags and Moving
+Section here (Moving Section only while grouping is off), and Collapse All folds
+the project groups while Group by Project is on and Group sessions by tags is off.
+
+Group sessions by tags (`groupSessionsByTags`, off by default, in Settings >
+Sidebar & Sessions and in Sort & Filter while the Unified sidebar is selected)
+puts the Unified sidebar's sessions into groups across all your projects, in the
+order of the Session Tags list: by default Needs you (an approval or a wait for
+your input), Question, Error (a failed model change, a failed program, or stuck),
+Finished (not yet read), Working (a running turn or background work) and Idle.
+Each group has a coloured header with its symbol, name and number of cards;
+groups are always open, and a group with no session has no header. A coordinator
+stands in the group of its most urgent thread and counts once; its threads keep
+their own marks. A finished result moves to Idle once you look at it on any
+device, or to Working when the session still has background work running; a
+session goes back to Working whenever its agent starts again. Drafts and Pinned stay above the groups and Snoozed and Parked below
+them, also with Group by Project on; there is no Moving section while grouping
+is on, and the Moving section setting keeps its value for when you turn grouping
+off. With Group by Project on, each group lists its sessions under their
+projects' headings (with the "+" for a new session there); the headings don't
+fold or drag, so arrange projects with grouping off. Move a status entry or a tag
+in Session Tags (on a computer, or on the phone) to change the order: the first
+enabled entry that applies to a session sets its group, so moving Bug above the
+status entries makes a Bug group first. A session no enabled entry applies to
+stays in the list below the groups, without a header. Group headers can't be
+dragged, and dragging a session never changes its tag or group.
 
 The row at the top is a filter bar that shows each pick as a chip with its own X.
 Chips that do not fit become a count that opens the menu; with nothing picked it
@@ -1720,8 +1744,16 @@ it a name, an icon from the shared icon list, and a color from the preset list.
 New Tag at the bottom of the Tag As menu opens that same place with the form
 ready. Custom tags then appear in the same drag list as the built-in ones: drag
 to reorder, use the switch or eye to hide them from menus and filters, and the
-trash button to delete one (sessions that carried it become untagged). The
-mobile app shows the same tags. `ghostex tag-session <selector> <tag>` accepts a
+trash button to delete one (sessions that carried it become untagged). While
+Group sessions by tags is on (Unified sidebar), the list also starts with six
+status entries, Needs you, Question, Error, Finished (not yet read), Working and
+Idle, each marked Status: they follow what each agent is doing, are never offered
+in Tag As or the tag filters, and can't be deleted; move them among your tags to
+change the order of the groups, by dragging a handle or clicking it for Move Up,
+Move Down and Move to top. On the phone, Settings > Sidebar & Sessions > Session
+Tags reorders the same list (drag a handle or tap it); adding, renaming and
+deleting tags stays on the computer. The tags themselves are stored and chosen
+exactly as before. The mobile app shows the same tags. `ghostex tag-session <selector> <tag>` accepts a
 custom tag by name. Claude, Codex and OpenCode name their own sessions; Ghostex
 syncs those names without running a first-prompt title job or blocking terminal
 input. If Claude or Codex has not named a session about a minute after a
@@ -6775,8 +6807,9 @@ agents, a connection from either side is enough.
   order), project groups, Project or Unified sidebar, Computers,
   Merge copies of the same repository, Worktree sessions, the Spaces switch, Show Main Hub on all Spaces, Hide projects
   without sessions, Group working sessions, session parking, Pinned order, the
-  Unified sidebar's Moving section, Session order, Group by project and project order, and
-  your Session Tags (the tags you made and the tag list's order). A change
+  Unified sidebar's Moving section, Session order, Group by project, Group
+  sessions by tags and project order, and your Session Tags (the tags you made
+  and the tag list's order, including where the status entries stand). A change
   shows on your other computers within a minute, without a restart. A project
   one computer doesn't have keeps its place and shows there once you add it.
   The sidebar's width, animations, tooltips, card details and hover buttons,

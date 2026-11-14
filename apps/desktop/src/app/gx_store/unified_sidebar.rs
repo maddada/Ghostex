@@ -11,10 +11,11 @@ use std::sync::Arc;
 use ghostex_gx_core::unified_sidebar::{
     UNIFIED_SAVED_STATE_KEY, UnifiedFilter, UnifiedFilterOption, UnifiedMachineInput,
     UnifiedRevealSpot, UnifiedRow, UnifiedSavedState, UnifiedSettings, UnifiedShelf,
-    UnifiedTreeLine, build_unified_sidebar_folded, find_unified_row, group_unified_sidebar,
-    move_unified_project, open_unified_reveal, repo_of_project, unified_branch_line,
-    unified_lane_inputs, unified_lane_menu_inputs, unified_machine_spaces, unified_shows_machine,
-    unified_space_of_project, unified_space_scope,
+    UnifiedTreeLine, build_unified_sidebar_folded, find_unified_row, group_unified_by_tags,
+    group_unified_sidebar, move_unified_project, open_unified_reveal, repo_of_project,
+    unified_branch_line, unified_grouping_settings, unified_lane_inputs, unified_lane_menu_inputs,
+    unified_machine_spaces, unified_shows_machine, unified_space_of_project, unified_space_scope,
+    unified_tag_entries,
 };
 use ghostex_gx_core::{
     ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, ProjectKey,
@@ -28,6 +29,7 @@ use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::model::{NativeSidebarGroup, NativeSidebarSession};
 use crate::app::native_sidebar::unified::model::{
     UnifiedCard, UnifiedCardLine, UnifiedGroupView, UnifiedShelfView, UnifiedSidebarSnapshot,
+    UnifiedStatusGroupView, UnifiedStatusProjectView,
 };
 use crate::app::native_sidebar::{CleanupBanner, OlderThreadsRow};
 
@@ -412,7 +414,8 @@ impl UnifiedSidebarHost {
                 })
             })
             .collect();
-        let settings = unified_settings(list_inputs);
+        let by_tags = list_inputs.settings.group_sessions_by_tags;
+        let settings = unified_grouping_settings(unified_settings(list_inputs), by_tags);
         let has_projects = inputs.iter().any(|input| !input.view.groups.is_empty());
         let scope = unified_space_scope(store, list_inputs);
         let folds = self.folds();
@@ -487,7 +490,9 @@ impl UnifiedSidebarHost {
             .order_override
             .as_ref()
             .unwrap_or(&list_inputs.settings.unified_project_order);
-        let grouped = list_inputs.settings.unified_group_by_project;
+        // Group by Project's own groups are drawn only while Group sessions by tags is off; while
+        // it is on, its projects are headings inside each status group.
+        let grouped = list_inputs.settings.unified_group_by_project && !by_tags;
         let project_groups = if grouped {
             group_unified_sidebar(&view, order)
         } else {
@@ -688,8 +693,62 @@ impl UnifiedSidebarHost {
             })
             .collect();
         let drafts = view.drafts.iter().filter_map(card).collect();
+        let (pinned, status_groups, ungrouped) = if by_tags {
+            let entries = unified_tag_entries(store, &list_inputs.settings);
+            let by = group_unified_by_tags(&view.active, &entries, &view.options.repos, order);
+            let nested = list_inputs.settings.unified_group_by_project;
+            let status_groups = by
+                .groups
+                .into_iter()
+                .map(|group| {
+                    let count = group.cards.len();
+                    let mut cards = Vec::new();
+                    let mut projects: Vec<UnifiedStatusProjectView> = Vec::new();
+                    for row in group.cards {
+                        let Some(mut drawn) = card(row) else {
+                            continue;
+                        };
+                        if !nested {
+                            cards.push(drawn);
+                            continue;
+                        }
+                        // Under its project's heading, which names the project.
+                        drawn.in_group = true;
+                        match projects.last_mut() {
+                            Some(project) if project.repo_key == row.repo.key => {
+                                project.cards.push(drawn);
+                            }
+                            _ => projects.push(UnifiedStatusProjectView {
+                                repo_key: row.repo.key.clone(),
+                                label: row.repo.label.clone(),
+                                cards: vec![drawn],
+                            }),
+                        }
+                    }
+                    UnifiedStatusGroupView {
+                        head: group.head,
+                        count,
+                        cards,
+                        projects,
+                    }
+                })
+                .collect();
+            (
+                view.pinned.iter().filter_map(card).collect(),
+                status_groups,
+                by.fallback.into_iter().filter_map(card).collect(),
+            )
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
         let (list, shelves) = if grouped {
             (Vec::new(), Vec::new())
+        } else if by_tags {
+            // No Moving section while grouping (gx-core `unified_grouping_settings`).
+            (
+                Vec::new(),
+                shelves_of(Vec::new(), view.snoozed, view.parked),
+            )
         } else {
             (
                 view.pinned
@@ -705,6 +764,9 @@ impl UnifiedSidebarHost {
             list,
             shelves,
             groups,
+            pinned,
+            status_groups,
+            ungrouped,
             options: view.options,
             filter,
             total: view.total,
@@ -771,8 +833,16 @@ fn drawn_reveal_spot(
     if holds(&snapshot.drafts) {
         return Some(spot(UnifiedShelf::Drafts, ""));
     }
-    if holds(&snapshot.list) {
+    if holds(&snapshot.list)
+        || holds(&snapshot.ungrouped)
+        || snapshot.status_groups.iter().any(|group| {
+            holds(&group.cards) || group.projects.iter().any(|project| holds(&project.cards))
+        })
+    {
         return Some(spot(UnifiedShelf::Active, ""));
+    }
+    if holds(&snapshot.pinned) {
+        return Some(spot(UnifiedShelf::Pinned, ""));
     }
     if let Some(shelf) = snapshot.shelves.iter().find(|shelf| holds(&shelf.cards)) {
         return Some(spot(shelf.shelf, ""));
@@ -1150,12 +1220,9 @@ impl GhostexGpuiApp {
             .reveal_target
             .take_if(|target| target.as_str() != sidebar_session_id)
             .is_some();
-        let grouped = self
-            .gx_store
-            .sidebar_list
-            .last_inputs
-            .settings
-            .unified_group_by_project;
+        // Project groups fold only while Group sessions by tags is off.
+        let settings = &self.gx_store.sidebar_list.last_inputs.settings;
+        let grouped = settings.unified_group_by_project && !settings.group_sessions_by_tags;
         // Rebuilt when a reveal unfolds a coordinator, lists its older threads or lifts the
         // filter, or an earlier reveal's older thread goes back: the snapshot's threads come from
         // the build.

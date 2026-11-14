@@ -831,9 +831,21 @@
       "agentWritable": true
     },
     {
+      "key": "groupSessionsByTags",
+      "title": "Group sessions by tags",
+      "subtitle": "Group the Unified sidebar by the Session Tags order: Needs you, Question, Error, Finished (not yet read), Working and Idle, across every project, with Drafts and Pinned above the groups and Snoozed and Parked below. Change the order in Session Tags, on a computer or on the phone. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "unifiedWorkingSection",
       "title": "Group busy sessions in a Moving section",
-      "subtitle": "In the Unified sidebar, move sessions whose agent is currently working (or running background tasks) into a collapsible Moving section at the bottom, so the top stays focused on sessions that need you. They jump back up when done or waiting for you. Shown while the Unified sidebar is selected.",
+      "subtitle": "In the Unified sidebar, move sessions whose agent is currently working (or running background tasks) into a collapsible Moving section at the bottom, so the top stays focused on sessions that need you. They jump back up when done or waiting for you. Not shown while Group sessions by tags is on, which lists them in its Working group; the setting is kept. Shown while the Unified sidebar is selected.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
@@ -845,7 +857,7 @@
     {
       "key": "unifiedGroupByProject",
       "title": "Group by project",
-      "subtitle": "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
+      "subtitle": "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. While Group sessions by tags is on, each group lists its sessions under their projects' headings instead, and Pinned, Snoozed and Parked stay above and below the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebar",
@@ -1486,13 +1498,49 @@
     {
       "key": "sidebarSessionTagListItems",
       "title": "Tag filter list",
-      "subtitle": "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.",
+      "subtitle": "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu. While Group sessions by tags is on, the list also holds the six status entries (Needs you, Question, Error, Finished (not yet read), Working and Idle), which follow each agent and are never offered in Tag as; the first enabled entry that applies sets a session's group.",
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebarTags",
       "sectionTitle": "Session Tags",
       "type": "json",
       "default": [
+        {
+          "enabled": true,
+          "id": "status-needs-you",
+          "type": "status",
+          "visible": true
+        },
+        {
+          "enabled": true,
+          "id": "status-question",
+          "type": "status",
+          "visible": true
+        },
+        {
+          "enabled": true,
+          "id": "status-error",
+          "type": "status",
+          "visible": true
+        },
+        {
+          "enabled": true,
+          "id": "status-finished",
+          "type": "status",
+          "visible": true
+        },
+        {
+          "enabled": true,
+          "id": "status-working",
+          "type": "status",
+          "visible": true
+        },
+        {
+          "enabled": true,
+          "id": "status-idle",
+          "type": "status",
+          "visible": true
+        },
         {
           "enabled": true,
           "id": "favorite",
@@ -1610,6 +1658,30 @@
         }
       ],
       "options": [
+        {
+          "label": "Needs you",
+          "value": "status-needs-you"
+        },
+        {
+          "label": "Question",
+          "value": "status-question"
+        },
+        {
+          "label": "Error",
+          "value": "status-error"
+        },
+        {
+          "label": "Finished (not yet read)",
+          "value": "status-finished"
+        },
+        {
+          "label": "Working",
+          "value": "status-working"
+        },
+        {
+          "label": "Idle",
+          "value": "status-idle"
+        },
         {
           "label": "Favorite",
           "value": "favorite"

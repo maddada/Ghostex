@@ -395,7 +395,7 @@ impl GhostexGpuiApp {
 
     /// A header's right-click menu: the Project sidebar menu of the project its repository's filter
     /// row opens.
-    fn unified_group_menu(&mut self, repo_key: &str) -> Option<Value> {
+    pub(super) fn unified_group_menu(&mut self, repo_key: &str) -> Option<Value> {
         let group_id = self
             .native_sidebar
             .unified
@@ -410,7 +410,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:Sidebar 2026-11-03 DECISION:
     /// User (Q1167, the page's "+" opens the picker with the machine already chosen, unobjected): the machine is picked on the New thread picker, so the "+" no longer opens a menu of machines first. It starts on the last machine used for the project, a connected one when there is one.
-    fn unified_group_new_session(
+    pub(super) fn unified_group_new_session(
         &mut self,
         repo_key: &str,
         _event: &gpui::ClickEvent,

@@ -38,7 +38,8 @@ const TAG_REORDER_LIST: &str = "sidebar-tags";
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TagListItem {
     pub(crate) id: String,
-    /// `tag`, `separator` or `untagged`.
+    /// `tag`, `separator`, `untagged` or `status` (one of the six computed status entries, gx-core
+    /// sidebar_view/status_tags.rs).
     pub(crate) kind: String,
     pub(crate) enabled: bool,
     pub(crate) visible: bool,
@@ -64,6 +65,8 @@ pub(crate) struct TagListState {
     picker_highlight: Option<usize>,
     picker_trigger: Rc<Cell<Option<Bounds<Pixels>>>>,
     dragging: Option<usize>,
+    /// The row (its place among the listed rows) whose handle menu is open.
+    handle_menu: Option<usize>,
 }
 
 fn is_custom_tag_id(value: &str) -> bool {
@@ -167,6 +170,14 @@ fn parse_item(value: &Value) -> Option<TagListItem> {
             visible: flag("visible"),
         });
     }
+    if let Some(group) = ghostex_gx_core::StatusGroup::from_id(id) {
+        return Some(TagListItem {
+            id: group.id().to_string(),
+            kind: "status".to_string(),
+            enabled: flag("enabled"),
+            visible: flag("visible"),
+        });
+    }
     if id == "untagged" || value.get("type").and_then(Value::as_str) == Some("untagged") {
         return Some(TagListItem {
             id: "untagged".to_string(),
@@ -191,7 +202,9 @@ fn parse_item(value: &Value) -> Option<TagListItem> {
         })
 }
 
-/// `normalizeSidebarSessionTagListItems(items, customTags)`.
+/// `normalizeSidebarSessionTagListItems(items, customTags)`: the status entries a list lacks go on
+/// top in their default order before the other defaults are appended, as gx-core's normalizer does,
+/// so a list saved before them shows them first, not at its end; the ones it holds keep their places.
 pub(crate) fn normalize_tag_list_items(
     value: &Value,
     custom: Option<&[CustomTag]>,
@@ -213,6 +226,17 @@ pub(crate) fn normalize_tag_list_items(
         }
         items.push(item);
     }
+    let missing: Vec<TagListItem> = ghostex_gx_core::StatusGroup::ALL
+        .into_iter()
+        .filter(|group| !items.iter().any(|item| item.id == group.id()))
+        .map(|group| TagListItem {
+            id: group.id().to_string(),
+            kind: "status".to_string(),
+            enabled: true,
+            visible: true,
+        })
+        .collect();
+    items.splice(0..0, missing);
     for item in default_items() {
         if !items.iter().any(|existing| existing.id == item.id) {
             items.push(item);
@@ -286,6 +310,8 @@ fn item_label(item: &TagListItem, custom: &[CustomTag]) -> String {
     match item.kind.as_str() {
         "untagged" => "No tag".to_string(),
         "separator" => "Separator".to_string(),
+        "status" => ghostex_gx_core::StatusGroup::from_id(&item.id)
+            .map_or_else(|| item.id.clone(), |group| group.label().to_string()),
         _ if is_custom_tag_id(&item.id) => custom
             .iter()
             .find(|tag| tag.id == item.id)
@@ -332,13 +358,19 @@ pub(crate) fn command_icon_asset(id: &str) -> SharedString {
     format!("titlebar/{kebab}.svg").into()
 }
 
-fn tag_glyph(item: &TagListItem, custom: &[CustomTag], muted: Rgba) -> AnyElement {
+fn tag_glyph(item: &TagListItem, custom: &[CustomTag], muted: Rgba, light: bool) -> AnyElement {
     if item.kind == "separator" {
         return settings_icon(icon::MINUS, 16.0, muted).into_any_element();
     }
     if item.kind == "untagged" {
         let (path, color) = builtin_presentation("untagged");
         return settings_icon(path, 15.0, gpui::rgb(color)).into_any_element();
+    }
+    if let Some(group) = ghostex_gx_core::StatusGroup::from_id(&item.id) {
+        // The symbol in its state colour, as on the group's header.
+        let (dark, light_color) = group.colors();
+        let color = if light { light_color } else { dark };
+        return settings_icon(group.symbol(), 16.0, gpui::rgb(color)).into_any_element();
     }
     if is_custom_tag_id(&item.id) {
         let tag = custom.iter().find(|tag| tag.id == item.id);
@@ -444,6 +476,7 @@ impl FieldStates {
             picker_highlight: None,
             picker_trigger: Rc::new(Cell::new(None)),
             dragging: None,
+            handle_menu: None,
         });
     }
 }
@@ -948,7 +981,26 @@ fn icon_picker_popover<V: SettingsPage>(
     )
 }
 
-/// `SidebarTagListSettingsField` (the whole Sidebar Tags card body).
+/// The list after the listed row at `from` moves to `to`: the rows not listed (the status entries
+/// while grouping is off) keep their places and the listed ones change places among the rest.
+fn move_listed(
+    items: &[TagListItem],
+    listed: &[usize],
+    from: usize,
+    to: usize,
+) -> Vec<TagListItem> {
+    let moved: Vec<TagListItem> = listed.iter().map(|index| items[*index].clone()).collect();
+    let moved = super::reorder::move_index(&moved, from, to);
+    let mut next = items.to_vec();
+    for (slot, item) in listed.iter().zip(moved) {
+        next[*slot] = item;
+    }
+    next
+}
+
+/// `SidebarTagListSettingsField` (the whole Sidebar Tags card body). `grouping` is Group sessions
+/// by tags: the six status entries are listed only while it is on (hidden, never greyed out, while
+/// it is off; they keep their places in the stored list).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn tag_list_field<V: SettingsPage>(
     page: &mut V,
@@ -956,6 +1008,7 @@ pub(crate) fn tag_list_field<V: SettingsPage>(
     description: &str,
     value: &Value,
     creating_on_open: bool,
+    grouping: bool,
     on_reset: PageAction<V>,
     window: &mut Window,
     cx: &mut Context<V>,
@@ -1080,9 +1133,18 @@ pub(crate) fn tag_list_field<V: SettingsPage>(
         ));
         // CDXC:Settings 2026-09-29 SEE-ALSO: the rows sort live like the dnd-kit sortable list of
         // fields.tsx; the drag itself is fields/reorder.rs, shared with Agents, Actions and Arrange views.
-        let order = super::reorder::reorder_order(page, TAG_REORDER_LIST, items.len(), cx);
+        let listed: Vec<usize> = (0..items.len())
+            .filter(|index| grouping || items[*index].kind != "status")
+            .collect();
+        let menu_open = page
+            .field_states()
+            .tag_list
+            .as_ref()
+            .and_then(|state| state.handle_menu);
+        let order = super::reorder::reorder_order(page, TAG_REORDER_LIST, listed.len(), cx);
         let mut rows: Vec<AnyElement> = Vec::new();
-        for (slot, index) in order.iter().copied().enumerate() {
+        for (slot, place) in order.iter().copied().enumerate() {
+            let index = listed[place];
             let item = &items[index];
             let label = item_label(item, &custom);
             let dimmed = !item.enabled || !item.visible;
@@ -1092,15 +1154,31 @@ pub(crate) fn tag_list_field<V: SettingsPage>(
             let delete_state = custom_state.clone();
             let item_id = item.id.clone();
             let is_custom = item.kind == "tag" && is_custom_tag_id(&item.id);
+            // CDXC:Sidebar 2026-11-14 DECISION: User (the approved Session Tags screen): clicking a handle opens, under its row, a bordered panel headed with the entry's name and position that offers Move Up, Move Down, Move to top and Done, each changing the same list a drag does, so the order can be set without dragging. The handle is a button named "Move <entry>, position <n> of <count>".
             let grip = div()
                 .id(("tag-list-grip", index))
+                .role(gpui::Role::Button)
+                .aria_label(format!(
+                    "Move {label}, position {} of {}",
+                    place + 1,
+                    listed.len()
+                ))
                 .flex_shrink_0()
                 .size(px(32.0))
                 .flex()
                 .items_center()
                 .justify_center()
                 .rounded(px(MODAL_RADIUS_CONTROL))
+                .cursor_pointer()
                 .hover(|this| this.bg(hsla(css_fade(gpui::rgb(0x262626), 0.5))))
+                .on_click(
+                    cx.listener(move |page: &mut V, _: &ClickEvent, _window, cx| {
+                        if let Some(state) = page.field_states().tag_list.as_mut() {
+                            state.handle_menu = (state.handle_menu != Some(place)).then_some(place);
+                        }
+                        cx.notify();
+                    }),
+                )
                 .child(settings_icon(icon::GRIP_VERTICAL, 16.0, p.foreground))
                 .into_any_element();
             let row = h_flex()
@@ -1116,7 +1194,7 @@ pub(crate) fn tag_list_field<V: SettingsPage>(
                 .child(super::reorder::reorder_handle(
                     p,
                     TAG_REORDER_LIST,
-                    index,
+                    place,
                     label.clone(),
                     grip,
                 ))
@@ -1141,23 +1219,35 @@ pub(crate) fn tag_list_field<V: SettingsPage>(
                                 } else {
                                     gpui::rgb(0x262626)
                                 }))
-                                .child(tag_glyph(item, &custom, p.muted)),
+                                .child(tag_glyph(item, &custom, p.muted, p.light)),
                         )
                         .child(
-                            div()
+                            v_flex()
                                 .flex_1()
                                 .min_w_0()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .text_ellipsis()
-                                .text_size(px(14.0))
-                                .text_color(hsla(if item.kind == "separator" {
-                                    p.muted
-                                } else {
-                                    text_color
-                                }))
-                                .when(item.kind == "separator", |this| this.italic())
-                                .child(label.clone()),
+                                .child(
+                                    div()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(px(14.0))
+                                        .text_color(hsla(if item.kind == "separator" {
+                                            p.muted
+                                        } else {
+                                            text_color
+                                        }))
+                                        .when(item.kind == "separator", |this| this.italic())
+                                        .child(label.clone()),
+                                )
+                                // A status entry's quiet caption, which stays with its row.
+                                .when(item.kind == "status", |this| {
+                                    this.child(
+                                        div()
+                                            .text_size(px(12.0))
+                                            .text_color(hsla(p.muted))
+                                            .child("Status"),
+                                    )
+                                }),
                         ),
                 )
                 // CDXC:Sessions 2026-09-12 DECISION: User: place the custom tag trash button leftmost, before the enabled switch and visibility button.
@@ -1238,15 +1328,100 @@ pub(crate) fn tag_list_field<V: SettingsPage>(
                 ))
                 .into_any_element();
             let move_items = items.clone();
+            let move_listed_rows = listed.clone();
             let move_custom = custom_state.clone();
+            let row = if menu_open == Some(place) {
+                let last = listed.len().saturating_sub(1);
+                let action =
+                    |id: &'static str, label: &'static str, to: usize, cx: &mut Context<V>| {
+                        let items = items.clone();
+                        let listed = listed.clone();
+                        let custom = custom_state.clone();
+                        settings_button(
+                            p,
+                            id,
+                            label,
+                            None,
+                            ButtonVariant::Ghost,
+                            to == place,
+                            None,
+                            move |page: &mut V, _window, cx| {
+                                let next = move_listed(&items, &listed, place, to);
+                                save_items(page, &next, custom.as_ref(), cx);
+                                // The menu follows the row, so it can move again.
+                                if let Some(state) = page.field_states().tag_list.as_mut() {
+                                    state.handle_menu = Some(to);
+                                }
+                                cx.notify();
+                            },
+                            cx,
+                        )
+                    };
+                // The approved `.move-options`: a bordered column under the row, headed with the
+                // entry's name and its position.
+                let menu = v_flex()
+                    .id(("tag-list-move-options", index))
+                    .role(gpui::Role::Group)
+                    .aria_label(format!("Move {label}"))
+                    .mt(px(4.0))
+                    .ml(px(40.0))
+                    .p(px(8.0))
+                    .gap(px(4.0))
+                    .items_start()
+                    .rounded(px(MODAL_RADIUS_CONTROL))
+                    .border_1()
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.raised))
+                    .child(
+                        div()
+                            .px(px(8.0))
+                            .py(px(4.0))
+                            .text_size(px(13.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(hsla(p.foreground))
+                            .child(format!("{label} · position {}", place + 1)),
+                    )
+                    .child(action(
+                        "tag-list-move-up",
+                        "Move Up",
+                        place.saturating_sub(1),
+                        cx,
+                    ))
+                    .child(action(
+                        "tag-list-move-down",
+                        "Move Down",
+                        (place + 1).min(last),
+                        cx,
+                    ))
+                    .child(action("tag-list-move-top", "Move to top", 0, cx))
+                    .child(settings_button(
+                        p,
+                        "tag-list-move-done",
+                        "Done",
+                        None,
+                        ButtonVariant::Ghost,
+                        false,
+                        None,
+                        |page: &mut V, _window, cx| {
+                            if let Some(state) = page.field_states().tag_list.as_mut() {
+                                state.handle_menu = None;
+                            }
+                            cx.notify();
+                        },
+                        cx,
+                    ));
+                v_flex().w_full().child(row).child(menu).into_any_element()
+            } else {
+                row
+            };
             rows.push(super::reorder::reorder_row(
                 page,
                 TAG_REORDER_LIST,
-                index,
+                place,
                 slot,
                 row,
                 move |page: &mut V, from, to, _window, cx| {
-                    let next = super::reorder::move_index(&move_items, from, to);
+                    let next = move_listed(&move_items, &move_listed_rows, from, to);
                     save_items(page, &next, move_custom.as_ref(), cx);
                 },
                 cx,

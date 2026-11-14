@@ -189,9 +189,10 @@ pub use crate::sidebar_actions::{
     close_confirmation, close_source, sidebar_close_targets, CloseConfirmation,
 };
 pub use crate::sidebar_actions::{
-    delayed_send_seed, normalize_remote_machine_settings, owns_agent_run_command,
-    owns_delayed_send_command, owns_group_working_sessions_command, owns_machine_disable_command,
-    plan_agent_run, plan_delayed_send_action, plan_group_working_sessions, plan_machine_disable,
+    delayed_send_seed, group_sessions_by_tags_list, normalize_remote_machine_settings,
+    owns_agent_run_command, owns_delayed_send_command, owns_group_working_sessions_command,
+    owns_machine_disable_command, plan_agent_run, plan_delayed_send_action,
+    plan_group_working_sessions, plan_machine_disable, GROUP_SESSIONS_BY_TAGS_ACTION,
     GROUP_WORKING_SESSIONS_ACTION, GROUP_WORKING_SESSIONS_SETTINGS_SOURCE,
     HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION, MACHINE_DISABLE_SETTINGS_SOURCE,
     PINNED_ORDER_MANUAL_ACTION, PINNED_ORDER_RECENT_ACTION, UNIFIED_GROUP_BY_PROJECT_ACTION,
@@ -306,6 +307,9 @@ pub use crate::sidebar_view::{
     DraftRow, DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use crate::sidebar_view::{tag_choice, tag_choices, TagChoice};
+pub use crate::sidebar_view::{
+    keep_status_entries, with_status_entries, without_status_entries, StatusGroup,
+};
 pub use crate::sidebar_view::{ChiefRowView, HomeHeaderView};
 pub use crate::sidebar_view::{FolderProblemCause, FolderProblemPath, FolderProblemView};
 pub use crate::workspace_groups::{

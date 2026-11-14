@@ -102,7 +102,10 @@ impl GhostexGpuiApp {
             )
             .when(open, |column| {
                 column.children(shelf.cards.iter().map(|card| {
-                    if matches!(kind, UnifiedShelf::Working | UnifiedShelf::Drafts) {
+                    if matches!(
+                        kind,
+                        UnifiedShelf::Working | UnifiedShelf::Drafts | UnifiedShelf::Pinned
+                    ) {
                         self.render_native_unified_card(card, hud, appearance, cx)
                     } else {
                         self.render_native_unified_slim_row(card, kind, hud, appearance, cx)

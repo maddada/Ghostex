@@ -37,10 +37,11 @@ pub fn unified_shelf_label(shelf: UnifiedShelf) -> &'static str {
     }
 }
 
-/// Whether a shelf is open: Drafts starts open and the rest folded, so the saved set holds the
-/// ones toggled away from that.
+/// Whether a shelf is open: Drafts and Pinned (a shelf of its own only while Group sessions by tags
+/// is on) start open and the rest folded, so the saved set holds the ones toggled away from that.
 pub fn unified_shelf_open(saved: &UnifiedSavedState, shelf: UnifiedShelf, key: &str) -> bool {
-    saved.toggled_shelves.contains(key) != (shelf == UnifiedShelf::Drafts)
+    saved.toggled_shelves.contains(key)
+        != matches!(shelf, UnifiedShelf::Drafts | UnifiedShelf::Pinned)
 }
 
 /// Where a card is drawn.
@@ -54,8 +55,9 @@ pub struct UnifiedRevealSpot {
     pub ancestors: Vec<String>,
 }
 
-/// Opens whatever folds the card at `spot` away. `grouped` is Group by Project. Returns whether
-/// anything changed, so the caller writes the saved state only then.
+/// Opens whatever folds the card at `spot` away. `grouped` is Group by Project with its project
+/// groups drawn (off while Group sessions by tags is on). Returns whether anything changed, so the
+/// caller writes the saved state only then.
 pub fn open_unified_reveal(
     saved: &mut UnifiedSavedState,
     spot: &UnifiedRevealSpot,
@@ -67,8 +69,9 @@ pub fn open_unified_reveal(
     for coordinator in &spot.ancestors {
         changed |= saved.unfolded_coordinators.insert(coordinator.clone());
     }
-    // Pinned and Sessions are no shelves: their cards are drawn whenever their group is.
-    if matches!(spot.shelf, UnifiedShelf::Pinned | UnifiedShelf::Active) {
+    // Sessions is no shelf: its cards are drawn whenever their group is. Pinned is a shelf of its
+    // own only above the status groups; inside a project group its cards lead the group.
+    if spot.shelf == UnifiedShelf::Active || (in_group && spot.shelf == UnifiedShelf::Pinned) {
         return changed;
     }
     let key = unified_shelf_key(spot.shelf, in_group.then_some(spot.repo_key.as_str()));

@@ -181,6 +181,11 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     {
         map.insert("unifiedGroupByProject".to_string(), json!(true));
     }
+    // Group sessions by tags, sent only when on (gx-core unified_sidebar/status_groups.rs); a phone
+    // reads its absence, and an older gxserver's, as off.
+    if settings.get("groupSessionsByTags").and_then(Value::as_bool) == Some(true) {
+        map.insert("groupSessionsByTags".to_string(), json!(true));
+    }
     if let Some(order) = settings
         .get("unifiedProjectOrder")
         .filter(|order| order.as_array().is_some_and(|keys| !keys.is_empty()))

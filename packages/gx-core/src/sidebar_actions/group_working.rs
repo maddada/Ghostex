@@ -1,6 +1,6 @@
 //! The switches of the Sort & Filter page that are settings: Group Working Sessions, Hide Projects
-//! Without Sessions, the view switch and, while the Unified sidebar is on, Group by Project and
-//! Working Section.
+//! Without Sessions, the view switch and, while the Unified sidebar is on, Group by Project, Group
+//! sessions by tags and Working Section.
 //!
 //! CDXC:Sidebar 2026-10-05 WHY:
 //! The rows write the setting, not the sidebar's own state like Show Hidden and the tag filters,
@@ -34,6 +34,8 @@ pub const HIDE_PROJECTS_WITHOUT_SESSIONS_ACTION: &str = "hideProjectsWithoutSess
 pub const UNIFIED_GROUP_BY_PROJECT_ACTION: &str = "unifiedGroupByProject";
 /// `unifiedWorkingSection`.
 pub const UNIFIED_WORKING_SECTION_ACTION: &str = "unifiedWorkingSection";
+/// `groupSessionsByTags`.
+pub const GROUP_SESSIONS_BY_TAGS_ACTION: &str = "groupSessionsByTags";
 /// `pinnedSessionOrder: manual` (CDXC:Sidebar 2026-11-07 in sidebar_menu/navigation.rs).
 pub const PINNED_ORDER_MANUAL_ACTION: &str = "pinnedOrderManual";
 /// `pinnedSessionOrder: recent`.
@@ -72,7 +74,7 @@ fn pinned_order_value(command: &Value) -> Option<&'static str> {
 }
 
 /// Each row: its action, the setting it flips and what that setting reads when it was never saved.
-const SETTING_ROWS: [(&str, &str, bool); 4] = [
+const SETTING_ROWS: [(&str, &str, bool); 5] = [
     (
         GROUP_WORKING_SESSIONS_ACTION,
         GROUP_WORKING_SESSIONS_SETTING_KEY,
@@ -88,6 +90,7 @@ const SETTING_ROWS: [(&str, &str, bool); 4] = [
         "unifiedGroupByProject",
         false,
     ),
+    (GROUP_SESSIONS_BY_TAGS_ACTION, "groupSessionsByTags", false),
     (
         UNIFIED_WORKING_SECTION_ACTION,
         "unifiedWorkingSection",
@@ -157,13 +160,46 @@ pub fn plan_group_working_sessions(
         .get(*key)
         .and_then(Value::as_bool)
         .unwrap_or(*default);
+    // The list goes in first, so it is saved no later than the switch that reads its places.
+    let mut patch = Map::new();
+    if *key == "groupSessionsByTags" {
+        patch.extend(group_sessions_by_tags_list(!on, saved_settings));
+    }
+    patch.insert((*key).to_string(), Value::Bool(!on));
     Some(SidebarActionPlan::one(ActionEffect::UpdateSettingsPatch {
         message: json!({
             "type": "updateSettingsPatch",
             "source": format!("sidebar:{action}"),
-            "patch": { *key: !on },
+            "patch": patch,
         }),
     }))
+}
+
+/// What turning Group sessions by tags on saves besides the switch, in the same patch and before
+/// it: the Session Tags list with the status entries it lacks on top, when this computer saved an
+/// arranged list that predates them. Nothing when turning it off, when the list already has them,
+/// when it was never saved, or when it is the default list apart from the status entries (never
+/// changed here): writing the default then would replace a list another computer arranged, so only
+/// the switch is saved, as on the phone.
+///
+/// CDXC:Sidebar 2026-11-14 WHY: the status entries' places are read from the stored list, and sync keeps them through an older app's write only when the computer held them (sidebar_view/status_tags.rs `keep_status_entries`), so turning grouping on stores them first; a list nobody changed here is left to sync, which brings the arranged one.
+pub fn group_sessions_by_tags_list(
+    on: bool,
+    saved_settings: &Map<String, Value>,
+) -> Option<(String, Value)> {
+    let list = saved_settings.get("sidebarSessionTagListItems")?;
+    let default = ghostex_settings_catalog::default_value("sidebarSessionTagListItems").map(|default| {
+        use ghostex_settings_catalog::ToJson as _;
+        default.to_json().to_value()
+    });
+    if default.is_some_and(|default| {
+        crate::sidebar_view::without_status_entries(&default)
+            == crate::sidebar_view::without_status_entries(list)
+    }) {
+        return None;
+    }
+    let list = on.then(|| crate::sidebar_view::with_status_entries(list))??;
+    Some(("sidebarSessionTagListItems".to_string(), list))
 }
 
 #[cfg(test)]

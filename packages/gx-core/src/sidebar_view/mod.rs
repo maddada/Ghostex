@@ -52,6 +52,7 @@ mod space_landing;
 mod space_sleep;
 mod space_switch;
 pub(crate) mod spaces;
+pub(crate) mod status_tags;
 pub(crate) mod tags;
 pub(crate) mod text;
 mod thread_fold;
@@ -134,6 +135,9 @@ pub use spaces::{Space, SpacesState, OTHER_SPACE_ID};
 pub use tags::{
     tag_choice, tag_choices, TagChoice, TagListItem, TagListItemKind, TagPresentation,
     UNTAGGED_TAG_FILTER,
+};
+pub use status_tags::{
+    keep_status_entries, with_status_entries, without_status_entries, StatusGroup,
 };
 pub use view::{
     rename_shake_key, CollectionView, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendView,

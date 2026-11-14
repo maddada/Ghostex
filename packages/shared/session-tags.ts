@@ -321,6 +321,29 @@ export const SIDEBAR_SESSION_TAG_LIST_UNTAGGED_ID = SIDEBAR_SESSION_TAG_FILTER_U
 
 export type SidebarSessionTagListSeparatorId = (typeof SIDEBAR_SESSION_TAG_LIST_SEPARATOR_IDS)[number];
 
+/**
+ * CDXC:Sidebar 2026-11-14 SEE-ALSO: the six computed status entries of the tag list, in their default order, as gx-core sidebar_view/status_tags.rs stores them (`type: 'status'`, no `tag`). They follow each session's state and are never a session tag, a tag filter or a Tag As choice.
+ */
+export const SIDEBAR_SESSION_STATUS_ENTRY_IDS = [
+  'status-needs-you',
+  'status-question',
+  'status-error',
+  'status-finished',
+  'status-working',
+  'status-idle',
+] as const;
+
+export type SidebarSessionStatusEntryId = (typeof SIDEBAR_SESSION_STATUS_ENTRY_IDS)[number];
+
+const SIDEBAR_SESSION_STATUS_ENTRY_LABELS: Record<SidebarSessionStatusEntryId, string> = {
+  'status-needs-you': 'Needs you',
+  'status-question': 'Question',
+  'status-error': 'Error',
+  'status-finished': 'Finished (not yet read)',
+  'status-working': 'Working',
+  'status-idle': 'Idle',
+};
+
 export type SidebarSessionTagListItem =
   | {
       enabled: boolean;
@@ -340,9 +363,16 @@ export type SidebarSessionTagListItem =
       id: typeof SIDEBAR_SESSION_TAG_LIST_UNTAGGED_ID;
       type: 'untagged';
       visible: boolean;
+    }
+  | {
+      enabled: boolean;
+      id: SidebarSessionStatusEntryId;
+      type: 'status';
+      visible: boolean;
     };
 
 const SIDEBAR_SESSION_TAG_LIST_SEPARATOR_SET = new Set<string>(SIDEBAR_SESSION_TAG_LIST_SEPARATOR_IDS);
+const SIDEBAR_SESSION_STATUS_ENTRY_SET = new Set<string>(SIDEBAR_SESSION_STATUS_ENTRY_IDS);
 
 /**
  * CDXC:Sessions 2026-06-13-17:50:
@@ -375,6 +405,7 @@ const DEFAULT_OFF_SIDEBAR_SESSION_TAG_FILTERS = new Set<SidebarSessionTag>([
 ]);
 
 export const DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS: readonly SidebarSessionTagListItem[] = [
+  ...SIDEBAR_SESSION_STATUS_ENTRY_IDS.map(createDefaultSidebarSessionTagListStatusItem),
   ...SIDEBAR_SESSION_TAG_SECTIONS[0]!.options.map((option) => createDefaultSidebarSessionTagListTagItem(option.value)),
   createDefaultSidebarSessionTagListSeparatorItem('separator-priority-progress'),
   ...SIDEBAR_SESSION_TAG_SECTIONS[1]!.options.map((option) => createDefaultSidebarSessionTagListTagItem(option.value)),
@@ -425,6 +456,9 @@ export function getSidebarSessionTagListItemLabel(
   if (item.type === 'untagged') {
     return 'No tag';
   }
+  if (item.type === 'status') {
+    return SIDEBAR_SESSION_STATUS_ENTRY_LABELS[item.id];
+  }
   return 'Separator';
 }
 
@@ -466,7 +500,7 @@ export function getEffectiveSidebarSessionTag(input: {
 
 /**
  * CDXC:Sessions 2026-09-11 WHY:
- * The tag filter list is a client setting, so it keeps custom tag ids by shape when it is normalized without a catalog (settings persistence), and only a caller that has the daemon catalog drops ids the daemon no longer knows and inserts newly created tags. New custom tags land just before the No tag separator, enabled and visible, so they show up in menus the moment they are created.
+ * The tag filter list is a client setting, so it keeps custom tag ids by shape when it is normalized without a catalog (settings persistence), and only a caller that has the daemon catalog drops ids the daemon no longer knows and inserts newly created tags. New custom tags land just before the No tag separator, enabled and visible, so they show up in menus the moment they are created. The status entries a list lacks go on top in their default order before the other defaults are appended, and the ones it holds keep their places and flags, as gx-core's `normalize_tag_list_items` and the phone do.
  */
 export function normalizeSidebarSessionTagListItems(
   candidate: unknown,
@@ -488,6 +522,12 @@ export function normalizeSidebarSessionTagListItems(
     seenIds.add(normalizedItem.id);
     normalized.push(normalizedItem);
   }
+
+  const missingStatuses = SIDEBAR_SESSION_STATUS_ENTRY_IDS.filter((id) => !seenIds.has(id));
+  for (const id of missingStatuses) {
+    seenIds.add(id);
+  }
+  normalized.unshift(...missingStatuses.map((id) => createDefaultSidebarSessionTagListStatusItem(id)));
 
   for (const item of DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS) {
     if (!seenIds.has(item.id)) {
@@ -633,6 +673,10 @@ function createDefaultSidebarSessionTagListUntaggedItem(): SidebarSessionTagList
   };
 }
 
+function createDefaultSidebarSessionTagListStatusItem(id: SidebarSessionStatusEntryId): SidebarSessionTagListItem {
+  return { enabled: true, id, type: 'status', visible: true };
+}
+
 function normalizeSidebarSessionTagListItem(candidate: unknown): SidebarSessionTagListItem | undefined {
   if (!isRecord(candidate)) {
     return undefined;
@@ -668,6 +712,15 @@ function normalizeSidebarSessionTagListItem(candidate: unknown): SidebarSessionT
     };
   }
 
+  if (SIDEBAR_SESSION_STATUS_ENTRY_SET.has(id)) {
+    return {
+      enabled: readBoolean(candidate.enabled, true),
+      id: id as SidebarSessionStatusEntryId,
+      type: 'status',
+      visible: readBoolean(candidate.visible, true),
+    };
+  }
+
   return undefined;
 }
 
@@ -677,6 +730,9 @@ function cloneSidebarSessionTagListItem(item: SidebarSessionTagListItem): Sideba
   }
   if (item.type === 'untagged') {
     return { enabled: item.enabled, id: item.id, type: 'untagged', visible: item.visible };
+  }
+  if (item.type === 'status') {
+    return { enabled: item.enabled, id: item.id, type: 'status', visible: item.visible };
   }
   return { enabled: item.enabled, id: item.id, type: 'separator', visible: item.visible };
 }

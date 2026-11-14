@@ -18,6 +18,7 @@ mod saved;
 #[cfg(test)]
 mod scale_tests;
 mod spaces;
+mod status_groups;
 #[cfg(test)]
 mod tests;
 mod tree;
@@ -51,3 +52,8 @@ pub use reveal::{
 pub use saved::{UnifiedSavedState, RECENT_REPOS_MAX, UNIFIED_SAVED_STATE_KEY};
 pub use spaces::{unified_machine_spaces, unified_space_scope, UnifiedSpaceScope};
 pub use tree::{unified_coordinator_key, UnifiedCrew, UnifiedFolds};
+pub use status_groups::{
+    group_unified_by_tags, session_status_group, tree_status_group, unified_grouping_settings,
+    unified_tag_entries, GroupingPolicy, UnifiedByTags, UnifiedGroupHead, UnifiedTagEntry,
+    UnifiedTagGroup, GROUPING_POLICY,
+};

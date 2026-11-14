@@ -1,6 +1,46 @@
 use crate::json::{opt, Opt, J};
 
+/// The tag list a first run and Reset to Default write: the six computed status entries first
+/// (`type: "status"`, no `tag`), then the hand tags, separators and No tag.
+///
+/// CDXC:Sidebar 2026-11-14 SEE-ALSO: the status entries, their ids and order are the stored contract of gx-core sidebar_view/tags.rs (`StatusGroup`), packages/shared/session-tags.ts and the phone's src/contract/sessionTagList.ts.
 pub const DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS: J = J::Arr(&[
+    J::Obj(&[
+        ("enabled", J::Bool(true)),
+        ("id", J::Str("status-needs-you")),
+        ("type", J::Str("status")),
+        ("visible", J::Bool(true)),
+    ]),
+    J::Obj(&[
+        ("enabled", J::Bool(true)),
+        ("id", J::Str("status-question")),
+        ("type", J::Str("status")),
+        ("visible", J::Bool(true)),
+    ]),
+    J::Obj(&[
+        ("enabled", J::Bool(true)),
+        ("id", J::Str("status-error")),
+        ("type", J::Str("status")),
+        ("visible", J::Bool(true)),
+    ]),
+    J::Obj(&[
+        ("enabled", J::Bool(true)),
+        ("id", J::Str("status-finished")),
+        ("type", J::Str("status")),
+        ("visible", J::Bool(true)),
+    ]),
+    J::Obj(&[
+        ("enabled", J::Bool(true)),
+        ("id", J::Str("status-working")),
+        ("type", J::Str("status")),
+        ("visible", J::Bool(true)),
+    ]),
+    J::Obj(&[
+        ("enabled", J::Bool(true)),
+        ("id", J::Str("status-idle")),
+        ("type", J::Str("status")),
+        ("visible", J::Bool(true)),
+    ]),
     J::Obj(&[
         ("enabled", J::Bool(true)),
         ("id", J::Str("favorite")),
@@ -173,4 +213,14 @@ pub const SIDEBAR_SESSION_TAG_OPTIONS: &[Opt] = &[
     opt("Bug", "bug"),
     opt("Feature", "feature"),
     opt("Design", "design"),
+];
+
+/// The six computed status entries of the tag list, in their default order: what each is called.
+pub const SIDEBAR_SESSION_STATUS_OPTIONS: &[Opt] = &[
+    opt("Needs you", "status-needs-you"),
+    opt("Question", "status-question"),
+    opt("Error", "status-error"),
+    opt("Finished (not yet read)", "status-finished"),
+    opt("Working", "status-working"),
+    opt("Idle", "status-idle"),
 ];

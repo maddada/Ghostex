@@ -10,6 +10,7 @@ use ghostex_gx_protocol::CustomSessionTagsState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::status_tags::StatusGroup;
 use super::text::{collapse_js_whitespace, js_trim, utf16_prefix};
 
 /// The filter value that matches sessions without a tag. Filter chrome only, never a stored tag.
@@ -383,7 +384,8 @@ pub(crate) fn matches_session_filters(
         || matches_tag_filters(effective_tag, filters)
 }
 
-/// One row of the tag filter list in settings.
+/// One row of the tag list in settings: a tag, a separator, No tag, or one of the six computed
+/// status entries (status_tags.rs).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagListItem {
@@ -399,15 +401,16 @@ pub enum TagListItemKind {
     Tag,
     Separator,
     Untagged,
+    Status,
 }
 
 impl TagListItem {
-    /// `getSidebarSessionTagListItemFilter`.
+    /// `getSidebarSessionTagListItemFilter`: a status entry is never a tag filter.
     fn filter(&self) -> Option<&str> {
         match self.kind {
             TagListItemKind::Tag => Some(&self.id),
             TagListItemKind::Untagged => Some(UNTAGGED_TAG_FILTER),
-            TagListItemKind::Separator => None,
+            TagListItemKind::Separator | TagListItemKind::Status => None,
         }
     }
 }
@@ -447,9 +450,10 @@ fn default_tag_list_items() -> Vec<TagListItem> {
     items
 }
 
-/// `normalizeSidebarSessionTagListItems`: known rows in the stored order, the defaults appended
-/// for anything missing, and (with a catalog) custom tags the daemon no longer knows dropped and
-/// new ones inserted before the No tag separator.
+/// `normalizeSidebarSessionTagListItems`: known rows in the stored order, the status entries the
+/// list lacks on top in their default order, the defaults appended for anything else missing, and (with a
+/// catalog) custom tags the daemon no longer knows dropped and new ones inserted before the No tag
+/// separator.
 pub(crate) fn normalize_tag_list_items(
     candidate: &Value,
     catalog: Option<&TagCatalog>,
@@ -474,6 +478,20 @@ pub(crate) fn normalize_tag_list_items(
         seen.insert(item.id.clone());
         items.push(item);
     }
+    // The status entries a list lacks go on top in their default order before the other defaults
+    // are appended, so a list that predates them has them first instead of at its end; the ones it
+    // holds keep their places and flags (status_tags.rs; the phone's sessionTagList.ts does the same).
+    let missing: Vec<TagListItem> = StatusGroup::ALL
+        .into_iter()
+        .filter(|group| seen.insert(group.id().to_string()))
+        .map(|group| TagListItem {
+            id: group.id().to_string(),
+            kind: TagListItemKind::Status,
+            enabled: true,
+            visible: true,
+        })
+        .collect();
+    items.splice(0..0, missing);
     for item in default_tag_list_items() {
         if !seen.contains(&item.id) {
             items.push(item);
@@ -528,6 +546,14 @@ fn normalize_tag_list_item(candidate: &Value) -> Option<TagListItem> {
         return Some(TagListItem {
             id: UNTAGGED_TAG_FILTER.to_string(),
             kind: TagListItemKind::Untagged,
+            enabled: bool_field("enabled"),
+            visible: bool_field("visible"),
+        });
+    }
+    if let Some(group) = StatusGroup::from_id(id) {
+        return Some(TagListItem {
+            id: group.id().to_string(),
+            kind: TagListItemKind::Status,
             enabled: bool_field("enabled"),
             visible: bool_field("visible"),
         });
@@ -620,6 +646,8 @@ pub(crate) fn tag_list_item_label(item: &TagListItem, catalog: &TagCatalog) -> S
         }
         TagListItemKind::Untagged => "No tag".to_string(),
         TagListItemKind::Separator => "Separator".to_string(),
+        TagListItemKind::Status => StatusGroup::from_id(&item.id)
+            .map_or_else(|| item.id.clone(), |group| group.label().to_string()),
     }
 }
 

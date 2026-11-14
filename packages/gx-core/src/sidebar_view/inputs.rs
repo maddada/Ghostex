@@ -442,6 +442,9 @@ pub struct SidebarSettings {
     pub unified_card_hover_buttons: Value,
     /// Unified cards sit under project headers (`unifiedGroupByProject`).
     pub unified_group_by_project: bool,
+    /// Unified cards stand in groups by the Session Tags order (`groupSessionsByTags`, off by
+    /// default; unified_sidebar/status_groups.rs).
+    pub group_sessions_by_tags: bool,
     /// The project groups' saved order, by repository key (`unifiedProjectOrder`).
     pub unified_project_order: Vec<String>,
     /// The Project sidebar leaves out projects with no sessions (`sidebarHideProjectsWithoutSessions`).
@@ -500,6 +503,7 @@ impl Default for SidebarSettings {
             unified_session_order: UnifiedSessionOrder::Recent,
             unified_card_hover_buttons: Value::Null,
             unified_group_by_project: false,
+            group_sessions_by_tags: false,
             unified_project_order: Vec::new(),
             hide_projects_without_sessions: false,
             chief_show_on_all_spaces: false,
@@ -588,6 +592,10 @@ impl SidebarSettings {
             unified_group_by_project: boolean(
                 "unifiedGroupByProject",
                 defaults.unified_group_by_project,
+            ),
+            group_sessions_by_tags: boolean(
+                "groupSessionsByTags",
+                defaults.group_sessions_by_tags,
             ),
             unified_project_order: settings
                 .get("unifiedProjectOrder")
