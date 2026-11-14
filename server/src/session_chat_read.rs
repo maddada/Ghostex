@@ -1001,10 +1001,18 @@ pub(crate) async fn handle_read_session_chat_http(
         // CDXC:MemoryGuard 2026-11-14 WHY: a session the memory guard stopped is asleep, and its
         // card (what was stopped, and Resume) is what the user opens the chat to read; no other
         // notice outlives the screen it was read from.
-        if let Some(notice) =
+        let stopped_card =
             crate::session_chat_notice::session_chat_watchdog_notice(&project_id, &session_id)
                 .filter(|notice| notice.kind == crate::memory_guard::NOTICE_KIND)
-        {
+                .or_else(|| {
+                    // After a gxserver restart the card comes from the stop record the session keeps.
+                    let db = open_gxserver_database(&state.paths).ok()?;
+                    let session = DomainRepository::new(&db, state.metadata.server_id.as_str())
+                        .get_session(&project_id, &session_id)
+                        .ok()??;
+                    crate::memory_guard::card_from_record(&session)
+                });
+        if let Some(notice) = stopped_card {
             result.insert("terminalNotice".to_string(), notice.to_value());
         }
         result.insert("screenProbed".to_string(), json!(true));

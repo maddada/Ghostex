@@ -7445,8 +7445,10 @@ the one using the memory, Ghostex restarts it on the same conversation and asks 
 If memory is still critical 30 seconds later, it stops that whole session, and the card in its
 chat has a Resume button. Sessions under 2 GB and apps outside Ghostex are never touched. Each
 step leaves a card in that chat and, while **Notify me when it steps in** is on, a notification on
-the computer and the phone. The switches follow you to your other computers when Settings > Sync
-> Agent defaults is on; each computer guards its own sessions. Windows is not guarded yet.
+the computer and the phone. A session it stopped shows a red dot in the sidebar until it runs again;
+open it to see what was stopped and press Resume. Both switches sync to all your computers (no
+Settings > Sync switch needed), and each computer guards its own sessions; the phone has them under
+Settings > Connection > Memory for each computer. Windows is not guarded yet.
 Settings: `memoryGuardEnabled`, `memoryGuardNotify`.
 
 ## Data folders

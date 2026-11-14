@@ -108,6 +108,11 @@ pub(crate) fn stuck_handled_by(project_id: &str, session_id: &str) -> Option<&'s
 /// marker, `failureNotifiedAt`). Gone once the session switches, resumes, makes progress or the
 /// user starts a new run; never after Stop retrying.
 pub(crate) fn blocked_state(session: &Value) -> Option<(String, String)> {
+    // A session the memory guard stopped, until it runs again (CDXC:MemoryGuard 2026-11-14 in
+    // server/src/memory_guard/card.rs).
+    if let Some(blocked) = crate::memory_guard::blocked_by_memory_guard(session) {
+        return Some(blocked);
+    }
     let runtime = session.get("runtimeSettings")?;
     if runtime["accountRecoverySuppressed"] == true {
         return None;

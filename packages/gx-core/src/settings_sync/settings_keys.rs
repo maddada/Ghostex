@@ -47,13 +47,15 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
     "sessionTitleGenerationAgent",
     "agentAcceptAllEnabled",
     "showQuickModelPickerInTerminal",
-    // CDXC:MemoryGuard 2026-11-14 DECISION in server/src/memory_guard/mod.rs (Q3101): the switch
-    // follows the user to every computer, and each computer guards itself.
-    "memoryGuardEnabled",
-    "memoryGuardNotify",
 ];
 
 /// Sidebar organization: the settings that change how the sidebar is organized, synced with the
+/// Settings that sync whatever Settings > Sync's switches say (`ALWAYS_CATEGORY`).
+///
+/// CDXC:MemoryGuard 2026-11-14 DECISION:
+/// User (Q3122, "always sync"): the memory guard's two switches sync to all the user's computers even while Settings > Sync > Agent defaults is off, and each computer still guards itself (server/src/memory_guard/mod.rs). Supersedes the same day's choice to sync them with Agent defaults.
+pub const ALWAYS_SYNCED_KEYS: &[&str] = &["memoryGuardEnabled", "memoryGuardNotify"];
+
 /// Spaces themselves (the `spaces` category, its switch `syncSpaces`).
 ///
 /// CDXC:SettingsSync 2026-11-12 DECISION:
@@ -108,6 +110,7 @@ pub fn category_setting_keys(prefix: &str) -> Vec<&'static str> {
         "coordinator" => COORDINATOR_KEYS.to_vec(),
         "spaces" => SIDEBAR_ORGANIZATION_KEYS.to_vec(),
         _ => Vec::new(),
+        super::ALWAYS_CATEGORY => ALWAYS_SYNCED_KEYS.to_vec(),
     }
 }
 

@@ -948,6 +948,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/setVoiceAgentKey" => full_local(path),
         /*
         CDXC:Secrets 2026-11-02 WHY:
+        // The memory guard's switches, which the phone's Settings › Connection shows per computer
+        // (memory_guard/mod.rs); it changes them with `updateSettingsPatch`.
+        "/api/readMemoryGuard" => remote_allowed(path),
         A secret request is created and waited for by the `ghostex secret request` an agent runs on this computer, and answered from any chat that shows the session, the phone included (the value only travels to this computer). Secret providers are a setting of this computer's: only its own clients list, change or test them.
         */
         "/api/answerSecretRequest" => remote_allowed(path),

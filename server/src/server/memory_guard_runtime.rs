@@ -19,9 +19,7 @@ use crate::memory_guard::{
     ChildGroup, PressureLevel, SessionUsage, Step, StopSignal,
 };
 use crate::session_chat_notice::{
-    set_session_chat_watchdog_notice, SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-    SessionChatTerminalNoticeActionKind, SessionChatTerminalNoticeSeverity,
-    SessionChatTerminalNoticeSource,
+    set_session_chat_watchdog_notice, SessionChatTerminalNoticeSeverity,
 };
 
 type Key = (String, String);
@@ -54,11 +52,6 @@ struct Book {
 }
 
 static BOOK: std::sync::LazyLock<Mutex<Book>> = std::sync::LazyLock::new(Default::default);
-
-/// The biggest commands named on each session the guard stopped, told to the agent when the user
-/// resumes it.
-static STOPPED_PARTS: std::sync::LazyLock<Mutex<HashMap<Key, String>>> =
-    std::sync::LazyLock::new(Default::default);
 
 fn book() -> std::sync::MutexGuard<'static, Book> {
     BOOK.lock().unwrap_or_else(|error| error.into_inner())
@@ -189,6 +182,7 @@ fn sizes(candidates: &[Candidate]) -> Value {
 
 /// One tick's decision. BLOCKING (settings file, SQLite, a process scan while under pressure).
 fn plan(state: &AppState) -> Option<Plan> {
+    clear_records_of_woken_sessions(state);
     let settings = crate::shared_settings_file::read_shared_settings(&state.paths);
     if !guard::setting_on(settings.as_ref(), guard::ENABLED_SETTING) {
         *book() = Book::default();
@@ -468,21 +462,18 @@ async fn stop_session(state: &Arc<AppState>, candidate: Candidate) {
             "leftoversKilled": killed,
         }),
     );
-    STOPPED_PARTS
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .insert(
-            candidate.key.clone(),
-            guard::stopped_session_parts(&candidate.usage),
-        );
     let words = guard::stopped_session_card(&candidate.usage);
-    show_card(
+    let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let record = guard::stop_record(&words, &guard::stopped_session_parts(&candidate.usage), &at);
+    write_stop_record(state, &candidate.key, Some(record)).await;
+    let mut notice = guard::card(&words, SessionChatTerminalNoticeSeverity::Warning, true);
+    notice.detected_at = at;
+    set_session_chat_watchdog_notice(&candidate.key.0, &candidate.key.1, notice);
+    crate::session_chat_options::session_chat_terminal_notice_publisher(
         state,
-        &candidate.key,
-        &words,
-        SessionChatTerminalNoticeSeverity::Warning,
-        true,
-    );
+        &candidate.key.0,
+        &candidate.key.1,
+    )();
     notify(state, &candidate, &words.detail).await;
 }
 
@@ -494,28 +485,74 @@ fn show_card(
     severity: SessionChatTerminalNoticeSeverity,
     resume: bool,
 ) {
-    let actions = if resume {
-        vec![SessionChatTerminalNoticeAction {
-            id: guard::ACTION_RESUME.to_string(),
-            label: "Resume".to_string(),
-            kind: SessionChatTerminalNoticeActionKind::RestartAgent,
-            send: None,
-        }]
-    } else {
-        Vec::new()
-    };
-    let notice = SessionChatTerminalNotice::new(
-        guard::NOTICE_KIND,
-        severity,
-        SessionChatTerminalNoticeSource::Watchdog,
-        words.title.clone(),
-    )
-    .with_detail(words.detail.clone())
-    .with_details((!words.details.is_empty()).then(|| words.details.clone()))
-    .with_actions(actions)
-    .with_input_blocking(false);
-    set_session_chat_watchdog_notice(&key.0, &key.1, notice);
+    set_session_chat_watchdog_notice(&key.0, &key.1, guard::card(words, severity, resume));
     crate::session_chat_options::session_chat_terminal_notice_publisher(state, &key.0, &key.1)();
+}
+
+/// Writes (or, with `None`, removes) a session's stop record and refreshes its row, so the red
+/// dot shows or clears on every client.
+async fn write_stop_record(state: &Arc<AppState>, key: &Key, record: Option<Value>) {
+    let state = state.clone();
+    let key = key.clone();
+    let _ = tokio::task::spawn_blocking(move || store_stop_record(&state, &key, record)).await;
+}
+
+/// BLOCKING. `true` when the row changed.
+fn store_stop_record(state: &AppState, key: &Key, record: Option<Value>) -> bool {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return false;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(Some(session)) = repository.get_session(&key.0, &key.1) else {
+        return false;
+    };
+    let mut runtime = session["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    match record {
+        Some(record) => runtime.insert(guard::STOP_RECORD.to_string(), record),
+        None => runtime.remove(guard::STOP_RECORD),
+    };
+    if crate::accounts::endpoint::update_session_members(
+        &repository,
+        &session,
+        &runtime,
+        &[guard::STOP_RECORD],
+    )
+    .is_err()
+    {
+        return false;
+    }
+    let _ =
+        crate::server::schedule_presentation_session_delta(state, &db, &repository, &key.0, &key.1);
+    true
+}
+
+/// Clears the stop record of every session that runs again, however it was woken, so its red dot
+/// goes and a later sleep is not taken for the guard's. BLOCKING.
+fn clear_records_of_woken_sessions(state: &AppState) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(stopped) = repository.list_sessions_with_runtime_object(guard::STOP_RECORD) else {
+        return;
+    };
+    drop(repository);
+    drop(db);
+    for session in stopped {
+        if crate::presentation::effective_lifecycle_state(&session) == "sleeping" {
+            continue;
+        }
+        let (Some(project_id), Some(session_id)) = (
+            text_field(&session, "projectId"),
+            text_field(&session, "sessionId"),
+        ) else {
+            continue;
+        };
+        store_stop_record(state, &(project_id, session_id), None);
+    }
 }
 
 /// The bell row and the phone's push, while the notification switch is on.
@@ -601,11 +638,22 @@ pub(crate) async fn resume_after_memory_stop(
             .unwrap_or_default()
     };
     let key = (read("projectId"), read("sessionId"));
-    let parts = STOPPED_PARTS
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .remove(&key)
-        .unwrap_or_default();
+    let reader = (Arc::new(state.clone()), key.clone());
+    let parts = tokio::task::spawn_blocking(move || {
+        let (state, key) = reader;
+        let db = open_gxserver_database(&state.paths).ok()?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let session = repository.get_session(&key.0, &key.1).ok()??;
+        let parts = guard::stopped_parts(&session);
+        drop(repository);
+        drop(db);
+        store_stop_record(&state, &key, None);
+        Some(parts)
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
     crate::session_chat_notice::clear_session_chat_watchdog_notice(&key.0, &key.1);
     crate::session_chat_options::session_chat_terminal_notice_publisher(state, &key.0, &key.1)();
     send(

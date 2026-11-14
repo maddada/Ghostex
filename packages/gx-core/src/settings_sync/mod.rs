@@ -134,6 +134,10 @@ pub fn category_enabled(category: &SyncCategory, settings: Option<&Value>) -> bo
 /// The key prefix that always syncs: the members of the sync group and the removed computers.
 pub const GROUP_CATEGORY: &str = "group";
 
+/// The key prefix of the settings that sync on every computer of the group with no switch of their
+/// own in Settings > Sync (`ALWAYS_SYNCED_KEYS`: the memory guard's switches).
+pub const ALWAYS_CATEGORY: &str = "always";
+
 /// The sync group's id for a paired phone (`phone-<id>`), from the id the phone made for itself:
 /// 4 to 64 letters, digits or dashes.
 ///
