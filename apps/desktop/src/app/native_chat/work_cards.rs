@@ -1097,11 +1097,17 @@ impl NativeChatView {
                 ))
                 .into_any_element()
         };
+        // The title is one line, so the mark, the title, the answers (taller than a line) and the
+        // ⋯ over the age share the row's middle.
+        //
+        // CDXC:Coordinators 2026-11-14 DECISION:
+        // User, of the ⋯ More actions at a row's right end sitting lower than its title: center it
+        // vertically in that header row.
         let mut head = div()
             .w_full()
             .min_w_0()
             .flex()
-            .items_start()
+            .items_center()
             .gap(px(DOCK_GAP * s))
             .child(
                 div()
