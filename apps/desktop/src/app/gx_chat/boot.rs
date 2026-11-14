@@ -193,6 +193,7 @@ pub(super) fn chat_settings() -> ChatSettings {
                 coordinators: switch("chatQuietViewCoordinators", true),
                 chats: switch("chatQuietViewChats", true),
                 expand_last: switch("chatQuietViewExpandLast", true),
+                calm: switch("chatQuietViewCalm", false),
             }
         }),
         // The desktop draws its own status line, which is what its gxserver sends the phone

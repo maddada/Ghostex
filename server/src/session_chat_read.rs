@@ -718,6 +718,8 @@ pub(crate) async fn handle_read_session_chat_http(
             coordinators: quiet_switch("chatQuietViewCoordinators", true),
             chats: quiet_switch("chatQuietViewChats", true),
             expand_last: quiet_switch("chatQuietViewExpandLast", true),
+            // Calm Quiet View (Settings > Experience's Chill); an older phone's core ignores it.
+            calm: quiet_switch("chatQuietViewCalm", false),
         }),
     );
     // The desktop's status line pins ride every read too, so the phone draws the line this
