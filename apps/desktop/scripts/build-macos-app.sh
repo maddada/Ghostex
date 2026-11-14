@@ -1677,12 +1677,20 @@ stage_gpui_sparkle_framework_if_available
 # codesign-gpui-app.sh (macOS codesign-ghostex-host.sh port), and
 # GHOSTEX_GPUI_NOTARIZE=1 notarizes and staples the app for distribution
 # outside a DMG release.
-sign_gpui_app_bundle
-notarize_and_staple_gpui_app_if_requested
-# rsync of this bundle's contents does not copy wrapper Finder flags, so the
-# staged .app must itself be a package. Launch Services treats a missing
-# bundle bit as kLSNoExecutableErr.
-/usr/bin/SetFile -a B "$APP_PATH"
+# CDXC:Release 2026-11-14 WHY:
+# A release that defers component signatures (GHOSTEX_GPUI_DEFER_APP_SIGNING=1, set by
+# tooling/release-gpui/macos.sh with GHOSTEX_COMPONENT_SIGNATURES_DEFERRED=1) seals
+# on-demand-resources.json unsigned here; its own signing step signs those records into the bundle,
+# and only then does `macos.sh --phase sign-app` sign the bundle with this same recipe. Signing here
+# would seal a manifest that is about to change.
+if [[ "${GHOSTEX_GPUI_DEFER_APP_SIGNING:-0}" != "1" ]]; then
+	sign_gpui_app_bundle
+	notarize_and_staple_gpui_app_if_requested
+	# rsync of this bundle's contents does not copy wrapper Finder flags, so the
+	# staged .app must itself be a package. Launch Services treats a missing
+	# bundle bit as kLSNoExecutableErr.
+	/usr/bin/SetFile -a B "$APP_PATH"
+fi
 
 # CDXC:Release 2026-08-03:
 # The GPUI macOS app retains CEF helper apps in every bundle. Development apps

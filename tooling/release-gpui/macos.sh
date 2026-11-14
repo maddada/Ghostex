@@ -53,7 +53,7 @@ if [[ "${1:-}" == "--phase" ]]; then
 	shift 2
 fi
 case "$PHASE" in
-all | prepare | prepare-sources | prepare-runtime | build-server | stage-runtime | build-desktop | assemble | dmg | notarize | finalize) ;;
+all | prepare | prepare-sources | prepare-runtime | build-server | stage-runtime | build-desktop | assemble | sign-app | publish-components | dmg | notarize | finalize) ;;
 *)
 	echo "Unknown macOS release phase: $PHASE" >&2
 	echo "Expected one of: all prepare prepare-sources prepare-runtime build-server stage-runtime build-desktop assemble dmg notarize finalize" >&2
@@ -315,8 +315,45 @@ phase_assemble() {
 		GHOSTEX_ON_DEMAND_ASSETS=1 \
 		GHOSTEX_GPUI_SIGN_IDENTITY="$SIGNING_IDENTITY" \
 		GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG=--timestamp \
+		GHOSTEX_GPUI_DEFER_APP_SIGNING="$(signatures_deferred && echo 1 || echo 0)" \
 		"$REPO_ROOT/apps/desktop/scripts/build-macos-app.sh"
 
+	# A deferred release stops here: its signing step signs the component records, then the
+	# sign-app and publish-components phases finish what the rest of this phase does.
+	if signatures_deferred; then
+		return 0
+	fi
+	phase_publish_components
+	validate_assembled_app
+}
+
+# CDXC:Release 2026-11-14 DECISION:
+# User (Q3121): no step that runs build tooling holds GHOSTEX_COMPONENT_SIGNING_KEY. With
+# GHOSTEX_COMPONENT_SIGNATURES_DEFERRED=1 the release workflow runs `assemble` (vite, cargo, the
+# bundle, its components recorded and sealed unsigned) without the key, signs the records in a step
+# of its own (sign-component-records.mjs), then runs `sign-app` (codesign and the checks, no key)
+# and `publish-components` (the uploads, with the key, nothing built). `all` and an assemble run
+# without the variable keep the historical single-step order.
+signatures_deferred() {
+	[[ "${GHOSTEX_COMPONENT_SIGNATURES_DEFERRED:-0}" == "1" ]]
+}
+
+phase_sign_app() {
+	[[ -d "$APP_PATH" ]] || {
+		echo "GPUI build did not produce $APP_PATH (run --phase assemble first)" >&2
+		exit 1
+	}
+	# The same recipe build-macos-app.sh runs when it signs the bundle itself (sign_gpui_app_bundle).
+	/usr/bin/xattr -cr "$APP_PATH"
+	GHOSTEX_GPUI_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+		GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG=--timestamp \
+		GHOSTEX_GPUI_LID_SLEEP_HELPER_LABEL=com.madda.ghostex.host.LidSleepHelper \
+		GHOSTEX_GPUI_HELPER_APP_GLOB="Ghostex Helper*.app" \
+		/bin/bash "$REPO_ROOT/apps/desktop/scripts/codesign-gpui-app.sh" "$APP_PATH"
+	validate_assembled_app
+}
+
+phase_publish_components() {
 	COMPONENT_MANIFEST="$REPO_ROOT/build/on-demand-components/components.json"
 	# Both are optional components: the bundle ships without them (the app loads the CEF framework
 	# at run time) and downloads one only when the user installs it, so each must be published.
@@ -340,7 +377,9 @@ process.stdout.write(version);
 		fi
 		"${PUBLISH_ARGS[@]}"
 	done
+}
 
+validate_assembled_app() {
 	[[ -d "$APP_PATH" ]] || {
 		echo "GPUI build did not produce $APP_PATH" >&2
 		exit 1
@@ -602,6 +641,8 @@ build-server) phase_build_server ;;
 stage-runtime) phase_stage_runtime ;;
 build-desktop) phase_build_desktop ;;
 assemble) phase_assemble ;;
+sign-app) phase_sign_app ;;
+publish-components) phase_publish_components ;;
 dmg) phase_dmg ;;
 notarize) phase_notarize ;;
 finalize) phase_finalize ;;

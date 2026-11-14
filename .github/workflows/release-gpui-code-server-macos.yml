@@ -183,7 +183,7 @@ jobs:
       - name: Build and package the macOS code-server component
         if: ${{ steps.probe.outputs.action == 'build' }}
         env:
-          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+          GHOSTEX_COMPONENT_SIGNATURES_DEFERRED: '1'
           GH_TOKEN: ${{ github.token }}
           GHOSTEX_MACOS_ARCH: arm64
           GHOSTEX_MACOS_CODE_SERVER_COMPONENT_ONLY: '1'

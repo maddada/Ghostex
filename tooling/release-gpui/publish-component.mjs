@@ -14,7 +14,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authenticateComponentChecksumSidecar, validateOnDemandManifestV2 } from './on-demand-manifest.mjs';
-import { COMPONENT_SIGNING_KEY_ENV, componentSigningKey, signComponentAsset } from './component-signing.mjs';
+import {
+  COMPONENT_SIGNING_KEY_ENV,
+  componentSigningKey,
+  signaturesDeferred,
+  signComponentAsset,
+} from './component-signing.mjs';
 import {
   APP_RELEASE_GITHUB_REPO,
   componentReleaseRepos,
@@ -450,6 +455,10 @@ function writeAggregateManifest(outputPath, record) {
 }
 
 async function main() {
+  // A step that defers signatures (CDXC:Release 2026-11-14 below) must never hold the key.
+  if (signaturesDeferred() && process.env[COMPONENT_SIGNING_KEY_ENV]?.trim()) {
+    throw new Error(`${COMPONENT_SIGNING_KEY_ENV} must not reach a step that defers component signatures.`);
+  }
   const options = parseArguments(process.argv.slice(2));
   const component = requireIdentifier(options.component, 'component');
   const componentVersion = requireIdentifier(options.version, 'version');
@@ -531,8 +540,18 @@ async function main() {
    * CDXC:Release 2026-11-08 DECISION:
    * User (#495, Q1731): every component archive carries Ghostex's Ed25519 signature, and clients refuse unsigned ones. A release run without the key would seal archives no client installs, so in the release workflows (GHOSTEX_REQUIRE_COMPONENT_SIGNATURES=1) a missing key stops the run here.
    */
-  const signingKey = componentSigningKey();
-  if (!signingKey && !options.dryRun && process.env.GHOSTEX_REQUIRE_COMPONENT_SIGNATURES === '1') {
+  /*
+   * CDXC:Release 2026-11-14 DECISION:
+   * User (Q3121): no step that runs build tooling (vite, npm, cargo) holds the signing key. The
+   * release workflows run those steps with GHOSTEX_COMPONENT_SIGNATURES_DEFERRED=1: this records
+   * each archive unsigned, and a later step that runs nothing but Ghostex's own signing code
+   * (sign-component-records.mjs) signs every record and every sealed copy. A deferred run that
+   * still sees the key stops at the start of main(), so the key cannot drift back into a build
+   * step unnoticed.
+   */
+  const deferred = signaturesDeferred();
+  const signingKey = deferred ? null : componentSigningKey();
+  if (!signingKey && !deferred && !options.dryRun && process.env.GHOSTEX_REQUIRE_COMPONENT_SIGNATURES === '1') {
     throw new Error(`${COMPONENT_SIGNING_KEY_ENV} is not configured: component archives must be signed.`);
   }
   const record = componentManifestRecord({

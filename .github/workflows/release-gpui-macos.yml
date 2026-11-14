@@ -394,7 +394,7 @@ jobs:
             --timeout-minutes 45
       - name: Stage macOS runtime (code-server, zmx, gxserver package)
         env:
-          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+          GHOSTEX_COMPONENT_SIGNATURES_DEFERRED: '1'
           GH_TOKEN: ${{ github.token }}
         run: tooling/release-gpui/macos.sh --phase stage-runtime "${{ inputs.version }}"
       - name: Cargo build ghostex-gpui (desktop crate)
@@ -402,12 +402,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GHOSTEX_CARGO_TIMINGS: '1'
         run: tooling/release-gpui/macos.sh --phase build-desktop "${{ inputs.version }}"
-      - name: Assemble, sign, and validate Ghostex.app
+      - name: Assemble Ghostex.app
+        env:
+          GHOSTEX_COMPONENT_SIGNATURES_DEFERRED: '1'
+          GH_TOKEN: ${{ github.token }}
+        run: tooling/release-gpui/macos.sh --phase assemble "${{ inputs.version }}"
+      # CDXC:Release 2026-11-14 DECISION: user (Q3121): no step that runs build tooling holds the
+      # component signing key. The steps above record and seal the component archives unsigned
+      # (GHOSTEX_COMPONENT_SIGNATURES_DEFERRED); this step runs only Ghostex's signing code, and the
+      # uploads run in a step of their own (tooling/release-gpui/sign-component-records.mjs).
+      - name: Sign the component records
+        env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+        run: |
+          node tooling/release-gpui/sign-component-records.mjs \
+            build/on-demand-components/components.json \
+            apps/desktop/runtime/macos/Web/on-demand-resources.json \
+            apps/desktop/build/macos.noindex/Ghostex.app/Contents/Resources/Web/on-demand-resources.json
+      - name: Sign and validate Ghostex.app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tooling/release-gpui/macos.sh --phase sign-app "${{ inputs.version }}"
+      - name: Publish the CEF and Source components
         env:
           GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
           COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
-        run: tooling/release-gpui/macos.sh --phase assemble "${{ inputs.version }}"
+        run: tooling/release-gpui/macos.sh --phase publish-components "${{ inputs.version }}"
       - name: Create DMG
         env:
           GH_TOKEN: ${{ github.token }}

@@ -5,6 +5,7 @@ import { APP_RELEASE_GITHUB_REPO, componentsGithubRepo } from './components-repo
 import {
   componentSigningStatement,
   expectedSigningPublicKeyHex,
+  signaturesDeferred,
   verifyComponentSignature,
 } from './component-signing.mjs';
 
@@ -226,8 +227,9 @@ export async function sealOnDemandManifest({ buildManifestPath, componentManifes
     components,
   });
   // A release seals only signed archives (GHOSTEX_REQUIRE_COMPONENT_SIGNATURES=1 in the release
-  // workflows): every client refuses an unsigned one.
-  if (process.env.GHOSTEX_REQUIRE_COMPONENT_SIGNATURES === '1') {
+  // workflows): every client refuses an unsigned one. A build step that defers signatures seals
+  // them unsigned, and sign-component-records.mjs signs this file before anything ships it.
+  if (process.env.GHOSTEX_REQUIRE_COMPONENT_SIGNATURES === '1' && !signaturesDeferred()) {
     validateOnDemandManifestV2(manifest, { requireSignatures: true });
   }
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);

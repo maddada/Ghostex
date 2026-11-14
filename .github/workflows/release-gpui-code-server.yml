@@ -228,12 +228,8 @@ jobs:
           require_file .dependencies/code-server/release/lib/vscode/node_modules/node-pty/build/Release/pty.node
           grep -F promptEditorIpcReady .dependencies/code-server/release/out/node/routes/health.js >/dev/null
           .dependencies/code-server/release/lib/node .dependencies/code-server/release/out/node/entry.js --version >/dev/null
-      - name: Package and publish the immutable component
+      - name: Package the immutable component
         if: ${{ steps.probe.outputs.action == 'build' }}
-        env:
-          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
-          GH_TOKEN: ${{ github.token }}
-          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
         run: |
           ARCHIVE="$OUTPUT_DIR/${{ steps.code_server_identity.outputs.archive_name }}"
           mkdir -p "$OUTPUT_DIR"
@@ -246,6 +242,15 @@ jobs:
             --archive "$ARCHIVE" \
             --version '${{ steps.code_server_identity.outputs.component_version }}' \
             --platform "linux-${{ inputs.arch }}"
+      - name: Publish the immutable component
+        if: ${{ steps.probe.outputs.action == 'build' }}
+        env:
+          GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
+        run: |
+          ARCHIVE="$OUTPUT_DIR/${{ steps.code_server_identity.outputs.archive_name }}"
+          [[ -f "$ARCHIVE" && -f "$ARCHIVE.sha256" ]]
           tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
             --require-sha256-sidecars \
             --component code-server \
