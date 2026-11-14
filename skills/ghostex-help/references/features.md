@@ -6766,7 +6766,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   click. What a panel may do is limited to what you allowed when you installed
   it: See your projects, See your sessions, Open projects and sessions, Start
   agents. Turn its sidebar button or its sections off on its page in Settings >
-  Extensions (Sidebar mode, Sections in Projects). Agents and scripts can read a
+  Extensions (Sidebar mode, Sections in Projects). On the phone, the extension's
+  button sits in the sessions list's header, its sections show in the Project
+  list, a tap ticks an item or opens it, and a long press opens its options
+  (rename, delete, the project's or session's menu); side panel views stay on
+  the computer. Agents and scripts can read a
   panel with `ghostex extensions panel get <id>`; only the extension itself
   changes it. Settings: `sidebarModeHidden`, `sidebarSectionsHidden` (extension
   state); CLI: `ghostex extensions panel get|set|patch|events`.
