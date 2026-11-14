@@ -208,6 +208,11 @@ impl AutopilotTab {
             |page: &mut Self, checked, _, cx| page.set(json!({ "enabled": checked }), cx),
             cx,
         )];
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): while Autopilot is off its page is
+        // this one switch (and what it did); every choice under it shows once it is on.
+        if !on {
+            return settings_section(p, "", None, None, rows);
+        }
         let scope = config["scope"].as_str().unwrap_or("all").to_string();
         rows.push(segmented_field(
             p,
@@ -342,6 +347,11 @@ impl AutopilotTab {
             |page: &mut Self, value, _, cx| page.set(json!({ "tier": value }), cx),
             cx,
         )];
+        // Heal leaves questions and approvals for you (server/src/server/autopilot_answers.rs), so
+        // their switches show only on Heal and decide or Everything (CDXC:Settings 2026-11-14).
+        if tier == "heal" {
+            return settings_section(p, "What it may do", None, None, rows);
+        }
         let answer_questions = config["answerQuestions"].as_bool() == Some(true);
         rows.push(toggle_field_with(
             p,
@@ -746,6 +756,7 @@ impl Render for AutopilotTab {
             }
             return settings_page(&self.store, SettingsTabId::Autopilot, &p, blocks, cx);
         }
+        let enabled = self.config()["enabled"].as_bool() == Some(true);
         let shown = |section: &str| {
             let result = search.section(section);
             !result.is_searching || result.has_visible()
@@ -762,17 +773,20 @@ impl Render for AutopilotTab {
         {
             blocks.push(PageBlock::section("summary", section));
         }
-        if shown("allowed")
+        if enabled
+            && shown("allowed")
             && let Some(section) = self.allowed_section(&p, cx)
         {
             blocks.push(PageBlock::section("allowed", section));
         }
-        if shown("allowed")
+        if enabled
+            && shown("allowed")
             && let Some(section) = self.limits_section(&p, cx)
         {
             blocks.push(PageBlock::section("limits", section));
         }
-        if shown("supervisor")
+        if enabled
+            && shown("supervisor")
             && let Some(section) = self.supervisor_section(&p, window, cx)
         {
             blocks.push(PageBlock::section("supervisor", section));

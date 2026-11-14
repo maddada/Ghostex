@@ -171,7 +171,11 @@ fn chat_section(
         false,
         cx,
     ));
-    rows.extend(page.toggle(g, s, "chatComposerMatchesTranscriptWidth", "Chat box matches transcript width", "When Transcript width is set to a percentage, the chat box takes the same width instead of its standard width.", false, cx));
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): only while Transcript width is a
+    // percentage, the only time it does anything.
+    if g.values.bool("sessionChatCustomTranscriptWidthEnabled") {
+        rows.extend(page.toggle(g, s, "chatComposerMatchesTranscriptWidth", "Chat box matches transcript width", "When Transcript width is set to a percentage, the chat box takes the same width instead of its standard width.", false, cx));
+    }
     if g.visible(s, "chatMessageSpacing") {
         let spec = g.spec(
             "chatMessageSpacing",
@@ -488,7 +492,10 @@ fn dev_servers_section(
         false,
         cx,
     ));
-    if g.visible(s, "terminalDevServerIgnoredPortRules") {
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): only while detection is on.
+    if g.values.bool("terminalDevServerDetectionEnabled")
+        && g.visible(s, "terminalDevServerIgnoredPortRules")
+    {
         let spec = g.spec(
             "terminalDevServerIgnoredPortRules",
             "Ignored ports",

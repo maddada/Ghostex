@@ -1,17 +1,11 @@
 //! When your computer starts, first on Power & Sleep: start the server at login, and under it the
-//! two switches that only work while it is on (CDXC:ComputerStartup 2026-11-06 in
+//! two switches that only work while it is on (shown only while it is on) (CDXC:ComputerStartup 2026-11-06 in
 //! packages/settings-catalog/src/general/system.rs). gxserver adds and removes the login entry when
 //! the first switch changes (server/src/computer_startup/).
-use super::super::super::fields::{
-    PageAction, setting_row, settings_section, settings_switch, toggle_field_with,
-};
+use super::super::super::fields::{PageAction, settings_section, toggle_field_with};
 use super::super::super::page::PageBlock;
-use super::super::super::palette::SettingsPalette;
 use super::{GeneralCx, GeneralTab, save};
-use gpui::{
-    AnyElement, Context, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div,
-};
+use gpui::{AnyElement, Context};
 use serde_json::{Map, json};
 use std::rc::Rc;
 
@@ -19,7 +13,6 @@ const SECTION: &str = "computerStartup";
 const START_SERVER: &str = "startServerAtLogin";
 const OPEN_APP: &str = "openAppAtLogin";
 const RESUME_SESSIONS: &str = "resumeSessionsAfterRestart";
-const NEEDS_SERVER: &str = "Turn on Start Ghostex's server when you log in first.";
 
 pub(super) fn computer_startup_section(
     _page: &mut GeneralTab,
@@ -80,23 +73,21 @@ pub(super) fn computer_startup_section(
             "Continues the agent sessions that were running when the computer shut down, restarted or lost power, each in its own chat. Sessions you closed, slept or that had already ended stay as they were. Works with or without the app opening.",
         ),
     ] {
-        if !g.visible(SECTION, key) {
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): hidden while the server switch is
+        // off, no longer greyed out.
+        if !server_on || !g.visible(SECTION, key) {
             continue;
         }
         let spec = g.spec(key, label, description).dependent();
-        if server_on {
-            rows.push(toggle_field_with(
-                &g.p,
-                key,
-                spec,
-                g.values.bool(key),
-                Some(super::super::super::fields::reset_key::<GeneralTab>(key)),
-                move |page: &mut GeneralTab, next, _window, cx| save(page, key, json!(next), cx),
-                cx,
-            ));
-        } else {
-            rows.push(locked_child_row(&g.p, key, spec, cx));
-        }
+        rows.push(toggle_field_with(
+            &g.p,
+            key,
+            spec,
+            g.values.bool(key),
+            Some(super::super::super::fields::reset_key::<GeneralTab>(key)),
+            move |page: &mut GeneralTab, next, _window, cx| save(page, key, json!(next), cx),
+            cx,
+        ));
     }
     settings_section(
         &g.p,
@@ -106,25 +97,4 @@ pub(super) fn computer_startup_section(
         rows,
     )
     .map(|section| PageBlock::section(SECTION, section))
-}
-
-/// A child while the server switch is off: the whole row greyed once (label and switch alike),
-/// shown off whatever is stored, and not clickable; hovering the switch says what to turn on.
-fn locked_child_row(
-    p: &SettingsPalette,
-    key: &'static str,
-    spec: super::super::super::fields::RowSpec,
-    cx: &mut Context<GeneralTab>,
-) -> AnyElement {
-    let control = div()
-        .id(ElementId::Name(SharedString::from(format!("{key}-switch"))))
-        .flex_shrink_0()
-        .tooltip(super::super::super::fields::tooltip_text(NEEDS_SERVER))
-        .child(settings_switch(p, false, false))
-        .into_any_element();
-    div()
-        .w_full()
-        .opacity(0.5)
-        .child(setting_row(p, key, spec, None, control, cx))
-        .into_any_element()
 }

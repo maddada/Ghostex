@@ -24,7 +24,6 @@ use std::rc::Rc;
 
 /// The colour Terminal background starts from when Follow theme is turned off.
 const TERMINAL_BACKGROUND_STARTING_COLOR: &str = "#111111";
-const SHADER_BACKGROUND_OVERRIDE_REASON: &str = "Custom shaders use the background from Ghostex's terminal config. To edit this override, turn Terminal shaders off in Settings > Extensions > Experimental; your saved choice will return.";
 
 fn option(label: &str, value: &str) -> SettingOption {
     SettingOption {
@@ -354,12 +353,17 @@ fn terminal_section(
             ));
         }
     }
-    if g.visible(s, "terminalBackgroundMode") {
+    // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): with Terminal shaders on (macOS) the
+    // shaders draw the background from Ghostex's terminal config, so Terminal background and its
+    // colour are hidden instead of greyed out; the saved choice returns when shaders go off.
+    let shaders_own_background =
+        cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled");
+    if !shaders_own_background && g.visible(s, "terminalBackgroundMode") {
         let spec = g.spec(
             "terminalBackgroundMode",
             "Terminal background",
             "Only changes the terminal panes. Black / white is pure black in dark mode and pure white in light mode.",
-        ).disabled_reason((cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled")).then(|| SHADER_BACKGROUND_OVERRIDE_REASON.into()));
+        );
         let options = vec![
             option("Black / white", "pure"),
             option("Follow theme", "theme"),
@@ -394,7 +398,8 @@ fn terminal_section(
             cx,
         ));
     }
-    if g.values.string("terminalBackgroundMode") == "custom"
+    if !shaders_own_background
+        && g.values.string("terminalBackgroundMode") == "custom"
         && g.visible(s, "workspaceBackgroundColor")
     {
         let spec = g
@@ -403,8 +408,7 @@ fn terminal_section(
                 "Terminal background color",
                 "Painted behind terminal text in dark and light mode. Window glass keeps the theme.",
             )
-            .dependent()
-            .disabled_reason((cfg!(target_os = "macos") && g.values.bool("terminalShadersEnabled")).then(|| SHADER_BACKGROUND_OVERRIDE_REASON.into()));
+            .dependent();
         let value = g.values.string("workspaceBackgroundColor");
         rows.push(color_field(
             page,

@@ -287,33 +287,33 @@ impl AccountsTab {
                 cx,
             ));
         }
-        rows.push(setting_row(
-            p,
-            SharedString::from(format!("accounts-{provider}-policy-retry")),
-            RowSpec::new("Retry after temporary errors")
-                .description(
-                    "A lost connection or server error retries once the network is back, after 5s, 15s, 1m, 2m and 5m, then after 5, 10, 20, 40, then every 60 minutes. Other temporary errors use the slower schedule. Login and permission requests need your attention. Stop cancels recovery for the current task.",
-                )
-                .inset_x(0.0),
-            None,
-            switch_control(
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): hidden while At a limit is Do
+        // nothing, no longer greyed out.
+        if enabled {
+            rows.push(setting_row(
                 p,
-                SharedString::from(format!("accounts-{provider}-policy-retry-switch")),
-                "Retry after temporary errors",
-                policy["retryErrors"].as_bool() == Some(true),
-                busy || !enabled,
-                Some(if busy {
-                    "Accounts are being updated.".into()
-                } else {
-                    "Choose Switch accounts or Wait for reset first.".into()
-                }),
-                move |page: &mut Self, next, _window, cx| {
-                    save(page, vec![("retryErrors", json!(next))], cx)
-                },
+                SharedString::from(format!("accounts-{provider}-policy-retry")),
+                RowSpec::new("Retry after temporary errors")
+                    .description(
+                        "A lost connection or server error retries once the network is back, after 5s, 15s, 1m, 2m and 5m, then after 5, 10, 20, 40, then every 60 minutes. Other temporary errors use the slower schedule. Login and permission requests need your attention. Stop cancels recovery for the current task.",
+                    )
+                    .inset_x(0.0),
+                None,
+                switch_control(
+                    p,
+                    SharedString::from(format!("accounts-{provider}-policy-retry-switch")),
+                    "Retry after temporary errors",
+                    policy["retryErrors"].as_bool() == Some(true),
+                    busy,
+                    Some("Accounts are being updated.".into()),
+                    move |page: &mut Self, next, _window, cx| {
+                        save(page, vec![("retryErrors", json!(next))], cx)
+                    },
+                    cx,
+                ),
                 cx,
-            ),
-            cx,
-        ));
+            ));
+        }
         rows
     }
 
@@ -387,8 +387,7 @@ impl AccountsTab {
                 store.update(cx, |store, cx| store.update_setting(key, json!(next), cx));
             }
         };
-        vec![
-            setting_row(
+        let mut rows = vec![setting_row(
                 p,
                 SharedString::from(format!("accounts-{provider}-auto-redeem")),
                 RowSpec::new("Auto-redeem expiring resets")
@@ -408,8 +407,11 @@ impl AccountsTab {
                     cx,
                 ),
                 cx,
-            ),
-            setting_row(
+            )];
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): hidden while Auto-redeem expiring
+        // resets is off, no longer greyed out.
+        if on {
+            rows.push(setting_row(
                 p,
                 SharedString::from(format!("accounts-{provider}-auto-redeem-at-limit")),
                 RowSpec::new("Also at a limit")
@@ -424,13 +426,14 @@ impl AccountsTab {
                     SharedString::from(format!("accounts-{provider}-auto-redeem-at-limit-switch")),
                     "Also use it when I hit a limit",
                     at_limit,
-                    !on,
-                    (!on).then(|| SharedString::from("Turn on Auto-redeem expiring resets first.")),
+                    false,
+                    None,
                     save(at_limit_key),
                     cx,
                 ),
                 cx,
-            ),
-        ]
+            ));
+        }
+        rows
     }
 }

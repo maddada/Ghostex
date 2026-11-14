@@ -360,7 +360,10 @@ impl AgentsTab {
             return None;
         }
         let mut rows: Vec<AnyElement> = Vec::new();
-        if should_show_setting(&section, SHOW_ON_ALL_SPACES, None) {
+        // CDXC:Settings 2026-11-14 DECISION (AGENTS.md, Q3107): only matters with Spaces on.
+        let spaces_on =
+            ghostex_settings_catalog::spaces::enabled_with(|key| values.value(key).as_bool());
+        if spaces_on && should_show_setting(&section, SHOW_ON_ALL_SPACES, None) {
             rows.push(toggle_field(
                 self,
                 p,
