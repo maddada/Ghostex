@@ -94,7 +94,14 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     // claims a collapsed composer whose space is already owned by something else.
     into.composer_collapsed = collapse_eligible && composer.collapse.collapsed;
 
-    into.composer_overflow = composer.overflow.clone();
+    into.composer_row = crate::composer::row::document(state);
+    into.composer_overflow = crate::document::ComposerOverflow {
+        overflowed: crate::composer::row::with_folded(
+            composer.overflow.overflowed.clone(),
+            &into.composer_row,
+        ),
+        options_overflowed: composer.overflow.options_overflowed,
+    };
     // The actions read the host's own capability block, so a transport narrower than the
     // desktop's can clear one.
     into.composer_actions = ComposerActions {

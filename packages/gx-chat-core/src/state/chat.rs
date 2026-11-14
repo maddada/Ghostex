@@ -55,6 +55,8 @@ pub struct CoreState {
     pub hide_account_emails: bool,
     /// The Catch me up setting (`chatCatchMeUp`), from the chat settings or the latest read.
     pub catch_up_enabled: bool,
+    /// The chat box row switches (Settings > Experience), from the host; all on by default.
+    pub composer_row: crate::composer::row::ComposerRowSettings,
     /// The Session details panel built-in extension is on (`sessionDetailsPanelHidden` false).
     pub session_details_enabled: bool,
     /// The Send when you pick an answer setting (`chatSendOnPick`), from the chat settings or the

@@ -361,6 +361,10 @@ pub struct ChatSettings {
     /// the web build, an older phone) keeps this host's own line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_line_from_computer: Option<bool>,
+    /// The chat box row switches (`composer/row.rs`): the desktop's from its settings file, the
+    /// phone's from its own settings. Absent keeps the whole row (an older host).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composer_row: Option<crate::composer::row::ComposerRowSettings>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.
