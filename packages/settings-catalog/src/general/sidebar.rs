@@ -17,6 +17,7 @@ pub(crate) fn session_cards() -> Section {
             row("offerCleanupWhenPrMerges", "Offer Clean up when a PR merges", "When a session's pull request is merged, its card asks once whether to clean up (remove the session's worktree and park the session; a worktree with uncommitted changes is kept) or keep it."),
             row("showSessionCardHoverButtonsInContextMenu", "Hover buttons also in context menu", "Also list the enabled hover buttons in the session right-click menu, in their usual place in the menu. Close is never listed while it is on the card. Turn off to leave every button out of the menu once it is on the card."),
             row("showSidebarSessionTooltips", "Session tooltips", "Show a tooltip with the full session name when you hover a session in the sidebar. Turn off to show none; other sidebar tooltips stay."),
+            row("sessionsBoldCoordinatorTitle", "Bold coordinator title", "Draw each coordinator's title in bold in the sidebar. Off, a coordinator stands apart from its threads by its crown, its brighter title and its threads' dimmer titles."),
         ],
     )
 }

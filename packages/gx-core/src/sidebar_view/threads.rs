@@ -316,9 +316,9 @@ pub(crate) fn nest_threads(
             Some(ancestor)
         });
 
-    // A folded coordinator's stack: its own status and every thread under it.
-    let folded_status: HashMap<usize, FoldedStatus> = (0..sessions.len())
-        .filter(|index| is_collapsed[*index])
+    // A coordinator's team stack, folded or not: its own status and every thread under it.
+    let team_status: HashMap<usize, FoldedStatus> = (0..sessions.len())
+        .filter(|index| children.contains_key(index))
         .map(|index| {
             let mut status = FoldedStatus::default();
             let mut stack = vec![index];
@@ -354,7 +354,12 @@ pub(crate) fn nest_threads(
             older_threads_shown: shows_older[index],
             older_hidden: older_hidden_of[index],
             contains_active_session: holds_active == Some(index),
-            folded_status: folded_status.get(&index).copied().unwrap_or_default(),
+            folded_status: if is_collapsed[index] {
+                team_status.get(&index).copied().unwrap_or_default()
+            } else {
+                FoldedStatus::default()
+            },
+            team_status: team_status.get(&index).copied().unwrap_or_default(),
             ..RowNesting::default()
         };
         nested.push(session);
@@ -471,6 +476,22 @@ mod tests {
         assert!(open
             .iter()
             .all(|session| !session.nesting.folded_status.any()));
+
+        // Open or folded, every coordinator with threads carries its whole team's dots
+        // (CDXC:Coordinators 2026-11-15, `RowNesting::team_status`): the lead its sub-coordinator's
+        // thread too, the sub-coordinator its own thread; a thread without threads carries none.
+        let by_id = |rows: &[SessionView], id: &str| {
+            rows.iter()
+                .find(|session| session.row.sidebar_session_id.ends_with(&format!(":{id}")))
+                .unwrap()
+                .nesting
+                .team_status
+        };
+        assert_eq!(by_id(&open, "lead"), lead.nesting.folded_status);
+        assert_eq!(by_id(&folded, "lead"), lead.nesting.folded_status);
+        assert!(by_id(&open, "done").attention && by_id(&open, "done").question);
+        assert!(!by_id(&open, "done").working);
+        assert!(!by_id(&open, "working").any());
     }
 
     /// A session waiting for approval counts on every orchestrator above it, its own and a nested

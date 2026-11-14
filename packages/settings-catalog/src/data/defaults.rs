@@ -336,6 +336,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("showSessionCardHoverButtonsInContextMenu", J::Bool(true)),
     // CDXC:Tooltips 2026-10-29 DECISION: User: "please let me disable the tooltip for sessions in the sidebar with a toggle (advanced setting)". Session tooltips stay on by default, as before; turning this off removes only the hover tooltip on a sidebar session row's title.
     ("showSidebarSessionTooltips", J::Bool(true)),
+    // CDXC:Coordinators 2026-11-15 DECISION (issue #618, Q3275): "no bold" (the user dislikes bold text). A coordinator and its threads stand apart by the crown, colour and dimmer thread text; Bold coordinator title (off by default) bolds the coordinator's title for people who want it. Same key as the phone's own setting (apps/mobile/app/src/settings/store.ts).
+    ("sessionsBoldCoordinatorTitle", J::Bool(false)),
     // CDXC:Sessions 2026-06-13-15:42
     // Recommended is the default sidebar style and hides session-card Last Active
     // timestamps by default. Settings still owns an explicit toggle for users who
