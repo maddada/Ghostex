@@ -1349,6 +1349,9 @@ impl Render for GhostexGpuiApp {
                     this.cancel_view_tab_drag(cx);
                 }),
             )
+            // Starts the frame's list of the sidebar extensions' web blocks on screen
+            // (extensions/web_blocks.rs); before anything that can draw one.
+            .child(self.extension_web_blocks_frame_start())
             .child(
                 /*
                 CDXC:Titlebar 2026-09-20 WHY:
@@ -1518,6 +1521,9 @@ impl Render for GhostexGpuiApp {
                         this
                     }),
             )
+            // Hides the sidebar extensions' web pages whose block this frame did not paint whole
+            // (extensions/web_blocks.rs); after everything that can draw one.
+            .child(self.extension_web_blocks_frame_end(cx))
             // Last child, so a resize drag in progress sees each mouse move
             // before the panes it is dragged across do.
             .child(self.render_resize_drag_pointer_tracker(cx))

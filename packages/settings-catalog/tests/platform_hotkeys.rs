@@ -829,7 +829,7 @@ fn every_surface_lets_the_terminal_binding_follow_a_customized_normal_key() {
 }
 
 /// Paste on Windows and Linux: Ctrl+Shift+V only while a terminal has the keyboard, Ctrl+V
-/// everywhere else (CDXC:Clipboard 2026-10-27 DECISION in src/hotkeys.rs). macOS keeps Cmd+V in
+/// everywhere else (CDXC:Clipboard 2026-11-14 DECISION in src/hotkeys.rs). macOS keeps Cmd+V in
 /// both sections.
 #[test]
 fn paste_is_ctrl_shift_v_in_a_terminal_and_ctrl_v_elsewhere_on_windows_and_linux() {

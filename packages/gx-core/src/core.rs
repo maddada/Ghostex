@@ -548,6 +548,17 @@ impl Core {
                 SideStateUpdate::Workspaces(frame.sidebar_workspaces),
                 output,
             ),
+            // State, not a delta: it carries no presentation revision.
+            ServerEvent::ExtensionPanelsChanged(frame) => {
+                let frame = *frame;
+                self.handle_side_state(
+                    machine,
+                    &frame.header.server_id,
+                    None,
+                    SideStateUpdate::ExtensionPanels(frame.extension_panels),
+                    output,
+                )
+            }
             ServerEvent::CustomSessionTagsChanged(frame) => self.handle_side_state(
                 machine,
                 &frame.header.server_id,

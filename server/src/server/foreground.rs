@@ -458,6 +458,11 @@ pub async fn run_gxserver_foreground(
     crate::collab_shim::sidecar::start_supervisor(state.clone());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
     tokio::spawn(peer_http::start_peer_listener(state.clone()));
+    // A sidebar extension's own server runs while it is on (CDXC:Extensions in extensions/sidebar.rs).
+    {
+        let registry = state.extension_registry.clone();
+        std::thread::spawn(move || registry.start_sidebar_servers());
+    }
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());
     crate::agentbox::start_agentbox_activity_poller(state.clone());
     crate::cloud_boxes::start_cloud_boxes_scheduler(state.clone());

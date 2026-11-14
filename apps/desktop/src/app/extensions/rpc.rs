@@ -222,6 +222,15 @@ impl GhostexGpuiApp {
                     close();
                 }
             }
+            // A sidebar extension's web page: the token it calls the extension API with
+            // (extensions/web_blocks.rs, cef/sidebar_bridge_manifest.rs).
+            "page.session" => self.run_extension_rpc(
+                "/api/extensionPageToken",
+                serde_json::json!({ "extension": event.extension_id }),
+                request.request_id,
+                responder,
+                cx,
+            ),
             "cli" => self.run_extension_cli(request, responder, cx),
             "exec" => run_extension_exec(
                 request,

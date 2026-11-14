@@ -22,6 +22,7 @@ pub(crate) mod git;
 pub(crate) mod host;
 mod hud;
 pub(crate) mod machine_short_names;
+pub(crate) mod panel_refs;
 mod primary_launcher;
 mod project_docs;
 mod quick_access_data;

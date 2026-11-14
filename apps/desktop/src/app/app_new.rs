@@ -533,6 +533,7 @@ impl GhostexGpuiApp {
                 pending_titlebar_popup_open: None,
                 titlebar_extension_popup_generation: 0,
                 titlebar_extension_popup: None,
+                extension_web_blocks: Default::default(),
                 agent_hook_status_request_in_flight: false,
                 agent_hook_status_request_queued: None,
                 native_sidebar: Default::default(),

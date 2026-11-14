@@ -259,7 +259,7 @@ impl SourceFilter {
 }
 
 /// `EXTENSION_TYPE_FILTERS`.
-pub(crate) const EXTENSION_TYPE_FILTERS: [&str; 8] = [
+pub(crate) const EXTENSION_TYPE_FILTERS: [&str; 9] = [
     "all",
     "view",
     "header-button",
@@ -268,6 +268,7 @@ pub(crate) const EXTENSION_TYPE_FILTERS: [&str; 8] = [
     "popup",
     "modal",
     "terminal-pane",
+    "sidebar",
 ];
 
 /// `extensionTypeLabel`.
@@ -432,6 +433,44 @@ impl InstalledExtension {
         self.manifest()["kind"].as_str() == Some("terminal-pane")
     }
 
+    /// A sidebar extension (`kind: "sidebar"`): its panel is drawn in the sidebar and side panel.
+    pub(crate) fn is_sidebar(&self) -> bool {
+        self.manifest()["kind"].as_str() == Some("sidebar")
+    }
+
+    /// The sidebar extension has its own sidebar mode.
+    pub(crate) fn declares_sidebar_mode(&self) -> bool {
+        self.manifest()["sidebar"]["mode"].is_object()
+    }
+
+    /// The sidebar extension adds sections to the Projects list.
+    pub(crate) fn declares_sidebar_sections(&self) -> bool {
+        self.manifest()["sidebar"]["sections"]
+            .as_array()
+            .is_some_and(|sections| !sections.is_empty())
+    }
+
+    pub(crate) fn sidebar_mode_hidden(&self) -> bool {
+        self.state()["sidebarModeHidden"].as_bool() == Some(true)
+    }
+
+    pub(crate) fn sidebar_sections_hidden(&self) -> bool {
+        self.state()["sidebarSectionsHidden"].as_bool() == Some(true)
+    }
+
+    /// The agent skill this extension installed for the user, if any.
+    pub(crate) fn skill_installed(&self) -> Option<String> {
+        optional_text(self.state(), "skillInstalled")
+    }
+
+    /// Why an install left the extension's agent skill out, if it did (`skillInstall`).
+    pub(crate) fn skill_left_out(&self) -> Option<String> {
+        let report = self.raw.get("skillInstall")?;
+        (report["installed"].as_bool() == Some(false))
+            .then(|| report["reason"].as_str().map(str::to_string))
+            .flatten()
+    }
+
     pub(crate) fn placements(&self) -> Vec<String> {
         string_list(self.manifest().get("placements"))
     }
@@ -540,6 +579,23 @@ impl CatalogEntry {
         string_list(self.raw.get("permissions"))
     }
 
+    /// Its folder in the source repository (`sourceUrl`, gxserver keeps only https addresses).
+    pub(crate) fn source_url(&self) -> Option<String> {
+        self.raw["sourceUrl"]
+            .as_str()
+            .filter(|url| url.starts_with("https://"))
+            .map(str::to_string)
+    }
+
+    /// The name of the agent skill the extension ships (`skill.name`), if any.
+    pub(crate) fn skill_name(&self) -> Option<String> {
+        self.raw["skill"]["name"]
+            .as_str()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+    }
+
     /// `server` runs a command (`'command' in entry.server`).
     pub(crate) fn runs_background_process(&self) -> bool {
         self.raw["server"].get("command").is_some()
@@ -569,6 +625,8 @@ impl CatalogEntry {
 pub(crate) fn catalog_types(manifest: &Value) -> Vec<String> {
     if manifest["kind"].as_str() == Some("terminal-pane") {
         vec!["terminal-pane".to_string()]
+    } else if manifest["kind"].as_str() == Some("sidebar") {
+        vec!["sidebar".to_string()]
     } else {
         string_list(manifest.get("placements"))
     }
@@ -686,6 +744,12 @@ pub(crate) fn permission_label(permission: &str) -> String {
         "exec" => "System commands",
         "network" => "Network access",
         "ssh" => "SSH access",
+        "projects.read" => "See your projects",
+        "sessions.read" => "See your sessions",
+        "sessions.open" => "Open projects and sessions",
+        "agents.start" => "Start agents",
+        "agents.message" => "Hear from your agents",
+        "sessions.message" => "Message a thread when you tap its panel",
         other => other,
     }
     .to_string()
@@ -699,6 +763,14 @@ pub(crate) fn permission_description(permission: &str) -> &'static str {
         "exec" => "Run system commands on this machine.",
         "network" => "Connect to services on your network or the internet.",
         "ssh" => "Use configured SSH access for remote machines.",
+        "projects.read" => "Read your project names and folders on this computer.",
+        "sessions.read" => "Read your sessions' titles and what they are doing.",
+        "sessions.open" => "Open a project or session when you click it in its panel.",
+        "agents.start" => "Start a new agent when you click it in its panel.",
+        "agents.message" => "An agent can send it updates about its own thread.",
+        "sessions.message" => {
+            "When you tap a button in a thread's panel, it can send that thread one short message."
+        }
         _ => "",
     }
 }

@@ -81,6 +81,9 @@ pub(crate) fn default_store_entry(manifest: &ExtensionManifest) -> ExtensionStor
         version: manifest.version.clone(),
         // Grants come only from an install the user approved; a payload with no store entry gets none.
         granted_permissions: Vec::new(),
+        sidebar_mode_hidden: false,
+        sidebar_sections_hidden: false,
+        skill_installed: None,
     }
 }
 
@@ -119,6 +122,9 @@ pub(crate) fn store_entry_for_install(
     entry.chat_bar_auto_open = previous.chat_bar_auto_open;
     entry.terminal_placement = previous.terminal_placement;
     entry.storage = previous.storage.clone();
+    entry.sidebar_mode_hidden = previous.sidebar_mode_hidden;
+    entry.sidebar_sections_hidden = previous.sidebar_sections_hidden;
+    entry.skill_installed = previous.skill_installed.clone();
     if previous
         .placement
         .is_some_and(|placement| manifest.placements.contains(&placement))
@@ -210,6 +216,12 @@ pub(crate) fn apply_state_patch(
             )));
         }
         entry.placement = Some(placement);
+    }
+    if let Some(hidden) = patch.sidebar_mode_hidden {
+        entry.sidebar_mode_hidden = hidden;
+    }
+    if let Some(hidden) = patch.sidebar_sections_hidden {
+        entry.sidebar_sections_hidden = hidden;
     }
     if let Some(terminal_placement) = patch.terminal_placement {
         entry.terminal_placement = terminal_placement;

@@ -843,6 +843,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/stopExtension"
         | "/api/extensionStatus"
         | "/api/extensionBadge"
+        // A tap on a sidebar extension's panel from a client (extensions/ext_api.rs).
+        | "/api/extensionPanelAction"
         /*
         CDXC:WorkMode 2026-10-09 WHY:
         A sidebar showing a remote machine's projects can flip their Work mode switch and set a
@@ -918,6 +920,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         The look is this computer's settings, changed through its own desktop app; the "Theme changed" card's Undo reaches it from the chat that shows the card, like the "GBot added" card's.
         */
         "/api/theme" => full_local(path),
+        // A sidebar extension's web pages call the extension API with this (extensions/ext_api.rs).
+        "/api/extensionPageToken" => full_local(path),
         /*
         CDXC:PiChatChannel 2026-11-05 WHY:
         The Ghostex Pi and OMP extensions poll it from inside the agent process on this computer, with the same token their hook reports use; it hands them chat commands for their own session only, so no other computer has any business with it.

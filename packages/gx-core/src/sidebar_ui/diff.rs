@@ -102,7 +102,8 @@ impl SidebarCollapseDiff {
                 &base.recent_sessions_by_space,
                 &next.recent_sessions_by_space,
             ),
-            sidebar_mode: (base.sidebar_mode != next.sidebar_mode).then_some(next.sidebar_mode),
+            sidebar_mode: (base.sidebar_mode != next.sidebar_mode)
+                .then(|| next.sidebar_mode.clone()),
         }
     }
 
@@ -234,8 +235,8 @@ impl SidebarCollapseDiff {
                 Value::Object(sections),
             );
         }
-        if let Some(mode) = self.sidebar_mode {
-            write_sidebar_mode(&mut object, mode);
+        if let Some(mode) = &self.sidebar_mode {
+            write_sidebar_mode(&mut object, mode.clone());
         }
         json!({ "state": Value::Object(object), "version": version }).to_string()
     }

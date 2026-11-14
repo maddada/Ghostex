@@ -51,6 +51,8 @@ pub(crate) struct BrowserState {
     pub(crate) selected_store: Option<String>,
     /// The catalog entry waiting for install consent.
     pub(crate) consent: Option<String>,
+    /// The consent card's "install its agent skill too" box is ticked.
+    pub(crate) consent_skill: bool,
     /// A folder's extension waiting for install consent (Install from folder…).
     pub(crate) folder_install: Option<super::folder_install::FolderInstall>,
     pub(crate) pending: HashSet<String>,
@@ -107,6 +109,11 @@ impl BrowserState {
             .as_deref()
             .and_then(|name| self.catalog_entry(name))
     }
+}
+
+/// The page's notice when an install left the extension's skill out (a name clash, skills.rs).
+pub(crate) fn skill_left_out_message(reason: String) -> String {
+    format!("Skill not installed. {reason} Ghostex left that one alone.")
 }
 
 fn rpc_error(error: String) -> String {
@@ -308,12 +315,14 @@ impl ExtensionsTab {
         if !self.has_transport(cx) {
             return;
         }
+        let skill = self.browser.consent_skill;
         let approval = self.browser.consent_entry().map(|entry| {
             json!({
                 "version": entry.version(),
                 "permissions": entry.permissions(),
                 "backgroundProcess": entry.runs_background_process(),
                 "remoteUrl": entry.remote_url(),
+                "skill": skill && entry.skill_name().is_some(),
             })
         });
         self.run_for_extension(
@@ -327,6 +336,7 @@ impl ExtensionsTab {
                         raw: value["extension"].clone(),
                     };
                     page.browser.icons.remove(&extension.id());
+                    page.browser.error = extension.skill_left_out().map(skill_left_out_message);
                     replace_installed(&mut page.browser.installed, extension);
                 }
                 page.browser.consent = None;

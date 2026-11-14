@@ -407,6 +407,8 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     if let Some(groups) = to_mobile_workspace_groups(result.get("workspaceGroups")) {
         map.insert("workspaceGroups".to_string(), groups);
     }
+    // Already checked by gxserver (extensions/panel.rs); the phone draws them from phase 3.
+    insert_present(&mut map, "extensionPanels", result.get("extensionPanels"));
     // Already normalized by gxserver (`SidebarWorkspacesState`); the phone re-narrows it on parse.
     if crate::workspaces::workspaces_feature_enabled() {
         insert_present(

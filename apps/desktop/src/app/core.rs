@@ -988,6 +988,8 @@ pub struct GhostexGpuiApp {
     pub(crate) pending_titlebar_popup_open: Option<GpuiTitlebarPopupKind>,
     pub(crate) titlebar_extension_popup_generation: u64,
     pub(crate) titlebar_extension_popup: Option<GpuiTitlebarExtensionPopupState>,
+    /// Sidebar extensions' `web` blocks: their pages (extensions/web_blocks.rs).
+    pub(crate) extension_web_blocks: crate::app::extensions::ExtensionWebBlocks,
     pub(crate) agent_hook_status_request_in_flight: bool,
     /// A status walk asked for while one was running (`Some(None)` = every agent), run when it ends.
     pub(crate) agent_hook_status_request_queued: Option<Option<Vec<String>>>,

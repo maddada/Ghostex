@@ -7,10 +7,38 @@ use super::{
     ExtensionError, ExtensionResult,
 };
 
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// Coordinator's phase 2 brief, taking the phase 1 suggestion: sidebar extensions go in a separate catalog file that only this gxserver and newer read, so the stores of 11.7 and older (which reject the whole catalog over one entry they can't read) never see them. The extensions repo's `tooling/build-catalog.mjs` writes `catalog.json` without them and `catalog-v2.json` with every extension, both into the rolling `store` release. Until that release carries `catalog-v2.json`, the old `catalog.json` is read instead.
 pub(crate) const DEFAULT_EXTENSIONS_CATALOG_URL: &str =
+    "https://github.com/maddada/Ghostex-extensions/releases/download/store/catalog-v2.json";
+/// The catalog of 11.7 and older, without sidebar extensions.
+const PREVIOUS_EXTENSIONS_CATALOG_URL: &str =
     "https://github.com/maddada/Ghostex-extensions/releases/download/store/catalog.json";
 const CATALOG_CACHE_FILE: &str = "catalog-cache.json";
 const CATALOG_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Where the official catalog's extensions live: `extensions/<id>` in the Ghostex-extensions repo.
+const OFFICIAL_EXTENSIONS_SOURCE_BASE: &str =
+    "https://github.com/maddada/Ghostex-extensions/tree/main/extensions";
+
+/// Each entry's `sourceUrl`: kept when it is an https address, dropped otherwise, and, for the
+/// official repository's catalogs, the extension's folder there when the catalog has none.
+///
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// User: "for all community extensions we have to have a small github logo on their card that takes you to their folder in the github repo for ghostex-extensions". build-catalog.mjs writes `sourceUrl`; the published catalogs built before it get the same address here, so every Community card links its folder as soon as this Ghostex runs. A catalog from another address (GHOSTEX_EXTENSIONS_CATALOG_URL) gets a link only when it says where its source is.
+fn fill_source_urls(catalog: &mut super::ExtensionCatalog, url: &str) {
+    let official = url == DEFAULT_EXTENSIONS_CATALOG_URL || url == PREVIOUS_EXTENSIONS_CATALOG_URL;
+    for entry in &mut catalog.extensions {
+        entry.source_url = entry
+            .source_url
+            .take()
+            .filter(|source| url::Url::parse(source).is_ok_and(|parsed| parsed.scheme() == "https"))
+            .or_else(|| {
+                official
+                    .then(|| format!("{OFFICIAL_EXTENSIONS_SOURCE_BASE}/{}", entry.manifest.name))
+            });
+    }
+}
 
 pub(crate) fn catalog_url() -> String {
     std::env::var("GHOSTEX_EXTENSIONS_CATALOG_URL")
@@ -21,9 +49,15 @@ pub(crate) fn catalog_url() -> String {
 }
 
 pub(crate) fn fetch_catalog(extensions_dir: &Path) -> ExtensionResult<ExtensionCatalogSnapshot> {
-    let url = catalog_url();
-    match fetch_remote_catalog(&url) {
-        Ok(catalog) => {
+    let mut url = catalog_url();
+    let mut fetched = fetch_remote_catalog(&url);
+    if fetched.is_err() && url == DEFAULT_EXTENSIONS_CATALOG_URL {
+        url = PREVIOUS_EXTENSIONS_CATALOG_URL.to_string();
+        fetched = fetch_remote_catalog(&url);
+    }
+    match fetched {
+        Ok(mut catalog) => {
+            fill_source_urls(&mut catalog, &url);
             write_catalog_cache(extensions_dir, &catalog)?;
             Ok(ExtensionCatalogSnapshot {
                 catalog,
@@ -39,12 +73,13 @@ pub(crate) fn fetch_catalog(extensions_dir: &Path) -> ExtensionResult<ExtensionC
                     cache_path.display()
                 ))
             })?;
-            let catalog = parse_catalog(&bytes).map_err(|cache_error| {
+            let mut catalog = parse_catalog(&bytes).map_err(|cache_error| {
                 ExtensionError::internal(format!(
                     "Could not fetch extension catalog from {url}: {remote_error}. The last-good cache at {} is invalid: {cache_error}",
                     cache_path.display()
                 ))
             })?;
+            fill_source_urls(&mut catalog, &url);
             Ok(ExtensionCatalogSnapshot {
                 catalog,
                 source: ExtensionCatalogSource::Cache,
@@ -124,16 +159,34 @@ fn fetch_remote_catalog(url: &str) -> ExtensionResult<ExtensionCatalog> {
     parse_catalog(&bytes)
 }
 
+/// CDXC:Extensions 2026-11-14 WHY:
+/// The catalog used to be read in one piece, so one entry this build could not read (a newer `kind` such as `sidebar`, a newer permission) made the whole store fail. Entries are now read one by one and an unreadable one is left out; an entry this build can read is still checked as strictly as before. gxservers up to 11.7 still read the catalog in one piece, so a `kind: "sidebar"` entry must not reach the catalog they fetch until those are gone (Ghostex-extensions `tooling/build-catalog.mjs`).
 fn parse_catalog(bytes: &[u8]) -> ExtensionResult<ExtensionCatalog> {
-    let mut catalog: ExtensionCatalog = serde_json::from_slice(bytes).map_err(|error| {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RawCatalog {
+        schema_version: u64,
+        published_at: String,
+        extensions: Vec<serde_json::Value>,
+    }
+    let raw: RawCatalog = serde_json::from_slice(bytes).map_err(|error| {
         ExtensionError::bad_request(format!("Extension catalog is not valid JSON: {error}"))
     })?;
-    if catalog.schema_version != 1 {
+    if raw.schema_version != 1 {
         return Err(ExtensionError::bad_request(format!(
             "Unsupported extension catalog schema version {}.",
-            catalog.schema_version
+            raw.schema_version
         )));
     }
+    let mut catalog = ExtensionCatalog {
+        schema_version: raw.schema_version,
+        published_at: raw.published_at,
+        extensions: raw
+            .extensions
+            .into_iter()
+            .filter_map(|entry| serde_json::from_value(entry).ok())
+            .collect(),
+    };
     let mut ids = std::collections::BTreeSet::new();
     for entry in &catalog.extensions {
         entry.manifest.validate(None, None)?;

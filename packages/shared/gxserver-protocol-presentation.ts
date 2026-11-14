@@ -896,6 +896,8 @@ export interface GxserverPresentationSnapshot {
   projects: readonly GxserverPresentationProject[];
   revision: GxserverPresentationRevision;
   sessions: readonly GxserverPresentationSession[];
+  /** Every enabled sidebar extension's panels; absent while none is on, and on older daemons. */
+  extensionPanels?: import('./ghostex-extensions').GhostexExtensionPanels;
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
   sidebarSpaces?: GxserverSidebarSpacesState;
   sidebarWorkspaces?: GxserverSidebarWorkspacesState;

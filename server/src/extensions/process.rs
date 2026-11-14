@@ -34,6 +34,9 @@ struct ExtensionRuntimeInner {
     badges: HashMap<String, ExtensionBadge>,
     processes: HashMap<String, ProcessControl>,
     tokens: HashMap<String, ExtensionToken>,
+    /// By extension id: the token its web pages (`web` blocks) call `/api/ext/v1` with, for the
+    /// life of this gxserver. Kept apart from the server tokens, which open more doors.
+    page_tokens: HashMap<String, String>,
 }
 
 struct ProcessControl {
@@ -54,6 +57,9 @@ struct LaunchSpec {
     timeout: Duration,
     token: String,
     context: ExtensionLaunchContext,
+    /// The extension's own folder for what it keeps (`<extensions>/data/<id>`), kept across
+    /// updates and removed with the extension.
+    data_dir: PathBuf,
 }
 
 impl ExtensionRuntime {
@@ -64,9 +70,48 @@ impl ExtensionRuntime {
                 badges: HashMap::new(),
                 processes: HashMap::new(),
                 tokens: HashMap::new(),
+                page_tokens: HashMap::new(),
             })),
             api_url,
         }
+    }
+
+    pub(crate) fn api_url(&self) -> &str {
+        &self.api_url
+    }
+
+    /// The extension's page token, made on first use.
+    pub(crate) fn page_token(&self, id: &str) -> String {
+        let Ok(mut inner) = self.inner.lock() else {
+            return new_extension_token();
+        };
+        inner
+            .page_tokens
+            .entry(id.to_string())
+            .or_insert_with(new_extension_token)
+            .clone()
+    }
+
+    /// Revokes the extension's page token: its web pages get 401 until the desktop asks for a new
+    /// one, which gxserver gives only while the extension is on.
+    ///
+    /// CDXC:Extensions 2026-11-14 WHY:
+    /// The coordinator's follow-up to phase 4: a turned-off extension's page token must stop working, not only its reads and writes. Turning it off, uninstalling it and installing over it (an update, which may change its permissions) all revoke it.
+    pub(crate) fn forget_page_token(&self, id: &str) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.page_tokens.remove(id);
+        }
+    }
+
+    /// The extension whose page token this request carries.
+    pub(crate) fn extension_for_page_token(&self, headers: &HeaderMap) -> Option<String> {
+        let provided = request_bearer_token(headers)?;
+        let inner = self.inner.lock().ok()?;
+        inner
+            .page_tokens
+            .iter()
+            .find(|(_, token)| tokens_equal(provided, token))
+            .map(|(id, _)| id.clone())
     }
 
     pub(crate) fn status(&self, id: &str, manifest: &ExtensionManifest) -> ExtensionRuntimeStatus {
@@ -144,6 +189,11 @@ impl ExtensionRuntime {
             timeout,
             token: token.clone(),
             context,
+            data_dir: payload_dir
+                .parent()
+                .and_then(Path::parent)
+                .map(|extensions_dir| extensions_dir.join("data").join(id))
+                .unwrap_or_default(),
         };
 
         {
@@ -252,6 +302,27 @@ impl ExtensionRuntime {
         ) {
             return None;
         }
+        let provided = request_bearer_token(headers)?;
+        let inner = self.inner.lock().ok()?;
+        inner
+            .tokens
+            .values()
+            .find(|entry| tokens_equal(provided, &entry.token))
+            .map(|entry| entry.extension_id.clone())
+    }
+
+    /// The running server's address and token, for gxserver's own calls to it.
+    pub(crate) fn server_and_token(&self, id: &str) -> Option<(String, String)> {
+        let inner = self.inner.lock().ok()?;
+        let status = inner.statuses.get(id)?;
+        if status.state != ExtensionRuntimeState::Ready {
+            return None;
+        }
+        Some((status.url.clone()?, inner.tokens.get(id)?.token.clone()))
+    }
+
+    /// The extension whose running server holds this request's bearer token.
+    pub(crate) fn extension_for_token(&self, headers: &HeaderMap) -> Option<String> {
         let provided = request_bearer_token(headers)?;
         let inner = self.inner.lock().ok()?;
         inner
@@ -499,6 +570,9 @@ fn spawnless_server_url(id: &str, manifest: &ExtensionManifest, api_url: &str) -
 }
 
 fn spawn_child(api_url: &str, spec: &LaunchSpec) -> io::Result<Child> {
+    if !spec.data_dir.as_os_str().is_empty() {
+        std::fs::create_dir_all(&spec.data_dir)?;
+    }
     let shell = command_shell();
     let mut command = Command::new(&shell.executable);
     command
@@ -517,6 +591,7 @@ fn spawn_child(api_url: &str, spec: &LaunchSpec) -> io::Result<Child> {
         )
         .env("GHOSTEX_WORKTREE_BRANCH", &spec.context.worktree_branch)
         .env("GHOSTEX_API_URL", api_url)
+        .env("GHOSTEX_EXTENSION_DATA_DIR", &spec.data_dir)
         .env("GHOSTEX_API_TOKEN", &spec.token);
     configure_process_group(&mut command);
     command.spawn()

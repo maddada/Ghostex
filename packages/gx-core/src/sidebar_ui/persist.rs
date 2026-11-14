@@ -129,7 +129,7 @@ pub fn collapse_into_storage(state: &SidebarCollapseState, existing: Option<&str
         "recentSessionIdsBySpace".to_string(),
         recent_sessions_into_storage(&state.recent_sessions_by_space),
     );
-    write_sidebar_mode(&mut object, state.sidebar_mode);
+    write_sidebar_mode(&mut object, state.sidebar_mode.clone());
     // The one field this state does not own travels untouched: normalizing it here would be this
     // writer quietly editing another writer's value, and the reader on either side already
     // normalizes what it finds. A first write spells out the default a reader would otherwise
@@ -235,8 +235,8 @@ pub(super) fn write_sidebar_mode(object: &mut Map<String, Value>, mode: SidebarM
         SidebarMode::Projects => {
             object.remove(SIDEBAR_MODE_KEY);
         }
-        SidebarMode::Bots => {
-            object.insert(SIDEBAR_MODE_KEY.to_string(), Value::from("bots"));
+        SidebarMode::Bots | SidebarMode::Extension(_) => {
+            object.insert(SIDEBAR_MODE_KEY.to_string(), Value::from(mode.as_wire()));
         }
     }
 }

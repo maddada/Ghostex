@@ -58,6 +58,9 @@ impl GhostexGpuiApp {
         // CDXC:Spaces 2026-11-05 DECISION:
         // User: "please implement spaces for the unified sidebar so when that extension is enabled it applies for unified sidebar also not just projecst sidebar". With Spaces on, the Unified header carries the Project sidebar's own Space row (selectors.rs, without the Bots slot), the list takes the same sideways swipe and empty-space drag with the same slide and fade (space_gesture.rs), and the outgoing Space's list stays frozen through the exit fade just as the Project list's does. The scope itself is gx-core's (`unified_space_scope`, `build_unified_sidebar_scoped`).
         let unified = self.native_sidebar.unified.clone();
+        // A sidebar extension's mode takes the classic list's place, and its sections sit above
+        // and below the projects (extension_panel/).
+        let extension_view = self.native_extension_sidebar_view();
         // The rows keep the Project sidebar's even spacing (selectors.rs): the filter has its own row.
         let gap = |height: f32| div().h(px(height * appearance.scale)).flex_shrink_0();
         let unified_header = unified.as_ref().map(|unified| {
@@ -92,13 +95,17 @@ impl GhostexGpuiApp {
             self.render_native_unified_list(&shown, &snapshot.hud, &appearance, cx)
         });
         let classic = unified.is_none();
-        let sticky_clip_top = if classic {
+        let extension_mode = extension_view.active.clone().filter(|_| classic);
+        // The classic list's own rows, which an extension's mode replaces.
+        let list_classic = classic && extension_mode.is_none();
+        // An extension's mode draws no project rows, so no project header is pinned over it.
+        let sticky_clip_top = if list_classic {
             self.native_sticky_project_clip_top(&content, &appearance)
         } else {
             None
         };
         // The project header pinned at the top: focusing it reveals nothing, its pinned copy shows.
-        let pinned_header = if classic {
+        let pinned_header = if list_classic {
             self.native_sticky_project_group_id(&content, &appearance)
         } else {
             None
@@ -299,7 +306,21 @@ impl GhostexGpuiApp {
                                     .left(px(space_offset * appearance.scale))
                                     .opacity(space_opacity)
                                     .children(unified_list)
-                                    .when(classic && content.automations_row, |column| {
+                                    .when_some(extension_mode.as_ref(), |column, view| {
+                                        column.child(self.render_native_sidebar_extension_mode(
+                                            view,
+                                            &appearance,
+                                            cx,
+                                        ))
+                                    })
+                                    .when(list_classic && !content.bots_mode, |column| {
+                                        column.children(self.render_native_extension_sections(
+                                            &extension_view.sections_top,
+                                            &appearance,
+                                            cx,
+                                        ))
+                                    })
+                                    .when(list_classic && content.automations_row, |column| {
                                         column.child(self.render_native_sidebar_automations_row(
                                             content.automations_today,
                                             &appearance,
@@ -318,34 +339,37 @@ impl GhostexGpuiApp {
                                             ))
                                         },
                                     )
-                                    .children(content.order.iter().filter(|_| classic).filter_map(
-                                        |item| {
-                                            if item.kind == "collection" {
-                                                content
-                                                    .collections
-                                                    .iter()
-                                                    .find(|collection| {
-                                                        collection.collection_id == item.id
-                                                    })
-                                                    .map(|collection| {
-                                                        self.render_native_collection(
-                                                            collection,
-                                                            &content,
-                                                            &appearance,
-                                                            cx,
-                                                        )
-                                                    })
-                                            } else {
-                                                content
-                                                    .groups
-                                                    .iter()
-                                                    .find(|group| group.group_id == item.id)
-                                                    .filter(|group| !session_groups.nests(group))
-                                                    // A GBot is drawn inside Main Hub's group (gbots_rows.rs).
-                                                    .filter(|group| group.gbot().is_none())
-                                                    .map(|group| {
-                                                        // CDXC:Spaces 2026-10-06 WHY: padding, not a margin, so this block's measured bounds (where a press is a row's and not the empty list space that starts a Space drag) cover the project header's box, which reaches left over its chevron; as a margin, a click on the chevron armed the Space drag and showed the grabbing hand.
-                                                        div()
+                                    .children(
+                                        content.order.iter().filter(|_| list_classic).filter_map(
+                                            |item| {
+                                                if item.kind == "collection" {
+                                                    content
+                                                        .collections
+                                                        .iter()
+                                                        .find(|collection| {
+                                                            collection.collection_id == item.id
+                                                        })
+                                                        .map(|collection| {
+                                                            self.render_native_collection(
+                                                                collection,
+                                                                &content,
+                                                                &appearance,
+                                                                cx,
+                                                            )
+                                                        })
+                                                } else {
+                                                    content
+                                                        .groups
+                                                        .iter()
+                                                        .find(|group| group.group_id == item.id)
+                                                        .filter(|group| {
+                                                            !session_groups.nests(group)
+                                                        })
+                                                        // A GBot is drawn inside Main Hub's group (gbots_rows.rs).
+                                                        .filter(|group| group.gbot().is_none())
+                                                        .map(|group| {
+                                                            // CDXC:Spaces 2026-10-06 WHY: padding, not a margin, so this block's measured bounds (where a press is a row's and not the empty list space that starts a Space drag) cover the project header's box, which reaches left over its chevron; as a margin, a click on the chevron armed the Space drag and showed the grabbing hand.
+                                                            div()
                                                             .pl(px(18.0 * appearance.scale))
                                                             .mr(px(5.0 * appearance.scale))
                                                             .mb(px(10.0 * appearance.scale))
@@ -360,17 +384,25 @@ impl GhostexGpuiApp {
                                                                 ),
                                                             )
                                                             .into_any_element()
-                                                    })
-                                            }
-                                        },
-                                    ))
-                                    .when(classic && content.bots_mode, |column| {
+                                                        })
+                                                }
+                                            },
+                                        ),
+                                    )
+                                    .when(list_classic && !content.bots_mode, |column| {
+                                        column.children(self.render_native_extension_sections(
+                                            &extension_view.sections_bottom,
+                                            &appearance,
+                                            cx,
+                                        ))
+                                    })
+                                    .when(list_classic && content.bots_mode, |column| {
                                         column.child(
                                             self.render_native_sidebar_new_bot_row(&appearance, cx),
                                         )
                                     })
                                     .children(
-                                        content.show_all_projects_row.filter(|_| classic).map(
+                                        content.show_all_projects_row.filter(|_| list_classic).map(
                                             |row| {
                                                 self.render_native_show_all_projects_row(
                                                     row,
@@ -468,7 +500,7 @@ impl GhostexGpuiApp {
                 .inset_0(),
             )
             .children(
-                classic
+                list_classic
                     .then(|| self.render_native_sticky_project(&content, &appearance, window, cx))
                     .flatten(),
             )

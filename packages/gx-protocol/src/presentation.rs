@@ -49,6 +49,10 @@ pub struct PresentationSnapshot {
     /// Absent on a daemon without workspaces (`capabilities.workspaces`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidebar_workspaces: Option<SidebarWorkspacesState>,
+    /// Every enabled sidebar extension's panels. Absent on an older daemon; read entry by entry
+    /// (`ExtensionPanels`), so a panel this client cannot read never fails the snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension_panels: Option<crate::extension_panel::ExtensionPanels>,
 }
 
 impl PresentationSnapshot {

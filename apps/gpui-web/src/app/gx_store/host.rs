@@ -122,6 +122,16 @@ async fn wait_for_retry(
 }
 
 impl GhostexGpuiApp {
+    /// The desktop's accessor of the same name (gx_store/sidebar_ui.rs), over the page's store.
+    pub(crate) fn gx_store_sidebar_mode(&self) -> ghostex_gx_core::SidebarMode {
+        self.gx_store
+            .sidebar_ui
+            .state()
+            .collapse
+            .sidebar_mode
+            .clone()
+    }
+
     /// Reads `/api/agentbox` status once the daemon is known; a gxserver without the endpoint
     /// leaves the launcher without its Run in a Box page.
     fn web_read_agentbox_locations(&mut self, cx: &mut gpui::Context<Self>) {

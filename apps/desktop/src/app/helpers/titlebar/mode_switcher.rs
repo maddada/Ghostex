@@ -120,7 +120,15 @@ pub(crate) fn gpui_extension_view_presentation(
     if manifest.get("name")?.as_str()? != id.as_str() {
         return None;
     }
-    let title = manifest.get("title")?.as_str()?.trim().to_string();
+    // A sidebar extension's view is its side panel, named by it.
+    let side_panel_title = (manifest.get("kind").and_then(serde_json::Value::as_str)
+        == Some("sidebar"))
+    .then(|| manifest.get("sidePanel")?.get("title")?.as_str())
+    .flatten();
+    let title = side_panel_title
+        .or_else(|| manifest.get("title")?.as_str())?
+        .trim()
+        .to_string();
     if title.is_empty() {
         return None;
     }

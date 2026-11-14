@@ -19,6 +19,7 @@ pub(crate) mod collections;
 mod daemon_wait;
 mod draft_arrivals;
 mod drop_landing;
+pub mod extension_panel;
 mod gbots;
 mod groups;
 #[cfg(test)]

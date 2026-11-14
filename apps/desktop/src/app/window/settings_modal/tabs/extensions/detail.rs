@@ -62,6 +62,7 @@ impl ExtensionsTab {
         icon: AnyElement,
         title: String,
         description: String,
+        source_url: Option<String>,
         on_back: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -89,14 +90,29 @@ impl ExtensionsTab {
                     .flex_1()
                     .min_w_0()
                     .child(
-                        div()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .text_size(px(16.0))
-                            .line_height(px(24.0))
-                            .text_color(hsla(p.foreground))
-                            .child(title),
+                        h_flex()
+                            .min_w_0()
+                            .items_center()
+                            .gap(px(6.0))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(px(16.0))
+                                    .line_height(px(24.0))
+                                    .text_color(hsla(p.foreground))
+                                    .child(title),
+                            )
+                            .children(source_url.map(|url| {
+                                super::cards::github_source_button(
+                                    p,
+                                    "extension-detail-github",
+                                    url,
+                                    16.0,
+                                )
+                            })),
                     )
                     .child(
                         div()
@@ -296,6 +312,9 @@ impl ExtensionsTab {
             extension_icon_tile(p, icon_bytes, has_source, true),
             extension.title(),
             extension.description(),
+            self.browser
+                .catalog_entry(&id)
+                .and_then(|entry| entry.source_url()),
             |page: &mut Self, _window, cx| {
                 page.browser.selected_installed = None;
                 page.preferences_draft = None;
@@ -354,7 +373,9 @@ impl ExtensionsTab {
                     ))
                     .into_any_element(),
             );
-        } else {
+        } else if !extension.placements().is_empty() {
+            // A sidebar extension lists no placements: its own mode and the side panel are where
+            // it opens, so it gets no empty picker.
             let options: Vec<(String, String)> = extension
                 .placements()
                 .into_iter()
@@ -515,7 +536,9 @@ impl ExtensionsTab {
             .child(settings_icon("modals/settings/pin.svg", 16.0, p.muted))
             .into_any_element();
         // A terminal pane has no view tab, so its page says where it opens from.
-        let enabled_subtitle = if extension.is_terminal_pane() {
+        let enabled_subtitle = if extension.is_sidebar() {
+            "Shows its panel in the sidebar and the side panel.".to_string()
+        } else if extension.is_terminal_pane() {
             format!(
                 "Open it from its header icon while pinned, Quick Access (Open {}), or Tools > Extensions in the sidebar's menu.",
                 extension.title()
@@ -523,18 +546,70 @@ impl ExtensionsTab {
         } else {
             "Available from its configured placement.".to_string()
         };
-        let mut status_rows = vec![
-            Self::detail_control_row(p, Some(dot), "Enabled", &enabled_subtitle, enabled_switch),
-            Self::detail_control_row(
+        let mut status_rows = vec![Self::detail_control_row(
+            p,
+            Some(dot),
+            "Enabled",
+            &enabled_subtitle,
+            enabled_switch,
+        )];
+        // A sidebar extension has no header icon to pin.
+        if !extension.is_sidebar() {
+            status_rows.push(Self::detail_control_row(
                 p,
                 Some(pin),
                 "Pinned",
                 "Show its icon in the work area header.",
                 pinned_switch,
-            ),
-            Self::detail_row(p, "Author", extension.author()),
-            Self::detail_row(p, "Installed version", format!("v{}", extension.version())),
-        ];
+            ));
+        }
+        // CDXC:Extensions 2026-11-14 WHY:
+        // The coordinator's phase 2 brief: Settings > Extensions turns a sidebar extension's own mode and its Projects-list sections on or off, each only when its manifest has one. They depend on Enabled, so they show only while it is on (CDXC:Settings 2026-11-14, dependent rows hidden while their parent is off).
+        if extension.is_sidebar() && extension.enabled() {
+            let switches = [
+                (
+                    extension.declares_sidebar_mode(),
+                    "Sidebar mode",
+                    "A button in the sidebar's top row that shows its panel instead of your projects.",
+                    "extension-detail-sidebar-mode",
+                    "sidebarModeHidden",
+                    extension.sidebar_mode_hidden(),
+                ),
+                (
+                    extension.declares_sidebar_sections(),
+                    "Sections in Projects",
+                    "Its sections above or below your projects.",
+                    "extension-detail-sidebar-sections",
+                    "sidebarSectionsHidden",
+                    extension.sidebar_sections_hidden(),
+                ),
+            ];
+            for (declared, title, caption, element_id, key, hidden) in switches {
+                if !declared {
+                    continue;
+                }
+                let id = id.clone();
+                let switch = small_switch_control(
+                    p,
+                    element_id,
+                    title,
+                    !hidden,
+                    pending,
+                    None,
+                    move |page: &mut Self, next, _window, cx| {
+                        page.set_extension_state(id.clone(), json!({ key: !next }), cx)
+                    },
+                    cx,
+                );
+                status_rows.push(Self::detail_control_row(p, None, title, caption, switch));
+            }
+        }
+        status_rows.push(Self::detail_row(p, "Author", extension.author()));
+        status_rows.push(Self::detail_row(
+            p,
+            "Installed version",
+            format!("v{}", extension.version()),
+        ));
         if update_available {
             let name = id.clone();
             status_rows.push(
@@ -785,6 +860,7 @@ impl ExtensionsTab {
             extension_icon_tile(p, icon_bytes, has_source, true),
             entry.title(),
             entry.description(),
+            entry.source_url(),
             |page: &mut Self, _window, cx| page.select_store_entry(None, cx),
             cx,
         );
@@ -989,7 +1065,7 @@ impl ExtensionsTab {
                 .map(|permission| {
                     item(
                         "modals/settings/shield-check.svg",
-                        capitalize(permission),
+                        permission_label(permission),
                         permission_description(permission).to_string(),
                     )
                 })
@@ -1014,6 +1090,28 @@ impl ExtensionsTab {
                 .children(items)
                 .into_any_element()
         };
+        // An extension that ships an agent skill asks whether to install it too, unless an earlier
+        // install already did (an update refreshes that one).
+        let skill = entry
+            .skill_name()
+            .filter(|_| {
+                !self.browser.installed.iter().any(|extension| {
+                    extension.id() == name && extension.skill_installed().is_some()
+                })
+            })
+            .map(|skill| {
+                super::folder_install::skill_choice(
+                    p,
+                    "extension-consent-skill",
+                    &skill,
+                    self.browser.consent_skill,
+                    |page: &mut Self, checked, _window, cx| {
+                        page.browser.consent_skill = checked;
+                        cx.notify();
+                    },
+                    cx,
+                )
+            });
         let cancel = modal_action_button(
             &m,
             "extension-consent-cancel",
@@ -1086,6 +1184,7 @@ impl ExtensionsTab {
                 Some("Review the access this audited extension declares before installing it."),
             ))
             .child(body)
+            .children(skill)
             .child(modal_footer(vec![cancel, confirm]))
             .into_any_element();
         Some(super::super::super::fields::settings_dialog_overlay(

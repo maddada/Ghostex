@@ -42,6 +42,10 @@ Commands:
   install-local <path> [--json]         Install a local extension folder (the user only)
   uninstall <id> [--json]               Remove an installed extension
   state <id> [--set k=v] [--json]       Read or update extension state
+  panel get|set|patch|events <id>       Read, write or follow a sidebar extension's panel
+                                        (ghostex extensions panel --help)
+  message <id> <name> [<json>|-]        Inside an agent: send the extension a message about
+                                        this session and print its answer
 
 Only the user installs extensions, from Settings > Extensions, where Ghostex shows what each
 one may do before it is installed. The CLI, agents and other computers are refused: tell the
@@ -49,7 +53,8 @@ user which extension to install there.
 
 State keys:
   enabled, pinned, placement, terminalPlacement,
-  preferences.<name>, preferences, grantedPermissions
+  preferences.<name>, preferences, grantedPermissions,
+  sidebarModeHidden, sidebarSectionsHidden (a sidebar extension's mode and sections)
 Turning an extension on and granting it a permission are the user's too (Settings >
 Extensions); turning one off and the other keys stay open.
 "

@@ -25,12 +25,14 @@ fn window_drag_is_app_owned(_window: &gpui::Window) -> bool {
     true
 }
 
+/// CDXC:PlatformSupport 2026-11-14 WHY:
+/// On Omarchy the page window a `ghostex show` card opens could not be dragged by its top band. Hyprland's XWayland does not advertise `_GTK_FRAME_EXTENTS`, so GPUI reports every window as server-decorated, yet Hyprland never draws a title bar for one: with the drag left to the window manager there was nothing to drag. On Hyprland the app's drag regions always move the window (gpui_linux moves it itself there, since Hyprland also drops `_NET_WM_MOVERESIZE`).
 #[cfg(all(target_os = "linux", not(ghostex_web)))]
 fn window_drag_is_app_owned(window: &gpui::Window) -> bool {
     matches!(
         window.window_decorations(),
         gpui::Decorations::Client { .. }
-    )
+    ) || crate::linux_hyprland::running_on_hyprland()
 }
 
 // The browser build (apps/gpui-web) compiles this file too; a page has no window to drag.

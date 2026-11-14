@@ -28,6 +28,7 @@ mod connectors_mcp;
 mod coordinator;
 pub mod diagnostics;
 pub mod editors;
+pub mod extension_panel;
 pub mod extensions;
 mod feedback;
 mod gbots_api_cli;

@@ -18,12 +18,25 @@ use super::{
     StoreEntryContent,
 };
 
+/// How long after the user's tap on a thread's panel the extension may message that thread.
+const SESSION_TAP_WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
+/// Where gxserver posts an agent's message on the extension's own server.
+pub(crate) const AGENT_MESSAGE_SERVER_PATH: &str = "/ghostex/agent-message";
+const AGENT_MESSAGE_ANSWER_MAX_BYTES: u64 = 64 * 1024;
+
 #[derive(Clone)]
 pub(crate) struct ExtensionRegistry {
-    extensions_dir: PathBuf,
-    store_file: PathBuf,
+    pub(super) extensions_dir: PathBuf,
+    pub(super) store_file: PathBuf,
     gate: Arc<Mutex<()>>,
-    runtime: ExtensionRuntime,
+    pub(super) runtime: ExtensionRuntime,
+    /// Sidebar and side panel documents (panel.rs).
+    pub(super) panels: super::PanelStore,
+    /// The home folder whose agents get an extension's skill (skills.rs).
+    agent_home: PathBuf,
+    /// By `(extension, <projectId>:<sessionId>)`: when the user last tapped that thread's panel,
+    /// which lets the extension send that thread one message (ext_api.rs `sessionMessage`).
+    taps: Arc<Mutex<std::collections::HashMap<(String, String), std::time::Instant>>>,
     /// Store README, changelog and icon by zip SHA-256: a published zip never changes under its hash.
     store_content: Arc<Mutex<HashMap<String, StoreEntryContent>>>,
     /// The last catalog read and when, for [`Self::store_entry_content`]. Its own lock, held
@@ -50,6 +63,9 @@ impl ExtensionRegistry {
             runtime: ExtensionRuntime::new(api_url),
             store_content: Arc::new(Mutex::new(HashMap::new())),
             recent_catalog: Arc::new(Mutex::new(None)),
+            panels: super::PanelStore::new(&paths.extensions_dir),
+            agent_home: paths.agent_config_home_dir().to_path_buf(),
+            taps: Arc::default(),
         };
         // CDXC:Workarea 2026-09-22 DECISION:
         // User: remove the original Storybook extension and keep only the built-in view.
@@ -63,7 +79,7 @@ impl ExtensionRegistry {
 
     pub(crate) fn list(&self) -> ExtensionResult<Vec<InstalledExtension>> {
         let _guard = self.lock()?;
-        self.list_locked()
+        self.scan_installed()
     }
 
     pub(crate) fn catalog(&self) -> ExtensionResult<ExtensionCatalogSnapshot> {
@@ -178,6 +194,7 @@ impl ExtensionRegistry {
     pub(crate) fn uninstall(&self, id: &str) -> ExtensionResult<()> {
         validate_extension_id(id)?;
         self.runtime.stop(id)?;
+        self.runtime.forget_page_token(id);
         let _guard = self.lock()?;
         let destination = self.installed_dir().join(id);
         let metadata = fs::symlink_metadata(&destination).map_err(|error| {
@@ -196,6 +213,12 @@ impl ExtensionRegistry {
             )));
         }
         let previous_store = read_store(&self.store_file)?;
+        if let Some(name) = previous_store
+            .get(id)
+            .and_then(|state| state.skill_installed.as_deref())
+        {
+            super::skills::remove_skill(&self.agent_home, id, name);
+        }
         let mut updated_store = previous_store.clone();
         updated_store.remove(id);
         write_store(&self.store_file, &updated_store)?;
@@ -208,7 +231,84 @@ impl ExtensionRegistry {
                 None => format!("Could not uninstall extension {id}: {error}"),
             })
         })?;
+        self.panels.remove_extension(id)?;
+        // Its own data folder (GHOSTEX_EXTENSION_DATA_DIR) goes with it.
+        let _ = fs::remove_dir_all(self.extensions_dir.join("data").join(id));
         Ok(())
+    }
+
+    /// Notes the user's tap on a thread's panel of this extension.
+    pub(crate) fn note_session_panel_tap(&self, id: &str, session: &str) {
+        if let Ok(mut taps) = self.taps.lock() {
+            taps.retain(|_, at| at.elapsed() < SESSION_TAP_WINDOW);
+            taps.insert(
+                (id.to_string(), session.to_string()),
+                std::time::Instant::now(),
+            );
+        }
+    }
+
+    /// Uses up a tap the user made on this thread's panel in the last minute, if there is one.
+    pub(crate) fn take_session_panel_tap(&self, id: &str, session: &str) -> bool {
+        self.taps.lock().is_ok_and(|mut taps| {
+            taps.remove(&(id.to_string(), session.to_string()))
+                .is_some_and(|at| at.elapsed() < SESSION_TAP_WINDOW)
+        })
+    }
+
+    /// Posts an agent's message to the extension's server and returns its JSON answer.
+    pub(crate) fn send_agent_message(
+        &self,
+        id: &str,
+        event: &serde_json::Value,
+    ) -> ExtensionResult<serde_json::Value> {
+        let (url, token) = self
+            .runtime
+            .server_and_token(id)
+            .ok_or_else(|| ExtensionError {
+                code: "conflict",
+                message: format!("{id} isn't running right now. Try again in a moment."),
+            })?;
+        let response = crate::http_agent::agent()
+            .post(format!(
+                "{}{AGENT_MESSAGE_SERVER_PATH}",
+                url.trim_end_matches('/')
+            ))
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .config()
+            .http_status_as_error(false)
+            .timeout_global(Some(std::time::Duration::from_secs(15)))
+            .build()
+            .send(event.to_string().as_str())
+            .map_err(|error| ExtensionError::internal(format!("{id} didn't answer: {error}")))?;
+        let status = response.status().as_u16();
+        let text = response
+            .into_body()
+            .with_config()
+            .limit(AGENT_MESSAGE_ANSWER_MAX_BYTES)
+            .read_to_string()
+            .map_err(|error| {
+                ExtensionError::internal(format!("{id}'s answer was unreadable: {error}"))
+            })?;
+        let answer: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::json!({ "text": text }));
+        if (200..300).contains(&status) {
+            Ok(answer)
+        } else {
+            Err(ExtensionError {
+                code: if status == 409 {
+                    "conflict"
+                } else {
+                    "badRequest"
+                },
+                message: answer
+                    .get("message")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("The extension refused the message.")
+                    .to_string(),
+            })
+        }
     }
 
     pub(crate) fn update_state(
@@ -237,6 +337,7 @@ impl ExtensionRegistry {
         apply_state_patch(&manifest, state, patch)?;
         if !state.enabled {
             self.runtime.stop(id)?;
+            self.runtime.forget_page_token(id);
         }
         let installed = InstalledExtension {
             runtime: self.runtime_status(id, &manifest, state),
@@ -244,9 +345,49 @@ impl ExtensionRegistry {
             id: id.to_string(),
             manifest,
             state: state.clone(),
+            skill_install: None,
         };
         write_store(&self.store_file, &store)?;
         Ok(installed)
+    }
+
+    /// The skill side of an install: a first install puts the skill in when the user asked for
+    /// it, an update refreshes the one the user installed (removing it if the new version ships
+    /// none or renamed it), and nothing replaces a skill this extension didn't put there.
+    /// Returns what happened, for the install card.
+    fn settle_install_skill(
+        &self,
+        id: &str,
+        manifest: &super::ExtensionManifest,
+        state: &mut ExtensionStoreEntry,
+        approval: Option<&ExtensionInstallApproval>,
+    ) -> Option<serde_json::Value> {
+        let previous = state.skill_installed.take();
+        let asked = approval.is_some_and(|approval| approval.skill);
+        let Some(skill) = &manifest.skill else {
+            if let Some(previous) = previous {
+                super::skills::remove_skill(&self.agent_home, id, &previous);
+            }
+            return None;
+        };
+        if let Some(previous) = previous
+            .as_deref()
+            .filter(|previous| *previous != skill.name)
+        {
+            super::skills::remove_skill(&self.agent_home, id, previous);
+        }
+        if previous.is_none() && !asked {
+            return None;
+        }
+        let payload_dir = self.installed_dir().join(id);
+        let outcome = super::skills::install_skill(&self.agent_home, id, &payload_dir, skill);
+        if outcome.is_ok() {
+            state.skill_installed = Some(skill.name.clone());
+        }
+        Some(super::skills::skill_report(
+            &skill.name,
+            &outcome.map(|()| true),
+        ))
     }
 
     fn install_zip_locked(
@@ -278,21 +419,26 @@ impl ExtensionRegistry {
         let previous_manifest = read_manifest(&self.installed_dir().join(&id), Some(&id)).ok();
         check_install_approval(&manifest, previous_manifest.as_ref(), approval)?;
         self.runtime.stop(&id)?;
+        self.runtime.forget_page_token(&id);
         let mut store = read_store(&self.store_file)?;
-        let state = store_entry_for_install(&manifest, store.get(&id), approval);
+        let mut state = store_entry_for_install(&manifest, store.get(&id), approval);
         activate_staged_payload(&self.installed_dir(), &id, staged_payload)?;
+        let skill_install = self.settle_install_skill(&id, &manifest, &mut state, approval);
         store.insert(id.clone(), state.clone());
         write_store(&self.store_file, &store)?;
         Ok(InstalledExtension {
             runtime: self.runtime_status(&id, &manifest, &state),
             badge: self.runtime.badge(&id),
+            skill_install,
             id,
             manifest,
             state,
         })
     }
 
-    fn list_locked(&self) -> ExtensionResult<Vec<InstalledExtension>> {
+    /// The listing itself. Callers that must not wait behind an install (it holds the gate through
+    /// its download) call it without the gate: every write it could see is an atomic rename.
+    pub(super) fn scan_installed(&self) -> ExtensionResult<Vec<InstalledExtension>> {
         let installed_dir = self.installed_dir();
         match fs::create_dir_all(&installed_dir) {
             Ok(()) => {}
@@ -354,6 +500,7 @@ impl ExtensionRegistry {
             installed.push(InstalledExtension {
                 runtime: self.runtime_status(&id, &manifest, &state),
                 badge: self.runtime.badge(&id),
+                skill_install: None,
                 id,
                 manifest,
                 state,
@@ -362,7 +509,7 @@ impl ExtensionRegistry {
         Ok(installed)
     }
 
-    fn installed_dir(&self) -> PathBuf {
+    pub(super) fn installed_dir(&self) -> PathBuf {
         self.extensions_dir.join("installed")
     }
 
@@ -428,10 +575,26 @@ impl ExtensionRegistry {
                 ExtensionError::not_found(format!("Extension {id:?} is not installed."))
             }
         })?;
-        let manifest_icon = PathBuf::from(manifest.icon);
-        if requested_relative != manifest_icon {
+        // The extension's icon, and a sidebar extension's mode and side panel icons.
+        let icons = std::iter::once(manifest.icon.clone())
+            .chain(
+                manifest
+                    .sidebar
+                    .as_ref()
+                    .and_then(|sidebar| sidebar.mode.as_ref())
+                    .and_then(|mode| mode.icon.clone()),
+            )
+            .chain(
+                manifest
+                    .side_panel
+                    .as_ref()
+                    .and_then(|panel| panel.icon.clone()),
+            )
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+        let Some(manifest_icon) = icons.into_iter().find(|icon| requested_relative == icon) else {
             return Ok(None);
-        }
+        };
         let canonical_payload = fs::canonicalize(&payload_dir).map_err(|error| {
             ExtensionError::internal(format!(
                 "Could not resolve installed extension {id}: {error}"
@@ -553,7 +716,7 @@ impl ExtensionRegistry {
         }
     }
 
-    fn lock(&self) -> ExtensionResult<std::sync::MutexGuard<'_, ()>> {
+    pub(super) fn lock(&self) -> ExtensionResult<std::sync::MutexGuard<'_, ()>> {
         self.gate
             .lock()
             .map_err(|_| ExtensionError::internal("Extension registry lock was poisoned."))

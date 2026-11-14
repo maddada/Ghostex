@@ -3439,7 +3439,9 @@ outside a terminal; in a terminal Paste is Ctrl+Shift+V, as in Ghostty, and
 Ctrl+V goes to the program there (an image on the clipboard still pastes as a
 link). Ctrl+Shift+V pastes from the client computer's clipboard, including into
 a remote terminal. Change or clear either Paste key in Settings > Hotkeys. Shift+Insert also pastes, in terminals
-and in text fields such as the chat composer and dialogs. A configured hotkey
+and in text fields such as the chat composer and dialogs. On Linux, Ctrl+Shift+V
+also pastes and Ctrl+Shift+C copies in those text fields, so Omarchy's Super+V
+and Super+C and Superwhisper dictation reach the chat box. A configured hotkey
 using the same chord takes precedence. In an agent's terminal prompt, use
 Prompt Editor in the terminal toolbar, Ctrl+G on macOS, or Ctrl+Shift+G on
 Windows and Linux (in chat view the same shortcut maximizes the chat box) to open the Ghostex prompt editor or your machine default
@@ -6753,6 +6755,35 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
   `keepAwakeEnabled`, `allAutomationsEnabled`, `terminalShadersEnabled`, `fasterRendering`,
   `chatToolCallLines`, `securityLogsEnabled`.
+  **Sidebar extensions** (such as Workbench) put their own content in the
+  sidebar, drawn by Ghostex with its own rows and menus. One can add a button to
+  the sidebar's top row that shows its panel instead of your projects (press it
+  again, or open a project from the panel, to go back), sections above or below
+  your projects (a Today list, for example), and a view in the side panel's
+  view list. In an editable list, click an item's circle to tick it, use Add
+  item, and right-click an item to rename or delete it; the extension sees your
+  changes. A project or session in a panel shows its live status and opens on a
+  click. A panel can also hold a small web page of the extension's own (a chart,
+  for example, like Workbench's This week under Focus); it loads when it comes
+  on screen and closes after your Project Auto Sleep time once it is out of
+  sight. What a panel may do is limited to what you allowed when you installed
+  it: See your projects, See your sessions, Open projects and sessions, Start
+  agents, Hear from your agents (an agent can tell it about its own thread
+  only) and Message a thread when you tap its panel (one short message, right
+  after your tap). A panel's section can fold under its heading, and a long list
+  shows its first items with "N more". The Thread brief extension uses these: a
+  side panel view with each thread's objective, status, next up, done, blocked
+  and parked items, kept by the thread's agent through its skill, with Refresh
+  to ask the thread for an update. Turn its sidebar button or its sections off on its page in Settings >
+  Extensions (Sidebar mode, Sections in Projects). On the phone, the extension's
+  button sits in the sessions list's header, its sections show in the Project
+  list, a tap ticks an item or opens it, and a long press opens its options
+  (rename, delete, the project's or session's menu), and a web page shows as
+  Open on computer; side panel views stay on the computer. Agents and scripts can read a
+  panel with `ghostex extensions panel get <id>`; only the extension itself
+  changes it. Settings: `sidebarModeHidden`, `sidebarSectionsHidden` (extension
+  state); CLI: `ghostex extensions panel get|set|patch|events`, and inside an
+  agent's session `ghostex extensions message <id> <name>`.
   The Edit (pencil) button on a tile chooses where that view, header button, or
   extension appears. Pick **Everywhere** or **Only in selected places**, then
   choose projects and spaces from the dropdown next to **Except in** (or
@@ -6852,7 +6883,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   install one, turn one on or give it a permission. To install one you made or downloaded
   yourself, use **Install from folder…** on the Extensions page's Installed tab: pick its folder,
   then tick each permission you give it (nothing is ticked at first; it gets nothing
-  you leave unticked) and Install. CLI: `ghostex extensions list`,
+  you leave unticked) and Install. An extension can ship a skill for your coding
+  agents: its install card then asks **Also install its skill for your agents**
+  (unticked at first). The skill goes where Ghostex's own skills go, an update
+  refreshes it, and uninstalling the extension removes it; it never replaces a
+  skill of the same name you already have, and says so instead. CLI: `ghostex extensions list`,
   `ghostex extensions state <id> --set pinned=true`.
 - **Claude** is a built-in extension, off by default: turn it on with its switch
   in Settings > Extensions > Built-in to use claude.ai inside Ghostex.

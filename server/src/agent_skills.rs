@@ -235,20 +235,9 @@ fn install_agent_skills_blocking(
                     },
                 )?,
             };
-        let mut installed_count = 0_usize;
-        let canonical_dir = target_roots[0].join(skill_name);
-        for (index, target_root) in target_roots.iter().enumerate() {
-            let destination = target_root.join(skill_name);
-            let written = if index == 0 {
-                copy_skill_directory_into_place(&source_dir, &destination)?
-            } else {
-                link_skill_into_agent_root(&canonical_dir, &destination)?
-            };
-            if written {
-                installed_paths.push(path_string(&destination));
-                installed_count += 1;
-            }
-        }
+        let written = place_skill(&source_dir, skill_name, &target_roots)?;
+        let installed_count = written.len();
+        installed_paths.extend(written);
         let source_label = if source_kind == "github" {
             format!("GitHub ({})", agent_skills_remote::AGENT_SKILLS_REMOTE_REF)
         } else {
@@ -284,6 +273,42 @@ fn install_agent_skills_blocking(
         json!(format!("{}\n", summary_lines.join("\n"))),
     );
     Ok(Value::Object(status))
+}
+
+/// Copies the skill folder into the first root (`~/.agents/skills`, the only real copy) and links
+/// it into every other root. Returns the paths that changed.
+fn place_skill(
+    source_dir: &Path,
+    skill_name: &str,
+    target_roots: &[PathBuf],
+) -> Result<Vec<String>, DomainStateError> {
+    let mut written = Vec::new();
+    let canonical_dir = target_roots[0].join(skill_name);
+    for (index, target_root) in target_roots.iter().enumerate() {
+        let destination = target_root.join(skill_name);
+        let changed = if index == 0 {
+            copy_skill_directory_into_place(source_dir, &destination)?
+        } else {
+            link_skill_into_agent_root(&canonical_dir, &destination)?
+        };
+        if changed {
+            written.push(path_string(&destination));
+        }
+    }
+    Ok(written)
+}
+
+/// Installs a skill folder that is not one of Ghostex's own (an extension's, extensions/skills.rs)
+/// into the same folders a bundled skill goes to with no agents named: `~/.agents/skills`, linked
+/// into every agent that doesn't read it itself.
+pub(crate) fn install_skill_folder(
+    home_dir: &Path,
+    source_dir: &Path,
+    skill_name: &str,
+) -> Result<Vec<String>, DomainStateError> {
+    let target_roots =
+        agent_skill_install_target_roots(home_dir, &normalize_agent_skill_agent_ids(None))?;
+    place_skill(source_dir, skill_name, &target_roots)
 }
 
 /// The equivalent CLI invocation, kept in the install result so clients that
@@ -876,7 +901,7 @@ fn read_skill_name_candidates(directory_path: &Path, skill_file_path: &Path) -> 
     candidates
 }
 
-fn read_frontmatter_name(markdown: &str) -> Option<String> {
+pub(crate) fn read_frontmatter_name(markdown: &str) -> Option<String> {
     let mut lines = markdown.lines();
     if lines.next()?.trim() != "---" {
         return None;

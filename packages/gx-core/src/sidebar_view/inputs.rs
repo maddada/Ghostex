@@ -162,12 +162,16 @@ impl SectionCollapse {
 /// User: Bots is a sidebar mode, entered from a Hermes-logo button, off by default.
 /// Projects mode never lists a bot project and Bots mode lists only bot projects, ignoring the Space filter.
 /// The mode is remembered across restarts beside the selected Space.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// Q24, user: a sidebar extension gets its own sidebar mode, like Bots. `Extension(id)` swaps the whole list for that extension's panel (`extension_panel.rs`); underneath, the list is built as Projects, so leaving the mode shows exactly what was there.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SidebarMode {
     #[default]
     Projects,
     Bots,
+    Extension(String),
 }
 
 impl SidebarMode {
@@ -175,10 +179,32 @@ impl SidebarMode {
         match value {
             "projects" => Some(SidebarMode::Projects),
             "bots" => Some(SidebarMode::Bots),
+            other => other
+                .strip_prefix(EXTENSION_MODE_PREFIX)
+                .filter(|id| !id.is_empty())
+                .map(|id| SidebarMode::Extension(id.to_string())),
+        }
+    }
+
+    /// The saved and command form: `projects`, `bots`, `extension:<id>`.
+    pub fn as_wire(&self) -> String {
+        match self {
+            SidebarMode::Projects => "projects".to_string(),
+            SidebarMode::Bots => "bots".to_string(),
+            SidebarMode::Extension(id) => format!("{EXTENSION_MODE_PREFIX}{id}"),
+        }
+    }
+
+    /// The sidebar extension whose mode this is.
+    pub fn extension_id(&self) -> Option<&str> {
+        match self {
+            SidebarMode::Extension(id) => Some(id),
             _ => None,
         }
     }
 }
+
+const EXTENSION_MODE_PREFIX: &str = "extension:";
 
 /// What the user collapsed and expanded. Group ids key the project rows; the storage id (a
 /// project's own id, or the group id for a user-made group) keys everything below a project.
@@ -714,9 +740,9 @@ pub(crate) fn effective_sidebar_mode(
     settings: &SidebarSettings,
     ui: &SidebarUiState,
 ) -> SidebarMode {
-    if settings.bots_enabled {
-        ui.collapse.sidebar_mode
-    } else {
-        SidebarMode::Projects
+    match &ui.collapse.sidebar_mode {
+        SidebarMode::Bots if settings.bots_enabled => SidebarMode::Bots,
+        // The list under an extension's mode is the projects (`extension_panel.rs` draws the mode).
+        _ => SidebarMode::Projects,
     }
 }
