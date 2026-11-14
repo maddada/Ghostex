@@ -797,9 +797,15 @@ const CURSOR_RULES: &[NoticeRule] = &[
         actions: &[
             NoticeActionSpec {
                 id: "trustDirectory",
-                label: "Trust this workspace",
+                label: "Trust folder",
                 kind: SessionChatTerminalNoticeActionKind::SendKeys,
                 send: Some("a"),
+            },
+            NoticeActionSpec {
+                id: "dontTrustDirectory",
+                label: "Don't trust",
+                kind: SessionChatTerminalNoticeActionKind::SendKeys,
+                send: Some("q"),
             },
             OPEN_TERMINAL,
         ],

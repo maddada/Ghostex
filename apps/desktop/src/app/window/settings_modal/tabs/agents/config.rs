@@ -1,7 +1,7 @@
 //! The Defaults card of Settings > Agents: Remember the agent you pick, Default Prompt Agent, Title Generation Agent (the exact
 //! command in its info tooltip), Custom Title Command, Agent approvals
 //! (`AgentApprovalPolicyControl`, packages/core-ui/agent-approval-policy-control.tsx (deleted 2026-10-01)) with its
-//! Skip permissions? confirmation, and Trust project folders automatically.
+//! Skip permissions? confirmation, and Trust project folders automatically (folder_trust_switch.rs).
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     ButtonVariant, PageAction, RowSpec, SELECT_WIDTH, SettingsDialogSpec, dialog_footer,
@@ -303,16 +303,7 @@ impl AgentsTab {
             ));
         }
         if should_show_setting(&section, TRUST_PROJECT_FOLDERS, None) {
-            rows.push(toggle_field(
-                self,
-                p,
-                TRUST_PROJECT_FOLDERS,
-                RowSpec::new("Trust project folders automatically").description(
-                    "Mark each project and worktree folder as trusted before its agent starts, so no session stops at a \"Do you trust this folder?\" prompt. Turn it off to answer that prompt yourself.",
-                ),
-                values.bool(TRUST_PROJECT_FOLDERS),
-                cx,
-            ));
+            rows.push(self.folder_trust_row(p, &values, cx));
         }
         // CDXC:Settings 2026-11-11 DECISION:
         // User: "move settings around so things make full sense"; Q2511 ("Move all five"): Tell agents about Ghostex and Claude task list moved here from Settings > Chat, because they set what an agent is told and given when it starts, not how the chat looks or acts. Each keeps its name, key and value. Claude task list still shows only while the Session details panel is on (its `settingKeys` in official_extensions.rs).

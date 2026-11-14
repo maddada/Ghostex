@@ -7,20 +7,14 @@ use serde_json::Value;
 use super::stores::{trust_folder, TrustingAgent};
 use crate::domain::DomainRepository;
 
-/// The Settings > Agents switch "Trust project folders automatically".
-const TRUST_PROJECT_FOLDERS_SETTING: &str = "trustProjectFoldersAutomatically";
-
-/// CDXC:AgentProviders 2026-10-17 DECISION:
-/// User: auto trust folders by default, with no folder-trust notice. So Ghostex trusts the folder a session runs in (its project or worktree, never a parent such as home or `/`) in that agent's own records before starting it, whenever "Trust project folders automatically" is on (the default). With it off, only folders the user remembered with Trust and Remember, the Ghostex config folder and an orchestrator's own project and worktrees are trusted this way, and every other folder keeps the agent's prompt and the chat's folder-trust card.
+/// CDXC:AgentProviders 2026-11-14 DECISION:
+/// Ghostex trusts the folder a session runs in (its project or worktree, never a parent such as home or `/`) in that agent's own records before starting it only while "Trust project folders automatically" is on and was confirmed on this computer (the user's rule, packages/settings-catalog/src/folder_trust.rs). It is off by default, which supersedes the 2026-10-17 "auto trust folders by default". With it off, only folders the user remembered with Trust and Remember, the Ghostex config folder and an orchestrator's own project and worktrees are trusted this way, and every other folder keeps the agent's own question, which the chat shows as the folder-trust card.
 /// SEE-ALSO: server/src/session_chat_trust_memory.rs (`session_folders_remembered`, Trust and Remember), server/src/agent_folder_trust/stores.rs (what each agent reads).
 fn trust_project_folders_enabled() -> bool {
-    let default = ghostex_settings_catalog::default_value(TRUST_PROJECT_FOLDERS_SETTING)
-        .is_some_and(|value| *value == ghostex_settings_catalog::J::Bool(true));
     crate::session_lifecycle::read_sidebar_settings(&crate::paths::get_gxserver_paths(None))
         .as_ref()
-        .and_then(|settings| settings.get(TRUST_PROJECT_FOLDERS_SETTING))
-        .and_then(Value::as_bool)
-        .unwrap_or(default)
+        .and_then(Value::as_object)
+        .is_some_and(ghostex_settings_catalog::folder_trust::trust_project_folders_on)
 }
 
 /// The folder to trust: the session's own folder as a real path. `None` for the filesystem root,
@@ -74,7 +68,7 @@ pub(crate) fn trust_session_folder_before_launch(
 }
 
 /// CDXC:AgentProviders 2026-11-11 DECISION:
-/// User, on the first-run page (step 16, trust the folder): "from now on always trust folders added automatically i hate this trust thing". With "Trust project folders automatically" on (the default), a session in a folder the user added to Ghostex (the project's own folder, a folder inside it, or a worktree Ghostex made for it) gets its agent's folder-trust question answered for it, like a coordinator's thread already did (CDXC:Coordinators 2026-09-30 in coordinators/state.rs). The record written before launch (`trust_session_folder_before_launch`) usually stops the question, but an agent that had never run on the computer has no record to write to yet, and some agents ask anyway; those sessions now go on without the user. Never the home folder or anything above it, which a project at `~` would be (Main Hub has its own rule). The agent's first approval of a command or an edit stays the agent's own question.
+/// User, on the first-run page (step 16, trust the folder): "from now on always trust folders added automatically i hate this trust thing". With "Trust project folders automatically" on (confirmed on this computer, see above), a session in a folder the user added to Ghostex (the project's own folder, a folder inside it, or a worktree Ghostex made for it) gets its agent's folder-trust question answered for it, like a coordinator's thread already did (CDXC:Coordinators 2026-09-30 in coordinators/state.rs). The record written before launch (`trust_session_folder_before_launch`) usually stops the question, but an agent that had never run on the computer has no record to write to yet, and some agents ask anyway; those sessions now go on without the user. Never the home folder or anything above it, which a project at `~` would be (Main Hub has its own rule). The agent's first approval of a command or an edit stays the agent's own question.
 /// SEE-ALSO: server/src/session_chat_trust_memory.rs (`session_folders_remembered`, the funnel that answers), server/src/coordinators/state.rs (`coordinator_thread_folder_trusted`).
 pub(crate) fn added_project_folder_trusted(
     repository: &DomainRepository<'_>,

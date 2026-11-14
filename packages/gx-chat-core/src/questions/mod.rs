@@ -40,6 +40,7 @@ pub mod sync;
 pub mod terminal_dialog_copy;
 pub mod terminal_picker;
 pub mod terminal_prompts;
+pub mod trust_card;
 pub mod unreachable_retry;
 
 pub use crate::questions::actions::handle;

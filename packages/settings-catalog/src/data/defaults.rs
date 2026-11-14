@@ -20,7 +20,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:AgentProviders 2026-09-04 DECISION:
     // User: new installs must start with Agent approvals set to Keep default. Running supported agents without approval is an explicit opt-in.
     ("agentAcceptAllEnabled", J::Bool(false)),
-    ("trustProjectFoldersAutomatically", J::Bool(true)),
+    // CDXC:AgentProviders 2026-11-14 DECISION: off by default, and on only with its confirmation
+    // beside it (folder_trust.rs).
+    ("trustProjectFoldersAutomatically", J::Bool(false)),
+    ("trustProjectFoldersConfirmedAt", J::Str("")),
     ("agentHooksAutoInstall", J::Bool(false)),
     ("useAgentHooks", J::Bool(false)),
     ("agentsTidyUpOfferDismissed", J::Bool(false)),

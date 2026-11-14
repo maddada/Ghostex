@@ -40,6 +40,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         (Some(raw), Some(notice)) => {
             let mut decorated = decorate_notice(raw, notice, state.session.agent.as_deref());
             if let Some(object) = decorated.as_object_mut() {
+                crate::questions::trust_card::decorate(object);
                 crate::questions::account_wait::decorate(
                     object,
                     state.core.hide_account_emails,

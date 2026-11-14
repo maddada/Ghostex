@@ -13,6 +13,7 @@ mod chips;
 mod cli;
 mod config;
 mod editor;
+mod folder_trust_switch;
 mod hooks_card;
 mod inline_input;
 pub(crate) mod logos;
@@ -122,6 +123,8 @@ pub(crate) struct AgentsTab {
     inline_committed: HashMap<SharedString, String>,
     /// The Skip permissions? confirmation is open.
     confirming_bypass: bool,
+    /// Trust project folders automatically while it is being turned on (folder_trust_switch.rs).
+    folder_trust_switch: folder_trust_switch::FolderTrustSwitch,
     /// The Uninstall hooks for all agents? confirmation is open (shares `confirm_focus`).
     confirming_uninstall_hooks: bool,
     confirm_focus: FocusHandle,
@@ -194,6 +197,7 @@ impl AgentsTab {
             hooks_menu_open: false,
             hooks_menu_trigger: Rc::new(Cell::new(None)),
             confirming_bypass: false,
+            folder_trust_switch: Default::default(),
             confirming_uninstall_hooks: false,
             confirm_focus: cx.focus_handle(),
             cli: cli::CliModel::default(),

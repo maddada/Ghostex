@@ -2538,30 +2538,31 @@ If a pick on a dialog card doesn't go through (the card says the agent's dialog
 changed), the card gets a **Dismiss** button: close it and answer the agent in
 the terminal with Open terminal. Messages you send while that dialog is still
 open on the agent's screen wait until it's answered.
-Ghostex trusts each project and worktree folder for you before it starts an
-agent there, so sessions never stop at the agent's own "Do you trust this
-folder?" question. It marks the folder trusted the way the agent would if you
-answered yes (Claude Code, Codex, Cursor, Copilot, Grok Build,
-Antigravity, Pi and Factory Droid have such a question; OMP, OpenCode and Hermes
-don't). If an agent asks anyway (one that never ran on this computer has no
-record to mark yet), Ghostex answers yes for you when the session runs in a
-project you added, a folder inside it or a worktree Ghostex made for it. Only
-the folder the session runs in is trusted, never your home folder or a folder
-above it, and the agent's own approvals of commands and edits still ask you. On
-a connected computer, that computer's Ghostex does the same with its own
-setting. To answer the question yourself, turn off **Trust project
-folders automatically** in Settings > Agents > Defaults
-(`trustProjectFoldersAutomatically`).
-With it off, when an agent asks whether to trust the project folder, chat shows a
-folder-trust card with the agent's own Yes/No choices. Its **Trust and Remember**
-button trusts the folder now and remembers it: from then on Ghostex answers the
-trust prompt for that project on its own, whichever agent asks, without showing
-a card. Worktrees count as part of their parent project, wherever they live on
-disk. The remembered folders are kept per computer in `workspace-trust.json`
-inside Ghostex's gxserver state folder; delete a folder's entry there to be asked
-again. One exception: older Claude Code builds' "Do you trust the files in this
-folder?" screen has no safe automatic answer, so that screen still shows the card
-and needs a click in the terminal even for a remembered folder.
+When an agent asks whether to trust the folder it runs in (Claude Code, Codex,
+Cursor, Copilot, Grok Build, Antigravity, Pi and Factory Droid have such a
+question; OMP, OpenCode and Hermes don't), chat shows it as a **Trust this
+folder?** card naming the agent and the folder, with two buttons: **Trust
+folder** (Cmd+Enter, Ctrl+Enter on Windows and Linux) answers yes for you, and
+**Don't trust** (Esc) answers no. The agent then remembers your answer for that
+folder the way it does when you answer in its own prompt, which Terminal view
+still shows as it is. Older Claude Code builds' "Do you trust the files in this
+folder?" screen has no safe automatic answer, so that card asks you to answer in
+the terminal.
+**Trust project folders automatically** in Settings > Agents > Defaults
+(`trustProjectFoldersAutomatically`) is off by default. Turned on, Ghostex marks
+each project and worktree folder trusted the way the agent would if you answered
+yes before it starts an agent there, and answers the question for you when a
+session runs in a project you added, a folder inside it or a worktree Ghostex
+made for it, so sessions never stop at it. Only the folder the session runs in
+is trusted, never your home folder or a folder above it, and the agent's own
+approvals of commands and edits still ask you. Turning it on asks for Touch ID
+or your Mac password (Windows Hello or your Windows password, or your system
+password on Linux) on that computer, in its own Settings window; the phone,
+another computer, the `ghostex` CLI and agents can turn it off but not on.
+Folders remembered earlier with Trust and Remember are still answered for you,
+whichever agent asks; they are kept per computer in `workspace-trust.json`
+inside Ghostex's gxserver state folder, and deleting a folder's entry there
+makes the agent ask again.
 If Codex says **Conversation open elsewhere**, choose **Continue here** or press
 Cmd+Enter (Ctrl+Enter on Windows and Linux) to close the other matching Ghostex
 sessions and retry here. This stops their running work but keeps conversation history.

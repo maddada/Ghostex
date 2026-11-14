@@ -532,6 +532,11 @@ pub fn detect_session_chat_terminal_state(
                 )
                 .is_some()
             });
+        if let Some((agent_name, folder)) = crate::session_chat_trust_memory::trust_card_place(
+            repository, project_id, session_id, agent_id,
+        ) {
+            crate::session_chat_trust_memory::word_trust_notice(notice, &agent_name, &folder);
+        }
         crate::session_chat_trust_memory::decorate_trust_notice(
             notice, remembered, answerable, project_id, session_id,
         );

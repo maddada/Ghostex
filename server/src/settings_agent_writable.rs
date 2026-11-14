@@ -33,13 +33,19 @@ fn agent_writable_keys() -> &'static HashSet<String> {
     })
 }
 
-/// The keys of `patch` the API may not change, in the patch's order.
+/// The keys of `patch` the API may not change, in the patch's order. "Trust project folders
+/// automatically" may be turned off here but never on (packages/settings-catalog/src/folder_trust.rs).
 pub(crate) fn refused_keys(patch: &Map<String, Value>) -> Vec<String> {
     let allowed = agent_writable_keys();
     patch
-        .keys()
-        .filter(|key| !allowed.contains(key.as_str()))
-        .cloned()
+        .iter()
+        .filter(|(key, value)| {
+            !allowed.contains(key.as_str())
+                || ghostex_settings_catalog::folder_trust::api_write_turns_on_folder_trust(
+                    key, value,
+                )
+        })
+        .map(|(key, _)| key.clone())
         .collect()
 }
 
@@ -49,6 +55,14 @@ const EDITED_ON_PAGE: &[(&str, &str, &str)] = &[("remoteMachines", "Remote machi
 
 /// The refusal's words: what can't be changed and where the user changes it.
 pub(crate) fn refusal_message(keys: &[String]) -> String {
+    use ghostex_settings_catalog::folder_trust::{
+        TRUST_PROJECT_FOLDERS_CONFIRMED_SETTING, TRUST_PROJECT_FOLDERS_SETTING, TURN_ON_REFUSAL,
+    };
+    if keys.iter().any(|key| {
+        key == TRUST_PROJECT_FOLDERS_SETTING || key == TRUST_PROJECT_FOLDERS_CONFIRMED_SETTING
+    }) {
+        return TURN_ON_REFUSAL.to_string();
+    }
     let catalog = ghostex_settings_catalog::help::catalog();
     let named = keys
         .iter()

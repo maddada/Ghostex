@@ -272,7 +272,8 @@ pub fn detect_grok_trust_prompt(
         .with_detail(lines[heading + 1..choices - 1].join("\n"))
         .with_screen_tail(crate::session_chat_notice::session_chat_terminal_screen_tail(text))
         .with_actions(vec![
-            SessionChatTerminalNoticeAction::send_keys("trustDirectory", "Trust this folder", "y"),
+            SessionChatTerminalNoticeAction::send_keys("trustDirectory", "Trust folder", "y"),
+            SessionChatTerminalNoticeAction::send_keys("dontTrustDirectory", "Don't trust", "n"),
             SessionChatTerminalNoticeAction::switch_to_terminal("Terminal view"),
         ]),
     )

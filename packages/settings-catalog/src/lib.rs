@@ -17,6 +17,7 @@ pub mod built_in_extensions;
 pub mod dark_chrome;
 mod data;
 pub mod file_opening;
+pub mod folder_trust;
 mod general;
 pub mod help;
 pub mod hotkey_chords;

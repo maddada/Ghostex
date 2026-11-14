@@ -9038,6 +9038,18 @@
       "agentWritable": false
     },
     {
+      "key": "trustProjectFoldersConfirmedAt",
+      "title": "trustProjectFoldersConfirmedAt",
+      "subtitle": "App-managed state saved with the settings; not a user preference.",
+      "tab": "about",
+      "tabTitle": "About",
+      "section": "internalState",
+      "sectionTitle": "Internal state (not user settings)",
+      "type": "string",
+      "default": "",
+      "agentWritable": false
+    },
+    {
       "key": "agentsTidyUpOfferDismissed",
       "title": "agentsTidyUpOfferDismissed",
       "subtitle": "App-managed state saved with the settings; not a user preference.",
@@ -9920,13 +9932,13 @@
     {
       "key": "trustProjectFoldersAutomatically",
       "title": "Trust project folders automatically",
-      "subtitle": "Mark each project and worktree folder as trusted before its agent starts, so no session stops at a \"Do you trust this folder?\" prompt. Turn it off to answer that prompt yourself.",
+      "subtitle": "Mark each project and worktree folder as trusted before its agent starts, so no session stops at a \"Do you trust this folder?\" question. Off by default: the chat shows that question as a card with Trust folder and Don't trust. Turning it on asks for Touch ID, Windows Hello or your password on this computer.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "config",
       "sectionTitle": "Defaults",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "agentWritable": true
     },
     {
