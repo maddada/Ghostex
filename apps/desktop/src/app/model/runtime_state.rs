@@ -49,7 +49,8 @@ implement fewer operations than the app that is driving it. The authenticated
 own capability inventory, so record the bounded selectors remote requests have to
 choose between instead of sending a newer selector and losing the whole action to
 a 400. Keep this to fixed capability names: no daemon paths, ports, tokens, or
-response text may be retained here.
+response text may be retained here. The one exception is the daemon's identity
+(`instance`), kept to tell whether it is this computer's own.
 */
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiRemoteGxserverCapabilities {
@@ -63,11 +64,15 @@ pub(crate) struct GpuiRemoteGxserverCapabilities {
     pub(crate) coordinator_handoff_draft: bool,
     /// The `protocolVersion` the daemon answers health with, `None` when it does not say.
     pub(crate) protocol_version: Option<u64>,
-    /// The daemon's server id from its health answer, `None` when it does not say.
-    pub(crate) server_id: Option<String>,
+    /// The running daemon (server id, process id and start time), `None` when the answer does not
+    /// say. Kept only to tell this computer's own gxserver from another computer's that shares its
+    /// server id (`gpui_remote_is_this_computer`); it is never sent anywhere or shown.
     pub(crate) instance: Option<GpuiRemoteGxserverInstance>,
 }
 
+/// One running gxserver: the short server id, which two computers can share, plus the process id
+/// and start time that tell two daemons apart. Read from a runtime file
+/// (`gxserver/runtime/server.json`) or an authenticated health answer, which carry the same values.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GpuiRemoteGxserverInstance {
