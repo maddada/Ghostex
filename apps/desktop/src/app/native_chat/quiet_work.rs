@@ -688,9 +688,15 @@ impl NativeChatView {
         }
         self.hide_file_changes = false;
         row.children(
-            spaced_tail(parts, false, Some(QUIET_TEXT_GAP), p)
-                .into_iter()
-                .map(|(part, gap)| div().pt(px(gap * s)).child(part)),
+            spaced_tail(
+                parts,
+                false,
+                Some(QUIET_TEXT_GAP),
+                self.card_stack_gap(p),
+                p,
+            )
+            .into_iter()
+            .map(|(part, gap)| div().pt(px(gap * s)).child(part)),
         )
         .into_any_element()
     }

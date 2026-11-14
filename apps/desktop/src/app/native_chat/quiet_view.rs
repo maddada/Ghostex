@@ -485,7 +485,8 @@ impl NativeChatView {
                         LINE_TO_REPLY
                     };
                     let mut first = true;
-                    for (part, above) in spaced_tail(drawn, false, None, p) {
+                    for (part, above) in spaced_tail(drawn, false, None, self.card_stack_gap(p), p)
+                    {
                         let above = if std::mem::take(&mut first) {
                             gap
                         } else {
@@ -574,6 +575,23 @@ impl NativeChatView {
             RAIL_ROW_GAP
         } else {
             super::cards::SINGLE_LINE_CARD.stack_gap(p)
+        }
+    }
+
+    /// `SINGLE_LINE_CARD.gap_above` with `card_stack_gap` between two cards: the space above a
+    /// part, the rail's gap when it and the part above it are both one-line cards on an opened
+    /// Quiet View line.
+    pub(super) fn card_gap_above(
+        &self,
+        above_is_card: bool,
+        is_card: bool,
+        gap: f32,
+        p: &ChatAppearance,
+    ) -> f32 {
+        if above_is_card && is_card {
+            self.card_stack_gap(p)
+        } else {
+            gap
         }
     }
 
