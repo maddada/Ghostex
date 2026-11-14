@@ -97,6 +97,25 @@ impl NameUnderlineFade {
     }
 }
 
+/// The same dotted line under a session named in a message's text, which gpui-component draws
+/// under the reference chip's label (`markdown_links.rs` `session_pill_link`).
+pub(super) fn session_name_chip_underline(
+    color: Hsla,
+    scale: f32,
+) -> gpui_component::text::InlineLinkUnderline {
+    gpui_component::text::InlineLinkUnderline {
+        color,
+        rest_opacity: NAME_UNDERLINE_REST,
+        dot: px(NAME_UNDERLINE_DOT * scale),
+        period: px(NAME_UNDERLINE_PERIOD * scale),
+        fade: if crate::app::helpers::gpui_macos_reduce_motion_enabled() {
+            std::time::Duration::ZERO
+        } else {
+            crate::app::consts::SIDEBAR_DIVIDER_HOVER_FADE_DURATION
+        },
+    }
+}
+
 /// The dotted line under a clickable session name, as a child of the element the click is on, which
 /// must have a `.hover()` style: that is what redraws the row when the pointer crosses it. `left`
 /// and `right` are how far the name sits inside that element.
@@ -247,7 +266,7 @@ impl NativeChatView {
                 .flex_col()
                 .min_w_0()
                 .w_full()
-                .gap(px(SINGLE_LINE_CARD.stack_gap(p) * p.scale))
+                .gap(px(self.card_stack_gap(p) * p.scale))
                 .children(cards.iter().map(|sent| {
                     let marked = text(sent, "markdown");
                     self.agent_card(
@@ -481,14 +500,15 @@ impl NativeChatView {
     }
 
     /// The other session's name on a message card (gx-chat-core `transcript/session_mentions.rs`):
-    /// the session pill's frame around the title in the line's own type and colour, then its state
-    /// dot and, for a session on another computer, that computer's icon (`session_card.rs`); its
-    /// tooltip is the session's hover card. A pill the core marks `logo: false` sits beside the
-    /// card's own agent tile and leaves the logo to it (CDXC:SessionChat 2026-10-28 on `card_pill`).
-    /// A click switches to the session; a session that is gone draws muted and opens nothing. Its
-    /// own click never opens or closes the card.
-    ///
-    /// CDXC:SessionChat 2026-11-13 DECISION: User, answering the session-mention design page (Q3063): "the same look spreads to message cards and the Workers popover, where they name a session". The card's session name is the session pill again (its hairline frame, the state dot, the computer icon, the hover card) instead of a frameless name with a dotted underline; it keeps the line's size, weight and colour and leaves the logo to the card's tile, as the 2026-10-29 and 2026-10-28 decisions asked. Supersedes the frameless name of 2026-10-29 on this card's header.
+    /// the session's title in the line's own type and colour with a faint dotted underline
+    /// (`session_name_underline`) that grows stronger under the pointer, no frame and no fill; then
+    /// its state dot while it works or needs you and, for a session on another computer, that
+    /// computer's icon (`session_card.rs`); its tooltip is the session's hover card. A name the core
+    /// marks `logo: false` sits beside the card's own agent tile and leaves the logo to it
+    /// (CDXC:SessionChat 2026-10-28 on `card_pill`). A click switches to the session; a session that
+    /// is gone draws muted, has no underline and opens nothing. Its own click never opens or closes
+    /// the card. The user's decision (2026-11-15, no frame, dotted underline, running dots only) is
+    /// on `mention_card` in gx-chat-core; it supersedes the framed pill of 2026-11-13 here.
     pub(super) fn session_pill(
         &self,
         key: &str,
@@ -529,19 +549,24 @@ impl NativeChatView {
             .map(|card| super::session_card::marks(card, p))
             .unwrap_or_default();
         let hint = SharedString::from(text(pill, "title"));
-        let hover = p.foreground.opacity(0.06);
+        // The underline runs under the title only: past the logo on the left, before the marks on
+        // the right.
+        let gap = 4.0 * s;
+        let lead = if shows_logo { 12.0 * s + gap } else { 0.0 };
+        let trail: f32 = marks
+            .iter()
+            .map(|mark| match mark {
+                super::session_card::PillMark::Dot { size, .. }
+                | super::session_card::PillMark::Icon { size, .. } => gap + f32::from(*size),
+            })
+            .sum();
         div()
             .id(SharedString::from(key.to_string()))
+            .relative()
             .flex()
             .items_center()
             .min_w_0()
-            .gap(px(4.0 * s))
-            .px(px(6.0 * s))
-            .py(px(1.0 * s))
-            .rounded_full()
-            .border(px(1.0))
-            .border_color(p.foreground.opacity(0.14))
-            .bg(p.foreground.opacity(0.03))
+            .gap(px(gap))
             .when(missing, |pill| pill.text_color(p.card_muted))
             .whitespace_nowrap()
             .role(gpui::Role::Button)
@@ -575,11 +600,20 @@ impl NativeChatView {
             )
             .when_some(command, |pill, command| {
                 pill.chat_cursor_pointer()
-                    .hover(move |style| style.bg(hover))
+                    .hover(|style| style)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
                         this.invoke(command.clone(), cx)
                     }))
+                    .when(!missing, |pill| {
+                        pill.child(session_name_underline(
+                            format!("{key}:underline"),
+                            lead,
+                            trail,
+                            p.foreground,
+                            s,
+                        ))
+                    })
             })
             .when(missing, |pill| {
                 pill.on_click(|_, _, cx| cx.stop_propagation())

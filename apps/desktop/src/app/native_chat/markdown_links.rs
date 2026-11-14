@@ -257,16 +257,25 @@ fn board_mention_link(
 }
 
 /// Another session named in a message (`session` references, gx-chat-core
-/// `transcript/session_mentions.rs`, where the user's decision lives): the working card's pill
-/// shape (a hairline rounded frame, chat_pills.rs) around the agent's logo and the title, then its
-/// state dot and, for a session on another computer, that computer's icon (`session_card.rs`, read
-/// from the host's list now, CDXC:SessionChat 2026-11-13 on `mention_card`); muted when the
+/// `transcript/session_mentions.rs`, where the user's decisions live): the agent's logo and the
+/// title in the line's own type, with no frame and a faint dotted underline that grows stronger
+/// under the pointer (the "Message to" card's, `session_name_chip_underline`), then its state dot
+/// while it works or needs you and, for a session on another computer, that computer's icon
+/// (`session_card.rs`, read from the host's list now); muted and without an underline when the
 /// session is gone. Its tooltip is the session's hover card, which the card builder finds by the
 /// Global Ref the title carries. A click goes to the core as any link does, which switches to it.
-/// A board card's chip (`board_mention_link`) starts from it, without the session's extras.
 fn session_pill_link(reference: &Value, appearance: &ChatAppearance, missing: bool) -> InlineLink {
     let mut link = session_pill_frame(reference, appearance, missing);
+    link.frame = None;
+    link.font_weight = None;
+    link.font_scale = None;
     let href = reference["href"].as_str().unwrap_or_default();
+    if !missing {
+        link.underline = Some(super::inter_agent_message::session_name_chip_underline(
+            appearance.foreground,
+            appearance.scale,
+        ));
+    }
     if let Some(card) = (!missing)
         .then(|| super::session_card::card(href))
         .flatten()
@@ -280,6 +289,9 @@ fn session_pill_link(reference: &Value, appearance: &ChatAppearance, missing: bo
     link
 }
 
+/// The framed chip a board card's mention draws (`board_mention_link`): the working card's pill
+/// shape (a hairline rounded frame, chat_pills.rs) around the logo and the title, muted when the
+/// thing it names is gone. A session's mention starts from it and drops the frame.
 fn session_pill_frame(reference: &Value, appearance: &ChatAppearance, missing: bool) -> InlineLink {
     let s = appearance.scale;
     let (icon, icon_color) = session_pill_icon(

@@ -565,6 +565,18 @@ impl NativeChatView {
         self.quiet_boxed && !self.in_work_fold && !self.quiet_steps
     }
 
+    /// The space between two one-line cards drawn now: the rail's `RAIL_ROW_GAP` in an opened
+    /// Quiet View line's rows, the transcript's (`SINGLE_LINE_CARD.stack_gap`) elsewhere.
+    ///
+    /// CDXC:SessionChat 2026-11-15 WHY: a row's "1 tool call" card with its "Message to" card under it sat a row gap apart on the rail while every other card there sat 8px apart (the user's red arrow: "make the spacing even"); the 2026-11-12 decision on `RAIL_ROW_GAP` covers the cards inside one row too.
+    pub(super) fn card_stack_gap(&self, p: &ChatAppearance) -> f32 {
+        if self.quiet_boxed {
+            RAIL_ROW_GAP
+        } else {
+            super::cards::SINGLE_LINE_CARD.stack_gap(p)
+        }
+    }
+
     /// The work item lines a line holds, as the dock's card JSON.
     /// Borrowed from the snapshot, as every work card stack takes its cards (work_cards.rs).
     fn quiet_cards(&self, line: &QuietStretch) -> Vec<&Value> {

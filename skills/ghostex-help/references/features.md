@@ -3747,13 +3747,15 @@ sent (thread reports included), Message to <session title> for one this
 session's agent sent with `agents send`, `agents create --task` or
 `coordinator start-thread`. Click the title to switch to that session; click the
 rest of the line to read the whole message. A mention of a session in a message
-(from Copy ID or the `+` list) shows as a pill with the agent's logo, the
-session's current title and a dot for its state (amber while it works, red when
-it needs you, a ring when idle); a session on another computer also shows that
-computer's icon. The chat box draws the same pill (a tinted run of text on the
-phone). Hover a pill (hold it on the phone) to see a card with the session's
-state, agent, project and computer. The "Message from" and "Message to" lines and
-the Workers list draw their sessions the same way. A pill whose session is gone is greyed out and opens nothing. One command that sends the same
+(from Copy ID or the `+` list) shows as the agent's logo and the session's
+current title with a faint dotted underline, which grows stronger under the
+pointer, and a dot while the session is busy (amber while it works, red when it
+needs you; none when it is idle or asleep); a session on another computer also
+shows that computer's icon. The "Message from" and "Message to" lines name their
+sessions the same way. In the chat box a mention is a framed pill (a tinted run
+of text on the phone). Hover a mention (hold it on the phone) to see a card with
+the session's state, agent, project and computer. A mention whose session is
+gone is greyed out and opens nothing. One command that sends the same
 message to several sessions is a single "Message to 2 sessions" line that lists
 each recipient when opened. A session Ghostex cannot find any more reads
 "Message from another agent".
@@ -3764,7 +3766,7 @@ conversation, and `--grep "<words>" --context 1` finds where a topic came up.
 Copy > Copy Details; its Global Ref is the most precise), or the title. The
 session's menu also has Copy ID, right above Tag As, which copies a mention of
 the session, `[<session title>](<Global Ref>)`, to paste into another chat (it
-shows there as the session's pill); dragging the session's row from the sidebar
+shows there as the session's underlined name); dragging the session's row from the sidebar
 onto a chat box types the same mention where the cursor is (one per session
 when several selected rows are dragged together). The Copy menu copies the
 session's branch, its Linear issue ID and link, and its pull request or GitHub
