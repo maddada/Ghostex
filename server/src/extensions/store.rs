@@ -83,6 +83,7 @@ pub(crate) fn default_store_entry(manifest: &ExtensionManifest) -> ExtensionStor
         granted_permissions: Vec::new(),
         sidebar_mode_hidden: false,
         sidebar_sections_hidden: false,
+        skill_installed: None,
     }
 }
 
@@ -123,6 +124,7 @@ pub(crate) fn store_entry_for_install(
     entry.storage = previous.storage.clone();
     entry.sidebar_mode_hidden = previous.sidebar_mode_hidden;
     entry.sidebar_sections_hidden = previous.sidebar_sections_hidden;
+    entry.skill_installed = previous.skill_installed.clone();
     if previous
         .placement
         .is_some_and(|placement| manifest.placements.contains(&placement))

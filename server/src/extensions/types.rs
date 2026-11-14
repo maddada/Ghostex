@@ -39,6 +39,21 @@ pub struct ExtensionManifest {
     /// `kind: "sidebar"`: a side panel view drawn from the same panel blocks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub side_panel: Option<ExtensionSidePanelManifest>,
+    /// An agent skill the extension ships, offered when it is installed (skills.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skill: Option<ExtensionSkillManifest>,
+}
+
+/// An agent skill inside the extension's package: a folder holding `SKILL.md` (whose frontmatter
+/// `name` is `name`) and its files, covered by the package hash like the rest of the payload.
+///
+/// CDXC:Extensions 2026-11-14 DECISION:
+/// User: "the skill shouldn't be in ghostex settings, it should ask you if you want to install it from the extension when you install the extension". The install card asks; the skill goes to the same agent folders as Ghostex's own skills, uninstalling the extension removes it, an update refreshes it only when the user installed it, and it never replaces a skill the user didn't get from this extension.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExtensionSkillManifest {
+    pub name: String,
+    pub path: String,
 }
 
 /// CDXC:Extensions 2026-11-14 DECISION:
@@ -148,6 +163,9 @@ pub(crate) struct ExtensionInstallApproval {
     pub background_process: bool,
     #[serde(default)]
     pub remote_url: Option<String>,
+    /// The user also asked for the agent skill the extension ships (`skill` in its manifest).
+    #[serde(default)]
+    pub skill: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -263,6 +281,10 @@ pub struct ExtensionStoreEntry {
     /// A sidebar extension's sections in the Projects list are turned off in Settings > Extensions.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sidebar_sections_hidden: bool,
+    /// The name of the agent skill this extension installed for the user (skills.rs), so an
+    /// update refreshes it and an uninstall removes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_installed: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -296,6 +318,9 @@ pub struct InstalledExtension {
     pub runtime: ExtensionRuntimeStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge: Option<ExtensionBadge>,
+    /// After an install: what happened to the agent skill it ships (skills.rs `skill_report`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skill_install: Option<Value>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -500,6 +525,12 @@ impl ExtensionManifest {
             if self.kind == Some(ExtensionKind::Sidebar) {
                 self.validate_sidebar_payload(payload_dir)?;
             }
+            if let Some(skill) = &self.skill {
+                super::skills::validate_skill_payload(payload_dir, skill)?;
+            }
+        }
+        if let Some(skill) = &self.skill {
+            super::skills::validate_skill_manifest(skill)?;
         }
         Ok(())
     }

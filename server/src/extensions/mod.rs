@@ -7,6 +7,7 @@ pub(crate) mod process;
 pub(crate) mod registry;
 pub(crate) mod serve;
 pub(crate) mod sidebar;
+pub(crate) mod skills;
 pub(crate) mod store;
 pub(crate) mod tokens;
 pub(crate) mod types;

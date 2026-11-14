@@ -458,6 +458,19 @@ impl InstalledExtension {
         self.state()["sidebarSectionsHidden"].as_bool() == Some(true)
     }
 
+    /// The agent skill this extension installed for the user, if any.
+    pub(crate) fn skill_installed(&self) -> Option<String> {
+        optional_text(self.state(), "skillInstalled")
+    }
+
+    /// Why an install left the extension's agent skill out, if it did (`skillInstall`).
+    pub(crate) fn skill_left_out(&self) -> Option<String> {
+        let report = self.raw.get("skillInstall")?;
+        (report["installed"].as_bool() == Some(false))
+            .then(|| report["reason"].as_str().map(str::to_string))
+            .flatten()
+    }
+
     pub(crate) fn placements(&self) -> Vec<String> {
         string_list(self.manifest().get("placements"))
     }
@@ -572,6 +585,15 @@ impl CatalogEntry {
 
     pub(crate) fn permissions(&self) -> Vec<String> {
         string_list(self.raw.get("permissions"))
+    }
+
+    /// The name of the agent skill the extension ships (`skill.name`), if any.
+    pub(crate) fn skill_name(&self) -> Option<String> {
+        self.raw["skill"]["name"]
+            .as_str()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
     }
 
     /// `server` runs a command (`'command' in entry.server`).

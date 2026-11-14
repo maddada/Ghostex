@@ -23,6 +23,8 @@ pub(crate) struct ExtensionRegistry {
     pub(super) runtime: ExtensionRuntime,
     /// Sidebar and side panel documents (panel.rs).
     pub(super) panels: super::PanelStore,
+    /// The home folder whose agents get an extension's skill (skills.rs).
+    agent_home: PathBuf,
 }
 
 impl ExtensionRegistry {
@@ -33,6 +35,7 @@ impl ExtensionRegistry {
             gate: Arc::new(Mutex::new(())),
             runtime: ExtensionRuntime::new(api_url),
             panels: super::PanelStore::new(&paths.extensions_dir),
+            agent_home: paths.agent_config_home_dir().to_path_buf(),
         };
         // CDXC:Workarea 2026-09-22 DECISION:
         // User: remove the original Storybook extension and keep only the built-in view.
@@ -122,6 +125,12 @@ impl ExtensionRegistry {
             )));
         }
         let previous_store = read_store(&self.store_file)?;
+        if let Some(name) = previous_store
+            .get(id)
+            .and_then(|state| state.skill_installed.as_deref())
+        {
+            super::skills::remove_skill(&self.agent_home, id, name);
+        }
         let mut updated_store = previous_store.clone();
         updated_store.remove(id);
         write_store(&self.store_file, &updated_store)?;
@@ -172,9 +181,49 @@ impl ExtensionRegistry {
             id: id.to_string(),
             manifest,
             state: state.clone(),
+            skill_install: None,
         };
         write_store(&self.store_file, &store)?;
         Ok(installed)
+    }
+
+    /// The skill side of an install: a first install puts the skill in when the user asked for
+    /// it, an update refreshes the one the user installed (removing it if the new version ships
+    /// none or renamed it), and nothing replaces a skill this extension didn't put there.
+    /// Returns what happened, for the install card.
+    fn settle_install_skill(
+        &self,
+        id: &str,
+        manifest: &super::ExtensionManifest,
+        state: &mut ExtensionStoreEntry,
+        approval: Option<&ExtensionInstallApproval>,
+    ) -> Option<serde_json::Value> {
+        let previous = state.skill_installed.take();
+        let asked = approval.is_some_and(|approval| approval.skill);
+        let Some(skill) = &manifest.skill else {
+            if let Some(previous) = previous {
+                super::skills::remove_skill(&self.agent_home, id, &previous);
+            }
+            return None;
+        };
+        if let Some(previous) = previous
+            .as_deref()
+            .filter(|previous| *previous != skill.name)
+        {
+            super::skills::remove_skill(&self.agent_home, id, previous);
+        }
+        if previous.is_none() && !asked {
+            return None;
+        }
+        let payload_dir = self.installed_dir().join(id);
+        let outcome = super::skills::install_skill(&self.agent_home, id, &payload_dir, skill);
+        if outcome.is_ok() {
+            state.skill_installed = Some(skill.name.clone());
+        }
+        Some(super::skills::skill_report(
+            &skill.name,
+            &outcome.map(|()| true),
+        ))
     }
 
     fn install_zip_locked(
@@ -208,13 +257,15 @@ impl ExtensionRegistry {
         self.runtime.stop(&id)?;
         self.runtime.forget_page_token(&id);
         let mut store = read_store(&self.store_file)?;
-        let state = store_entry_for_install(&manifest, store.get(&id), approval);
+        let mut state = store_entry_for_install(&manifest, store.get(&id), approval);
         activate_staged_payload(&self.installed_dir(), &id, staged_payload)?;
+        let skill_install = self.settle_install_skill(&id, &manifest, &mut state, approval);
         store.insert(id.clone(), state.clone());
         write_store(&self.store_file, &store)?;
         Ok(InstalledExtension {
             runtime: self.runtime_status(&id, &manifest, &state),
             badge: self.runtime.badge(&id),
+            skill_install,
             id,
             manifest,
             state,
@@ -285,6 +336,7 @@ impl ExtensionRegistry {
             installed.push(InstalledExtension {
                 runtime: self.runtime_status(&id, &manifest, &state),
                 badge: self.runtime.badge(&id),
+                skill_install: None,
                 id,
                 manifest,
                 state,

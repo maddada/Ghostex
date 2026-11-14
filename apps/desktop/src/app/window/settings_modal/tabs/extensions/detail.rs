@@ -1065,6 +1065,28 @@ impl ExtensionsTab {
                 .children(items)
                 .into_any_element()
         };
+        // An extension that ships an agent skill asks whether to install it too, unless an earlier
+        // install already did (an update refreshes that one).
+        let skill = entry
+            .skill_name()
+            .filter(|_| {
+                !self.browser.installed.iter().any(|extension| {
+                    extension.id() == name && extension.skill_installed().is_some()
+                })
+            })
+            .map(|skill| {
+                super::folder_install::skill_choice(
+                    p,
+                    "extension-consent-skill",
+                    &skill,
+                    self.browser.consent_skill,
+                    |page: &mut Self, checked, _window, cx| {
+                        page.browser.consent_skill = checked;
+                        cx.notify();
+                    },
+                    cx,
+                )
+            });
         let cancel = modal_action_button(
             &m,
             "extension-consent-cancel",
@@ -1137,6 +1159,7 @@ impl ExtensionsTab {
                 Some("Review the access this audited extension declares before installing it."),
             ))
             .child(body)
+            .children(skill)
             .child(modal_footer(vec![cancel, confirm]))
             .into_any_element();
         Some(super::super::super::fields::settings_dialog_overlay(

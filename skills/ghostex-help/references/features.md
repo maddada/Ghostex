@@ -6876,7 +6876,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   install one, turn one on or give it a permission. To install one you made or downloaded
   yourself, use **Install from folder…** on the Extensions page's Installed tab: pick its folder,
   then tick each permission you give it (nothing is ticked at first; it gets nothing
-  you leave unticked) and Install. CLI: `ghostex extensions list`,
+  you leave unticked) and Install. An extension can ship a skill for your coding
+  agents: its install card then asks **Also install its skill for your agents**
+  (unticked at first). The skill goes where Ghostex's own skills go, an update
+  refreshes it, and uninstalling the extension removes it; it never replaces a
+  skill of the same name you already have, and says so instead. CLI: `ghostex extensions list`,
   `ghostex extensions state <id> --set pinned=true`.
 - **Claude** is a built-in extension, off by default: turn it on with its switch
   in Settings > Extensions > Built-in to use claude.ai inside Ghostex.
