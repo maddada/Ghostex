@@ -71,6 +71,7 @@ mod sessions_brief;
 pub mod settings;
 mod settings_hotkeys;
 mod show;
+mod settings_transfer;
 mod side_chats;
 pub mod skills;
 pub mod tailcat;

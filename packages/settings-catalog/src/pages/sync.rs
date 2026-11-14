@@ -5,7 +5,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "sync",
         title: "Sync",
-        sections: vec![what_syncs(), computers(), changes()],
+        sections: vec![what_syncs(), computers(), changes(), transfer()],
     }
 }
 
@@ -40,5 +40,17 @@ fn changes() -> Section {
         "syncChanges",
         "Changed on two computers",
         vec![row("syncChangeNotes", "Recent changes", "When two computers changed the same thing while apart, the later change wins on both. Undo puts the other one back everywhere.")],
+    )
+}
+
+/// Export and import (CDXC:SettingsSync 2026-11-14 in gx-core settings_transfer.rs).
+fn transfer() -> Section {
+    section(
+        "settingsTransfer",
+        "Export and import",
+        vec![
+            row("settingsExport", "Export settings", "Save your Ghostex settings to a JSON file to bring them to another computer. Secrets, sign-ins and settings that belong to this computer (folders, the glass picture, interface scale and zoom, these sync switches) stay out. Keyboard shortcuts come along for a computer of the same system."),
+            row("settingsImport", "Import settings", "Apply a settings file exported on another computer. Ghostex shows how many settings change, and which, before anything is saved; settings this version doesn't have and values it can't use are skipped."),
+        ],
     )
 }

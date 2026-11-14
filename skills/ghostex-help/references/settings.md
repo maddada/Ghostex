@@ -713,6 +713,10 @@ How to use this file:
 ### Changed on two computers
 
 - **Recent changes** `syncChangeNotes` (Settings UI row without a settings key; use `ghostex settings open`): When two computers changed the same thing while apart, the later change wins on both. Undo puts the other one back everywhere.
+### Export and import
+
+- **Export settings** `settingsExport` (Settings UI row without a settings key; use `ghostex settings open`): Save your Ghostex settings to a JSON file to bring them to another computer. Secrets, sign-ins and settings that belong to this computer (folders, the glass picture, interface scale and zoom, these sync switches) stay out. Keyboard shortcuts come along for a computer of the same system.
+- **Import settings** `settingsImport` (Settings UI row without a settings key; use `ghostex settings open`): Apply a settings file exported on another computer. Ghostex shows how many settings change, and which, before anything is saved; settings this version doesn't have and values it can't use are skipped.
 ## Secrets (tab `secrets`)
 
 ### Secret providers

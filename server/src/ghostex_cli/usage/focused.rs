@@ -536,6 +536,8 @@ Usage:
   gx settings hotkeys set <id> <keys> [--replace] [--terminal] [--json]
   gx settings hotkeys reset <id> [--terminal] [--json]
   gx settings hotkeys reset --all [--terminal] [--json]
+  gx settings export <file> [--json]
+  gx settings import <file> [--dry-run] [--json]
   gx settings --help
 
 Keys:
@@ -574,6 +576,16 @@ Hotkeys:
   another hotkey already uses unless --replace moves them (the other hotkey is
   left unassigned). Changes save through the running desktop app like the
   Hotkeys page and bind at once.
+
+Export and import:
+  export saves this computer's settings to a JSON file to bring them to another
+  computer (Settings > Sync > Export settings does the same). Secrets, sign-ins
+  and settings that belong to one computer (folders, the glass picture,
+  interface scale and zoom, the sync switches) are left out. import applies such
+  a file here through the running app like set does (or saves it when the app
+  isn't running) and lists what changed; --dry-run lists it without saving.
+  Settings this Ghostex doesn't know, values of the wrong type, and keyboard
+  shortcuts from another system are skipped and counted.
 
 Tabs (for --tab):
   settings integrations extensions osIntegration remote projects agents

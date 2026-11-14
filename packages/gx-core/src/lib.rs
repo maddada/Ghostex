@@ -53,6 +53,7 @@ mod session_create;
 mod session_deep_link;
 pub mod session_handoff;
 pub mod settings_sync;
+pub mod settings_transfer;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_command_run;

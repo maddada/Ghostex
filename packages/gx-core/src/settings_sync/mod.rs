@@ -29,7 +29,7 @@ pub use lists::{
 };
 pub use settings_keys::{
     category_setting_keys, category_setting_values, describe_setting_key, setting_of_sync_key,
-    setting_sync_key, SIDEBAR_ORGANIZATION_KEYS,
+    setting_sync_key, APPEARANCE_LEFT_OUT, SIDEBAR_ORGANIZATION_KEYS,
 };
 pub use spaces::{
     apply_spaces_entries, derive_spaces_edits, describe_spaces_key, group_deleted_edit,

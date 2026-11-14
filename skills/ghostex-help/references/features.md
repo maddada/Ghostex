@@ -5600,6 +5600,22 @@ sessions, so any client can control agents on any machine.
   `syncSpaces` (Sidebar organization, on by default), `syncAppearance`, `syncAgentDefaults`,
   `syncSoundsAndNotifications`, `syncKeybindings`, `syncCoordinator`,
   `syncAgents`, `syncSkills`, `syncAccounts`.
+- **Export and import settings**: to bring your settings to a computer that
+  isn't connected to this one, use Settings > Sync > Export and import. Export
+  settings saves a JSON file (named after the computer and the day) with your
+  settings and the Ghostex version that wrote it. Secrets, sign-ins and
+  settings that belong to one computer stay out: API keys and tokens, the
+  Accounts and Remote pages, folders, the glass picture or video, the
+  interface scale and zoom, the microphone, automatic folder trust and the
+  sync switches. Keyboard shortcuts come along to a computer of the same
+  system. Import settings opens the file and shows how many settings will
+  change (Show lists which) before anything is saved; Cancel is the default.
+  Settings an older Ghostex doesn't have and values it can't use are skipped
+  and counted, and a file that isn't a Ghostex settings export is refused.
+  Imported settings apply at once, like any change in Settings. Agents and
+  computers without the window use `ghostex settings export <file>` and
+  `ghostex settings import <file>` (`--dry-run` lists the changes without
+  saving).
 - **Web app**: the desktop's sidebar (with its session, group and project
   actions, the Git menu and Quick Access), chat and terminal running in a
   browser and talking to gxserver; remote machines, Settings and the commit

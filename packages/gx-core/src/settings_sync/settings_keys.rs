@@ -17,8 +17,9 @@ use serde_json::Value;
 
 use super::entries::{SyncConflict, SyncEntry};
 
-/// Appearance rows that stay on each computer.
-const APPEARANCE_LEFT_OUT: &[&str] = &[
+/// Appearance rows that stay on each computer (a settings export leaves them out too,
+/// crate::settings_transfer).
+pub const APPEARANCE_LEFT_OUT: &[&str] = &[
     "windowGlassImageDark",
     "windowGlassImageLight",
     "windowGlassVideoDark",
@@ -49,13 +50,13 @@ const AGENT_DEFAULT_KEYS: &[&str] = &[
     "showQuickModelPickerInTerminal",
 ];
 
-/// Sidebar organization: the settings that change how the sidebar is organized, synced with the
 /// Settings that sync whatever Settings > Sync's switches say (`ALWAYS_CATEGORY`).
 ///
 /// CDXC:MemoryGuard 2026-11-14 DECISION:
 /// User (Q3122, "always sync"): the memory guard's two switches sync to all the user's computers even while Settings > Sync > Agent defaults is off, and each computer still guards itself (server/src/memory_guard/mod.rs). Supersedes the same day's choice to sync them with Agent defaults.
 pub const ALWAYS_SYNCED_KEYS: &[&str] = &["memoryGuardEnabled", "memoryGuardNotify"];
 
+/// Sidebar organization: the settings that change how the sidebar is organized, synced with the
 /// Spaces themselves (the `spaces` category, its switch `syncSpaces`).
 ///
 /// CDXC:SettingsSync 2026-11-12 DECISION:
@@ -109,8 +110,8 @@ pub fn category_setting_keys(prefix: &str) -> Vec<&'static str> {
         "keybindings" => vec!["hotkeys"],
         "coordinator" => COORDINATOR_KEYS.to_vec(),
         "spaces" => SIDEBAR_ORGANIZATION_KEYS.to_vec(),
-        _ => Vec::new(),
         super::ALWAYS_CATEGORY => ALWAYS_SYNCED_KEYS.to_vec(),
+        _ => Vec::new(),
     }
 }
 

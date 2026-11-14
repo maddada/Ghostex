@@ -406,6 +406,14 @@ pub fn usage() -> String {
             "List hotkeys, or change, unassign or reset one (or --all) through the running desktop app",
         ),
         format_help_command(
+            "settings export <file> [--json]",
+            "Save this computer's settings to a JSON file for another computer (no secrets or sign-ins)",
+        ),
+        format_help_command(
+            "settings import <file> [--dry-run] [--json]",
+            "Apply a settings export here through the running desktop app and list what changed",
+        ),
+        format_help_command(
             "guide [overview|features|settings|hotkeys]",
             "Print the built-in Ghostex guide, or one chapter of it",
         ),

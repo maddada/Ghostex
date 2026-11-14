@@ -5,6 +5,7 @@
 - **Compact an idle Codex chat before you send:** when a Codex chat's last turn is more than a day old, the chat box shows "Option + Enter to compact then send" ("Alt + Enter" on Windows and Linux), so the next message doesn't re-read the whole conversation uncached. The hint goes once a new turn starts.
 - **Claude Code's idle compaction in Settings:** expand Claude Code in Settings > Agents to turn off compacting idle chats before the prompt cache expires, set the smallest chat it compacts (100K to 500K), or ask for the 1-hour prompt cache on an API key, Bedrock, Vertex or Foundry. Session details' Cache card shows the cache length and when an idle chat will be compacted.
 - **A clearer Autopilot page:** pick Off, Careful or Full at the top (Custom when you mix your own), then one row each for questions (Wait for me, or answer after 5, 10 or 15 minutes) and permission (Wait for me, Safe steps, or All but limits). Approval cards now wait a minute for you before Autopilot answers them, hard limits show and count only with All but limits, Every session lists the projects and sessions you left out, and the supervisor and the sweep moved under Advanced. On the computer and the Android app.
+- **Export and import settings:** Settings > Sync can save your settings to a JSON file and apply it on another computer, showing how many settings change before it saves them. Secrets, sign-ins and settings of one computer (folders, the glass picture, scale and zoom) stay out. Also `ghostex settings export` and `ghostex settings import`.
 
 ## 11.6.1 - 2026-11-13
 

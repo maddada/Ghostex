@@ -12813,6 +12813,28 @@
       "agentWritable": false
     },
     {
+      "key": "settingsExport",
+      "title": "Export settings",
+      "subtitle": "Save your Ghostex settings to a JSON file to bring them to another computer. Secrets, sign-ins and settings that belong to this computer (folders, the glass picture, interface scale and zoom, these sync switches) stay out. Keyboard shortcuts come along for a computer of the same system.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "settingsTransfer",
+      "sectionTitle": "Export and import",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "settingsImport",
+      "title": "Import settings",
+      "subtitle": "Apply a settings file exported on another computer. Ghostex shows how many settings change, and which, before anything is saved; settings this version doesn't have and values it can't use are skipped.",
+      "tab": "sync",
+      "tabTitle": "Sync",
+      "section": "settingsTransfer",
+      "sectionTitle": "Export and import",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "secretProviders",
       "title": "1Password accounts",
       "subtitle": "The 1Password accounts Ghostex reads keys and tokens from, so you can paste an op://vault/item/field reference instead of the key itself. Needs the 1Password CLI (op) with \"Integrate with 1Password CLI\" turned on in 1Password. Ghostex keeps only the account name; 1Password may ask you to unlock when a key is read.",

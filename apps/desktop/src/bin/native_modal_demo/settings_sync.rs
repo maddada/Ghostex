@@ -1,13 +1,17 @@
 //! Preview of the Sync and Autopilot Settings pages against a real gxserver (a throwaway one from
 //! `cargo xtask test-server`), so the pages show live computers and notes, or Autopilot's log.
 //!
-//! States: `sync`, `autopilot`, `autopilot-supervisor`, `collab`, `security`. Environment: `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_URL` (`http://127.0.0.1:<port>`)
+//! States: `sync`, `sync-import-confirm` (the Import settings? confirm for a file that changes a few
+//! settings; `sync-import-confirm-list` with its list shown), `sync-transfer` (Sync searched for its Export and
+//! import rows), `autopilot`, `autopilot-supervisor`, `collab`, `security`. Environment: `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_URL` (`http://127.0.0.1:<port>`)
 //! and `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_TOKEN_FILE` (that server's `auth/token`). Without them
 //! the page shows the service as unreachable.
 use serde_json::{Value, json};
 
 pub(super) fn owns(state: &str) -> bool {
     state == "sync"
+        || state.starts_with("sync-import-confirm")
+        || state == "sync-transfer"
         || state == "autopilot"
         || state == "autopilot-supervisor"
         || state == "collab"
@@ -18,6 +22,13 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
     // `autopilot-supervisor` is Autopilot searched for its Supervisor section (the notes folder path).
     if state == "autopilot-supervisor" {
         return Some(json!({ "initialTab": "autopilot", "initialSearchQuery": "supervisor" }));
+    }
+    // `sync-transfer` is Sync searched for its Export and import rows.
+    if state == "sync-transfer" {
+        return Some(json!({ "initialTab": "sync", "initialSearchQuery": "settings file" }));
+    }
+    if state.starts_with("sync-import-confirm") {
+        return Some(json!({ "initialTab": "sync" }));
     }
     owns(state).then(|| json!({ "initialTab": state }))
 }
