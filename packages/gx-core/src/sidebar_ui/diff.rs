@@ -17,7 +17,7 @@ use serde_json::{json, Map, Value};
 
 use super::persist::{
     collapse_into_storage, stored_state_object, stored_version, write_sidebar_mode,
-    COLLAPSE_STORAGE_VERSION,
+    COLLAPSE_STORAGE_VERSION, HIDDEN_PROJECT_MACHINES_KEY,
 };
 use crate::sidebar_view::{SectionCollapse, SidebarCollapseState, SidebarMode};
 
@@ -29,6 +29,7 @@ pub struct SidebarCollapseDiff {
     expanded_hover_actions: SetDiff,
     collapsed_coordinators: SetDiff,
     expanded_coordinator_older_threads: SetDiff,
+    hidden_project_machines: SetDiff,
     section_collapse: BTreeMap<String, Option<SectionCollapse>>,
     selected_space_by_section: BTreeMap<String, Option<String>>,
     /// Per SECTION, not per Space: `rememberSidebarSpaceSession` rebuilds a whole section's object
@@ -93,6 +94,10 @@ impl SidebarCollapseDiff {
                 &base.expanded_coordinator_older_threads,
                 &next.expanded_coordinator_older_threads,
             ),
+            hidden_project_machines: SetDiff::between(
+                &base.hidden_project_machines,
+                &next.hidden_project_machines,
+            ),
             section_collapse: map_diff(&base.section_collapse, &next.section_collapse),
             selected_space_by_section: map_diff(
                 &base.selected_space_by_section,
@@ -113,6 +118,7 @@ impl SidebarCollapseDiff {
             && self.expanded_hover_actions.is_empty()
             && self.collapsed_coordinators.is_empty()
             && self.expanded_coordinator_older_threads.is_empty()
+            && self.hidden_project_machines.is_empty()
             && self.section_collapse.is_empty()
             && self.selected_space_by_section.is_empty()
             && self.recent_sessions_by_space.is_empty()
@@ -159,6 +165,11 @@ impl SidebarCollapseDiff {
             &mut object,
             "expandedCoordinatorOlderThreadsById",
             &self.expanded_coordinator_older_threads,
+        );
+        apply_set(
+            &mut object,
+            HIDDEN_PROJECT_MACHINES_KEY,
+            &self.hidden_project_machines,
         );
         if !self.section_collapse.is_empty() {
             let mut sections = match object.get("collapsedProjectSessionSectionsById") {

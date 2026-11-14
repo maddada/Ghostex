@@ -252,6 +252,14 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     {
         map.insert("sidebarMergeRepositoryCopies".to_string(), json!(false));
     }
+    // CDXC:RemoteMachines 2026-11-15 SEE-ALSO: packages/gx-core/src/sidebar_view/merged.rs; the phone's Project list leaves a computer that isn't connected out as the computer's does (apps/mobile/app/src/components/sessions/drawerModel.ts `everyComputerList`). Sent only when on (the default is off).
+    if settings
+        .get("sidebarHideDisconnectedMachines")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        map.insert("sidebarHideDisconnectedMachines".to_string(), json!(true));
+    }
     if settings
         .get("sidebarSeparateByMachine")
         .and_then(Value::as_bool)

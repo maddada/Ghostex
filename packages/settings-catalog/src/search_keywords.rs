@@ -32,6 +32,9 @@ pub fn search_keywords(key: &str) -> &'static [&'static str] {
         | "linuxDisplayScale" => INTERFACE_SCALE,
         "secretReferenceCheck" => &["check a reference"],
         "agentboxBoxes" => &["your boxes"],
+        // CDXC:RemoteMachines 2026-11-15: people say machine and offline as often as computer and
+        // not connected.
+        "sidebarHideDisconnectedMachines" => &["offline", "disconnected machines", "hide offline"],
         _ => &[],
     }
 }

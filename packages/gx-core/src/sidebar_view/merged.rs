@@ -10,6 +10,12 @@
 //! CDXC:RemoteMachines 2026-11-09 DECISION:
 //! Issue #518 (a folder copied to a new name, both clones of one GitHub repository, drawn as one entry named after one of them with both folders' sessions mixed in); user: "we need toggle for this. and we need phone and pc to match pls." Settings › Sidebar's Merge copies of the same repository (`sidebarMergeRepositoryCopies`, on by default, so Q1352 stays the default) decides whether two copies on ONE computer are one entry. Off, every folder on a computer is its own entry, titled and acting as its own project, and copies on different computers still merge (Q1350's one entry per project across computers is what the one list is for, and the report is about one computer only): another computer's copy joins the entry whose folder has its folder's name, else the first copy's, and an entry takes at most one copy from each computer, so that computer's second copy is its own entry too. The phone's Project list follows the same switch (apps/mobile/app/src/contract/grouping.ts `mergeRepositoryCopies`): it merges one computer's copies only while this is on and Separate by machine is off, as this list does. Separate by machine already keeps every copy apart, so the row shows only while it is off.
 //!
+//! CDXC:RemoteMachines 2026-11-15 DECISION:
+//! User: "for projects that only have 1 machine still show the icon of that machine in case we are connected to multiple machines". While another computer is in the one list, every project header names its computers with their icons, a project only this computer has too; with this computer alone (or every other one left out by the setting below) none does, as before.
+//!
+//! CDXC:RemoteMachines 2026-11-15 DECISION:
+//! User: "add a setting in settings sidebar advanced to hide sessions and projects from machines that aren't connected (show on desktop and phone this setting pls)". Settings › Sidebar › Advanced's Hide sessions and projects from computers that aren't connected (`sidebarHideDisconnectedMachines`, off by default): on, a computer whose stream is not live is left out of the one list entirely, so its sessions leave every project (a coordinator's threads there included) and a project only it has is not drawn; all of it comes back when it reconnects. Off, such a computer keeps drawing its last rows, faded, as before. Separate by machine has a tab per computer and is not filtered. The phone's Projects list honours the same key (apps/mobile/app/src/contract/grouping.ts).
+//!
 //! CDXC:RemoteMachines 2026-11-05 WHY:
 //! A copy merged into another entry gives it its sessions only: its user-made session groups are listed with the entry's own sessions rather than as groups, because a session group is drawn inside the project that owns its id (`owner_project_group_id`), and that project is not drawn. A project only another machine has keeps its session groups, exactly as that machine's tab drew them.
 
@@ -144,7 +150,26 @@ pub(super) fn merge_machines(
         .rows
         .retain(|key, _| !changes.machines_reloaded.contains(&key.machine));
 
-    let guests = guests(store, input.inputs);
+    let mut guests = guests(store, input.inputs);
+    if input.inputs.settings.hide_disconnected_machines {
+        let offline: HashSet<MachineId> = guests
+            .iter()
+            .filter(|guest| guest.is_stale)
+            .map(|guest| guest.machine.clone())
+            .collect();
+        guests.retain(|guest| !guest.is_stale);
+        // A thread this computer's coordinator started there, already in this computer's rows.
+        if !offline.is_empty() {
+            for plan in plans.iter_mut() {
+                plan.rows.retain(|row| {
+                    row.row
+                        .key
+                        .as_ref()
+                        .is_none_or(|key| !offline.contains(&key.machine))
+                });
+            }
+        }
+    }
     for guest in &guests {
         let machine = refresh_guest(
             previous.machines.remove(&guest.machine),
@@ -517,9 +542,14 @@ pub(super) fn merge_machines(
     }
 
     for (entry, entry_names) in names {
-        // A project only this computer has says nothing; one elsewhere names every machine.
-        if entry_names.len() > 1 || plans[entry].remote_machine.is_some() {
+        // While another computer is in the list every project names its computers, one only this
+        // computer has too; with this computer alone none does.
+        if !guests.is_empty() || entry_names.len() > 1 || plans[entry].remote_machine.is_some() {
             plans[entry].machine_names = entry_names;
+            hide_machines(
+                &mut plans[entry],
+                &input.inputs.ui.collapse.hidden_project_machines,
+            );
         }
     }
     for (entry, entry_copies) in &copies {
@@ -540,6 +570,62 @@ pub(super) fn merge_machines(
         });
     }
     (cache, outcome)
+}
+
+/// Leaves out the rows of the computers the user hid in this entry, and marks their chips.
+///
+/// CDXC:RemoteMachines 2026-11-15 DECISION:
+/// User, of the computer icons after a project's name: "please allow clicking on machines here to toggle showing or hiding their sessions in that project". A click on a computer's icon hides that computer's sessions in that project only (Pinned and every other section, since the rows never reach the group), and a second click shows them again. The choice is per project row and per computer and is kept with the sidebar's other collapse state (`hiddenProjectMachinesByKey`), so it survives restarts. A hidden computer's icon draws dimmed; while one of the rows it hides waits on the user (an approval, a question, or an unseen finished turn), the dimmed icon carries that row's status dot, the most urgent one, so hiding never swallows a request. The project's own header counts leave hidden rows out. A row with no store key (a browser tab, which is host state) counts as this computer's.
+fn hide_machines(plan: &mut GroupPlan, hidden: &BTreeSet<String>) {
+    if hidden.is_empty() {
+        return;
+    }
+    let group_id = plan.group_id.clone();
+    let mut hidden_ids: Vec<(String, Option<super::view::NeedsYou>)> = Vec::new();
+    for chip in &mut plan.machine_names {
+        chip.hidden = hidden.contains(&super::inputs::project_machine_key(
+            &group_id,
+            &chip.machine_id,
+        ));
+        if chip.hidden {
+            hidden_ids.push((chip.machine_id.clone(), None));
+        }
+    }
+    if hidden_ids.is_empty() {
+        return;
+    }
+    plan.rows.retain(|row| {
+        let machine_id = row
+            .row
+            .key
+            .as_ref()
+            .and_then(|key| key.machine.remote_id())
+            .unwrap_or(LOCAL_MACHINE_ID);
+        let Some((_, needs_you)) = hidden_ids.iter_mut().find(|(id, _)| id == machine_id) else {
+            return true;
+        };
+        if let Some(wait) = row.row.needs_you() {
+            if needs_you.is_none_or(|held| urgency(wait) > urgency(held)) {
+                *needs_you = Some(wait);
+            }
+        }
+        false
+    });
+    for chip in &mut plan.machine_names {
+        chip.hidden_needs_you = hidden_ids
+            .iter()
+            .find(|(id, _)| *id == chip.machine_id)
+            .and_then(|(_, needs_you)| *needs_you);
+    }
+}
+
+/// Approval outranks a question, which outranks an unseen finished turn (`SessionRow::needs_you`).
+fn urgency(wait: super::view::NeedsYou) -> u8 {
+    match wait {
+        super::view::NeedsYou::Approval => 3,
+        super::view::NeedsYou::Question => 2,
+        super::view::NeedsYou::Attention => 1,
+    }
 }
 
 /// The machines besides this computer whose projects the list takes: every machine tab the host
@@ -589,6 +675,7 @@ fn machine_chip(inputs: &SidebarInputs, machine_id: &str) -> MachineChip {
         name,
         short_name,
         machine_id: machine_id.to_string(),
+        ..MachineChip::default()
     }
 }
 

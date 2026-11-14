@@ -89,11 +89,12 @@ pub use gbots::{
     gbots_department_storage_id, gbots_section_storage_id, GbotsDepartmentView, GbotsSectionView,
 };
 pub use inputs::{
-    BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput, PinnedSessionOrder,
-    ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode, SidebarCollapseState,
-    SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode, SidebarSettings,
-    SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY, LOCAL_MACHINE_ID,
-    MACHINE_STATE_CONNECTED, MAX_RECENT_SPACE_SESSION_IDS, PINNED_SESSION_ORDER_SETTING_KEY,
+    project_machine_key, BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput,
+    PinnedSessionOrder, ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode,
+    SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
+    SidebarSettings, SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY,
+    LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED, MAX_RECENT_SPACE_SESSION_IDS,
+    PINNED_SESSION_ORDER_SETTING_KEY,
 };
 pub use links::{
     link_chips_that_fit, SessionLink, SessionLinkGlyph, SessionLinkKind, SessionLinkTone,

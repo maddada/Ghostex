@@ -218,6 +218,9 @@ pub struct SidebarCollapseState {
     pub collapsed_coordinators: BTreeSet<String>,
     /// Coordinators whose older threads (idle for two hours) the user listed, by sidebar row id.
     pub expanded_coordinator_older_threads: BTreeSet<String>,
+    /// The computers whose sessions a merged project hides, keyed by [`project_machine_key`]
+    /// (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
+    pub hidden_project_machines: BTreeSet<String>,
     pub section_collapse: BTreeMap<String, SectionCollapse>,
     /// Keyed by section key (`local`, `remote:<machine>`).
     pub selected_space_by_section: BTreeMap<String, String>,
@@ -231,6 +234,13 @@ pub struct SidebarCollapseState {
     /// The mode the user left the sidebar in. Read through [`effective_sidebar_mode`], which falls
     /// back to Projects while Bots is switched off.
     pub sidebar_mode: SidebarMode,
+}
+
+/// The key [`SidebarCollapseState::hidden_project_machines`] holds for one computer of one project
+/// row: the project row's group id and the computer's id (`MachineChip::machine_id`). Only ever
+/// compared whole, never split.
+pub fn project_machine_key(group_id: &str, machine_id: &str) -> String {
+    format!("{group_id}|{machine_id}")
 }
 
 /// `MAX_RECENT_SIDEBAR_SPACE_SESSION_IDS`.
@@ -298,6 +308,10 @@ pub const WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY: &str = "worktreeSessionsInPr
 /// The setting behind Merge copies of the same repository (CDXC:RemoteMachines 2026-11-09 in
 /// `merged.rs`).
 pub const MERGE_REPOSITORY_COPIES_SETTING_KEY: &str = "sidebarMergeRepositoryCopies";
+
+/// The setting behind Hide sessions and projects from computers that aren't connected
+/// (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
+pub const HIDE_DISCONNECTED_MACHINES_SETTING_KEY: &str = "sidebarHideDisconnectedMachines";
 
 /// The setting behind Settings > Sidebar & Sessions > Advanced's Pinned order.
 pub const PINNED_SESSION_ORDER_SETTING_KEY: &str = "pinnedSessionOrder";
@@ -395,6 +409,10 @@ pub struct SidebarSettings {
     /// on by default): two folders on one computer that are copies of one repository are one
     /// entry of the one list. Off, each is its own (`merged.rs`).
     pub merge_repository_copies: bool,
+    /// Settings › Sidebar › Advanced's Hide sessions and projects from computers that aren't
+    /// connected (`sidebarHideDisconnectedMachines`, off by default): the one list leaves out a
+    /// computer whose stream is down (`merged.rs`).
+    pub hide_disconnected_machines: bool,
     /// Settings › Sidebar & Sessions › Advanced's Worktree sessions show in their project
     /// (`worktreeSessionsInProject`, on by default): the Project sidebar lists a worktree
     /// project's sessions under its parent project (`worktree_fold.rs`).
@@ -436,6 +454,7 @@ impl Default for SidebarSettings {
             active_projects: true,
             separate_by_machine: false,
             merge_repository_copies: true,
+            hide_disconnected_machines: false,
             worktree_sessions_in_project: true,
             pinned_session_order: PinnedSessionOrder::Manual,
         }
@@ -540,6 +559,10 @@ impl SidebarSettings {
             merge_repository_copies: boolean(
                 MERGE_REPOSITORY_COPIES_SETTING_KEY,
                 defaults.merge_repository_copies,
+            ),
+            hide_disconnected_machines: boolean(
+                HIDE_DISCONNECTED_MACHINES_SETTING_KEY,
+                defaults.hide_disconnected_machines,
             ),
             worktree_sessions_in_project: boolean(
                 WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY,

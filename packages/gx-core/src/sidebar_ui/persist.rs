@@ -111,6 +111,16 @@ pub fn collapse_into_storage(state: &SidebarCollapseState, existing: Option<&str
         "expandedCoordinatorOlderThreadsById".to_string(),
         flag_map(&state.expanded_coordinator_older_threads),
     );
+    // Written only once something is hidden, so an envelope from before this field is byte for
+    // byte what it was (examples/sidebar_ui_state.rs) until the user hides a computer.
+    if state.hidden_project_machines.is_empty() {
+        object.remove(HIDDEN_PROJECT_MACHINES_KEY);
+    } else {
+        object.insert(
+            HIDDEN_PROJECT_MACHINES_KEY.to_string(),
+            flag_map(&state.hidden_project_machines),
+        );
+    }
     object.insert(
         "collapsedProjectSessionSectionsById".to_string(),
         persisted_section_collapse(&state.section_collapse),
@@ -210,6 +220,7 @@ fn normalize_collapse_state(state: Option<&Value>) -> SidebarCollapseState {
         expanded_coordinator_older_threads: flag_set(
             state.get("expandedCoordinatorOlderThreadsById"),
         ),
+        hidden_project_machines: flag_set(state.get(HIDDEN_PROJECT_MACHINES_KEY)),
         section_collapse: normalize_section_collapse(
             state.get("collapsedProjectSessionSectionsById"),
         ),
@@ -224,6 +235,10 @@ fn normalize_collapse_state(state: Option<&Value>) -> SidebarCollapseState {
             .unwrap_or_default(),
     }
 }
+
+/// Where the collapse envelope keeps the computers a project hides
+/// (`SidebarCollapseState::hidden_project_machines`).
+pub(super) const HIDDEN_PROJECT_MACHINES_KEY: &str = "hiddenProjectMachinesByKey";
 
 /// Where the collapse envelope keeps the sidebar mode, beside `selectedSpaceIdBySectionKey`.
 const SIDEBAR_MODE_KEY: &str = "sidebarMode";

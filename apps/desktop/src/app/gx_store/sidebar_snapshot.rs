@@ -542,7 +542,21 @@ fn native_group(
             .iter()
             // The computer's name and id: its chip draws the computer's icon (gx-core
             // computer_icons.rs).
-            .map(|chip| (chip.name.clone(), chip.machine_id.clone()))
+            .map(
+                |chip| crate::app::native_sidebar::model::SidebarMachineChip {
+                    name: chip.name.clone(),
+                    machine_id: chip.machine_id.clone(),
+                    hidden: chip.hidden,
+                    hidden_needs_you: chip.hidden_needs_you.map(|wait| {
+                        match wait {
+                            ghostex_gx_core::NeedsYou::Approval => "approval",
+                            ghostex_gx_core::NeedsYou::Question => "question",
+                            ghostex_gx_core::NeedsYou::Attention => "attention",
+                        }
+                        .to_string()
+                    }),
+                },
+            )
             .collect(),
         holds_active_session_group: group.holds_active_session_group,
         project_context: project_context(group),
