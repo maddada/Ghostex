@@ -220,6 +220,24 @@ impl GhostexGpuiApp {
             })
             .flatten();
         let question = question && folded_dots.is_none() && !approval;
+        // CDXC:Coordinators 2026-11-15 DECISION (issue #618, Q3275): "no bold" (the user dislikes
+        // bold text). A coordinator and its threads stand apart by the crown, colour and dimmer
+        // thread text: a coordinator's title is the bright ink a selected row's title has, a
+        // thread's sits between the row text and the muted ink; a selected or visible row keeps its
+        // bright title. Sidebar & Sessions > Session Cards > Bold coordinator title (off by default)
+        // bolds the coordinator's title. The phone's SessionRow.tsx does the same.
+        let coordinator_title = super::threads::is_coordinator(session);
+        let title_color = if visible || highlighted {
+            None
+        } else if coordinator_title {
+            Some(gpui::Hsla::from(chrome_color(0xd8d8d8, 0x292929)))
+        } else if super::threads::thread_depth(session) > 0.0 {
+            Some(appearance.foreground.blend(appearance.muted.opacity(0.55)))
+        } else {
+            None
+        };
+        let bold_title = coordinator_title
+            && hud["settings"]["sessionsBoldCoordinatorTitle"].as_bool() == Some(true);
         let timer = session.details.get("timerLabel").and_then(Value::as_str);
         let show_time = hud
             .get("settings")
@@ -341,7 +359,7 @@ impl GhostexGpuiApp {
                 // decorations above keep their tops because it starts at the card's top.
                 .child(h_flex().h(px(SESSION_HEIGHT * scale)).flex_shrink_0().w_full().min_w_0().pl(px(indent * scale)).pr(px(6.0 * scale)).gap(px(6.0 * scale))
                 .child(self.render_native_session_identity(session, icon, hovered, appearance, cx))
-                .child(div().id(format!("native-session-title-{session_id}")).flex_1().min_w_0().h_full().flex().items_center().child(title_with_rename_shake(div().min_w_0().truncate().child(session.title().to_owned()), &session_id, session.rename_failed_at.as_deref(), scale)).when(session_tooltips && self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx))))
+                .child(div().id(format!("native-session-title-{session_id}")).flex_1().min_w_0().h_full().flex().items_center().child(title_with_rename_shake(div().min_w_0().truncate().when_some(title_color, |title, color| title.text_color(color)).when(bold_title, |title| title.font_weight(gpui::FontWeight::SEMIBOLD)).child(session.title().to_owned()), &session_id, session.rename_failed_at.as_deref(), scale)).when(session_tooltips && self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_tooltip(tooltip.clone(), tooltip_span, scale, window, cx))))
                 // CDXC:Sidebar 2026-10-29 DECISION: User: "please swap the order of these 2 things (the threads one for orchestrator with the link tag)". The links badge comes before a coordinator's workers badge; the phone's SessionRow.tsx follows.
                 .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
                 .when(!buttons_shown && !clock_fold, |row| row.children(super::threads::coordinator_badge(session, appearance)))
