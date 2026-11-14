@@ -323,6 +323,8 @@ pub(crate) struct CoordinatorBoardView {
     pub(super) motion: crate::app::panel_motion::PanelMotion,
     /// The pane had room to dock last frame; a change of it snaps instead of sliding.
     fits: bool,
+    /// How wide the docked column was last drawn, sliding included; 0 while it is not docked.
+    pub(super) dock_drawn_width: f32,
     pub(super) scroll: ScrollHandle,
     /// The view the switch last picked here: it applies at once, before the settings file comes
     /// back with it, and on the web page, which cannot save settings, for as long as the page is open.
@@ -2454,11 +2456,17 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let frame = self.board.motion.frame();
+        self.board.dock_drawn_width = 0.0;
         if !self.board.docked && frame.extent <= 0.0 {
             return None;
         }
         let board = self.board_value()?.clone();
         let s = p.scale;
+        self.board.dock_drawn_width = if frame.animating {
+            frame.extent.max(0.0)
+        } else {
+            BOARD_WIDTH * s
+        };
         let column = div()
             .id("chat-coordinator-board-dock")
             .role(gpui::Role::Group)

@@ -91,6 +91,13 @@ impl NativeChatView {
         let top = self.list.logical_scroll_top();
         top.item_ix == 0 && top.offset_in_item <= px(0.0)
     }
+
+    /// How wide the columns docked at the chat's right edge (the coordinator board and Session
+    /// details) were last drawn, sliding included. The header's fade over the transcript stops at
+    /// their left edge (`render_workarea_header_content_fade`).
+    pub(crate) fn docked_columns_width(&self) -> f32 {
+        self.board.dock_drawn_width + self.session_details.dock_width
+    }
 }
 
 impl Render for NativeChatView {

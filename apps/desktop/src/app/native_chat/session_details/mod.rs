@@ -74,6 +74,8 @@ pub(crate) struct SessionDetailsView {
     pub(super) to_context: bool,
     /// The floating card's scroll.
     pub(super) menu_scroll: ScrollHandle,
+    /// How wide the docked column was last drawn, sliding included; 0 while it is not docked.
+    pub(super) dock_width: f32,
 }
 
 impl NativeChatView {
@@ -333,9 +335,15 @@ impl NativeChatView {
         // A closing slide keeps drawing the column until its frame has shut.
         let frame = self.session_details.motion.frame();
         if !self.session_details.docked && frame.extent <= 0.0 {
+            self.session_details.dock_width = 0.0;
             return None;
         }
         let s = p.scale;
+        self.session_details.dock_width = if frame.animating {
+            frame.extent.max(0.0)
+        } else {
+            PANEL_WIDTH * s
+        };
         let body = self.session_details_cards(p, window, cx);
         self.scroll_session_details_to_context(s);
         let column = div()

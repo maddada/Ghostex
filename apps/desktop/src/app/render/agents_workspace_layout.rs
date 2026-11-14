@@ -142,7 +142,7 @@ impl GhostexGpuiApp {
         )
         .when(
             flows_under_header && self.workarea_header_content_fade_visible(cx),
-            |this| this.child(self.render_workarea_header_content_fade()),
+            |this| this.child(self.render_workarea_header_content_fade(cx)),
         )
         .into_any_element()
     }
