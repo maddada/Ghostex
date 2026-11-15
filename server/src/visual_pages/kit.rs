@@ -242,8 +242,6 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 .gx-thumb>.gx-pill-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.62);color:#fff;font-size:13px}
 .gx-thumb>.gx-pill-x:hover{background:rgba(0,0,0,.82);color:#fff}
 .gx-tally{position:fixed;right:max(var(--gx-gutter,16px),env(safe-area-inset-right,0px));bottom:max(var(--gx-gutter,16px),env(safe-area-inset-bottom,0px));left:auto;max-width:calc(100% - 2*max(var(--gx-gutter,16px),env(safe-area-inset-right,0px)));overflow:hidden;text-overflow:ellipsis;z-index:20;box-sizing:border-box;padding:3px 10px;border-radius:999px;border:1px solid var(--gx-card-border);background:var(--gx-card);color:var(--gx-muted);font:500 12px/18px var(--font-sans);font-variant-numeric:tabular-nums;white-space:nowrap;box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);pointer-events:none}
-.gx-tally{transition:opacity .18s ease,transform .18s ease}
-.gx-tally.gx-tally-away{opacity:0;transform:translateY(6px)}
 .gx-tally.gx-all{color:var(--success)}
 .gx-tally-room{display:block;height:calc(var(--gx-gutter,16px) + 34px)}
 .gx-has-pick{display:flex;align-items:center;gap:8px}
@@ -689,8 +687,8 @@ function setup(root){
   });
   function lock(){questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Seen":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked as seen. The agent was told.":"Sent to the agent.";}
   /* CDXC:SessionChat 2026-11-11 DECISION:
-     User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
-     CDXC:SessionChat 2026-11-15 DECISION (narrows "always" above): User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." The pill never covers content: whenever text, a picture, a control or a card (anything with its own border or fill) is under it, it fades away, and it comes back as soon as the space under it is clear: in a wide window's margin, in a gap between cards, and always at the page's end, where its room is. */
+     User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px; measured from the pill since 2026-11-15, below), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
+     CDXC:SessionChat 2026-11-15 DECISION: User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." Asked whether the pill should fade whenever content is under it or always show, the user answered "Always show", so the "always" above stands: the pill never hides. It cannot hide a control: clicks and taps go through it (`pointer-events:none`), and the page's room at its end is measured from the pill itself (its margin, its height at the current text size and a 12px gap), so scrolled to the end every card, the send bar and its buttons sit clear above it. Supersedes the fading pill tried the same day. */
   if(questions.length&&!seen){
     var tally=el("div","gx-tally");tally.setAttribute("role","status");tally.setAttribute("aria-live","polite");
     var tallied=function(){var n=questions.filter(function(q){return q.el.classList.contains("gx-has-answer");}).length,text=n+" of "+questions.length+" answered";if(tally.textContent!==text){tally.textContent=text;place();}tally.classList.toggle("gx-all",n===questions.length);};
@@ -702,28 +700,13 @@ function setup(root){
       var dx=(vv?vv.offsetLeft+vv.width:de.clientWidth)-gr-r.right,dy=(vv?vv.offsetTop+vv.height:innerHeight)-gb-r.bottom;
       if(Math.abs(dx)>0.5)tally.style.right=(gr-dx)+"px";
       if(Math.abs(dy)>0.5)tally.style.bottom=(gb-dy)+"px";
+      /* The room at the page's end is the pill's own height plus its margin and a gap, measured, so a larger text size (Android's font size setting) or a wider gutter still leaves the last content clear of it. */
+      room.style.height=Math.ceil(gb+tally.getBoundingClientRect().height+ROOM_GAP)+"px";
     };
-    /* Whether only the page's own backdrop is under the pill: probed at its corners and centre, the topmost box at each point (the pill itself lets clicks through, so it is never found) must be the page, a layout box with no border, fill or text of its own, or the pill's room. */
-    var bare=function(e){
-      if(e===document.documentElement||e===document.body||/^(GX-PAGE|GX-QUESTIONS|GX-WIDE)$/.test(e.tagName)||e.classList.contains("gx-tally-room"))return true;
-      if(/^(IMG|SVG|CANVAS|VIDEO|IFRAME|INPUT|TEXTAREA|SELECT|BUTTON|PRE|TABLE)$/i.test(e.tagName))return false;
-      var cs=getComputedStyle(e),bg=cs.backgroundColor;
-      if(parseFloat(cs.borderTopWidth)||parseFloat(cs.borderLeftWidth)||cs.backgroundImage!=="none"||cs.boxShadow!=="none"||(bg&&bg!=="transparent"&&!/,\s*0\)$/.test(bg)))return false;
-      for(var n=e.firstChild;n;n=n.nextSibling)if(n.nodeType===3&&n.data.trim())return false;
-      return true;
-    };
-    var clear=function(){
-      var r=tally.getBoundingClientRect();if(!r.width||!r.height)return true;
-      var points=[[r.left+2,r.top+2],[r.right-2,r.top+2],[r.left+2,r.bottom-2],[r.right-2,r.bottom-2],[(r.left+r.right)/2,(r.top+r.bottom)/2]];
-      for(var i=0;i<points.length;i++){var under=document.elementFromPoint(points[i][0],points[i][1]);if(under&&!tally.contains(under)&&!bare(under))return false;}
-      return true;
-    };
-    var aside=0,stepAside=function(){if(aside)return;aside=requestAnimationFrame(function(){aside=0;tally.classList.toggle("gx-tally-away",!clear());});};
-    var placed=place;place=function(){placed();stepAside();};
-    document.body.append(el("div","gx-tally-room"),tally);tallied();place();
+    var room=el("div","gx-tally-room"),ROOM_GAP=12;
+    document.body.append(room,tally);tallied();place();
     window.addEventListener("resize",place);
-    window.addEventListener("scroll",stepAside,{passive:true});
-    window.addEventListener("load",stepAside);
+    window.addEventListener("load",place);
     if(window.visualViewport){visualViewport.addEventListener("resize",place);visualViewport.addEventListener("scroll",place);}
     new MutationObserver(tallied).observe(root,{subtree:true,attributes:true,attributeFilter:["class"]});
   }

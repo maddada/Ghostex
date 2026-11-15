@@ -7,7 +7,7 @@
 //! CDXC:SessionChat 2026-10-28 WHY:
 //! The page kit (server/src/visual_pages/fit.rs) fits a too-wide page to the phone, but a page that needs fitting still reads worse than one written for a phone: a stacked comparison loses its side-by-side, a scrolled mockup hides its right half. The check reports what the kit had to fit (`window.__ghostexFit`) and anything still past the screen's edge, so the agent fixes its CSS before sending. Chrome is driven over the DevTools protocol because a headless Chrome window cannot be narrower than 500px, and the phone's width only comes from device emulation.
 //! CDXC:SessionChat 2026-11-15 DECISION:
-//! User, with a screenshot of a page on their Android foldable (two option cards side by side where they did not fit, mockups cut at their card's edge, stat boxes drawn over each other, the answered pill over a card): "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." That page had passed the check at 390 and 1280px, but the foldable's screen is about 750 to 900 CSS px with large text, a width neither run saw. So the check now opens every page at 360, 600, 900 and 1280px and again at 360 and 900px with text at 130% (Android's font size setting scales text, not boxes), and inspects the page itself rather than only what the kit fitted: a box whose own content spills past its edge or is cut off by `overflow:hidden` without an ellipsis, content a sideways scroller cannot scroll back to, text drawn over other text, and fixed boxes (the answered pill) over text. Each problem names its CSS selector and the width it showed at.
+//! User, with a screenshot of a page on their Android foldable (two option cards side by side where they did not fit, mockups cut at their card's edge, stat boxes drawn over each other, the answered pill over a card): "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." That page had passed the check at 390 and 1280px, but the foldable's screen is about 750 to 900 CSS px with large text, a width neither run saw. So the check now opens every page at 360, 600, 900 and 1280px and again at 360 and 900px with text at 130% (Android's font size setting scales text, not boxes), and inspects the page itself rather than only what the kit fitted: a box whose own content spills past its edge or is cut off by `overflow:hidden` without an ellipsis, content a sideways scroller cannot scroll back to, text drawn over other text, and fixed boxes over text. (2026-11-15: the answered pill shows always, the user's "Always show", so it is checked only with the page scrolled to its end, where it must cover no text or control.) Each problem names its CSS selector and the width it showed at.
 //! SEE-ALSO: server/src/visual_pages/fit.rs (`window.__ghostexFit`), server/src/visual_pages/kit.rs (the safe layout defaults), skills/ghostex-visuals/SKILL.md (tells agents to run the check).
 
 use std::{
@@ -397,7 +397,9 @@ return new Promise(function(done){
 /// - `clipped`: the same in a box that hides its overflow without an ellipsis, so content is cut;
 /// - `unreachable`: content placed left of where a sideways scroller starts, which no scrolling
 ///   reaches (a centred row in an `overflow-x:auto` box);
-/// - `overlap`: text drawn over other text, a fixed box (the answered pill) included.
+/// - `overlap`: text drawn over other text, a fixed box included; the answered pill floats over
+///   the page on purpose, so it counts only when it covers text or a control with the page
+///   scrolled to its end, where the kit gives it room.
 ///
 /// Each names the element by a CSS selector unique in the page.
 const INSPECT: &str = r###"function(scale){
@@ -493,7 +495,7 @@ function problems(){
   var boxes=[],walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),t;
   while((t=walker.nextNode())&&boxes.length<6000){
     if(!t.data.trim())continue;var p=t.parentElement;
-    if(!p||p.closest("script,style,textarea,svg,noscript,template,select")||!visible(p))continue;
+    if(!p||p.closest("script,style,textarea,svg,noscript,template,select,.gx-tally")||!visible(p))continue;
     var c=clipOf(p),fixed=fixedOf(p);
     textRects(t).forEach(function(r){
       var b={l:Math.max(r.left,c.l),t:Math.max(r.top,c.t),r:Math.min(r.right,c.r),b:Math.min(r.bottom,c.b)};
@@ -515,6 +517,20 @@ function problems(){
       out.overlap.push({element:selector(top.el),text:textSaid(top.node),fixed:!!top.fixed,other:selector(under.el),otherText:textSaid(under.node)});
       if(out.overlap.length>=SHOWN)break;
     }
+  }
+  /* The answered pill floats over the page on purpose, wherever it is scrolled; what must hold is that at the page's end, in its own room, it covers no text or control. */
+  var pill=document.querySelector(".gx-tally");
+  if(pill&&visible(pill)){
+    var se=document.scrollingElement||document.documentElement,was=se.scrollTop;se.scrollTop=se.scrollHeight;
+    var q=pill.getBoundingClientRect(),hit=null;
+    var covers=function(r){return Math.min(q.right,r.right)-Math.max(q.left,r.left)>2&&Math.min(q.bottom,r.bottom)-Math.max(q.top,r.top)>2;};
+    Array.prototype.some.call(document.querySelectorAll("button,a[href],input,select,textarea,label,[role=button]"),function(e){
+      if(pill.contains(e)||!visible(e))return false;var r=e.getBoundingClientRect();if(r.width&&r.height&&covers(r)){hit=e;return true;}return false;
+    });
+    if(!hit){var w2=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),t2;
+      while(!hit&&(t2=w2.nextNode())){var p2=t2.parentElement;if(!t2.data.trim()||!p2||pill.contains(p2)||p2.closest("script,style,noscript,template")||!visible(p2))continue;if(textRects(t2).some(covers))hit=p2;}}
+    se.scrollTop=was;
+    if(hit&&out.overlap.length<SHOWN)out.overlap.push({element:selector(pill),text:pill.textContent.trim(),fixed:true,other:selector(hit),otherText:hit.textContent.trim().slice(0,60),end:true});
   }
   return out;
 }
@@ -684,8 +700,11 @@ pub(crate) fn problem_findings(report: &Value) -> Vec<String> {
             .collect(),
     ));
     let overlaps = list("overlap");
-    let (fixed, text_over): (Vec<_>, Vec<_>) = overlaps
+    let (pill_at_end, overlaps): (Vec<_>, Vec<_>) = overlaps
         .iter()
+        .partition(|item| item.get("end").and_then(Value::as_bool) == Some(true));
+    let (fixed, text_over): (Vec<_>, Vec<_>) = overlaps
+        .into_iter()
         .partition(|item| item.get("fixed").and_then(Value::as_bool) == Some(true));
     let over = |items: Vec<&Value>| {
         items
@@ -708,6 +727,10 @@ pub(crate) fn problem_findings(report: &Value) -> Vec<String> {
     findings.extend(group(
         "A box fixed to the screen covers text. Give it room of its own, or move it off the content:",
         over(fixed),
+    ));
+    findings.extend(group(
+        "Scrolled to the end, the answered pill covers content. The kit leaves room for it after the page's last box, so something reaches into that room (a fixed height on html or body, or a box placed at the bottom):",
+        over(pill_at_end),
     ));
     findings
 }

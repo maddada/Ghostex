@@ -723,10 +723,10 @@ check:
   large text). It saves a full-page screenshot of each (in parts, -part2.png
   and on, for a long page) and lists, by CSS
   selector, every box whose content overflows it or is cut off, content a
-  sideways scroller can't reach, text drawn over other text (the answered
-  pill included), and what Ghostex had to fit for the phone (columns
-  stacked, pills kept on one line, blocks scrolling sideways), with how to
-  fix the page. It exits with an error while anything overflows or overlaps.
+  sideways scroller can't reach, text drawn over other text, the answered
+  pill over text or a control with the page scrolled to its end, and what
+  Ghostex had to fit for the phone (columns stacked, pills kept on one line,
+  blocks scrolling sideways), with how to fix the page. It exits with an error while anything overflows or overlaps.
 "
     .to_string()
 }
