@@ -319,15 +319,17 @@ struct TurnRow {
 impl TurnRow {
     fn of(row: usize, item: &TranscriptItem) -> Option<Self> {
         let section = |deferred: &Option<Value>| deferred.clone().filter(Value::is_object);
-        let (stats, turns, loads) = match item {
+        let (stats, work, turns, loads) = match item {
             TranscriptItem::CompletedWork {
                 id,
                 label,
                 stats,
                 deferred,
+                work,
                 ..
             } => (
                 stats,
+                work,
                 vec![(0, label.clone())],
                 section(deferred)
                     .map(|work| QuietLoad {
@@ -337,8 +339,11 @@ impl TurnRow {
                     .into_iter()
                     .collect(),
             ),
-            TranscriptItem::GroupedWork { stats, turns, .. } => (
+            TranscriptItem::GroupedWork {
+                stats, turns, work, ..
+            } => (
                 stats,
+                work,
                 turns
                     .iter()
                     .map(|turn| (turn.work_start, turn.label.clone()))
@@ -361,7 +366,8 @@ impl TurnRow {
             .iter()
             .find(|stat| stat["kind"] == "tools")
             .or_else(|| stats.iter().find(|stat| stat["kind"] != "files"))
-            .and_then(|stat| Some((stat["label"].as_str()?.to_string(), kind(stat))));
+            .and_then(|stat| Some((stat["label"].as_str()?.to_string(), kind(stat))))
+            .map(|(title, kind)| (one_call_title(&title, &kind, work).unwrap_or(title), kind));
         Some(Self {
             row,
             title,
@@ -369,6 +375,28 @@ impl TurnRow {
             loads,
         })
     }
+}
+
+/// A turn's card titled "1 tool call" says what the call did instead, as a group of one call
+/// does (`simple::calls_label`), when the turn's rows are here to read it: the one call among
+/// its rows that the count counts (not an answered question or a message sent). `None` keeps the
+/// count's own title, as for a turn whose rows are still on the server.
+fn one_call_title(
+    title: &str,
+    kind: &str,
+    work: &[crate::document::ProjectedMessage],
+) -> Option<String> {
+    if kind != "tools" || title != crate::transcript::simple::tool_count_label(1) {
+        return None;
+    }
+    let calls: Vec<&Value> = work
+        .iter()
+        .flat_map(|row| row["tools"].as_array().into_iter().flatten())
+        .filter(|tool| {
+            tool["hasCall"] == true && tool["exchange"] != true && tool["sentMessage"] != true
+        })
+        .collect();
+    (calls.len() == 1).then(|| crate::transcript::simple::calls_label(&calls))
 }
 
 /// The looks of the finished turns `line` holds (see [`QuietTurnLook`]) and the reads opening it

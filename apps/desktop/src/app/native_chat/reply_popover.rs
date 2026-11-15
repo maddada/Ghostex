@@ -166,6 +166,13 @@ struct QuestionReply {
     /// the words go after, its open tags ("Q12 Q13") or, for a page that asks nothing, its
     /// mention. The words go to the agent as one message ("Q12 Q13: words", `questionsReply`).
     questions: Option<(String, String)>,
+    /// What its box calls it: a page's or form's title, a question's words (gx-chat-core
+    /// `reply_name`), never its tags; empty when the opener has no name for it.
+    ///
+    /// CDXC:Coordinators 2026-11-15 DECISION:
+    /// User, of a Reply reading "Your answer to Q3310 Q3311 … Q3324…": "Please stop showing Q1,
+    /// Q2, Q3, Q4 like this. Just say the main title of what you want me to answer about."
+    name: String,
 }
 
 /// What the popover's actions do with the chat box.
@@ -225,6 +232,10 @@ impl NativeChatView {
             .as_str()
             .filter(|tag| !tag.is_empty() || !item.is_empty() || questions.is_some())
             .map(|tag| QuestionReply {
+                name: command["question"]["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
                 questions: questions.clone(),
                 form: command["question"]["form"].as_str().map(str::to_owned),
                 tag: tag.to_owned(),
@@ -779,17 +790,10 @@ impl ReplyPopover {
         cx: &mut Context<Self>,
     ) -> Self {
         let placeholder = match &question {
-            Some(QuestionReply {
-                tag,
-                work: Some((item, _)),
-                ..
-            }) if tag.is_empty() => format!("Your reply on {item}…"),
-            Some(QuestionReply {
-                tag,
-                questions: Some(_),
-                ..
-            }) if tag.is_empty() => "Your reply…".to_string(),
-            Some(question) => format!("Your answer to {}…", question.tag),
+            Some(question) if !question.name.is_empty() => {
+                format!("Reply about {}…", question.name)
+            }
+            Some(_) => "Your answer…".to_string(),
             None => "Reply…".to_string(),
         };
         let typed_any = !typed.is_empty();

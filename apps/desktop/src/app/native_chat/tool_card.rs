@@ -226,21 +226,18 @@ impl NativeChatView {
             return Some(column.into_any_element());
         }
 
-        let column = div().w_full().min_w_0().flex().flex_col();
-        let column = if boxed {
-            super::cards::SINGLE_LINE_CARD.shell(column, p)
-        } else {
-            column
-                .rounded(px(12.0 * s))
-                // One scaled pixel, as the one-line cards' shell has, so the folded card is
-                // exactly as tall as they are (`SINGLE_LINE_CARD.header_height`).
-                .border(px(s))
-                .border_color(border)
-                .bg(surface)
-        };
-        let mut column = column
+        // CDXC:SessionChat 2026-11-15 DECISION: User, picking Q3400 B on the event cards page
+        // (~/.local/share/agent-work/Ghostex/chat-event-cards/more-cards.html): a tool call card is
+        // the shared one-line card when closed (`SINGLE_LINE_CARD`: the tools icon in the tile with
+        // a green check, or a red cross when a call failed, the title in the card's type, the time
+        // on the right, no chevron, no stack of round logos), and opens to today's rows. Supersedes
+        // the 2026-11-08 card that kept its own look at the one-line cards' height; Tool call lines
+        // keep theirs.
+        let _ = (surface, boxed);
+        let mut column = super::cards::SINGLE_LINE_CARD
+            .shell(div().w_full().min_w_0().flex().flex_col(), p)
             .overflow_hidden()
-            .child(self.tool_card_header(&key, card, open, animate, false, p, cx));
+            .child(self.tool_card_shared_header(&key, card, open, animate, p, cx));
         if open || motion.is_some() {
             let rows: Vec<AnyElement> = entries
                 .iter()
@@ -263,6 +260,132 @@ impl NativeChatView {
             column = column.child(self.disclosure_body_motion(&key, motion, 0.0, body));
         }
         Some(column.into_any_element())
+    }
+
+    /// A tool call card's header as the shared one-line card (`SINGLE_LINE_CARD`): the tools icon
+    /// in the tile, a green check once its calls are done or a red cross when one failed, the title,
+    /// a failure as a red pill, the time, and the running call's spinner. No chevron: the whole
+    /// header opens and shuts the card.
+    fn tool_card_shared_header(
+        &self,
+        key: &str,
+        card: &Value,
+        open: bool,
+        animate: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let live_label = text(card, "liveLabel");
+        let live_more = text(card, "liveMore");
+        let title = if live_label.is_empty() {
+            text(card, "title")
+        } else {
+            live_label.clone()
+        };
+        let failed = text(card, "failedLabel");
+        let time = self.live_time(
+            text(card, "time"),
+            &card["startedAt"],
+            ghostex_gx_chat_core::transcript::work_summary::tool_duration_label,
+            cx,
+        );
+        let running = card["running"] == true || !live_label.is_empty();
+        let tile = shape.tile("titlebar/tool.svg", p);
+        let tile = if running {
+            tile
+        } else if failed.is_empty() {
+            tile.child(shape.check_badge(p))
+        } else {
+            tile.child(shape.error_badge(p))
+        };
+        // The running call's words sweep with the row's shimmer; otherwise the header's words
+        // settle into their next value while the card is live.
+        let title_element = if !live_label.is_empty() && animate {
+            self.running_shimmer(
+                SharedString::from(format!("{key}:live")),
+                shape.title(div().min_w_0().truncate(), p),
+                live_label.clone(),
+                p,
+            )
+        } else {
+            let plain = shape
+                .title(div().min_w_0().truncate(), p)
+                .text_color(p.foreground)
+                .child(title.clone());
+            if animate {
+                plain
+                    .with_animation(
+                        SharedString::from(format!("{key}:title:{title}")),
+                        enter_animation(),
+                        |title, delta| title.opacity(0.2 + 0.8 * delta),
+                    )
+                    .into_any_element()
+            } else {
+                plain.into_any_element()
+            }
+        };
+        let spinner: Option<AnyElement> = (!live_label.is_empty()).then(|| {
+            if animate {
+                return self.running_spinner(
+                    SharedString::from(format!("{key}:spin")),
+                    13.0 * s,
+                    p.muted,
+                );
+            }
+            gpui::svg()
+                .path("titlebar/loader2.svg")
+                .size(px(13.0 * s))
+                .flex_shrink_0()
+                .text_color(p.muted)
+                .into_any_element()
+        });
+        let aria = [
+            title.as_str(),
+            live_more.as_str(),
+            failed.as_str(),
+            time.as_str(),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+        let toggle_key = key.to_string();
+        let hover = super::cards::card_hover_fill(p);
+        let small = |words: String| {
+            div()
+                .flex_shrink_0()
+                .whitespace_nowrap()
+                .text_size(px(12.0 * s))
+                .text_color(p.muted)
+                .child(words)
+        };
+        div()
+            .id(SharedString::from(format!("{key}:header")))
+            .role(gpui::Role::Button)
+            .aria_label(aria)
+            .aria_expanded(open)
+            .flex()
+            .items_center()
+            .gap(px(super::cards::TITLE_ROW_GAP * s))
+            .px(px(shape.padding_x * s))
+            .h(px(shape.header_height(s)))
+            .min_w_0()
+            .chat_cursor_pointer()
+            .hover(move |style| style.bg(hover))
+            .on_click(cx.listener(move |view, _, _, cx| {
+                view.toggle_marker_disclosure(toggle_key.clone(), open, cx)
+            }))
+            .child(tile)
+            .child(div().flex_1().min_w_0().flex().items_center().child(title_element))
+            .when(!failed.is_empty(), |this| {
+                this.child(shape.pill(None, Some(failed.clone()), p.error(), p))
+            })
+            .when(!time.is_empty(), |this| this.child(small(time.clone())))
+            .when(!live_more.is_empty(), |this| this.child(small(live_more.clone())))
+            .children(spinner)
+            .into_any_element()
     }
 
     #[allow(clippy::too_many_arguments)]

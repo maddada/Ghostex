@@ -64,6 +64,9 @@ pub struct MenuItem {
     pub command: Option<MenuCommand>,
     pub secondary: Option<MenuSecondary>,
     pub children: Option<Vec<MenuItem>>,
+    /// A row of icon buttons across the menu (`quick`): each child is a button with its icon,
+    /// label and command, drawn side by side instead of as rows (`MenuItem::quick_row`).
+    pub quick: Option<Vec<MenuItem>>,
     pub supports_chat: bool,
     pub keep_open: bool,
     pub heading: bool,
@@ -105,6 +108,15 @@ impl MenuItem {
             label: Some(label.to_string()),
             icon: Some(icon.to_string()),
             children: Some(children),
+            ..Self::default()
+        }
+    }
+
+    /// A row of icon buttons, each an action row of its own (`row`), drawn side by side under
+    /// the menu's top: the session menu's Rename, Pin and Copy ID.
+    pub(crate) fn quick_row(buttons: Vec<MenuItem>) -> Self {
+        Self {
+            quick: Some(buttons),
             ..Self::default()
         }
     }
@@ -246,6 +258,12 @@ impl MenuItem {
             object.insert(
                 "children".to_string(),
                 Value::Array(children.iter().map(MenuItem::to_json).collect()),
+            );
+        }
+        if let Some(quick) = &self.quick {
+            object.insert(
+                "quick".to_string(),
+                Value::Array(quick.iter().map(MenuItem::to_json).collect()),
             );
         }
         Value::Object(object)

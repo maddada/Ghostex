@@ -647,7 +647,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 // The words sent from here as its Reply, which its Reply button shows until gxserver
                 // settles it (an answer picked from its buttons is marked on that button instead).
                 "replied": replied_words(ask, answers.get(&key).map(String::as_str)),
-                "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag") },
+                "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag"), "name": reply_name(text(ask, "text")) },
                 "mention": mention_of(item),
                 "dismiss": card["cancel"],
                 "snooze": card["snooze"],
@@ -683,7 +683,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
             "detail": [card["line"]],
             "buttons": [done_button(item, &key, picked)],
             "busy": picked && item["saidDone"] != true,
-            "reply": { "item": text(item, "ref"), "key": key, "tag": "" },
+            "reply": { "item": text(item, "ref"), "key": key, "tag": "", "name": reply_name(text(item, "title")) },
             "mention": mention_of(item),
             "chips": card["chips"],
             "needs": true,
@@ -884,7 +884,7 @@ pub fn panel_actions_with(
             .next_back()
             .unwrap_or(at);
         return json!({
-            "reply": { "item": reference, "key": key, "tag": tag },
+            "reply": { "item": reference, "key": key, "tag": tag, "name": reply_name(text(ask, "text")) },
             "dismiss": card["cancel"],
             "snooze": card["snooze"],
             "showInChat": show_in_chat(&turns, asked_in, &key),
@@ -901,7 +901,7 @@ pub fn panel_actions_with(
     // A Needs you item with no open question: Reply too, for anything besides its Done.
     if let Some(key) = done_answer_key(item) {
         return json!({
-            "reply": { "item": reference, "key": key, "tag": "" },
+            "reply": { "item": reference, "key": key, "tag": "", "name": reply_name(text(item, "title")) },
             "showInChat": show,
         });
     }
@@ -1040,7 +1040,11 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                         "command": { "type": "inlineAnswer", "form": asker.id, "choice": index },
                     }))
                     .collect::<Vec<_>>());
-                row["reply"] = json!({ "form": asker.id, "tag": question.tag });
+                row["reply"] = json!({
+                    "form": asker.id,
+                    "tag": question.tag,
+                    "name": reply_name(&question.question),
+                });
                 row["detail"] = json!([]);
             } else {
                 row["kind"] = json!("form");
@@ -1061,20 +1065,38 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                 row["detail"] = json!([detail]);
                 row["open"] = json!({ "type": "openResource", "id": asker.id });
                 // Reply beside Open: the reader's own words on the whole form or page, sent to the
-                // agent tagged with the questions it still asks ("Q12 Q13: words",
-                // `questionsReply`), as a work item ask's Reply goes as "W7 Q12: words". Mention
-                // puts its name (a page's as a link to it) and those tags in the chat box.
+                // agent after its name and the questions it still asks as one range ("Triage (Q12
+                // to Q14): words", `questionsReply`), as a work item ask's Reply goes as "W7 Q12:
+                // words". Mention puts its name (a page's as a link to it) and that range in the
+                // chat box. The Reply box itself names it by its title (`name`), never its tags.
                 //
                 // CDXC:Coordinators 2026-11-12 DECISION:
                 // User, of an opened form row with only Open and a menu of Show in chat, Dismiss
                 // and Snooze: "i can't reply to this or mention it :> pls fix".
-                let mention = questions_mention(state, &asker, text(&row, "title"), form);
-                let tags = asker.waiting_tags().join(" ");
+                //
+                // CDXC:Coordinators 2026-11-15 DECISION:
+                // User, of a page's Reply sheet titled "Answer Q3310 Q3311 … Q3323…": "Please stop
+                // showing Q1, Q2, Q3, Q4 like this. Just say the main title of what you want me to
+                // answer about." The box names it by its title; the agent still gets the tags, as
+                // one range after that title.
+                let title = text(&row, "title").to_owned();
+                let mention = questions_mention(state, &asker, &title, form);
+                let tags = asker.waiting_tags();
+                let to = if tags.is_empty() {
+                    mention.clone()
+                } else {
+                    format!(
+                        "{} ({})",
+                        title.replace(['[', ']'], ""),
+                        crate::transcript::open_questions::tag_range(&tags)
+                    )
+                };
                 row["reply"] = json!({
                     "key": row["key"],
                     "questions": asker.id,
-                    "tag": tags,
-                    "to": if tags.is_empty() { mention.clone() } else { tags.clone() },
+                    "tag": tags.join(" "),
+                    "to": to,
+                    "name": reply_name(&title),
                 });
                 row["mention"] = json!(mention);
             }
@@ -1105,8 +1127,25 @@ fn questions_mention(
     if tags.is_empty() {
         name
     } else {
-        format!("{name} {}", tags.join(" "))
+        format!(
+            "{name} ({})",
+            crate::transcript::open_questions::tag_range(&tags)
+        )
     }
+}
+
+/// What a Reply box calls the thing it answers (`reply.name`): a page's or form's title, or a
+/// question's own words, as plain text (no leading tag, a Markdown link as its text), cut with …
+/// past 60 characters. The user reads it; the agent gets the tags instead.
+fn reply_name(words: &str) -> String {
+    let words = crate::transcript::open_questions::strip_leading_tag(words.trim());
+    let plain = crate::questions::form_links::plain_words(words).replace(['*', '`'], "");
+    let plain = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+    if plain.chars().count() <= 60 {
+        return plain;
+    }
+    let cut: String = plain.chars().take(59).collect();
+    format!("{}\u{2026}", cut.trim_end())
 }
 
 /// `{type: "loadPageQuestionCounts", pageId}`: asks the page's gxserver how many of its questions
