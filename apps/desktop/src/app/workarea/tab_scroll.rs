@@ -48,8 +48,9 @@ impl GhostexGpuiApp {
             self.scroll_workspace_pane_active_tab_without_ensure(pane_id);
         }
         for pane_id in self.browser_tabs.rendered_leaf_order() {
-            self.scroll_browser_pane_active_tab_without_ensure(pane_id);
+            self.scroll_browser_pane_strip_active_tab_without_ensure(pane_id);
         }
+        self.scroll_shared_browser_row_for_pane(self.browser_tabs.focused_pane);
         for group_id in self.command_pane.group_order() {
             self.scroll_command_group_active_tab_without_ensure(group_id);
         }
@@ -146,25 +147,50 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn scroll_browser_pane_active_tab_without_ensure(&self, pane_id: BrowserPaneId) {
-        let Some(leaf) = self.browser_tabs.find_leaf(pane_id) else {
-            return;
-        };
+    pub(crate) fn scroll_browser_pane_strip_active_tab_without_ensure(
+        &self,
+        pane_id: BrowserPaneId,
+    ) -> Option<BrowserTabId> {
+        let leaf = self.browser_tabs.find_leaf(pane_id)?;
         let active_tab_id = leaf.tab_group.active_tab_id();
-        let Some(active_index) = leaf.tab_group.active_tab_index() else {
-            return;
-        };
+        let active_index = leaf.tab_group.active_tab_index()?;
         if let Some(handle) = self.browser_tab_scroll_handles.get(&pane_id) {
             handle.scroll_to_item(active_index);
         }
-        // The view panel's strip is one scroller across every pane and every view, so the same
-        // reveal reads the tab's place in that row rather than its place inside its own pane. While
-        // another view is on screen the strip belongs to that view's tab instead.
-        if self.active_mode == TitlebarMode::Browser
-            && let Some(position) = active_tab_id
-                .and_then(|tab_id| self.view_strip_tab_position(ViewStripTabKey::Browser(tab_id)))
+        active_tab_id
+    }
+
+    fn scroll_shared_browser_row_for_pane(&self, pane_id: BrowserPaneId) {
+        let Some(tab_id) = self.browser_tabs.active_tab_id_for_pane(pane_id) else {
+            return;
+        };
+        // The view panel's strip (or the Browser's own page row when
+        // `browserPagesInViewRow` is on) is one scroller across panes, so the
+        // reveal reads the tab's existing position in that row without moving it.
+        // While another view is on screen the strip belongs to that view's tab.
+        if self.active_mode == TitlebarMode::Browser {
+            if self.browser_pages_in_view_row {
+                if let Some(position) = self
+                    .browser_page_row()
+                    .iter()
+                    .position(|page| page.tab_id == tab_id)
+                {
+                    self.browser_page_tab_scroll_handle.scroll_to_item(position);
+                }
+            } else if let Some(position) =
+                self.view_strip_tab_position(ViewStripTabKey::Browser(tab_id))
+            {
+                self.view_tab_scroll_handle.scroll_to_item(position);
+            }
+        }
+    }
+
+    pub(crate) fn scroll_browser_pane_active_tab_without_ensure(&self, pane_id: BrowserPaneId) {
+        if self
+            .scroll_browser_pane_strip_active_tab_without_ensure(pane_id)
+            .is_some()
         {
-            self.view_tab_scroll_handle.scroll_to_item(position);
+            self.scroll_shared_browser_row_for_pane(pane_id);
         }
     }
 
