@@ -1519,3 +1519,54 @@ mod tests {
         assert_eq!(tag_state(&found, "Q55"), Some(TagState::Answered));
     }
 }
+
+/// Question tags as one short run for a line the reader sees: "Q12", "Q12 and Q13", "Q3310 to
+/// Q3324" when they count up one by one, else the first and last ("Q3 to Q9") past three tags,
+/// and all of them up to three ("Q3, Q7 and Q9"). Never fifteen tags in a row.
+pub fn tag_range(tags: &[String]) -> String {
+    let number = |tag: &str| -> Option<(String, u64)> {
+        let digits = tag.trim_start_matches(|c: char| c.is_ascii_alphabetic());
+        let prefix = &tag[..tag.len() - digits.len()];
+        digits
+            .parse()
+            .ok()
+            .map(|n| (prefix.to_ascii_uppercase(), n))
+    };
+    match tags {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first, second] => format!("{first} and {second}"),
+        [first, .., last] => {
+            let numbers: Option<Vec<(String, u64)>> = tags.iter().map(|tag| number(tag)).collect();
+            let counts_up = numbers.is_some_and(|numbers| {
+                numbers
+                    .windows(2)
+                    .all(|pair| pair[0].0 == pair[1].0 && pair[1].1 == pair[0].1 + 1)
+            });
+            if counts_up || tags.len() > 3 {
+                format!("{first} to {last}")
+            } else {
+                format!("{}, {} and {last}", tags[0], tags[1])
+            }
+        }
+    }
+}
+
+/// Words without the question tag they start with ("Q12: Which one?" is "Which one?").
+pub fn strip_leading_tag(words: &str) -> &str {
+    let mut chars = words.char_indices();
+    let starts_tagged = matches!(chars.next(), Some((_, 'Q' | 'q')))
+        && matches!(chars.next(), Some((_, c)) if c.is_ascii_digit());
+    if !starts_tagged {
+        return words;
+    }
+    let end = words[1..]
+        .find(|c: char| !c.is_ascii_digit())
+        .map_or(words.len(), |end| end + 1);
+    let rest = &words[end..];
+    if rest.is_empty() || rest.starts_with([':', ' ', '.', ')']) {
+        rest.trim_start_matches(|c: char| c == ':' || c == '.' || c == ')' || c.is_whitespace())
+    } else {
+        words
+    }
+}
