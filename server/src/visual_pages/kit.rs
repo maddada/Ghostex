@@ -90,7 +90,7 @@
 /// CDXC:SessionChat 2026-11-04 DECISION:
 /// User, of the solid black "Send answers ⌘ Enter" tooltip over a question page's send bar: "please make tooltips inside the inline htmls glassy and not black bg like this". The kit's one tooltip bubble (`#gx-tip`, every `data-gx-tip` on a page and in the floating window's picture viewer) is the page's neutral glass, the material the app's own tooltips take under window glass: a translucent fill (`--gx-tip-bg`, 66% of #171717 in dark, 78% white in light, a little denser than the cards so it stays readable over a busy wallpaper), a 20px blur like the app's tooltip Menu blur, the cards' neutral edge, a 10px radius like the choices, a soft shadow (`--gx-tip-shadow`), and key caps drawn as ink washes on that glass. Supersedes the opaque #0a0a0a / #fcfcfc bubble.
 pub(super) const KIT_STYLE: &str = r#"<style id="ghostex-kit">
-gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text)}
+gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text);overflow-wrap:break-word}
 gx-page{display:grid}
 gx-page>*,gx-questions>*{grid-column:2;min-width:0}
 /* The Mark as seen footer (SEEN_FOOTER) inside a page's own layout takes the page's width, not gutters of its own. */
@@ -138,10 +138,10 @@ gx-wide>.gx-options{width:100%}
 .gx-chips{display:flex;flex-wrap:wrap;gap:6px}
 .gx-chip{display:inline-flex;flex:none;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;border:1px solid var(--gx-line);background:var(--gx-surface);color:var(--gx-text);font-size:12px;line-height:1.5;white-space:nowrap}
 .gx-chip b,.gx-stat b{color:var(--gx-fg);font-weight:650}
-.gx-stats{display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(72px,1fr))}
+.gx-stats{display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--gx-stat-min,96px)),1fr))}
 .gx-stat{min-width:0;padding:7px 10px 6px;border-radius:10px;border:1px solid var(--gx-line);background:var(--gx-surface)}
 .gx-stat small{display:block;font-size:10px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:var(--gx-muted)}
-.gx-stat b{display:block;font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.gx-stat b{display:block;font-size:15px;line-height:1.35;text-wrap:balance;font-variant-numeric:tabular-nums}
 .gx-figure{display:flex;flex-direction:column;gap:10px}
 .gx-figure>img{display:block;max-width:100%;height:auto;border-radius:12px;border:1px solid var(--gx-line)}
 .gx-figure figcaption{font-size:13px;line-height:1.5;color:var(--gx-muted)}
@@ -242,6 +242,8 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 .gx-thumb>.gx-pill-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.62);color:#fff;font-size:13px}
 .gx-thumb>.gx-pill-x:hover{background:rgba(0,0,0,.82);color:#fff}
 .gx-tally{position:fixed;right:max(var(--gx-gutter,16px),env(safe-area-inset-right,0px));bottom:max(var(--gx-gutter,16px),env(safe-area-inset-bottom,0px));left:auto;max-width:calc(100% - 2*max(var(--gx-gutter,16px),env(safe-area-inset-right,0px)));overflow:hidden;text-overflow:ellipsis;z-index:20;box-sizing:border-box;padding:3px 10px;border-radius:999px;border:1px solid var(--gx-card-border);background:var(--gx-card);color:var(--gx-muted);font:500 12px/18px var(--font-sans);font-variant-numeric:tabular-nums;white-space:nowrap;box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);pointer-events:none}
+.gx-tally{transition:opacity .18s ease,transform .18s ease}
+.gx-tally.gx-tally-away{opacity:0;transform:translateY(6px)}
 .gx-tally.gx-all{color:var(--success)}
 .gx-tally-room{display:block;height:calc(var(--gx-gutter,16px) + 34px)}
 .gx-has-pick{display:flex;align-items:center;gap:8px}
@@ -607,8 +609,10 @@ function bindOptions(questions){
   return found;
 }
 /* CDXC:SessionChat 2026-10-30 DECISION:
-   User, on a question page whose variants were not tied to its choices: "PLEASE for inline htmls we must show the pick button on the top right so i can pick one easily instead of having to pick below". An agent can forget `data-question` / `data-choice`, so the kit ties the variants itself when a question has none: a heading above the question (after the previous question, so only the mockups it asks about) that starts with a choice's letter ("A. Same layout") or reads as its label gets that choice's Pick button, exactly like a tied variant. A heading that already has a Pick, matches nothing or matches two choices (or a choice another heading also matches) stays untouched: a wrong Pick is worse than none. A question under mockups that still gets no Pick is listed in `window.__ghostexKit.untied`, which `ghostex show` and `ghostex visual check` (server/src/ghostex_cli/visual_page_check.rs) tell the author about. */
+   User, on a question page whose variants were not tied to its choices: "PLEASE for inline htmls we must show the pick button on the top right so i can pick one easily instead of having to pick below". An agent can forget `data-question` / `data-choice`, so the kit ties the variants itself when a question has none: a heading above the question (after the previous question, so only the mockups it asks about) that starts with a choice's letter ("A. Same layout") or reads as its label gets that choice's Pick button, exactly like a tied variant. A heading that already has a Pick, matches nothing or matches two choices (or a choice another heading also matches) stays untouched: a wrong Pick is worse than none. A question under mockups that still gets no Pick is listed in `window.__ghostexKit.untied`, which `ghostex show` and `ghostex visual check` (server/src/ghostex_cli/visual_page_check.rs) tell the author about.
+   2026-11-15: "under mockups" means at least two mockup-sized blocks (160×80px or more, counted innermost) above the question, or a heading lettered like a choice. Any svg, logo or single card used to count, so list pages with icons got the warning and their authors worked around it (CSS-masked logos, questions moved into row cards). */
 var LETTERED=/^(?:(?:option|variant|choice|design|idea|proposal)\s+)?([A-Za-z])(?:[.):]|\s+[\u2013\u2014-])(?:\s+|$)(.*)$/i;
+var MOCKUP_MIN_WIDTH=160,MOCKUP_MIN_HEIGHT=80;
 var MOCKUP="gx-wide,.gx-frame,.gx-figure,figure,img,svg,iframe,canvas,video,[class*=mock i],[class*=variant i],[class*=screen i],[class*=device i]";
 function norm(text){return(text||"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();}
 function byLetterAny(m,real){return !!m&&real.some(function(c){return c.letter===m[1].toLowerCase();});}
@@ -635,7 +639,10 @@ function autoTie(questions,explicit){
     var good=hits.filter(function(x){return hits.filter(function(y){return y.c===x.c;}).length===1;});
     good.forEach(function(x){options.push(attachPick(x.h,x.h,x.c));report.auto.push({question:q.key,heading:x.text,choice:x.c.letter});});
     if(good.length)return;
-    var under=lettered||Array.prototype.some.call(document.querySelectorAll(MOCKUP),function(n){return !n.closest("gx-question,gx-questions>.gx-send,.gx-seg,.gx-theme-switch,#gx-tip")&&above(n);});
+    /* Variants to pick from: at least two mockup-sized blocks above the question (counted innermost, so a band holding two frames counts as two). An icon, a logo or one picture is not a choice between variants. */
+    var shown=Array.prototype.filter.call(document.querySelectorAll(MOCKUP),function(n){if(n.closest("gx-question,gx-questions>.gx-send,.gx-seg,.gx-theme-switch,#gx-tip")||!above(n))return false;var r=n.getBoundingClientRect();return r.width>=MOCKUP_MIN_WIDTH&&r.height>=MOCKUP_MIN_HEIGHT;});
+    var inner=shown.filter(function(n){return !shown.some(function(o){return o!==n&&n.contains(o);});});
+    var under=lettered||inner.length>=2;
     if(under)report.untied.push({question:q.key,tag:q.tag,title:q.title});
   });
   return{options:options,report:report};
@@ -682,7 +689,8 @@ function setup(root){
   });
   function lock(){questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Seen":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked as seen. The agent was told.":"Sent to the agent.";}
   /* CDXC:SessionChat 2026-11-11 DECISION:
-     User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here. */
+     User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
+     CDXC:SessionChat 2026-11-15 DECISION (narrows "always" above): User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." The pill never covers content: whenever text, a picture, a control or a card (anything with its own border or fill) is under it, it fades away, and it comes back as soon as the space under it is clear: in a wide window's margin, in a gap between cards, and always at the page's end, where its room is. */
   if(questions.length&&!seen){
     var tally=el("div","gx-tally");tally.setAttribute("role","status");tally.setAttribute("aria-live","polite");
     var tallied=function(){var n=questions.filter(function(q){return q.el.classList.contains("gx-has-answer");}).length,text=n+" of "+questions.length+" answered";if(tally.textContent!==text){tally.textContent=text;place();}tally.classList.toggle("gx-all",n===questions.length);};
@@ -695,8 +703,27 @@ function setup(root){
       if(Math.abs(dx)>0.5)tally.style.right=(gr-dx)+"px";
       if(Math.abs(dy)>0.5)tally.style.bottom=(gb-dy)+"px";
     };
+    /* Whether only the page's own backdrop is under the pill: probed at its corners and centre, the topmost box at each point (the pill itself lets clicks through, so it is never found) must be the page, a layout box with no border, fill or text of its own, or the pill's room. */
+    var bare=function(e){
+      if(e===document.documentElement||e===document.body||/^(GX-PAGE|GX-QUESTIONS|GX-WIDE)$/.test(e.tagName)||e.classList.contains("gx-tally-room"))return true;
+      if(/^(IMG|SVG|CANVAS|VIDEO|IFRAME|INPUT|TEXTAREA|SELECT|BUTTON|PRE|TABLE)$/i.test(e.tagName))return false;
+      var cs=getComputedStyle(e),bg=cs.backgroundColor;
+      if(parseFloat(cs.borderTopWidth)||parseFloat(cs.borderLeftWidth)||cs.backgroundImage!=="none"||cs.boxShadow!=="none"||(bg&&bg!=="transparent"&&!/,\s*0\)$/.test(bg)))return false;
+      for(var n=e.firstChild;n;n=n.nextSibling)if(n.nodeType===3&&n.data.trim())return false;
+      return true;
+    };
+    var clear=function(){
+      var r=tally.getBoundingClientRect();if(!r.width||!r.height)return true;
+      var points=[[r.left+2,r.top+2],[r.right-2,r.top+2],[r.left+2,r.bottom-2],[r.right-2,r.bottom-2],[(r.left+r.right)/2,(r.top+r.bottom)/2]];
+      for(var i=0;i<points.length;i++){var under=document.elementFromPoint(points[i][0],points[i][1]);if(under&&!tally.contains(under)&&!bare(under))return false;}
+      return true;
+    };
+    var aside=0,stepAside=function(){if(aside)return;aside=requestAnimationFrame(function(){aside=0;tally.classList.toggle("gx-tally-away",!clear());});};
+    var placed=place;place=function(){placed();stepAside();};
     document.body.append(el("div","gx-tally-room"),tally);tallied();place();
     window.addEventListener("resize",place);
+    window.addEventListener("scroll",stepAside,{passive:true});
+    window.addEventListener("load",stepAside);
     if(window.visualViewport){visualViewport.addEventListener("resize",place);visualViewport.addEventListener("scroll",place);}
     new MutationObserver(tallied).observe(root,{subtree:true,attributes:true,attributeFilter:["class"]});
   }

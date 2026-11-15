@@ -53,8 +53,12 @@ pub(crate) const SHOW_CHECKS: [(u32, f64); 3] = [
 ];
 /// Widths at or below this are emulated as a phone or tablet (meta viewport, touch, a dense screen).
 const MOBILE_MAX_WIDTH: u32 = 1024;
-/// The tallest screenshot taken, in CSS pixels; a longer page is cut there.
-const SCREENSHOT_MAX_HEIGHT: f64 = 8000.0;
+/// The tallest single screenshot, in CSS pixels: a longer page is saved in parts of this height
+/// (`page-360.png`, `page-360-part2.png`, …), each under Chrome's largest picture at a phone's
+/// double-density screen.
+const SCREENSHOT_PART_HEIGHT: f64 = 6000.0;
+/// The most of a page screenshotted, in CSS pixels; anything longer is cut there.
+const SCREENSHOT_MAX_HEIGHT: f64 = 48000.0;
 const CHROME_START_TIMEOUT: Duration = Duration::from_secs(20);
 const CDP_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -77,7 +81,8 @@ pub(crate) struct PageCheckResult {
     pub(crate) width: u32,
     pub(crate) text_scale: f64,
     pub(crate) report: Value,
-    pub(crate) screenshot: Option<PathBuf>,
+    /// The page's screenshot, top to bottom: one file, or several parts for a long page.
+    pub(crate) screenshots: Vec<PathBuf>,
 }
 
 /// "Phone, 360px wide", "Foldable or tablet, 900px wide, text at 130%".
@@ -145,11 +150,19 @@ pub(crate) fn check_page_command(
     let results = check_page(&path, &checks)?;
     let mut broken = 0;
     for result in &results {
-        let shot = result
-            .screenshot
-            .as_ref()
-            .map(|shot| format!(": {}", shot.display()))
-            .unwrap_or_default();
+        let shot = if result.screenshots.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ": {}",
+                result
+                    .screenshots
+                    .iter()
+                    .map(|shot| shot.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
         println!(
             "{} ({} theme){shot}",
             screen_label(result.width, result.text_scale),
@@ -157,13 +170,14 @@ pub(crate) fn check_page_command(
         );
         let problems = problem_findings(&result.report);
         let findings = page_findings(result.width, &result.report);
+        let notes = kit_notes(&result.report);
         if problems.is_empty() && findings.is_empty() {
-            println!("  Fits: nothing overflows or overlaps, and the kit had nothing to fit.");
+            println!("  Fits: nothing overflows or overlaps, and the kit had nothing to fix.");
         }
         if !problems.is_empty() {
             broken += 1;
         }
-        for finding in problems.iter().chain(findings.iter()) {
+        for finding in problems.iter().chain(findings.iter()).chain(notes.iter()) {
             println!("  - {finding}");
         }
     }
@@ -316,42 +330,46 @@ fn check_width(cdp: &mut Cdp, page: &Path, check: &PageCheck) -> CliResult<PageC
         .pointer("/result/value")
         .cloned()
         .unwrap_or(Value::Null);
-    let screenshot = match &check.screenshot {
-        Some(out) => {
-            let height = report
-                .get("height")
-                .and_then(Value::as_f64)
-                .unwrap_or(900.0)
-                .clamp(1.0, SCREENSHOT_MAX_HEIGHT);
+    let mut screenshots = Vec::new();
+    if let Some(out) = &check.screenshot {
+        let height = report
+            .get("height")
+            .and_then(Value::as_f64)
+            .unwrap_or(900.0)
+            .clamp(1.0, SCREENSHOT_MAX_HEIGHT);
+        if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                CliError::Other(format!("Could not create {}: {error}", parent.display()))
+            })?;
+        }
+        let mut top = 0.0;
+        while top < height {
+            let part = (height - top).min(SCREENSHOT_PART_HEIGHT);
             let shot = cdp.call(
                 "Page.captureScreenshot",
                 json!({
                     "format": "png",
                     "captureBeyondViewport": true,
-                    "clip": { "x": 0, "y": 0, "width": check.width, "height": height, "scale": 1 },
+                    "clip": { "x": 0, "y": top, "width": check.width, "height": part, "scale": 1 },
                 }),
             )?;
             let data = shot.get("data").and_then(Value::as_str).unwrap_or_default();
             let png = BASE64_STANDARD.decode(data).map_err(|error| {
                 CliError::Other(format!("Chrome's screenshot could not be read: {error}"))
             })?;
-            if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-                std::fs::create_dir_all(parent).map_err(|error| {
-                    CliError::Other(format!("Could not create {}: {error}", parent.display()))
-                })?;
-            }
-            std::fs::write(out, png).map_err(|error| {
-                CliError::Other(format!("Could not write {}: {error}", out.display()))
+            let file = part_path(out, screenshots.len() + 1);
+            std::fs::write(&file, png).map_err(|error| {
+                CliError::Other(format!("Could not write {}: {error}", file.display()))
             })?;
-            Some(out.clone())
+            screenshots.push(file);
+            top += part;
         }
-        None => None,
-    };
+    }
     Ok(PageCheckResult {
         width: check.width,
         text_scale: check.text_scale,
         report,
-        screenshot,
+        screenshots,
     })
 }
 
@@ -564,6 +582,23 @@ pub(crate) fn page_findings(width: u32, report: &Value) -> Vec<String> {
         ));
     }
     findings
+}
+
+/// What the kit adjusted that needs no fix (`ghostex visual check` says it; `ghostex show` does
+/// not, since the page reads well as it is).
+pub(crate) fn kit_notes(report: &Value) -> Vec<String> {
+    let widened = report
+        .pointer("/fit/widened")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().map(describe).collect::<Vec<_>>())
+        .unwrap_or_default();
+    if widened.is_empty() {
+        return Vec::new();
+    }
+    vec![format!(
+        "The kit gave columns more room so what they hold fits (a mockup, or a value's longest word), which puts fewer side by side: {}. Fine as it is; to choose the width yourself, set --gx-option-min, --gx-grid-min or --gx-stat-min on the row (for a mockup: its width plus the card's padding).",
+        join(&widened)
+    )]
 }
 
 /// What the page itself gets wrong at one size (`problems` from `INSPECT`): one finding per kind of
@@ -781,6 +816,19 @@ pub(crate) fn screenshot_path(
                 .join(format!("{stem}-{size}.png"))
         }
     }
+}
+
+/// The file for part `n` (from 1) of a long screenshot: the path itself for the first part,
+/// `-part<n>` before the extension for the rest.
+fn part_path(out: &Path, n: usize) -> PathBuf {
+    if n == 1 {
+        return out.to_path_buf();
+    }
+    let stem = out
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "page".to_string());
+    out.with_file_name(format!("{stem}-part{n}.png"))
 }
 
 fn absolute(file: &str) -> PathBuf {
@@ -1305,7 +1353,7 @@ mod tests {
             q3 = question("Q3", "Which colour?", &["Red", "Green"]),
             q4v = variants(&["Alpha", "Alpha"]),
             q4 = question("Q4", "Which name?", &["Alpha", "Beta"]),
-            q5v = variants(&["Unrelated heading"]),
+            q5v = variants(&["Unrelated heading", "Another heading"]),
             q5 = question("Q5", "Which other?", &["One", "Two"]),
             q6v = "<section data-question=\"Q6\" data-choice=\"x\"><h3>A. Already tied</h3><div class=\"gx-frame\">m</div></section><section><h3>B. Not tied</h3><div class=\"gx-frame\">m</div></section>",
             q6 = question("Q6", "Which tied?", &["x", "y"]),

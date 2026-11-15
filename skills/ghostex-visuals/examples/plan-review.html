@@ -10,7 +10,7 @@
   .how { margin: -2px 0 0; font-size: 13px; line-height: 1.45; color: var(--gx-muted); }
   .how b { color: var(--gx-fg); font-weight: 600; }
   /* One shared 0 to 60 minute scale, so the plans compare at a glance. */
-  .lanes { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; align-items: center;
+  .lanes { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px; align-items: center;
     padding: 11px 11px 8px; border-radius: 12px; background: var(--gx-surface); border: 1px solid var(--gx-line); }
   .who { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 550; color: var(--gx-text); white-space: nowrap; }
   .who::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }

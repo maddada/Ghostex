@@ -720,7 +720,8 @@ check:
   360px (a phone), 600px, 900px (a foldable or tablet) and 1280px (a
   computer), then at 360px and 900px with text at 130%, the way a phone's
   large font setting draws it (--width N for one width, --text-scale 130 for
-  large text). It saves a full-page screenshot of each and lists, by CSS
+  large text). It saves a full-page screenshot of each (in parts, -part2.png
+  and on, for a long page) and lists, by CSS
   selector, every box whose content overflows it or is cut off, content a
   sideways scroller can't reach, text drawn over other text (the answered
   pill included), and what Ghostex had to fit for the phone (columns

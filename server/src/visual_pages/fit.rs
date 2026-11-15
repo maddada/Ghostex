@@ -7,19 +7,29 @@
 //! own CSS left too wide, in this order, and again whenever the window's width changes:
 //!
 //! 1. A small pill or chip whose text wrapped (`SPX-` over `123`) stays on one line.
-//! 2. On a phone, a multi-column grid whose content no longer fits stacks into one column.
-//! 3. A block still wider than its column scrolls sideways inside its own box, with a fade on the
+//! 2. At any width, a `.gx-options` or `.gx-grid` row whose cards hold a mockup (a `.gx-frame`) or
+//!    content wider than their column gets a wider minimum column, so it puts fewer cards side by
+//!    side (one per row when even one does not fit) instead of cutting or scrolling the mockups;
+//!    a `.gx-stats` row whose values would break mid-word puts fewer stats on a row.
+//! 3. On a phone, a multi-column grid whose content no longer fits stacks into one column.
+//! 4. A block still wider than its column scrolls sideways inside its own box, with a fade on the
 //!    edge that has more, so the page itself never scrolls sideways. A block whose own box is wider
 //!    than the column (a fixed-width device frame) is wrapped in a scroller, so it keeps its real
-//!    size instead of being squashed.
+//!    size instead of being squashed. A scroller that centres its content centres it only while it
+//!    fits (`safe center`), so a wide mockup's left side can still be scrolled to.
 //!
-//! What it did is kept in `window.__ghostexFit` (`stacked`, `nowrap`, `scroll`, `overflow`), which
-//! `ghostex visual check` reads to tell the agent what to fix in its page.
+//! The style also keeps every `.gx-frame` inside its column whatever width the page gave it (the
+//! frame is what scrolls; its mockup keeps its own width inside it).
+//!
+//! What it did is kept in `window.__ghostexFit` (`stacked`, `widened`, `nowrap`, `scroll`,
+//! `overflow`), which `ghostex visual check` reads to tell the agent what to fix in its page.
 //!
 //! CDXC:SessionChat 2026-10-28 DECISION:
 //! User, on an agent's page opened on their Android phone (a column two thirds of the screen wide, mockups running off the right edge, pills breaking mid-word, a narrow question card): "The inline html u sent doesn't look good at phone at all please fix this for customers and all future inline htmls like we did previously for light dark etc". So the kit fits every page to a phone instead of trusting each agent's CSS.
 //! CDXC:SessionChat 2026-10-28 WHY:
 //! The phone's page sheet is an Android WebView in overview mode (react-native-webview's `scalesPageToFit`, on by default): when anything makes the document wider than the screen it zooms the whole page out to fit, and Chrome's text autosizer then inflates the text, which is what made the column narrow and the pills wrap. So the page must never be wider than the screen: a too-wide block scrolls inside its own box (the user's standing rule for mockups: "horizontal scrolling is fine, a squashed or wrapped screen is broken"), rather than being scaled down, which would turn 13px mockup text into unreadable 7px text; and on a phone the root clips sideways overflow as the last guard.
+//! CDXC:SessionChat 2026-11-15 DECISION:
+//! User, with a screenshot of a page on their Android foldable (two option cards side by side where their mockups did not fit, so the mockups ran past the cards' edges and were cut, and the kit then made the whole row scroll sideways; stat values drawn over each other): "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." The page had set its frames' `min-width` to its mockup's width, wider than its column at that size (about 750 CSS px). Fixed at the cause for every page, at every width rather than only on a phone: a `.gx-frame` never grows past its column (the page's own `min-width` loses), an options or cards row gives each column the width its widest mockup needs so it wraps to fewer columns, and the kit's stat values wrap (kit.rs).
 //! SEE-ALSO: kit.rs (the template's column and the question card), apps/mobile/app/src/chat/native/cards/PageSheet.tsx (the phone's page sheet), server/src/ghostex_cli/visual_page_check.rs (reads `window.__ghostexFit`), skills/ghostex-visuals/SKILL.md (teaches agents to write pages that need none of this).
 
 /// The fit's look; after the kit's style, so its narrow-screen rules win over the kit's defaults.
@@ -35,7 +45,10 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .gx-fit-stack{grid-template-columns:minmax(0,1fr)!important}
 .gx-fit-grow{min-width:max-content!important}
 .gx-fit-scroll{overflow-x:auto!important;overscroll-behavior-x:contain;max-width:100%;min-width:0;box-sizing:border-box}
-.gx-frame{overscroll-behavior-x:contain}
+.gx-fit-safe{justify-content:safe center!important}
+.gx-frame{overscroll-behavior-x:contain;min-width:0!important;max-width:100%!important;box-sizing:border-box}
+:where(gx-page,gx-questions) :where(iframe,pre,table){max-width:100%}
+.gx-send-status{min-width:20px}
 .gx-more-right{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent)}
 .gx-more-left{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px);mask-image:linear-gradient(90deg,transparent,#000 36px)}
 .gx-more-left.gx-more-right{-webkit-mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,transparent,#000 36px,#000 calc(100% - 36px),transparent)}
@@ -61,7 +74,7 @@ gx-question{padding:12px 12px 12px}
 /// page: what it changed the last time is put back first.
 pub(super) const FIT_SCRIPT: &str = r##"<script>(function(){
 var MARK="data-gx-fit",PHONE=640,CHIP_CHARS=24,lastWidth=-1,queued=0,running=false,watched=new WeakSet();
-var report={width:0,stacked:[],nowrap:[],scroll:[],overflow:[]};
+var report={width:0,stacked:[],widened:[],nowrap:[],scroll:[],overflow:[]};
 window.__ghostexFit=report;
 function name(e){var s=e.tagName.toLowerCase(),c=typeof e.className==="string"?e.className.trim().split(/\s+/).filter(function(x){return x&&!/^gx-(fit|more)/.test(x);}).slice(0,2):[];return e.id?s+"#"+e.id:c.length?s+"."+c.join("."):s;}
 function said(e){var t=(e.textContent||"").replace(/\s+/g," ").trim();return t.length>40?t.slice(0,39)+"…":t;}
@@ -71,7 +84,9 @@ function kitOwned(e){return !!(e.closest&&e.closest("gx-question,.gx-send,.gx-th
 function undo(){
   Array.prototype.forEach.call(document.querySelectorAll("["+MARK+"]"),function(e){
     if(e.getAttribute(MARK)==="wrap"){var child=e.firstElementChild;if(child)e.replaceWith(child);else e.remove();return;}
-    e.classList.remove("gx-fit-nowrap","gx-fit-stack","gx-fit-scroll","gx-fit-grow","gx-more-left","gx-more-right");e.removeAttribute(MARK);
+    var v=e.getAttribute(MARK+"-var");
+    if(v){var was=e.getAttribute(MARK+"-was");if(was)e.style.setProperty(v,was);else e.style.removeProperty(v);e.removeAttribute(MARK+"-var");e.removeAttribute(MARK+"-was");}
+    e.classList.remove("gx-fit-nowrap","gx-fit-stack","gx-fit-scroll","gx-fit-grow","gx-fit-safe","gx-more-left","gx-more-right");e.removeAttribute(MARK);
   });
 }
 function mark(e,kind){if(!e.hasAttribute(MARK))e.setAttribute(MARK,kind);}
@@ -100,6 +115,52 @@ function keepChipsWhole(root,anyLook){
 }
 function columns(e){var v=getComputedStyle(e).gridTemplateColumns;return v&&v!=="none"?v.split(/\s+(?![^(]*\))/).length:0;}
 function overflows(e){return e.scrollWidth>e.clientWidth+1;}
+/* How much wider than now a card must be for what it holds: its mockups' full width (a frame's children, measured from the leftmost to the rightmost, since a centred row reaches past both edges) and anything else reaching past its edge. 0 when it fits. */
+function extraFor(card){
+  var extra=Math.max(0,card.scrollWidth-card.clientWidth);
+  Array.prototype.forEach.call(card.querySelectorAll(".gx-frame"),function(f){
+    var left=Infinity,right=-Infinity;
+    Array.prototype.forEach.call(f.children,function(c){var r=c.getBoundingClientRect();if(!r.width)return;left=Math.min(left,r.left);right=Math.max(right,r.right);});
+    if(right<=left)return;
+    var cs=getComputedStyle(f),want=right-left+parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight);
+    extra=Math.max(extra,want-f.clientWidth);
+  });
+  return extra>1?extra:0;
+}
+/* Gives a row's columns a minimum of `need` px through its `v` variable when that puts fewer columns side by side; else leaves it (already one column: a mockup scrolls in its frame, a long word wraps). */
+function widen(g,v,need){
+  var was=g.style.getPropertyValue(v),before=columns(g);
+  g.style.setProperty(v,Math.ceil(need)+"px");
+  if(columns(g)>=before){if(was)g.style.setProperty(v,was);else g.style.removeProperty(v);return;}
+  g.setAttribute(MARK+"-var",v);g.setAttribute(MARK+"-was",was);mark(g,"widen");report.widened.push(entry(g));
+}
+/* Rows of options or cards whose columns are too narrow for what a card holds get a minimum column that fits it, so the row wraps to fewer columns; a row of stats gets columns as wide as its longest word, so values wrap between words. The row's own `min(100%, …)` keeps one column from growing past the row. */
+function widenColumns(){
+  Array.prototype.forEach.call(document.querySelectorAll(".gx-options,.gx-grid"),function(g){
+    if(kitOwned(g)||getComputedStyle(g).display.indexOf("grid")<0)return;
+    var need=0;
+    Array.prototype.forEach.call(g.children,function(c){var extra=extraFor(c);if(extra)need=Math.max(need,c.getBoundingClientRect().width+extra);});
+    if(need)widen(g,g.classList.contains("gx-options")?"--gx-option-min":"--gx-grid-min",need);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".gx-stats"),function(g){
+    if(kitOwned(g)||getComputedStyle(g).display.indexOf("grid")<0||columns(g)<2)return;
+    var need=0;
+    Array.prototype.forEach.call(g.children,function(c){
+      var now=c.getBoundingClientRect().width,width=c.style.width;
+      c.style.width="min-content";var least=c.getBoundingClientRect().width;c.style.width=width;
+      if(least>now+1)need=Math.max(need,least);
+    });
+    if(need)widen(g,"--gx-stat-min",need);
+  });
+}
+/* A scroller that centres its content would put a too-wide mockup's left part where no scrolling reaches; `safe center` centres only what fits. */
+function safeCentres(){
+  var all=document.body.querySelectorAll("*"),n=Math.min(all.length,8000);
+  for(var i=0;i<n;i++){
+    var e=all[i];if(!scrolls(e))continue;
+    var cs=getComputedStyle(e);if(/(flex|grid)$/.test(cs.display)&&cs.justifyContent==="center"){e.classList.add("gx-fit-safe");mark(e,"safe");}
+  }
+}
 /* On a phone, side-by-side columns that no longer fit become one column. The layout width, not `innerWidth`, which a zoomed-out phone page reports as wider. */
 function stackGrids(){
   if(document.documentElement.clientWidth>PHONE)return;
@@ -165,9 +226,9 @@ function leftovers(){
 function fit(){
   if(running||!document.body||document.readyState==="loading")return;running=true;
   try{
-    undo();report.stacked=[];report.nowrap=[];report.scroll=[];
+    undo();report.stacked=[];report.widened=[];report.nowrap=[];report.scroll=[];
     lastWidth=document.documentElement.clientWidth;report.width=lastWidth;
-    keepChipsWhole(document.body,false);stackGrids();contain();
+    keepChipsWhole(document.body,false);widenColumns();stackGrids();contain();safeCentres();
     report.overflow=leftovers();
   }finally{running=false;}
 }
