@@ -907,9 +907,11 @@ the project groups while Group by Project is on and Group sessions by tags is of
 Group sessions by tags (`groupSessionsByTags`, off by default, in Settings >
 Sidebar & Sessions and in Sort & Filter while the Unified sidebar is selected)
 puts the Unified sidebar's sessions into groups across all your projects, in the
-order of the Session Tags list: by default Needs you (an approval or a wait for
-your input), Question, Error (a failed model change, a failed program, or stuck),
-Finished (not yet read), Working (a running turn or background work) and Idle.
+order of the Session Tags list: by default Needs you (an approval, a wait for
+your input, or a finished turn whose handover ends with a Blocked or Needs you
+section), Question, Error (a failed model change, a failed program, or stuck),
+Finished (not yet read; any other finished turn), Working (a running turn or
+background work) and Idle.
 Each group has a coloured header with its symbol, name and number of cards;
 groups are always open, and a group with no session has no header. A coordinator
 stands in the group of its most urgent thread and counts once; its threads keep

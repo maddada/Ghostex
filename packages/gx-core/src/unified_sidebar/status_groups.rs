@@ -30,15 +30,19 @@ pub struct GroupingPolicy {
     /// An attention without a known kind (an older computer sends none) is a wait for input:
     /// Needs you, not Finished.
     pub unknown_attention_is_input_wait: bool,
-    /// A finished turn whose handover has a Blocked or Needs you section stays in Finished.
-    pub finished_handover_stays_finished: bool,
+    /// A finished turn whose handover has a Blocked or Needs you section is a wait for input:
+    /// Needs you (after an approval, a question and a failure), not Finished (not yet read).
+    pub finished_handover_is_input_wait: bool,
 }
 
-/// CDXC:Sidebar 2026-11-14 WHY: the three cases the approved states do not settle, answered the way the existing code and the phone's folded-display triage already answer them: `unified_status` checks a failure before an attention, the triage counts an attention that is not `finished` as waiting on the user, and the states map a finished turn by its kind alone. The user can reverse each; the phone's port holds the same block.
+/// CDXC:Sidebar 2026-11-14 WHY: the two cases the approved states do not settle, answered the way the existing code and the phone's folded-display triage already answer them: `unified_status` checks a failure before an attention, and the triage counts an attention that is not `finished` as waiting on the user. The user can reverse each; the phone's port holds the same block.
+///
+/// CDXC:Sidebar 2026-11-14 DECISION:
+/// User: a finished turn whose handover ends with a Blocked or Needs you section stands in Needs you, exactly like a plain wait for input (an approval stays Needs you, a question Question, a failure Error, a background job does not make it Working); a finished turn without such a handover stays in Finished (not yet read).
 pub const GROUPING_POLICY: GroupingPolicy = GroupingPolicy {
     plain_wait_after_failure: true,
     unknown_attention_is_input_wait: true,
-    finished_handover_stays_finished: true,
+    finished_handover_is_input_wait: true,
 };
 
 /// The settings the list is built with: no Moving section while grouping is on (build.rs
@@ -60,7 +64,7 @@ fn status_group_with(row: &SessionRow, policy: GroupingPolicy) -> StatusGroup {
     let waits_for_input = row.activity == "attention"
         && match &row.attention_kind {
             Some(AttentionKind::Finished) => {
-                !policy.finished_handover_stays_finished && row.attention_handover_needs_you
+                policy.finished_handover_is_input_wait && row.attention_handover_needs_you
             }
             Some(AttentionKind::NeedsInput) => true,
             Some(AttentionKind::Other(_)) | None => policy.unknown_attention_is_input_wait,
