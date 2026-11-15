@@ -6804,12 +6804,19 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   sight. What a panel may do is limited to what you allowed when you installed
   it: See your projects, See your sessions, Open projects and sessions, Start
   agents, Hear from your agents (an agent can tell it about its own thread
-  only) and Message a thread when you tap its panel (one short message, right
-  after your tap). A panel's section can fold under its heading, and a long list
-  shows its first items with "N more". The Thread brief extension uses these: a
-  side panel view with each thread's objective, status, next up, done, blocked
-  and parked items, kept by the thread's agent through its skill, with Refresh
-  to ask the thread for an update. Turn its sidebar button or its sections off on its page in Settings >
+  only), Message a thread when you tap its panel (one short message, right
+  after your tap) and Tell new agent sessions about it (one short line added to
+  what agent sessions are told when they start or resume, except coordinators
+  and their threads; it stops once the extension is off or uninstalled). A
+  panel's section can fold under its heading, a long list shows its first items
+  with "N more", and a text can be editable: click it to rewrite it in place.
+  The Thread brief extension uses these: a side panel view with each session's
+  objective (click it to rewrite it; yours stays), status, next up, done,
+  blocked and parked items, kept by the session's agent through its skill, with
+  Refresh to ask for an update, and a Briefs button in the sidebar's top row
+  listing every session with a brief, its objective and its done count. While
+  it is on, new and resumed agent sessions start their brief on their own;
+  coordinators and their threads keep none. Turn its sidebar button or its sections off on its page in Settings >
   Extensions (Sidebar mode, Sections in Projects). On the phone, the extension's
   button sits in the sessions list's header, its sections show in the Project
   list, a tap ticks an item or opens it, and a long press opens its options
