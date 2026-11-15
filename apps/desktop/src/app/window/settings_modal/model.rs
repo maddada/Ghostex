@@ -354,7 +354,8 @@ pub(crate) struct SettingsOpenRequest {
     pub(crate) initial_sidebar_tags_action: Option<String>,
     pub(crate) initial_search_query: Option<String>,
     pub(crate) initial_remote_machine_id: Option<String>,
-    /// `easyConnect`, `tailscale` or `addComputer` (the empty Add a computer dialog).
+    /// `easyConnect`, `tailscale`, or `addComputerSsh` / its older name `addComputer` (the Add a
+    /// computer dialog, Connect a computer's Use SSH details).
     pub(crate) initial_remote_section: Option<String>,
     /// `agentHooks`.
     pub(crate) initial_agents_section: Option<String>,
@@ -422,8 +423,18 @@ impl SettingsOpenRequest {
             initial_search_query: optional_text(message, "initialSearchQuery"),
             initial_remote_machine_id: optional_text(message, "initialRemoteMachineId")
                 .filter(|id| !id.trim().is_empty()),
-            initial_remote_section: optional_text(message, "initialRemoteSection")
-                .filter(|section| section == "easyConnect" || section == "tailscale"),
+            // CDXC:RemotePairing 2026-11-16 WHY: this list once kept only easyConnect and
+            // tailscale, so the `addComputerSsh` that Use SSH details sends was dropped here and
+            // Settings opened on Remote with no Add a computer form ("clicking on use ssh details
+            // does nothing"). Every section the Remote page reads (`apply_deep_links`) must pass.
+            initial_remote_section: optional_text(message, "initialRemoteSection").filter(
+                |section| {
+                    matches!(
+                        section.as_str(),
+                        "easyConnect" | "tailscale" | "addComputer" | "addComputerSsh"
+                    )
+                },
+            ),
             initial_agents_section: optional_text(message, "initialAgentsSection")
                 .filter(|section| section == "agentHooks"),
             initial_machine_id: optional_text(message, "initialMachineId")

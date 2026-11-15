@@ -1061,7 +1061,16 @@ impl RemoteTab {
             && self.targeted_section != section
         {
             self.targeted_section = section.clone();
-            self.open_machine_dialog(None, window, cx);
+            // An Add a computer draft the last visit left unsaved comes back on its values
+            // (CDXC:Settings 2026-10-16 in settings_modal/restore.rs); otherwise the form is empty.
+            let new_machine_draft = self
+                .kept_machine_form
+                .take()
+                .filter(|form| form.get("machineId").and_then(Value::as_str).is_none());
+            match new_machine_draft {
+                Some(form) => self.restore_machine_dialog(&form, window, cx),
+                None => self.open_machine_dialog(None, window, cx),
+            }
             self.pending_scroll = Some(ScrollTarget::Machines);
         }
         // `easyConnect` is the top of the page; `tailscale` opens its row.
