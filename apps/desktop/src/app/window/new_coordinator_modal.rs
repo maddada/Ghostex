@@ -30,7 +30,10 @@ use serde_json::Value;
 use std::rc::Rc;
 
 pub(crate) const NEW_COORDINATOR_MODAL_WIDTH: f32 = 540.0;
-pub(crate) const NEW_COORDINATOR_MODAL_INITIAL_HEIGHT: f32 = 540.0;
+/// The fixed frame the form opens at (the playbook pages fill the same frame). It holds the form
+/// with the Playbook overrides row; whatever does not fit (an agents problem line, a long project
+/// name) scrolls above the footer, because the body keeps its natural height (`render_body`).
+pub(crate) const NEW_COORDINATOR_MODAL_INITIAL_HEIGHT: f32 = 590.0;
 
 const TITLE: &str = "New Coordinator";
 const FIELD_NAME: &str = "Name";
@@ -312,9 +315,11 @@ impl GpuiNewCoordinatorModalWindow {
         cx.stop_propagation();
     }
 
+    /// CDXC:Coordinators 2026-11-15 WHY:
+    /// The body keeps its natural height. It used to be `flex_1().min_h_0()`, which let it shrink to the fixed frame, so `ModalFit` measured a body that always fit and never turned on its scrolling, and the First message hint's last line was drawn under Cancel and Next.
     fn render_body(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
-        let mut body = v_flex().w_full().flex_1().min_h_0().gap(px(16.0));
+        let mut body = v_flex().w_full().gap(px(16.0));
         body = body.child(
             v_flex()
                 .w_full()
