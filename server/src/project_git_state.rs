@@ -157,7 +157,9 @@ async fn read_checkout(
         checkout::read_checkout_state(&path, if_origin.as_deref())
     })
     .await
-    .map_err(|error| TypedOperationError::bad_request(format!("Reading the checkout failed: {error}")))?;
+    .map_err(|error| {
+        TypedOperationError::bad_request(format!("Reading the checkout failed: {error}"))
+    })?;
     Ok(json!({ "checkout": checkout }))
 }
 

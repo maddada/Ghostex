@@ -55,8 +55,11 @@ pub fn read_checkout_state(path: &Path, if_origin: Option<&str>) -> Value {
     let main_ref = main_ref(&top);
     // Two Ghostex projects can be one repository (a worktree added as a project of its own):
     // the caller keeps one checkout per `commonDir`.
-    let common_dir = git(&top, &["rev-parse", "--path-format=absolute", "--git-common-dir"])
-        .map(|dir| dir.trim().to_string());
+    let common_dir = git(
+        &top,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .map(|dir| dir.trim().to_string());
     let own_dir = git(&top, &["rev-parse", "--path-format=absolute", "--git-dir"])
         .map(|dir| dir.trim().to_string());
     let (submodule_states, worktree_states) = std::thread::scope(|scope| {
@@ -72,7 +75,10 @@ pub fn read_checkout_state(path: &Path, if_origin: Option<&str>) -> Value {
     object.insert("mainRef".into(), json!(main_ref));
     object.insert("lastFetchMs".into(), json!(last_fetch_ms(&top)));
     object.insert("commonDir".into(), json!(common_dir));
-    object.insert("isMainWorktree".into(), json!(own_dir.is_some() && own_dir == common_dir));
+    object.insert(
+        "isMainWorktree".into(),
+        json!(own_dir.is_some() && own_dir == common_dir),
+    );
     object.insert("stashes".into(), json!(stashes(&top)));
     object.insert("submodules".into(), json!(submodule_states));
     object.insert("worktrees".into(), json!(worktree_states));
@@ -316,22 +322,22 @@ fn submodules(top: &Path, project_main: Option<&str>) -> Vec<Value> {
         }
     }
     parallel_map(entries, |(marker, path)| {
-            if marker == '-' {
-                return json!({ "path": path, "initialized": false });
-            }
-            let dir = top.join(&path);
-            if !answers(&dir) {
-                return json!({ "path": path, "initialized": true, "unreadable": true });
-            }
-            let pins: Vec<String> = pinned_on_main.get(&path).cloned().into_iter().collect();
-            let mut state = repository(&dir, main_ref(&dir).as_deref(), &pins);
-            let object = state.as_object_mut().expect("repository answers an object");
-            object.insert("path".into(), json!(path));
-            object.insert("initialized".into(), json!(true));
-            object.insert("pointerMoved".into(), json!(marker == '+'));
-            object.insert("conflicted".into(), json!(marker == 'U'));
-            state
-        })
+        if marker == '-' {
+            return json!({ "path": path, "initialized": false });
+        }
+        let dir = top.join(&path);
+        if !answers(&dir) {
+            return json!({ "path": path, "initialized": true, "unreadable": true });
+        }
+        let pins: Vec<String> = pinned_on_main.get(&path).cloned().into_iter().collect();
+        let mut state = repository(&dir, main_ref(&dir).as_deref(), &pins);
+        let object = state.as_object_mut().expect("repository answers an object");
+        object.insert("path".into(), json!(path));
+        object.insert("initialized".into(), json!(true));
+        object.insert("pointerMoved".into(), json!(marker == '+'));
+        object.insert("conflicted".into(), json!(marker == 'U'));
+        state
+    })
 }
 
 /// The checkout's other worktrees (the first entry is the checkout itself): branch or detached,
@@ -362,18 +368,18 @@ fn worktrees(top: &Path, main_ref: Option<&str>) -> Vec<Value> {
         .skip(1)
         .collect();
     parallel_map(found, |(path, branch, prunable)| {
-            if prunable || !path.is_dir() {
-                return json!({ "path": path.to_string_lossy(), "branch": branch, "missing": true });
-            }
-            if !answers(&path) {
-                return json!({ "path": path.to_string_lossy(), "branch": branch, "missing": false, "unreadable": true });
-            }
-            let mut state = repository(&path, main_ref, &[]);
-            if let Some(object) = state.as_object_mut() {
-                object.insert("missing".into(), json!(false));
-            }
-            state
-        })
+        if prunable || !path.is_dir() {
+            return json!({ "path": path.to_string_lossy(), "branch": branch, "missing": true });
+        }
+        if !answers(&path) {
+            return json!({ "path": path.to_string_lossy(), "branch": branch, "missing": false, "unreadable": true });
+        }
+        let mut state = repository(&path, main_ref, &[]);
+        if let Some(object) = state.as_object_mut() {
+            object.insert("missing".into(), json!(false));
+        }
+        state
+    })
 }
 
 /// How many git readers run at once: the Mac's checkout has 15 worktrees and 10 submodules, and

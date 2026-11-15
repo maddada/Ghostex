@@ -320,7 +320,11 @@ fn read_computer(local: &Target, computer: &ConnectedComputer, origin: Option<&s
         .to_string();
     candidates.sort_by_key(|project| !text(project, "path").to_lowercase().ends_with(&repo_name));
     // A matching checkout reads its worktrees and submodules too: give it more than the usual 15 s.
-    let slow = parse_args(&["--timeout".to_string(), CHECKOUT_READ_TIMEOUT_MS.to_string()]).flags;
+    let slow = parse_args(&[
+        "--timeout".to_string(),
+        CHECKOUT_READ_TIMEOUT_MS.to_string(),
+    ])
+    .flags;
     let answers = crate::project_git_state::checkout::parallel_map(candidates, |project| {
         let answer = request_gxserver_rpc(
             &target,
@@ -387,14 +391,18 @@ const CHECKOUT_READ_TIMEOUT_MS: u64 = 120_000;
 /// repository (same stashes, same worktrees) as the project of its main checkout, and was counted
 /// twice. The main checkout wins; a repository whose main checkout is no project keeps the first.
 fn one_per_repository(mut checkouts: Vec<Value>) -> Vec<Value> {
-    checkouts.sort_by_key(|checkout| checkout.get("isMainWorktree").and_then(Value::as_bool) != Some(true));
+    checkouts.sort_by_key(|checkout| {
+        checkout.get("isMainWorktree").and_then(Value::as_bool) != Some(true)
+    });
     let mut seen = std::collections::HashSet::new();
     checkouts
         .into_iter()
-        .filter(|checkout| match checkout.get("commonDir").and_then(Value::as_str) {
-            Some(dir) => seen.insert(dir.to_string()),
-            None => seen.insert(text(checkout, "path").to_string()),
-        })
+        .filter(
+            |checkout| match checkout.get("commonDir").and_then(Value::as_str) {
+                Some(dir) => seen.insert(dir.to_string()),
+                None => seen.insert(text(checkout, "path").to_string()),
+            },
+        )
         .collect()
 }
 
@@ -548,7 +556,10 @@ fn print_table(project_name: &str, origin: Option<&str>, rows: &[Row]) {
                 ));
                 describe_repo(&mut details, "    ", submodule);
             }
-            for part in list(checkout, "submodules").iter().chain(list(checkout, "worktrees")) {
+            for part in list(checkout, "submodules")
+                .iter()
+                .chain(list(checkout, "worktrees"))
+            {
                 if part.get("unreadable").and_then(Value::as_bool) == Some(true) {
                     details.push(format!(
                         "  {} could not be read: git did not answer there within 10 s",
@@ -592,17 +603,17 @@ fn print_table(project_name: &str, origin: Option<&str>, rows: &[Row]) {
     let read: Vec<&Row> = rows.iter().filter(|row| row.state == "checked").collect();
     let with_work: Vec<String> = read
         .iter()
-        .filter(|row| {
-            row.checkouts
-                .iter()
-                .any(|checkout| unpushed(checkout))
-        })
+        .filter(|row| row.checkouts.iter().any(|checkout| unpushed(checkout)))
         .map(|row| row.name.clone())
         .collect();
     let stashed: Vec<String> = read
         .iter()
         .filter_map(|row| {
-            let count: usize = row.checkouts.iter().map(|checkout| list(checkout, "stashes").len()).sum();
+            let count: usize = row
+                .checkouts
+                .iter()
+                .map(|checkout| list(checkout, "stashes").len())
+                .sum();
             (count > 0).then(|| format!("{} ({count})", row.name))
         })
         .collect();
