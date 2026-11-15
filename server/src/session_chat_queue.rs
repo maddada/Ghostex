@@ -1297,6 +1297,9 @@ pub(crate) fn forget_session_chat_queue(
                 ids
             }
         };
+        for sid in &sessions {
+            bump_queue_version(db, project_id, sid)?;
+        }
         let deleted = match session_id {
             Some(session_id) => db.execute(
                 "DELETE FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2",
@@ -1308,9 +1311,6 @@ pub(crate) fn forget_session_chat_queue(
             ),
         }
         .map_err(sql_error)?;
-        for sid in sessions {
-            bump_queue_version(db, project_id, &sid)?;
-        }
         Ok(deleted)
     })
 }

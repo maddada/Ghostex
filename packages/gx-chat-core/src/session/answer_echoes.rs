@@ -555,10 +555,9 @@ fn observe_index(
                     .as_ref()
                     .map(|send| &send.answers)
                     .or(form.sent.as_ref());
-                let belongs_to_local_form = form.queued_prompt_id.as_deref() == Some(prompt_id)
-                    || (form.queued_prompt_id.is_none()
-                        && is_local_echo
-                        && local_answers == Some(&answers));
+                let belongs_to_local_form = local_answers == Some(&answers)
+                    && (form.queued_prompt_id.as_deref() == Some(prompt_id)
+                        || (form.queued_prompt_id.is_none() && is_local_echo));
                 if !form.confirmed
                     && belongs_to_local_form
                     && form
