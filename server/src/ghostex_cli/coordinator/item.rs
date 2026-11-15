@@ -159,6 +159,48 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
             }
             return Ok(());
         }
+        // `item delivered release v11.7.1`: an event happened (the release flow runs it), so the
+        // items waiting on it come back to the coordinator to check and finish (work.rs).
+        "delivered" => {
+            let event = words.first().cloned().ok_or_else(|| {
+                usage_error("delivered needs the event: release, ota or rebuild (then its name, such as v11.7.1).")
+            })?;
+            params.insert("op".into(), json!("delivered"));
+            params.insert("event".into(), json!(event));
+            if let Some(name) = words.get(1) {
+                params.insert("name".into(), json!(name));
+            }
+            let answer = call_gxserver_rpc("/api/coordinatorWork", &Value::Object(params), &flags)?;
+            if json_out {
+                print_json(&answer);
+                return Ok(());
+            }
+            let name = agents::text(&answer, "name");
+            println!(
+                "Recorded: {}{}.",
+                agents::text(&answer, "event"),
+                if name.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {name}")
+                }
+            );
+            let items = answer["items"].as_array().cloned().unwrap_or_default();
+            if items.is_empty() {
+                println!("No item of this coordinator was waiting on it.");
+            } else {
+                println!("Delivered now ({}):", items.len());
+                for item in &items {
+                    println!(
+                        "  {}  {}",
+                        agents::text(item, "ref"),
+                        agents::text(item, "title")
+                    );
+                }
+                println!("Check each is in what shipped and finish it: ghostex coordinator item done <W> \"<what was done; where it shipped>\".");
+            }
+            return Ok(());
+        }
         "add" => {
             let title = words
                 .first()
@@ -241,7 +283,7 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
                     let on = repeated(args, "on");
                     if on.is_empty() {
                         return Err(usage_error(
-                            "wait needs --on W12 (an item), --on Q12 (an ask) or --on \"words\" (something outside).",
+                            "wait needs --on W12 (an item), --on Q12 (a question), --on release, --on ota or --on rebuild (an event Ghostex follows) or --on \"words\" (something outside).",
                         ));
                     }
                     params.insert("on".into(), json!(on));
@@ -469,11 +511,13 @@ fn print_item(item: &Value, full: bool) {
         println!(
             "      waits on {}{}{}",
             match agents::text(wait, "kind") {
-                "item" | "ask" => format!(
-                    "{} {}",
-                    agents::text(wait, "on"),
-                    agents::text(wait, "label")
-                ),
+                "item" | "ask"
+                    if !agents::text(wait, "label").starts_with(agents::text(wait, "on")) =>
+                    format!(
+                        "{} {}",
+                        agents::text(wait, "on"),
+                        agents::text(wait, "label")
+                    ),
                 _ => agents::text(wait, "label").to_string(),
             },
             if until.is_empty() {
@@ -481,8 +525,25 @@ fn print_item(item: &Value, full: bool) {
             } else {
                 format!(" (until {until})")
             },
-            if wait["open"] == true { "" } else { ": done" }
+            if wait["open"] == true {
+                String::new()
+            } else if let Some(name) = wait["delivered"].as_str() {
+                format!(
+                    ": happened ({name}, {})",
+                    local_time(agents::text(wait, "deliveredAt"))
+                )
+            } else {
+                ": done".to_string()
+            }
         );
+    }
+    let delivered = agents::text(item, "delivered");
+    if !delivered.is_empty() {
+        println!("      delivered ({delivered}): check it shipped and finish it");
+    }
+    let recheck = agents::text(item, "recheck");
+    if !recheck.is_empty() {
+        println!("      recheck: {recheck}");
     }
     if item["kind"] == "item" {
         for thread in item["threads"].as_array().into_iter().flatten() {

@@ -794,6 +794,7 @@ pub fn refresh_coordinator_panels(
         .unwrap_or_default();
     let remote_threads = list_remote_threads(db).unwrap_or_default();
     let mut board_items = super::work::list_all_work_items(db);
+    super::work::load_deliveries(db);
     let intro_hidden = super::intro::intro_hidden(db);
     let generated_at = now_iso();
     let now = chrono::Utc::now();
@@ -988,7 +989,14 @@ pub fn refresh_coordinator_panels(
         let mut board =
             super::board::board_value(&panel_rows, &items, Some(super::board::SUMMARY_ROWS), now);
         super::board::add_tag_looks(&mut board, &custom_tags);
-        let mut work = super::work::work_value(&panel_rows, &items, false, now, Some(idle_floor));
+        let mut work = super::work::work_value(
+            &panel_rows,
+            &items,
+            false,
+            now,
+            Some(idle_floor),
+            Some(&key),
+        );
         super::work::add_work_tag_looks(&mut work, &custom_tags);
         let panel = cached_panel(
             panel_rows,

@@ -102,6 +102,10 @@ only to get a phone JavaScript fix out).
 4. Verify with `curl https://ota.ghostex.dev/v1/status/production/<platform>/<runtime>`:
    its `createdAt` is the run's. Phones take it at their next launch or
    foreground check; Settings › Updates shows it.
+5. Tell the coordinator's work items: `ghostex coordinator item delivered ota`
+   (add `--coordinator <ref>` from a thread). It lists the items that waited on
+   the next phone update; check each one's phone commit is in what you
+   published and finish it (`item done`).
 
 It **refuses** when a platform's runtime version has no installed app, which
 means the phone's native side changed since the last app build (Kotlin,
@@ -573,6 +577,14 @@ result for both architectures in the report. An unsigned or invalid file is a
 release defect: report it at once.
 
 ### 9. Report to the user
+
+First tell the coordinator's work items once the release is live:
+`ghostex coordinator item delivered release vX.Y.Z` and, since a full release
+also publishes the phone update, `ghostex coordinator item delivered ota vX.Y.Z`
+(add `--coordinator <ref>` from a thread). Each lists the items that waited
+on it; check each one's commit is in the tag (`git merge-base --is-ancestor
+<sha> vX.Y.Z`, or the phone commit the tag records) and finish it with
+`item done`.
 
 - the version, the run URL, the release URL, and the wall time;
 - each platform: live, reused or failed, plus what you did about each failure;
