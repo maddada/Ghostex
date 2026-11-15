@@ -270,6 +270,15 @@ impl NativeChatView {
 
     /// CDXC:SessionChat 2026-09-27 DECISION:
     /// User: after Close the side question stays in the chat for good, folded to one line at the point it was asked, and opens again on click; it reads quieter than the conversation and says it was not added to it.
+    ///
+    /// CDXC:SessionChat 2026-11-15 DECISION: User, picking Q3402 C on the event cards page
+    /// (~/.local/share/agent-work/Ghostex/chat-event-cards/more-cards.html): the row is the shared
+    /// one-line card all the way (`SINGLE_LINE_CARD`): the side question's bubble in the tile, just
+    /// the question as the title and the time, no chevron and no "Side question" pill; it opens to
+    /// the answer under the card's hairline, as a message card opens. "Not added to the
+    /// conversation" and Copy move off the card: the note to the tooltip, Copy (with Add to Chat
+    /// and Reply) to the right-click menu, the phone's long press. Supersedes the outlined row
+    /// with its own footer.
     pub(super) fn side_question_row(
         &self,
         id: &str,
@@ -278,46 +287,53 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
+        let shape = &*super::cards::SINGLE_LINE_CARD;
         let card = &message["sideQuestion"];
         let key = format!("side-question:{id}");
         let expanded = self.expanded.contains(&key);
+        let motion = self.disclosure_frame(&key, expanded, cx);
         let answer = text(card, "answer");
+        let question = text(card, "question");
+        let time = text(message, "time");
         let toggle_key = key.clone();
+        let hover = super::cards::card_hover_fill(p);
+        let menu_text = answer.clone();
         let header = div()
             .id(SharedString::from(format!("side-question-row:{id}")))
             .role(gpui::Role::Button)
-            .aria_label(format!("Side question: {}", text(card, "question")))
+            .aria_label(format!("Side question: {question}. Not added to the conversation"))
             .aria_expanded(expanded)
+            .h(px(shape.header_height(s)))
+            .px(px(shape.padding_x * s))
             .flex()
             .items_center()
-            .gap(px(8.0 * s))
-            .px(px(12.0 * s))
-            .py(px(8.0 * s))
+            .gap(px(super::cards::TITLE_ROW_GAP * s))
+            .min_w_0()
             .chat_cursor_pointer()
-            .hover(|style| style.bg(p.border.opacity(0.35)))
+            .hover(move |style| style.bg(hover))
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new(
+                    "Side question · Not added to the conversation",
+                )
+                .build(window, cx)
+            })
+            .child(shape.tile("titlebar/message-circle.svg", p))
             .child(
-                super::disclosure_motion::turned_chevron(self.fold_turn(&key, expanded, cx), true)
-                    .size(px(14.0 * s))
-                    .text_color(p.muted)
-                    .flex_shrink_0(),
-            )
-            .child(side_badge(p))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .text_size(px(13.0 * s))
+                shape
+                    .title(div().flex_1().min_w_0().truncate(), p)
                     .text_color(p.foreground)
-                    .truncate()
-                    .child(text(card, "question")),
+                    .child(question),
             )
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .text_size(px(12.0 * s))
-                    .text_color(p.muted)
-                    .child(text(message, "time")),
-            )
+            .when(!time.is_empty(), |row| {
+                row.child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.muted)
+                        .child(time),
+                )
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.anchor_disclosure_toggle(&toggle_key, !expanded);
                 if expanded {
@@ -326,18 +342,28 @@ impl NativeChatView {
                     this.expanded.insert(toggle_key.clone());
                 }
                 cx.notify();
-            }));
-        let body = expanded.then(|| {
-            let copy = answer.clone();
-            div()
+            }))
+            .when(!menu_text.is_empty(), |row| {
+                row.on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                        if this.show_text_menu(menu_text.clone(), event.position, window, cx) {
+                            cx.stop_propagation();
+                        }
+                    }),
+                )
+            });
+        let opened = (expanded || motion.is_some()).then(|| {
+            let body = div()
                 .flex()
                 .flex_col()
-                .gap(px(6.0 * s))
+                .min_w_0()
                 .border_t_1()
-                .border_color(p.border)
-                .px(px(14.0 * s))
-                .pt(px(10.0 * s))
-                .pb(px(8.0 * s))
+                .border_color(shape.hairline(p))
+                .px(px(12.0 * s))
+                .pt(px(8.0 * s))
+                .pb(px(10.0 * s))
+                .text_color(p.card_muted)
                 .child(if answer.is_empty() {
                     div()
                         .text_size(px(13.0 * s))
@@ -354,54 +380,23 @@ impl NativeChatView {
                         cx,
                     )
                 })
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0 * s))
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_size(px(12.0 * s))
-                                .text_color(p.muted)
-                                .child("Not added to the conversation"),
-                        )
-                        .when(!answer.is_empty(), |row| {
-                            row.child(side_button(
-                                &format!("side-question-row-copy:{id}"),
-                                Some("titlebar/copy.svg"),
-                                "Copy",
-                                None,
-                                false,
-                                None,
-                                p,
-                                cx.listener(move |_, _, _, cx| {
-                                    crate::app::helpers::gpui_copy_to_clipboard(
-                                        gpui::ClipboardItem::new_string(copy.clone()),
-                                        cx,
-                                    );
-                                }),
-                            ))
-                        }),
-                )
+                .into_any_element();
+            self.disclosure_body_motion(&key, motion, 0.0, body)
         });
         div()
             .w_full()
             .min_w_0()
             .pb(px(p.inner_gap(13.0) * s))
             .child(
-                div()
+                shape
+                    .shell(div(), p)
                     .w_full()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .rounded(px(10.0 * s))
-                    .border_1()
-                    .border_color(p.border)
-                    .bg(p.input.opacity(0.35))
                     .overflow_hidden()
                     .child(header)
-                    .when_some(body, |row, body| row.child(body)),
+                    .children(opened),
             )
             .into_any_element()
     }
