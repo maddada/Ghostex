@@ -169,10 +169,19 @@ fn read_details(
     let live = payload
         .and_then(|payload| payload.get("context_window"))
         .map(|window| {
+            // Not measured since Claude started or compacted: no size yet, not 0.
+            let measured = crate::session_chat_options::claude_context_measured(Some(window));
+            let used = |key: &str| {
+                if measured {
+                    window[key].clone()
+                } else {
+                    Value::Null
+                }
+            };
             json!({
-                "usedTokens": window["total_input_tokens"],
+                "usedTokens": used("total_input_tokens"),
                 "windowSize": window["context_window_size"],
-                "usedPercentage": window["used_percentage"],
+                "usedPercentage": used("used_percentage"),
                 "updatedAt": statusline.as_ref().map(|stored| stored.updated_at.clone()),
             })
         });

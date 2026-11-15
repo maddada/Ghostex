@@ -12,7 +12,9 @@
 //! we can hover to see a tooltip saying it's recommended to compact to save a lot on usage when
 //! resuming sessions"). The size is Claude's "Only above" (200K by default), one number for every
 //! agent, renamed to cover both idle compaction and carrying on (Q3239). Carry-ons nobody clicks
-//! (the restart switch on, a limit wait that continues by itself) follow the same size rule.
+//! (the restart switch on, a limit wait that continues by itself) follow the same size rule. The
+//! stopped-threads card offers its checkbox for smaller threads too (Q66, 2026-11-16, in
+//! server/src/coordinators/stopped_by_restart.rs).
 //! SEE-ALSO: server/src/agents/claude_idle_compaction.rs (the size), server/src/accounts/recovery.rs
 //! (limit waits), server/src/coordinators/stopped_by_restart.rs (threads a restart cut off),
 //! packages/gx-chat-core/src/questions/account_wait.rs (the limit card's checkbox).

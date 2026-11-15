@@ -28,7 +28,12 @@ pub(crate) fn find_sessions_to_resume_after_restart(
     // coordinator threads cut off this way wait for Carry on, unless the switch carries them on.
     if let Ok(db) = crate::storage::open_gxserver_database(paths) {
         let repository = crate::domain::DomainRepository::new(&db, server_id);
-        let keys: Vec<_> = cut_off.iter().map(SessionToResume::key).collect();
+        // Q67: only threads that were working; a finished one just stays idle.
+        let keys: Vec<_> = cut_off
+            .iter()
+            .filter(|session| session.was_working())
+            .map(SessionToResume::key)
+            .collect();
         crate::coordinators::note_restart(&repository, &keys, !resume);
     }
     if !resume {

@@ -284,6 +284,18 @@ fn read_session_chat_statusline_selection(
         .map(|(selection, _)| selection)
 }
 
+/// CDXC:AgentProviders 2026-11-16 WHY: until its first request after it starts, resumes or
+/// compacts (by itself while idle too), Claude's statusline reports `total_input_tokens` 0 with no
+/// `current_usage`: nothing measured yet, not an empty context. Read as a size, it put "0K" beside
+/// two compacted threads on the stopped-threads card and "0%" on the context meter, so that reading
+/// is "not yet reported", like Hermes' `ctx --`.
+pub(crate) fn claude_context_measured(context_window: Option<&Value>) -> bool {
+    context_window
+        .and_then(|window| window.get("total_input_tokens"))
+        .and_then(Value::as_u64)
+        .is_some_and(|tokens| tokens > 0)
+}
+
 /// Claude's last statusline payload as a selection, with the time Ghostex stored it.
 /// `login_limits` takes the 5h / 7d windows from the newest reading on the session's login.
 ///
@@ -322,12 +334,15 @@ pub(crate) fn read_claude_statusline_reading(
         .map(|found| choice(&found.value, &found.label));
     let fast = payload.get("fast_mode").and_then(Value::as_bool);
     let context_window = payload.get("context_window");
+    let measured = claude_context_measured(context_window);
     let context_usage = SessionChatContextUsage {
         used_percentage: context_window
+            .filter(|_| measured)
             .and_then(|window| window.get("used_percentage"))
             .and_then(Value::as_f64)
             .map(|value| value.round().clamp(0.0, 100.0) as u32),
         used_tokens: context_window
+            .filter(|_| measured)
             .and_then(|window| window.get("total_input_tokens"))
             .and_then(Value::as_u64),
         window_size: context_window
