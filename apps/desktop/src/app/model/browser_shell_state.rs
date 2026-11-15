@@ -17,7 +17,10 @@ pub(crate) fn browser_tab_model_to_shell_state_json(model: &BrowserTabModel) -> 
             .tabs
             .iter()
             .map(|tab| {
-                let sanitized_url = sanitize_browser_tab_url_for_state(&tab.url);
+                let sanitized_url = sanitize_browser_tab_url_for_tab(
+                    &tab.url,
+                    tab.remote_machine_id.as_deref(),
+                );
                 let state = if tab.state == BrowserTabState::Loaded && sanitized_url.is_some() {
                     BrowserTabState::Loaded
                 } else {
@@ -27,6 +30,7 @@ pub(crate) fn browser_tab_model_to_shell_state_json(model: &BrowserTabModel) -> 
                     browser_navigation_history_to_shell_state_json(
                         &tab.navigation_history,
                         sanitized_url.as_deref(),
+                        tab.remote_machine_id.as_deref(),
                     )
                 } else {
                     None
@@ -72,6 +76,7 @@ pub(crate) fn browser_tab_model_to_shell_state_json(model: &BrowserTabModel) -> 
 pub(crate) fn browser_navigation_history_to_shell_state_json(
     history: &BrowserNavigationHistory,
     sanitized_tab_url: Option<&str>,
+    remote_machine_id: Option<&str>,
 ) -> Option<serde_json::Value> {
     /*
     CDXC:Telemetry 2026-06-22-10:09:
@@ -83,7 +88,7 @@ pub(crate) fn browser_navigation_history_to_shell_state_json(
     let mut sanitized_entries = Vec::new();
     let mut sanitized_current_index = None;
     for (index, url) in history.entries.iter().enumerate() {
-        let sanitized_url = sanitize_browser_tab_url_for_state(url)?;
+        let sanitized_url = sanitize_browser_tab_url_for_tab(url, remote_machine_id)?;
         if index == current_index {
             sanitized_current_index = Some(sanitized_entries.len());
         }
@@ -238,7 +243,7 @@ pub(crate) fn browser_tab_model_from_shell_state(
         .unwrap_or(0)
         .max(tabs.iter().map(|tab| tab.id.0).max().unwrap_or(0) + 1);
 
-    Some(BrowserTabModel {
+    let mut model = BrowserTabModel {
         tabs,
         root,
         focused_pane,
@@ -246,7 +251,9 @@ pub(crate) fn browser_tab_model_from_shell_state(
         next_pane_id,
         next_split_id,
         next_tab_id,
-    })
+    };
+    model.prune_empty_address_only_tabs_for_restore();
+    Some(model)
 }
 
 pub(crate) fn browser_node_from_shell_state(
@@ -316,12 +323,14 @@ pub(crate) fn browser_node_from_shell_state(
 pub(crate) fn browser_navigation_history_from_shell_state(
     value: Option<&serde_json::Value>,
     current_url: &str,
+    remote_machine_id: Option<&str>,
 ) -> BrowserNavigationHistory {
     let fallback = BrowserNavigationHistory::loaded(current_url);
     let Some(value) = value else {
         return fallback;
     };
-    let Some(history) = browser_navigation_history_value_from_shell_state(value, current_url)
+    let Some(history) =
+        browser_navigation_history_value_from_shell_state(value, current_url, remote_machine_id)
     else {
         return fallback;
     };
@@ -331,11 +340,12 @@ pub(crate) fn browser_navigation_history_from_shell_state(
 pub(crate) fn browser_navigation_history_value_from_shell_state(
     value: &serde_json::Value,
     current_url: &str,
+    remote_machine_id: Option<&str>,
 ) -> Option<BrowserNavigationHistory> {
     let object = value.as_object()?;
     let entries = json_array_field(object, "entries")?
         .iter()
-        .map(valid_sanitized_browser_history_url)
+        .map(|entry| valid_sanitized_browser_history_url(entry, remote_machine_id))
         .collect::<Option<Vec<_>>>()?;
     let current_index = usize::try_from(json_u64_field(object, "currentIndex")?).ok()?;
     if entries.is_empty()
@@ -352,9 +362,12 @@ pub(crate) fn browser_navigation_history_value_from_shell_state(
     })
 }
 
-pub(crate) fn valid_sanitized_browser_history_url(value: &serde_json::Value) -> Option<String> {
+pub(crate) fn valid_sanitized_browser_history_url(
+    value: &serde_json::Value,
+    remote_machine_id: Option<&str>,
+) -> Option<String> {
     let url = value.as_str()?.trim();
-    let sanitized_url = sanitize_browser_tab_url_for_state(url)?;
+    let sanitized_url = sanitize_browser_tab_url_for_tab(url, remote_machine_id)?;
     (sanitized_url == url).then_some(sanitized_url)
 }
 
@@ -367,11 +380,13 @@ pub(crate) fn browser_tab_from_shell_state(
     if id.0 == 0 {
         return None;
     }
+    let remote_machine_id = json_string_field(object, "remoteMachineId")
+        .and_then(crate::app::helpers::gpui_normalize_remote_machine_id);
     let requested_state = json_string_field(object, "state")
         .and_then(BrowserTabState::from_slug)
         .unwrap_or(BrowserTabState::AddressOnly);
-    let sanitized_url =
-        json_string_field(object, "url").and_then(sanitize_browser_tab_url_for_state);
+    let sanitized_url = json_string_field(object, "url")
+        .and_then(|url| sanitize_browser_tab_url_for_tab(url, remote_machine_id.as_deref()));
     let (state, url) = match (requested_state, sanitized_url) {
         (BrowserTabState::Loaded, Some(url)) => (BrowserTabState::Loaded, url),
         (BrowserTabState::AddressOnly, Some(url)) => (BrowserTabState::AddressOnly, url),
@@ -390,11 +405,18 @@ pub(crate) fn browser_tab_from_shell_state(
     } else {
         None
     };
-    let remote_machine_id = json_string_field(object, "remoteMachineId")
-        .and_then(crate::app::helpers::gpui_normalize_remote_machine_id);
     let cached_favicon_image = (state == BrowserTabState::Loaded)
         .then(|| browser_favicon_cache_lookup(&url, remote_machine_id.as_deref()))
         .flatten();
+    let navigation_history = if state == BrowserTabState::Loaded {
+        browser_navigation_history_from_shell_state(
+            object.get("history"),
+            &url,
+            remote_machine_id.as_deref(),
+        )
+    } else {
+        BrowserNavigationHistory::empty()
+    };
     Some(BrowserTab {
         id,
         notification_target: uuid::Uuid::new_v4(),
@@ -417,11 +439,7 @@ pub(crate) fn browser_tab_from_shell_state(
         runtime_can_go_forward: false,
         url: url.clone(),
         state,
-        navigation_history: if state == BrowserTabState::Loaded {
-            browser_navigation_history_from_shell_state(object.get("history"), &url)
-        } else {
-            BrowserNavigationHistory::empty()
-        },
+        navigation_history,
         device_view: object
             .get("deviceView")
             .map(|value| BrowserDeviceView {

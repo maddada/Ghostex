@@ -138,7 +138,14 @@ impl GhostexGpuiApp {
                 return;
             }
             let _ = this.update_in(cx, |app, window, cx| {
-                app.sync_active_browser_tab_to_surface(window, cx);
+                if app.active_mode == TitlebarMode::Browser
+                    && app
+                        .project_editor_shell
+                        .is_mode_awake(TitlebarMode::Browser)
+                {
+                    app.sync_active_browser_tab_to_surface(window, cx);
+                }
+                app.reload_open_project_browser_tabs_on_startup(cx);
                 app.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
                 app.start_waiting_parked_browser_pages(cx);
                 cx.notify();

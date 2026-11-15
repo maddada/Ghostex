@@ -352,4 +352,73 @@ impl BrowserTabModel {
             .map(BrowserTab::address_value)
             .unwrap_or_default()
     }
+
+    /// Prune stale empty `New Tab` (`AddressOnly` with empty URL) placeholders left behind by
+    /// earlier restarts: drop all of them in panes that have loaded tabs, and collapse panes
+    /// with only empty placeholders down to a single `New Tab`.
+    pub(crate) fn prune_empty_address_only_tabs_for_restore(&mut self) {
+        let empty_ids: HashSet<BrowserTabId> = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.state == BrowserTabState::AddressOnly && tab.url.trim().is_empty())
+            .map(|tab| tab.id)
+            .collect();
+        if empty_ids.is_empty() {
+            return;
+        }
+        let mut kept_ids = HashSet::new();
+        prune_empty_address_only_tabs_in_node(&mut self.root, &empty_ids, &mut kept_ids);
+        self.tabs.retain(|tab| kept_ids.contains(&tab.id));
+        if !self.has_tab(self.active_tab)
+            && let Some(next_active) = self
+                .find_leaf(self.focused_pane)
+                .and_then(|leaf| leaf.tab_group.active_tab_id())
+                .or_else(|| first_browser_tab_id(&self.root))
+                .or_else(|| self.tabs.first().map(|tab| tab.id))
+        {
+            self.active_tab = next_active;
+        }
+    }
+}
+
+fn prune_empty_address_only_tabs_in_node(
+    node: &mut BrowserNode,
+    empty_ids: &HashSet<BrowserTabId>,
+    kept_ids: &mut HashSet<BrowserTabId>,
+) {
+    match node {
+        BrowserNode::Leaf(leaf) => {
+            let has_non_empty = leaf
+                .tab_group
+                .tabs
+                .iter()
+                .any(|pane_tab| !empty_ids.contains(&pane_tab.tab_id));
+            if has_non_empty {
+                leaf.tab_group
+                    .tabs
+                    .retain(|pane_tab| !empty_ids.contains(&pane_tab.tab_id));
+            } else if let Some(keep_id) = leaf
+                .tab_group
+                .has_tab(leaf.tab_group.active_tab)
+                .then_some(leaf.tab_group.active_tab)
+                .or_else(|| leaf.tab_group.tabs.first().map(|pane_tab| pane_tab.tab_id))
+            {
+                leaf.tab_group
+                    .tabs
+                    .retain(|pane_tab| pane_tab.tab_id == keep_id);
+            }
+            for pane_tab in &leaf.tab_group.tabs {
+                kept_ids.insert(pane_tab.tab_id);
+            }
+            if !leaf.tab_group.has_tab(leaf.tab_group.active_tab)
+                && let Some(first) = leaf.tab_group.tabs.first()
+            {
+                leaf.tab_group.active_tab = first.tab_id;
+            }
+        }
+        BrowserNode::Split(split) => {
+            prune_empty_address_only_tabs_in_node(&mut split.first, empty_ids, kept_ids);
+            prune_empty_address_only_tabs_in_node(&mut split.second, empty_ids, kept_ids);
+        }
+    }
 }
