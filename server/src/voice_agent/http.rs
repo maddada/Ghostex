@@ -135,10 +135,14 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
                 .map_err(|message| failure("badKey", message))?;
             match keys::check_key(provider, read.trim()) {
                 KeyCheck::Valid => {}
-                KeyCheck::Refused => {
+                KeyCheck::Refused(reason) => {
                     return Err(failure(
                         "badKey",
-                        format!("{} refused the key 1Password gave.", provider.label()),
+                        keys::refused_message(
+                            provider,
+                            "the key 1Password gave",
+                            reason.as_deref(),
+                        ),
                     ))
                 }
                 KeyCheck::Unreachable(message) => {
@@ -161,10 +165,10 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
     tokio::task::spawn_blocking(move || {
         match keys::check_key(provider, &key) {
             KeyCheck::Valid => {}
-            KeyCheck::Refused => {
+            KeyCheck::Refused(reason) => {
                 return Err(failure(
                     "badKey",
-                    format!("{} refused that API key.", provider.label()),
+                    keys::refused_message(provider, "that API key", reason.as_deref()),
                 ))
             }
             KeyCheck::Unreachable(message) => return Err(failure("providerUnavailable", message)),

@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::provider::Provider;
+use super::provider::{KeyCheckRequest, Provider};
 use crate::paths::GxserverPaths;
 use crate::vault::{self, UnsealError};
 
@@ -291,27 +291,68 @@ pub(super) fn write_key(
 /// What checking a key with its provider found.
 pub(super) enum KeyCheck {
     Valid,
-    Refused,
+    /// The provider turned the key down; its own reason when it gave one other than a wrong key.
+    Refused(Option<String>),
     Unreachable(String),
 }
 
 /// Asks the provider whether the key works (blocking; run it off the async runtime).
+///
+/// A 401 is a wrong or revoked key. A 400 or 403 also refuses the key, with the provider's reason
+/// (a key without access to Realtime, say), since that key can't run a call either. The 401's own
+/// text is left out: OpenAI's repeats part of the key.
 pub(super) fn check_key(provider: Provider, key: &str) -> KeyCheck {
-    let response = crate::http_agent::agent()
-        .get(provider.key_check_url())
-        .header("authorization", format!("Bearer {key}"))
-        .config()
-        .timeout_global(Some(Duration::from_secs(15)))
-        .build()
-        .call();
-    match response {
-        Ok(_) => KeyCheck::Valid,
-        Err(ureq::Error::StatusCode(400 | 401 | 403)) => KeyCheck::Refused,
-        Err(ureq::Error::StatusCode(status)) => {
-            KeyCheck::Unreachable(format!("{} answered HTTP {status}.", provider.label()))
-        }
+    let agent = crate::http_agent::answering_agent();
+    let bearer = format!("Bearer {key}");
+    let timeout = Some(Duration::from_secs(15));
+    let response = match provider.key_check() {
+        KeyCheckRequest::Get(url) => agent
+            .get(url)
+            .header("authorization", bearer)
+            .config()
+            .timeout_global(timeout)
+            .build()
+            .call(),
+        KeyCheckRequest::PostJson(url, body) => agent
+            .post(url)
+            .header("authorization", bearer)
+            .config()
+            .timeout_global(timeout)
+            .build()
+            .send_json(body),
+    };
+    let mut response = match response {
+        Ok(response) => response,
         Err(error) => {
-            KeyCheck::Unreachable(format!("Couldn't reach {}: {error}", provider.label()))
+            return KeyCheck::Unreachable(format!("Couldn't reach {}: {error}", provider.label()))
         }
+    };
+    let status = response.status().as_u16();
+    if (200..300).contains(&status) {
+        return KeyCheck::Valid;
+    }
+    let body = response
+        .body_mut()
+        .with_config()
+        .limit(64 * 1024)
+        .read_to_vec()
+        .ok();
+    match status {
+        401 => KeyCheck::Refused(None),
+        400 | 403 => KeyCheck::Refused(super::provider::error_body_text(body.as_deref())),
+        status => KeyCheck::Unreachable(super::provider::refused_sentence(
+            provider.label(),
+            status,
+            body.as_deref(),
+        )),
+    }
+}
+
+/// The sentence for a refused key: `what` names the key ("that API key"), then the provider's
+/// reason when it gave one.
+pub(super) fn refused_message(provider: Provider, what: &str, reason: Option<&str>) -> String {
+    match reason {
+        Some(reason) => format!("{} refused {what}: {reason}", provider.label()),
+        None => format!("{} refused {what}.", provider.label()),
     }
 }
