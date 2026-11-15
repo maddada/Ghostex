@@ -92,13 +92,16 @@ pub(crate) fn launch_note_text(
     (!text.is_empty()).then_some(text)
 }
 
-/// [`launch_note_text`] for the current settings, followed by the line of each installed extension
-/// that may add one (extensions/agent_notes.rs).
-pub(crate) fn current_launch_note_text(paths: &GxserverPaths) -> Option<String> {
+/// [`launch_note_text`] for the current settings, followed, `with_extensions`, by the line of each
+/// installed extension that may add one (extensions/agent_notes.rs).
+pub(crate) fn current_launch_note_text(
+    paths: &GxserverPaths,
+    with_extensions: bool,
+) -> Option<String> {
     let note = ghostex_note_enabled(paths).then(|| ghostex_note_text(agent_preview_browser(paths)));
     let text = launch_note_text(note.as_deref(), super::marked_handovers_enabled(paths));
     // Unit tests assert exact commands, which must not depend on the user's extensions.
-    if cfg!(test) {
+    if cfg!(test) || !with_extensions {
         return text;
     }
     with_extension_notes(

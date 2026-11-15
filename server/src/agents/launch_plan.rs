@@ -293,23 +293,27 @@ pub(crate) fn create_agent_session_params_for_project(
             .launch_plan
         }
         _ => {
-            let mut plan = build_agent_launch_plan(AgentLaunchInput {
-                accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
-                    .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
-                agent_id: agent_id.clone(),
-                agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),
-                command: account_command.or(configured_command),
-                delayed_send_deadline_at: read_text_from_map(
-                    &launch_settings,
-                    "delayedSendDeadlineAt",
-                ),
-                first_user_message: read_text_from_map(&runtime_settings, "firstUserMessage"),
-                global_accept_all_enabled: settings
-                    .get("agentAcceptAllEnabled")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                icon: agent_icon.clone(),
-            });
+            let coordinator = session_is_coordinator(&runtime_settings);
+            let mut plan = build_session_launch_plan(
+                AgentLaunchInput {
+                    accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
+                        .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
+                    agent_id: agent_id.clone(),
+                    agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),
+                    command: account_command.or(configured_command),
+                    delayed_send_deadline_at: read_text_from_map(
+                        &launch_settings,
+                        "delayedSendDeadlineAt",
+                    ),
+                    first_user_message: read_text_from_map(&runtime_settings, "firstUserMessage"),
+                    global_accept_all_enabled: settings
+                        .get("agentAcceptAllEnabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    icon: agent_icon.clone(),
+                },
+                coordinator,
+            );
             // Only the command this launch runs names the id; `agentCommand` stays the base that
             // resume, fork and account wrapping rebuild from. Pi's id is minted here; Empryo's names
             // the session folder seeded for a launch model (session_chat_empryo_launch_selection.rs).
@@ -1044,16 +1048,23 @@ pub(crate) struct AgentLaunchInput {
 }
 
 pub(crate) fn build_agent_launch_plan(input: AgentLaunchInput) -> Value {
+    build_session_launch_plan(input, false)
+}
+
+/// [`build_agent_launch_plan`] for a session that may be a `coordinator`
+/// ([`session_is_coordinator`]), which takes no extension lines in its launch note.
+pub(crate) fn build_session_launch_plan(input: AgentLaunchInput, coordinator: bool) -> Value {
     let base_command = input
         .command
         .or_else(|| default_agent_command(&input.agent_id).map(str::to_string))
         .unwrap_or_default();
-    let launch_command = resolve_agent_launch_command(
+    let launch_command = resolve_session_launch_command(
         &input.agent_id,
         &base_command,
         input.accept_all_mode.as_deref(),
         input.global_accept_all_enabled,
         input.icon.as_deref(),
+        coordinator,
     );
     let command = if input.agent_id == "cursor" {
         input
@@ -1142,6 +1153,34 @@ pub(crate) fn resolve_agent_launch_command(
     global_accept_all_enabled: bool,
     icon: Option<&str>,
 ) -> String {
+    resolve_session_launch_command(
+        agent_id,
+        command,
+        accept_all_mode,
+        global_accept_all_enabled,
+        icon,
+        false,
+    )
+}
+
+/// Whether a session's runtime settings mark it as a coordinator (`coordinatorRole`), whose launch
+/// note takes no extension lines (marked_handovers.rs `with_launch_notes`).
+pub(crate) fn session_is_coordinator(runtime_settings: &Map<String, Value>) -> bool {
+    runtime_settings
+        .get(crate::coordinators::COORDINATOR_ROLE_SETTING)
+        .and_then(Value::as_str)
+        .is_some_and(|role| !role.is_empty())
+}
+
+/// [`resolve_agent_launch_command`] for a session that may be a `coordinator`.
+pub(crate) fn resolve_session_launch_command(
+    agent_id: &str,
+    command: &str,
+    accept_all_mode: Option<&str>,
+    global_accept_all_enabled: bool,
+    icon: Option<&str>,
+    coordinator: bool,
+) -> String {
     let enabled = match accept_all_mode {
         Some("enabled") => true,
         Some("disabled") => false,
@@ -1157,7 +1196,7 @@ pub(crate) fn resolve_agent_launch_command(
     );
     let command = super::mode_picker_off::with_auto_mode(agent_id, icon, enabled, &command);
     let command = with_codex_no_daemon(agent_id, icon, &command);
-    let command = with_launch_notes(agent_id, icon, &command);
+    let command = with_launch_notes(agent_id, icon, &command, coordinator);
     let command = crate::connectors::with_connector_tools(agent_id, icon, &command);
     // Last, so the steps above still read the program's own name (agent_cli/launch_path.rs).
     let command = crate::agent_cli::launch_path::with_reachable_program(&command);
