@@ -265,7 +265,13 @@ impl NativeChatView {
             .filter(|_| !answered)
             .and_then(|page_id| self.question_section_of(page_id))
             .is_some_and(|section| section == "canceled");
-        let withdrawn = if canceled {
+        // A page that waited only to be looked at and was cleared from the dock (Mark all seen,
+        // Dismiss) reads Seen, as one marked seen on the page does (gx-chat-core
+        // questions/later.rs `mark_seen`).
+        let seen_only = page.awaits_seen && page.questions.is_none();
+        let withdrawn = if canceled && seen_only {
+            Some(("Seen".to_string(), "Seen, no answer needed".to_string()))
+        } else if canceled {
             Some((
                 "Canceled".to_string(),
                 "Canceled, no answer needed".to_string(),
