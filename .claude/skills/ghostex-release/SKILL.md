@@ -44,15 +44,25 @@ marked **(unverified)** were inferred and not confirmed from that evidence.
 
 ### Who runs it, and where
 
-Releases are started by the **Main Coordinator from Windows**
-(`C:\dev\Ghostex`). Nothing needs a Mac to **ship**: signing, notarization and
-publishing use repository secrets on GitHub's runners, and the dispatch only
-needs `git`, `gh` (authenticated as `maddada`), `node` and `bun`. Releases up
-to 10.9.1 were dispatched from the user's MacBook, so the first Windows
-dispatch is new ground: if a dispatcher script breaks on Windows paths, report
-the exact error rather than working around it (unverified that it runs cleanly).
+Releases are started by the **Main Coordinator on the Mac**
+(`/Users/madda/dev/_active/Ghostex`). Two other computers work on the same
+repository and push to the same `main`, each with its own coordinator:
 
-The local checks that need macOS are **optional** and skipped on Windows:
+- **m7-arch** (Linux, `/home/madda/dev/ghostex`): **Arch Chungus**.
+- **M7-DESKTOP** (Windows, `C:\dev\Ghostex`): **Win Chungus**. It is often
+  off for days.
+
+Their uncommitted or unpushed work must be in the release (user, 2026-11-15:
+"I don't want you to push a release and miss including things from the other
+machines"), so step 2 checks them with `ghostex project status`.
+
+Nothing needs a Mac to **ship**: signing, notarization and publishing use
+repository secrets on GitHub's runners, and the dispatch only needs `git`,
+`gh` (authenticated as `maddada`), `node` and `bun`. On the Mac every local
+check runs (`release:preflight`, `release:test`, `release:verify`).
+
+If a release is ever dispatched from Windows instead, the local checks that
+need macOS are **optional** and skipped there:
 
 - `bun run release:preflight` probes the codesigning identity and `notarytool`.
   Don't run it on Windows; the dispatcher already runs the gates that matter.
@@ -153,13 +163,33 @@ tree:
 
 1. Check `ghostex agents` / `ghostex sessions`. Threads in this project should
    be settled, because a thread still editing will dirty the tree again.
-2. Commit and push every sub-repo with pending work (`apps/mobile/app`,
+2. **Check the other computers.** Run `ghostex project status` in the project
+   folder. It reads this checkout and the same project on every connected
+   computer (found by its origin, whatever the folder is called): uncommitted
+   files, commits not on origin, stashes, and each submodule and worktree, and
+   lists a computer that is offline as `not checked, offline, last seen ...`.
+   - For every other computer with work in its row, ask its coordinator to
+     commit and push it: `ghostex agents send --main-coordinator --project-id
+     <its project id> --computer <name> "..."` (Arch Chungus on m7-arch, Win
+     Chungus on M7-DESKTOP; `ghostex projects --computer <name>` lists the
+     ids). Name the files and commits the table shows. Wait for the report,
+     run `ghostex project status` again, and go on only when that row is clean
+     (stashes may stay if their coordinator says they are not release work).
+   - An **offline** computer doesn't hold the release (user decision Q3297,
+     2026-11-15): release without it, and say so in the report (step 9) with
+     the last-seen time the table printed. Its work goes in the next release.
+   - A row that says `needs a newer Ghostex on <computer>` can't be read until
+     that computer (or, for "this computer", the Mac) runs a Ghostex released
+     after 11.7.1. Ask its coordinator to run `git status` and
+     `git log --branches --not --remotes` in its checkout and report, and say
+     in the report that the computer was checked by hand.
+3. Commit and push every sub-repo with pending work (`apps/mobile/app`,
    `.dependencies/zmx`, `.dependencies/wmx`, ...), each on its own branch as
    usual. Then commit their pointer bumps in Ghostex.
-3. Commit all pending Ghostex work, following AGENTS.md (formatting pass when
+4. Commit all pending Ghostex work, following AGENTS.md (formatting pass when
    quiet, no dropped hunks), then `git pull --rebase` and `git push origin main`.
    Other machines push to the same repo, so pull right before pushing.
-4. Clear what remains in `git status --porcelain --untracked-files=all`:
+5. Clear what remains in `git status --porcelain --untracked-files=all`:
    - ` M .dependencies/code-server` with an **unchanged** pointer (no `+` in
      `git submodule status .dependencies/code-server`) means untracked files
      inside it. On this machine that is the patch leftover
@@ -170,9 +200,9 @@ tree:
      Administrators. Delete `*.orig` / `*.rej` patch leftovers. Anything else
      inside a `.dependencies/` tree belongs to someone; stop and report it.
    - A `+` in `git submodule status` (pointer moved) is real work: commit it in
-     step 2 or 3.
+     step 3 or 4.
    - Don't hide entries with `submodule.<name>.ignore`, and don't stash or clean.
-5. Write the CHANGELOG and bump the version (step 3). The pushed
+6. Write the CHANGELOG and bump the version (step 3). The pushed
    `chore: prepare X.Y.Z` commit is the **release point**: record its sha
    (`git rev-parse HEAD`) and dispatch from exactly that commit (step 4). If
    `origin/main` moves before the dispatch, the dispatcher refuses. Pull, push
@@ -592,6 +622,9 @@ on it; check each one's commit is in the tag (`git merge-base --is-ancestor
 - the "Publish agent skills" run (URL and result) and the commit its signed list names;
 - anything left for them: a missing Homebrew PR, or a platform whose
   rebuild failed twice;
+- the other computers (step 2): which were checked clean, whose work was
+  pushed for this release, and any that was offline and released without
+  ("M7-DESKTOP not checked: offline, last seen Nov 14 05:07");
 - a reminder that `main` received the bot's `chore: release X.Y.Z` commit, so
   every machine should pull.
 
