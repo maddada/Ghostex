@@ -1219,6 +1219,9 @@ pub fn handle_work_request(
         };
         item.record("add", item.title.clone(), &now);
         if let Some(line) = param_text(params, "now") {
+            if let Some(refusal) = super::user_handoff::now_refusal("W<n>", &line, true) {
+                return Err(bad(refusal));
+            }
             item.now = line;
             item.status = "moving".to_string();
         }
@@ -1242,6 +1245,9 @@ pub fn handle_work_request(
     match op.as_str() {
         "now" => {
             let line = param_text(params, "text").ok_or_else(|| bad("Say where it stands."))?;
+            if let Some(refusal) = super::user_handoff::now_refusal(&name, &line, false) {
+                return Err(bad(refusal));
+            }
             item.now = line.clone();
             item.status = "moving".to_string();
             item.finished_at = None;
@@ -1327,6 +1333,13 @@ pub fn handle_work_request(
             let on = param_list(params, "on");
             if on.is_empty() {
                 return Err(bad("Say what it waits on: --on W12, --on Q12 or --on \"words\"."));
+            }
+            if let Some(refusal) = super::user_handoff::wait_refusal(
+                &name,
+                &on,
+                param_text(params, "text").as_deref(),
+            ) {
+                return Err(bad(refusal));
             }
             let until = param_text(params, "until").unwrap_or_default();
             for wait in &on {

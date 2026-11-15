@@ -262,8 +262,11 @@ WORK ITEMS
   add starts an item (Later until something moves it; --now starts it In progress)
   and prints its W number; --thread attaches a thread (repeat it for more).
   now replaces the line saying where it stands and makes it In progress: never
-  append, say where it stands now. step records a step (--done when it is);
-  --chore keeps a rebuild or test run out of sight: chores are never shown.
+  append, say where it stands now. In progress means a thread or you are on it
+  right now: a line that hands it to the user ("waiting on your try") is
+  refused, because whatever the user must try or decide is an ask. step
+  records a step (--done when it is); --chore keeps a rebuild or test run out
+  of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
   chat's, or --tag Q12 for one the chat asked and still waits on; a tag already
   answered is refused). next-tag prints the next free tag, one past the highest
@@ -281,8 +284,8 @@ WORK ITEMS
   stops until they do it. An ask settles when the user answers it (its card,
   or "Q12: yes" in the chat for a tag asked there), with --done Q12 when the
   user did it, or --withdraw Q12. wait replaces what it waits on: W8 (another
-  item), Q12 (an ask) or words for something outside, with --until for when
-  it's expected. done finishes it with the one line worth keeping; its open
+  item), Q12 (an ask) or words for something outside (never the user: that
+  is an ask), with --until for when it's expected. done finishes it with the one line worth keeping; its open
   questions and tasks for the user stay under Needs you until they answer or
   mark them done, or you withdraw them. drop takes it off with everything it asks
   (restore brings it back for 7 days). edit renames it, attaches or detaches threads, or sets its status

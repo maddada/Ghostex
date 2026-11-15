@@ -4042,7 +4042,9 @@ version of the Projects features in Cursor and Claude Code.
   you**, **Blocked** (stopped until you act), **In progress**, **Waiting** (on
   another item, a question or something outside), **Later** and **Finished**.
   Threads, steps and what it asks you belong to the item, and a wait on another
-  item or question clears itself once that's done. A coordinator's reply is a
+  item or question clears itself once that's done. Anything a coordinator needs
+  you to try, test, check or decide is an ask under Needs you, never left In
+  progress or Waiting. A coordinator's reply is a
   set of marked sections with bullets, or a couple of sentences of news while
   Settings > Chat > Marked handovers is Off. On the computer, each work item the turn
   changed gets a small card under the reply, like a "Message from" card: "Work
