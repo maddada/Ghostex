@@ -87,7 +87,7 @@ struct SettledKey {
 struct ScanRow {
     /// The row's place in the sorted list, which finds where it sits in the list as it arrived.
     at: usize,
-    answers: Option<PageAnswers>,
+    answers: Vec<PageAnswers>,
     found: Vec<Found>,
     forms: Vec<QuestionForm>,
     resent: Vec<String>,
@@ -380,10 +380,10 @@ fn cuts(rows: &[ChatRow], opens: impl Fn(&ChatMessage) -> bool) -> Vec<usize> {
 /// What a row tells the question scans, or `None` when it tells them nothing.
 fn scan_row(message: &ChatMessage, at: usize) -> Option<ScanRow> {
     let one = std::slice::from_ref(message);
-    let answers = page_answers_in(one).into_iter().next();
+    let answers = page_answers_in(one);
     let found = asker_entries(one, &[]);
     let (forms, resent) = form_entries(one, &[]);
-    (answers.is_some() || !found.is_empty() || !forms.is_empty() || !resent.is_empty()).then_some(
+    (!answers.is_empty() || !found.is_empty() || !forms.is_empty() || !resent.is_empty()).then_some(
         ScanRow {
             at,
             answers,
@@ -400,7 +400,7 @@ fn scan_row(message: &ChatMessage, at: usize) -> Option<ScanRow> {
 fn merge_scans<'a>(rows: impl Iterator<Item = &'a ScanRow>) -> Scans {
     let mut merged = Scans::default();
     for row in rows {
-        if let Some(answers) = &row.answers {
+        for answers in &row.answers {
             // A later answer replaces the earlier one where it first arrived, as `page_answers_in`
             // keeps it (a one-click answer changed after the agent read it).
             match merged

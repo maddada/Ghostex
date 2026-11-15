@@ -148,12 +148,13 @@ pub fn apply_state_frame(
     if frame.state.screen_probed == Some(true) {
         state.session.screen_probed = true;
     }
-    apply_queue_carriage(
+    apply_queue_carriage_versioned(
         state,
         &frame.state.account_switch,
         &frame.state.api_retry,
         &frame.state.pending_model_selection,
         frame.state.queue.as_ref(),
+        frame.state.queue_version,
         frame.state.draft.as_deref(),
     );
 }
@@ -242,6 +243,69 @@ pub fn apply_returned_prompt(state: &mut ChatState, prompt: &Value) {
         .retain(|entry| normalize_pending_text(&entry.text) != returned);
 }
 
+/// Records the authoritative server queue (`server_queue_prompts`), updates `queue_prompts`, and
+/// re-applies any active optimistic inline-answer overlays on top.
+/// Applies a server queue snapshot guarded by the server's monotonic `queueVersion`: an older
+/// snapshot or delayed RPC result never overwrites a newer server queue or resurrects removed
+/// prompts.
+pub(crate) fn apply_server_queue_versioned(
+    state: &mut ChatState,
+    queue: &[Value],
+    queue_version: Option<u64>,
+    force: bool,
+) -> bool {
+    if let (Some(current), Some(incoming)) = (state.session.server_queue_version, queue_version) {
+        if incoming < current {
+            return false;
+        }
+    }
+    let version_advanced = match (state.session.server_queue_version, queue_version) {
+        (None, Some(_)) => true,
+        (Some(current), Some(incoming)) => incoming > current,
+        _ => false,
+    };
+    let server_changed = state
+        .session
+        .server_queue_prompts
+        .as_deref()
+        .is_some_and(|known| known != queue)
+        || (state.session.server_queue_prompts.is_none()
+            && state.session.queue_prompts.as_deref() != Some(queue));
+    let optimistically_diverged = state.composer.queue_mutation.is_none()
+        && !crate::questions::inline_answers::has_pending_queue_updates(state)
+        && state.session.queue_prompts.as_deref() != Some(queue);
+    if !force
+        && !version_advanced
+        && !server_changed
+        && !optimistically_diverged
+        && !crate::questions::inline_answers::has_pending_queue_updates(state)
+    {
+        return false;
+    }
+    if let Some(incoming) = queue_version {
+        state.session.server_queue_version = Some(
+            state
+                .session
+                .server_queue_version
+                .map_or(incoming, |current| current.max(incoming)),
+        );
+    }
+    if server_changed || version_advanced || state.session.server_queue_prompts.is_none() {
+        state.session.server_queue_prompts = Some(queue.to_vec());
+        state.session.queue_revision = state.session.queue_revision.saturating_add(1);
+    } else if !force && !optimistically_diverged && state.session.server_queue_prompts.is_some() {
+        // Server's queue is unchanged: avoid clobbering optimistic inline overlays on repeated
+        // heartbeats while ensuring in-flight updates still project any missing edits.
+        return false;
+    }
+    if state.session.queue_prompts.as_deref() != Some(queue) {
+        *state.session.queue_prompts = Some(queue.to_vec());
+        state.messages.new_composition_identity();
+    }
+    crate::questions::inline_answers::on_server_queue_prompts(state);
+    true
+}
+
 /// Folds the two queue-carriage fields with their DIFFERENT omission rules: an absent `queue`
 /// leaves the capability, and the list, exactly as it was; an absent `draft` means unchanged.
 /// Neither ever clears anything, because clearing a draft is an explicit empty `content` from the
@@ -252,6 +316,26 @@ pub fn apply_queue_carriage(
     api_retry: &Tri<Value>,
     pending_model_selection: &Tri<Value>,
     queue: Option<&Vec<Value>>,
+    draft: Option<&Value>,
+) {
+    apply_queue_carriage_versioned(
+        state,
+        account_switch,
+        api_retry,
+        pending_model_selection,
+        queue,
+        None,
+        draft,
+    );
+}
+
+pub fn apply_queue_carriage_versioned(
+    state: &mut ChatState,
+    account_switch: &Tri<Value>,
+    api_retry: &Tri<Value>,
+    pending_model_selection: &Tri<Value>,
+    queue: Option<&Vec<Value>>,
+    queue_version: Option<u64>,
     draft: Option<&Value>,
 ) {
     if !matches!(account_switch, Tri::Absent) {
@@ -266,9 +350,7 @@ pub fn apply_queue_carriage(
     if let Some(queue) = queue {
         // Every state frame repeats the (usually empty) queue; only a real change replaces it, so
         // a new identity for the same rows cannot dirty every consumer down to the projection.
-        if state.session.queue_prompts.as_ref() != Some(queue) {
-            *state.session.queue_prompts = Some(queue.clone());
-        }
+        apply_server_queue_versioned(state, queue, queue_version, false);
     }
     if let Some(draft) = draft {
         // Every state frame of an older gxserver repeats the draft: an equal merge keeps the value
@@ -608,12 +690,13 @@ pub fn apply_authoritative(
     if result.state.screen_probed == Some(true) {
         state.session.screen_probed = true;
     }
-    apply_queue_carriage(
+    apply_queue_carriage_versioned(
         state,
         &result.state.account_switch,
         &result.state.api_retry,
         &result.state.pending_model_selection,
         result.state.queue.as_ref(),
+        result.state.queue_version,
         result.state.draft.as_deref(),
     );
     state.session.error = if matches!(result.status, ChatStatus::Error) {

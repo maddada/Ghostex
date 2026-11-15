@@ -323,10 +323,25 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         present => present.clone(),
     };
 
-    folded.result.state.queue = side
-        .queue
-        .clone()
-        .or_else(|| previous_side.and_then(|state| state.queue.clone()));
+    let stale_queue_version = match (
+        previous_side.and_then(|state| state.queue_version),
+        side.queue_version,
+    ) {
+        (Some(prev), Some(inc)) => inc < prev,
+        _ => false,
+    };
+    if stale_queue_version {
+        folded.result.state.queue = previous_side.and_then(|state| state.queue.clone());
+        folded.result.state.queue_version = previous_side.and_then(|state| state.queue_version);
+    } else {
+        folded.result.state.queue = side
+            .queue
+            .clone()
+            .or_else(|| previous_side.and_then(|state| state.queue.clone()));
+        folded.result.state.queue_version = side
+            .queue_version
+            .or_else(|| previous_side.and_then(|state| state.queue_version));
+    }
 
     let previous_draft = previous_side.and_then(|state| state.draft.as_ref());
     folded.result.state.draft = match &side.draft {

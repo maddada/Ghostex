@@ -236,7 +236,7 @@ pub fn keep_unsent(
             .position(|entry| entry.id == pending_id)?;
         Some(state.pending.sends.remove(at))
     });
-    let mut echo = match drawn {
+    let echo = match drawn {
         Some(echo) => echo,
         // Drawn as a send made now would be, so it sits after the chat it was typed under.
         None => {
@@ -255,12 +255,70 @@ pub fn keep_unsent(
             state.pending.sends.remove(at)
         }
     };
+    push_failed_unsent_row(
+        state,
+        UnsentSend {
+            echo,
+            typed: submission.typed_text().to_string(),
+            text: submission.text.clone(),
+            mode: submission.mode,
+            image_paths: submission.image_paths.clone(),
+            send_request_id: submission.send_request_id.clone(),
+            interrupt: submission.interrupt,
+        },
+        message,
+        code,
+    );
+    state.core.timers.cancel(SEND_SLOW_TIMER);
+    state.core.refusal_claimed = true;
+    state.core.clear_error();
+    true
+}
+
+/// Moves a permanently refused combined answer resend into `state.composer.unsent` so its sibling
+/// envelopes and prose remain visible, retryable, editable, and removable.
+pub(crate) fn keep_failed_combined_send(
+    state: &mut ChatState,
+    echo: PendingSend,
+    text: String,
+    queue_until_idle: bool,
+    send_request_id: Option<String>,
+    message: &str,
+    code: Option<&str>,
+) {
+    let mode = if queue_until_idle {
+        SubmissionMode::Queue
+    } else {
+        SubmissionMode::Send
+    };
+    push_failed_unsent_row(
+        state,
+        UnsentSend {
+            echo,
+            typed: text.clone(),
+            text,
+            mode,
+            image_paths: Vec::new(),
+            send_request_id,
+            interrupt: false,
+        },
+        message,
+        code,
+    );
+}
+
+fn push_failed_unsent_row(
+    state: &mut ChatState,
+    mut unsent: UnsentSend,
+    message: &str,
+    code: Option<&str>,
+) {
     let reason = message.trim();
-    echo.queued_prompt_id = None;
-    echo.sent_while_working = false;
-    echo.awaiting_attachments = false;
-    echo.startup_delivery = Some(StartupDelivery {
-        prompt_id: format!("{UNSENT_PROMPT_PREFIX}{}", echo.id),
+    unsent.echo.queued_prompt_id = None;
+    unsent.echo.sent_while_working = false;
+    unsent.echo.awaiting_attachments = false;
+    unsent.echo.startup_delivery = Some(StartupDelivery {
+        prompt_id: format!("{UNSENT_PROMPT_PREFIX}{}", unsent.echo.id),
         state: "failed".to_string(),
         error_message: Some(if reason.is_empty() {
             "Not sent.".to_string()
@@ -269,25 +327,13 @@ pub fn keep_unsent(
         }),
         wait_reason: None,
     });
-    state.composer.unsent.push(UnsentSend {
-        echo,
-        typed: submission.typed_text().to_string(),
-        text: submission.text.clone(),
-        mode: submission.mode,
-        image_paths: submission.image_paths.clone(),
-        // gxserver could not say what became of that attempt, so the id can never be sent again.
-        send_request_id: submission
-            .send_request_id
-            .clone()
-            .filter(|_| code != Some("sendOutcomeUnknown")),
-        interrupt: submission.interrupt,
-    });
-    state.core.timers.cancel(SEND_SLOW_TIMER);
-    state.core.refusal_claimed = true;
-    state.core.clear_error();
+    // gxserver could not say what became of that attempt, so the id can never be sent again.
+    if code == Some("sendOutcomeUnknown") {
+        unsent.send_request_id = None;
+    }
+    state.composer.unsent.push(unsent);
     state.messages.new_composition_identity();
     state.core.request_publish();
-    true
 }
 
 /// Whether `prompt_id` names a row that was not sent (`UNSENT_PROMPT_PREFIX`).

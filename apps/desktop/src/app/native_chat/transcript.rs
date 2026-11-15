@@ -662,18 +662,39 @@ impl NativeChatView {
                 .into_any_element();
         }
         if message["role"] == "user" && message["pageAnswers"].is_object() {
-            // Under Quiet View's own line the card opens straight onto its rows (quiet_view.rs).
-            let body_only = !self.in_subagent
+            let extra = message["extraPageAnswers"].as_array();
+            let has_extra = extra.is_some_and(|cards| !cards.is_empty());
+            let under_quiet_answers = !self.in_subagent
                 && message["id"]
                     .as_str()
                     .is_some_and(|id| self.quiet_answers(id).is_some());
-            row = row.child(self.page_answers_card(
-                &message["pageAnswers"],
-                &message["startupDelivery"],
-                body_only,
-                p,
-                cx,
-            ));
+            // Under Quiet View's own line a single card opens straight onto its rows
+            // (`quiet_view.rs`); when one message holds several envelopes, keep each card's own
+            // header visible and opened under Quiet View so the forms stay distinct.
+            let body_only = under_quiet_answers && !has_extra;
+            let default_open = under_quiet_answers && has_extra;
+            let cards: Vec<&Value> = std::iter::once(&message["pageAnswers"])
+                .chain(extra.into_iter().flatten())
+                .filter(|card| card.is_object())
+                .collect();
+            let last = cards.len().saturating_sub(1);
+            for (index, card) in cards.into_iter().enumerate() {
+                let delivery = if index == last {
+                    &message["startupDelivery"]
+                } else {
+                    &Value::Null
+                };
+                row = row.child(self.page_answers_card(
+                    &id,
+                    index,
+                    card,
+                    delivery,
+                    body_only,
+                    default_open,
+                    p,
+                    cx,
+                ));
+            }
             // The user's own words besides the answers follow as their ordinary message.
             if message["pageAnswers"]["withText"] != true {
                 return row.into_any_element();
