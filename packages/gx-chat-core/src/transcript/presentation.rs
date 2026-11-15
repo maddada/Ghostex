@@ -318,15 +318,31 @@ pub fn project_message(
             }),
     );
     projected.insert("questions".to_string(), Value::Array(questions));
-    projected.insert(
-        "sentMessages".to_string(),
-        Value::Array(project_sent_messages(
-            message,
-            &tool_pairs,
-            line_breaks,
-            spans,
-        )),
-    );
+    // A "Message to" card shows when it went, like a "Message from" card: its send's own call
+    // time, else the message's.
+    //
+    // CDXC:SessionChat 2026-11-15 DECISION: User, picking Q3298 A on the event cards page
+    // (~/.local/share/agent-work/Ghostex/chat-event-cards/event-cards.html): every event card in the
+    // chat wears the message card's look, the time on the right included, so "Message to" gets its
+    // time too.
+    let message_label = projected
+        .get("time")
+        .and_then(|time| time.get("label"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let mut sent_messages = project_sent_messages(message, &tool_pairs, line_breaks, spans);
+    for sent in &mut sent_messages {
+        let label = sent["recipients"][0]["calledAt"]
+            .as_i64()
+            .map(|at| crate::transcript::message_time::clock_label(at, context))
+            .unwrap_or_else(|| message_label.clone());
+        sent["time"] = label.clone().into();
+        if sent["card"].is_object() {
+            sent["card"]["time"] = label.into();
+        }
+    }
+    projected.insert("sentMessages".to_string(), Value::Array(sent_messages));
     // The Workflow calls this message made, by call id: the document's `workflowCards` holds each
     // run's card, drawn after the message's tool rows (`workflow_card.rs`).
     projected.insert(
