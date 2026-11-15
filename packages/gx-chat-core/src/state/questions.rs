@@ -152,12 +152,12 @@ pub struct FormState {
     pub confirmation_boundary: Option<PendingSend>,
     /// The current send's answers appeared in the transcript.
     pub confirmed: bool,
-    /// Rows used by earlier confirmations, so a new send needs its own transcript row.
-    pub confirmed_message_ids: Vec<String>,
+    /// Confirmed transcript row and envelope occurrence pairs, so a new send needs its own envelope.
+    pub confirmed_message_ids: Vec<(String, usize)>,
     /// The queue receipt returned for the current send, when it took the queue path.
     pub queued_prompt_id: Option<String>,
-    /// Confirmed queue receipts: queue id, answers, and the real transcript row that recorded them.
-    pub confirmed_queue_answers: Vec<(String, serde_json::Value, String)>,
+    /// Confirmed queue receipts: queue id, answers, and the transcript `(row_id, occurrence)` that recorded them.
+    pub confirmed_queue_answers: Vec<(String, serde_json::Value, (String, usize))>,
     /// Per receipt: latest queue update time, failure state, retry occurrence, and answer text.
     pub queue_receipt_versions:
         std::collections::BTreeMap<String, (i64, bool, Option<u32>, String)>,
@@ -175,6 +175,17 @@ pub struct FormState {
     pub dictated: std::collections::BTreeMap<String, u64>,
 }
 
+/// Recovery data for a merged multi-part resend emitted after taking back an agent-queued message.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CombinedFormSend {
+    /// Echo id in `state.pending.sends` when `begin_send` created an optimistic row for this send.
+    pub pending_id: Option<String>,
+    /// Complete merged text (`env(A) + env(B_new) + prose`) moved into `composer.unsent` on permanent error.
+    pub text: String,
+    /// Seed echo used when no `pending.sends` row existed (e.g. `answers_wait_for_idle = true`).
+    pub echo_seed: PendingSend,
+}
+
 /// A question form's answers on their way to the agent.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FormSend {
@@ -186,6 +197,8 @@ pub struct FormSend {
     pub queue_until_idle: bool,
     /// See [`crate::questions::unreachable_retry`].
     pub retry: crate::questions::unreachable_retry::Retry,
+    /// Present only for combined resends produced by an inline agent-queue take-back.
+    pub combined_recovery: Option<CombinedFormSend>,
 }
 
 /// The answer call in flight and what settling it means.

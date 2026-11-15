@@ -73,6 +73,7 @@ impl NativeChatView {
         answers: &Value,
         delivery: &Value,
         body_only: bool,
+        default_open: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -80,7 +81,7 @@ impl NativeChatView {
         // `by`: someone else's answers (a Ghostex Collab guest's, held for the owner).
         let by = text(answers, "by");
         let key = format!("answers-card:{page_id}:{by}");
-        let open = body_only || self.is_expanded(&key, false);
+        let open = body_only || self.is_expanded(&key, default_open);
         let motion = (!body_only)
             .then(|| self.disclosure_frame(&key, open, cx))
             .flatten();
@@ -101,7 +102,7 @@ impl NativeChatView {
                 .into_any_element();
             return self.lined_ask_card(div().into_any_element(), Some(body), p);
         }
-        let head = self.answers_head(answers, &key, open, motion.is_some(), p, cx);
+        let head = self.answers_head(answers, &key, open, default_open, motion.is_some(), p, cx);
         let body = match (rows, note) {
             (None, None) => None,
             (rows, note) => Some(
@@ -133,6 +134,7 @@ impl NativeChatView {
         answers: &Value,
         key: &str,
         open: bool,
+        default_open: bool,
         moving: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
@@ -192,7 +194,7 @@ impl NativeChatView {
             p,
         )
         .on_click(cx.listener(move |this, _, _, cx| {
-            let open = this.is_expanded(&toggle_key, false);
+            let open = this.is_expanded(&toggle_key, default_open);
             this.anchor_disclosure_toggle(&toggle_key, !open);
             if open {
                 this.expanded.remove(&toggle_key);

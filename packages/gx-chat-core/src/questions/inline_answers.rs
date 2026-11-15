@@ -34,6 +34,8 @@ pub struct InlineTakeBack {
     pub correction: Value,
     /// What it sends once the old answers are out of the agent's queue.
     pub replacement: Value,
+    /// The queued message text taken back, so other envelopes and prose around the target form stay intact.
+    pub queued_text: String,
 }
 
 /// What this client is doing with one-click answers.
@@ -79,8 +81,8 @@ fn answers_for(form: &QuestionForm, value: &str, changed_from: Option<&str>) -> 
     Value::Object(out)
 }
 
-/// The id of Ghostex's queued prompt that holds the form's answers, when one does.
-fn ghostex_queued_prompt(state: &ChatState, id: &str) -> Option<String> {
+/// The id and full text of Ghostex's queued prompt that holds the form's answers, when one does.
+fn ghostex_queued_prompt(state: &ChatState, id: &str) -> Option<(String, String)> {
     state
         .session
         .queue_prompts
@@ -88,8 +90,15 @@ fn ghostex_queued_prompt(state: &ChatState, id: &str) -> Option<String> {
         .iter()
         .find_map(|prompt| {
             let text = prompt.get("text").and_then(Value::as_str)?;
-            (crate::transcript::page_answers::answers_page_id(text).as_deref() == Some(id))
-                .then(|| prompt.get("id").and_then(Value::as_str).map(str::to_string))
+            crate::transcript::page_answers::answers_page_ids(text)
+                .iter()
+                .any(|page_id| page_id == id)
+                .then(|| {
+                    prompt
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(|prompt_id| (prompt_id.to_string(), text.to_string()))
+                })
                 .flatten()
         })
 }
@@ -102,7 +111,9 @@ fn agent_queued_text(state: &ChatState, id: &str) -> Option<(String, String)> {
             return None;
         }
         let text = crate::transcript::prose::prose_markdown(&message.blocks);
-        (crate::transcript::page_answers::answers_page_id(&text).as_deref() == Some(id))
+        crate::transcript::page_answers::answers_page_ids(&text)
+            .iter()
+            .any(|page_id| page_id == id)
             .then(|| (message.id.clone(), text))
     })
 }
@@ -282,17 +293,24 @@ fn answer(
         return Vec::new();
     }
     let replacement = answers_for(&form, picked, None);
-    if let Some(prompt_id) = ghostex_queued_prompt(state, id) {
+    if let Some((prompt_id, existing_text)) = ghostex_queued_prompt(state, id) {
         if let Some(entry) = state.questions.forms.get_mut(id) {
             entry.sent = Some(replacement.clone());
         }
+        let new_envelope = answers_message(&form, &replacement);
+        let updated_text = crate::transcript::page_answers::replace_page_answers_envelope(
+            &existing_text,
+            id,
+            &new_envelope,
+        )
+        .unwrap_or(new_envelope);
         let request_id = state.core.allocate_request_id();
         return vec![Effect::SendRpc {
             request_id,
             method: ChatRpcMethod::UpdateSessionChatQueuedPrompt,
             params: Box::new(json!({
                 "promptId": prompt_id,
-                "text": answers_message(&form, &replacement),
+                "text": updated_text,
             })),
         }];
     }
@@ -304,6 +322,7 @@ fn answer(
             form: id.to_string(),
             correction,
             replacement,
+            queued_text: text.clone(),
         });
         return vec![Effect::SendRpc {
             request_id,
@@ -540,12 +559,29 @@ pub fn rpc_settled(
             take_back.correction,
         ));
     }
-    // The old answers never reached the agent: forget them and send the new pick in their place.
+    // The old answers never reached the agent: forget them and send the new pick in their place,
+    // preserving any other envelopes or prose carried in the same queued message.
     if let Some((message_id, _)) = agent_queued_text(state, &form.id) {
         if let Some(pending_id) = message_id.strip_prefix(PENDING_ID_PREFIX) {
             crate::session::sends::drop_send(state, pending_id);
         }
     }
+    let original_text = match outcome {
+        RpcOutcome::Ok { result } => result
+            .get("text")
+            .and_then(Value::as_str)
+            .filter(|text| !text.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| take_back.queued_text.clone()),
+        RpcOutcome::Err { .. } => take_back.queued_text.clone(),
+    };
+    let new_envelope = answers_message(&form, &take_back.replacement);
+    let updated_text = crate::transcript::page_answers::replace_page_answers_envelope(
+        &original_text,
+        &form.id,
+        &new_envelope,
+    )
+    .unwrap_or_else(|| new_envelope.clone());
     if let Some(entry) = state.questions.forms.get_mut(&form.id) {
         entry.sent = None;
         entry.sent_waiting_for_idle = false;
@@ -553,11 +589,17 @@ pub fn rpc_settled(
         entry.confirmed = false;
         entry.queued_prompt_id = None;
     }
-    Some(crate::questions::forms::dispatch_answers(
+    let combined = updated_text != new_envelope;
+    let combined_pending_id = (combined && !state.core.answers_wait_for_idle)
+        .then(|| crate::session::sends::begin_send(state, context, &updated_text, &[]));
+    Some(crate::questions::forms::dispatch_answers_text(
         state,
         context,
         &form,
         take_back.replacement,
+        updated_text,
+        combined_pending_id,
+        combined,
     ))
 }
 

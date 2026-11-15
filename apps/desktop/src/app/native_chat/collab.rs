@@ -143,15 +143,27 @@ impl NativeChatView {
                     div()
                         .w_full()
                         .min_w_0()
-                        .when(card["answers"].is_object(), |slot| {
-                            slot.child(self.page_answers_card(
-                                &card["answers"],
-                                &Value::Null,
-                                false,
-                                p,
-                                cx,
-                            ))
-                        })
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.0 * s))
+                        .children(
+                            card["answers"]
+                                .is_object()
+                                .then_some(&card["answers"])
+                                .into_iter()
+                                .chain(card["extraAnswers"].as_array().into_iter().flatten())
+                                .filter(|answers| answers.is_object())
+                                .map(|answers| {
+                                    self.page_answers_card(
+                                        answers,
+                                        &Value::Null,
+                                        false,
+                                        false,
+                                        p,
+                                        cx,
+                                    )
+                                }),
+                        )
                         .into_any_element(),
                     div()
                         .w_full()
@@ -207,13 +219,21 @@ impl NativeChatView {
             .children(pictures)
             // Answers to a form or page wait as their answers card (gx-chat-core extras/collab.rs).
             .when(row["answers"].is_object(), |column| {
-                column.child(div().w_full().child(self.page_answers_card(
-                    &row["answers"],
-                    &Value::Null,
-                    false,
-                    p,
-                    cx,
-                )))
+                column.children(
+                    std::iter::once(&row["answers"])
+                        .chain(row["extraAnswers"].as_array().into_iter().flatten())
+                        .filter(|answers| answers.is_object())
+                        .map(|answers| {
+                            div().w_full().child(self.page_answers_card(
+                                answers,
+                                &Value::Null,
+                                false,
+                                false,
+                                p,
+                                cx,
+                            ))
+                        }),
+                )
             })
             .when(!words.is_empty(), |column| {
                 column.child(

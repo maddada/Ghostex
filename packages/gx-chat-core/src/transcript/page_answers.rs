@@ -59,42 +59,180 @@ fn is_page_id(id: &str) -> bool {
     id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// The answers envelope a user message holds and the text written around it (empty when the
-/// message is only the envelope).
+/// Finds the closing `</ghostex-page-answers>` tag starting from `body_start`, ignoring tags embedded
+/// inside JSON string literals (including escaped quotes/backslashes) when the body begins as JSON.
+fn find_envelope_close(text: &str, body_start: usize) -> Option<usize> {
+    let tail = &text[body_start..];
+    let first_non_ws = tail.trim_start();
+    if !(first_non_ws.starts_with('{')
+        || first_non_ws.starts_with('[')
+        || first_non_ws.starts_with('"'))
+    {
+        return tail.find(CLOSE).map(|rel| body_start + rel);
+    }
+    let bytes = text.as_bytes();
+    let close_bytes = CLOSE.as_bytes();
+    let offset = text.len() - first_non_ws.len();
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut i = offset;
+    while i < bytes.len() {
+        let byte = bytes[i];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+        if byte == b'"' {
+            in_string = true;
+            i += 1;
+            continue;
+        }
+        if bytes[i..].starts_with(close_bytes) {
+            return Some(i);
+        }
+        i += 1;
+    }
+    tail.find(CLOSE).map(|rel| body_start + rel)
+}
+
+/// Byte spans `(open, close)` and parsed `PageAnswers` for every valid envelope in `text`.
+fn scan_page_answer_spans(text: &str) -> Vec<(usize, usize, PageAnswers)> {
+    if !text.contains(OPEN) {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    let mut scan = 0usize;
+    while let Some(rel_open) = text[scan..].find(OPEN) {
+        let open = scan + rel_open;
+        let after_open = &text[open + OPEN.len()..];
+        if !after_open
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_whitespace() || ch == '>')
+        {
+            scan = open + OPEN.len();
+            continue;
+        }
+        let Some(head_rel_end) = after_open.find('>') else {
+            break;
+        };
+        let head = &after_open[..head_rel_end];
+        if head.contains('<') {
+            scan = open + OPEN.len();
+            continue;
+        }
+        let body_start = open + OPEN.len() + head_rel_end + 1;
+        let Some(close_start) = find_envelope_close(text, body_start) else {
+            break;
+        };
+        let close = close_start + CLOSE.len();
+        if let Some(answers) = parse_page_answers(&text[open..close]) {
+            found.push((open, close, answers));
+            scan = close;
+        } else {
+            scan = open + OPEN.len();
+        }
+    }
+    found
+}
+
+/// Replaces only the envelope for `page_id` in `text` with `replacement`, keeping surrounding
+/// envelopes and prose verbatim.
+pub(crate) fn replace_page_answers_envelope(
+    text: &str,
+    page_id: &str,
+    replacement: &str,
+) -> Option<String> {
+    let spans = scan_page_answer_spans(text);
+    let (open, close, _) = spans
+        .into_iter()
+        .rfind(|(_, _, answers)| answers.page_id == page_id)?;
+    Some(format!("{}{}{}", &text[..open], replacement, &text[close..]))
+}
+
+/// All answers envelopes a user message holds (in document order) and the text written around
+/// them (empty when the message holds only envelopes).
 ///
 /// CDXC:SessionChat 2026-10-11 WHY:
 /// The envelope is not always the whole message: answers that went out while Claude could not
 /// take them came back into its input box, Ghostex handed them to the chat's composer, and the
-/// user's next message carried them with their own words below. The chat draws the answers card
-/// for the envelope and the rest as the user's text, and the form still reads Answered.
-pub fn split_page_answers(text: &str) -> Option<(PageAnswers, String)> {
-    let open = text.find(OPEN)?;
-    let close = text[open..].find(CLOSE)? + open + CLOSE.len();
-    let answers = parse_page_answers(&text[open..close])?;
-    let before = js_trim(&text[..open]);
-    let after = js_trim(&text[close..]);
-    let rest = match (before.is_empty(), after.is_empty()) {
-        (true, _) => after.to_string(),
-        (false, true) => before.to_string(),
-        (false, false) => format!("{before}\n\n{after}"),
-    };
-    Some((answers, rest))
+/// user's next message carried them with their own words below. Multiple forms answered while the
+/// agent was busy can also be concatenated into one user message. The chat draws an answers card
+/// for each envelope and the rest as the user's text, and each form still reads Answered.
+pub fn split_all_page_answers(text: &str) -> (Vec<PageAnswers>, String) {
+    let spans = scan_page_answer_spans(text);
+    if spans.is_empty() {
+        return (Vec::new(), text.to_string());
+    }
+    let mut found = Vec::with_capacity(spans.len());
+    let mut parts: Vec<&str> = Vec::new();
+    let mut cursor = 0usize;
+    for (open, close, answers) in spans {
+        let gap = js_trim(&text[cursor..open]);
+        if !gap.is_empty() {
+            parts.push(gap);
+        }
+        found.push(answers);
+        cursor = close;
+    }
+    let tail = js_trim(&text[cursor..]);
+    if !tail.is_empty() {
+        parts.push(tail);
+    }
+    (found, parts.join("\n\n"))
 }
 
-/// The page or question form a message's answers envelope answers, when it holds one.
-pub fn answers_page_id(text: &str) -> Option<String> {
+/// Every page or question form a message's answers envelopes answer, in document order.
+pub fn answers_page_ids(text: &str) -> Vec<String> {
     if !text.contains(OPEN) {
-        return None;
+        return Vec::new();
     }
-    split_page_answers(text).map(|(answers, _)| answers.page_id)
+    split_all_page_answers(text)
+        .0
+        .into_iter()
+        .map(|answers| answers.page_id)
+        .collect()
+}
+
+/// All projected answer cards a transcript row carries: the primary `pageAnswers` object plus any
+/// additional cards in `extraPageAnswers`.
+pub(crate) fn row_page_answers(row: &Value) -> impl Iterator<Item = &Value> {
+    let first = row
+        .get("pageAnswers")
+        .filter(|value| value.is_object())
+        .into_iter();
+    let extra = row
+        .get("extraPageAnswers")
+        .and_then(|value| value.as_array())
+        .into_iter()
+        .flatten()
+        .filter(|value| value.is_object());
+    first.chain(extra)
 }
 
 /// The answers a message holds, when the whole message is one answers envelope.
 pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
     let text = js_trim(text);
     let rest = text.strip_prefix(OPEN)?;
+    if !rest
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_whitespace() || ch == '>')
+    {
+        return None;
+    }
     let head_end = rest.find('>')?;
     let head = &rest[..head_end];
+    if head.contains('<') {
+        return None;
+    }
     let body = rest[head_end + 1..].strip_suffix(CLOSE)?;
     let page_id = attribute(head, "page").filter(|id| is_page_id(id))?;
     let title = attribute(head, "title")
@@ -102,6 +240,9 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
         .filter(|title| !title.is_empty())
         .unwrap_or_else(|| "Ghostex page".to_string());
     let body = js_trim(body);
+    if body.contains(OPEN) && serde_json::from_str::<Value>(body).is_err() {
+        return None;
+    }
     let answers = serde_json::from_str(body).unwrap_or_else(|_| Value::String(body.to_string()));
     let tags = attribute(head, "tags")
         .map(|tags| tags.split_whitespace().map(str::to_string).collect())
@@ -114,17 +255,25 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
     })
 }
 
+pub(crate) fn is_unsent_or_failed(message: &ghostex_gx_protocol::ChatMessage) -> bool {
+    message.startup_delivery.as_ref().is_some_and(|delivery| {
+        delivery.state == "failed" || crate::composer::delivery::is_unsent(&delivery.prompt_id)
+    })
+}
+
 /// The answers this transcript received, one per page or question form (the latest sent, where the
-/// first one arrived).
+/// first one arrived). Failed or unsent client recovery rows are excluded so they never settle
+/// an open form as answered before retry succeeds.
 pub fn page_answers_in<'a>(
     messages: impl IntoIterator<Item = &'a ghostex_gx_protocol::ChatMessage>,
 ) -> Vec<PageAnswers> {
     let mut found: Vec<PageAnswers> = Vec::new();
     for message in messages
         .into_iter()
-        .filter(|message| message.role == ChatRole::User)
+        .filter(|message| message.role == ChatRole::User && !is_unsent_or_failed(message))
     {
-        if let Some((answers, _)) = split_page_answers(&prose_markdown(&message.blocks)) {
+        let (envelopes, _) = split_all_page_answers(&prose_markdown(&message.blocks));
+        for answers in envelopes {
             // A later answer to the same question replaces the earlier one in place: a one-click
             // answer changed after the agent read it (`questions/inline_answers.rs`).
             match found
@@ -434,13 +583,15 @@ pub fn answers_below<'a>(
                 && card["withText"] != true
                 && row[crate::transcript::folded_cards::FOLDED_INTO_WORK] != true
             {
-                let page_id = card["pageId"].as_str().unwrap_or_default();
                 let reply_id = reply["id"].as_str().unwrap_or_default();
-                if askers
-                    .iter()
-                    .any(|asker| asker.id == page_id && asker.message_id == reply_id)
-                {
-                    below.push(page_id.to_string());
+                for envelope in row_page_answers(row) {
+                    let page_id = envelope["pageId"].as_str().unwrap_or_default();
+                    if askers
+                        .iter()
+                        .any(|asker| asker.id == page_id && asker.message_id == reply_id)
+                    {
+                        below.push(page_id.to_string());
+                    }
                 }
             }
         }

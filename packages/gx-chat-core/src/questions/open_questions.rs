@@ -674,6 +674,9 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
         })
         .collect();
     for entry in state.session.queue_prompts.iter().flatten() {
+        if entry.get("state").and_then(serde_json::Value::as_str) == Some("failed") {
+            continue;
+        }
         let text = entry["prompt"]["text"]
             .as_str()
             .or_else(|| entry["text"].as_str())
@@ -681,7 +684,7 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
         if !text.contains("<ghostex-page-answers") {
             continue;
         }
-        if let Some((answers, _)) = crate::transcript::page_answers::split_page_answers(text) {
+        for answers in crate::transcript::page_answers::split_all_page_answers(text).0 {
             if !found.iter().any(|known| known.page_id == answers.page_id) {
                 found.push(answers);
             }

@@ -38,7 +38,8 @@ pub use crate::state::pickers::{
     ContextPreferencesByAgent, ContextState, DraftHandoffModel, ForkBranchesState, PickersState,
 };
 pub use crate::state::questions::{
-    AnswerRequest, AsyncQuestionsState, AsyncSubmit, FormSend, FormState, QuestionsState,
+    AnswerRequest, AsyncQuestionsState, AsyncSubmit, CombinedFormSend, FormSend, FormState,
+    QuestionsState,
 };
 pub use crate::state::read_aloud::{Notice, Playing, ReadAloudState};
 pub use crate::state::session::{SessionIdentity, SessionState};

@@ -152,23 +152,40 @@ fn answers_count(values: &[String], total: usize) -> String {
 
 /// A page's or a form's answers row, unless the user wrote words of his own with it.
 fn page_answers(row: &Value) -> Option<QuietAnswers> {
-    let card = &row["pageAnswers"];
-    if !card.is_object() || card["withText"] == true || row["role"] != "user" {
+    if row["role"] != "user" {
+        return None;
+    }
+    let cards: Vec<&Value> = crate::transcript::page_answers::row_page_answers(row).collect();
+    let first = *cards.first()?;
+    if first["withText"] == true {
         return None;
     }
     let id = row["id"].as_str()?.to_string();
-    let rows = card["rows"].as_array().map_or(&[][..], Vec::as_slice);
-    let values: Vec<String> = rows
-        .iter()
-        .map(|row| row["value"].as_str().unwrap_or_default().to_string())
-        .collect();
-    let total = rows.len() + card["more"].as_u64().unwrap_or(0) as usize;
+    let mut values = Vec::new();
+    let mut total = 0usize;
+    let mut titles = Vec::with_capacity(cards.len());
+    for card in &cards {
+        let rows = card["rows"].as_array().map_or(&[][..], Vec::as_slice);
+        for entry in rows {
+            values.push(entry["value"].as_str().unwrap_or_default().to_string());
+        }
+        total += rows.len() + card["more"].as_u64().unwrap_or(0) as usize;
+        titles.push(card["title"].as_str().unwrap_or("the page"));
+    }
+    let text = match titles.as_slice() {
+        [only] => format!("You answered \u{201c}{}\u{201d}", clip(only, 60)),
+        many => {
+            let summary = many
+                .iter()
+                .map(|title| format!("\u{201c}{}\u{201d}", clip(title, 36)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("You answered {summary}")
+        }
+    };
     Some(QuietAnswers {
         key: format!("quiet-answers:{id}"),
-        text: format!(
-            "You answered \u{201c}{}\u{201d}",
-            clip(card["title"].as_str().unwrap_or("the page"), 60)
-        ),
+        text,
         count: answers_count(&values, total),
         id,
         open: false,

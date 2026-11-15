@@ -70,10 +70,10 @@ pub fn pending_with_startup_sends(
             .unwrap_or(false);
         // Answers a page or question form sent are drawn in the transcript at once too
         // (`session/answer_echoes.rs`), never in the strip above the composer.
-        let answers = crate::transcript::page_answers::answers_page_id(
+        let answers = !crate::transcript::page_answers::answers_page_ids(
             queue_field(prompt, "text").unwrap_or_default(),
         )
-        .is_some();
+        .is_empty();
         if !startup_send && !answers && by_receipt.is_none() {
             continue;
         }
