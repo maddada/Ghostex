@@ -61,7 +61,8 @@ export interface GhostexBridgeError extends Error {
     | 'sessions.open'
     | 'agents.start'
     | 'agents.message'
-    | 'sessions.message';
+    | 'sessions.message'
+    | 'agents.note';
 }
 
 export interface GhostexExtensionApi {

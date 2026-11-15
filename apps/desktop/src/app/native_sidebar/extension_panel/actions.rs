@@ -8,11 +8,11 @@ use ghostex_gx_core::{MachineId, ProjectKey, SessionKey, SidebarMode};
 use ghostex_gx_protocol::extension_panel::{PanelAction, PanelMenuItem};
 use gpui::{AppContext as _, Window};
 use gpui_component::input::{InputEvent, InputState};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::PanelPlace;
-use crate::GhostexGpuiApp;
 use crate::app::gx_store::gx_rpc;
+use crate::GhostexGpuiApp;
 
 /// A user's edit of an editable checklist, which gxserver applies and saves.
 #[derive(Clone, Debug, PartialEq)]
@@ -52,6 +52,7 @@ fn permission_label(permission: &str) -> &'static str {
         "sessions.read" => "See your sessions",
         "agents.message" => "Hear from your agents",
         "sessions.message" => "Message a thread when you tap its panel",
+        "agents.note" => "Tell new agent sessions about it",
         _ => "this permission",
     }
 }
