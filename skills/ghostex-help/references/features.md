@@ -5130,7 +5130,12 @@ sessions, so any client can control agents on any machine.
   is right in the step, with a light button). It won't scan gives tips. If the
   phone can't scan it, click Copy the code under the code and tap Paste a code
   instead on the phone (also under Other ways to connect on the first screen,
-  beside Use Tailscale). The code works once, for five minutes. "Need the
+  beside Use Tailscale). The code works once, for five minutes. To add a
+  computer with no code at all, tap Use SSH details (a small link on the
+  first screen and on Add a computer) and type its name, SSH host (an IP or
+  host name the phone can reach, such as its Tailscale IP or its address on
+  your own network), SSH username and password, or generate a key under
+  Advanced; the computer needs SSH access on. "Need the
   app?" at the bottom of the window links to the Android app and to the App
   Store for iPhone. Computer in the window's list shows another computer's two
   steps and the code to copy. Tailscale in the list says what it is for and
