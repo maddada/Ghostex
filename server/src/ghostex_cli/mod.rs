@@ -21,6 +21,7 @@ mod chief;
 mod claude_cloud_cli;
 mod cloud_attach;
 mod cloud_cli;
+mod computer_code;
 mod computers;
 mod connectors;
 mod connectors_executor;
@@ -136,6 +137,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "chief",
     "security",
     "agent-guide",
+    "computer-code",
     "computers",
     "autopilot",
     "help",
@@ -268,6 +270,11 @@ fn dispatch(argv: &[String]) -> CliResult<i32> {
 /// commands (assert-card, wait-for, failed attach) instead of throwing.
 /// Commands record that here.
 static EXIT_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// `gxserver computer-code`, the same command as `ghostex computer-code`.
+pub fn run_computer_code(args: &[String]) -> CliResult<()> {
+    computer_code::run(args)
+}
 
 pub fn set_exit_code(code: i32) {
     EXIT_CODE.store(code, std::sync::atomic::Ordering::SeqCst);
@@ -447,6 +454,7 @@ fn is_known_command(name: &str) -> bool {
         "resources",
         "project",
         "projects",
+        "computer-code",
         "computers",
         "chief",
         "autopilot",
@@ -522,6 +530,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             agentbox_cli::run(args)
         }
         "agents" => agents::run(args),
+        "computer-code" => computer_code::run(args),
         "computers" => computers::run(args),
         "project" => project_status::run(args),
         "projects" => projects::run(args),

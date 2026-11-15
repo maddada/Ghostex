@@ -5314,7 +5314,13 @@ sessions, so any client can control agents on any machine.
   a line or two with one button that fixes it (Try another code, Reconnect,
   Try again). Use SSH details in the window adds a computer by its address,
   username and password instead. To re-pair a computer paired before 11.1.0,
-  open it in Settings > Remote there and paste a new code.
+  open it in Settings > Remote there and paste a new code. On a server without
+  the app (or any terminal), `ghostex computer-code` (also `gxserver
+  computer-code`) prints this computer's code to paste into Connect a Computer
+  on the other one, then shows that computer's three words and asks y or n to
+  approve it; `--once` or `--json` only prints the code. Easy Connect must be on
+  (`ghostex tailcat enable`), and it runs only in your own terminal, not from an
+  agent's session.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;

@@ -217,6 +217,10 @@ pub fn usage() -> String {
             "Update this or a connected computer's Ghostex app",
         ),
         format_help_command(
+            "computer-code [--once] [--json]",
+            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer, then approve that computer here when its three words match; works on a server without the app, in your own terminal only",
+        ),
+        format_help_command(
             "computers [--json]",
             "List the computers this one is connected to; any agent can then start, message and read sessions there with --computer <name> (sessions, agents create/send/list, coordinator start-thread, read-session-chat, read-text and the other session verbs), or with a session ref from that computer",
         ),
