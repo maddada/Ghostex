@@ -97,6 +97,13 @@ pub enum PanelBlockBody {
     /// A small Markdown subset (paragraphs, bold, italic, code, links, lists).
     Text {
         text: String,
+        /// The user may rewrite the text in place (a click opens it in a field); gxserver applies
+        /// the edit itself and tells the extension (`textEdited`).
+        ///
+        /// CDXC:Extensions 2026-11-16 DECISION:
+        /// User (Q3433, Thread brief): the objective is "editable right in the panel", so a text block can be editable the way a checklist is, with the same inline field.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        editable: Option<bool>,
     },
     Buttons {
         items: Vec<PanelButton>,

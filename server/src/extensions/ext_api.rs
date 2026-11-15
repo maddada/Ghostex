@@ -8,8 +8,8 @@
 //! | `PATCH /api/ext/v1/panel` `{blocks?, removeBlocks?, title?, tabs?, baseRevision?}` | the extension | Upserts blocks by id, removes blocks |
 //! | `GET /api/ext/v1/projects` | the extension, with `projects.read` | This computer's projects |
 //! | `GET /api/ext/v1/sessions?project=` | the extension, with `sessions.read` | Its sessions and what they are doing |
-//! | `GET /api/ext/v1/events` | the extension, and you and your agents (its panel events only) | Server-sent events: `panelChanged`, `checklistEdited`, `panelAction`, and `projectsChanged` / `sessionsChanged` with the matching read permission |
-//! | `POST /api/ext/v1/panelAction` `{extension, surface?, session?, blockId, itemId?, edit? \| action?, data?, baseRevision?}` | your Ghostex apps and phones | A tap: an editable-checklist edit gxserver applies, or an `extension` action passed to the extension |
+//! | `GET /api/ext/v1/events` | the extension, and you and your agents (its panel events only) | Server-sent events: `panelChanged`, `checklistEdited`, `textEdited`, `panelAction`, and `projectsChanged` / `sessionsChanged` with the matching read permission |
+//! | `POST /api/ext/v1/panelAction` `{extension, surface?, session?, blockId, itemId?, edit? \| action?, data?, baseRevision?}` | your Ghostex apps and phones | A tap: an editable checklist's or text's edit gxserver applies, or an `extension` action passed to the extension |
 //!
 //! The extension is the one whose server holds the bearer token (`GHOSTEX_API_TOKEN`, given to
 //! its command server at start); every other caller names it with `?extension=<id>`. Answered
@@ -461,6 +461,30 @@ fn panel_action(
         .and_then(Value::as_str)
         .ok_or_else(|| ExtensionError::bad_request("A panel action needs blockId."))?;
     let panels = state.extension_registry.panels();
+    if let Some(edit) = body.get("edit").filter(|edit| edit["op"] == "text") {
+        let text = edit
+            .get("text")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .ok_or_else(|| ExtensionError::bad_request("The edit needs text."))?;
+        let record = panels.edit_text(
+            &extension.manifest,
+            &extension.payload_dir,
+            surface,
+            block_id,
+            text,
+            base_revision,
+        )?;
+        let mut event = Map::new();
+        event.insert("type".into(), json!("textEdited"));
+        surface.describe(&mut event);
+        event.insert("blockId".into(), json!(block_id));
+        event.insert("text".into(), json!(text));
+        event.insert("revision".into(), json!(record.revision));
+        panels.emit(id, Value::Object(event));
+        return Ok((with_ok(record.to_json(id, surface)), true));
+    }
     if let Some(edit) = body.get("edit") {
         let edit = ChecklistEdit::parse(edit)?;
         let record = panels.edit_checklist(
