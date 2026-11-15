@@ -21,6 +21,8 @@ pub(crate) fn chat() -> Section {
             row("chatQuietViewExpandLast", "Expand the last turn in Quiet View", "Show the work after the newest reply, or the turn that is running, open instead of as one line. It folds once a newer reply comes."),
             // CDXC:Experience 2026-11-15 SEE-ALSO: Chill's Quiet View (packages/settings-catalog/src/experience.rs has the user's Q3280 decision).
             row("chatQuietViewCalm", "Calm Quiet View", "Keep the turn that is running as one line that counts its time (Working · 1m 12s), and have each line name only its reports; open a line to see the tool calls and messages sent inside it. Experience's Chill turns it on."),
+            // CDXC:SessionChat 2026-11-15 SEE-ALSO: the user's words on Thinking are in packages/gx-chat-core/src/extras/working_strip.rs.
+            row("chatVariedWorkingWords", "Varied thinking words", "While the agent works, show a different playful word each turn (Pondering, Brewing and the like) instead of Thinking."),
             row("sessionChatDetailedView", "Default to Detailed view", "New chats open in Detailed view: Quiet View with every line open, so all the work between replies shows. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat."),
             // CDXC:Experience 2026-11-15 SEE-ALSO: the chat box rows Experience sets (packages/settings-catalog/src/experience.rs has the user's Q3281 and Q3282 decisions).
             row("chatComposerModePicker", "Mode in the chat box", "Show the mode picker (Auto, Plan, Bypass permissions and the like) in the chat box. Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on. The phone has its own switch."),

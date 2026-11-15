@@ -67,6 +67,9 @@ pub struct CoreState {
     /// The Show all effort levels setting (`orchestratorAllEfforts`), from the chat settings or the
     /// latest read; off by default, which narrows an orchestrator's effort pickers.
     pub all_orchestrator_efforts_enabled: bool,
+    /// The Varied thinking words setting (`chatVariedWorkingWords`), from the chat settings or the
+    /// latest read; off by default, which makes the working strip say Thinking.
+    pub varied_working_words: bool,
     /// The Handover heading color strength setting (`markedHandoversHeadingStrength`), from the
     /// chat settings or the latest read; `None` is the default, 60%.
     pub marked_heading_strength: Option<u8>,

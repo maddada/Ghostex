@@ -650,6 +650,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatComposerContextRing", J::Bool(true)),
     ("chatComposerMaximize", J::Bool(true)),
     ("chatQuietViewCalm", J::Bool(false)),
+    ("chatVariedWorkingWords", J::Bool(false)),
     // CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." Off keeps the unified look; on, thinking takes the theme's muted text colour and replies its full foreground, in the desktop, web and phone chats.
     ("sessionChatMutedThinking", J::Bool(false)),
     ("sessionChatKeepComposerExpanded", J::Bool(false)),

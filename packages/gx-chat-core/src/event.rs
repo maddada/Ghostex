@@ -333,6 +333,10 @@ pub struct ChatSettings {
     /// The Show all effort levels setting (`orchestratorAllEfforts`), the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_orchestrator_efforts: Option<bool>,
+    /// The Varied thinking words setting (`chatVariedWorkingWords`), the same way: off, the
+    /// working strip says Thinking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub varied_working_words: Option<bool>,
     /// The Handover heading color strength setting (`markedHandoversHeadingStrength`, 0 to 100),
     /// the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -329,6 +329,19 @@
       "agentWritable": true
     },
     {
+      "key": "chatVariedWorkingWords",
+      "title": "Varied thinking words",
+      "subtitle": "While the agent works, show a different playful word each turn (Pondering, Brewing and the like) instead of Thinking.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatDetailedView",
       "title": "Default to Detailed view",
       "subtitle": "New chats open in Detailed view: Quiet View with every line open, so all the work between replies shows. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
