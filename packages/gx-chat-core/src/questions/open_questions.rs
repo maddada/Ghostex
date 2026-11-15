@@ -673,6 +673,7 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
             })
         })
         .collect();
+    let form_count = found.len();
     for entry in state.session.queue_prompts.iter().flatten() {
         if entry.get("state").and_then(serde_json::Value::as_str) == Some("failed") {
             continue;
@@ -685,8 +686,14 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
             continue;
         }
         for answers in crate::transcript::page_answers::split_all_page_answers(text).0 {
-            if !found.iter().any(|known| known.page_id == answers.page_id) {
-                found.push(answers);
+            // Form answers keep precedence; a later queued answer replaces an earlier queued one.
+            match found
+                .iter()
+                .position(|known| known.page_id == answers.page_id)
+            {
+                Some(index) if index >= form_count => found[index] = answers,
+                Some(_) => {}
+                None => found.push(answers),
             }
         }
     }

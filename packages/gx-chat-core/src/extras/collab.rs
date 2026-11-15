@@ -189,7 +189,7 @@ pub fn own_held_answers(state: &ChatState, form_id: &str) -> Option<Value> {
         .flat_map(|row| {
             crate::transcript::page_answers::split_all_page_answers(text(row, "text")).0
         })
-        .find(|answers| answers.page_id == form_id)
+        .rfind(|answers| answers.page_id == form_id)
         .map(|answers| answers.answers)
 }
 

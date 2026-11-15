@@ -153,8 +153,11 @@ impl NativeChatView {
                                 .into_iter()
                                 .chain(card["extraAnswers"].as_array().into_iter().flatten())
                                 .filter(|answers| answers.is_object())
-                                .map(|answers| {
+                                .enumerate()
+                                .map(|(index, answers)| {
                                     self.page_answers_card(
+                                        &id,
+                                        index,
                                         answers,
                                         &Value::Null,
                                         false,
@@ -219,12 +222,16 @@ impl NativeChatView {
             .children(pictures)
             // Answers to a form or page wait as their answers card (gx-chat-core extras/collab.rs).
             .when(row["answers"].is_object(), |column| {
+                let row_id = text(row, "id");
                 column.children(
                     std::iter::once(&row["answers"])
                         .chain(row["extraAnswers"].as_array().into_iter().flatten())
                         .filter(|answers| answers.is_object())
-                        .map(|answers| {
+                        .enumerate()
+                        .map(move |(index, answers)| {
                             div().w_full().child(self.page_answers_card(
+                                &row_id,
+                                index,
                                 answers,
                                 &Value::Null,
                                 false,

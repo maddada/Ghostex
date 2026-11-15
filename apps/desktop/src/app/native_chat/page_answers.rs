@@ -70,6 +70,8 @@ impl NativeChatView {
     /// the delivery's error with Retry and Remove, under its line whether or not it is open.
     pub(super) fn page_answers_card(
         &self,
+        row_id: &str,
+        occurrence: usize,
         answers: &Value,
         delivery: &Value,
         body_only: bool,
@@ -80,7 +82,7 @@ impl NativeChatView {
         let page_id = text(answers, "pageId");
         // `by`: someone else's answers (a Ghostex Collab guest's, held for the owner).
         let by = text(answers, "by");
-        let key = format!("answers-card:{page_id}:{by}");
+        let key = format!("answers-card:{row_id}:{occurrence}:{page_id}:{by}");
         let open = body_only || self.is_expanded(&key, default_open);
         let motion = (!body_only)
             .then(|| self.disclosure_frame(&key, open, cx))
@@ -89,7 +91,7 @@ impl NativeChatView {
             (open || motion.is_some()).then(|| self.answers_rows(answers, &key, !body_only, p, cx));
         let note = delivery
             .is_object()
-            .then(|| self.answers_delivery(answers, delivery, p, cx));
+            .then(|| self.answers_delivery(&key, delivery, p, cx));
         if body_only {
             let body = div()
                 .flex()
@@ -521,7 +523,7 @@ impl NativeChatView {
     /// (CDXC:SessionChat 2026-10-31 in packages/gx-chat-core/src/session/startup_sends.rs).
     fn answers_delivery(
         &self,
-        answers: &Value,
+        card_key: &str,
         delivery: &Value,
         p: &ChatAppearance,
         cx: &Context<Self>,
@@ -529,9 +531,8 @@ impl NativeChatView {
         let s = p.scale;
         let failed = delivery["state"] == "failed";
         let prompt_id = text(delivery, "promptId");
-        let key = text(answers, "pageId");
         let remove = || NoteAction {
-            id: format!("answers-remove:{key}").into(),
+            id: format!("answers-remove:{card_key}").into(),
             label: "Remove",
             command: json!({"type":"removeQueue","promptId":prompt_id.clone()}),
         };
@@ -543,7 +544,7 @@ impl NativeChatView {
                 .min_w_0()
                 .child(self.delivery_note(
                     DeliveryNote {
-                        id: format!("answers-delivery:{key}").into(),
+                        id: format!("answers-delivery:{card_key}").into(),
                         role,
                         lead,
                         status,
@@ -594,7 +595,7 @@ impl NativeChatView {
             } else {
                 glyph
                     .with_throttled_animation(
-                        gpui::SharedString::from(format!("answers-spinner:{key}")),
+                        gpui::SharedString::from(format!("answers-spinner:{card_key}")),
                         std::time::Duration::from_millis(900),
                         |svg, delta| {
                             svg.with_transformation(gpui::Transformation::rotate(gpui::radians(
@@ -624,7 +625,7 @@ impl NativeChatView {
             // `sendFailureCardPromptId`).
             if self.snapshot["sendFailureCardPromptId"] != delivery["promptId"] {
                 actions.push(NoteAction {
-                    id: format!("answers-retry:{key}").into(),
+                    id: format!("answers-retry:{card_key}").into(),
                     label: "Retry",
                     command: json!({"type":"retryQueue","promptId":prompt_id.clone()}),
                 });

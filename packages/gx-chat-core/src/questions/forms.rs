@@ -702,8 +702,13 @@ pub fn rpc_settled(
             // The queue answers with its whole new strip, which carries the answers' row: the card
             // the send drew keeps its place instead of waiting for the queue's broadcast.
             if let Some(queue) = result.get("queue").and_then(Value::as_array) {
-                *state.session.queue_prompts = Some(queue.clone());
-                state.messages.new_composition_identity();
+                let queue_version = result.get("queueVersion").and_then(Value::as_u64);
+                crate::session::apply::apply_server_queue_versioned(
+                    state,
+                    queue,
+                    queue_version,
+                    true,
+                );
             }
             Some(Vec::new())
         }

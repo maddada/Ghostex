@@ -106,9 +106,22 @@ pub fn pending_with_startup_sends(
         };
         match at {
             Some(at) => {
+                if !startup_send && !answers {
+                    let existing = &entries[at];
+                    let was_answers = !crate::transcript::page_answers::answers_page_ids(
+                        &existing.text,
+                    )
+                    .is_empty();
+                    if existing.id.starts_with("startup:") || was_answers {
+                        entries.remove(at);
+                        continue;
+                    }
+                }
                 matched.push(entries[at].id.clone());
                 let entry = &mut entries[at];
+                let text_changed = entry.text != prompt_text;
                 let changed = entry.queued_prompt_id.as_deref() != Some(prompt_id)
+                    || text_changed
                     || entry
                         .startup_delivery
                         .as_ref()
@@ -126,6 +139,9 @@ pub fn pending_with_startup_sends(
                         != delivery.wait_reason;
                 if changed {
                     entry.queued_prompt_id = Some(prompt_id.to_string());
+                    if text_changed {
+                        entry.text = prompt_text.to_string();
+                    }
                     entry.startup_delivery = Some(delivery);
                 }
             }

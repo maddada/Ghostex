@@ -337,6 +337,8 @@ pub struct ChatSideState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_version: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<crate::shared::Shared<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_commands: Option<Vec<Value>>,

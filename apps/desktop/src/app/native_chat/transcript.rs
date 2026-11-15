@@ -685,6 +685,8 @@ impl NativeChatView {
                     &Value::Null
                 };
                 row = row.child(self.page_answers_card(
+                    &id,
+                    index,
                     card,
                     delivery,
                     body_only,

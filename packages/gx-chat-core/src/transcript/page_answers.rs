@@ -60,44 +60,23 @@ fn is_page_id(id: &str) -> bool {
 }
 
 /// Finds the closing `</ghostex-page-answers>` tag starting from `body_start`, ignoring tags embedded
-/// inside JSON string literals (including escaped quotes/backslashes) when the body begins as JSON.
+/// inside valid JSON bodies (objects, arrays, or string literals) before the closing tag.
 fn find_envelope_close(text: &str, body_start: usize) -> Option<usize> {
     let tail = &text[body_start..];
     let first_non_ws = tail.trim_start();
-    if !(first_non_ws.starts_with('{')
+    if first_non_ws.starts_with('{')
         || first_non_ws.starts_with('[')
-        || first_non_ws.starts_with('"'))
+        || first_non_ws.starts_with('"')
     {
-        return tail.find(CLOSE).map(|rel| body_start + rel);
-    }
-    let bytes = text.as_bytes();
-    let close_bytes = CLOSE.as_bytes();
-    let offset = text.len() - first_non_ws.len();
-    let mut in_string = false;
-    let mut escaped = false;
-    let mut i = offset;
-    while i < bytes.len() {
-        let byte = bytes[i];
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if byte == b'\\' {
-                escaped = true;
-            } else if byte == b'"' {
-                in_string = false;
+        let mut stream = serde_json::Deserializer::from_str(first_non_ws).into_iter::<Value>();
+        if let Some(Ok(_)) = stream.next() {
+            let after_json = &first_non_ws[stream.byte_offset()..];
+            let trailing_ws = after_json.len() - after_json.trim_start().len();
+            if after_json[trailing_ws..].starts_with(CLOSE) {
+                let offset = text.len() - first_non_ws.len();
+                return Some(offset + stream.byte_offset() + trailing_ws);
             }
-            i += 1;
-            continue;
         }
-        if byte == b'"' {
-            in_string = true;
-            i += 1;
-            continue;
-        }
-        if bytes[i..].starts_with(close_bytes) {
-            return Some(i);
-        }
-        i += 1;
     }
     tail.find(CLOSE).map(|rel| body_start + rel)
 }

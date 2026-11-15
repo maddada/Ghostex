@@ -131,7 +131,7 @@ pub(crate) fn remember_current_receipt(form: &mut FormState) {
     if !form
         .confirmed_queue_answers
         .iter()
-        .any(|(known, value, _)| known == id && value == answers)
+        .any(|(known, value, row)| known == id && value == answers && row == message_id)
     {
         form.confirmed_queue_answers
             .push((id.clone(), answers.clone(), message_id.clone()));
@@ -146,17 +146,32 @@ pub(crate) fn observe_queue_updates(state: &mut ChatState) {
     if state.questions.forms.is_empty() {
         return;
     }
-    for row in state.session.queue_prompts.iter().flatten() {
-        let (Some(id), Some(text)) = (
+    let has_server_queue = state.session.server_queue_prompts.is_some();
+    let rows = state
+        .session
+        .server_queue_prompts
+        .as_ref()
+        .or(state.session.queue_prompts.as_ref());
+    for row in rows.into_iter().flatten() {
+        let (Some(id), Some(raw_text)) = (
             row.get("id").and_then(serde_json::Value::as_str),
             row.get("text").and_then(serde_json::Value::as_str),
         ) else {
             continue;
         };
-        let envelopes = split_all_page_answers(text).0;
-        if envelopes.is_empty() {
-            continue;
-        }
+        let auth_text;
+        let text = if !has_server_queue {
+            if let Some(authoritative) =
+                crate::questions::inline_answers::authoritative_prompt_text(state, id)
+            {
+                auth_text = authoritative;
+                auth_text.as_str()
+            } else {
+                raw_text
+            }
+        } else {
+            raw_text
+        };
         let (Some(status), Some(updated)) = (
             row.get("state").and_then(serde_json::Value::as_str),
             crate::session::startup_sends::parse_iso_ms(
@@ -166,6 +181,24 @@ pub(crate) fn observe_queue_updates(state: &mut ChatState) {
             continue;
         };
         if !matches!(status, "failed" | "queued" | "sending") {
+            continue;
+        }
+        let envelopes = split_all_page_answers(text).0;
+        let present: HashSet<&str> = envelopes
+            .iter()
+            .map(|answer| answer.page_id.as_str())
+            .collect();
+        for (page_id, form) in state.questions.forms.iter_mut() {
+            if !present.contains(page_id.as_str())
+                && form
+                    .queue_receipt_versions
+                    .get(id)
+                    .is_some_and(|(at, _, _, _)| updated >= *at)
+            {
+                form.queue_receipt_versions.remove(id);
+            }
+        }
+        if envelopes.is_empty() {
             continue;
         }
         let normalized_text = crate::composer::skill_invocation::agent_skill_text(
@@ -178,7 +211,12 @@ pub(crate) fn observe_queue_updates(state: &mut ChatState) {
                 continue;
             };
             let previous = form.queue_receipt_versions.get(id);
-            if previous.is_some_and(|(at, _, _, _)| updated <= *at) {
+            if previous.is_some_and(|(at, failed, _, prev_text)| {
+                updated < *at
+                    || (updated == *at
+                        && *prev_text == normalized_text
+                        && *failed == (status == "failed"))
+            }) {
                 continue;
             }
             let mut occurrence = previous.and_then(|(_, _, occurrence, _)| *occurrence);
@@ -222,6 +260,8 @@ pub(crate) fn observe_queue_updates(state: &mut ChatState) {
 /// Restore the latest receipt text and keep a Retry until its own transcript row arrives.
 pub(crate) fn apply_queue_receipts(
     forms: &BTreeMap<String, FormState>,
+    inline_updates: &[crate::questions::inline_answers::InlineQueueUpdate],
+    live_queue: Option<&[serde_json::Value]>,
     pending: &mut [PendingSend],
 ) {
     if forms.is_empty() {
@@ -239,7 +279,14 @@ pub(crate) fn apply_queue_receipts(
         }) else {
             continue;
         };
-        if entry.text != *text {
+        let keep_live_text = entry.left_queue_at_ms.is_none()
+            && (inline_updates.iter().any(|update| update.prompt_id == id)
+                || live_queue.is_some_and(|queue| {
+                    queue
+                        .iter()
+                        .any(|row| row.get("id").and_then(serde_json::Value::as_str) == Some(id))
+                }));
+        if !keep_live_text && entry.text != *text {
             entry.text.clone_from(text);
         }
         if let Some(occurrence) = occurrence {
@@ -247,6 +294,14 @@ pub(crate) fn apply_queue_receipts(
                 Some(entry.matching_occurrence.unwrap_or(0).max(*occurrence));
         }
     }
+}
+
+fn can_confirm_queued_entry(entry: &PendingSend) -> bool {
+    entry.left_queue_at_ms.is_some()
+        || entry
+            .startup_delivery
+            .as_ref()
+            .is_some_and(|delivery| delivery.state == "sending")
 }
 
 fn needs_observation(state: &ChatState) -> bool {
@@ -313,7 +368,12 @@ pub(crate) fn observe_loaded(state: &mut ChatState) {
             pending
         },
     );
-    apply_queue_receipts(&state.questions.forms, &mut pending);
+    apply_queue_receipts(
+        &state.questions.forms,
+        &state.questions.inline_answers.queue_updates,
+        state.session.queue_prompts.as_deref(),
+        &mut pending,
+    );
     observe_index(
         &mut state.questions.forms,
         &state.questions.form_answer_index,
@@ -351,34 +411,53 @@ fn observe_index(
     let mut queued: HashMap<String, HashMap<serde_json::Value, Vec<&PendingSend>>> = HashMap::new();
     for entry in pending
         .iter()
-        .filter(|entry| entry.queued_prompt_id.is_some())
+        .filter(|entry| entry.queued_prompt_id.is_some() && can_confirm_queued_entry(entry))
     {
         let prompt_id = entry.queued_prompt_id.as_deref().unwrap_or_default();
+        let mut seen_in_entry: HashMap<(String, serde_json::Value), usize> = HashMap::new();
         for answer in split_all_page_answers(&entry.text).0 {
             let Some(form) = forms.get(&answer.page_id) else {
                 continue;
             };
-            // Only the send RPC proves which queue id belongs to a local echo.
-            if entry.id.strip_prefix(FORM_ECHO_PREFIX) == Some(answer.page_id.as_str())
-                && (form.queued_prompt_id.as_deref() != Some(prompt_id)
-                    || (form
-                        .send
-                        .as_ref()
-                        .map(|send| &send.answers)
-                        .or(form.sent.as_ref())
-                        == Some(&answer.answers)
-                        && !form
-                            .queue_receipt_versions
-                            .get(prompt_id)
-                            .is_some_and(|(_, _, occurrence, _)| occurrence.is_some())))
+            // When the send RPC has named a different prompt id, do not credit this local echo to
+            // `prompt_id`. When it is still in flight (`queued_prompt_id.is_none()`), keep duplicate
+            // envelopes on `prompt_id` in `queued` so only the already-confirmed slot is skipped.
+            let is_local_echo =
+                entry.id.strip_prefix(FORM_ECHO_PREFIX) == Some(answer.page_id.as_str());
+            if is_local_echo
+                && form
+                    .queued_prompt_id
+                    .as_deref()
+                    .is_some_and(|id| id != prompt_id)
             {
                 continue;
             }
-            if form
+            let slot = {
+                let count = seen_in_entry
+                    .entry((answer.page_id.clone(), answer.answers.clone()))
+                    .or_default();
+                let current = *count;
+                *count += 1;
+                current
+            };
+            let local_answers = form
+                .send
+                .as_ref()
+                .map(|send| &send.answers)
+                .or(form.sent.as_ref());
+            let extra_confirmed = usize::from(
+                is_local_echo
+                    && form.queued_prompt_id.is_none()
+                    && form.confirmed
+                    && local_answers == Some(&answer.answers),
+            );
+            let confirmed_count = form
                 .confirmed_queue_answers
                 .iter()
-                .any(|(id, value, _)| id == prompt_id && *value == answer.answers)
-            {
+                .filter(|(id, value, _)| id == prompt_id && *value == answer.answers)
+                .count()
+                + extra_confirmed;
+            if confirmed_count > slot {
                 continue;
             }
             queued
@@ -405,7 +484,114 @@ fn observe_index(
         });
     }
 
+    for (page_id, by_answer) in queued {
+        let (Some(form), Some(indexed)) = (forms.get_mut(&page_id), index.pages.get(&page_id))
+        else {
+            continue;
+        };
+        let mut used_occurrences: HashSet<(String, usize)> = form
+            .confirmed_message_ids
+            .iter()
+            .chain(form.confirmed_queue_answers.iter().map(|(_, _, row)| row))
+            .cloned()
+            .collect();
+        for (answers, entries) in by_answer {
+            let Some(rows) = indexed.get(&answers) else {
+                continue;
+            };
+            let mut remaining_by_prompt: HashMap<&str, usize> = HashMap::new();
+            for entry in &entries {
+                let prompt_id = entry.queued_prompt_id.as_deref().unwrap_or_default();
+                *remaining_by_prompt.entry(prompt_id).or_default() += 1;
+            }
+            for (at, occurrence) in rows {
+                let message_id = &transcript[*at].id;
+                let target = (message_id.clone(), *occurrence);
+                if used_occurrences.contains(&target) {
+                    continue;
+                }
+                let eligible = |entry: &&PendingSend| {
+                    let prompt_id = entry.queued_prompt_id.as_deref().unwrap_or_default();
+                    let remaining = remaining_by_prompt
+                        .get(prompt_id)
+                        .copied()
+                        .unwrap_or_default();
+                    remaining > 0 && index.is_after(transcript, *at, entry)
+                };
+                let picked = entries
+                    .iter()
+                    .find(|entry| {
+                        let prompt_id = entry.queued_prompt_id.as_deref().unwrap_or_default();
+                        let confirmed_on_row = form
+                            .confirmed_queue_answers
+                            .iter()
+                            .any(|(id, _, (row_id, _))| id == prompt_id && row_id == message_id)
+                            || (entry.id.strip_prefix(FORM_ECHO_PREFIX)
+                                == Some(page_id.as_str())
+                                && form.queued_prompt_id.is_none()
+                                && form.confirmed
+                                && form
+                                    .confirmed_message_ids
+                                    .last()
+                                    .is_some_and(|(row_id, _)| row_id == message_id));
+                        eligible(entry) && confirmed_on_row
+                    })
+                    .or_else(|| entries.iter().find(|entry| eligible(entry)));
+                let Some(entry) = picked else {
+                    continue;
+                };
+                let prompt_id = entry.queued_prompt_id.as_deref().unwrap_or_default();
+                if let Some((_, _, occurrence, _)) =
+                    form.queue_receipt_versions.get_mut(prompt_id)
+                {
+                    *occurrence = None;
+                }
+                // Confirm the local form only when the matched row belongs to this form's own send
+                // (its receipt or paired local echo); another client's row reserves its occurrences
+                // without closing an unrelated local send still waiting on RPC or queue.
+                let is_local_echo = entry.id.strip_prefix(FORM_ECHO_PREFIX) == Some(page_id.as_str());
+                let local_answers = form
+                    .send
+                    .as_ref()
+                    .map(|send| &send.answers)
+                    .or(form.sent.as_ref());
+                let belongs_to_local_form = form.queued_prompt_id.as_deref() == Some(prompt_id)
+                    || (form.queued_prompt_id.is_none()
+                        && is_local_echo
+                        && local_answers == Some(&answers));
+                if !form.confirmed
+                    && belongs_to_local_form
+                    && form
+                        .confirmation_boundary
+                        .as_ref()
+                        .is_some_and(|boundary| index.is_after(transcript, *at, boundary))
+                {
+                    form.sent = Some(answers.clone());
+                    form.confirmed = true;
+                    form.confirmed_message_ids.push(target.clone());
+                }
+                form.confirmed_queue_answers.push((
+                    prompt_id.to_string(),
+                    answers.clone(),
+                    target.clone(),
+                ));
+                used_occurrences.insert(target);
+                if let Some(left) = remaining_by_prompt.get_mut(prompt_id) {
+                    *left -= 1;
+                }
+            }
+        }
+    }
+
     for (page_id, form) in forms.iter_mut() {
+        if pending.iter().any(|entry| {
+            entry.queued_prompt_id.is_some()
+                && !can_confirm_queued_entry(entry)
+                && (form.queued_prompt_id.as_deref() == entry.queued_prompt_id.as_deref()
+                    || entry.id.strip_prefix(FORM_ECHO_PREFIX) == Some(page_id.as_str()))
+        }) {
+            continue;
+        }
         let Some((answers, boundary)) = awaiting_confirmation(form) else {
             continue;
         };
@@ -432,72 +618,6 @@ fn observe_index(
             remember_current_receipt(form);
         }
     }
-
-    for (page_id, by_answer) in queued {
-        let (Some(form), Some(indexed)) = (forms.get_mut(&page_id), index.pages.get(&page_id))
-        else {
-            continue;
-        };
-        let mut used_occurrences: HashSet<(String, usize)> = form
-            .confirmed_message_ids
-            .iter()
-            .chain(form.confirmed_queue_answers.iter().map(|(_, _, row)| row))
-            .cloned()
-            .collect();
-        for (answers, entries) in by_answer {
-            let Some(rows) = indexed.get(&answers) else {
-                continue;
-            };
-            let mut confirmed_queue_ids: HashSet<String> = form
-                .confirmed_queue_answers
-                .iter()
-                .filter(|(_, known, _)| *known == answers)
-                .map(|(id, _, _)| id.clone())
-                .collect();
-            for (at, occurrence) in rows {
-                let target = (transcript[*at].id.clone(), *occurrence);
-                if used_occurrences.contains(&target) {
-                    continue;
-                }
-                for entry in &entries {
-                    let prompt_id = entry.queued_prompt_id.as_deref().unwrap_or_default();
-                    if !index.is_after(transcript, *at, entry)
-                        || confirmed_queue_ids.contains(prompt_id)
-                    {
-                        continue;
-                    }
-                    if let Some((_, _, occurrence, _)) =
-                        form.queue_receipt_versions.get_mut(prompt_id)
-                    {
-                        *occurrence = None;
-                    }
-                    // An accepted local queue row can be edited by another client. Its new
-                    // answers become the form's only after their real transcript row arrives.
-                    if !form.confirmed
-                        && form.send.is_none()
-                        && form.sent.as_ref().is_some_and(|sent| *sent != answers)
-                        && form.queued_prompt_id.as_deref() == Some(prompt_id)
-                        && form
-                            .confirmation_boundary
-                            .as_ref()
-                            .is_some_and(|boundary| index.is_after(transcript, *at, boundary))
-                    {
-                        form.sent = Some(answers.clone());
-                        form.confirmed = true;
-                        form.confirmed_message_ids.push(target.clone());
-                    }
-                    form.confirmed_queue_answers.push((
-                        prompt_id.to_string(),
-                        answers.clone(),
-                        target.clone(),
-                    ));
-                    used_occurrences.insert(target);
-                    confirmed_queue_ids.insert(prompt_id.to_string());
-                    break;
-                }
-            }
-        }
-    }
 }
 
 /// Keeps the answer echoes in step: one for each form send in flight, none for answers the
@@ -517,21 +637,79 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatRo
         .filter(|entry| entry.get("status").and_then(serde_json::Value::as_str) == Some("answered"))
         .filter_map(|entry| entry.get("id").and_then(serde_json::Value::as_str))
         .collect();
+    let mut untracked_index: Option<AnswerIndex> = None;
+    if !state.questions.untracked_indexed_claims.is_empty() {
+        let index = untracked_index.get_or_insert_with(|| AnswerIndex::from_rows(transcript));
+        let mut resolved_pages = Vec::new();
+        for (page_id, claim) in &state.questions.untracked_indexed_claims {
+            let existing_claims = state
+                .questions
+                .untracked_confirmed_queue_answers
+                .get(page_id);
+            let matched = index
+                .pages
+                .get(page_id)
+                .and_then(|by_value| by_value.get(&claim.answers))
+                .and_then(|occurrences| {
+                    occurrences.iter().find_map(|(at, occurrence)| {
+                        if !index.is_after(transcript, *at, &claim.boundary) {
+                            return None;
+                        }
+                        let target = (transcript[*at].id.clone(), *occurrence);
+                        let taken = existing_claims.is_some_and(|claims| {
+                            claims.iter().any(|(_, _, row)| row == &target)
+                        });
+                        (!taken).then_some(target)
+                    })
+                });
+            if let Some(target) = matched {
+                state
+                    .questions
+                    .untracked_confirmed_queue_answers
+                    .entry(page_id.clone())
+                    .or_default()
+                    .push((claim.prompt_id.clone(), claim.answers.clone(), target));
+                resolved_pages.push(page_id.clone());
+            }
+        }
+        for page_id in resolved_pages {
+            state.questions.untracked_indexed_claims.remove(&page_id);
+        }
+    }
     let mut sends = std::mem::take(&mut state.pending.sends);
     sends.retain(|entry| {
         let answers = split_all_page_answers(&entry.text).0;
         if answers.is_empty() {
             return true;
         }
+        let has_known_queue_prompt = entry.queued_prompt_id.is_some();
+        if has_known_queue_prompt && entry.left_queue_at_ms.is_none() {
+            return true;
+        }
         let mut all_confirmed = true;
+        let mut sibling_unconfirmed = false;
+        let mut seen_in_entry: HashMap<(String, serde_json::Value), usize> = HashMap::new();
+        let mut entry_untracked: Vec<(String, serde_json::Value, (String, usize))> = Vec::new();
+        let mut entry_indexed: Vec<(String, serde_json::Value)> = Vec::new();
+        let prompt_id = entry.queued_prompt_id.as_deref().unwrap_or_default();
         for answer in &answers {
             let page_id = &answer.page_id;
+            let slot = {
+                let count = seen_in_entry
+                    .entry((page_id.clone(), answer.answers.clone()))
+                    .or_default();
+                let current = *count;
+                *count += 1;
+                current
+            };
             let same_confirmed_queue_send =
                 entry.queued_prompt_id.as_deref().is_some_and(|prompt_id| {
                     state.questions.forms.get(page_id).is_some_and(|form| {
                         form.confirmed_queue_answers
                             .iter()
-                            .any(|(id, answers, _)| id == prompt_id && *answers == answer.answers)
+                            .filter(|(id, answers, _)| id == prompt_id && *answers == answer.answers)
+                            .count()
+                            > slot
                     })
                 });
             // An old answer for the same page is not evidence for a later send or retry.
@@ -544,8 +722,8 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatRo
                         .or(form.sent.as_ref())
                         == Some(&answer.answers)
             });
-            let confirmed_local_send = entry.id.strip_prefix(FORM_ECHO_PREFIX)
-                == Some(page_id.as_str())
+            let confirmed_local_send = slot == 0
+                && entry.id.strip_prefix(FORM_ECHO_PREFIX) == Some(page_id.as_str())
                 && current_form.is_some_and(|form| {
                     form.confirmed
                         && form.queued_prompt_id == entry.queued_prompt_id
@@ -555,26 +733,122 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatRo
                                 .is_some_and(|(_, _, occurrence, _)| occurrence.is_some())
                         })
                 });
-            // A live queue row stays visible. A different receipt or answer can be a later retry.
-            if entry.queued_prompt_id.is_some()
-                && (entry.left_queue_at_ms.is_none()
-                    || (!same_confirmed_queue_send
-                        && !confirmed_local_send
-                        && state.questions.forms.get(page_id).is_some_and(|form| {
-                            form.confirmed || form.confirmation_boundary.is_some()
-                        })))
-            {
-                return true;
-            }
             let confirmed_local_send = entry.left_queue_at_ms.is_some()
                 && (same_confirmed_queue_send || confirmed_local_send);
+            let untracked_queued_confirmed = if has_known_queue_prompt
+                && entry.left_queue_at_ms.is_some()
+                && !state.questions.forms.contains_key(page_id)
+            {
+                let claims_for_page = state
+                    .questions
+                    .untracked_confirmed_queue_answers
+                    .get(page_id);
+                let prior_claimed = claims_for_page.map_or(0, |claims| {
+                    claims
+                        .iter()
+                        .filter(|(id, value, _)| id == prompt_id && *value == answer.answers)
+                        .count()
+                });
+                let batch_claimed = entry_untracked
+                    .iter()
+                    .filter(|(p, value, _)| p == page_id && *value == answer.answers)
+                    .count();
+                if prior_claimed + batch_claimed > slot {
+                    true
+                } else {
+                    let index = untracked_index
+                        .get_or_insert_with(|| AnswerIndex::from_rows(transcript));
+                    let matched_target = index
+                        .pages
+                        .get(page_id)
+                        .and_then(|by_value| by_value.get(&answer.answers))
+                        .and_then(|occurrences| {
+                            occurrences.iter().find_map(|(at, occurrence)| {
+                                if !index.is_after(transcript, *at, entry) {
+                                    return None;
+                                }
+                                let target = (transcript[*at].id.clone(), *occurrence);
+                                let already_taken = claims_for_page.is_some_and(|claims| {
+                                    claims.iter().any(|(_, _, row)| row == &target)
+                                }) || entry_untracked.iter().any(
+                                    |(p, _, row)| p == page_id && row == &target,
+                                );
+                                (!already_taken).then_some(target)
+                            })
+                        });
+                    if let Some(target) = matched_target {
+                        entry_untracked.push((page_id.clone(), answer.answers.clone(), target));
+                        true
+                    } else if indexed.contains(&page_id.as_str())
+                        && !index.holds(page_id)
+                        && claims_for_page.is_none_or(Vec::is_empty)
+                        && entry_untracked.iter().all(|(p, _, _)| p != page_id)
+                        && state
+                            .questions
+                            .untracked_indexed_claims
+                            .get(page_id)
+                            .is_none_or(|claim| claim.prompt_id == prompt_id)
+                        && !entry_indexed.iter().any(|(p, _)| p == page_id)
+                    {
+                        entry_indexed.push((page_id.clone(), answer.answers.clone()));
+                        true
+                    } else {
+                        false
+                    }
+                }
+            } else {
+                false
+            };
             let answer_confirmed = confirmed_local_send
-                || (confirmed.contains(page_id) && current_form.is_none_or(|form| form.confirmed))
-                || (entry.left_queue_at_ms.is_some()
+                || untracked_queued_confirmed
+                || (!has_known_queue_prompt
+                    && confirmed.contains(page_id)
+                    && current_form.is_none_or(|form| form.confirmed))
+                || (!has_known_queue_prompt
+                    && entry.left_queue_at_ms.is_some()
                     && indexed.contains(&page_id.as_str())
                     && current_form.is_none_or(|form| form.confirmed));
             if !answer_confirmed {
                 all_confirmed = false;
+                if entry
+                    .id
+                    .strip_prefix(FORM_ECHO_PREFIX)
+                    .is_some_and(|primary| primary != page_id.as_str())
+                    && entry.queued_prompt_id.is_none()
+                    && state
+                        .questions
+                        .forms
+                        .get(page_id)
+                        .is_none_or(|sibling| sibling.held_for_owner.is_none())
+                {
+                    sibling_unconfirmed = true;
+                }
+            }
+        }
+        if !prompt_id.is_empty() {
+            for (page_id, answers_value, target) in entry_untracked {
+                let claims = state
+                    .questions
+                    .untracked_confirmed_queue_answers
+                    .entry(page_id)
+                    .or_default();
+                if !claims
+                    .iter()
+                    .any(|(id, val, row)| id == prompt_id && val == &answers_value && row == &target)
+                {
+                    claims.push((prompt_id.to_string(), answers_value, target));
+                }
+            }
+            for (page_id, answers_value) in entry_indexed {
+                state
+                    .questions
+                    .untracked_indexed_claims
+                    .entry(page_id)
+                    .or_insert_with(|| crate::state::UntrackedIndexedClaim {
+                        prompt_id: prompt_id.to_string(),
+                        answers: answers_value,
+                        boundary: entry.clone(),
+                    });
             }
         }
         if all_confirmed {
@@ -584,11 +858,11 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatRo
         // transcript records it. A queued send instead becomes its queue row.
         match entry.id.strip_prefix(FORM_ECHO_PREFIX) {
             Some(form) if entry.queued_prompt_id.is_none() => {
-                state.questions.forms.get(form).is_some_and(|form| {
-                    !form.confirmed
-                        && form.held_for_owner.is_none()
-                        && (form.send.is_some() || form.sent.is_some())
-                })
+                let primary_active = state.questions.forms.get(form).is_some_and(|form| {
+                    form.held_for_owner.is_none()
+                        && (form.send.is_some() || (!form.confirmed && form.sent.is_some()))
+                });
+                primary_active || sibling_unconfirmed
             }
             _ => true,
         }

@@ -12,6 +12,14 @@ use crate::questions::drafts::AnswerDrafts;
 use crate::questions::notice_state::DismissedNotice;
 use crate::state::PendingSend;
 
+/// Pending coarse `resource_index` fallback claim for an untracked page awaiting its real row.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UntrackedIndexedClaim {
+    pub prompt_id: String,
+    pub answers: serde_json::Value,
+    pub boundary: PendingSend,
+}
+
 /// What the question and notice surfaces remember between frames.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct QuestionsState {
@@ -103,6 +111,15 @@ pub struct QuestionsState {
     pub core_id: String,
     /// The real answer rows and send boundaries in the current loaded transcript.
     pub form_answer_index: crate::state::Stamped<crate::session::answer_echoes::AnswerIndex>,
+    /// Confirmed `(prompt_id, answers, (row_id, occurrence))` claims for queued sends whose
+    /// pages are not in `forms` (for example standalone visual pages), preventing one transcript
+    /// row from confirming more queued prompts than its envelope count across `settle` calls.
+    pub untracked_confirmed_queue_answers:
+        std::collections::BTreeMap<String, Vec<(String, serde_json::Value, (String, usize))>>,
+    /// Coarse page-level `resource_index` fallback claims (`page_id -> claim`), capped at one
+    /// queued prompt per page when no transcript row is present, carrying its answer value and send
+    /// boundary so the claim transfers cleanly once its transcript row lands.
+    pub untracked_indexed_claims: std::collections::BTreeMap<String, UntrackedIndexedClaim>,
     /// One-click answers being changed (`crate::questions::inline_answers`).
     pub inline_answers: crate::state::Stamped<crate::questions::inline_answers::InlineAnswersState>,
 
