@@ -1,11 +1,14 @@
 //! `ghostex visual check <page.html>`: opens a page the way `ghostex show` would publish it in a
-//! headless Chrome at a phone's width and a computer's, saves a screenshot of each and says what
-//! does not fit, so an agent sees its page on a phone before the user does. `ghostex show` runs the
-//! phone half (no screenshot) after publishing and prints what it found.
+//! headless Chrome at a phone's width, a large phone's or tablet's, a foldable's and a computer's,
+//! and again with large text, saves a screenshot of each and says what does not fit, so an agent
+//! sees its page on a phone before the user does. `ghostex show` runs the narrow half (no
+//! screenshots) after publishing and prints what it found.
 //!
 //! CDXC:SessionChat 2026-10-28 WHY:
 //! The page kit (server/src/visual_pages/fit.rs) fits a too-wide page to the phone, but a page that needs fitting still reads worse than one written for a phone: a stacked comparison loses its side-by-side, a scrolled mockup hides its right half. The check reports what the kit had to fit (`window.__ghostexFit`) and anything still past the screen's edge, so the agent fixes its CSS before sending. Chrome is driven over the DevTools protocol because a headless Chrome window cannot be narrower than 500px, and the phone's width only comes from device emulation.
-//! SEE-ALSO: server/src/visual_pages/fit.rs (`window.__ghostexFit`), skills/ghostex-visuals/SKILL.md (tells agents to run the check).
+//! CDXC:SessionChat 2026-11-15 DECISION:
+//! User, with a screenshot of a page on their Android foldable (two option cards side by side where they did not fit, mockups cut at their card's edge, stat boxes drawn over each other, the answered pill over a card): "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." That page had passed the check at 390 and 1280px, but the foldable's screen is about 750 to 900 CSS px with large text, a width neither run saw. So the check now opens every page at 360, 600, 900 and 1280px and again at 360 and 900px with text at 130% (Android's font size setting scales text, not boxes), and inspects the page itself rather than only what the kit fitted: a box whose own content spills past its edge or is cut off by `overflow:hidden` without an ellipsis, content a sideways scroller cannot scroll back to, text drawn over other text, and fixed boxes over text. (2026-11-15: the answered pill shows always, the user's "Always show", so it is checked only with the page scrolled to its end, where it must cover no text or control.) Each problem names its CSS selector and the width it showed at.
+//! SEE-ALSO: server/src/visual_pages/fit.rs (`window.__ghostexFit`), server/src/visual_pages/kit.rs (the safe layout defaults), skills/ghostex-visuals/SKILL.md (tells agents to run the check).
 
 use std::{
     io::{Read, Write},
@@ -21,14 +24,41 @@ use serde_json::{json, Value};
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::visual_pages::prepare_page;
 
-/// The phone width pages are checked at: a common Android and iPhone width, inside the 360–430px
+/// The narrowest phone width pages are checked at: small Android phones, the bottom of the 360–430px
 /// range phones have.
-pub(crate) const PHONE_WIDTH: u32 = 390;
+pub(crate) const PHONE_WIDTH: u32 = 360;
+/// A large phone held sideways, a small tablet, or the Ghostex window narrowed on a computer.
+pub(crate) const SMALL_TABLET_WIDTH: u32 = 600;
+/// A foldable phone opened, or a tablet: wide enough for two columns that may not fit.
+pub(crate) const FOLDABLE_WIDTH: u32 = 900;
 pub(crate) const DESKTOP_WIDTH: u32 = 1280;
-/// Widths at or below this are emulated as a phone (meta viewport, touch-sized zoom).
-const MOBILE_MAX_WIDTH: u32 = 600;
-/// The tallest screenshot taken, in CSS pixels; a longer page is cut there.
-const SCREENSHOT_MAX_HEIGHT: f64 = 8000.0;
+/// Android's large font size setting (and iOS's larger text) scales text, not boxes; 130% is a
+/// common large setting.
+pub(crate) const LARGE_TEXT_SCALE: f64 = 1.3;
+/// What `ghostex visual check page.html` opens a page at: each width at the normal text size, then
+/// the phone and the foldable with large text.
+pub(crate) const DEFAULT_CHECKS: [(u32, f64); 6] = [
+    (PHONE_WIDTH, 1.0),
+    (SMALL_TABLET_WIDTH, 1.0),
+    (FOLDABLE_WIDTH, 1.0),
+    (DESKTOP_WIDTH, 1.0),
+    (PHONE_WIDTH, LARGE_TEXT_SCALE),
+    (FOLDABLE_WIDTH, LARGE_TEXT_SCALE),
+];
+/// What `ghostex show` checks after publishing: the narrow screens, where pages break.
+pub(crate) const SHOW_CHECKS: [(u32, f64); 3] = [
+    (PHONE_WIDTH, 1.0),
+    (SMALL_TABLET_WIDTH, 1.0),
+    (FOLDABLE_WIDTH, LARGE_TEXT_SCALE),
+];
+/// Widths at or below this are emulated as a phone or tablet (meta viewport, touch, a dense screen).
+const MOBILE_MAX_WIDTH: u32 = 1024;
+/// The tallest single screenshot, in CSS pixels: a longer page is saved in parts of this height
+/// (`page-360.png`, `page-360-part2.png`, …), each under Chrome's largest picture at a phone's
+/// double-density screen.
+const SCREENSHOT_PART_HEIGHT: f64 = 6000.0;
+/// The most of a page screenshotted, in CSS pixels; anything longer is cut there.
+const SCREENSHOT_MAX_HEIGHT: f64 = 48000.0;
 const CHROME_START_TIMEOUT: Duration = Duration::from_secs(20);
 const CDP_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -40,61 +70,114 @@ pub(crate) fn is_page_file(file: &str) -> bool {
 
 pub(crate) struct PageCheck {
     pub(crate) width: u32,
+    /// How much larger than the page's own sizes text is drawn (1.0 as written).
+    pub(crate) text_scale: f64,
     pub(crate) light: bool,
     pub(crate) screenshot: Option<PathBuf>,
 }
 
-/// What one width showed: the kit's fit report and the page's size.
+/// What one width showed: the kit's fit report, what the page itself got wrong, and its size.
 pub(crate) struct PageCheckResult {
     pub(crate) width: u32,
+    pub(crate) text_scale: f64,
     pub(crate) report: Value,
-    pub(crate) screenshot: Option<PathBuf>,
+    /// The page's screenshot, top to bottom: one file, or several parts for a long page.
+    pub(crate) screenshots: Vec<PathBuf>,
 }
 
-/// `ghostex visual check <page.html> [--width N] [--light] [--out file.png]`.
+/// "Phone, 360px wide", "Foldable or tablet, 900px wide, text at 130%".
+pub(crate) fn screen_label(width: u32, text_scale: f64) -> String {
+    let kind = if width <= 480 {
+        "Phone"
+    } else if width <= 700 {
+        "Large phone or small tablet"
+    } else if width <= MOBILE_MAX_WIDTH {
+        "Foldable or tablet"
+    } else {
+        "Computer"
+    };
+    let text = if is_large_text(text_scale) {
+        format!(", text at {:.0}%", text_scale * 100.0)
+    } else {
+        String::new()
+    };
+    format!("{kind}, {width}px wide{text}")
+}
+
+fn is_large_text(text_scale: f64) -> bool {
+    (text_scale - 1.0).abs() > 0.001
+}
+
+/// `ghostex visual check <page.html> [--width N] [--text-scale P] [--light] [--out file.png]`.
+/// Ends with an error when anything overflows or overlaps, so a script can rely on it.
 pub(crate) fn check_page_command(
     file: &str,
     width: Option<u32>,
+    text_scale: Option<f64>,
     light: bool,
     out: Option<PathBuf>,
 ) -> CliResult<()> {
     let path = absolute(file);
-    let widths = width.map_or_else(|| vec![PHONE_WIDTH, DESKTOP_WIDTH], |width| vec![width]);
-    let checks = widths
+    let runs: Vec<(u32, f64)> = match (width, text_scale) {
+        (Some(width), scale) => vec![(width, scale.unwrap_or(1.0))],
+        (None, Some(scale)) => [
+            PHONE_WIDTH,
+            SMALL_TABLET_WIDTH,
+            FOLDABLE_WIDTH,
+            DESKTOP_WIDTH,
+        ]
+        .into_iter()
+        .map(|width| (width, scale))
+        .collect(),
+        (None, None) => DEFAULT_CHECKS.to_vec(),
+    };
+    let several = runs.len() > 1;
+    let checks = runs
         .iter()
-        .map(|&width| PageCheck {
+        .map(|&(width, text_scale)| PageCheck {
             width,
+            text_scale,
             light,
             screenshot: Some(screenshot_path(
                 &path,
                 out.as_deref(),
                 width,
-                widths.len() > 1,
+                text_scale,
+                several,
             )),
         })
         .collect::<Vec<_>>();
     let results = check_page(&path, &checks)?;
+    let mut broken = 0;
     for result in &results {
-        let label = if result.width <= MOBILE_MAX_WIDTH {
-            "Phone"
+        let shot = if result.screenshots.is_empty() {
+            String::new()
         } else {
-            "Computer"
+            format!(
+                ": {}",
+                result
+                    .screenshots
+                    .iter()
+                    .map(|shot| shot.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         };
-        let shot = result
-            .screenshot
-            .as_ref()
-            .map(|shot| format!(": {}", shot.display()))
-            .unwrap_or_default();
         println!(
-            "{label}, {}px wide ({} theme){shot}",
-            result.width,
+            "{} ({} theme){shot}",
+            screen_label(result.width, result.text_scale),
             if light { "light" } else { "dark" }
         );
+        let problems = problem_findings(&result.report);
         let findings = page_findings(result.width, &result.report);
-        if findings.is_empty() {
-            println!("  Fits: nothing reaches past the screen and the kit had nothing to fit.");
+        let notes = kit_notes(&result.report);
+        if problems.is_empty() && findings.is_empty() {
+            println!("  Fits: nothing overflows or overlaps, and the kit had nothing to fix.");
         }
-        for finding in findings {
+        if !problems.is_empty() {
+            broken += 1;
+        }
+        for finding in problems.iter().chain(findings.iter()).chain(notes.iter()) {
             println!("  - {finding}");
         }
     }
@@ -109,6 +192,12 @@ pub(crate) fn check_page_command(
         }
     }
     println!("Look at each screenshot before sending the page.");
+    if broken > 0 {
+        return Err(CliError::Other(format!(
+            "The page overflows or overlaps at {broken} of {} sizes; fix what is listed above and check again.",
+            results.len()
+        )));
+    }
     Ok(())
 }
 
@@ -120,22 +209,35 @@ pub(crate) struct ShowFindings {
     pub(crate) picks: Vec<String>,
 }
 
-/// The phone check `ghostex show` runs after publishing: what to fix, or nothing when the page fits
-/// or no Chrome is installed to look with.
+/// The narrow-screen check `ghostex show` runs after publishing: what to fix, each finding led by
+/// the screen it showed on, or nothing when the page fits or no Chrome is installed to look with.
 pub(crate) fn findings_for_show(path: &Path) -> ShowFindings {
-    let check = PageCheck {
-        width: PHONE_WIDTH,
-        light: false,
-        screenshot: None,
-    };
-    match check_page(path, &[check]) {
-        Ok(results) => results
-            .first()
-            .map(|result| ShowFindings {
-                phone: page_findings(result.width, &result.report),
-                picks: pick_findings(&result.report),
-            })
-            .unwrap_or_default(),
+    let checks = SHOW_CHECKS
+        .iter()
+        .map(|&(width, text_scale)| PageCheck {
+            width,
+            text_scale,
+            light: false,
+            screenshot: None,
+        })
+        .collect::<Vec<_>>();
+    match check_page(path, &checks) {
+        Ok(results) => ShowFindings {
+            phone: results
+                .iter()
+                .flat_map(|result| {
+                    let label = screen_label(result.width, result.text_scale);
+                    problem_findings(&result.report)
+                        .into_iter()
+                        .chain(page_findings(result.width, &result.report))
+                        .map(move |finding| format!("{label}: {finding}"))
+                })
+                .collect(),
+            picks: results
+                .first()
+                .map(|result| pick_findings(&result.report))
+                .unwrap_or_default(),
+        },
         Err(_) => ShowFindings::default(),
     }
 }
@@ -180,21 +282,25 @@ fn check_width(cdp: &mut Cdp, page: &Path, check: &PageCheck) -> CliResult<PageC
             "mobile": mobile,
         }),
     )?;
+    cdp.call(
+        "Emulation.setTouchEmulationEnabled",
+        json!({ "enabled": mobile }),
+    )?;
     let theme = if check.light { "light" } else { "dark" };
     let url = format!("{}#gx-theme={theme}", file_url(page));
     cdp.call("Page.navigate", json!({ "url": url }))?;
     let deadline = Instant::now() + CDP_TIMEOUT;
-    let report = loop {
+    loop {
         let answer = cdp.call(
             "Runtime.evaluate",
             json!({ "expression": PROBE, "awaitPromise": true, "returnByValue": true }),
         )?;
-        let value = answer
-            .pointer("/result/value")
-            .cloned()
-            .unwrap_or(Value::Null);
-        if value.get("page").and_then(Value::as_bool) == Some(true) {
-            break value;
+        if answer
+            .pointer("/result/value/page")
+            .and_then(Value::as_bool)
+            == Some(true)
+        {
+            break;
         }
         if Instant::now() >= deadline {
             return Err(CliError::Other(
@@ -202,42 +308,68 @@ fn check_width(cdp: &mut Cdp, page: &Path, check: &PageCheck) -> CliResult<PageC
             ));
         }
         std::thread::sleep(Duration::from_millis(150));
-    };
-    let screenshot = match &check.screenshot {
-        Some(out) => {
-            let height = report
-                .get("height")
-                .and_then(Value::as_f64)
-                .unwrap_or(900.0)
-                .clamp(1.0, SCREENSHOT_MAX_HEIGHT);
+    }
+    let answer = cdp.call(
+        "Runtime.evaluate",
+        json!({
+            "expression": format!("({INSPECT})({})", check.text_scale),
+            "awaitPromise": true,
+            "returnByValue": true,
+        }),
+    )?;
+    if let Some(error) = answer.pointer("/exceptionDetails") {
+        return Err(CliError::Other(format!(
+            "The check could not inspect the page: {}",
+            error
+                .pointer("/exception/description")
+                .and_then(Value::as_str)
+                .unwrap_or("an error in the page")
+        )));
+    }
+    let report = answer
+        .pointer("/result/value")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let mut screenshots = Vec::new();
+    if let Some(out) = &check.screenshot {
+        let height = report
+            .get("height")
+            .and_then(Value::as_f64)
+            .unwrap_or(900.0)
+            .clamp(1.0, SCREENSHOT_MAX_HEIGHT);
+        if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                CliError::Other(format!("Could not create {}: {error}", parent.display()))
+            })?;
+        }
+        let mut top = 0.0;
+        while top < height {
+            let part = (height - top).min(SCREENSHOT_PART_HEIGHT);
             let shot = cdp.call(
                 "Page.captureScreenshot",
                 json!({
                     "format": "png",
                     "captureBeyondViewport": true,
-                    "clip": { "x": 0, "y": 0, "width": check.width, "height": height, "scale": 1 },
+                    "clip": { "x": 0, "y": top, "width": check.width, "height": part, "scale": 1 },
                 }),
             )?;
             let data = shot.get("data").and_then(Value::as_str).unwrap_or_default();
             let png = BASE64_STANDARD.decode(data).map_err(|error| {
                 CliError::Other(format!("Chrome's screenshot could not be read: {error}"))
             })?;
-            if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-                std::fs::create_dir_all(parent).map_err(|error| {
-                    CliError::Other(format!("Could not create {}: {error}", parent.display()))
-                })?;
-            }
-            std::fs::write(out, png).map_err(|error| {
-                CliError::Other(format!("Could not write {}: {error}", out.display()))
+            let file = part_path(out, screenshots.len() + 1);
+            std::fs::write(&file, png).map_err(|error| {
+                CliError::Other(format!("Could not write {}: {error}", file.display()))
             })?;
-            Some(out.clone())
+            screenshots.push(file);
+            top += part;
         }
-        None => None,
-    };
+    }
     Ok(PageCheckResult {
         width: check.width,
+        text_scale: check.text_scale,
         report,
-        screenshot,
+        screenshots,
     })
 }
 
@@ -253,6 +385,157 @@ return new Promise(function(done){
   if(document.readyState==="complete")settle();else addEventListener("load",settle,{once:true});
 });
 })()"#;
+
+/// Run once the page has loaded (`PROBE`), as `(INSPECT)(textScale)`: draws the text larger when
+/// asked (every element's font size and pixel line height times the scale, the way Android's font
+/// size setting does, then a `load` event so the kit fits the page again), waits for the page to
+/// settle, then answers the kit's reports, the page's size and `problems`, what the page itself
+/// gets wrong:
+///
+/// - `spill`: a box whose own child or text reaches past its edge (the deepest box: a box whose
+///   overflow comes only from a grandchild is left to the child that holds it);
+/// - `clipped`: the same in a box that hides its overflow without an ellipsis, so content is cut;
+/// - `unreachable`: content placed left of where a sideways scroller starts, which no scrolling
+///   reaches (a centred row in an `overflow-x:auto` box);
+/// - `overlap`: text drawn over other text, a fixed box included; the answered pill floats over
+///   the page on purpose, so it counts only when it covers text or a control with the page
+///   scrolled to its end, where the kit gives it room.
+///
+/// Each names the element by a CSS selector unique in the page.
+const INSPECT: &str = r###"function(scale){
+return new Promise(function(done){
+var LIMIT=8000,SHOWN=12,SKIP=/^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|BR|WBR|HEAD|META|LINK|TITLE|OPTION|TEXTAREA|INPUT|SELECT)$/;
+function svgPart(e){return typeof SVGElement!=="undefined"&&e instanceof SVGElement&&!(e instanceof SVGSVGElement);}
+if(Math.abs(scale-1)>0.001&&document.body){
+  var sized=[];
+  [document.documentElement,document.body].concat(Array.prototype.slice.call(document.body.querySelectorAll("*"))).forEach(function(e){
+    if(svgPart(e)||SKIP.test(e.tagName)&&e.tagName!=="TEXTAREA"&&e.tagName!=="INPUT"&&e.tagName!=="SELECT")return;
+    var cs=getComputedStyle(e);sized.push([e,parseFloat(cs.fontSize),cs.lineHeight]);
+  });
+  sized.forEach(function(v){
+    if(v[1])v[0].style.setProperty("font-size",(v[1]*scale)+"px","important");
+    if(/px$/.test(v[2]))v[0].style.setProperty("line-height",(parseFloat(v[2])*scale)+"px","important");
+  });
+  dispatchEvent(new Event("load"));
+}
+setTimeout(function(){requestAnimationFrame(function(){requestAnimationFrame(function(){
+  var d=document.documentElement,fit=window.__ghostexFit||null,kit=window.__ghostexKit||null;
+  done({page:true,fit:fit?JSON.parse(JSON.stringify(fit)):null,kit:kit?JSON.parse(JSON.stringify(kit)):null,docWidth:d.scrollWidth,viewport:d.clientWidth,height:Math.max(d.scrollHeight,document.body?document.body.scrollHeight:0),problems:problems()});
+});});},400);
+function visible(e){return e.checkVisibility?e.checkVisibility({opacityProperty:true,visibilityProperty:true}):true;}
+function classes(e){var c=e.getAttribute&&e.getAttribute("class");return c?c.trim().split(/\s+/).filter(function(x){return x&&!/^gx-(fit|more|has-)/.test(x);}):[];}
+function esc(t){return window.CSS&&CSS.escape?CSS.escape(t):t;}
+function part(e){
+  var s=e.tagName.toLowerCase();if(e.id)return s+"#"+esc(e.id);
+  var c=classes(e).slice(0,2);if(c.length)s+="."+c.map(esc).join(".");
+  ["data-choice","data-tab","tag"].forEach(function(a){var v=e.getAttribute(a);if(v!==null&&v.length<40)s+="["+a+"=\""+v.replace(/["\\]/g,"\\$&")+"\"]";});
+  return s;
+}
+function selector(e){
+  var parts=[],n=e;
+  while(n&&n.nodeType===1&&n!==document.documentElement&&n!==document.body){
+    var p=part(n),parent=n.parentElement;
+    if(parent){var twins=0;for(var c=parent.firstElementChild;c;c=c.nextElementSibling){try{if(c.matches(p))twins++;}catch(_){twins=2;}}if(twins>1)p+=":nth-child("+(Array.prototype.indexOf.call(parent.children,n)+1)+")";}
+    parts.unshift(p);
+    if(n.id)break;
+    try{if(document.querySelectorAll(parts.join(" > ")).length===1&&parts.length>1)break;}catch(_){}
+    n=parent;
+  }
+  return parts.join(" > ");
+}
+function said(e){var t=(e.textContent||"").replace(/\s+/g," ").trim();return t.length>40?t.slice(0,39)+"…":t;}
+function textSaid(t){var s=t.data.replace(/\s+/g," ").trim();return s.length>40?s.slice(0,39)+"…":s;}
+function textRects(t){var r=document.createRange();r.selectNodeContents(t);return Array.prototype.filter.call(r.getClientRects(),function(x){return x.width>=1&&x.height>=1;});}
+/* The child (or text) of e reaching furthest past e's inside edges. */
+function worst(e,left,right,leftOnly){
+  var best=null,most=1;
+  for(var n=e.firstChild;n;n=n.nextSibling){
+    var rects,what;
+    if(n.nodeType===1){
+      if(SKIP.test(n.tagName)||svgPart(n))continue;
+      var cs=getComputedStyle(n);if(cs.position==="absolute"||cs.position==="fixed"||cs.display==="none")continue;
+      var r=n.getBoundingClientRect();if(!r.width||!r.height)continue;rects=[r];what=n;
+    }else if(n.nodeType===3&&n.data.trim()){rects=textRects(n);what=n;}else continue;
+    rects.forEach(function(r){
+      var past=Math.max(leftOnly?0:r.right-right,left-r.left);
+      if(past>most){most=past;best=what;}
+    });
+  }
+  return best&&{node:best,past:Math.round(most)};
+}
+function name(node){if(node.nodeType!==3)return selector(node);var t=textSaid(node);return /"/.test(t)?"its text "+t:"its text \""+t+"\"";}
+function problems(){
+  var out={spill:[],clipped:[],unreachable:[],overlap:[]};if(!document.body)return out;
+  var all=document.body.querySelectorAll("*"),n=Math.min(all.length,LIMIT);
+  for(var i=0;i<n;i++){
+    var e=all[i];if(SKIP.test(e.tagName)||svgPart(e)||e.tagName==="svg")continue;
+    if(e.scrollWidth<=e.clientWidth+1)continue;
+    var cs=getComputedStyle(e);if(/^(inline|contents|none)$/.test(cs.display)||!visible(e))continue;
+    var r=e.getBoundingClientRect(),left=r.left+parseFloat(cs.borderLeftWidth),right=Math.min(r.right-parseFloat(cs.borderRightWidth),left+e.clientWidth);
+    var ox=cs.overflowX,scroller=ox==="auto"||ox==="scroll",found;
+    if(scroller){
+      if(e.scrollLeft<=0&&(found=worst(e,left,right,true))&&out.unreachable.length<SHOWN)out.unreachable.push({element:selector(e),text:said(e),culprit:name(found.node),past:found.past});
+      continue;
+    }
+    var clips=ox==="hidden"||ox==="clip";if(clips&&cs.textOverflow==="ellipsis")continue;
+    found=worst(e,left,right,false);if(!found)continue;
+    var list=clips?out.clipped:out.spill;
+    if(list.length<SHOWN)list.push({element:selector(e),text:said(e),culprit:name(found.node),past:found.past,width:Math.round(right-left)});
+  }
+  /* Text over text. Each text's line boxes, cut to what its scrolling or clipping boxes show. */
+  var clipsOf=new Map(),NONE={l:-1e9,t:-1e9,r:1e9,b:1e9};
+  function clipOf(e){
+    if(!e||e===document.body||e===document.documentElement)return NONE;
+    if(clipsOf.has(e))return clipsOf.get(e);
+    var cs=getComputedStyle(e),c=cs.position==="fixed"?NONE:clipOf(e.parentElement);
+    if(cs.overflowX!=="visible"||cs.overflowY!=="visible"){var r=e.getBoundingClientRect();c={l:Math.max(c.l,r.left),t:Math.max(c.t,r.top),r:Math.min(c.r,r.right),b:Math.min(c.b,r.bottom)};}
+    clipsOf.set(e,c);return c;
+  }
+  function fixedOf(e){for(;e&&e!==document.body;e=e.parentElement){if(getComputedStyle(e).position==="fixed")return e;}return null;}
+  var boxes=[],walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),t;
+  while((t=walker.nextNode())&&boxes.length<6000){
+    if(!t.data.trim())continue;var p=t.parentElement;
+    if(!p||p.closest("script,style,textarea,svg,noscript,template,select,.gx-tally")||!visible(p))continue;
+    var c=clipOf(p),fixed=fixedOf(p);
+    textRects(t).forEach(function(r){
+      var b={l:Math.max(r.left,c.l),t:Math.max(r.top,c.t),r:Math.min(r.right,c.r),b:Math.min(r.bottom,c.b)};
+      if(b.r-b.l>=1&&b.b-b.t>=1)boxes.push({node:t,el:p,fixed:fixed,l:b.l,t:b.t,r:b.r,b:b.b});
+    });
+  }
+  boxes.sort(function(a,b){return a.t-b.t;});
+  var seen={};
+  for(var a=0;a<boxes.length&&out.overlap.length<SHOWN;a++){
+    var x=boxes[a];
+    for(var k=a+1;k<boxes.length&&boxes[k].t<x.b;k++){
+      var y=boxes[k];if(y.node===x.node)continue;
+      var w=Math.min(x.r,y.r)-Math.max(x.l,y.l),h=Math.min(x.b,y.b)-Math.max(x.t,y.t);
+      if(w<=2||h<=0)continue;
+      var smallH=Math.min(x.b-x.t,y.b-y.t),smallA=Math.min((x.r-x.l)*(x.b-x.t),(y.r-y.l)*(y.b-y.t));
+      if(h<0.4*smallH||w*h<0.2*smallA)continue;
+      var top=y.fixed&&!x.fixed?y:x,under=top===y?x:y,key=selector(top.el)+"|"+selector(under.el);
+      if(seen[key])continue;seen[key]=1;
+      out.overlap.push({element:selector(top.el),text:textSaid(top.node),fixed:!!top.fixed,other:selector(under.el),otherText:textSaid(under.node)});
+      if(out.overlap.length>=SHOWN)break;
+    }
+  }
+  /* The answered pill floats over the page on purpose, wherever it is scrolled; what must hold is that at the page's end, in its own room, it covers no text or control. */
+  var pill=document.querySelector(".gx-tally");
+  if(pill&&visible(pill)){
+    var se=document.scrollingElement||document.documentElement,was=se.scrollTop;se.scrollTop=se.scrollHeight;
+    var q=pill.getBoundingClientRect(),hit=null;
+    var covers=function(r){return Math.min(q.right,r.right)-Math.max(q.left,r.left)>2&&Math.min(q.bottom,r.bottom)-Math.max(q.top,r.top)>2;};
+    Array.prototype.some.call(document.querySelectorAll("button,a[href],input,select,textarea,label,[role=button]"),function(e){
+      if(pill.contains(e)||!visible(e))return false;var r=e.getBoundingClientRect();if(r.width&&r.height&&covers(r)){hit=e;return true;}return false;
+    });
+    if(!hit){var w2=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),t2;
+      while(!hit&&(t2=w2.nextNode())){var p2=t2.parentElement;if(!t2.data.trim()||!p2||pill.contains(p2)||p2.closest("script,style,noscript,template")||!visible(p2))continue;if(textRects(t2).some(covers))hit=p2;}}
+    se.scrollTop=was;
+    if(hit&&out.overlap.length<SHOWN)out.overlap.push({element:selector(pill),text:pill.textContent.trim(),fixed:true,other:selector(hit),otherText:hit.textContent.trim().slice(0,60),end:true});
+  }
+  return out;
+}
+});
+}"###;
 
 /// What to tell the agent about one width, from the probe's answer.
 pub(crate) fn page_findings(width: u32, report: &Value) -> Vec<String> {
@@ -314,6 +597,141 @@ pub(crate) fn page_findings(width: u32, report: &Value) -> Vec<String> {
             join(&scroll)
         ));
     }
+    findings
+}
+
+/// What the kit adjusted that needs no fix (`ghostex visual check` says it; `ghostex show` does
+/// not, since the page reads well as it is).
+pub(crate) fn kit_notes(report: &Value) -> Vec<String> {
+    let widened = report
+        .pointer("/fit/widened")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().map(describe).collect::<Vec<_>>())
+        .unwrap_or_default();
+    if widened.is_empty() {
+        return Vec::new();
+    }
+    vec![format!(
+        "The kit gave columns more room so what they hold fits (a mockup, or a value's longest word), which puts fewer side by side: {}. Fine as it is; to choose the width yourself, set --gx-option-min, --gx-grid-min or --gx-stat-min on the row (for a mockup: its width plus the card's padding).",
+        join(&widened)
+    )]
+}
+
+/// What the page itself gets wrong at one size (`problems` from `INSPECT`): one finding per kind of
+/// problem, saying how to fix it, then each place it happens by its CSS selector (on its own
+/// indented line). Empty when the page fits.
+pub(crate) fn problem_findings(report: &Value) -> Vec<String> {
+    let Some(problems) = report.get("problems").filter(|value| value.is_object()) else {
+        return Vec::new();
+    };
+    let list = |key: &str| {
+        problems
+            .get(key)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let text = |item: &Value, key: &str| {
+        item.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let px = |item: &Value, key: &str| item.get(key).and_then(Value::as_f64).unwrap_or(0.0);
+    let said = |item: &Value, key: &str| match text(item, key) {
+        said if said.is_empty() => String::new(),
+        said if said.contains('"') => format!(" ({said})"),
+        said => format!(" (\"{said}\")"),
+    };
+    let group = |head: &str, lines: Vec<String>| -> Option<String> {
+        (!lines.is_empty()).then(|| {
+            let mut finding = head.to_string();
+            for line in lines {
+                finding.push_str("\n    ");
+                finding.push_str(&line);
+            }
+            finding
+        })
+    };
+    let mut findings = Vec::new();
+    findings.extend(group(
+        "Overflows its box, over whatever is beside it. Let it shrink and wrap (min-width:0 on grid and flex children, overflow-wrap:anywhere on long words, no white-space:nowrap on long values), give it max-width:100%, or put a fixed-width mockup in a .gx-frame so it scrolls in its own box:",
+        list("spill")
+            .iter()
+            .map(|item| {
+                format!(
+                    "`{}`{}, {:.0}px wide: {} reaches {:.0}px past its edge",
+                    text(item, "element"),
+                    said(item, "text"),
+                    px(item, "width"),
+                    text(item, "culprit"),
+                    px(item, "past"),
+                )
+            })
+            .collect(),
+    ));
+    findings.extend(group(
+        "Cut off by overflow:hidden. Let the content wrap or fit the box, or end the cut with text-overflow:ellipsis:",
+        list("clipped")
+            .iter()
+            .map(|item| {
+                format!(
+                    "`{}`{} hides {:.0}px of {}",
+                    text(item, "element"),
+                    said(item, "text"),
+                    px(item, "past"),
+                    text(item, "culprit"),
+                )
+            })
+            .collect(),
+    ));
+    findings.extend(group(
+        "Can't be scrolled to: a box scrolls sideways, but part of its content starts left of where scrolling begins. Use justify-content:safe center (or flex-start) in a box that scrolls:",
+        list("unreachable")
+            .iter()
+            .map(|item| {
+                format!(
+                    "`{}`: {} starts {:.0}px left of it",
+                    text(item, "element"),
+                    text(item, "culprit"),
+                    px(item, "past"),
+                )
+            })
+            .collect(),
+    ));
+    let overlaps = list("overlap");
+    let (pill_at_end, overlaps): (Vec<_>, Vec<_>) = overlaps
+        .iter()
+        .partition(|item| item.get("end").and_then(Value::as_bool) == Some(true));
+    let (fixed, text_over): (Vec<_>, Vec<_>) = overlaps
+        .into_iter()
+        .partition(|item| item.get("fixed").and_then(Value::as_bool) == Some(true));
+    let over = |items: Vec<&Value>| {
+        items
+            .into_iter()
+            .map(|item| {
+                format!(
+                    "`{}`{} over `{}`{}",
+                    text(item, "element"),
+                    said(item, "text"),
+                    text(item, "other"),
+                    said(item, "otherText"),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    findings.extend(group(
+        "Text drawn over other text. Let each text wrap inside its own box (min-width:0, overflow-wrap:anywhere) or give the boxes room to stack:",
+        over(text_over),
+    ));
+    findings.extend(group(
+        "A box fixed to the screen covers text. Give it room of its own, or move it off the content:",
+        over(fixed),
+    ));
+    findings.extend(group(
+        "Scrolled to the end, the answered pill covers content. The kit leaves room for it after the page's last box, so something reaches into that room (a fixed height on html or body, or a box placed at the bottom):",
+        over(pill_at_end),
+    ));
     findings
 }
 
@@ -387,14 +805,21 @@ fn join(items: &[String]) -> String {
     text
 }
 
-/// Where a width's screenshot goes: `--out` as given for one width, with `-<width>` before the
-/// extension for several, else beside the system's temporary files.
+/// Where a size's screenshot goes: `--out` as given for one size, with `-<width>` (and
+/// `-text<percent>` for large text) before the extension for several, else beside the system's
+/// temporary files.
 pub(crate) fn screenshot_path(
     page: &Path,
     out: Option<&Path>,
     width: u32,
+    text_scale: f64,
     several: bool,
 ) -> PathBuf {
+    let size = if is_large_text(text_scale) {
+        format!("{width}-text{:.0}", text_scale * 100.0)
+    } else {
+        width.to_string()
+    };
     match out {
         Some(out) if !several => out.to_path_buf(),
         Some(out) => {
@@ -402,7 +827,7 @@ pub(crate) fn screenshot_path(
                 .file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "page".to_string());
-            out.with_file_name(format!("{stem}-{width}.png"))
+            out.with_file_name(format!("{stem}-{size}.png"))
         }
         None => {
             let stem = page
@@ -411,9 +836,22 @@ pub(crate) fn screenshot_path(
                 .unwrap_or_else(|| "page".to_string());
             std::env::temp_dir()
                 .join("ghostex-visuals")
-                .join(format!("{stem}-{width}.png"))
+                .join(format!("{stem}-{size}.png"))
         }
     }
+}
+
+/// The file for part `n` (from 1) of a long screenshot: the path itself for the first part,
+/// `-part<n>` before the extension for the rest.
+fn part_path(out: &Path, n: usize) -> PathBuf {
+    if n == 1 {
+        return out.to_path_buf();
+    }
+    let stem = out
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "page".to_string());
+    out.with_file_name(format!("{stem}-part{n}.png"))
 }
 
 fn absolute(file: &str) -> PathBuf {
@@ -758,14 +1196,18 @@ mod tests {
     fn screenshots_get_the_width_when_several_are_taken() {
         let page = Path::new("/w/mock.html");
         assert_eq!(
-            screenshot_path(page, Some(Path::new("/o/shot.png")), 390, false),
+            screenshot_path(page, Some(Path::new("/o/shot.png")), 390, 1.0, false),
             PathBuf::from("/o/shot.png")
         );
         assert_eq!(
-            screenshot_path(page, Some(Path::new("/o/shot.png")), 390, true),
+            screenshot_path(page, Some(Path::new("/o/shot.png")), 390, 1.0, true),
             PathBuf::from("/o/shot-390.png")
         );
-        assert!(screenshot_path(page, None, 1280, true).ends_with("ghostex-visuals/mock-1280.png"));
+        assert!(
+            screenshot_path(page, None, 1280, 1.0, true).ends_with("ghostex-visuals/mock-1280.png")
+        );
+        assert!(screenshot_path(page, None, 900, 1.3, true)
+            .ends_with("ghostex-visuals/mock-900-text130.png"));
     }
 
     /// The kit's phone fit (visual_pages/fit.rs) in a real browser: a fixed two-column grid, pills
@@ -793,6 +1235,7 @@ mod tests {
         .expect("the page");
         let checks = [PHONE_WIDTH, DESKTOP_WIDTH].map(|width| PageCheck {
             width,
+            text_scale: 1.0,
             light: false,
             screenshot: None,
         });
@@ -933,7 +1376,7 @@ mod tests {
             q3 = question("Q3", "Which colour?", &["Red", "Green"]),
             q4v = variants(&["Alpha", "Alpha"]),
             q4 = question("Q4", "Which name?", &["Alpha", "Beta"]),
-            q5v = variants(&["Unrelated heading"]),
+            q5v = variants(&["Unrelated heading", "Another heading"]),
             q5 = question("Q5", "Which other?", &["One", "Two"]),
             q6v = "<section data-question=\"Q6\" data-choice=\"x\"><h3>A. Already tied</h3><div class=\"gx-frame\">m</div></section><section><h3>B. Not tied</h3><div class=\"gx-frame\">m</div></section>",
             q6 = question("Q6", "Which tied?", &["x", "y"]),

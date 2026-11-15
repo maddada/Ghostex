@@ -143,6 +143,9 @@ pub(super) fn chat_settings() -> ChatSettings {
         all_orchestrator_efforts: object
             .get("orchestratorAllEfforts")
             .and_then(Value::as_bool),
+        varied_working_words: object
+            .get("chatVariedWorkingWords")
+            .and_then(Value::as_bool),
         marked_heading_strength: object
             .get("markedHandoversHeadingStrength")
             .and_then(Value::as_f64),

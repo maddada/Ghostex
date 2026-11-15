@@ -188,8 +188,8 @@ For every question:
   tag was already used means: give that question a new tag.
 - Write a form's block to a file and send it only when `ghostex visual check <file>` shows no error.
   Whoever builds a page looks at it before the user does:
-  `ghostex visual check <page.html> --out <file.png>` (`--width 390` for the phone); put that in the
-  brief of a thread that builds one.
+  `ghostex visual check <page.html> --out <file.png>` (phone, foldable, computer and large text; it
+  fails while anything overflows or overlaps); put that in the brief of a thread that builds one.
 - End your turn after asking: the answers arrive as your next message.
 - An answer or Reply arrives as "W<n> Q<n>: <answer>", already recorded: act on it, never ask it again
   or withdraw it. Dismiss arrives as "I dismissed …": withdrawn for good, never ask it again. A
@@ -226,12 +226,18 @@ Update the item in the turn something changes (WORK ITEMS in `ghostex coordinato
 flag):
 
 - `item add "<line of work>" --thread <ref>` starts one.
-- `item now W<n> "<where it stands>"`: one line that replaces the last; never append.
+- `item now W<n> "<where it stands>"`: one line that replaces the last; never append. Only for work a
+  thread or you are doing right now. **Everything that needs the user (try, test, check, confirm,
+  decide, sign in, approve) is an `item ask`, so it shows under Needs you**: never a `now` or `wait`
+  line ("waiting on your try" is refused).
 - `item step W<n> "<step>"`: a step the user cares about. Rebuilds and test runs are chores: leave
   them out, or add `--chore`.
 - `item ask W<n> "<title>" --detail "<the rest>"`: anything the user must do or decide; `--holds`
   when the work stops until they do.
-- `item wait W<n> --on <W<m> | Q<n> | "something outside">`: clears itself when that is done.
+- `item wait W<n> --on <W<m> | Q<n> | release | ota | rebuild | "something outside">`: a wait on an
+  item, a question or one of those events clears itself; words never do, so name the event when
+  there is one. After a release or phone update, `item delivered release v<x>` (or `ota`) brings
+  back the items it delivered: check each and finish it.
 - `item done W<n> "<the one line worth keeping>"`: its open asks stay under Needs you until answered
   or withdrawn.
 - `item drop W<n>` for abandoned work (withdraws its asks); `item edit W<n> --status parked` for work
@@ -239,14 +245,18 @@ flag):
 
 Ghostex works out each status:
 
-- **Done:** mark `item done` in the turn the work is done and delivered: the thread reported, the
-  change is landed and, where the app must be rebuilt for the user to have it, it is in their app.
+- **Done:** mark `item done` in the turn the work is done: the thread reported, the change is on
+  main (committed and pushed) and, for the desktop, in the user's rebuilt app. "Ships in the next
+  release" or "the phone gets it with the next phone update" is a note on the done line, not a
+  Waiting status.
   Never hold it In progress for the user to look at, try or confirm: what they must check or decide
   is an `item ask` (on the finished item or a new one); "waiting for the user to try it" is not a
   status. If they later find a fault, reopen the item or add one.
-- **In progress:** a thread or you are on it right now. Say "In progress", never "Moving".
-- **Waiting:** built but not yet delivered, or waiting on something outside (a rebuild, a release, a
-  vendor, CI, another item): `item wait` with what it waits on. Never Blocked.
+- **In progress:** a thread or you are on it right now, nothing else. Say "In progress", never
+  "Moving".
+- **Waiting:** on something outside that hasn't happened (a store review, a vendor, CI, another item,
+  the rebuild that puts it in the user's app): `item wait` with what it waits on. Never Blocked,
+  never the user.
 - **Blocked:** the user must act now to unblock it (an ask with `--holds`, or a thread still not
   moving after the nudge).
 - **Not being worked on:** nobody is on it. `item list` and `status` name it until you finish it,
@@ -269,7 +279,8 @@ Your reply:
 
 Before you end your turn, run `ghostex coordinator item list`: nothing finished is still In
 progress, every In progress item is being worked on right now, nothing is left under Not being
-worked on, and nothing that waits on the user is missing its ask.
+worked on, nothing it lists as Delivered or Recheck (Waiting and Later items) is left unchecked, and
+nothing that waits on the user is missing its ask.
 
 In a user message, `[title](board:B<n>)` names item W<n>. Use `item`, not the old `board` verbs.
 

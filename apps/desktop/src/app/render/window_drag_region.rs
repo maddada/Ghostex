@@ -29,10 +29,7 @@ fn window_drag_is_app_owned(_window: &gpui::Window) -> bool {
 /// On Omarchy the page window a `ghostex show` card opens could not be dragged by its top band. Hyprland's XWayland does not advertise `_GTK_FRAME_EXTENTS`, so GPUI reports every window as server-decorated, yet Hyprland never draws a title bar for one: with the drag left to the window manager there was nothing to drag. On Hyprland the app's drag regions always move the window (gpui_linux moves it itself there, since Hyprland also drops `_NET_WM_MOVERESIZE`).
 #[cfg(all(target_os = "linux", not(ghostex_web)))]
 fn window_drag_is_app_owned(window: &gpui::Window) -> bool {
-    matches!(
-        window.window_decorations(),
-        gpui::Decorations::Client { .. }
-    ) || crate::linux_hyprland::running_on_hyprland()
+    crate::app::helpers::linux_app_draws_window_caption(window)
 }
 
 // The browser build (apps/gpui-web) compiles this file too; a page has no window to drag.
@@ -55,17 +52,19 @@ Do Nothing). Linux compositors leave the same gesture to the client, so zoom dir
 Windows already resolves it from the WindowControlArea::Drag hit test in the platform layer.
 */
 #[cfg(all(target_os = "macos", not(ghostex_web)))]
-fn window_drag_double_click_action(window: &gpui::Window) {
+fn window_drag_double_click_action(window: &mut gpui::Window) {
     window.titlebar_double_click();
 }
 
 #[cfg(all(target_os = "linux", not(ghostex_web)))]
-fn window_drag_double_click_action(window: &gpui::Window) {
+fn window_drag_double_click_action(window: &mut gpui::Window) {
     window.zoom_window();
+    // The maximize button's icon follows; Hyprland's maximize can leave the size unchanged.
+    window.refresh();
 }
 
 #[cfg(any(all(target_os = "windows", not(ghostex_web)), ghostex_web))]
-fn window_drag_double_click_action(_window: &gpui::Window) {}
+fn window_drag_double_click_action(_window: &mut gpui::Window) {}
 
 /// CDXC:Titlebar 2026-09-21 WHY:
 /// The view tab strip sits in the window's top band, and on macOS AppKit moved the window from any

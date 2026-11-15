@@ -367,6 +367,43 @@ impl NativeChatView {
         let status = &card["status"];
         let time = text(card, "time");
         let shape = &*SINGLE_LINE_CARD;
+        // The name is cut, never collapsed: on a tight row the time steps aside, then the name's
+        // marks (cards.rs `title_fit`, the user's Q3300 A).
+        let time_width = super::fonts::label_width(
+            &time,
+            &p.font,
+            gpui::FontWeight::NORMAL,
+            12.0 * s,
+            cx,
+        ) / s;
+        let fit = if card["pill"].is_object() {
+            let pill = &card["pill"];
+            let lead = super::fonts::label_width(
+                &text(pill, "prefix"),
+                &p.font,
+                gpui::FontWeight(shape.title_weight),
+                shape.title_size * s,
+                cx,
+            ) / s
+                + shape.title_size * WORD_SPACE_EM;
+            shape.title_fit(
+                self.title_room.borrow().get(key).copied(),
+                lead,
+                time_width,
+                Self::session_pill_marks_width(pill, p),
+            )
+        } else {
+            super::cards::TitleFit {
+                show_time: true,
+                show_marks: true,
+            }
+        };
+        let show_time = !time.is_empty() && fit.show_time;
+        let time_room = if show_time {
+            time_width + super::cards::TITLE_ROW_GAP
+        } else {
+            0.0
+        };
         let row = div()
             .id(SharedString::from(format!("{key}:row")))
             .h(px(shape.header_height(s)))
@@ -381,7 +418,16 @@ impl NativeChatView {
                 // `Message from` / `Message to`, then the other session's pill.
                 let pill = &card["pill"];
                 shape
-                    .title(div().flex_1().min_w_0().flex().items_center(), p)
+                    .title(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .flex()
+                            .items_center(),
+                        p,
+                    )
                     // An ordinary word space between `Message to` and the session's name.
                     .gap(px(shape.title_size * WORD_SPACE_EM * s))
                     .text_color(p.foreground)
@@ -391,7 +437,26 @@ impl NativeChatView {
                             .whitespace_nowrap()
                             .child(text(pill, "prefix")),
                     )
-                    .child(self.session_pill(&format!("{key}:pill"), pill, p, cx))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_shrink(1.0)
+                            .min_w(px(shape.name_min() * s))
+                            .child(self.session_pill_fitted(
+                                &format!("{key}:pill"),
+                                pill,
+                                fit.show_marks,
+                                p,
+                                cx,
+                            )),
+                    )
+                    .child(super::cards::title_room_probe(
+                        self.title_room.clone(),
+                        key.to_string(),
+                        time_room,
+                        s,
+                        cx.entity_id(),
+                    ))
                     .into_any_element()
             } else {
                 shape
@@ -400,7 +465,7 @@ impl NativeChatView {
                     .child(text(card, "name"))
                     .into_any_element()
             })
-            .when(!time.is_empty(), |row| {
+            .when(show_time, |row| {
                 row.child(
                     div()
                         .flex_shrink_0()
@@ -530,9 +595,52 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
+        self.session_pill_fitted(key, pill, true, p, cx)
+    }
+
+    /// How wide a session name's logo, state dot and computer icon are with their gaps (unscaled):
+    /// what `session_pill_fitted` drops when a card's row is too tight for them
+    /// (cards.rs `title_fit`).
+    pub(super) fn session_pill_marks_width(pill: &Value, p: &ChatAppearance) -> f32 {
+        let gap = 4.0;
+        let logo = if pill["logo"] != false { 12.0 + gap } else { 0.0 };
+        let session = &pill["session"];
+        let card = (pill["missing"] != true && session.is_object())
+            .then(|| {
+                super::session_card::card_for(
+                    session["serverId"].as_str().unwrap_or_default(),
+                    session["projectId"].as_str().unwrap_or_default(),
+                    session["sessionId"].as_str().unwrap_or_default(),
+                )
+            })
+            .flatten();
+        let trail: f32 = card
+            .as_ref()
+            .map(|card| super::session_card::marks(card, p))
+            .unwrap_or_default()
+            .iter()
+            .map(|mark| match mark {
+                super::session_card::PillMark::Dot { size, .. }
+                | super::session_card::PillMark::Icon { size, .. } => gap + f32::from(*size),
+            })
+            .sum();
+        logo + trail
+    }
+
+    /// The session's name; `show_marks` false leaves out its logo, state dot and computer icon,
+    /// which a tight card row drops before the name gets shorter than a few letters
+    /// (cards.rs `title_fit`).
+    pub(super) fn session_pill_fitted(
+        &self,
+        key: &str,
+        pill: &Value,
+        show_marks: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
         let s = p.scale;
         let missing = pill["missing"] == true;
-        let shows_logo = pill["logo"] != false;
+        let shows_logo = show_marks && pill["logo"] != false;
         let (logo, logo_color) = super::markdown_links::session_pill_icon(
             pill["agentIcon"].as_str().unwrap_or_default(),
             pill["coordinator"] == true,
@@ -560,6 +668,7 @@ impl NativeChatView {
             .flatten();
         let marks = card
             .as_ref()
+            .filter(|_| show_marks)
             .map(|card| super::session_card::marks(card, p))
             .unwrap_or_default();
         let hint = SharedString::from(text(pill, "title"));

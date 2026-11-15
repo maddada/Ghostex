@@ -42,6 +42,7 @@ mod thread_messages;
 mod thread_reads;
 mod title;
 mod turns;
+mod user_handoff;
 mod work;
 
 pub use auto_sleep::*;

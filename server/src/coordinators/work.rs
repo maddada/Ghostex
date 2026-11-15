@@ -51,6 +51,150 @@ const DROPPED_KEEP_DAYS: i64 = 7;
 /// still be drawn; the panel shows only today's under Finished.
 const PANEL_RECENT_DAYS: i64 = 3;
 
+/// A Waiting item the coordinator has not rechecked for this long is named in `item list` and
+/// `status` until it does (`recheck_reason`).
+const RECHECK_WAITING_DAYS: i64 = 2;
+/// Where the delivery events are kept (the `metadata` table): `{projectId: {kind: Delivery}}`.
+const DELIVERIES_KEY: &str = "coordinatorDeliveries";
+
+/// The events a wait can name instead of words (`item wait W7 --on release`), with the words the
+/// user reads.
+///
+/// CDXC:Coordinators 2026-11-15 DECISION:
+/// User, of the Work panel's Waiting group: "Why do I see a lot of stuff on the work items in
+/// waiting and in the other statuses that I think should be marked as done? Why does this keep
+/// happening?" Every one of the 22 Waiting items waited on words ("the next release", "next phone
+/// over-the-air update", "the next rebuild of your Mac app"), which never clear, so 15 delivered
+/// items sat there after 11.7.1 shipped. On the options page (board-stale-options.html) the user
+/// picked A (waits on known events), B (a nudge for stale Waiting and Later items) and D (done
+/// when landed). A wait on one of these events closes once the event happens after the wait was
+/// set, and the item comes back to the coordinator as delivered, to check and finish: Ghostex
+/// still never finishes an item itself (turns.rs). What gxserver can see: a rebuild is the
+/// running gxserver starting from an executable built after the wait (`cargo xtask rebuild` and
+/// an app update both restart it), or `item delivered rebuild`; a release and a phone update are
+/// published by GitHub Actions, which this computer cannot see, so the release flow records them
+/// (`ghostex coordinator item delivered release v11.7.1`, ghostex-release skill), per project, so
+/// another project's release clears nothing here.
+pub const WAIT_EVENTS: [(&str, &str); 3] = [
+    ("release", "the next release"),
+    ("ota", "the next phone update"),
+    ("rebuild", "the next rebuild of Ghostex on this computer"),
+];
+
+/// The event a wait word names (`release`, `ota`, `rebuild` and a few spellings), or `None` for
+/// words.
+pub fn wait_event(word: &str) -> Option<&'static str> {
+    match word.trim().to_ascii_lowercase().as_str() {
+        "release" | "next-release" => Some("release"),
+        "ota" | "phone-update" | "next-ota" => Some("ota"),
+        "rebuild" | "app-rebuild" | "next-rebuild" => Some("rebuild"),
+        _ => None,
+    }
+}
+
+fn wait_event_words(kind: &str) -> &'static str {
+    WAIT_EVENTS
+        .iter()
+        .find(|(event, _)| *event == kind)
+        .map_or("", |(_, words)| words)
+}
+
+/// The latest time an event happened: when, and its name ("v11.7.1"), "" for none.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Delivery {
+    pub at: String,
+    pub name: String,
+}
+
+type ProjectDeliveries = HashMap<String, Delivery>;
+
+/// The delivery events, read once from the database and kept current by `record_delivery`.
+static DELIVERIES: std::sync::RwLock<Option<HashMap<String, ProjectDeliveries>>> =
+    std::sync::RwLock::new(None);
+
+/// When the executable this gxserver runs was built, read once at its start.
+static RUNNING_BUILD: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
+fn read_deliveries(db: &Connection) -> HashMap<String, ProjectDeliveries> {
+    db.query_row(
+        "SELECT value FROM metadata WHERE key = ?1",
+        params![DELIVERIES_KEY],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|text| serde_json::from_str(&text).ok())
+    .unwrap_or_default()
+}
+
+/// Reads the delivery events once, and notes this gxserver's build. Called where a database is at
+/// hand: the panels' refresh (soon after start), `item` requests and `status`.
+pub fn load_deliveries(db: &Connection) {
+    note_running_build();
+    if DELIVERIES.read().is_ok_and(|loaded| loaded.is_some()) {
+        return;
+    }
+    let read = read_deliveries(db);
+    if let Ok(mut loaded) = DELIVERIES.write() {
+        loaded.get_or_insert(read);
+    }
+}
+
+/// Notes when the running executable was built (its modification time), the first time it is
+/// asked: a rebuild or an update replaces the file and restarts gxserver.
+pub fn note_running_build() {
+    RUNNING_BUILD.get_or_init(|| {
+        let exe = std::env::current_exe().ok()?;
+        let modified = std::fs::metadata(exe).ok()?.modified().ok()?;
+        Some(DateTime::<Utc>::from(modified).to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+    });
+}
+
+fn project_deliveries(project_id: &str) -> ProjectDeliveries {
+    DELIVERIES
+        .read()
+        .ok()
+        .and_then(|loaded| loaded.as_ref()?.get(project_id).cloned())
+        .unwrap_or_default()
+}
+
+/// Records that an event happened now for the coordinator's project (`item delivered`).
+fn record_delivery(
+    db: &Connection,
+    project_id: &str,
+    kind: &str,
+    name: &str,
+    at: &str,
+) -> Result<(), DomainStateError> {
+    let mut all = read_deliveries(db);
+    all.entry(project_id.to_string()).or_default().insert(
+        kind.to_string(),
+        Delivery {
+            at: at.to_string(),
+            name: name.to_string(),
+        },
+    );
+    db.execute(
+        r#"
+        INSERT INTO metadata (key, value, updatedAt)
+        VALUES (?1, ?2, ?3)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt
+        "#,
+        params![DELIVERIES_KEY, to_json(&all), at],
+    )
+    .map_err(sql_error)?;
+    if let Ok(mut loaded) = DELIVERIES.write() {
+        *loaded = Some(all);
+    }
+    Ok(())
+}
+
+fn parse_time(at: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(at)
+        .ok()
+        .map(|at| at.with_timezone(&Utc))
+}
+
 /// A thread working on an item: its server (empty for this computer), project and session.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -489,6 +633,11 @@ pub struct WorkContext<'a> {
     /// An In progress item with no thread on it that the coordinator last changed before this is
     /// not being worked on (turns.rs `idle_floor`); `None` keeps every such item In progress.
     idle_floor: Option<DateTime<Utc>>,
+    /// The question tags the coordinator's chat asked (a page's, a form's, a one-click answer's),
+    /// uppercased, with whether each is settled, so a wait on one clears when it is answered.
+    chat_tags: HashMap<String, bool>,
+    /// The events that happened for the coordinator's project (`item delivered`).
+    deliveries: ProjectDeliveries,
 }
 
 impl<'a> WorkContext<'a> {
@@ -500,7 +649,42 @@ impl<'a> WorkContext<'a> {
                 .collect(),
             items,
             idle_floor: None,
+            chat_tags: HashMap::new(),
+            deliveries: ProjectDeliveries::new(),
         }
+    }
+
+    /// The same, with what the coordinator's chat asked and its project's delivery events.
+    pub fn with_coordinator(mut self, key: Option<&SessionKey>) -> Self {
+        if let Some(key) = key {
+            self.chat_tags =
+                crate::session_chat_open_questions::asked_question_tags(&key.0, &key.1);
+            self.deliveries = project_deliveries(&key.0);
+        }
+        self
+    }
+
+    /// When the event a wait names happened after the wait was set: its name and time.
+    fn delivered(&self, kind: &str, since: &str) -> Option<Delivery> {
+        let since = parse_time(since)?;
+        let mut best: Option<Delivery> = self
+            .deliveries
+            .get(kind)
+            .filter(|event| parse_time(&event.at).is_some_and(|at| at > since))
+            .cloned();
+        if kind == "rebuild" && best.is_none() {
+            // The running gxserver was built after the wait: Ghostex here was rebuilt or updated.
+            best = RUNNING_BUILD
+                .get()
+                .cloned()
+                .flatten()
+                .filter(|at| parse_time(at).is_some_and(|at| at > since))
+                .map(|at| Delivery {
+                    at,
+                    name: "this computer's Ghostex".to_string(),
+                });
+        }
+        best
     }
 
     /// The same, telling items nobody is on from the ones the coordinator is on (turns.rs).
@@ -560,6 +744,22 @@ impl<'a> WorkContext<'a> {
             out["kind"] = json!("ask");
             out["label"] = json!(ask.text);
             out["open"] = json!(ask.is_open());
+        } else if let Some(settled) =
+            question_tag(&wait.on).and_then(|tag| self.chat_tags.get(&tag))
+        {
+            // A question the chat asked (a page, a form): it clears once the user answers it.
+            out["kind"] = json!("ask");
+            out["label"] = json!(format!("{} (asked in the chat)", wait.on));
+            out["open"] = json!(!settled);
+        } else if let Some(kind) = wait_event(&wait.on) {
+            out["kind"] = json!("event");
+            out["event"] = json!(kind);
+            out["label"] = json!(wait_event_words(kind));
+            if let Some(event) = self.delivered(kind, &wait.since) {
+                out["open"] = json!(false);
+                out["delivered"] = json!(event.name);
+                out["deliveredAt"] = json!(event.at);
+            }
         }
         if !wait.until.is_empty() {
             out["until"] = json!(wait.until);
@@ -857,6 +1057,25 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
         "threads": item.threads.iter().map(|thread| thread_value(thread, context.thread(thread))).collect::<Vec<_>>(),
         "history": item.history.iter().rev().take(history).rev().collect::<Vec<_>>(),
     });
+    // Every wait it had is over and one was an event that has happened: delivered, for the
+    // coordinator to check and finish (`idle_notice`).
+    if item.status == "waiting" && status != "waiting" {
+        let delivered: Vec<String> = item
+            .waits
+            .iter()
+            .map(|wait| context.wait(wait))
+            .filter_map(|wait| {
+                let name = wait["delivered"].as_str()?;
+                Some(format!("{}: {name}", text(&wait, "event")))
+            })
+            .collect();
+        if !delivered.is_empty() {
+            out["delivered"] = json!(delivered.join(", "));
+        }
+    }
+    if let Some(reason) = recheck_reason(item, status, context, Utc::now()) {
+        out["recheck"] = json!(reason);
+    }
     // A Later kind says only what kind of Later it is.
     if status == "later" && !item.reason.is_empty() {
         out["reason"] = json!(item.reason);
@@ -904,6 +1123,89 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
         out["droppedAt"] = json!(at);
     }
     out
+}
+
+/// When the coordinator last looked at the item: its latest change by any item command (an edit
+/// with no change too), unless that change was the user's answer.
+fn checked_at(item: &WorkItem) -> &str {
+    match item.history.last() {
+        Some(event)
+            if matches!(event.kind.as_str(), "answer" | "settle" | "moved")
+                && event.at == item.updated_at =>
+        {
+            coordinator_changed_at(item)
+        }
+        _ => item.updated_at.as_str(),
+    }
+}
+
+/// An `--until` that is a date or time still ahead: the wait is expected later, not forgotten.
+fn until_ahead(until: &str, now: DateTime<Utc>) -> bool {
+    let until = until.trim();
+    if let Some(at) = parse_time(until) {
+        return at > now;
+    }
+    NaiveDate::parse_from_str(until, "%Y-%m-%d")
+        .is_ok_and(|day| day >= now.with_timezone(&Local).date_naive())
+}
+
+/// Why the coordinator should look at the item again, or `None`: Waiting for
+/// `RECHECK_WAITING_DAYS` with no item command since (and no `--until` still ahead), or Later
+/// with every thread done and no change since they finished. Any item command clears it.
+///
+/// CDXC:Coordinators 2026-11-15 DECISION:
+/// User picked B on the stale-board options page: the end-of-turn check looked only at In progress
+/// and Not being worked on, and saying what an item waits on was a way out of it, so Waiting and
+/// Later items were never looked at again (W454 and W461 sat in Later a day after their threads
+/// finished). `item list` and `status` now name these until the coordinator rechecks them.
+fn recheck_reason(
+    item: &WorkItem,
+    status: &str,
+    context: &WorkContext<'_>,
+    now: DateTime<Utc>,
+) -> Option<String> {
+    if item.for_thread {
+        return None;
+    }
+    let checked = parse_time(checked_at(item))?;
+    match status {
+        "waiting" => {
+            let days = now.signed_duration_since(checked).num_days();
+            if days < RECHECK_WAITING_DAYS
+                || item.waits.iter().any(|wait| until_ahead(&wait.until, now))
+            {
+                return None;
+            }
+            Some(format!("Waiting {days}d with no recheck"))
+        }
+        "later" => {
+            let rows: Vec<&Value> = item
+                .threads
+                .iter()
+                .filter_map(|thread| context.thread(thread))
+                .collect();
+            if rows.is_empty() || !rows.iter().all(|row| row["state"] == "done") {
+                return None;
+            }
+            let last_active = rows
+                .iter()
+                .filter_map(|row| parse_time(row["activeAt"].as_str().unwrap_or_default()))
+                .max();
+            let rechecked = match last_active {
+                Some(at) => checked > at,
+                // No time to compare: rechecked once the coordinator did more than add it and
+                // attach its threads.
+                None => item
+                    .history
+                    .iter()
+                    .rev()
+                    .find(|event| !matches!(event.kind.as_str(), "answer" | "settle" | "moved"))
+                    .is_some_and(|event| !matches!(event.kind.as_str(), "add" | "thread")),
+            };
+            (!rechecked).then(|| "Later, and its threads are done".to_string())
+        }
+        _ => None,
+    }
 }
 
 fn recent(at: &str, now: DateTime<Utc>, days: i64) -> bool {
@@ -978,8 +1280,11 @@ pub fn work_value(
     all: bool,
     now: DateTime<Utc>,
     idle_floor: Option<DateTime<Utc>>,
+    coordinator: Option<&SessionKey>,
 ) -> Value {
-    let context = WorkContext::new(threads, items).with_idle_floor(idle_floor);
+    let context = WorkContext::new(threads, items)
+        .with_idle_floor(idle_floor)
+        .with_coordinator(coordinator);
     let today = now.with_timezone(&Local).date_naive();
     let mut rows: Vec<Value> = items
         .iter()
@@ -1034,30 +1339,69 @@ pub fn work_value(
     json!({ "items": rows, "asks": asks, "counts": counts })
 }
 
-/// What `item list` and `status` tell the coordinator about its items nobody is on (`idle`), or
-/// `None` when there are none. It only asks: Ghostex never finishes an item itself.
+/// What `item list` and `status` tell the coordinator about its items: the delivered ones (what
+/// they waited on has happened), the ones nobody is on (`idle`) and the ones to recheck (Waiting a
+/// while, or Later with their threads done), or `None` when there are none. It only asks: Ghostex
+/// never finishes an item itself.
 pub fn idle_notice(work: &Value) -> Option<String> {
-    let idle: Vec<String> = work["items"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|item| item["status"] == "idle")
-        .map(|item| format!("{} {}", text(item, "ref"), text(item, "title")))
+    let rows: Vec<&Value> = work["items"].as_array().into_iter().flatten().collect();
+    let named = |item: &Value| format!("{} {}", text(item, "ref"), text(item, "title"));
+    let first = |list: &[String]| list[0].split(' ').next().unwrap_or("W1").to_string();
+    let mut parts = Vec::new();
+    let delivered: Vec<String> = rows
+        .iter()
+        .filter(|item| !text(item, "delivered").is_empty())
+        .map(|item| format!("{} ({})", named(item), text(item, "delivered")))
         .collect();
-    let first = idle.first()?.split(' ').next().unwrap_or("W1").to_string();
-    Some(format!(
-        "Not being worked on (In progress, but no thread is on it and you have not changed it since your last turn): {}. Finished? Mark it done: `ghostex coordinator item done {first} \"<what was done>\"`. Otherwise say what it waits on (`item wait {first} --on ...`), ask the user (`item ask`), or say where it stands now (`item now`).",
-        idle.join("; ")
-    ))
+    if !delivered.is_empty() {
+        parts.push(format!(
+            "Delivered (what it waited on has happened): {}. Check it is in what shipped and finish it: `ghostex coordinator item done {} \"<what was done; where it shipped>\"`, or say what it waits on now (`item wait`).",
+            delivered.join("; "),
+            first(&delivered)
+        ));
+    }
+    let idle: Vec<String> = rows
+        .iter()
+        .filter(|item| item["status"] == "idle" && text(item, "delivered").is_empty())
+        .map(|item| named(item))
+        .collect();
+    if !idle.is_empty() {
+        let first = first(&idle);
+        parts.push(format!(
+            "Not being worked on (In progress, but no thread is on it and you have not changed it since your last turn): {}. Finished? Mark it done: `ghostex coordinator item done {first} \"<what was done>\"`. Otherwise say what it waits on (`item wait {first} --on ...`), ask the user (`item ask`), or say where it stands now (`item now`).",
+            idle.join("; ")
+        ));
+    }
+    let recheck: Vec<String> = rows
+        .iter()
+        .filter(|item| !text(item, "recheck").is_empty())
+        .map(|item| format!("{} ({})", named(item), text(item, "recheck")))
+        .collect();
+    if !recheck.is_empty() {
+        let first = first(&recheck);
+        parts.push(format!(
+            "Recheck: {}. Has it happened or shipped? Finish it (`item done {first} \"<line>\"`), say what it waits on now (`item wait {first} --on ...`), ask the user (`item ask`) or park it (`item edit {first} --status parked`). Any item command on it counts as a recheck.",
+            recheck.join("; ")
+        ));
+    }
+    (!parts.is_empty()).then(|| parts.join("\n"))
 }
 
 /// [`idle_notice`] for one coordinator, read from its items and its panel's thread rows.
 pub fn idle_notice_for(db: &Connection, key: &SessionKey) -> Option<String> {
+    load_deliveries(db);
     let items = list_work_items(db, key).ok()?;
     let threads = super::panel::cached_thread_rows(key);
     let now = Utc::now();
     let floor = super::turns::idle_floor_for(db, key, now);
-    idle_notice(&work_value(&threads, &items, false, now, Some(floor)))
+    idle_notice(&work_value(
+        &threads,
+        &items,
+        false,
+        now,
+        Some(floor),
+        Some(key),
+    ))
 }
 
 fn param_text(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -1175,11 +1519,54 @@ fn said_done(item: &WorkItem) -> bool {
 fn answer(item: &WorkItem, threads: &[Value], db: &Connection, key: &SessionKey) -> Value {
     let items = list_work_items(db, key).unwrap_or_default();
     let floor = super::turns::idle_floor_for(db, key, Utc::now());
-    let context = WorkContext::new(threads, &items).with_idle_floor(Some(floor));
+    let context = WorkContext::new(threads, &items)
+        .with_idle_floor(Some(floor))
+        .with_coordinator(Some(key));
     item_value(item, &context, PANEL_HISTORY)
 }
 
-/// `/api/coordinatorWork`. `op` is `list` (default; `all` for finished and dropped too), `add`,
+/// `op: delivered`: records that `kind` (release, ota or rebuild) happened now for the
+/// coordinator's project, named `name` ("v11.7.1"), and answers with this coordinator's items it
+/// delivered (`item delivered`, run by the release flow).
+fn delivered_request(
+    db: &Connection,
+    key: &SessionKey,
+    threads: &[Value],
+    params: &Map<String, Value>,
+    now: &str,
+) -> Result<(Value, bool), DomainStateError> {
+    let word = param_text(params, "event").unwrap_or_default();
+    let kind = wait_event(&word).ok_or_else(|| {
+        bad(format!(
+            "Name the event: release, ota or rebuild (not \"{word}\")."
+        ))
+    })?;
+    let name = param_text(params, "name").unwrap_or_default();
+    record_delivery(db, &key.0, kind, &name, now)?;
+    let items = list_work_items(db, key)?;
+    let floor = super::turns::idle_floor_for(db, key, Utc::now());
+    let work = work_value(threads, &items, false, Utc::now(), Some(floor), Some(key));
+    let delivered: Vec<Value> = work["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| text(item, "delivered").contains(&format!("{kind}:")))
+        .map(|item| json!({ "ref": item["ref"], "title": item["title"], "now": item["now"] }))
+        .collect();
+    Ok((
+        json!({
+            "event": kind,
+            "name": name,
+            "at": now,
+            "items": delivered,
+            "notice": idle_notice(&work),
+        }),
+        true,
+    ))
+}
+
+/// `/api/coordinatorWork`. `op` is `list` (default; `all` for finished and dropped too), `delivered`
+/// (an event happened: `event`, `name`), `add`,
 /// `now`, `step`, `ask`, `wait`, `done`, `drop`, `restore`, `edit` (title, link, release, untested,
 /// status, reason, threads), `answer` (an ask's one-click answer, recorded once), `settle` (an ask
 /// done or withdrawn) or `tag` (the user's tag). `ask_floor` is the highest question tag the
@@ -1196,12 +1583,16 @@ pub fn handle_work_request(
 ) -> Result<(Value, bool), DomainStateError> {
     let op = param_text(params, "op").unwrap_or_else(|| "list".to_string());
     let now = now_iso();
+    load_deliveries(db);
+    if op == "delivered" {
+        return delivered_request(db, key, threads, params, &now);
+    }
     if op == "list" {
         let items = list_work_items(db, key)?;
         let all = params.get("all").and_then(Value::as_bool) == Some(true);
         let now = Utc::now();
         let floor = super::turns::idle_floor_for(db, key, now);
-        let mut work = work_value(threads, &items, all, now, Some(floor));
+        let mut work = work_value(threads, &items, all, now, Some(floor), Some(key));
         if let Some(notice) = idle_notice(&work) {
             work["idleNotice"] = json!(notice);
         }
@@ -1219,6 +1610,9 @@ pub fn handle_work_request(
         };
         item.record("add", item.title.clone(), &now);
         if let Some(line) = param_text(params, "now") {
+            if let Some(refusal) = super::user_handoff::now_refusal("W<n>", &line, true) {
+                return Err(bad(refusal));
+            }
             item.now = line;
             item.status = "moving".to_string();
         }
@@ -1242,6 +1636,9 @@ pub fn handle_work_request(
     match op.as_str() {
         "now" => {
             let line = param_text(params, "text").ok_or_else(|| bad("Say where it stands."))?;
+            if let Some(refusal) = super::user_handoff::now_refusal(&name, &line, false) {
+                return Err(bad(refusal));
+            }
             item.now = line.clone();
             item.status = "moving".to_string();
             item.finished_at = None;
@@ -1326,7 +1723,14 @@ pub fn handle_work_request(
         "wait" => {
             let on = param_list(params, "on");
             if on.is_empty() {
-                return Err(bad("Say what it waits on: --on W12, --on Q12 or --on \"words\"."));
+                return Err(bad("Say what it waits on: --on W12, --on Q12, --on release, --on ota, --on rebuild or --on \"words\"."));
+            }
+            if let Some(refusal) = super::user_handoff::wait_refusal(
+                &name,
+                &on,
+                param_text(params, "text").as_deref(),
+            ) {
+                return Err(bad(refusal));
             }
             let until = param_text(params, "until").unwrap_or_default();
             for wait in &on {
@@ -1339,6 +1743,7 @@ pub fn handle_work_request(
                 .map(|on| WorkWait {
                     on: question_tag(on)
                         .or_else(|| item_number_of(on).filter(|_| on.trim().len() < 12).map(|number| format!("W{number}")))
+                        .or_else(|| wait_event(on).map(str::to_string))
                         .unwrap_or_else(|| on.clone()),
                     until: until.clone(),
                     since: now.clone(),
@@ -1363,6 +1768,9 @@ pub fn handle_work_request(
                             others.iter().flat_map(|other| other.asks.iter()).find_map(|ask| {
                                 (!ask.tag.is_empty() && ask.tag == wait.on).then(|| ask.text.clone())
                             })
+                        })
+                        .or_else(|| {
+                            wait_event(&wait.on).map(|kind| wait_event_words(kind).to_string())
                         });
                     named.unwrap_or_else(|| wait.on.clone())
                 })

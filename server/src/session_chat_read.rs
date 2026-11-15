@@ -631,6 +631,15 @@ pub(crate) async fn handle_read_session_chat_http(
             "chatSendOnPick"
         )),
     );
+    // Varied thinking words rides every read too, so the phone's working strip says Thinking or the
+    // stint's word as the computer does (gx-chat-core `extras/working_strip.rs`).
+    result.insert(
+        "variedWorkingWords".to_string(),
+        json!(crate::session_chat_catch_up::chat_setting_enabled(
+            &state.paths,
+            "chatVariedWorkingWords"
+        )),
+    );
     // The phone reads the computer's answer delivery choice from this optional field; older
     // clients ignore it, and an older daemon leaves the core's default (normal send) in place.
     result.insert(

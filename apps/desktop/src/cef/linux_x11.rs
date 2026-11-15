@@ -45,9 +45,10 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use x11rb::connection::Connection as _;
+use x11rb::protocol::shape::{ConnectionExt as _, SK, SO};
 use x11rb::protocol::xproto::{
-    ColormapAlloc, ConfigureWindowAux, ConnectionExt as _, CreateWindowAux, InputFocus, StackMode,
-    Window as X11Window, WindowClass,
+    ClipOrdering, ColormapAlloc, ConfigureWindowAux, ConnectionExt as _, CreateWindowAux,
+    InputFocus, Rectangle, StackMode, Window as X11Window, WindowClass,
 };
 use x11rb::rust_connection::RustConnection;
 
@@ -670,6 +671,7 @@ pub(super) fn browser_native_close_finished(native_view: *mut c_void) {
         return;
     };
     pointer_focus::forget(cef_window);
+    forget_corner_shape(cef_window);
     let host = EMBED_HOST_BY_CEF_WINDOW
         .lock()
         .expect("CEF embed-host registry mutex should not be poisoned")
@@ -759,7 +761,167 @@ pub(super) fn set_native_view_frame(
             .height(scaled_height);
         let _ = connection.configure_window(window, &values);
     }
+    reshape_corners_for_frame(window, scaled_width, scaled_height);
     let _ = connection.flush();
+}
+
+/// A CEF window's rounded corners: physical radii (top-left, top-right, bottom-right, bottom-left)
+/// and the frame size they were last cut for.
+#[derive(Clone, Copy, Default, PartialEq)]
+struct CornerShape {
+    radii: [u32; 4],
+    width: u32,
+    height: u32,
+}
+
+/// Each CEF window's frame size and corner radii, by CEF window id, from its first frame until it
+/// closes.
+static CORNER_SHAPES: Mutex<Option<HashMap<X11Window, CornerShape>>> = Mutex::new(None);
+
+/// CDXC:Workarea 2026-11-15 WHY:
+/// A page is an X11 child window over the GPUI window, so nothing GPUI paints can round it; with the work area frame on, its square corners sat over the card's rounded ones. The page's embed host takes an XShape bounding and input shape cut to the card's inner corners (the CEF window inside it is clipped by its parent), so the card's corner and border show through and clicks there reach the card. The shape is recut whenever the page's frame changes size. XShape has no partial coverage, so the arc is whole pixels.
+/// SEE-ALSO: app/element/work_area_frame.rs (`clip_native_view_to_work_area_frame`), cef/windows.rs (`set_native_view_corner_radii`), native/macos/GpuiWindowCorners.h (the macOS clip).
+pub(super) fn set_native_view_corner_radii(
+    native_view: *mut c_void,
+    radii: [f32; 4],
+    scale_factor: f32,
+) {
+    let Some(window) = x11_window(native_view) else {
+        return;
+    };
+    let scale = if scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    let radii = radii.map(|radius| (radius.max(0.0) * scale).round() as u32);
+    let shape = {
+        let mut shapes = CORNER_SHAPES
+            .lock()
+            .expect("CEF corner-shape mutex should not be poisoned");
+        let shape = shapes
+            .get_or_insert_with(HashMap::new)
+            .entry(window)
+            .or_default();
+        if shape.radii == radii {
+            return;
+        }
+        shape.radii = radii;
+        *shape
+    };
+    if shape.width > 0 && shape.height > 0 {
+        apply_corner_shape(window, shape);
+        let _ = x11_connection().0.flush();
+    }
+}
+
+/// Records a CEF window's new frame size and recuts its shape when it has rounded corners.
+fn reshape_corners_for_frame(window: X11Window, width: u32, height: u32) {
+    let shape = {
+        let mut shapes = CORNER_SHAPES
+            .lock()
+            .expect("CEF corner-shape mutex should not be poisoned");
+        let shape = shapes
+            .get_or_insert_with(HashMap::new)
+            .entry(window)
+            .or_default();
+        if shape.width == width && shape.height == height {
+            return;
+        }
+        shape.width = width;
+        shape.height = height;
+        *shape
+    };
+    if shape.radii != [0; 4] {
+        apply_corner_shape(window, shape);
+    }
+}
+
+fn forget_corner_shape(window: X11Window) {
+    if let Some(shapes) = CORNER_SHAPES
+        .lock()
+        .expect("CEF corner-shape mutex should not be poisoned")
+        .as_mut()
+    {
+        shapes.remove(&window);
+    }
+}
+
+/// Sets the embed host's bounding and input shapes to `shape`, or removes them when every corner
+/// is square.
+fn apply_corner_shape(window: X11Window, shape: CornerShape) {
+    let (connection, _) = x11_connection();
+    let target = embed_host_for_cef_window(window).unwrap_or(window);
+    if shape.radii == [0; 4] {
+        for kind in [SK::BOUNDING, SK::INPUT] {
+            let _ = connection.shape_mask(SO::SET, kind, target, 0, 0, x11rb::NONE);
+        }
+        return;
+    }
+    let rectangles = rounded_rectangle_bands(shape);
+    for kind in [SK::BOUNDING, SK::INPUT] {
+        let _ = connection.shape_rectangles(
+            SO::SET,
+            kind,
+            ClipOrdering::UNSORTED,
+            target,
+            0,
+            0,
+            &rectangles,
+        );
+    }
+}
+
+/// How far a corner of radius `radius` cuts into pixel row `row`, counted from that corner's edge.
+fn corner_inset(radius: u32, row: u32) -> u32 {
+    if row >= radius {
+        return 0;
+    }
+    let radius = f64::from(radius);
+    let from_centre = radius - (f64::from(row) + 0.5);
+    let reach = (radius * radius - from_centre * from_centre)
+        .max(0.0)
+        .sqrt();
+    (radius - reach).round() as u32
+}
+
+/// `shape`'s rounded rectangle as horizontal bands, one rectangle per run of rows with the same
+/// insets.
+fn rounded_rectangle_bands(shape: CornerShape) -> Vec<Rectangle> {
+    let CornerShape {
+        radii,
+        width,
+        height,
+    } = shape;
+    let limit = width.min(height) / 2;
+    let [top_left, top_right, bottom_right, bottom_left] = radii.map(|radius| radius.min(limit));
+    let insets = |row: u32| {
+        let from_bottom = height - 1 - row;
+        let left = corner_inset(top_left, row).max(corner_inset(bottom_left, from_bottom));
+        let right = corner_inset(top_right, row).max(corner_inset(bottom_right, from_bottom));
+        (left, right)
+    };
+    let mut bands: Vec<Rectangle> = Vec::new();
+    let mut start = 0;
+    while start < height {
+        let current = insets(start);
+        let mut end = start + 1;
+        while end < height && insets(end) == current {
+            end += 1;
+        }
+        let (left, right) = current;
+        let band_width = width.saturating_sub(left + right);
+        if band_width > 0 {
+            bands.push(Rectangle {
+                x: left.min(i16::MAX as u32) as i16,
+                y: start.min(i16::MAX as u32) as i16,
+                width: band_width.min(u16::MAX as u32) as u16,
+                height: (end - start).min(u16::MAX as u32) as u16,
+            });
+        }
+        start = end;
+    }
+    bands
 }
 
 pub(super) fn log_resize_diagnostic(

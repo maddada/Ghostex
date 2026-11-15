@@ -545,6 +545,8 @@ fn recipient_pill(prefix: &str, recipient: &Value, icon: &Value, session: &Value
 /// `Message to "<session>"`, or `Message to N sessions` with each recipient listed inside.
 pub fn dress_sent(sent: &mut Value) {
     let recipients = sent["recipients"].as_array().cloned().unwrap_or_default();
+    // When the message went, as "Message from" shows when one came (`project_message` sets it).
+    let time = text(sent, "time").to_string();
     if recipients.len() <= 1 {
         let recipient = recipients.first().unwrap_or(sent);
         let sentence = format!("Message to {}", recipient_phrase(recipient));
@@ -563,7 +565,7 @@ pub fn dress_sent(sent: &mut Value) {
             icon,
             sentence.clone(),
             sentence,
-            "",
+            &time,
             delivery_status(recipient),
             &failure,
             Value::Null,
@@ -610,7 +612,7 @@ pub fn dress_sent(sent: &mut Value) {
             icon,
             sentence.clone(),
             sentence,
-            "",
+            &time,
             combined_status(&statuses),
             "",
             Value::Null,

@@ -2379,12 +2379,49 @@ impl NativeChatView {
             said = format!("{said}\nClick to open it in the Work panel.");
         }
         let tip = said.clone();
+        // The item's title is cut, never collapsed: on a tight row the time steps aside first
+        // (cards.rs `title_fit`, the user's Q3300 A).
+        let room_key = format!("work-turn-card:{}", text(card, "key"));
+        let time_width = super::fonts::label_width(
+            &time,
+            &p.font,
+            FontWeight::NORMAL,
+            12.0 * s,
+            cx,
+        ) / s;
+        let fit = if title.is_empty() {
+            super::cards::TitleFit {
+                show_time: true,
+                show_marks: true,
+            }
+        } else {
+            let lead_width = super::fonts::label_width(
+                &lead,
+                &p.font,
+                FontWeight(shape.title_weight),
+                shape.title_size * s,
+                cx,
+            ) / s
+                + 6.0;
+            shape.title_fit(
+                self.title_room.borrow().get(&room_key).copied(),
+                lead_width,
+                time_width,
+                0.0,
+            )
+        };
+        let show_time = !time.is_empty() && fit.show_time;
+        let time_room = if show_time {
+            time_width + super::cards::TITLE_ROW_GAP
+        } else {
+            0.0
+        };
         let row = div()
             .h(px(shape.header_height(s)))
             .px(px(shape.padding_x * s))
             .flex()
             .items_center()
-            .gap(px(10.0 * s))
+            .gap(px(super::cards::TITLE_ROW_GAP * s))
             .min_w_0()
             .child(
                 shape
@@ -2393,9 +2430,16 @@ impl NativeChatView {
             )
             .child(
                 shape
-                    .title(div().flex_1().min_w_0().flex().items_center(), p)
+                    .title(div().relative().flex_1().min_w_0().flex().items_center(), p)
                     .gap(px(6.0 * s))
                     .overflow_hidden()
+                    .child(super::cards::title_room_probe(
+                        self.title_room.clone(),
+                        room_key,
+                        time_room,
+                        s,
+                        cx.entity_id(),
+                    ))
                     // The lead-in is quieter than the item's title it names; alone (a turn that
                     // changed many items) it is the title.
                     .child(
@@ -2413,7 +2457,7 @@ impl NativeChatView {
                         line.child(
                             div()
                                 .flex_shrink(1.0)
-                                .min_w(px(80.0 * s))
+                                .min_w(px(shape.name_min() * s))
                                 .truncate()
                                 .text_color(p.foreground)
                                 .child(title),
@@ -2433,7 +2477,7 @@ impl NativeChatView {
                         )
                     }),
             )
-            .when(!time.is_empty(), |row| {
+            .when(show_time, |row| {
                 row.child(
                     div()
                         .flex_shrink_0()

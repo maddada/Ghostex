@@ -756,6 +756,16 @@ impl Element for CefElement {
                 super::window_corner_pane::refresh_native_window_corner_clip(native_view);
             }
         }
+        // Windows and Linux: with the work area frame on, the page's native window takes the card's
+        // inner corners where it meets them (element/work_area_frame.rs); square everywhere else.
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        if self.surface_id != APP_MODAL_HOST_ID {
+            super::work_area_frame::clip_native_view_to_work_area_frame(
+                &self.browser,
+                bounds,
+                window,
+            );
+        }
         let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
         Some(hitbox)
     }

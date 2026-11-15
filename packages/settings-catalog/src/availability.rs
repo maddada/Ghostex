@@ -39,12 +39,6 @@ const ROWS: &[RowAvailability] = &[
         only_on: &[Platform::MacOs],
         hidden_while: None,
     },
-    // CDXC:Workarea 2026-11-05 WHY: Frame the work area clips the work area's web pages to the card's rounded corners with a native layer mask, which exists on macOS only; on Windows and Linux the pages would keep square corners over the card, so the row is macOS-only until they can be clipped there too.
-    RowAvailability {
-        key: "workAreaFrame",
-        only_on: &[Platform::MacOs],
-        hidden_while: None,
-    },
     // CDXC:Settings 2026-11-08 WHY: Windows and Linux have no window buttons on the left to keep or hide, so the row exists on macOS only.
     RowAvailability {
         key: "showWindowButtonsWhenSidebarCollapsed",

@@ -38,7 +38,7 @@ impl GhostexGpuiApp {
     /// The rightmost band region owns the caption controls as fixed-width siblings, preserving the column divider alignment and the space available to each region's other controls.
     ///
     /// CDXC:Titlebar 2026-09-23 WHY:
-    /// Linux client decorations use this same band ownership; putting its window controls among project actions left them above the sessions column when Code or Browser opened to the right.
+    /// Linux client decorations (and Hyprland, which draws no titlebar for Ghostex: `linux_app_draws_window_caption`) use this same band ownership; putting its window controls among project actions left them above the sessions column when Code or Browser opened to the right.
     pub(crate) fn render_workarea_header(
         &self,
         window: &mut Window,
@@ -55,12 +55,7 @@ impl GhostexGpuiApp {
             WORKAREA_HEADER_HEIGHT
         };
         #[cfg(any(target_os = "windows", target_os = "linux"))]
-        let mut window_controls = (cfg!(target_os = "windows")
-            || matches!(
-                window.window_decorations(),
-                gpui::Decorations::Client { .. }
-            ))
-        .then(|| {
+        let mut window_controls = app_draws_window_caption(window).then(|| {
             self.render_titlebar_window_controls(window, cx)
                 .into_any_element()
         });
@@ -245,13 +240,7 @@ impl GhostexGpuiApp {
                 .max(0.0);
         if !self.workarea_header_hosts_view_tab_strip() {
             #[cfg(any(target_os = "windows", target_os = "linux"))]
-            if reserve == 0.0
-                && (cfg!(target_os = "windows")
-                    || matches!(
-                        window.window_decorations(),
-                        gpui::Decorations::Client { .. }
-                    ))
-            {
+            if reserve == 0.0 && app_draws_window_caption(window) {
                 return (band_width - 3.0 * TITLEBAR_WINDOW_BUTTON_WIDTH).max(0.0);
             }
             return band_width;

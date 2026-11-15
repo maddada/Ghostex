@@ -2366,8 +2366,11 @@ written. And
 `ghostex visual check <file.json>` draws a Ghostex visual to an image, or lists a
 Ghostex form's questions (and names anything to write the standard way), so the
 agent can check it before replying;
-`ghostex visual check <file.html>` opens a page in Chrome at a phone's width
-and a computer's, saves a screenshot of each and lists what does not fit.
+`ghostex visual check <file.html>` opens a page in Chrome at 360, 600, 900 and
+1280px wide, and again with large text (130%) on a phone and a foldable, saves
+a screenshot of each and lists anything that overflows its box, is cut off or
+is drawn over other text, by its CSS selector (`--width N` and
+`--text-scale 130` check one size).
 
 **Exported pages.** Any Ghostex page can go to someone who doesn't use Ghostex.
 Press Export on the page's card in the chat, or Export page in the ⋯ menu at the
@@ -4042,7 +4045,9 @@ version of the Projects features in Cursor and Claude Code.
   you**, **Blocked** (stopped until you act), **In progress**, **Waiting** (on
   another item, a question or something outside), **Later** and **Finished**.
   Threads, steps and what it asks you belong to the item, and a wait on another
-  item or question clears itself once that's done. A coordinator's reply is a
+  item or question clears itself once that's done. Anything a coordinator needs
+  you to try, test, check or decide is an ask under Needs you, never left In
+  progress or Waiting. A coordinator's reply is a
   set of marked sections with bullets, or a couple of sentences of news while
   Settings > Chat > Marked handovers is Off. On the computer, each work item the turn
   changed gets a small card under the reply, like a "Message from" card: "Work
@@ -7502,7 +7507,7 @@ work area colourfulness separately, and show the active pane outline and its
 colour.
 Picking a colour square never overwrites the custom values, so picking the + square again
 restores them (a theme preset does set them).
-Frame the work area (macOS; in the page's Advanced section; on by default for a new install, while a computer that already had settings keeps its choice) shows the work area as a card inside the
+Frame the work area (in the page's Advanced section; on by default for a new install, while a computer that already had settings keeps its choice) shows the work area as a card inside the
 window: a thin margin all around it, a hairline border and, without window glass, a light
 shadow. It stays on with the sidebar hidden and in full screen, web pages in the work area
 follow the card's rounded corners, and the sidebar is at least 196pt wide while it is on.

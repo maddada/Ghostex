@@ -10,7 +10,7 @@ mod scope;
 mod thread_scope;
 
 pub(crate) use held_sends::{
-    handle_held_sends_http, start_held_send_delivery, HELD_SEND_ENDPOINTS,
+    handle_held_sends_http, read_known_computers, start_held_send_delivery, HELD_SEND_ENDPOINTS,
 };
 pub(crate) use http::{
     handle_connected_computers_http, this_computer_name, CONNECTED_COMPUTER_ENDPOINTS,

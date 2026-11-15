@@ -13,6 +13,7 @@ use super::item::MenuItem;
 ///
 /// CDXC:ContextMenus 2026-11-12 DECISION:
 /// User: "i want a new Copy ID that let's me just copy the id and name of an agent so i can mention it in other chats" (2026-10-28), then (2026-11-12) "move Copy ID to sit directly above Tag As": Copy ID leaves the Copy submenu and is a row of the session menu itself, right above Tag As. It copies `[<session title>](<Global Ref>)` (`session_mention` in gx-protocol), which the chats draw as the session's agent pill; dropping a session row on a chat's composer types the same text. The phone's long-press menu matches.
+/// Since 2026-11-15 it is a button in the menu's quick row beside Rename and Pin instead (CDXC:ContextMenus 2026-11-15 in session.rs `full_menu`).
 pub(crate) fn copy_id_row(row: &SessionRow, group: &MenuGroup<'_>) -> Option<MenuItem> {
     session_mention_text(row, &group.details())
         .filter(|text| !text.trim().is_empty())

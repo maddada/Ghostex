@@ -121,6 +121,9 @@ pub(crate) struct NativeChatView {
     /// The room right of each "Worked for" title, by row, as last painted (unscaled), which its
     /// count pills fit on one line (completed_work_row.rs `stat_pills`).
     pub(super) stat_room: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
+    /// Each one-line card's title width as last painted, the time stepped aside (unscaled), by
+    /// card, which its name and time fit in (cards.rs `title_fit`).
+    pub(super) title_room: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
     /// "Don't show again" is ticked in the open coordinator tips; it applies when they close
     /// (coordinator_intro.rs).
     pub(super) coordinator_intro_dont_show: bool,
@@ -576,6 +579,7 @@ impl NativeChatView {
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),
             stat_room: Default::default(),
+            title_room: Default::default(),
             coordinator_intro_dont_show: false,
             working_card: Default::default(),
             status_tail: false,

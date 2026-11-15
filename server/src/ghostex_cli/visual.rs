@@ -50,6 +50,9 @@ struct CheckOptions {
     /// `None` when `--width` was not given: a block is drawn at [`DEFAULT_WIDTH`], a page is
     /// checked at a phone's width and a computer's.
     width: Option<f32>,
+    /// `--text-scale P` (a percent): a page's text drawn larger, the way a phone's font size
+    /// setting does. Pages only.
+    text_scale: Option<f64>,
     light: bool,
     out: Option<PathBuf>,
 }
@@ -57,6 +60,7 @@ struct CheckOptions {
 fn parse_check(args: &[String]) -> CliResult<Option<CheckOptions>> {
     let mut file: Option<String> = None;
     let mut width = None;
+    let mut text_scale = None;
     let mut light = false;
     let mut out = None;
     let mut index = 0;
@@ -83,6 +87,21 @@ fn parse_check(args: &[String]) -> CliResult<Option<CheckOptions>> {
                     .map(Some)?;
                 index += 1;
             }
+            "--text-scale" => {
+                let text = value(index)?;
+                text_scale = text
+                    .trim_end_matches('%')
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|percent| percent.is_finite() && (50.0..=300.0).contains(percent))
+                    .ok_or_else(|| {
+                        CliError::Other(format!(
+                            "--text-scale takes a percent from 50 to 300 (130 for large text), not {text:?}."
+                        ))
+                    })
+                    .map(|percent| Some(percent / 100.0))?;
+                index += 1;
+            }
             "--out" => {
                 out = Some(PathBuf::from(value(index)?));
                 index += 1;
@@ -102,13 +121,14 @@ fn parse_check(args: &[String]) -> CliResult<Option<CheckOptions>> {
     }
     let file = file.ok_or_else(|| {
         CliError::Other(
-            "visual check needs the block's JSON or a page: ghostex visual check <file.json|-|page.html> [--width N] [--light] [--out file.png]"
+            "visual check needs the block's JSON or a page: ghostex visual check <file.json|-|page.html> [--width N] [--text-scale P] [--light] [--out file.png]"
                 .to_string(),
         )
     })?;
     Ok(Some(CheckOptions {
         file,
         width,
+        text_scale,
         light,
         out,
     }))
@@ -369,6 +389,7 @@ fn check_command(args: &[String]) -> CliResult<()> {
         return visual_page_check::check_page_command(
             &options.file,
             options.width.map(|width| width.round().max(1.0) as u32),
+            options.text_scale,
             options.light,
             options.out,
         );

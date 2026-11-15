@@ -336,6 +336,8 @@ pub(crate) fn open_workspace_window(
                 }
             })
             .detach();
+            #[cfg(target_os = "linux")]
+            crate::app::helpers::follow_window_minimize_place(window, cx);
             cx.observe_window_activation(window, |app, window, cx| {
                 if !window.is_window_active() {
                     app.voice_agent_window_deactivated(cx);

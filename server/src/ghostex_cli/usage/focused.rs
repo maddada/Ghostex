@@ -627,7 +627,7 @@ pub fn visuals_usage() -> String {
 Usage:
   gx visual --help
   gx visual check <file.json|-> [--width N] [--light] [--out file.png]
-  gx visual check <page.html> [--width N] [--light] [--out file.png]
+  gx visual check <page.html> [--width N] [--text-scale P] [--light] [--out file.png]
   gx visual export <file.html|page id|page URL> [--out file.html] [--json]
   gx visual install-skill [--json]
 
@@ -716,11 +716,17 @@ check:
   \"skipped\", so move on and don't ask it again unless it blocks the work.
 
   Given a page (.html), check prepares it as `ghostex show` would and opens it
-  in headless Chrome (or Chromium, Edge, Brave; GHOSTEX_CHROME picks one) at a
-  phone's width, 390px, and a computer's, 1280px (--width N for one width).
-  It saves a full-page screenshot of each and lists what reaches past the
-  screen and what Ghostex had to fit for the phone (columns stacked, pills
-  kept on one line, blocks scrolling sideways), with how to fix the page.
+  in headless Chrome (or Chromium, Edge, Brave; GHOSTEX_CHROME picks one) at
+  360px (a phone), 600px, 900px (a foldable or tablet) and 1280px (a
+  computer), then at 360px and 900px with text at 130%, the way a phone's
+  large font setting draws it (--width N for one width, --text-scale 130 for
+  large text). It saves a full-page screenshot of each (in parts, -part2.png
+  and on, for a long page) and lists, by CSS
+  selector, every box whose content overflows it or is cut off, content a
+  sideways scroller can't reach, text drawn over other text, the answered
+  pill over text or a control with the page scrolled to its end, and what
+  Ghostex had to fit for the phone (columns stacked, pills kept on one line,
+  blocks scrolling sideways), with how to fix the page. It exits with an error while anything overflows or overlaps.
 "
     .to_string()
 }

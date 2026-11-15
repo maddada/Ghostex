@@ -587,43 +587,40 @@ fn full_menu(
     CDXC:ContextMenus 2026-10-01 DECISION:
     The user wants the session menu in ChatGPT's conversation-menu order (Rename, Pin, Mark as unread, Archive, then Section after a line), mirrored hover buttons included: "why is rename below those other buttons? match the order of ChatGPT". The rows run Rename, Pin, Snooze, Park, Sleep, Note, then Tag As after a separator, whether a row is there as a mirrored hover button or on its own; this supersedes the mirrored buttons leading the menu in the card's right-to-left order. Note shows here only as a mirrored hover button and otherwise sits first in Advanced. Close keeps its hover-strip rule, and Fork stays in Advanced (Copy Details moved into the Copy submenu on 2026-10-09, sidebar_menu/copy.rs). The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
     */
-    const PRIMARY_ORDER: [HoverAction; 7] = [
-        HoverAction::Rename,
-        HoverAction::Pin,
+    /*
+    CDXC:ContextMenus 2026-11-15 DECISION:
+    User (Android screenshot of the long-press menu running off the screen): "This is too long", then picked the quick row with "Put sleep under advanced, 4 quick actions only pls" (Q3420 C) and the same change on the desktop's right-click menu (Q3421 Yes). The menu opens with a row of icon buttons, Rename, Pin and Copy ID (the phone adds Voice Call, which the desktop has no row for), then Snooze, Park, Note and Tag As as rows with no line between them; Sleep (or Wake) moves to the top of Advanced. Each keeps its hover-strip rule (`shown`). Supersedes Copy ID's own row above Tag As (2026-11-12, copy.rs); the order inside the list is still ChatGPT's (2026-10-01). The phone's menu (`apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts`) must match.
+    */
+    let shown = |action: HoverAction| {
+        mirror.contains(&action) || (action != HoverAction::Note && !enabled.contains(&action))
+    };
+    let mut menu: Vec<MenuItem> = Vec::new();
+    let mut quick: Vec<MenuItem> = Vec::new();
+    for action in [HoverAction::Rename, HoverAction::Pin] {
+        if let Some(item) = rows.get(action).filter(|_| shown(action)) {
+            quick.push(if action == HoverAction::Pin && !row.is_pinned {
+                MenuItem {
+                    icon: Some("pin-outline".to_string()),
+                    ..item.clone()
+                }
+            } else {
+                item.clone()
+            });
+        }
+    }
+    quick.extend(super::copy::copy_id_row(row, group));
+    if !quick.is_empty() {
+        menu.push(MenuItem::quick_row(quick));
+    }
+    for action in [
         HoverAction::Snooze,
         HoverAction::Park,
-        HoverAction::Sleep,
         HoverAction::Note,
         HoverAction::Tag,
-    ];
-    let mut menu: Vec<MenuItem> = Vec::new();
-    // Copy ID opens the block after the line, right above Tag As (CDXC:ContextMenus 2026-11-12 in
-    // copy.rs), and keeps that place when Tag As is not in the menu.
-    let copy_id = super::copy::copy_id_row(row, group);
-    for action in PRIMARY_ORDER {
-        let shown = if mirror.contains(&action) {
-            true
-        } else {
-            action != HoverAction::Note && !enabled.contains(&action)
-        };
-        let item = rows.get(action).filter(|_| shown);
-        if action == HoverAction::Tag {
-            if !menu.is_empty() && (copy_id.is_some() || item.is_some()) {
-                menu.push(MenuItem::separator());
-            }
-            menu.extend(copy_id.clone());
+    ] {
+        if let Some(item) = rows.get(action).filter(|_| shown(action)) {
+            menu.push(item.clone());
         }
-        let Some(item) = item else {
-            continue;
-        };
-        menu.push(if action == HoverAction::Pin && !row.is_pinned {
-            MenuItem {
-                icon: Some("pin-outline".to_string()),
-                ..item.clone()
-            }
-        } else {
-            item.clone()
-        });
     }
 
     let mut coordinator_block = coordinator_rows(row, group.is_stale);
@@ -720,6 +717,10 @@ fn full_menu(
     }
 
     let mut advanced: Vec<MenuItem> = vec![MenuItem::heading("Session")];
+    // Sleep sits first in Advanced (CDXC:ContextMenus 2026-11-15 above).
+    if let Some(item) = rows.get(HoverAction::Sleep).filter(|_| shown(HoverAction::Sleep)) {
+        advanced.push(item.clone());
+    }
     if !enabled.contains(&HoverAction::Note) {
         if let Some(item) = &rows.note {
             advanced.push(item.clone());

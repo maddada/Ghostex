@@ -73,11 +73,12 @@ is off.
   ghostex coordinator start-thread --computer <name> --title \"...\" --task \"...\" [--project-id <id>]
   ghostex coordinator promote <ref> --computer <name>   Make a session there a coordinator
   ghostex agent-hooks install --all --computer <name>   Its session resume hooks
+  ghostex project status [--computer <name>]            This project's git state there and here
 
 --computer takes the computer's name (or the start of it) or its server id. Both computers need
 Ghostex 10.44 or later; agents there can start, message, read, sleep, wake and close sessions,
-make one a coordinator, and check or install Ghostex's hooks there, nothing else. An agent started
-there from here gets its missing hook installed on its own.";
+make one a coordinator, check or install Ghostex's hooks there, and read a project's git state
+there, nothing else. An agent started there from here gets its missing hook installed on its own.";
 
 /// A computer this one is connected to, as `listConnectedComputers` reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -244,6 +245,7 @@ pub(crate) fn args_for_session_on_another_computer(
     if matches!(
         name,
         "computers"
+            | "project"
             | "autopilot"
             | "security"
             | "coordinator"

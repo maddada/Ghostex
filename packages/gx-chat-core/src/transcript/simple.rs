@@ -49,3 +49,22 @@ pub fn tool_count_label(count: usize) -> String {
         format!("{count} tool {}", if count == 1 { "call" } else { "calls" })
     }
 }
+
+/// The title of a folded group of tool calls (`simpleToolLabel`): the call's own words when the
+/// group holds one ("Install emulator and Play Store system image", its description or the label
+/// `tool_label` reads off it, as its row says), else "3 tool calls" ([`tool_count_label`]).
+///
+/// CDXC:SessionChat 2026-11-15 DECISION: User, of an opened Quiet View line drawn as a row of
+/// cards each saying only "1 tool call": a card holding one call says what that call did, never a
+/// bare "1 tool call". Every host draws this label for the group (desktop `tool_run.rs`, phone
+/// `ToolRows.tsx`); a row with no label of its own keeps the count.
+pub fn calls_label(calls: &[&serde_json::Value]) -> String {
+    match calls {
+        [only] => only["label"]
+            .as_str()
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+            .map_or_else(|| tool_count_label(1), str::to_string),
+        _ => tool_count_label(calls.len()),
+    }
+}

@@ -50,6 +50,9 @@ pub struct CefBrowser {
     pub(crate) last_bounds: RefCell<Option<(f32, f32, f32, f32, f32)>>,
     pub(crate) last_visible: Cell<Option<bool>>,
     motion_hidden: Cell<bool>,
+    /// The corner radii the native view was last clipped to (`set_corner_radii`).
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    corner_radii: Cell<([f32; 4], f32)>,
     pub(crate) uses_system_page_appearance: bool,
     pub(crate) extension_bridge_installed: bool,
     /// The surface the bridge was installed for, so outbound messages can check that the main
@@ -405,6 +408,8 @@ impl CefBrowser {
             last_bounds: RefCell::new(None),
             last_visible: Cell::new(None),
             motion_hidden: Cell::new(false),
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            corner_radii: Cell::new(([0.0; 4], 0.0)),
             uses_system_page_appearance,
             extension_bridge_installed,
             extension_bridge_surface: extension_bridge_surface
@@ -532,6 +537,30 @@ impl CefBrowser {
             scale_factor,
         );
         self.last_bounds.borrow().as_ref() != Some(&raw_bounds)
+    }
+
+    /// Rounds the native view's corners: `radii` is top-left, top-right, bottom-right, bottom-left in
+    /// GPUI logical pixels (0 keeps a corner square), `scale_factor` the window's, as `set_bounds`
+    /// takes it. The platform adapter keeps the shape across later frame changes.
+    /// SEE-ALSO: app/element/work_area_frame.rs (`clip_native_view_to_work_area_frame`), which asks
+    /// for the card's inner corners.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    pub fn set_corner_radii(&self, radii: [f32; 4], scale_factor: f32) {
+        let (last_radii, last_scale) = self.corner_radii.get();
+        let square = |radii: [f32; 4]| radii.iter().all(|radius| *radius <= 0.0);
+        if last_radii == radii && (last_scale == scale_factor || square(radii)) {
+            return;
+        }
+        let browser = self.browser.borrow();
+        let Some(host) = browser.host() else {
+            return;
+        };
+        self.corner_radii.set((radii, scale_factor));
+        platform::set_native_view_corner_radii(
+            platform::native_view_ptr(host.window_handle()),
+            radii,
+            scale_factor,
+        );
     }
 
     /// Makes the page transparent for the frames a panel slides (app/panel_motion.rs), keeping its

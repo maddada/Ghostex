@@ -35,7 +35,8 @@ USAGE
                               [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
-  ghostex coordinator item wait <W7> --on <W8|Q12|"words">... [--until <when>] ["<line>"] [--json]
+  ghostex coordinator item wait <W7> --on <W8|Q12|release|ota|rebuild|"words">... [--until <when>] ["<line>"] [--json]
+  ghostex coordinator item delivered <release|ota|rebuild> [<name>] [--json]
   ghostex coordinator item done <W7> ["<the one line worth keeping>"] [--json]
   ghostex coordinator item drop <W7> [--json]
   ghostex coordinator item restore <W7> [--json]
@@ -145,6 +146,10 @@ MAIN COORDINATOR
   To reach it without its session ref:
     ghostex agents send --main-coordinator --project-id <id> [--computer <name>] "<text>"
   See ghostex agents --help for what happens when a project has none.
+  What the project's checkout holds on each computer (uncommitted files,
+  commits not on origin, stashes, submodules, worktrees; offline ones with when
+  they were last seen), for example before a release:
+    ghostex project status [--computer <name>]
 
 STATUS
   status prints the goal, the standing instructions, the memory notes, and every
@@ -251,19 +256,27 @@ WORK ITEMS
                coordinator has not changed it since its last turn; never
                stored: item list and status name it until it is finished,
                asked about, waits on something or changes again
-    Waiting    on another item, an ask, or something outside
+    Waiting    on another item, a question, an event (release, ota,
+               rebuild) or something outside
     Later      nobody is on it yet (next, held for a release, parked, backlog)
     Finished   done; today's show, older ones leave after 14 days
   Ghostex works the status out: a working thread makes its item In progress, a
   thread waiting on a question or approval makes it Needs you, and a wait on
-  another item or an ask clears itself once that finishes or is answered (the
-  coordinator has the ball again). Who has the ball (You, the coordinator, a
+  another item, a question (an ask, or a tag a page or form asked in the
+  chat) or an event clears itself once that finishes, is answered or happens
+  (the coordinator has the ball again). A wait on words never clears: item
+  list and status name it for a recheck after 2 days without a change, and a
+  Later item whose threads are all done until you change it; any item
+  command on it counts as a recheck. Who has the ball (You, the coordinator, a
   thread, what it waits on) follows from the status.
   add starts an item (Later until something moves it; --now starts it In progress)
   and prints its W number; --thread attaches a thread (repeat it for more).
   now replaces the line saying where it stands and makes it In progress: never
-  append, say where it stands now. step records a step (--done when it is);
-  --chore keeps a rebuild or test run out of sight: chores are never shown.
+  append, say where it stands now. In progress means a thread or you are on it
+  right now: a line that hands it to the user ("waiting on your try") is
+  refused, because whatever the user must try or decide is an ask. step
+  records a step (--done when it is); --chore keeps a rebuild or test run out
+  of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
   chat's, or --tag Q12 for one the chat asked and still waits on; a tag already
   answered is refused). next-tag prints the next free tag, one past the highest
@@ -281,8 +294,17 @@ WORK ITEMS
   stops until they do it. An ask settles when the user answers it (its card,
   or "Q12: yes" in the chat for a tag asked there), with --done Q12 when the
   user did it, or --withdraw Q12. wait replaces what it waits on: W8 (another
-  item), Q12 (an ask) or words for something outside, with --until for when
-  it's expected. done finishes it with the one line worth keeping; its open
+  item), Q12 (an ask, or a question a page or form asked), release (the next
+  release of this project), ota (the next phone update), rebuild (the next
+  rebuild or update of Ghostex on this computer) or words for something
+  outside (never the user: that is an ask), with --until for when it's
+  expected; repeat --on for each thing.
+  An event clears the wait when it happens after the wait was set: a rebuild
+  when gxserver restarts on a newer build, a release or ota when the release
+  flow runs `item delivered release v11.7.1` (it can't be seen from here).
+  The item then comes back as delivered: check it shipped and finish it.
+  delivered records that an event happened now, for every coordinator of this
+  project, and lists the items it delivered. done finishes it with the one line worth keeping; its open
   questions and tasks for the user stay under Needs you until they answer or
   mark them done, or you withdraw them. drop takes it off with everything it asks
   (restore brings it back for 7 days). edit renames it, attaches or detaches threads, or sets its status

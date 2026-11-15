@@ -16,6 +16,8 @@ pub(crate) mod resource_monitor;
 pub(crate) mod titlebar_actions;
 pub(crate) mod tooltips_and_popup_geometry;
 pub(crate) mod urls_and_sessions;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub(crate) mod window_caption;
 
 pub(crate) use chrome_colors::*;
 pub(crate) use chrome_tints::*;
@@ -28,3 +30,5 @@ pub(crate) use resource_monitor::*;
 pub(crate) use titlebar_actions::*;
 pub(crate) use tooltips_and_popup_geometry::*;
 pub(crate) use urls_and_sessions::*;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub(crate) use window_caption::*;
