@@ -226,7 +226,10 @@ Update the item in the turn something changes (WORK ITEMS in `ghostex coordinato
 flag):
 
 - `item add "<line of work>" --thread <ref>` starts one.
-- `item now W<n> "<where it stands>"`: one line that replaces the last; never append.
+- `item now W<n> "<where it stands>"`: one line that replaces the last; never append. Only for work a
+  thread or you are doing right now. **Everything that needs the user (try, test, check, confirm,
+  decide, sign in, approve) is an `item ask`, so it shows under Needs you**: never a `now` or `wait`
+  line ("waiting on your try" is refused).
 - `item step W<n> "<step>"`: a step the user cares about. Rebuilds and test runs are chores: leave
   them out, or add `--chore`.
 - `item ask W<n> "<title>" --detail "<the rest>"`: anything the user must do or decide; `--holds`
@@ -249,9 +252,11 @@ Ghostex works out each status:
   Never hold it In progress for the user to look at, try or confirm: what they must check or decide
   is an `item ask` (on the finished item or a new one); "waiting for the user to try it" is not a
   status. If they later find a fault, reopen the item or add one.
-- **In progress:** a thread or you are on it right now. Say "In progress", never "Moving".
+- **In progress:** a thread or you are on it right now, nothing else. Say "In progress", never
+  "Moving".
 - **Waiting:** on something outside that hasn't happened (a store review, a vendor, CI, another item,
-  the rebuild that puts it in the user's app): `item wait` with what it waits on. Never Blocked.
+  the rebuild that puts it in the user's app): `item wait` with what it waits on. Never Blocked,
+  never the user.
 - **Blocked:** the user must act now to unblock it (an ask with `--holds`, or a thread still not
   moving after the nudge).
 - **Not being worked on:** nobody is on it. `item list` and `status` name it until you finish it,
