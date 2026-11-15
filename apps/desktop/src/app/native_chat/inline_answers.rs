@@ -136,7 +136,10 @@ impl NativeChatView {
                 .flex()
                 .items_center()
                 .gap(px(6.0 * s))
-                .h(px(24.0 * s))
+                .when(!stacked, |segment| segment.h(px(24.0 * s)))
+                .when(stacked, |segment| {
+                    segment.min_h(px(24.0 * s)).py(px(4.0 * s))
+                })
                 .px(px(9.0 * s))
                 .when(!stacked, |segment| segment.flex_none())
                 .when(stacked, |segment| segment.w_full())
@@ -163,7 +166,9 @@ impl NativeChatView {
                         .text_color(p.card_muted),
                 )
                 // Stacked, the pencil's row has the room to say what it does.
-                .when(stacked, |segment| segment.child("Write your own answer"))
+                .when(stacked, |segment| {
+                    segment.child(div().flex_1().min_w_0().child("Write your own answer"))
+                })
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new("Write your own answer").build(window, cx)
                 })
