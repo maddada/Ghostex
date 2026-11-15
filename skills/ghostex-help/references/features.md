@@ -759,18 +759,18 @@ of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
 several. On the phone, the pencil at the top of the Sessions list (New session,
-next to the bell, in both the Unified and the Project layout) lists every
-project on every computer, recent ones first, with a search field and a chip for
-each computer, starting on the one you used last for that project. Tap a project
-and its remembered agent starts there (the computer's Settings > Agents >
-Remember the agent you pick decides whether that is the agent picked last in the
-project, in its Space or anywhere). It opens in the view the phone's Settings >
-Chat > Default agent view picks, as a project's agent button does: in Chat, a new
-chat where you can still change the agent, model, worktree, project or computer
-before you send the first message; an agent without chat always opens its
-terminal. If that computer isn't connected, it says so. A project's "+" and the
-"+" on a project in the filter open the agent menu instead, which shows its
-project on top (tap it to pick any project) and the same computer chips.
+next to the bell, in both the Unified and the Project layout) opens the agent
+menu on the project you used last (or the one project the filter shows), with
+that project on top: tap it to pick any project on any computer, recent ones
+first, and its computer chips pick where it runs. The menu lists what that
+computer has set up: New Coordinator…, its agents (the remembered one stands
+out), Cloud Box where offered, and Terminal. Nothing starts until you pick a
+row. An agent opens in the view the phone's Settings > Chat > Default agent view
+picks: in Chat, a new chat where you can still change the agent, model,
+worktree, project or computer before you send the first message; an agent
+without chat always opens its terminal. If the project's computer isn't
+connected, the project list opens instead. A project's "+" and the "+" on a
+project in the filter open the same agent menu on that project.
 
 On the computer, both sidebars have a wide New session button in a row of its
 own under the top row: a plus and New session, with its shortcut shown while
@@ -2747,7 +2747,7 @@ Tool call lines (Settings > Extensions > Experimental, off by default; on the ph
 
 A call that is still running shows a light sweeping across its words in every look: the tool rows and Tool call lines.
 
-Chat look (Settings > Chat > Advanced) has five opt-in settings for a quieter, Slack or Claude Code style chat. With all five at Default the chat looks as it always has. Message layout set to Left aligned starts every message at the same left edge instead of putting yours on the right. Your messages set to Band puts yours on a soft full-width strip and also left-aligns them. Status line in the chat shows what the agent is doing as the last line of the chat instead of above the chat box. Chat box matches transcript width makes the chat box as wide as the transcript when Transcript width is set to a percentage (computer only). Message spacing set to Compact puts messages closer together and keeps a small row under each message for its time and ⋯ menu; on the phone that row shows the time. The phone follows the computer's choices for all but the chat box width, and picks up a changed look the next time a chat opens or catches up after a lost connection (`chatMessageLayout`, `chatUserMessageStyle`, `chatStatusInTranscript`, `chatComposerMatchesTranscriptWidth`, `chatMessageSpacing`).
+Chat look (Settings > Chat > Advanced) has five opt-in settings for a quieter, Slack or Claude Code style chat. With all five at Default the chat looks as it always has. Message layout set to Left aligned starts every message at the same left edge instead of putting yours on the right. Your messages set to Band puts yours on a soft full-width strip and also left-aligns them. Status line in the chat shows what the agent is doing as the last line of the chat instead of above the chat box. Chat box matches transcript width makes the chat box as wide as the transcript when Transcript width is set to a percentage (computer only). Message spacing set to Compact puts messages closer together and keeps a small row under each message for its time and ⋯ menu; on the phone that row shows the time. On a tablet (an iPad, or an Android tablet) the phone's transcript uses the full width by default; with Custom Transcript Width on (Settings > Advanced on the phone), its percentage applies instead, and phones keep the standard column. The phone follows the computer's choices for all but the chat box width, and picks up a changed look the next time a chat opens or catches up after a lost connection (`chatMessageLayout`, `chatUserMessageStyle`, `chatStatusInTranscript`, `chatComposerMatchesTranscriptWidth`, `chatMessageSpacing`).
 
 Quiet View makes a chat read as the conversation: your messages, the agent's replies, Ghostex pages and forms, questions and your answers, approvals waiting on you, errors and messages that were not sent stay in view, and everything between two of them (reports from threads, messages sent to them, tool calls, the line that says which work items changed, turns that ended without a reply) folds into one quiet line that counts it, for example "3 reports · 1 message sent · 3 tool calls · 1 item updated". Click the line to see all of it in order, as the full chat shows it; an open line drops its counts and says only "Working", how long the agent worked, or "Reports", since what it holds is in view. Inside, a single turn's card says what it did ("4 tool calls") instead of repeating the time, and when the line holds several turns their tool calls sit right under it, with a small "Then · 22s" mark where the agent picked up again. Click it again to shut it. While the agent works the line counts up instead of the cards piling up. Every chat opens in Quiet View; More actions > View > Quiet View turns it on or off for any chat, and the chat remembers that choice. When a chat's view differs from its default, a small Quiet view or Full view chip at the left of the chat box's pill row switches it back in one click. Summary view, which folds more, wins while it is on, and Detailed view is Quiet View with every line open. Agent work Reduced and Quiet and the Tool call cards preview are gone: Quiet View replaced them, and a chat that used one of them opens in Quiet View. Settings > Chat > Advanced has the defaults: Coordinators open in Quiet View (on), Other chats open in Quiet View (on; turn it off to have other chats open in the full Normal view), and Expand the last turn in Quiet View (on), which shows the work after the newest reply, or the running turn, open until a newer reply comes. Quiet View is on the computer, in Ghostex in a browser and on the phone, which follows the computer's three settings and has the same Quiet View row in its chat box's More actions > View; with a computer on an older Ghostex the phone shows the full chat (`chatQuietViewCoordinators`, `chatQuietViewChats`, `chatQuietViewExpandLast`).
 
