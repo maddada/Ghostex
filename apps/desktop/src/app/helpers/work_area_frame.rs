@@ -16,7 +16,7 @@ use crate::app::helpers::*;
 /// SEE-ALSO: app/element/work_area_frame.rs (the card and its glass gutter), app/element/window_corner_pane.rs (panes round to the card), native/macos/GpuiWindowCorners.h, cef/linux_x11.rs and cef/windows.rs (web pages clip to the card).
 ///
 /// CDXC:Workarea 2026-11-15 DECISION:
-/// User, about Frame the work area: "i like this setting but can't set it on linux (and maybe on win also) please fix this". The frame exists on Linux too (WORK_AREA_FRAME_PLATFORMS below), now that the work area's web pages are clipped to the card's corners there (an XShape on each page's X11 window). Supersedes the 2026-11-05 macOS-only rule.
+/// User, about Frame the work area: "i like this setting but can't set it on linux (and maybe on win also) please fix this". Then, asked whether to turn it on for Windows before it had run there (Q56): "Turn it on now". The frame exists on Linux and Windows too (WORK_AREA_FRAME_PLATFORMS below): the work area's web pages are clipped to the card's corners there (an XShape on each page's X11 window on Linux, a rounded window region on each page's HWND on Windows, cef/windows.rs). Supersedes the 2026-11-05 macOS-only rule.
 ///
 /// CDXC:Workarea 2026-11-08 DECISION:
 /// User: "make frame around work area toggle enabled by default for new users please". Supersedes the off default above: a new install starts with the frame on, and anyone who already had a settings file keeps it off, because the first start of this version writes `workAreaFrame` false into their file (shared_settings/work_area_frame_default.rs). The setting is read as on when the file does not carry it.
@@ -69,8 +69,12 @@ pub(crate) fn show_window_buttons_when_sidebar_collapsed() -> bool {
 }
 
 /// Whether this platform has the frame: where the work area's web pages can be clipped to the
-/// card's corners (packages/settings-catalog/src/availability.rs lists the same platforms).
-const WORK_AREA_FRAME_PLATFORMS: bool = cfg!(any(target_os = "macos", target_os = "linux"));
+/// card's corners: every desktop platform (the Settings row has no platform limit).
+const WORK_AREA_FRAME_PLATFORMS: bool = cfg!(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows"
+));
 
 /// Whether the work area is drawn as a card.
 pub(crate) fn work_area_frame_active() -> bool {

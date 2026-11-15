@@ -8703,8 +8703,7 @@
       "type": "boolean",
       "default": true,
       "advanced": true,
-      "agentWritable": true,
-      "availability": "Only on macOS and Linux."
+      "agentWritable": true
     },
     {
       "key": "showWindowButtonsWhenSidebarCollapsed",
