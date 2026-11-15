@@ -172,14 +172,16 @@ fn row_markdown(row: &Value, forms: &Value) -> String {
             answers(&buttons),
         ]),
         "form" if row["page"] == true => {
-            // Its mention is `[Name](url) Q12 Q13` (gx-chat-core `questions_mention`), or the
-            // name in quotes when the page has no address: the heading is the link, else the title.
+            // Its mention is `[Name](url) (Q12 to Q14)` (gx-chat-core `questions_mention`), or
+            // the name in quotes when the page has no address: the heading is the link, else the
+            // title.
             let tags = str_of(&row["reply"], "tag");
             let mention = str_of(row, "mention");
-            let link = mention
-                .strip_suffix(tags.as_str())
-                .unwrap_or(&mention)
-                .trim_end();
+            let link = match mention.rfind(" (") {
+                Some(at) if !tags.is_empty() && mention.ends_with(')') => &mention[..at],
+                _ => mention.as_str(),
+            }
+            .trim_end();
             let heading = if link.starts_with('[') && link.ends_with(')') {
                 link
             } else {

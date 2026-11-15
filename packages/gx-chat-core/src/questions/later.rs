@@ -158,7 +158,7 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
     } else {
         format!(
             "I dismissed {}: no need to ask {} again.",
-            tags.join(", "),
+            crate::transcript::open_questions::tag_range(&tags),
             if tags.len() == 1 { "it" } else { "them" }
         )
     };
@@ -176,7 +176,7 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
 
 /// `questionsReply {id, text}`: the reader's own words on a whole form or page, from its dock
 /// row's Reply, sent to the agent as a message without touching the chat box. `text` comes already
-/// tagged with the questions it still asks ("Q12 Q13: words", `extras::work_cards`), as a work
+/// after its title and the questions it still asks ("Triage (Q12 to Q14): words", `extras::work_cards`), as a work
 /// item ask's Reply comes as "W7 Q12: words". The form or page stays open: the words answer none
 /// of its questions by themselves.
 pub fn reply(state: &mut ChatState, id: &str, text: &str) -> Vec<Effect> {
