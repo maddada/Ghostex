@@ -70,6 +70,8 @@ struct Row {
     message: Option<String>,
     last_seen_ms: Option<i64>,
     checkouts: Vec<Value>,
+    /// Projects there that could not be read, with why; the row is still checked.
+    skipped: Vec<String>,
 }
 
 impl Row {
@@ -82,12 +84,15 @@ impl Row {
             message: None,
             last_seen_ms: None,
             checkouts: Vec::new(),
+            skipped: Vec::new(),
         }
     }
 
+    /// Nothing it read counts: a computer that wasn't checked never adds to the summary.
     fn not_checked(mut self, state: &'static str, message: String) -> Self {
         self.state = state;
         self.message = Some(message);
+        self.checkouts.clear();
         self
     }
 }
@@ -140,7 +145,7 @@ fn status(args: &[String]) -> CliResult<()> {
     local_row.checkouts.push(here);
     let mut rows = Vec::new();
     match flags.text("computer") {
-        Some(wanted) if !flags.truthy("all-computers") => {
+        Some(wanted) if !flags.truthy("allComputers") => {
             let lower = wanted.trim().to_lowercase();
             let offline_match = offline.iter().find(|(id, name, _)| {
                 id == wanted.trim() || name.to_lowercase().starts_with(&lower)
@@ -174,7 +179,7 @@ fn status(args: &[String]) -> CliResult<()> {
                 "path": project_path.to_string_lossy(),
                 "originUrl": origin,
             },
-            "clean": rows.iter().all(|row| row.checkouts.iter().all(|checkout| !unpushed(checkout))),
+            "clean": rows.iter().filter(|row| row.state == "checked").all(|row| row.checkouts.iter().all(|checkout| !unpushed(checkout))),
             "notChecked": rows.iter().filter(|row| row.state != "checked").map(|row| row.name.clone()).collect::<Vec<_>>(),
             "computers": rows.iter().map(|row| json!({
                 "name": row.name,
@@ -184,6 +189,7 @@ fn status(args: &[String]) -> CliResult<()> {
                 "message": row.message,
                 "lastSeenMs": row.last_seen_ms,
                 "checkouts": row.checkouts,
+                "skipped": row.skipped,
             })).collect::<Vec<_>>(),
         }));
         return Ok(());
@@ -200,7 +206,7 @@ fn local_project(projects: &Value, flags: &Flags) -> CliResult<Value> {
         .get("projects")
         .and_then(Value::as_array)
         .unwrap_or(&empty);
-    if let Some(id) = flags.text("project-id") {
+    if let Some(id) = flags.text("projectId") {
         return list
             .iter()
             .find(|project| text(project, "projectId") == id)
@@ -294,32 +300,42 @@ fn read_computer(local: &Target, computer: &ConnectedComputer, origin: Option<&s
         Err(error) => return row.not_checked("notChecked", error.to_string()),
     };
     let empty = Vec::new();
-    let mut candidates: Vec<&Value> = projects
+    // The sidebar's projects, as `ghostex projects` lists them: hidden ones are not the user's,
+    // and parked ones (Recent Projects; 389 of the Mac's 418) were asked one by one before and
+    // took the read past its time limit.
+    let mut candidates: Vec<Value> = projects
         .get("projects")
         .and_then(Value::as_array)
         .unwrap_or(&empty)
         .iter()
         .filter(|project| text(project, "visibility") != "hidden")
+        .filter(|project| !parked(project))
+        .cloned()
         .collect();
-    // A folder named like the repository first; every project is still asked.
+    // A folder named like the repository first.
     let repo_name = normalize_origin(origin)
         .rsplit('/')
         .next()
         .unwrap_or_default()
         .to_string();
     candidates.sort_by_key(|project| !text(project, "path").to_lowercase().ends_with(&repo_name));
-    let mut row = row;
-    for project in candidates {
+    // A matching checkout reads its worktrees and submodules too: give it more than the usual 15 s.
+    let slow = parse_args(&["--timeout".to_string(), CHECKOUT_READ_TIMEOUT_MS.to_string()]).flags;
+    let answers = crate::project_git_state::checkout::parallel_map(candidates, |project| {
         let answer = request_gxserver_rpc(
             &target,
             "/api/readProjectGitState",
             &json!({
-                "projectId": text(project, "projectId"),
+                "projectId": text(&project, "projectId"),
                 "checkout": true,
                 "ifOrigin": origin,
             }),
-            &none,
+            &slow,
         );
+        (text(&project, "path").to_string(), answer)
+    });
+    let mut row = row;
+    for (path, answer) in answers {
         match answer {
             Ok(answer) => match answer.get("checkout") {
                 Some(checkout) => {
@@ -342,9 +358,15 @@ fn read_computer(local: &Target, computer: &ConnectedComputer, origin: Option<&s
                 {
                     return row.not_checked("needsNewerGhostex", newer_on(&computer.name));
                 }
-                return row.not_checked("notChecked", message);
+                // One project that can't be read doesn't hide the others.
+                row.skipped.push(format!("{path}: {message}"));
             }
         }
+    }
+    row.checkouts = one_per_repository(std::mem::take(&mut row.checkouts));
+    if row.checkouts.is_empty() && !row.skipped.is_empty() {
+        let why = row.skipped.join("; ");
+        return row.not_checked("notChecked", why);
     }
     if row.checkouts.is_empty() {
         return row.not_checked(
@@ -356,6 +378,30 @@ fn read_computer(local: &Target, computer: &ConnectedComputer, origin: Option<&s
         );
     }
     row
+}
+
+/// How long one project's checkout read may take through the relay.
+const CHECKOUT_READ_TIMEOUT_MS: u64 = 120_000;
+
+/// One checkout per repository: a worktree added as a Ghostex project of its own is the same
+/// repository (same stashes, same worktrees) as the project of its main checkout, and was counted
+/// twice. The main checkout wins; a repository whose main checkout is no project keeps the first.
+fn one_per_repository(mut checkouts: Vec<Value>) -> Vec<Value> {
+    checkouts.sort_by_key(|checkout| checkout.get("isMainWorktree").and_then(Value::as_bool) != Some(true));
+    let mut seen = std::collections::HashSet::new();
+    checkouts
+        .into_iter()
+        .filter(|checkout| match checkout.get("commonDir").and_then(Value::as_str) {
+            Some(dir) => seen.insert(dir.to_string()),
+            None => seen.insert(text(checkout, "path").to_string()),
+        })
+        .collect()
+}
+
+/// A project closed to Recent Projects (`ghostex projects` leaves it out without --all).
+fn parked(project: &Value) -> bool {
+    let flag = project.get("isRecentProject");
+    flag.and_then(Value::as_bool) == Some(true) || flag.and_then(Value::as_i64) == Some(1)
 }
 
 fn newer_on(where_: &str) -> String {
@@ -477,7 +523,11 @@ fn print_table(project_name: &str, origin: Option<&str>, rows: &[Row]) {
     let mut details = Vec::new();
     for row in rows.iter().filter(|row| row.state == "checked") {
         for checkout in &row.checkouts {
-            if work(checkout).is_none() {
+            let unreadable = list(checkout, "submodules")
+                .iter()
+                .chain(list(checkout, "worktrees"))
+                .any(|part| part.get("unreadable").and_then(Value::as_bool) == Some(true));
+            if work(checkout).is_none() && !unreadable {
                 continue;
             }
             details.push(format!("\n{} {}", row.name, text(checkout, "path")));
@@ -497,6 +547,14 @@ fn print_table(project_name: &str, origin: Option<&str>, rows: &[Row]) {
                     }
                 ));
                 describe_repo(&mut details, "    ", submodule);
+            }
+            for part in list(checkout, "submodules").iter().chain(list(checkout, "worktrees")) {
+                if part.get("unreadable").and_then(Value::as_bool) == Some(true) {
+                    details.push(format!(
+                        "  {} could not be read: git did not answer there within 10 s",
+                        text(part, "path")
+                    ));
+                }
             }
             for worktree in list(checkout, "worktrees") {
                 if work(worktree).is_none() {
@@ -530,7 +588,9 @@ fn print_table(project_name: &str, origin: Option<&str>, rows: &[Row]) {
         println!("{line}");
     }
     println!();
-    let with_work: Vec<String> = rows
+    // Only computers that were read: a not-checked one says so on its own line below.
+    let read: Vec<&Row> = rows.iter().filter(|row| row.state == "checked").collect();
+    let with_work: Vec<String> = read
         .iter()
         .filter(|row| {
             row.checkouts
@@ -539,14 +599,14 @@ fn print_table(project_name: &str, origin: Option<&str>, rows: &[Row]) {
         })
         .map(|row| row.name.clone())
         .collect();
-    let stashed: Vec<String> = rows
+    let stashed: Vec<String> = read
         .iter()
         .filter_map(|row| {
             let count: usize = row.checkouts.iter().map(|checkout| list(checkout, "stashes").len()).sum();
             (count > 0).then(|| format!("{} ({count})", row.name))
         })
         .collect();
-    let checked = rows.iter().filter(|row| row.state == "checked").count();
+    let checked = read.len();
     if checked == 0 {
         println!("No computer could be read.");
     } else if with_work.is_empty() {
@@ -563,6 +623,11 @@ fn print_table(project_name: &str, origin: Option<&str>, rows: &[Row]) {
     if !unchecked.is_empty() {
         let names: Vec<&str> = unchecked.iter().map(|(name, _)| name.as_str()).collect();
         println!("Not checked: {}.", names.join(", "));
+    }
+    for row in &read {
+        for skipped in &row.skipped {
+            println!("{}: a project could not be read: {skipped}", row.name);
+        }
     }
 }
 

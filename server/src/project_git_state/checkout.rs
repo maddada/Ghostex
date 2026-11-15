@@ -22,12 +22,11 @@
 //! fetches, so "behind" is as of the checkout's last fetch (`lastFetchMs`).
 
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
-use crate::platform::process::background_command;
+use crate::platform::process::{background_command, run_bounded, Keep, RunLimits};
 
 /// How many changed files and commits one repository lists; the counts are always whole.
 const LIST_LIMIT: usize = 20;
@@ -54,6 +53,17 @@ pub fn read_checkout_state(path: &Path, if_origin: Option<&str>) -> Value {
         }
     }
     let main_ref = main_ref(&top);
+    // Two Ghostex projects can be one repository (a worktree added as a project of its own):
+    // the caller keeps one checkout per `commonDir`.
+    let common_dir = git(&top, &["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .map(|dir| dir.trim().to_string());
+    let own_dir = git(&top, &["rev-parse", "--path-format=absolute", "--git-dir"])
+        .map(|dir| dir.trim().to_string());
+    let (submodule_states, worktree_states) = std::thread::scope(|scope| {
+        let submodule_states = scope.spawn(|| submodules(&top, main_ref.as_deref()));
+        let worktree_states = worktrees(&top, main_ref.as_deref());
+        (submodule_states.join().unwrap_or_default(), worktree_states)
+    });
     let mut state = repository(&top, main_ref.as_deref(), &[]);
     let object = state.as_object_mut().expect("repository answers an object");
     object.insert("isRepo".into(), json!(true));
@@ -61,15 +71,11 @@ pub fn read_checkout_state(path: &Path, if_origin: Option<&str>) -> Value {
     object.insert("originUrl".into(), json!(origin_url));
     object.insert("mainRef".into(), json!(main_ref));
     object.insert("lastFetchMs".into(), json!(last_fetch_ms(&top)));
+    object.insert("commonDir".into(), json!(common_dir));
+    object.insert("isMainWorktree".into(), json!(own_dir.is_some() && own_dir == common_dir));
     object.insert("stashes".into(), json!(stashes(&top)));
-    object.insert(
-        "submodules".into(),
-        json!(submodules(&top, main_ref.as_deref())),
-    );
-    object.insert(
-        "worktrees".into(),
-        json!(worktrees(&top, main_ref.as_deref())),
-    );
+    object.insert("submodules".into(), json!(submodule_states));
+    object.insert("worktrees".into(), json!(worktree_states));
     state
 }
 
@@ -137,7 +143,7 @@ fn repository(dir: &Path, main_ref: Option<&str>, pins: &[String]) -> Value {
             (json!(ahead), json!(behind))
         });
     let changed = changed_files(dir);
-    let not_on_origin = commits_not_on_origin(dir, main_ref, pins);
+    let (not_on_origin_count, not_on_origin) = commits_not_on_origin(dir, main_ref, pins);
     json!({
         "path": dir.to_string_lossy(),
         "branch": branch,
@@ -147,8 +153,8 @@ fn repository(dir: &Path, main_ref: Option<&str>, pins: &[String]) -> Value {
         "behind": behind,
         "changedCount": changed.len(),
         "changed": changed.into_iter().take(LIST_LIMIT).collect::<Vec<_>>(),
-        "notOnOriginCount": not_on_origin.len(),
-        "notOnOrigin": not_on_origin.into_iter().take(LIST_LIMIT).collect::<Vec<_>>(),
+        "notOnOriginCount": not_on_origin_count,
+        "notOnOrigin": not_on_origin,
     })
 }
 
@@ -175,16 +181,21 @@ fn changed_files(dir: &Path) -> Vec<String> {
 
 /// The commits HEAD has that origin does not: on no remote-tracking branch, not one of `pins`'
 /// ancestors, and not a patch origin's main already holds (`git cherry` marks those `-`).
-fn commits_not_on_origin(dir: &Path, main_ref: Option<&str>, pins: &[String]) -> Vec<Value> {
+/// The count, and the first `LIST_LIMIT` with their subjects.
+fn commits_not_on_origin(
+    dir: &Path,
+    main_ref: Option<&str>,
+    pins: &[String],
+) -> (usize, Vec<Value>) {
     let mut args = vec!["rev-list", "--max-count=500", "HEAD", "--not", "--remotes"];
     args.extend(pins.iter().map(String::as_str));
     let Some(listed) = git(dir, &args) else {
-        return Vec::new();
+        return (0, Vec::new());
     };
     let mut shas: Vec<String> = listed.lines().map(|sha| sha.trim().to_string()).collect();
     shas.retain(|sha| !sha.is_empty());
     if shas.is_empty() {
-        return Vec::new();
+        return (0, Vec::new());
     }
     if let Some(base) = main_ref {
         if let Some(cherry) = git(dir, &["cherry", base, "HEAD"]) {
@@ -196,20 +207,25 @@ fn commits_not_on_origin(dir: &Path, main_ref: Option<&str>, pins: &[String]) ->
             shas.retain(|sha| !landed.contains(sha.as_str()));
         }
     }
-    shas.iter()
-        .map(|sha| {
-            let subject = git(dir, &["log", "-1", "--format=%s%x09%ct", sha]).unwrap_or_default();
-            let (subject, time) = subject
-                .trim_end()
-                .rsplit_once('\t')
-                .unwrap_or((subject.trim_end(), ""));
-            json!({
+    // Subjects of the listed ones only, in one call: a long-lived branch can hold hundreds.
+    let listed: Vec<&str> = shas.iter().take(LIST_LIMIT).map(String::as_str).collect();
+    let mut args = vec!["log", "--no-walk=unsorted", "--format=%H%x09%ct%x09%s"];
+    args.extend(listed.iter().copied());
+    let commits = git(dir, &args)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '\t');
+            let sha = parts.next()?;
+            let time = parts.next()?;
+            Some(json!({
                 "sha": &sha[..sha.len().min(10)],
-                "subject": subject,
-                "committedMs": time.parse::<i64>().ok().map(|seconds| seconds * 1000),
-            })
+                "subject": parts.next().unwrap_or(""),
+                "committedMs": time.trim().parse::<i64>().ok().map(|seconds| seconds * 1000),
+            }))
         })
-        .collect()
+        .collect();
+    (shas.len(), commits)
 }
 
 /// `refs/remotes/origin/HEAD`'s branch, else origin's main or master, as `origin/<name>`.
@@ -299,13 +315,14 @@ fn submodules(top: &Path, project_main: Option<&str>) -> Vec<Value> {
             }
         }
     }
-    entries
-        .into_iter()
-        .map(|(marker, path)| {
+    parallel_map(entries, |(marker, path)| {
             if marker == '-' {
                 return json!({ "path": path, "initialized": false });
             }
             let dir = top.join(&path);
+            if !answers(&dir) {
+                return json!({ "path": path, "initialized": true, "unreadable": true });
+            }
             let pins: Vec<String> = pinned_on_main.get(&path).cloned().into_iter().collect();
             let mut state = repository(&dir, main_ref(&dir).as_deref(), &pins);
             let object = state.as_object_mut().expect("repository answers an object");
@@ -315,14 +332,13 @@ fn submodules(top: &Path, project_main: Option<&str>) -> Vec<Value> {
             object.insert("conflicted".into(), json!(marker == 'U'));
             state
         })
-        .collect()
 }
 
 /// The checkout's other worktrees (the first entry is the checkout itself): branch or detached,
 /// changed files, and commits not on origin; a missing folder is reported, not read.
 fn worktrees(top: &Path, main_ref: Option<&str>) -> Vec<Value> {
     let listed = git(top, &["worktree", "list", "--porcelain"]).unwrap_or_default();
-    listed
+    let found: Vec<(PathBuf, Option<String>, bool)> = listed
         .split("\n\n")
         .filter_map(|block| {
             let mut path = None;
@@ -344,9 +360,13 @@ fn worktrees(top: &Path, main_ref: Option<&str>) -> Vec<Value> {
             (!bare).then_some((path, branch, prunable))
         })
         .skip(1)
-        .map(|(path, branch, prunable)| {
+        .collect();
+    parallel_map(found, |(path, branch, prunable)| {
             if prunable || !path.is_dir() {
                 return json!({ "path": path.to_string_lossy(), "branch": branch, "missing": true });
+            }
+            if !answers(&path) {
+                return json!({ "path": path.to_string_lossy(), "branch": branch, "missing": false, "unreadable": true });
             }
             let mut state = repository(&path, main_ref, &[]);
             if let Some(object) = state.as_object_mut() {
@@ -354,12 +374,48 @@ fn worktrees(top: &Path, main_ref: Option<&str>) -> Vec<Value> {
             }
             state
         })
+}
+
+/// How many git readers run at once: the Mac's checkout has 15 worktrees and 10 submodules, and
+/// one after another they took seconds (each read is a handful of short git calls).
+const READERS: usize = 8;
+
+/// `items` through `read` on up to `READERS` threads, answers in the items' order.
+pub(crate) fn parallel_map<T: Send, R: Send>(
+    items: Vec<T>,
+    read: impl Fn(T) -> R + Sync,
+) -> Vec<R> {
+    let total = items.len();
+    let queue = std::sync::Mutex::new(items.into_iter().enumerate());
+    let answers = std::sync::Mutex::new((0..total).map(|_| None).collect::<Vec<Option<R>>>());
+    std::thread::scope(|scope| {
+        for _ in 0..READERS.min(total) {
+            scope.spawn(|| loop {
+                let next = queue.lock().unwrap_or_else(|p| p.into_inner()).next();
+                let Some((index, item)) = next else { break };
+                let answer = read(item);
+                answers.lock().unwrap_or_else(|p| p.into_inner())[index] = Some(answer);
+            });
+        }
+    });
+    answers
+        .into_inner()
+        .unwrap_or_else(|p| p.into_inner())
+        .into_iter()
+        .flatten()
         .collect()
 }
 
-/// One read-only git call in `dir`; `None` when git is missing or the call fails.
+/// How long one git call may take. Some folders block every read (on the Mac, projects under
+/// ~/dev/references and on the offload volume hang `ls` itself); git there never returned, so the
+/// whole read missed the relay's time limit and each call left a git process behind for good.
+const GIT_CALL_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// One read-only git call in `dir`, ended after `GIT_CALL_TIMEOUT` with everything it started;
+/// `None` when git is missing, the call fails or it ran out of time.
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
-    let output = background_command("git")
+    let mut command = background_command("git");
+    command
         .arg("-c")
         .arg("safe.directory=*")
         .arg("-c")
@@ -367,13 +423,25 @@ fn git(dir: &Path, args: &[&str]) -> Option<String> {
         .args(args)
         .current_dir(dir)
         .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
+        .env("GIT_TERMINAL_PROMPT", "0");
+    let output = run_bounded(
+        command,
+        RunLimits {
+            timeout: GIT_CALL_TIMEOUT,
+            stdin: None,
+            stdout: Keep::Head(32 << 20),
+            stderr: Keep::Head(0),
+        },
+    )
+    .ok()?;
     output
         .status
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Whether git answers in `dir` at all: a worktree or submodule on a folder that blocks is
+/// reported as unreadable after one call instead of costing every call its time limit.
+fn answers(dir: &Path) -> bool {
+    git(dir, &["rev-parse", "--git-dir"]).is_some()
 }
