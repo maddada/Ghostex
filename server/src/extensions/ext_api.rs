@@ -790,6 +790,11 @@ fn forked_from(state: &AppState) -> std::collections::HashMap<String, String> {
         .unwrap_or_default()
 }
 
+/// This computer's sessions as an extension sees them, each with its `role`: `coordinator`, `thread`
+/// (with its `coordinator` ref) or `session` for every other one.
+///
+/// CDXC:Extensions 2026-11-16 DECISION:
+/// User (Q3430 "ordinary sessions only (not coordinators or threads). Make the Ghostex change extensions need to tell them apart"): the Thread brief extension keeps a brief only for ordinary sessions, so the sessions list says which ones are coordinators and threads, read from the presentation snapshot's coordinator fields (coordinators/presentation.rs).
 fn sessions(
     snapshot: &Value,
     project: Option<&str>,
@@ -819,7 +824,21 @@ fn sessions(
                         })
                         .unwrap_or_default();
                     let reference = format!("{project_id}:{session_id}");
+                    let role = match session.get("coordinatorRole").and_then(Value::as_str) {
+                        Some("coordinator") => "coordinator",
+                        Some("thread") => "thread",
+                        _ => "session",
+                    };
+                    let coordinator = (role == "thread")
+                        .then(|| {
+                            let project = session.get("coordinatorProjectId")?.as_str()?;
+                            let id = session.get("coordinatorSessionId")?.as_str()?;
+                            Some(format!("{project}:{id}"))
+                        })
+                        .flatten();
                     json!({
+                        "role": role,
+                        "coordinator": coordinator,
                         "forkedFrom": forks.get(&reference),
                         "session": reference,
                         "projectId": project_id,
