@@ -7778,16 +7778,29 @@ itself, so it works even when it cannot reach your computer. While a computer is
 connected, "Collect more data with an agent" is there too: Start Agent starts
 the agent on that computer and opens its chat on the phone.
 
-If the phone app closes unexpectedly, it saves a crash report on the phone
-(what went wrong, the app version, the phone model and the screen you were on);
-nothing is sent on its own. The next time you open the app, a card at the
-bottom says it closed unexpectedly, once per crash: Dismiss deletes the
-report, Send Report opens Send Bug / Feedback with it attached. Names of your
-computers, addresses, usernames, emails and keys are removed first; Show Report
-displays the cleaned text, and Review shows the exact issue before you send it.
-If you started the agent instead, it removes anything personal it still finds.
-A saved report you have not sent can also be attached later with Attach Crash
-Report in Send Bug / Feedback.
+If the phone app closes unexpectedly, it can save a crash report on the phone
+(what went wrong, the app version, the phone model and the screen, when known);
+nothing is sent on its own. The iPhone features described below need an app
+build with the crash-report updates; older builds may not have them. With
+those updates, the iPhone also keeps the native crashes that
+iOS reports to the app later; for those iOS gives only a time range, not the
+exact time. The next time you open the app, a card at the bottom says it closed
+unexpectedly, once per crash: Send Report opens Send Bug / Feedback with it
+attached, and Dismiss keeps the report on the iPhone and deletes it on Android.
+Names of your computers, addresses, usernames, emails and keys are removed
+first; Show Report displays the cleaned text, and Review shows the exact issue
+before you send it. If you started the agent instead, it removes anything
+personal it still finds. A saved report you have not sent can also be attached
+later with Attach Crash Report in Send Bug / Feedback.
+
+On the iPhone, Settings › Connection › Troubleshooting › Crash reports lists the
+saved reports, newest first, and the phone keeps the 5 newest. Open one to Copy
+its cleaned text, Share it as a text file or Delete it; Delete All Reports
+removes every report after asking. Copy and Share replace the computer and user
+names, addresses, emails and keys they recognize, so read the text before you
+share it. Keep crash reports is on by default; turning it off deletes the saved
+reports, after asking when there are any, and the phone saves none until you
+turn it on again.
 
 ## Answering the common questions
 
