@@ -2157,6 +2157,8 @@ mod tests {
             superseded: Vec::new(),
             inherited: false,
             seen_only: false,
+            source: None,
+            replaced: false,
             prints: Vec::new(),
             rounds: Vec::new(),
             said: Vec::new(),

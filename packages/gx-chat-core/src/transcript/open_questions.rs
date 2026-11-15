@@ -123,6 +123,12 @@ pub struct Asker {
     /// server/src/visual_pages/publish.rs). It has no tags, counts as one thing waiting, and is
     /// answered once the page's answers (`{"seen": true, …}`) come back.
     pub seen_only: bool,
+    /// A page's `"source"` (server/src/ghostex_cli/show.rs `source_key`): which file it was
+    /// published from. `None` for a form and for page blocks printed before 2026-11-16.
+    pub source: Option<String>,
+    /// A later page from the same file replaced it ([`settle_askers`]): it no longer waits, and its
+    /// card reads Replaced ([`withdrawn_pages`]).
+    pub replaced: bool,
     /// Each tag with what it asks ([`question_print`]): the question's words up to its first `?`
     /// and its choices, so the same question asked again under its tag is told from a new question
     /// that reuses the tag ([`share_answers`]). Empty for a page, whose questions the chat does not
@@ -335,6 +341,8 @@ pub fn asker_entries<'a>(
                 superseded: Vec::new(),
                 inherited: false,
                 seen_only: false,
+                source: None,
+                replaced: false,
                 said: Vec::new(),
                 title: question.question.clone(),
                 at: message.timestamp,
@@ -417,6 +425,8 @@ pub fn asker_entries<'a>(
                     superseded: Vec::new(),
                     inherited: false,
                     seen_only: false,
+                    source: None,
+                    replaced: false,
                     said: Vec::new(),
                     title,
                     at: message.timestamp,
@@ -448,6 +458,8 @@ pub fn asker_entries<'a>(
                     superseded: Vec::new(),
                     inherited: false,
                     seen_only,
+                    source: page.source.clone(),
+                    replaced: false,
                     said: Vec::new(),
                     title: page.title.trim().to_string(),
                     at: message.timestamp,
@@ -610,6 +622,10 @@ pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
         })
         .collect();
     let (mut asked_later, mut withdrawn_later) = (HashSet::new(), HashSet::new());
+    // The files later pages were published from (`Asker::source`): an earlier page from one of
+    // them is replaced (CDXC:SessionChat 2026-11-16 DECISION in server/src/ghostex_cli/show.rs
+    // `source_key`).
+    let mut sources_later: HashSet<String> = HashSet::new();
     let mut said_later: HashMap<String, usize> = HashMap::new();
     let mut askers = Vec::new();
     for (entry, answers) in found.iter().zip(answer_tags.iter()).rev() {
@@ -638,9 +654,19 @@ pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
                     })
                     .collect();
                 asker.answered = answered.contains(asker.id.as_str()) || asker.answered_in_words();
-                asker.obsolete =
-                    !asker.tags.is_empty() && asker.superseded.len() == asker.tags.len();
+                asker.replaced = asker.kind == AskerKind::Page
+                    && asker
+                        .source
+                        .as_deref()
+                        .is_some_and(|source| sources_later.contains(source));
+                asker.obsolete = asker.replaced
+                    || (!asker.tags.is_empty() && asker.superseded.len() == asker.tags.len());
                 asked_later.extend(asker.tags.iter().map(|tag| tag.to_ascii_lowercase()));
+                if asker.kind == AskerKind::Page {
+                    if let Some(source) = &asker.source {
+                        sources_later.insert(source.clone());
+                    }
+                }
                 askers.push(asker);
             }
             Found::Withdraw(tags) => {
@@ -812,6 +838,10 @@ pub fn mark_inherited(askers: &mut [Asker], messages: &[ChatRow], forked_at: Opt
 pub struct WithdrawnPage {
     pub tags: Vec<String>,
     pub total: usize,
+    /// A later page from the same file replaced it (`Asker::replaced`): its card reads Replaced,
+    /// whether it asked questions or only waited to be seen.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replaced: bool,
 }
 
 /// The question pages whose cards say what was withdrawn, by page id: a page not answered whose
@@ -822,7 +852,11 @@ pub struct WithdrawnPage {
 pub fn withdrawn_pages(askers: &[Asker]) -> std::collections::BTreeMap<String, WithdrawnPage> {
     askers
         .iter()
-        .filter(|asker| asker.kind == AskerKind::Page && !asker.answered && !asker.tags.is_empty())
+        .filter(|asker| {
+            asker.kind == AskerKind::Page
+                && !asker.answered
+                && (asker.replaced || !asker.tags.is_empty())
+        })
         .filter_map(|asker| {
             let tags: Vec<String> = if asker.obsolete {
                 asker.tags.clone()
@@ -834,12 +868,13 @@ pub fn withdrawn_pages(askers: &[Asker]) -> std::collections::BTreeMap<String, W
                     .cloned()
                     .collect()
             };
-            (!tags.is_empty()).then(|| {
+            (asker.replaced || !tags.is_empty()).then(|| {
                 (
                     asker.id.clone(),
                     WithdrawnPage {
                         tags,
                         total: asker.tags.len(),
+                        replaced: asker.replaced,
                     },
                 )
             })

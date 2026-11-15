@@ -238,7 +238,14 @@ impl NativeChatView {
                     .filter_map(Value::as_str)
                     .collect();
                 let total = entry["total"].as_u64().unwrap_or(0) as usize;
-                if tags.len() >= total {
+                // A newer `ghostex show` of the same file replaced it (the core's
+                // `Asker::replaced`); the newest card is the page.
+                if entry["replaced"] == true {
+                    (
+                        "Replaced".to_string(),
+                        "Replaced by a newer version of this page".to_string(),
+                    )
+                } else if tags.len() >= total {
                     (
                         "Withdrawn".to_string(),
                         "Withdrawn, no answer needed".to_string(),
