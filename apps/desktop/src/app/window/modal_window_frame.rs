@@ -188,11 +188,26 @@ impl Render for ModalWindowFrame {
         let show_close = (self.shows_corner_close)(cx);
         let reveal = self.corner_close_reveal(window, cx);
         set_reveal(&reveal, cx, |r| &mut r.enabled, show_close);
+        /*
+        CDXC:AppModal 2026-11-16 DECISION:
+        User: on Linux "pls put a thin border around the settings and other modals like it on arch, cuz the edge of the modal blends with the bg of the main window". Settings, Connect a computer, Add a computer and every other app modal draw a square surface tinted from the app chrome, and a Linux window gets no edge of its own from Ghostex (Hyprland's own border is the user's theme, often invisible), so each modal draws a 1px inner edge in `ModalPalette::window_border`, the colour Windows modals already get from DWM (`frame_app_modal_window`): the foreground mixed 16% into the modal surface, a soft gray in dark mode, never black or an accent. Linux only: macOS draws its rim and shadow around these windows, and Windows 11 draws the DWM border in this same colour, so a second line there would double the edge.
+        */
+        let linux_edge = cfg!(all(target_os = "linux", not(ghostex_web)))
+            .then(|| hsla(self.palette.window_border()));
         div()
             .id("app-modal-window-frame")
             .relative()
             .size_full()
             .child(self.content.clone())
+            .when_some(linux_edge, |this, edge| {
+                this.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .border_1()
+                        .border_color(edge),
+                )
+            })
             .when(show_close, |this| {
                 this.child(Self::top_band_tracker(reveal))
             })
