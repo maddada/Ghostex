@@ -19,6 +19,10 @@ impl GhostexGpuiApp {
         if mode == TitlebarMode::Source {
             self.stop_source_code_server_runtime(cx);
         } else if mode == TitlebarMode::Browser {
+            // Explicit Browser sleep cancels any pending startup reload so async context/tunnel
+            // callbacks cannot wake or recreate surfaces behind the user's back.
+            self.pending_startup_browser_reload = false;
+            self.pending_startup_browser_remote_machines.clear();
             // Pages of this project still waiting to be made are not made later: the sleep wins
             // (`waiting_parked_browser_pages`).
             if let Some(project_id) = self.browser_tabs_project_id.as_deref() {
