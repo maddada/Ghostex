@@ -2,7 +2,8 @@ use super::{
     actions::NativeSidebarAction,
     hover_actions::{SESSION_HOVER_BUTTON, SESSION_HOVER_ICON},
     menu_state::{
-        SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_SEARCH_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT,
+        QUICK_BUTTON_MIN_WIDTH, SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_QUICK_ROW_HEIGHT,
+        SIDEBAR_MENU_SEARCH_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT,
         SidebarMenuPanel, SidebarMenuPlacement, SidebarMenuState,
     },
 };
@@ -809,6 +810,60 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
+    /// A click on one of a quick row's buttons: it runs that button's command and closes the menu,
+    /// as a click on a row with a command does.
+    fn activate_native_sidebar_menu_quick(
+        &mut self,
+        panel_index: usize,
+        item_index: usize,
+        button_index: usize,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        // Clicked in the frosted host window, it acts in the window the menu belongs to.
+        if let Some(source) = self.native_sidebar.menu.as_ref().map(|menu| menu.window)
+            && source != window.window_handle()
+        {
+            let app = cx.entity();
+            cx.defer(move |cx| {
+                let _ = source.update(cx, |_, window, cx| {
+                    app.update(cx, |app, cx| {
+                        app.activate_native_sidebar_menu_quick(
+                            panel_index,
+                            item_index,
+                            button_index,
+                            window,
+                            cx,
+                        );
+                    });
+                });
+            });
+            return;
+        }
+        let Some(button) = self
+            .native_sidebar
+            .menu
+            .as_ref()
+            .and_then(|menu| menu.panels.get(panel_index))
+            .and_then(|panel| panel.items.get(item_index))
+            .and_then(|item| item["quick"].get(button_index))
+            .cloned()
+        else {
+            return;
+        };
+        if button["disabled"] == true {
+            return;
+        }
+        let Some(command) = button.get("command").cloned() else {
+            return;
+        };
+        if button["keepOpen"] != true {
+            self.close_native_sidebar_menu(window, cx);
+        }
+        self.handle_native_sidebar_action(&NativeSidebarAction { command }, window, cx);
+        cx.notify();
+    }
+
     pub(crate) fn render_native_sidebar_menu(
         &self,
         window: &Window,
@@ -1084,6 +1139,69 @@ impl GhostexGpuiApp {
                             ),
                     );
                     offset += SIDEBAR_MENU_SEPARATOR_HEIGHT;
+                    continue;
+                }
+                // CDXC:ContextMenus 2026-11-15 SEE-ALSO: the user's decision on the session menu's
+                // quick row in packages/gx-core/src/sidebar_menu/session.rs `full_menu`: its
+                // buttons side by side, an icon over a small label, each running its own command.
+                if let Some(buttons) = item["quick"].as_array() {
+                    let mut strip = h_flex()
+                        .w_full()
+                        .h(px(SIDEBAR_MENU_QUICK_ROW_HEIGHT * scale))
+                        .flex_shrink_0()
+                        .gap(px(4.0 * scale))
+                        .pb(px(6.0 * scale));
+                    for (button_index, button) in buttons.iter().enumerate() {
+                        let label = button["label"].as_str().unwrap_or_default().to_owned();
+                        let icon_path = gpui_sidebar_command_icon_asset_path(button["icon"].as_str());
+                        let disabled = button["disabled"] == true;
+                        strip = strip.child(
+                            v_flex()
+                                .id(format!(
+                                    "native-menu-quick-{panel_index}-{item_index}-{button_index}"
+                                ))
+                                .role(gpui::Role::Button)
+                                .aria_label(label.clone())
+                                .flex_1()
+                                .min_w(px(QUICK_BUTTON_MIN_WIDTH * scale))
+                                .h_full()
+                                .items_center()
+                                .justify_center()
+                                .gap(px(4.0 * scale))
+                                .rounded(px(6.0 * scale))
+                                .bg(hover.opacity(0.5))
+                                .when(!disabled, |button| button.hover(|button| button.bg(hover)))
+                                .when(disabled, |button| button.opacity(0.42))
+                                .child(
+                                    gpui::svg()
+                                        .path(icon_path)
+                                        .text_color(foreground)
+                                        .size(px(16.0 * scale))
+                                        .flex_shrink_0(),
+                                )
+                                .child(
+                                    div()
+                                        .max_w_full()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(px(11.0 * scale))
+                                        .child(label),
+                                )
+                                .on_click(cx.listener(move |app, _, window, cx| {
+                                    cx.stop_propagation();
+                                    app.activate_native_sidebar_menu_quick(
+                                        panel_index,
+                                        item_index,
+                                        button_index,
+                                        window,
+                                        cx,
+                                    );
+                                })),
+                        );
+                    }
+                    content = content.child(strip);
+                    offset += SIDEBAR_MENU_QUICK_ROW_HEIGHT;
                     continue;
                 }
                 let label = item["label"].as_str().unwrap_or_default().to_owned();
