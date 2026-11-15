@@ -19,6 +19,7 @@
 //! SEE-ALSO: packages/gx-core/src/git_menu/read.rs (the client's reader),
 //! apps/desktop/src/app/gx_store/git/ (the callers), server/src/git_ship_workflow.rs.
 
+pub mod checkout;
 mod diff_stats_cache;
 
 use axum::http::StatusCode;
@@ -136,6 +137,30 @@ fn read_project_id(params: &Map<String, Value>) -> Result<String, TypedOperation
         .ok_or_else(|| TypedOperationError::bad_request("projectId is required."))
 }
 
+/// `checkout: true`: `{"checkout": …}` for the project's folder, read off the async workers.
+async fn read_checkout(
+    params: &Map<String, Value>,
+    projects: &[Value],
+) -> Result<Value, TypedOperationError> {
+    let path = projects
+        .first()
+        .and_then(|project| project.get("path"))
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| TypedOperationError::bad_request("No project has that projectId."))?;
+    let if_origin = params
+        .get("ifOrigin")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let checkout = tokio::task::spawn_blocking(move || {
+        checkout::read_checkout_state(&path, if_origin.as_deref())
+    })
+    .await
+    .map_err(|error| TypedOperationError::bad_request(format!("Reading the checkout failed: {error}")))?;
+    Ok(json!({ "checkout": checkout }))
+}
+
 pub async fn read_project_git_state(
     params: &Map<String, Value>,
     projects: Vec<Value>,
@@ -146,6 +171,11 @@ pub async fn read_project_git_state(
     // moment later (`CDXC:Git 2026-07-29`).
     if flag("gitHubOnly") {
         return Ok(json!({ "gitHub": read_git_hub_state(&projects, &project_id).await? }));
+    }
+    // The checkout's work not on origin yet: its submodules, worktrees and stashes too (checkout.rs).
+    // `ifOrigin` answers a project of another repository with its origin alone.
+    if flag("checkout") {
+        return read_checkout(params, &projects).await;
     }
     if flag("diffStatsOnly") {
         let count_untracked = flag("countUntrackedWhenClean");

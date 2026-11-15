@@ -281,6 +281,10 @@ pub fn usage() -> String {
             "List the projects with their ids, the --project-id that create-session, create-agent and the other project verbs take; --all adds parked projects (Recent Projects); read-only",
         ),
         format_help_command(
+            "project status [--computer name | --all-computers] [--project-id id] [--json]",
+            "This project's git state here and on every connected computer, as one table: uncommitted files, commits not on origin, stashes, and each submodule and worktree; an offline computer shows when it was last seen. Run it before a release; read-only",
+        ),
+        format_help_command(
             "switch-project (--project-id|--path|--name) <value>",
             "Switch active project",
         ),
