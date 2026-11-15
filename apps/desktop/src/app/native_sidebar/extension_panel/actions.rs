@@ -17,10 +17,24 @@ use crate::app::gx_store::gx_rpc;
 /// A user's edit of an editable checklist, which gxserver applies and saves.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ExtensionPanelEdit {
-    Check { item_id: String, done: bool },
-    Add { text: String },
-    Rename { item_id: String, text: String },
-    Delete { item_id: String },
+    Check {
+        item_id: String,
+        done: bool,
+    },
+    Add {
+        text: String,
+    },
+    Rename {
+        item_id: String,
+        text: String,
+    },
+    Delete {
+        item_id: String,
+    },
+    /// A new text for an editable text block.
+    Text {
+        text: String,
+    },
 }
 
 impl ExtensionPanelEdit {
@@ -34,6 +48,7 @@ impl ExtensionPanelEdit {
                 json!({"op": "rename", "itemId": item_id, "text": text})
             }
             Self::Delete { item_id } => json!({"op": "delete", "itemId": item_id}),
+            Self::Text { text } => json!({"op": "text", "text": text}),
         }
     }
 }
@@ -52,6 +67,7 @@ fn permission_label(permission: &str) -> &'static str {
         "sessions.read" => "See your sessions",
         "agents.message" => "Hear from your agents",
         "sessions.message" => "Message a thread when you tap its panel",
+        "agents.note" => "Tell new agent sessions about it",
         _ => "this permission",
     }
 }
@@ -460,9 +476,39 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        let kind = if item_id.is_some() {
+            "extensionItem"
+        } else {
+            "extensionAdd"
+        };
+        self.open_native_panel_editor(kind, place, block_id, item_id, initial, window, cx);
+    }
+
+    /// Opens the inline field that rewrites an editable text block.
+    pub(crate) fn begin_native_panel_text_editor(
+        &mut self,
+        place: &PanelPlace,
+        block_id: &str,
+        initial: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.open_native_panel_editor("extensionText", place, block_id, None, initial, window, cx);
+    }
+
+    fn open_native_panel_editor(
+        &mut self,
+        kind: &'static str,
+        place: &PanelPlace,
+        block_id: &str,
+        item_id: Option<&str>,
+        initial: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let input = cx.new(|cx| {
             let input = InputState::new(window, cx).default_value(initial.to_string());
-            if item_id.is_none() {
+            if kind == "extensionAdd" {
                 input.placeholder("Add an item")
             } else {
                 input
@@ -480,11 +526,7 @@ impl GhostexGpuiApp {
         });
         self.native_sidebar.name_editor =
             Some(crate::app::native_sidebar::rename::SidebarNameEditor::new(
-                if item_id.is_some() {
-                    "extensionItem"
-                } else {
-                    "extensionAdd"
-                },
+                kind,
                 editor_id(place, block_id, item_id),
                 input.clone(),
                 subscription,
@@ -518,6 +560,9 @@ impl GhostexGpuiApp {
                 text: text.to_string(),
             },
             ("extensionAdd", _) => ExtensionPanelEdit::Add {
+                text: text.to_string(),
+            },
+            ("extensionText", _) => ExtensionPanelEdit::Text {
                 text: text.to_string(),
             },
             _ => return,

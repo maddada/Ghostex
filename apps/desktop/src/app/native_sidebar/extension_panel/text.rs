@@ -1,7 +1,10 @@
 //! The `text` block: gx-core's small Markdown subset (`parse_text`) drawn as the sidebar's text,
-//! with links that open in the browser and "Show more" past the preview's lines.
+//! with links that open in the browser and "Show more" past the preview's lines. An editable one
+//! (`editable: true`) opens in the sidebar's inline field on a click, and gxserver applies what the
+//! user writes and tells the extension (actions.rs).
 
 use ghostex_gx_core::extension_panel::{ExtensionBlockView, TextLineKind, TextSpan};
+use ghostex_gx_protocol::extension_panel::PanelBlockBody;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString,
@@ -23,6 +26,29 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let scale = appearance.scale;
         let block_id = view.block.id.clone();
+        let editable_text = match &view.block.body {
+            PanelBlockBody::Text {
+                text,
+                editable: Some(true),
+            } => Some(text.clone()),
+            _ => None,
+        };
+        if editable_text.is_some() {
+            if let Some(editor) = self.native_panel_editor("extensionText", place, &block_id, None)
+            {
+                return div()
+                    .w_full()
+                    .px(px(6.0 * scale))
+                    .on_action(
+                        cx.listener(|app, _: &gpui_component::input::Escape, _, cx| {
+                            cx.stop_propagation();
+                            app.finish_native_sidebar_rename(false, cx);
+                        }),
+                    )
+                    .child(gpui_component::input::Input::new(&editor.input).h(px(24.0 * scale)))
+                    .into_any_element();
+            }
+        }
         let lines: Vec<AnyElement> = view
             .text_lines
             .iter()
@@ -86,14 +112,35 @@ impl GhostexGpuiApp {
                     cx.notify();
                 }))
         });
-        v_flex()
+        let body = v_flex()
             .w_full()
             .min_w_0()
             .px(px(6.0 * scale))
             .gap(px(2.0 * scale))
             .children(lines)
-            .children(more)
-            .into_any_element()
+            .children(more);
+        match editable_text {
+            Some(text) => {
+                let edit_place = place.clone();
+                let edit_block = block_id.clone();
+                body.id(SharedString::from(format!(
+                    "ext-text-edit-{}-{block_id}",
+                    place.ui_key()
+                )))
+                .role(gpui::Role::Button)
+                .aria_label("Edit")
+                .rounded(px(5.0 * scale))
+                .py(px(2.0 * scale))
+                .cursor_pointer()
+                .hover(|body| body.bg(appearance.hover))
+                .on_click(cx.listener(move |app, _, window, cx| {
+                    cx.stop_propagation();
+                    app.begin_native_panel_text_editor(&edit_place, &edit_block, &text, window, cx);
+                }))
+                .into_any_element()
+            }
+            None => body.into_any_element(),
+        }
     }
 }
 

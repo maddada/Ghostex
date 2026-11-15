@@ -1,3 +1,4 @@
+pub(crate) mod agent_notes;
 pub(crate) mod catalog;
 pub(crate) mod ext_api;
 pub(crate) mod http;

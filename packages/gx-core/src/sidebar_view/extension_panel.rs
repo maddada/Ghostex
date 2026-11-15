@@ -334,7 +334,7 @@ fn block_view(
     width: f32,
 ) -> ExtensionBlockView {
     let (text_lines, text_truncated) = match &block.body {
-        PanelBlockBody::Text { text } => {
+        PanelBlockBody::Text { text, .. } => {
             let lines = parse_text(text);
             let expanded = ui.expanded_texts.contains(&format!(
                 "{}|{}",
