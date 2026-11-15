@@ -759,18 +759,18 @@ of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
 several. On the phone, the pencil at the top of the Sessions list (New session,
-next to the bell, in both the Unified and the Project layout) lists every
-project on every computer, recent ones first, with a search field and a chip for
-each computer, starting on the one you used last for that project. Tap a project
-and its remembered agent starts there (the computer's Settings > Agents >
-Remember the agent you pick decides whether that is the agent picked last in the
-project, in its Space or anywhere). It opens in the view the phone's Settings >
-Chat > Default agent view picks, as a project's agent button does: in Chat, a new
-chat where you can still change the agent, model, worktree, project or computer
-before you send the first message; an agent without chat always opens its
-terminal. If that computer isn't connected, it says so. A project's "+" and the
-"+" on a project in the filter open the agent menu instead, which shows its
-project on top (tap it to pick any project) and the same computer chips.
+next to the bell, in both the Unified and the Project layout) opens the agent
+menu on the project you used last (or the one project the filter shows), with
+that project on top: tap it to pick any project on any computer, recent ones
+first, and its computer chips pick where it runs. The menu lists what that
+computer has set up: New Coordinator…, its agents (the remembered one stands
+out), Cloud Box where offered, and Terminal. Nothing starts until you pick a
+row. An agent opens in the view the phone's Settings > Chat > Default agent view
+picks: in Chat, a new chat where you can still change the agent, model,
+worktree, project or computer before you send the first message; an agent
+without chat always opens its terminal. If the project's computer isn't
+connected, the project list opens instead. A project's "+" and the "+" on a
+project in the filter open the same agent menu on that project.
 
 On the computer, both sidebars have a wide New session button in a row of its
 own under the top row: a plus and New session, with its shortcut shown while
