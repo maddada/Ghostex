@@ -27,6 +27,23 @@ pub(crate) const USER_BUBBLE_PADDING: f32 = 12.0;
 pub(crate) const INPUT_STEP_DARK: f32 = 0.03;
 pub(crate) const INPUT_STEP_LIGHT: f32 = 0.032;
 
+/// Your bubble's blue (`ChatAppearance::user_message`, the Settings chat preview): lighter over a
+/// dark chat so it reads as blue, not navy.
+const USER_BUBBLE_BLUE_DARK: u32 = 0x4a90d9;
+const USER_BUBBLE_BLUE_LIGHT: u32 = 0x3b82f6;
+/// How much of that blue lies over the chat background.
+const USER_BUBBLE_SHARE_DARK: f32 = 0.30;
+const USER_BUBBLE_SHARE_LIGHT: f32 = 0.12;
+
+/// Your bubble's blue and how much of it covers the chat background, in one appearance.
+pub(crate) fn user_bubble_blue(light: bool) -> (u32, f32) {
+    if light {
+        (USER_BUBBLE_BLUE_LIGHT, USER_BUBBLE_SHARE_LIGHT)
+    } else {
+        (USER_BUBBLE_BLUE_DARK, USER_BUBBLE_SHARE_DARK)
+    }
+}
+
 /// The gap below an agent's thinking, before the zoom.
 pub(crate) const THINKING_GAP: f32 = 13.0;
 

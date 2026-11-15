@@ -857,6 +857,18 @@ turn off Merge copies of the same repository (Settings > Sidebar & Sessions,
 project with only its own sessions, and a copy on another computer still joins
 the one with its folder's name. The phone's project list follows the same
 switch.
+While another computer is in the list, every project header shows the icons of
+the computers it is on, a project on just one computer too. Click a computer's
+icon to hide that computer's sessions in that project (every section, Pinned
+included); click it again to show them. A hidden computer's icon is dimmed, and
+carries a status dot while one of the sessions it hides needs you. The choice is
+kept per project and computer across restarts. This is desktop only for now.
+To leave out computers that aren't connected, turn on Hide sessions and
+projects from computers that aren't connected (Settings > Sidebar & Sessions >
+Advanced, `sidebarHideDisconnectedMachines`, off by default): such a computer's
+sessions leave every project, and a project only it has is hidden, until it
+reconnects. Off, its last sessions stay, faded. The Unified sidebar always
+leaves a disconnected computer out. The phone follows this setting.
 To put a project on a computer that doesn't have it yet, right-click it and
 pick Clone on… and the computer: Ghostex clones its git remote into that
 computer's usual projects folder (Settings > Projects > Global settings > Default
@@ -3747,13 +3759,15 @@ sent (thread reports included), Message to <session title> for one this
 session's agent sent with `agents send`, `agents create --task` or
 `coordinator start-thread`. Click the title to switch to that session; click the
 rest of the line to read the whole message. A mention of a session in a message
-(from Copy ID or the `+` list) shows as a pill with the agent's logo, the
-session's current title and a dot for its state (amber while it works, red when
-it needs you, a ring when idle); a session on another computer also shows that
-computer's icon. The chat box draws the same pill (a tinted run of text on the
-phone). Hover a pill (hold it on the phone) to see a card with the session's
-state, agent, project and computer. The "Message from" and "Message to" lines and
-the Workers list draw their sessions the same way. A pill whose session is gone is greyed out and opens nothing. One command that sends the same
+(from Copy ID or the `+` list) shows as the agent's logo and the session's
+current title with a faint dotted underline, which grows stronger under the
+pointer, and a dot while the session is busy (amber while it works, red when it
+needs you; none when it is idle or asleep); a session on another computer also
+shows that computer's icon. The "Message from" and "Message to" lines name their
+sessions the same way, and so does the chat box while you write, where a mention
+stays one piece for the cursor and Delete. Hover a mention (hold it on the phone) to see a card with
+the session's state, agent, project and computer. A mention whose session is
+gone is greyed out and opens nothing. One command that sends the same
 message to several sessions is a single "Message to 2 sessions" line that lists
 each recipient when opened. A session Ghostex cannot find any more reads
 "Message from another agent".
@@ -3764,7 +3778,7 @@ conversation, and `--grep "<words>" --context 1` finds where a topic came up.
 Copy > Copy Details; its Global Ref is the most precise), or the title. The
 session's menu also has Copy ID, right above Tag As, which copies a mention of
 the session, `[<session title>](<Global Ref>)`, to paste into another chat (it
-shows there as the session's pill); dragging the session's row from the sidebar
+shows there as the session's underlined name); dragging the session's row from the sidebar
 onto a chat box types the same mention where the cursor is (one per session
 when several selected rows are dragged together). The Copy menu copies the
 session's branch, its Linear issue ID and link, and its pull request or GitHub
@@ -7341,6 +7355,29 @@ failed) and an × that dismisses it. Dismiss on the item's card in Settings >
 Updates does the same; a dismissed failure stays hidden in every window until
 that item's next update. An item only the page can finish (Needs you) opens
 Settings > Updates.
+
+## Experience (Settings > Experience: Chill, Regular, Advanced)
+
+Experience sets how many buttons and details Ghostex shows, on the computer and
+on the phone, each device on its own. Chill is a simple chat box (the field,
+the model, the effort, •••, attach, the mic and Send) and a calm chat: in Quiet
+View the turn that is running stays one line that counts its time ("Working ·
+1m 12s") and each line names only its reports. Regular adds the mode picker
+(and Maximize on the computer); the terminal is a Terminal View row in the •••
+menu. Advanced is for people who use terminals more: the terminal button and
+the context ring in the chat box, and last-active times in the sessions list.
+The sessions list uses the Sidebar's presets (Chill is Minimal, Regular is
+Recommended, Advanced is Detailed). The page has one row for the whole app and
+one per area (Chat box, Chat, Sessions list); picking a preset writes its
+settings, every switch stays in Settings, and a row whose settings were changed
+by hand says Custom. While the terminal button is off the chat box, the •••
+button turns red when the terminal has a problem, and pointing at it says why.
+With the mode picker off, new Claude sessions on that computer start in Auto,
+or in Bypass permissions while Skip permissions is on. A new phone asks once
+after pairing, with Regular picked. Settings keys: `chatComposerModePicker`,
+`chatComposerTerminalButton`, `chatComposerContextRing`, `chatComposerMaximize`,
+`chatQuietViewCalm`, plus the Quiet View and Card details keys; open the page
+with `ghostex settings open --tab experience`.
 
 ## Appearance and app
 

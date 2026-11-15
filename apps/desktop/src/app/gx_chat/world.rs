@@ -591,7 +591,10 @@ fn settings_moved(
         })
         || settings
             .quiet_view
-            .is_some_and(|quiet| Some(quiet) != state.transcript_view.quiet_view_settings))
+            .is_some_and(|quiet| Some(quiet) != state.transcript_view.quiet_view_settings)
+        || settings
+            .composer_row
+            .is_some_and(|row| row != state.core.composer_row))
     .then(|| Event::SettingsChanged(Box::new(settings.clone())))
 }
 

@@ -869,6 +869,24 @@ pub(super) fn merge_session_chat_option_selections(
 /// The option readings that live on disk rather than on the screen: the transcript's structured
 /// metadata, and the statusline sidecar Claude, Cursor and Hermes write. Also returns Claude's own
 /// session id and transcript path, which the task store hangs off.
+/// The Claude transcript file of a session, when Ghostex knows it (server/src/carry_on_compaction.rs
+/// reads its last cache write to know the session's prompt cache life).
+pub(crate) fn claude_session_transcript_path(
+    repository: &DomainRepository<'_>,
+    hook_state_directory: &Path,
+    project_id: &str,
+    session_id: &str,
+) -> Option<String> {
+    read_session_chat_stored_selections(
+        repository,
+        hook_state_directory,
+        project_id,
+        session_id,
+        Some(SessionChatOptionAgent::Claude),
+    )
+    .3
+}
+
 #[allow(clippy::type_complexity)]
 pub(super) fn read_session_chat_stored_selections(
     repository: &DomainRepository<'_>,

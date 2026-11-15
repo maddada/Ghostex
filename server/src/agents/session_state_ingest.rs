@@ -684,7 +684,7 @@ pub(crate) fn ingest_terminal_title_event_with_home(
     // A coordinator's turn that ends while its threads still work is stored as seen
     // (CDXC:Notifications 2026-11-14 in coordinators/quiet_turn_end.rs).
     let quiet_turn_end =
-        crate::coordinators::quiet_coordinator_turn_end(repository, &session, &mut activity_update);
+        crate::coordinators::quiet_turn_end(repository, &session, &mut activity_update);
     let should_update_activity = should_persist_activity_update(&session, &activity_update);
     if should_update_activity {
         let mut runtime_settings = object_field(&session, "runtimeSettings");

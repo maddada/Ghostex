@@ -86,10 +86,9 @@ pub(crate) struct NativeSidebarGroup {
     pub(crate) holds_active_session_group: bool,
     /// The machines a project the one-list sidebar merged is on (gx-core `GroupCore::machine_names`),
     /// drawn after its name.
-    /// Each is `(name, machine id)`; the chip draws that computer's icon (gx-core `MachineChip`,
-    /// computer_icons.rs).
+    /// The chip draws that computer's icon (gx-core `MachineChip`, computer_icons.rs).
     #[serde(default)]
-    pub(crate) machine_names: Vec<(String, String)>,
+    pub(crate) machine_names: Vec<SidebarMachineChip>,
     pub(crate) project_context: Option<Value>,
     pub(crate) remote_machine_context: Option<Value>,
     #[serde(deserialize_with = "deserialize_sessions")]
@@ -263,6 +262,20 @@ pub(crate) struct NativeSidebarRevealRequest {
 pub(crate) struct NativeSidebarRenameRequest {
     pub(crate) collection_id: String,
     pub(crate) request_id: u64,
+}
+
+/// One computer's icon after a project's name (gx-core `MachineChip`).
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub(crate) struct SidebarMachineChip {
+    pub(crate) name: String,
+    pub(crate) machine_id: String,
+    /// The user hid this computer's sessions in this project (a click on the icon).
+    #[serde(default)]
+    pub(crate) hidden: bool,
+    /// While hidden, the most urgent wait among the rows it hides: `approval`, `question` or
+    /// `attention`.
+    #[serde(default)]
+    pub(crate) hidden_needs_you: Option<String>,
 }
 
 fn deserialize_sessions<'de, D: serde::Deserializer<'de>>(

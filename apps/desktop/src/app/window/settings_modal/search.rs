@@ -1,172 +1,118 @@
-//! Settings search, ported from packages/settings-catalog/src/pages/: the same Fuse.js fuzzy
-//! match (7.3.0, `threshold: 0.24`, `ignoreLocation`, keys title/subtitle/options), the same
-//! section, group and page results (a row's hidden `keywords` match like its title), and the same Show Advanced visibility rules.
-//!
-//! Only whether a row matches matters to Settings (never the ranking), and Fuse includes a row
-//! when any one of its keys matches, so this ports Fuse's Bitap matcher and its per-key
-//! membership test, not its scoring.
+//! Settings search, ported from packages/settings-catalog/src/pages/: the same section, group
+//! and page results (a row matches when its title, subtitle, one of its choices or one of its
+//! hidden `keywords` matches), and the same Show Advanced visibility rules. Whether a text
+//! matches is decided word by word (`SearchPattern`), no longer by Fuse.js's fuzzy match.
 use super::catalog::{SearchSectionDef, SettingRowDef, settings_catalog};
 use std::collections::{HashMap, HashSet};
 
-/// Fuse's `threshold` in `getSettingsSectionSearch`.
-const SEARCH_THRESHOLD: f64 = 0.24;
-/// Fuse's machine word size: longer patterns are searched in 32-character chunks.
-const MAX_BITS: usize = 32;
+/// The shortest query word a single typo is forgiven in. Shorter words would let one typo reach
+/// a different word: "spaces" is one letter from "SpaceO", "theme" from "there".
+const MIN_TYPO_WORD_LEN: usize = 7;
 
 /// JavaScript `String.prototype.trim`.
 pub(crate) fn js_trim(value: &str) -> &str {
     value.trim_matches(|character: char| character.is_whitespace() || character == '\u{feff}')
 }
 
-/// A lower-cased Fuse pattern, split into the chunks Fuse searches.
-struct BitapPattern {
-    pattern: Vec<u16>,
-    chunks: Vec<(Vec<u16>, HashMap<u16, u32>, usize)>,
+/// The lower-cased words of a text: runs of letters and digits.
+fn words_of(text: &str) -> Vec<Vec<char>> {
+    text.to_lowercase()
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(|word| word.chars().collect())
+        .collect()
 }
 
-impl BitapPattern {
-    fn new(query: &str) -> Self {
-        let pattern: Vec<u16> = query.to_lowercase().encode_utf16().collect();
-        let mut chunks = Vec::new();
-        let add = |chunks: &mut Vec<(Vec<u16>, HashMap<u16, u32>, usize)>,
-                   chunk: &[u16],
-                   start: usize| {
-            let len = chunk.len();
-            let mut alphabet: HashMap<u16, u32> = HashMap::new();
-            for (index, unit) in chunk.iter().enumerate() {
-                *alphabet.entry(*unit).or_default() |= 1u32 << (len - index - 1);
-            }
-            chunks.push((chunk.to_vec(), alphabet, start));
-        };
-        let len = pattern.len();
-        if len > MAX_BITS {
-            let remainder = len % MAX_BITS;
-            let end = len - remainder;
-            let mut index = 0;
-            while index < end {
-                add(&mut chunks, &pattern[index..index + MAX_BITS], index);
-                index += MAX_BITS;
-            }
-            if remainder > 0 {
-                let start = len - MAX_BITS;
-                add(&mut chunks, &pattern[start..], start);
-            }
-        } else if len > 0 {
-            add(&mut chunks, &pattern, 0);
-        }
-        Self { pattern, chunks }
+/// Whether two words are at most one edit apart (one letter added, dropped, changed, or two
+/// neighbours swapped).
+fn within_one_edit(a: &[char], b: &[char]) -> bool {
+    if a == b {
+        return true;
     }
+    let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    if long.len() - short.len() > 1 {
+        return false;
+    }
+    let prefix = short.iter().zip(long).take_while(|(x, y)| x == y).count();
+    if short.len() == long.len() {
+        let rest = prefix + 1;
+        // One letter changed, or two neighbours swapped.
+        short[rest..] == long[rest..]
+            || (rest < short.len()
+                && short[prefix] == long[rest]
+                && short[rest] == long[prefix]
+                && short[rest + 1..] == long[rest + 1..])
+    } else {
+        // One letter dropped from the longer word.
+        short[prefix..] == long[prefix + 1..]
+    }
+}
 
-    /// `BitapSearch.searchIn(text).isMatch`.
-    fn matches(&self, text: &str) -> bool {
-        let text: Vec<u16> = text.to_lowercase().encode_utf16().collect();
-        if self.pattern == text {
+/// Whether query word `query` finds text word `word`: the word starts with it (so a word being
+/// typed already finds its settings), it is the plural of a name (`plural`: "spaces" finds the
+/// title "Go to Space 1"), or, for a long query word, the two (or the start of the word) are one
+/// typo apart.
+fn word_matches(query: &[char], word: &[char], plural: bool) -> bool {
+    if word.starts_with(query) {
+        return true;
+    }
+    if plural && query.len() > 3 && query.last() == Some(&'s') {
+        let singular = &query[..query.len() - 1];
+        if word == singular
+            || (singular.last() == Some(&'e') && word == &singular[..singular.len() - 1])
+        {
             return true;
         }
-        self.chunks
-            .iter()
-            .any(|(pattern, alphabet, start)| bitap_is_match(&text, pattern, alphabet, *start))
     }
+    if query.len() < MIN_TYPO_WORD_LEN || query.first() != word.first() {
+        return false;
+    }
+    (query.len() - 1..=query.len() + 1)
+        .filter(|len| *len <= word.len())
+        .any(|len| within_one_edit(query, &word[..len]))
 }
 
-fn index_of(text: &[u16], pattern: &[u16], from: usize) -> Option<usize> {
-    if pattern.is_empty() {
-        return (from <= text.len()).then_some(from);
-    }
-    if pattern.len() > text.len() {
-        return None;
-    }
-    (from..=text.len() - pattern.len())
-        .find(|&index| &text[index..index + pattern.len()] == pattern)
+/// A Settings search query, split into the words a text must hold to match.
+///
+/// CDXC:Settings 2026-11-15 DECISION:
+/// User: "searching for spaces shows a lot of sidebar pages that dont have spaces in the sidebar of
+/// settings pls fix". The search was a port of Fuse.js (Bitap, `threshold: 0.24`,
+/// `ignoreLocation`): it matched the query anywhere inside a text and forgave one typo in six
+/// letters, so "spaces" found "workspaces", "Monospace", "SpaceO", "Spacegray", "spacing" and
+/// every passing "a space", and also listed Interface, Chat, Auto Sleep, Editor, Integrations,
+/// Open In, Projects, Connectors, Dictation, Voice Agent and Updates. A text now matches when every
+/// query word finds one of its words: from the word's start, as the plural of a word in a name
+/// (not in a description), or (query words of `MIN_TYPO_WORD_LEN` letters and more) one typo
+/// away. The phone's copy of the old matcher
+/// (apps/mobile/app/src/screens/settings/search/fuzzyMatch.ts) is unchanged.
+struct SearchPattern {
+    words: Vec<Vec<char>>,
+    /// A query with no letters or digits ("+", "/") matches as plain text.
+    raw: String,
 }
 
-/// Fuse's `search()` with `ignoreLocation: true`, `findAllMatches: false`, `minMatchCharLength: 1`
-/// and `includeMatches: false`, reduced to its `isMatch`. With `ignoreLocation` a score is just
-/// `errors / patternLen`; everything else (the location window, the early exits) is kept as Fuse
-/// has it so the same texts match.
-fn bitap_is_match(
-    text: &[u16],
-    pattern: &[u16],
-    alphabet: &HashMap<u16, u32>,
-    location: usize,
-) -> bool {
-    let pattern_len = pattern.len();
-    let text_len = text.len();
-    let expected_location = location.min(text_len) as i64;
-    let score = |errors: usize| errors as f64 / pattern_len as f64;
-    let mut current_threshold = SEARCH_THRESHOLD;
-    let mut best_location = expected_location;
-    // Exact matches first: each one lowers the threshold to 0.
-    while let Some(index) = index_of(text, pattern, best_location.max(0) as usize) {
-        current_threshold = current_threshold.min(0.0);
-        best_location = (index + pattern_len) as i64;
+impl SearchPattern {
+    fn new(query: &str) -> Self {
+        Self {
+            words: words_of(query),
+            raw: query.to_lowercase(),
+        }
     }
-    best_location = -1;
-    let mut last_bit_arr: Vec<u32> = Vec::new();
-    let mut bin_max = (pattern_len + text_len) as i64;
-    let mask: u32 = 1u32 << (pattern_len - 1);
-    for errors in 0..pattern_len {
-        let mut bin_min: i64 = 0;
-        let mut bin_mid = bin_max;
-        while bin_min < bin_mid {
-            if score(errors) <= current_threshold {
-                bin_min = bin_mid;
-            } else {
-                bin_max = bin_mid;
-            }
-            bin_mid = ((bin_max - bin_min) as f64 / 2.0 + bin_min as f64).floor() as i64;
+
+    /// Whether `text` holds every query word. A plural query word finds its singular in a name
+    /// (a title, choice or search word), not in a description (`prose`), whose passing "a space"
+    /// or "empty space" is not about Spaces.
+    fn matches(&self, text: &str, prose: bool) -> bool {
+        if self.words.is_empty() {
+            return !self.raw.is_empty() && text.to_lowercase().contains(&self.raw);
         }
-        bin_max = bin_mid;
-        let mut start = (expected_location - bin_mid + 1).max(1);
-        let finish = (expected_location + bin_mid).min(text_len as i64) + pattern_len as i64;
-        let mut bit_arr: Vec<u32> = vec![0; (finish + 2).max(0) as usize];
-        if let Some(last) = bit_arr.get_mut((finish + 1) as usize) {
-            *last = (1u64 << errors).wrapping_sub(1) as u32;
-        }
-        let get = |array: &Vec<u32>, index: i64| -> u32 {
-            if index < 0 {
-                0
-            } else {
-                array.get(index as usize).copied().unwrap_or(0)
-            }
-        };
-        let mut j = finish;
-        while j >= start {
-            let current_location = j - 1;
-            let char_match = if current_location >= 0 {
-                text.get(current_location as usize)
-                    .and_then(|unit| alphabet.get(unit))
-                    .copied()
-                    .unwrap_or(0)
-            } else {
-                0
-            };
-            let mut value = ((get(&bit_arr, j + 1) << 1) | 1) & char_match;
-            if errors > 0 {
-                value |= ((get(&last_bit_arr, j + 1) | get(&last_bit_arr, j)) << 1)
-                    | 1
-                    | get(&last_bit_arr, j + 1);
-            }
-            bit_arr[j as usize] = value;
-            if value & mask != 0 {
-                let final_score = score(errors);
-                if final_score <= current_threshold {
-                    current_threshold = final_score;
-                    best_location = current_location;
-                    if best_location <= expected_location {
-                        break;
-                    }
-                    start = (2 * expected_location - best_location).max(1);
-                }
-            }
-            j -= 1;
-        }
-        if score(errors + 1) > current_threshold {
-            break;
-        }
-        last_bit_arr = bit_arr;
+        let text_words = words_of(text);
+        self.words.iter().all(|query| {
+            text_words
+                .iter()
+                .any(|word| word_matches(query, word, !prose))
+        })
     }
-    best_location >= 0
 }
 
 /// `SettingsSectionSearchResult`.
@@ -186,24 +132,24 @@ impl SectionSearch {
     }
 }
 
-fn fuse_item_matches(
-    pattern: &BitapPattern,
-    fields: &[&str],
+fn item_matches(
+    pattern: &SearchPattern,
+    title: &str,
+    subtitle: &str,
     options: &[String],
     keywords: &[String],
 ) -> bool {
-    fields
-        .iter()
-        .filter(|field| !js_trim(field).is_empty())
-        .any(|field| pattern.matches(field))
+    let name = |text: &&str| !js_trim(text).is_empty() && pattern.matches(text, false);
+    [title].iter().any(name)
+        || (!js_trim(subtitle).is_empty() && pattern.matches(subtitle, true))
         || keywords
             .iter()
-            .filter(|keyword| !js_trim(keyword).is_empty())
-            .any(|keyword| pattern.matches(keyword))
+            .map(String::as_str)
+            .any(|keyword| name(&keyword))
         || options
             .iter()
-            .filter(|option| !js_trim(option).is_empty())
-            .any(|option| pattern.matches(option))
+            .map(String::as_str)
+            .any(|option| name(&option))
 }
 
 /// `getSettingsSectionSearch(query, sectionTitle, settings)`.
@@ -221,8 +167,8 @@ pub(crate) fn section_search(
             visible_keys: rows.iter().map(|row| row.key.clone()).collect(),
         };
     }
-    let pattern = BitapPattern::new(trimmed);
-    let section_matches = fuse_item_matches(&pattern, &[section_title], &[], &[]);
+    let pattern = SearchPattern::new(trimmed);
+    let section_matches = item_matches(&pattern, section_title, "", &[], &[]);
     let visible_keys = rows
         .iter()
         .filter(|row| {
@@ -231,12 +177,7 @@ pub(crate) fn section_search(
                 .iter()
                 .flat_map(|option| [option.label.clone(), option.value.clone()])
                 .collect();
-            fuse_item_matches(
-                &pattern,
-                &[&row.title, &row.subtitle],
-                &options,
-                &row.keywords,
-            )
+            item_matches(&pattern, &row.title, &row.subtitle, &options, &row.keywords)
         })
         .map(|row| row.key.clone())
         .collect();
@@ -663,5 +604,52 @@ mod tests {
                 "{query}"
             );
         }
+    }
+
+    /// CDXC:Settings 2026-11-15: "spaces" lists only the pages that talk about Spaces, not the ones
+    /// holding "workspaces", "Monospace", "SpaceO", "Spacegray" or a passing "empty space".
+    #[test]
+    fn spaces_finds_only_the_pages_about_spaces() {
+        let general = GeneralSearch::new("spaces", Vec::new());
+        assert!(general.subsection_visible("spaces", true));
+        assert!(general.subsection_visible("sidebar", true));
+        for section in ["theming", "chat", "autoSleep", "terminal", "editor"] {
+            assert!(!general.subsection_visible(section, true), "{section}");
+        }
+        for tab in ["sync", "workspaces", "agents"] {
+            assert!(
+                extra_tab_search("spaces", tab, false, &[]).has_matches(),
+                "{tab}"
+            );
+        }
+        for tab in [
+            "integrations",
+            "openTargets",
+            "projects",
+            "connectors",
+            "dictation",
+            "voiceAgent",
+            "updates",
+        ] {
+            assert!(
+                !extra_tab_search("spaces", tab, false, &[]).has_matches(),
+                "{tab}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_word_matches_from_its_start_as_a_plural_name_or_one_typo_off() {
+        let finds = |query: &str, text: &str| SearchPattern::new(query).matches(text, false);
+        assert!(finds("notif", "Notifications"));
+        assert!(finds("notifcations", "Notifications"));
+        assert!(finds("spaces", "Go to Space 1"));
+        assert!(!SearchPattern::new("spaces").matches("empty sidebar space", true));
+        assert!(!finds("spaces", "Workspaces"));
+        assert!(!finds("spaces", "SpaceO"));
+        assert!(!finds("theme", "Show them there"));
+        assert!(finds("font family", "Font family for terminals"));
+        assert!(!finds("font zebra", "Font family for terminals"));
+        assert!(finds("+", "Cmd+K"));
     }
 }

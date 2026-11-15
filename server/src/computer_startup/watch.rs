@@ -22,10 +22,19 @@ pub(crate) fn find_sessions_to_resume_after_restart(
     server_id: &str,
 ) -> Vec<SessionToResume> {
     let restarted = note_this_boot(paths);
-    if !restarted || !ComputerStartupSettings::read(paths).resume_sessions {
+    let resume = restarted && ComputerStartupSettings::read(paths).resume_sessions;
+    let cut_off = find_sessions_to_resume(paths, server_id);
+    // CDXC:Coordinators 2026-11-14 DECISION in server/src/coordinators/stopped_by_restart.rs:
+    // coordinator threads cut off this way wait for Carry on, unless the switch carries them on.
+    if let Ok(db) = crate::storage::open_gxserver_database(paths) {
+        let repository = crate::domain::DomainRepository::new(&db, server_id);
+        let keys: Vec<_> = cut_off.iter().map(SessionToResume::key).collect();
+        crate::coordinators::note_restart(&repository, &keys, !resume);
+    }
+    if !resume {
         return Vec::new();
     }
-    find_sessions_to_resume(paths, server_id)
+    cut_off
 }
 
 pub(crate) fn start_computer_startup(state: Arc<AppState>, to_resume: Vec<SessionToResume>) {

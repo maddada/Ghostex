@@ -49,6 +49,13 @@ pub struct QuietViewSettings {
     /// The newest stretch shows open (`chatQuietViewExpandLast`, on since 2026-11-13).
     #[serde(default = "on")]
     pub expand_last: bool,
+    /// Calm Quiet View (`chatQuietViewCalm`, Experience's Chill): the running turn stays one shut
+    /// line that counts its time, and every line names only its reports.
+    ///
+    /// CDXC:Experience 2026-11-15 DECISION:
+    /// User, Q3280 B: "Chill folds Quiet View further": the newest turn stays as one line ("Working · 1m 12s") and lines name only reports; tool calls and messages sent stay inside the line, which opens on a click as before. A line with no reports keeps its time ("Worked for 2m 5s") or says Worked. Regular and Advanced do not change. The running line publishes `startedAt` and the renderers count up, since a line's words are only rebuilt when its rows change.
+    #[serde(default)]
+    pub calm: bool,
 }
 
 fn on() -> bool {
@@ -61,6 +68,7 @@ impl Default for QuietViewSettings {
             coordinators: true,
             chats: true,
             expand_last: true,
+            calm: false,
         }
     }
 }
@@ -231,6 +239,10 @@ pub struct QuietStretch {
     /// The turn still runs: the line counts up.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub running: bool,
+    /// Calm Quiet View's running line: when the turn began (ms since the epoch); the renderers
+    /// draw "Working · 1m 12s" from it, counting up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<i64>,
     /// The line starts open (`chatQuietViewExpandLast`, the newest stretch).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub open: bool,
@@ -466,6 +478,7 @@ pub fn apply_from_read(
         coordinators: settings.coordinators.unwrap_or(defaults.coordinators),
         chats: settings.chats.unwrap_or(defaults.chats),
         expand_last: settings.expand_last.unwrap_or(defaults.expand_last),
+        calm: settings.calm.unwrap_or(defaults.calm),
     };
     if state.transcript_view.quiet_view_settings != Some(next) {
         apply_settings(state, next);
@@ -482,6 +495,32 @@ pub fn apply_settings(state: &mut ChatState, settings: QuietViewSettings) {
         state.transcript_view.invalidate();
     }
     sync(state);
+}
+
+/// Settings > Chat > Calm Quiet View ([`QuietViewSettings::calm`]).
+fn calm(state: &ChatState) -> bool {
+    state
+        .transcript_view
+        .quiet_view_settings
+        .is_some_and(|settings| settings.calm)
+}
+
+/// When the running turn began: the Working lifecycle's own stamp, else when this client began
+/// watching it (the same two `session/working.rs` `quiet_finished_before` reads).
+fn working_since(state: &ChatState) -> Option<i64> {
+    if !crate::transcript::foreign::is_working(state) {
+        return None;
+    }
+    state
+        .session
+        .lifecycle
+        .as_ref()
+        .filter(|lifecycle| lifecycle.state == ghostex_gx_protocol::TurnLifecycleState::Working)
+        .and_then(|lifecycle| lifecycle.timestamp)
+        .or(state
+            .session
+            .working_started_at_ms
+            .map(|at| at.round() as i64))
 }
 
 /// Settings > Chat > Expand the last turn in Quiet View.
@@ -627,6 +666,8 @@ pub fn document_kept(
                 .transcript_view
                 .quiet_view_settings
                 .is_some_and(|settings| settings.expand_last),
+            calm: calm(state),
+            working_since: working_since(state),
             all_open: detailed(state),
             approvals: open_approval_anchors(approvals),
             cards: turn_lines(work_cards),
@@ -674,6 +715,10 @@ struct Inputs {
     coordinator: bool,
     working: bool,
     expand_last: bool,
+    /// Calm Quiet View ([`QuietViewSettings::calm`]).
+    calm: bool,
+    /// When the running turn began, for Calm Quiet View's counting line ([`working_since`]).
+    working_since: Option<i64>,
     /// Detailed view: every line and answers card starts open ([`detailed`]).
     all_open: bool,
     /// The rows an open relayed approval sits under (`relayedApprovals` `anchorId`).
@@ -1104,7 +1149,9 @@ fn stretches<'a>(
         .into_iter()
         .enumerate()
         .map(|(at, (mut line, counts))| {
-            line.open = inputs.all_open || (inputs.expand_last && Some(at) == newest);
+            // Calm Quiet View keeps the running turn shut, whatever Expand the last turn says.
+            line.open = inputs.all_open
+                || (inputs.expand_last && Some(at) == newest && !(inputs.calm && line.running));
             let names_time = !line.running && counts.reports == 0 && counts.worked.is_some();
             turn_looks(&mut line, &turn_rows, names_time);
             words(&mut line, counts, inputs, context);
@@ -1140,6 +1187,8 @@ pub(crate) fn summary_work_lines(
         coordinator,
         working,
         expand_last,
+        calm: false,
+        working_since: None,
         all_open: false,
         approvals: BTreeSet::new(),
         cards: Vec::new(),
@@ -1248,6 +1297,8 @@ fn words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs, context: &Cha
 /// The line's words: what it holds, in counts.
 fn count_words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs) {
     let tools = counts.tools + counts.held.iter().map(|(_, calls)| calls).sum::<usize>();
+    // Calm Quiet View names only reports: the rest stays inside the line.
+    let tools = if inputs.calm { 0 } else { tools };
     let mut parts: Vec<String> = Vec::new();
     if counts.reports > 0 {
         parts.push(if inputs.coordinator {
@@ -1256,16 +1307,16 @@ fn count_words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs) {
             plural(counts.reports, "message received", "messages received")
         });
     }
-    if counts.sent > 0 {
+    if counts.sent > 0 && !inputs.calm {
         parts.push(plural(counts.sent, "message sent", "messages sent"));
     }
     if tools > 0 {
         parts.push(plural(tools, "tool call", "tool calls"));
     }
-    if !counts.files.is_empty() {
+    if !counts.files.is_empty() && !inputs.calm {
         parts.push(plural(counts.files.len(), "file edited", "files edited"));
     }
-    if !line.cards.is_empty() {
+    if !line.cards.is_empty() && !inputs.calm {
         parts.push(plural(line.cards.len(), "item updated", "items updated"));
     }
     let joined = parts.join(" \u{b7} ");
@@ -1287,7 +1338,13 @@ fn count_words(line: &mut QuietStretch, counts: Counts, inputs: &Inputs) {
     } else {
         "Worked".to_string()
     };
-    line.text = if line.running {
+    if inputs.calm && line.running {
+        line.started_at = inputs.working_since;
+    }
+    line.text = if line.running && inputs.calm {
+        // "Working · 1m 12s": the renderers add the time from `started_at`.
+        "Working".to_string()
+    } else if line.running {
         if joined.is_empty() {
             "Working".to_string()
         } else {
@@ -1357,6 +1414,8 @@ pub fn closed_rows(
             .transcript_view
             .quiet_view_settings
             .is_some_and(|settings| settings.expand_last),
+        calm: calm(state),
+        working_since: working_since(state),
         all_open: detailed(state),
         approvals: open_approval_anchors(&approvals),
         cards: Vec::new(),

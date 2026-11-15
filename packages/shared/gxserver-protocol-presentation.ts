@@ -502,7 +502,7 @@ export interface GxserverPresentationSession {
   awaitingApproval?: boolean;
   /** Since when a session has shown no progress (the not-moving red dot); absent when not stuck. */
   stuckSince?: string;
-  /** `autopilot` while Autopilot heals the stuck session, so its red dot does not alert yet. */
+  /** `autopilot` while Autopilot heals the stuck session, or `coordinator` for a coordinator's thread its coordinator heals, so its red dot does not alert yet. */
   stuckHandledBy?: string;
   /** Since when the session is blocked (out of usage on every account, an error recovery could not get past): the red dot. */
   blockedSince?: string;

@@ -631,6 +631,15 @@ pub(crate) async fn handle_read_session_chat_http(
             "chatSendOnPick"
         )),
     );
+    // Varied thinking words rides every read too, so the phone's working strip says Thinking or the
+    // stint's word as the computer does (gx-chat-core `extras/working_strip.rs`).
+    result.insert(
+        "variedWorkingWords".to_string(),
+        json!(crate::session_chat_catch_up::chat_setting_enabled(
+            &state.paths,
+            "chatVariedWorkingWords"
+        )),
+    );
     // The phone reads the computer's answer delivery choice from this optional field; older
     // clients ignore it, and an older daemon leaves the core's default (normal send) in place.
     result.insert(
@@ -718,6 +727,8 @@ pub(crate) async fn handle_read_session_chat_http(
             coordinators: quiet_switch("chatQuietViewCoordinators", true),
             chats: quiet_switch("chatQuietViewChats", true),
             expand_last: quiet_switch("chatQuietViewExpandLast", true),
+            // Calm Quiet View (Settings > Experience's Chill); an older phone's core ignores it.
+            calm: quiet_switch("chatQuietViewCalm", false),
         }),
     );
     // The desktop's status line pins ride every read too, so the phone draws the line this
@@ -1011,7 +1022,8 @@ pub(crate) async fn handle_read_session_chat_http(
                         .get_session(&project_id, &session_id)
                         .ok()??;
                     crate::memory_guard::card_from_record(&session)
-                });
+                })
+                .or_else(|| crate::coordinators::stopped_threads_card(&project_id, &session_id));
         if let Some(notice) = stopped_card {
             result.insert("terminalNotice".to_string(), notice.to_value());
         }

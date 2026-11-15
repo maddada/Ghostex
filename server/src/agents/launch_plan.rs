@@ -1155,6 +1155,7 @@ pub(crate) fn resolve_agent_launch_command(
         icon,
         accept_all_mode == Some("disabled"),
     );
+    let command = super::mode_picker_off::with_auto_mode(agent_id, icon, enabled, &command);
     let command = with_codex_no_daemon(agent_id, icon, &command);
     let command = with_launch_notes(agent_id, icon, &command);
     let command = crate::connectors::with_connector_tools(agent_id, icon, &command);

@@ -116,11 +116,13 @@ impl<'a> FoldedCards<'a> {
 /// Each tail part with the space above it. The heading is a one-line card unless `above_is_card`
 /// says otherwise, so a stack of cards right under it (or under another stack) sits a row gap away
 /// (`SINGLE_LINE_CARD.gap_above`); `first_text_gap`, when given, is the space above a first part
-/// that is not a card (a quiet line's 2px, quiet_work.rs).
+/// that is not a card (a quiet line's 2px, quiet_work.rs). `stack_gap` is the space between two
+/// cards (`NativeChatView::card_stack_gap`: the rail's on an opened Quiet View line).
 pub(super) fn spaced_tail(
     parts: Vec<(AnyElement, bool)>,
     mut above_is_card: bool,
     first_text_gap: Option<f32>,
+    stack_gap: f32,
     p: &ChatAppearance,
 ) -> Vec<(AnyElement, f32)> {
     let mut first = true;
@@ -129,7 +131,8 @@ pub(super) fn spaced_tail(
         .map(|(part, is_card)| {
             let gap = match first_text_gap {
                 Some(gap) if first && !is_card => gap,
-                _ => SINGLE_LINE_CARD.gap_above(above_is_card, is_card, part_gap(p), p),
+                _ if above_is_card && is_card => stack_gap,
+                _ => part_gap(p),
             };
             first = false;
             above_is_card = is_card;
@@ -236,7 +239,7 @@ impl NativeChatView {
             window,
             cx,
         );
-        let tail = spaced_tail(tail, log.is_none(), None, p);
+        let tail = spaced_tail(tail, log.is_none(), None, self.card_stack_gap(p), p);
         self.hide_file_changes = false;
 
         let Some(frame) = motion else {
@@ -284,7 +287,10 @@ impl NativeChatView {
         let tail = self.work_tail_parts(tail, p, window, cx);
         self.hide_file_changes = false;
         let opens = parts.is_empty();
-        for (at, (part, gap)) in spaced_tail(tail, false, None, p).into_iter().enumerate() {
+        for (at, (part, gap)) in spaced_tail(tail, false, None, self.card_stack_gap(p), p)
+            .into_iter()
+            .enumerate()
+        {
             parts.push((part, if opens && at == 0 { 0.0 } else { gap }));
         }
         div()
@@ -352,7 +358,7 @@ impl NativeChatView {
             let row = self.message_row(message, p, window, cx);
             let card_first = message["toolCard"].is_object()
                 && super::transcript::text(message, "text").trim().is_empty();
-            let extra = SINGLE_LINE_CARD.gap_above(card_above, card_first, LOG_GAP, p) - LOG_GAP;
+            let extra = self.card_gap_above(card_above, card_first, LOG_GAP, p) - LOG_GAP;
             log.push(if extra > 0.0 {
                 div().mt(px(extra * s)).child(row).into_any_element()
             } else {
@@ -368,8 +374,8 @@ impl NativeChatView {
                 message["toolCard"].is_object()
                     && super::transcript::text(message, "text").trim().is_empty()
             });
-        let log_extra = SINGLE_LINE_CARD.gap_above(cards_above, log_opens_on_card, part_gap(p), p)
-            - part_gap(p);
+        let log_extra =
+            self.card_gap_above(cards_above, log_opens_on_card, part_gap(p), p) - part_gap(p);
         if !log.is_empty() {
             parts.push(
                 div()
@@ -417,7 +423,7 @@ impl NativeChatView {
                     let gap = if std::mem::take(&mut first) {
                         0.0
                     } else {
-                        SINGLE_LINE_CARD.gap_above(true, true, PART_GAP, p)
+                        self.card_stack_gap(p)
                     };
                     div().pt(px(gap * s)).child(part)
                 }))

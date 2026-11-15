@@ -1235,7 +1235,7 @@ fn markdown_view(p: &SettingsPalette, id: SharedString, markdown: String) -> Any
 
 /// The chat Markdown metrics (`.ghostex-chat-markdown`, shared through
 /// packages/gx-chat-core/visual/markdown-visual.json) at the Settings type weight: headings
-/// 20/18/16px on a 1.3 line with 20px above and 8px below, 10.4px between blocks, the 20px list
+/// 22/19/17px on a 1.3 line with 20px above and 8px below, 10.4px between blocks, the 20px list
 /// gutter with 4px between items, and inline code as a small bordered chip. Strong text is 500, not
 /// bold: `.ghostex-settings-shadcn.ghostex-settings-shadcn :is(b, strong) { font-weight: 500 }` in
 /// packages/core-ui/styles.css (deleted 2026-11-06).
@@ -1265,7 +1265,7 @@ fn markdown_style(p: &SettingsPalette) -> gpui_component::text::TextViewStyle {
                 visual.heading_font_sizes,
             )
         })
-        .unwrap_or((10.4, 20.0, 1.3, [20.0, 18.0, 16.0, 14.0, 14.0, 14.0]));
+        .unwrap_or((10.4, 20.0, 1.3, [22.0, 19.0, 17.0, 15.5, 14.0, 14.0]));
     let mut style = gpui_component::text::TextViewStyle::default()
         .paragraph_gap(rems(gap / 16.0))
         .heading_font_size(move |level, base| base * sizes[(level.clamp(1, 6) - 1) as usize] / 14.0)

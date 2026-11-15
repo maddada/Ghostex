@@ -149,21 +149,70 @@ impl GhostexGpuiApp {
         let systems = self.remote_machine_systems();
         tabs.iter()
             .map(|tab| {
-                let local = tab.machine_id == LOCAL_MACHINE_ID;
-                let (picked, default) =
-                    Self::computer_icon_choice(&tab.machine_id, settings.object(), &systems);
-                let name = if local {
+                let name = if tab.machine_id == LOCAL_MACHINE_ID {
                     crate::host_name::local_computer_name()
                 } else {
                     tab.label.clone()
                 };
-                let asset = picked
-                    .as_deref()
-                    .and_then(ghostex_gx_core::computer_icons::computer_icon)
-                    .map_or(default, |icon| icon.asset);
+                let asset = Self::computer_asset(&tab.machine_id, settings.object(), &systems);
                 (tab.machine_id.clone(), ComputerMark { asset, name })
             })
             .collect()
+    }
+
+    /// The drawing a computer wears: the icon picked for it, else its system's logo.
+    fn computer_asset(
+        machine_id: &str,
+        settings: &serde_json::Map<String, Value>,
+        systems: &HashMap<String, &'static str>,
+    ) -> &'static str {
+        let (picked, default) = Self::computer_icon_choice(machine_id, settings, systems);
+        picked
+            .as_deref()
+            .and_then(ghostex_gx_core::computer_icons::computer_icon)
+            .map_or(default, |icon| icon.asset)
+    }
+
+    /// The mark of the computer a Browser page loads from, whatever the sidebar lists: `None` is
+    /// this computer (its real name), a Cloud Box wears the cloud, any other computer its mark.
+    ///
+    /// CDXC:Browser 2026-11-15 DECISION:
+    /// User: "please just show the icon of the machine here, don't show this text. tooltip should
+    /// say the machine's name". The address bar's route control draws this and nothing else.
+    pub(crate) fn browser_source_mark(&self, machine_id: Option<&str>) -> ComputerMark {
+        let machine_id = machine_id.unwrap_or(LOCAL_MACHINE_ID);
+        if machine_id == LOCAL_MACHINE_ID {
+            let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+            let systems = self.remote_machine_systems();
+            return ComputerMark {
+                asset: Self::computer_asset(machine_id, settings.object(), &systems),
+                name: crate::host_name::local_computer_name(),
+            };
+        }
+        if let Some(box_id) =
+            ghostex_gx_core::protocol::cloud_box::cloud_box_id_from_machine_id(machine_id)
+        {
+            let name = self
+                .gx_store
+                .core
+                .cloud_boxes()
+                .iter()
+                .find(|cloud_box| cloud_box.box_id == box_id)
+                .map(|cloud_box| cloud_box.name.trim().to_string())
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| "Cloud Box".to_string());
+            return ComputerMark {
+                asset: "titlebar/cloud.svg",
+                name,
+            };
+        }
+        let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+        let systems = self.remote_machine_systems();
+        ComputerMark {
+            asset: Self::computer_asset(machine_id, settings.object(), &systems),
+            name: crate::app::helpers::gpui_remote_machine_name_from_settings(machine_id)
+                .unwrap_or_else(|| "Remote computer".to_string()),
+        }
     }
 
     /// Reads the icon of this computer and of every connected computer not read since its client

@@ -12,7 +12,8 @@
 //! daemon runs from an APFS clone of the app made once per installed zmx in
 //! `<data>/session-hosts.noindex/`, and a clone stays until no process runs from it. A clone
 //! shares the app's disk blocks until the app is replaced. When the clone can't be made (the app
-//! is on another volume than the data folder, or not on APFS) daemons run from the app as before.
+//! is on another volume than the data folder, or not on APFS), or macOS won't run zmx from it
+//! (`SessionHostPlan::runs`), daemons run from the app as before.
 //! Sessions started by a build without this keep running from the app the update deletes.
 //! `.noindex` keeps Spotlight, and through it Launch Services, from listing the copies as apps.
 //! SEE-ALSO: `remove_leftover_releases` in server/src/setup.rs (the same rule for the release
@@ -29,10 +30,11 @@ pub(crate) fn session_daemon_zmx(zmx: GxserverResolvedTool) -> GxserverResolvedT
         return zmx;
     };
     match plan.ensure() {
-        Ok(executable) => GxserverResolvedTool {
+        Ok(executable) if plan.runs(&executable) => GxserverResolvedTool {
             executable_path: executable.to_string_lossy().into_owned(),
             ..zmx
         },
+        Ok(_) => zmx,
         Err(error) => {
             eprintln!(
                 "[gxserver] session daemons run from {} because its copy could not be made: {error}",
@@ -74,15 +76,25 @@ pub(crate) fn remove_unused_session_hosts() {}
 #[cfg(target_os = "macos")]
 mod macos {
     use std::{
+        collections::HashMap,
         ffi::CString,
         fs, io,
         os::unix::{ffi::OsStrExt, fs::MetadataExt},
         path::{Path, PathBuf},
-        sync::Mutex,
+        process::{Command, Stdio},
+        sync::{LazyLock, Mutex},
+        thread,
+        time::{Duration, Instant},
     };
 
     /// Serialises clone creation, so two sessions starting together make one copy.
     static CLONE_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Whether each clone's zmx runs, by clone key; sessions starting together wait for one check.
+    static RUN_CHECKS: LazyLock<Mutex<HashMap<String, bool>>> = LazyLock::new(Default::default);
+
+    /// A working zmx prints its version in milliseconds; one macOS holds never starts.
+    const RUN_CHECK_TIMEOUT: Duration = Duration::from_secs(3);
 
     pub(super) fn hosts_root() -> PathBuf {
         crate::paths::get_gxserver_paths(None)
@@ -187,6 +199,49 @@ mod macos {
                 &crate::setup::running_executable_paths(),
             );
             Ok(host_zmx)
+        }
+
+        /// CDXC:Zmx 2026-11-14 WHY: macOS can refuse to run zmx from the clone while it runs the same bytes from the app: on 2026-11-14 a source build signed with an Apple Development certificate (not notarized) ran from /Applications, but from the clone the kernel logged "ASP: Security policy would not allow process" and the process waited in dyld forever, so every new session's launchd job hung, never registered, and the app showed "Couldn't open this terminal". Only running it tells, so the clone's `zmx version` must finish once per installed zmx before daemons run from it; one that macOS holds is killed and daemons run from the app as before this clone existed.
+        pub(super) fn runs(&self, host_zmx: &Path) -> bool {
+            let mut verdicts = RUN_CHECKS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *verdicts.entry(self.key.clone()).or_insert_with(|| {
+                let runs = runs_within(host_zmx, RUN_CHECK_TIMEOUT);
+                if !runs {
+                    eprintln!(
+                        "[gxserver] session daemons run from {} because macOS did not let its copy's zmx run within {} s",
+                        self.app.display(),
+                        RUN_CHECK_TIMEOUT.as_secs()
+                    );
+                }
+                runs
+            })
+        }
+    }
+
+    /// Whether `zmx version` from this executable exits successfully in time; a run still waiting is killed.
+    fn runs_within(zmx: &Path, timeout: Duration) -> bool {
+        let Ok(mut child) = Command::new(zmx)
+            .arg("version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            return false;
+        };
+        let deadline = Instant::now() + timeout;
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return status.success(),
+                Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+            }
         }
     }
 

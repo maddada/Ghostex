@@ -53,6 +53,16 @@
 //! an ask that holds the work. That turn alerts once, like any session's, under Alert me for.
 //! Supersedes the 2026-11-08 and 2026-11-13 rules above that a plain finished coordinator turn never
 //! alerts.
+//!
+//! CDXC:Notifications 2026-11-14 DECISION:
+//! User: "lets pls not show notifications on done for workers". A coordinator's thread (a worker)
+//! now reports everything that is its coordinator's to handle there: its finished turn leaves no
+//! row or dot, and its question card, a message stuck on its input box, a stall, an error and a
+//! memory-guard stop alert nobody, unless Settings > Notifications > Workers brings them back
+//! (Silent: rows; Sound: gxserver stamps it as any session). An approval, every account out of
+//! usage and a sign-in that stopped working still alert. gxserver applies it
+//! (server/src/worker_alerts.rs); clients read its stamps (`attention.alerts`, `stuckHandledBy`,
+//! `blockedAlertedBy` `coordinator`), so this rule's fallback for an older daemon is unchanged.
 //! SEE-ALSO: server/src/presentation/attention_alerts.rs (the stamps), server/src/notification_feed/producer.rs
 //! (rows and pushes), apps/desktop/src/app/gx_store/attention/host.rs (sound and banner),
 //! apps/mobile/app/src/notifications/attentionAlerts.ts (the phone).

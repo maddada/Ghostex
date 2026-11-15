@@ -3,6 +3,122 @@
   "generatedBy": "packages/settings-catalog",
   "settings": [
     {
+      "key": "experiencePreset",
+      "title": "Experience",
+      "subtitle": "How many buttons and details Ghostex shows. Chill: a simple chat box and a calm chat. Regular: pick the model, the mode and the effort as you chat. Advanced: for people who use terminals more. Each area below follows it; change one and it says Custom.",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
+      "key": "experienceChatBox",
+      "title": "Chat box",
+      "subtitle": "Chill: the field, the model, the effort, •••, attach, the mic and Send. Regular adds the mode and Maximize; the terminal is in •••. Advanced adds the terminal button and the context ring.",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
+      "key": "experienceChat",
+      "title": "Chat",
+      "subtitle": "Chill: Quiet View keeps the running turn as one line with its time and names only reports. Regular and Advanced: Quiet View with the last turn open.",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
+      "key": "experienceSessionsList",
+      "title": "Sessions list",
+      "subtitle": "Chill is the Sidebar's Minimal preset (no project icons, times or git numbers), Regular its Recommended, Advanced its Detailed (with last-active times).",
+      "tab": "experience",
+      "tabTitle": "Experience",
+      "section": "experience",
+      "sectionTitle": "Experience",
+      "type": "ui",
+      "options": [
+        {
+          "label": "Chill",
+          "value": "chill"
+        },
+        {
+          "label": "Regular",
+          "value": "regular"
+        },
+        {
+          "label": "Advanced",
+          "value": "advanced"
+        },
+        {
+          "label": "Custom",
+          "value": "custom"
+        }
+      ],
+      "agentWritable": false
+    },
+    {
       "key": "preferredAgentInterface",
       "title": "Default view for compatible agents",
       "subtitle": "Automatically switch to chat as soon as Ghostex detects that an agent session supports it.",
@@ -200,6 +316,32 @@
       "agentWritable": true
     },
     {
+      "key": "chatQuietViewCalm",
+      "title": "Calm Quiet View",
+      "subtitle": "Keep the turn that is running as one line that counts its time (Working · 1m 12s), and have each line name only its reports; open a line to see the tool calls and messages sent inside it. Experience's Chill turns it on.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatVariedWorkingWords",
+      "title": "Varied thinking words",
+      "subtitle": "While the agent works, show a different playful word each turn (Pondering, Brewing and the like) instead of Thinking.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatDetailedView",
       "title": "Default to Detailed view",
       "subtitle": "New chats open in Detailed view: Quiet View with every line open, so all the work between replies shows. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
@@ -209,6 +351,58 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerModePicker",
+      "title": "Mode in the chat box",
+      "subtitle": "Show the mode picker (Auto, Plan, Bypass permissions and the like) in the chat box. Off, sessions run in Auto, or in Bypass permissions while Skip permissions is on. The phone has its own switch.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerTerminalButton",
+      "title": "Terminal button in the chat box",
+      "subtitle": "Show the Terminal View button in the chat box. Off, Terminal View is in the ••• menu, and the ••• button turns red with the reason when the terminal has a problem.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerContextRing",
+      "title": "Context ring in the chat box",
+      "subtitle": "Show how full the agent's context is as a ring in the chat box. Off, it stays in ••• › More › Context window.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerMaximize",
+      "title": "Maximize button in the chat box",
+      "subtitle": "Show the button that makes the chat box fill the chat.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
       "advanced": true,
       "agentWritable": true
     },
@@ -860,6 +1054,19 @@
       "agentWritable": true
     },
     {
+      "key": "sidebarHideDisconnectedMachines",
+      "title": "Hide sessions and projects from computers that aren't connected",
+      "subtitle": "Leave a computer that isn't connected out of the Project sidebar: its sessions leave every project, and a project only it has is hidden. They come back when it reconnects. Off: its last sessions stay, faded. The Unified sidebar always leaves it out. The phone follows this. Shown while Separate by machine is off.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "pinnedSessionOrder",
       "title": "Pinned order",
       "subtitle": "Keep pinned sessions in the order you drag them into, or put the pinned session that came back to you last (started, sent a message, or finished a turn) first. With Most recently updated, pinned sessions can't be dragged to rearrange them. Applies to both sidebars and the phone. Also in the sidebar's Sort & Filter menu.",
@@ -1229,6 +1436,19 @@
       "sectionTitle": "Session Cards",
       "type": "boolean",
       "default": true,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "sessionsBoldCoordinatorTitle",
+      "title": "Bold coordinator title",
+      "subtitle": "Draw each coordinator's title in bold in the sidebar. Off, a coordinator stands apart from its threads by its crown, its brighter title and its threads' dimmer titles.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sessionCards",
+      "sectionTitle": "Session Cards",
+      "type": "boolean",
+      "default": false,
       "advanced": true,
       "agentWritable": true
     },
@@ -2311,7 +2531,7 @@
     {
       "key": "attentionAlertsFor",
       "title": "Alert me for",
-      "subtitle": "A coordinator's threads finishing, and a coordinator that only finished, stay quiet under both choices, and a red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever any other agent finishes; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. The bell keeps every row either way.",
+      "subtitle": "A red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever an agent finishes, and for a coordinator only once none of its workers is still working; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. Workers follow the Workers setting instead. The bell keeps a row either way.",
       "tab": "notifications",
       "tabTitle": "Notifications",
       "section": "sounds",
@@ -2326,6 +2546,32 @@
         {
           "label": "Needs you only",
           "value": "needsYou"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "workerNotifications",
+      "title": "Workers",
+      "subtitle": "How a coordinator's workers reach you. Off: when they finish, ask a question, can't take a message, stop moving or hit an error, their coordinator is told and you see only their dot. Silent: they also show in the bell, without the sound or system notification. Sound: they alert like any other agent. An approval, every account out of usage and a sign-in that stopped working always reach you.",
+      "tab": "notifications",
+      "tabTitle": "Notifications",
+      "section": "sounds",
+      "sectionTitle": "Sounds",
+      "type": "enum",
+      "default": "off",
+      "options": [
+        {
+          "label": "Off",
+          "value": "off"
+        },
+        {
+          "label": "Silent",
+          "value": "silent"
+        },
+        {
+          "label": "Sound",
+          "value": "sound"
         }
       ],
       "agentWritable": true
@@ -9855,8 +10101,8 @@
     },
     {
       "key": "claudeIdleCompactAbove",
-      "title": "Only above",
-      "subtitle": "Compact only chats whose context is at least this size. Claude Code's default is 200K. Shown while Compact idle chats is on.",
+      "title": "Compact chats above",
+      "subtitle": "The size at and above which Claude Code compacts an idle chat, and Ghostex compacts any session before carrying it on after a restart or a usage-limit reset. Claude Code's default is 200K.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "agentList",
@@ -9885,6 +10131,18 @@
           "value": "500000"
         }
       ],
+      "agentWritable": true
+    },
+    {
+      "key": "compactWorkersBeforeReturn",
+      "title": "Compact workers before a coordinator returns to them",
+      "subtitle": "When a coordinator messages one of its workers after the worker sat idle longer than its prompt cache lasts (5 minutes or 1 hour for Claude, about a day for Codex), Ghostex compacts a worker at or above Compact chats above first, then hands it the message, to save tokens. Messages you type are never held.",
+      "tab": "agents",
+      "tabTitle": "Agents",
+      "section": "agentList",
+      "sectionTitle": "Agents",
+      "type": "boolean",
+      "default": true,
       "agentWritable": true
     },
     {

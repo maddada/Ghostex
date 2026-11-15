@@ -455,7 +455,8 @@ impl NativeChatView {
             )
             .when(
                 self.snapshot["contextMeter"].is_object()
-                    && self.snapshot["composerOverflow"]["optionsOverflowed"] != true,
+                    && self.snapshot["composerOverflow"]["optionsOverflowed"] != true
+                    && self.snapshot["composerRow"]["hideContextRing"] != true,
                 |item| item.child(self.render_context_meter(appearance, cx)),
             )
             .into_any_element()

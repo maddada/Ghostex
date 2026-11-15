@@ -485,7 +485,8 @@ impl NativeChatView {
                         LINE_TO_REPLY
                     };
                     let mut first = true;
-                    for (part, above) in spaced_tail(drawn, false, None, p) {
+                    for (part, above) in spaced_tail(drawn, false, None, self.card_stack_gap(p), p)
+                    {
                         let above = if std::mem::take(&mut first) {
                             gap
                         } else {
@@ -565,6 +566,35 @@ impl NativeChatView {
         self.quiet_boxed && !self.in_work_fold && !self.quiet_steps
     }
 
+    /// The space between two one-line cards drawn now: the rail's `RAIL_ROW_GAP` in an opened
+    /// Quiet View line's rows, the transcript's (`SINGLE_LINE_CARD.stack_gap`) elsewhere.
+    ///
+    /// CDXC:SessionChat 2026-11-15 WHY: a row's "1 tool call" card with its "Message to" card under it sat a row gap apart on the rail while every other card there sat 8px apart (the user's red arrow: "make the spacing even"); the 2026-11-12 decision on `RAIL_ROW_GAP` covers the cards inside one row too.
+    pub(super) fn card_stack_gap(&self, p: &ChatAppearance) -> f32 {
+        if self.quiet_boxed {
+            RAIL_ROW_GAP
+        } else {
+            super::cards::SINGLE_LINE_CARD.stack_gap(p)
+        }
+    }
+
+    /// `SINGLE_LINE_CARD.gap_above` with `card_stack_gap` between two cards: the space above a
+    /// part, the rail's gap when it and the part above it are both one-line cards on an opened
+    /// Quiet View line.
+    pub(super) fn card_gap_above(
+        &self,
+        above_is_card: bool,
+        is_card: bool,
+        gap: f32,
+        p: &ChatAppearance,
+    ) -> f32 {
+        if above_is_card && is_card {
+            self.card_stack_gap(p)
+        } else {
+            gap
+        }
+    }
+
     /// The work item lines a line holds, as the dock's card JSON.
     /// Borrowed from the snapshot, as every work card stack takes its cards (work_cards.rs).
     fn quiet_cards(&self, line: &QuietStretch) -> Vec<&Value> {
@@ -618,7 +648,13 @@ impl NativeChatView {
         } else {
             &line.text
         };
-        let mut segments: Vec<QuietSegment> = vec![(text.clone(), None)];
+        // Calm Quiet View's running line counts its time, "Working · 1m 12s" (gx-chat-core
+        // `quiet_view.rs`, CDXC:Experience 2026-11-15); the phone counts the same way.
+        let text = match line.started_at.filter(|_| line.running && !open) {
+            Some(start) => format!("{text} \u{b7} {}", self.quiet_clock(start, cx)),
+            None => text.clone(),
+        };
+        let mut segments: Vec<QuietSegment> = vec![(text, None)];
         if !line.time.is_empty() {
             segments.push((format!("\u{2002}{}", line.time), None));
         }
@@ -706,5 +742,29 @@ impl NativeChatView {
             p,
             cx,
         )
+    }
+}
+
+impl NativeChatView {
+    /// How long Calm Quiet View's running line has run ("12s", "1m 12s"), redrawn each second
+    /// through the tool cards' clock (`live_time` in tool_card.rs).
+    fn quiet_clock(&self, started_at: i64, cx: &Context<Self>) -> String {
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|since| since.as_millis() as i64)
+            .unwrap_or(started_at);
+        let ran = (now - started_at).max(0);
+        if !self.tool_clock_tick.replace(true) {
+            let wait = std::time::Duration::from_millis((1_000 - ran % 1_000).max(50) as u64);
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(wait).await;
+                let _ = this.update(cx, |this, cx| {
+                    this.tool_clock_tick.set(false);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+        ghostex_gx_chat_core::extras::activity::format_activity_elapsed(ran as f64 / 1_000.0)
     }
 }

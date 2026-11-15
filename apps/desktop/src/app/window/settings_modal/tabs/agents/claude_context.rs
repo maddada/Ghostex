@@ -1,5 +1,6 @@
 //! The Context group of Claude Code's row panel in Settings > Agents: Compact idle chats before the
-//! prompt cache expires, Only above (shown while that switch is on) and Use a 1-hour prompt cache.
+//! prompt cache expires, Compact chats above (also the size Ghostex compacts at before carrying a
+//! session on) and Use a 1-hour prompt cache.
 //! gxserver hands them to each Claude launch and resume (server/src/agents/claude_idle_compaction.rs,
 //! where the user's decision is).
 //!
@@ -16,6 +17,8 @@ use serde_json::json;
 const IDLE_COMPACTION: &str = "claudeIdleCompaction";
 const MIN_TOKENS: &str = "claudeIdleCompactAbove";
 const ONE_HOUR_CACHE: &str = "claudeOneHourPromptCache";
+/// CDXC:Coordinators 2026-11-15 DECISION in server/src/carry_on_compaction.rs: on by default.
+const COMPACT_WORKERS: &str = "compactWorkersBeforeReturn";
 
 /// The agent whose panel holds the group.
 pub(super) const CLAUDE_AGENT_ID: &str = "claude";
@@ -24,7 +27,7 @@ pub(super) const CLAUDE_AGENT_ID: &str = "claude";
 pub(super) fn search_opens_claude(search: &TabSearch) -> bool {
     let section = search.section("agentList");
     section.is_searching
-        && [IDLE_COMPACTION, MIN_TOKENS, ONE_HOUR_CACHE]
+        && [IDLE_COMPACTION, MIN_TOKENS, ONE_HOUR_CACHE, COMPACT_WORKERS]
             .iter()
             .any(|key| section.visible_keys.contains(*key))
 }
@@ -51,7 +54,10 @@ impl AgentsTab {
             idle_compaction,
             cx,
         )];
-        if idle_compaction {
+        // CDXC:AgentProviders 2026-11-14 DECISION in server/src/carry_on_compaction.rs (Q3239): the
+        // size also decides which sessions Ghostex compacts before carrying them on, so it shows
+        // whether or not idle compaction is on (superseding Q3103's hide for this row).
+        {
             let options = settings_catalog()
                 .options(module::SETTINGS, "CLAUDE_IDLE_COMPACT_MIN_TOKENS_OPTIONS");
             let allowed: Vec<String> = options.iter().map(|option| option.value.clone()).collect();
@@ -60,11 +66,10 @@ impl AgentsTab {
                 self,
                 p,
                 MIN_TOKENS,
-                RowSpec::new("Only above")
+                RowSpec::new("Compact chats above")
                     .description(
-                        "Compact only chats whose context is at least this size. Claude Code's default is 200K.",
+                        "The size at and above which Claude Code compacts an idle chat, and Ghostex compacts any session before carrying it on after a restart or a usage-limit reset. Claude Code's default is 200K.",
                     )
-                    .dependent()
                     .keyed(&values, MIN_TOKENS),
                 Some(reset_key::<Self>(MIN_TOKENS)),
                 &options,
@@ -75,6 +80,16 @@ impl AgentsTab {
                 cx,
             ));
         }
+        rows.push(toggle_field(
+            self,
+            p,
+            COMPACT_WORKERS,
+            RowSpec::new("Compact workers before a coordinator returns to them")
+                .description("When a coordinator messages one of its workers after the worker sat idle longer than its prompt cache lasts (5 minutes or 1 hour for Claude, about a day for Codex), Ghostex compacts a worker at or above Compact chats above first, then hands it the message, to save tokens. Messages you type are never held.")
+                .keyed(&values, COMPACT_WORKERS),
+            values.bool(COMPACT_WORKERS),
+            cx,
+        ));
         rows.push(toggle_field(
             self,
             p,

@@ -1,4 +1,3 @@
-use super::cards::SINGLE_LINE_CARD;
 use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -710,6 +709,7 @@ impl NativeChatView {
                             .items_end()
                             .gap(px(4.0 * s))
                             .children(indicator.map(|(icon, _)| icon))
+                            .children(self.attaching_line(&id, true, p))
                             .children(failed_delivery)
                             .children(actions),
                     )
@@ -759,6 +759,8 @@ impl NativeChatView {
                         .items_end()
                         .gap(px(4.0 * s))
                         .child(bubble)
+                        // "Image is being uploaded" while it waits for its picture.
+                        .children(self.attaching_line(&id, true, p))
                         .children(failed_delivery)
                         .children(actions),
                 )
@@ -1019,12 +1021,15 @@ impl NativeChatView {
             }
         }
         // The rows' own 8px part gap is already there; a card under a card adds the rest.
+        // On an opened Quiet View line's rail that is the rail's gap (`card_stack_gap`).
+        let stack_gap = self.card_stack_gap(p);
         let card_gap = |card_above: bool| {
-            px(
-                (SINGLE_LINE_CARD.gap_above(card_above, true, MESSAGE_PART_GAP, p)
-                    - MESSAGE_PART_GAP)
-                    * s,
-            )
+            px((if card_above {
+                stack_gap
+            } else {
+                MESSAGE_PART_GAP
+            } - MESSAGE_PART_GAP)
+                * s)
         };
         // Inside a turn's work fold the raw tool pairs stay plain rows and the cards are hoisted
         // onto the turn instead, so an answer is never rendered twice (the core's questions/hoisting.rs).

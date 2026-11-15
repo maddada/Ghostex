@@ -183,7 +183,7 @@ impl NativeChatView {
             ));
         }
         self.hide_file_changes = false;
-        let mut spaced = spaced_tail(parts, false, None, p);
+        let mut spaced = spaced_tail(parts, false, None, self.card_stack_gap(p), p);
         if let Some((_, gap)) = spaced.first_mut() {
             *gap = first_gap;
         }

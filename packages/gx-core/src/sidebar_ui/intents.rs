@@ -37,6 +37,12 @@ pub enum SidebarUiIntent {
     ToggleCoordinatorOlderThreads {
         sidebar_session_id: String,
     },
+    /// Hide or show one computer's sessions in a project row that lists several computers (a
+    /// click on that computer's icon after the project's name).
+    ToggleProjectMachineHidden {
+        group_id: String,
+        machine_id: String,
+    },
     /// Filter the section the machine tab is on by a Space. The renderer's `selectSpace`.
     SelectSpace {
         space_id: String,

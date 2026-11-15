@@ -1,5 +1,5 @@
 use super::chat_text_look::{
-    CHAT_BODY_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT, zoom_scale,
+    CHAT_BODY_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT, user_bubble_blue, zoom_scale,
 };
 use crate::app::helpers::{
     gpui_session_chat_uses_light_theme, sidebar_titlebar_pack_rgb, sidebar_titlebar_rgb_channels,
@@ -76,8 +76,15 @@ pub(crate) struct ChatAppearance {
     /// Your message's fill under the Band style: one input step further off the background than
     /// the bubble (`input`).
     pub(crate) user_band: Hsla,
-    /// Your message bubble's fill: the input tone unless the Your messages theme role is set.
+    /// Your message bubble's fill (and your `!` command card's): a soft blue over the chat
+    /// background, unless the Your messages theme role is set.
+    ///
+    /// CDXC:SessionChat 2026-11-15 DECISION (issue #618, Q3270 A): "my own message bubble is nearly the same grey as the background"; the user picked stronger headings plus a soft blue bubble for their own messages, on the phone and then the desktop. Blue #4a90d9 at 30% over a dark chat, #3b82f6 at 12% over a light one; under window glass the same blues as see-through washes, never a black fill.
+    /// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/theme.ts (`userBubble`).
     pub(crate) user_message: Hsla,
+    /// A lane's own heading colour (Grey thinking's muted tone); `None` draws headings and bold
+    /// words in the bright `foreground` (`markdown_style::text_style`).
+    pub(crate) lane_heading: Option<Hsla>,
 }
 
 impl ChatAppearance {
@@ -91,8 +98,10 @@ impl ChatAppearance {
         let wash = |white: bool, alpha: f32| -> Hsla {
             gpui::Hsla::from(rgb(if white { 0xffffff } else { 0x000000 })).opacity(alpha)
         };
+        // Your bubble keeps its blue as a see-through wash, so the glass shows through it.
+        let (blue, share) = user_bubble_blue(self.light);
+        self.user_message = gpui::Hsla::from(rgb(blue)).opacity(share);
         if self.light {
-            self.user_message = wash(false, 0.04);
             self.input = wash(false, 0.04);
             self.user_band = wash(false, 0.08);
             self.border = wash(false, 0.08);
@@ -103,7 +112,6 @@ impl ChatAppearance {
             self.composer_border = wash(false, 0.08);
             self.card_row = self.input;
         } else {
-            self.user_message = wash(true, 0.06);
             self.input = wash(true, 0.06);
             self.user_band = wash(true, 0.12);
             self.border = wash(true, 0.08);
@@ -165,8 +173,10 @@ impl ChatAppearance {
         lane.prose = tone;
         lane.code_text = tone;
         if self.muted_thinking {
-            // A thought's headings and a reasoning headline go grey with its prose.
+            // A thought's headings and a reasoning headline go grey with its prose, and its bold
+            // words keep the prose's colour.
             lane.primary = tone;
+            lane.lane_heading = Some(tone);
         }
         lane
     }
@@ -349,7 +359,20 @@ impl ChatAppearance {
             border: lifted(0.062, 0.095),
             input: lifted(INPUT_STEP_DARK, INPUT_STEP_LIGHT),
             user_band: lifted(INPUT_STEP_DARK * 2.0, INPUT_STEP_LIGHT * 2.0),
-            user_message: lifted(INPUT_STEP_DARK, INPUT_STEP_LIGHT),
+            user_message: {
+                let (tint, share) = user_bubble_blue(light);
+                let [red, green, blue] = sidebar_titlebar_rgb_channels(tint);
+                let [base_red, base_green, base_blue] =
+                    sidebar_titlebar_rgb_channels(background_rgb);
+                let mix = |top: f32, base: f32| top * share + base * (1.0 - share);
+                rgb(sidebar_titlebar_pack_rgb([
+                    mix(red, base_red),
+                    mix(green, base_green),
+                    mix(blue, base_blue),
+                ]))
+                .into()
+            },
+            lane_heading: None,
             composer_border: lifted(0.08, 0.067),
             composer_background: if light {
                 raised(0.3)

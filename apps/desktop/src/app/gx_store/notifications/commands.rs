@@ -46,22 +46,35 @@ struct OpenTarget {
 
 impl OpenTarget {
     fn from_message_item(item: &Value) -> Option<Self> {
+        // A coordinator's thread's approval opens the coordinator (`openSessionId`,
+        // CDXC:Notifications 2026-11-14 in server/src/worker_alerts.rs).
+        let open = item["openProjectId"]
+            .as_str()
+            .zip(item["openSessionId"].as_str())
+            .filter(|(project_id, session_id)| !project_id.is_empty() && !session_id.is_empty());
         Some(Self {
             machine: notification_feed_item_machine(item),
             notification_id: item["id"].as_str()?.to_string(),
-            project_id: item["projectId"].as_str()?.to_string(),
-            session_id: item["sessionId"].as_str()?.to_string(),
+            project_id: open
+                .map(|(project_id, _)| project_id)
+                .or(item["projectId"].as_str())?
+                .to_string(),
+            session_id: open
+                .map(|(_, session_id)| session_id)
+                .or(item["sessionId"].as_str())?
+                .to_string(),
             account_id: item["accountId"].as_str().map(str::to_string),
             security: item["securityEntry"].is_u64(),
         })
     }
 
     fn from_feed_item(item: &crate::notification_feed::GpuiNotificationFeedItem) -> Self {
+        let (project_id, session_id) = item.open_target();
         Self {
             machine: item.machine.clone(),
             notification_id: item.id.clone(),
-            project_id: item.project_id.clone(),
-            session_id: item.session_id.clone(),
+            project_id: project_id.to_string(),
+            session_id: session_id.to_string(),
             account_id: item.account_id.clone(),
             security: item.security_entry.is_some(),
         }

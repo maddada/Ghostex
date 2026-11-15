@@ -65,6 +65,7 @@ pub const SIDEBAR_ORGANIZATION_KEYS: &[&str] = &[
     "sidebarView",
     "sidebarSeparateByMachine",
     "sidebarMergeRepositoryCopies",
+    "sidebarHideDisconnectedMachines",
     "worktreeSessionsInProject",
     "sidebarSpacesEnabled",
     "sidebarActiveProjects",

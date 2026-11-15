@@ -732,6 +732,14 @@ pub const CHAT_PAGE_OPEN_TARGET_OPTIONS: &[Opt] = &[
 pub const ATTENTION_ALERTS_FOR_OPTIONS: &[Opt] =
     &[opt("All", "all"), opt("Needs you only", "needsYou")];
 
+/// How a coordinator's workers reach the user (`workerNotifications`), in the Settings control's
+/// order (server/src/worker_alerts.rs).
+pub const WORKER_NOTIFICATIONS_OPTIONS: &[Opt] = &[
+    opt("Off", "off"),
+    opt("Silent", "silent"),
+    opt("Sound", "sound"),
+];
+
 /// What a coordinator chat's Work pill opens (`coordinatorBoardView`), in the Settings control's order.
 pub const COORDINATOR_BOARD_VIEW_OPTIONS: &[Opt] =
     &[opt("Side list", "list"), opt("Columns", "columns")];

@@ -382,6 +382,9 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
     if let Some(all_efforts) = result.all_orchestrator_efforts {
         state.core.all_orchestrator_efforts_enabled = all_efforts;
     }
+    if let Some(varied) = result.varied_working_words {
+        state.core.varied_working_words = varied;
+    }
     if let Some(icons) = &result.enabled_agent_icons {
         state.session.enabled_agent_icons = Some(icons.clone());
     }

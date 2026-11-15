@@ -13,10 +13,9 @@ use super::super::super::store::SettingsValues;
 use super::colours::{Rgb, preview_colours};
 use crate::ui_fonts::{exact_family, monospace_default_face, monospace_replacement, picked_family};
 use chat_text_look::{
-    CHAT_BODY_FONT, CHAT_MONO_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT,
-    PROSE_LINE_HEIGHT, PROSE_SIZE, THINKING_GAP, USER_BUBBLE_PADDING, USER_BUBBLE_RADIUS,
-    inline_code_fill, inline_code_font_scale, inline_code_padding_x, inline_code_radius,
-    zoom_scale,
+    CHAT_BODY_FONT, CHAT_MONO_FONT, ChatTextColors, PROSE_LINE_HEIGHT, PROSE_SIZE, THINKING_GAP,
+    USER_BUBBLE_PADDING, USER_BUBBLE_RADIUS, inline_code_fill, inline_code_font_scale,
+    inline_code_padding_x, inline_code_radius, zoom_scale,
 };
 use gpui::{
     AnyElement, App, FontWeight, Hsla, IntoElement as _, ParentElement as _, SharedString,
@@ -71,14 +70,16 @@ fn hsla_of(color: Rgb) -> Hsla {
 
 /// The user bubble's fill: the chat background a step toward white, or black in light mode.
 fn bubble_fill(background: Rgb, light: bool) -> Hsla {
-    let (target, amount) = if light {
-        (0.0, f64::from(INPUT_STEP_LIGHT))
-    } else {
-        (255.0, f64::from(INPUT_STEP_DARK))
-    };
-    hsla_of(Rgb(background
-        .0
-        .map(|channel| channel + (target - channel) * amount)))
+    // Your bubble's soft blue over the chat background, as the chat draws it
+    // (`ChatAppearance::user_message`).
+    let (blue, share) = chat_text_look::user_bubble_blue(light);
+    let tint = [(blue >> 16) & 0xff, (blue >> 8) & 0xff, blue & 0xff].map(f64::from);
+    let share = f64::from(share);
+    let mut channels = background.0;
+    for (channel, tint) in channels.iter_mut().zip(tint) {
+        *channel = tint * share + *channel * (1.0 - share);
+    }
+    hsla_of(Rgb(channels))
 }
 
 /// Whether the chat draws in its light look: its own Chat theme, else the app's.

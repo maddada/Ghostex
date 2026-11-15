@@ -55,6 +55,8 @@ pub struct CoreState {
     pub hide_account_emails: bool,
     /// The Catch me up setting (`chatCatchMeUp`), from the chat settings or the latest read.
     pub catch_up_enabled: bool,
+    /// The chat box row switches (Settings > Experience), from the host; all on by default.
+    pub composer_row: crate::composer::row::ComposerRowSettings,
     /// The Session details panel built-in extension is on (`sessionDetailsPanelHidden` false).
     pub session_details_enabled: bool,
     /// The Send when you pick an answer setting (`chatSendOnPick`), from the chat settings or the
@@ -65,6 +67,9 @@ pub struct CoreState {
     /// The Show all effort levels setting (`orchestratorAllEfforts`), from the chat settings or the
     /// latest read; off by default, which narrows an orchestrator's effort pickers.
     pub all_orchestrator_efforts_enabled: bool,
+    /// The Varied thinking words setting (`chatVariedWorkingWords`), from the chat settings or the
+    /// latest read; off by default, which makes the working strip say Thinking.
+    pub varied_working_words: bool,
     /// The Handover heading color strength setting (`markedHandoversHeadingStrength`), from the
     /// chat settings or the latest read; `None` is the default, 60%.
     pub marked_heading_strength: Option<u8>,

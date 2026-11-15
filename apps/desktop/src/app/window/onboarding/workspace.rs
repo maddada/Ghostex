@@ -70,7 +70,10 @@ impl WorkspaceState {
 /// no Recommended chip (it only turned Browser and Files on); the Browser view stays as a first run
 /// leaves it (on), and the browser skill comes with Fast Computer & Browser use
 /// (`ws_toggle_computer_use`). This supersedes the browser skill switch of CDXC:Onboarding 2026-10-28.
-const ROW_TOPS: [f32; 5] = [300.0, 376.0, 452.0, 528.0, 604.0];
+const ROW_TOPS: [f32; 5] = [412.0, 480.0, 548.0, 616.0, 684.0];
+/// Where the Experience choice sits, above the five rows (CDXC:Experience 2026-11-15 on
+/// `render_experience_row`).
+const EXPERIENCE_TOP: f32 = 290.0;
 const VIEW_ROWS: [(ViewKey, &str, &str, &str, f32); 2] = [
     (
         ViewKey::Docs,
@@ -264,6 +267,13 @@ impl GpuiOnboardingWindow {
                 .child("Start lean; anything you hide stays available in Settings.")
                 .into_any_element(),
         );
+        out.push(self.render_experience_row(s, cx));
+        // What the picked preset shows, in full, under its row.
+        out.push(
+            sub(s, 60.0, EXPERIENCE_TOP + 64.0, 632.0, 13.0, false)
+                .child(self.experience_shown().description())
+                .into_any_element(),
+        );
         for (key, icon_name, title, detail, top) in VIEW_ROWS {
             let on = views[key.index()];
             let thumb = self.thumb(&format!("ws-{title}"), on, now);
@@ -403,7 +413,10 @@ impl GpuiOnboardingWindow {
                     interact::Ring::new(10.0, 1.0),
                     interact::Keys::EnterSpace,
                     cx,
-                    |this, _, cx| this.go(4, cx),
+                    |this, _, cx| {
+                        this.keep_experience(cx);
+                        this.go(4, cx)
+                    },
                 ))
                 .into_any_element(),
         );
@@ -420,6 +433,87 @@ impl GpuiOnboardingWindow {
             out.extend(self.render_workspace_window(s, now, views, drive, current, cx));
         }
         out
+    }
+
+    /// The preset the Experience choice shows: what the settings match, else Regular, which a
+    /// first run starts on.
+    fn experience_shown(&self) -> ghostex_settings_catalog::experience::Preset {
+        self.settings
+            .experience()
+            .unwrap_or(ghostex_settings_catalog::experience::FIRST_RUN_PRESET)
+    }
+
+    /// Next keeps the preselected preset: settings that match none get Regular's.
+    fn keep_experience(&mut self, cx: &mut Context<Self>) {
+        if self.settings.experience().is_none() {
+            self.pick_experience(ghostex_settings_catalog::experience::FIRST_RUN_PRESET, cx);
+        }
+    }
+
+    fn pick_experience(
+        &mut self,
+        preset: ghostex_settings_catalog::experience::Preset,
+        cx: &mut Context<Self>,
+    ) {
+        let patch: serde_json::Map<String, serde_json::Value> =
+            ghostex_settings_catalog::experience::writes_all(preset)
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value))
+                .collect();
+        self.update_settings(patch, cx);
+    }
+
+    /// "How much should Ghostex show?": Chill, Regular or Advanced, with what the picked one shows.
+    ///
+    /// CDXC:Experience 2026-11-15 DECISION:
+    /// Q3286 A: ask new users on first run with Regular preselected; Next keeps it. Of the words under each preset: Regular does show the mode picker, and it hides the terminal button and shows attach instead; Advanced is for people who use terminals more (`Preset::description` in packages/settings-catalog/src/experience.rs). The phone asks once after pairing (apps/mobile/app/src/screens/sessions-screen/ExperienceCard.tsx).
+    fn render_experience_row(&mut self, s: S, cx: &mut Context<Self>) -> AnyElement {
+        use ghostex_settings_catalog::experience::Preset;
+        let shown = self.experience_shown();
+        let mut picks = div().flex().items_center().gap(s.px(6.0));
+        for preset in Preset::ALL {
+            let key = format!("ws-experience-{}", preset.id());
+            picks = picks.child(self.control(
+                s,
+                cta(
+                    s,
+                    key.clone(),
+                    preset.label(),
+                    preset == shown,
+                    false,
+                    false,
+                    CtaSize::Small,
+                ),
+                key,
+                interact::Ring::new(10.0, 1.0),
+                interact::Keys::EnterSpace,
+                cx,
+                move |this, _, cx| {
+                    cx.stop_propagation();
+                    this.pick_experience(preset, cx);
+                },
+            ));
+        }
+        glass(s)
+            .absolute()
+            .left(s.px(60.0))
+            .top(s.px(EXPERIENCE_TOP))
+            .w(s.px(632.0))
+            .h(s.px(58.0))
+            .flex()
+            .items_center()
+            .gap(s.px(20.0))
+            .pl(s.px(30.0))
+            .pr(s.px(12.0))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(nm(s, 17.0, 500.0).child("How much should Ghostex show?"))
+                    .child(ss(s, 12.5).child("You can change this any time in Settings.")),
+            )
+            .child(picks)
+            .into_any_element()
     }
 
     /// A Workspace row with a switch for one setting: the whole row toggles it.

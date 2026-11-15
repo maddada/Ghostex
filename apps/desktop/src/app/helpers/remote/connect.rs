@@ -181,19 +181,7 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
     daemon's own token, never installs or updates, and is marked as this computer, which the
     sidebar and Settings say.
     */
-    let this_computer = gpui_remote_is_this_computer(
-        gpui_remote_identity_instance(
-            gpui_run_remote_ssh(
-                &config,
-                gpui_remote_identity_read_command(),
-                GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT,
-            )
-            .stdout
-            .as_str(),
-        )
-        .as_ref(),
-        gpui_local_gxserver_instance().as_ref(),
-    );
+    let (this_computer, local_instance_seen) = gpui_remote_reaches_this_computer(&config);
     let mut token_result = if this_computer {
         match read_gpui_gxserver_auth_token() {
             Ok(token) => GpuiRemoteProcessResult {
@@ -400,13 +388,17 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
             registration then ran for it and asked "Let the agents on SSH repro test and this
             computer reach each other" for the PC's own server id: a Windows Hello prompt for
             nothing, whose approval had no call to complete. The health answer the tunnel just
-            got identifies the running instance on every platform, so it decides too.
+            got identifies the running instance on every platform, so it decides too. It is
+            compared with this daemon now and with the one the check above saw, so a restart of
+            this computer's gxserver between the two does not hide that it is this computer.
             */
+            let remote_instance = connection.capabilities.instance.as_ref();
             connection.this_computer = this_computer
                 || gpui_remote_is_this_computer(
-                    connection.capabilities.instance.as_ref(),
+                    remote_instance,
                     gpui_local_gxserver_instance().as_ref(),
-                );
+                )
+                || gpui_remote_is_this_computer(remote_instance, local_instance_seen.as_ref());
             GpuiRemoteGxserverConnectResult::connected(connection)
         }
         Err(message) => GpuiRemoteGxserverConnectResult::without_connection(
@@ -906,12 +898,17 @@ pub(crate) fn gpui_remote_identity_read_command() -> &'static str {
     )
 }
 
+/// The running instance in [`gpui_remote_identity_read_command`]'s output, or `None` when the
+/// remote printed no runtime file (no gxserver running there) or one without `pid` and `startedAt`.
 pub(crate) fn gpui_remote_identity_instance(stdout: &str) -> Option<GpuiRemoteGxserverInstance> {
     let (_, rest) = stdout.split_once("__GHOSTEX_REMOTE_IDENTITY_START__")?;
     let (body, _) = rest.split_once("__GHOSTEX_REMOTE_IDENTITY_END__")?;
     gpui_remote_gxserver_instance(&serde_json::from_str(body.trim()).ok()?)
 }
 
+/// The running instance named by a gxserver runtime file or authenticated health answer: both
+/// carry `serverId`, `pid` and `startedAt`. `None` when any is missing or empty, as in an older
+/// gxserver's answer or the unauthenticated `/api/health`.
 pub(crate) fn gpui_remote_gxserver_instance(
     value: &serde_json::Value,
 ) -> Option<GpuiRemoteGxserverInstance> {
@@ -920,6 +917,49 @@ pub(crate) fn gpui_remote_gxserver_instance(
         .then_some(instance)
 }
 
+/// Whether the machine `config` reaches over SSH is this computer, read without starting anything
+/// there, and the last instance of this computer's own gxserver the check saw.
+///
+/// CDXC:RemoteMachines 2026-11-14 WHY:
+/// The match is on the running instance, so a restart of this computer's gxserver while the SSH
+/// read runs, or a replacement daemon publishing its runtime file while the old one still answers
+/// (server/src/runtime.rs, `remove_runtime_metadata`), would make this computer look like a
+/// remote, and the token read would then run `gxserver start` here. This daemon is read before
+/// and after the SSH read and either may match; when it changed in between and neither did, the
+/// read is repeated once the daemon has settled. Two computers that only share a server id never
+/// match: their processes differ.
+pub(crate) fn gpui_remote_reaches_this_computer(
+    config: &GpuiRemoteMachineConfig,
+) -> (bool, Option<GpuiRemoteGxserverInstance>) {
+    let mut local_after = None;
+    for attempt in 0..2 {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        let local_before = gpui_local_gxserver_instance();
+        let remote = gpui_remote_identity_instance(
+            gpui_run_remote_ssh(
+                config,
+                gpui_remote_identity_read_command(),
+                GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT,
+            )
+            .stdout
+            .as_str(),
+        );
+        local_after = gpui_local_gxserver_instance();
+        if gpui_remote_is_this_computer(remote.as_ref(), local_before.as_ref())
+            || gpui_remote_is_this_computer(remote.as_ref(), local_after.as_ref())
+        {
+            return (true, local_after.or(local_before));
+        }
+        if local_before == local_after {
+            break;
+        }
+    }
+    (false, local_after)
+}
+
+/// This app's own gxserver's running instance, from its authenticated health answer.
 pub(crate) fn gpui_local_gxserver_instance() -> Option<GpuiRemoteGxserverInstance> {
     gpui_remote_gxserver_instance(&gpui_gxserver_server_health(Duration::from_millis(1500)).ok()?)
 }

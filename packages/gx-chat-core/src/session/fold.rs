@@ -633,6 +633,7 @@ fn empty_result() -> ReadSessionChatResult {
         send_on_pick: None,
         answers_wait_for_idle: None,
         all_orchestrator_efforts: None,
+        varied_working_words: None,
         enabled_agent_icons: None,
         marked_heading_strength: None,
         chat_text_strength: None,

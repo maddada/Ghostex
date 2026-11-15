@@ -239,7 +239,19 @@ impl NativeChatView {
                 if id == "maximize" {
                     row["hotkeyAction"] = json!("toggleChatComposerMaximized");
                 }
+                // Off the row, a terminal problem shows here: the reason under Terminal View
+                // and Copy Report after it (CDXC:Experience 2026-11-15 in gx-chat-core
+                // composer/row.rs).
+                let issue = self.snapshot["composerRow"]["terminalIssue"].as_str();
+                if id == "terminal"
+                    && let Some(issue) = issue
+                {
+                    row["description"] = json!(issue);
+                }
                 rows.push(row);
+                if id == "terminal" && issue.is_some() {
+                    rows.push(json!({"label":"Copy Report","iconPath":"titlebar/copy.svg","command":{"type":"copyReport"}}));
+                }
             }
         }
         rows.extend(self.files_links_menu_row());
@@ -356,14 +368,16 @@ impl NativeChatView {
         let mut more_rows = Vec::new();
         more_rows.extend(self.stash_menu_row());
         more_rows.push(self.skills_row());
-        if self.snapshot["composerOverflow"]["optionsOverflowed"] == true {
+        let ring_off_row = self.snapshot["composerRow"]["hideContextRing"] == true;
+        if self.snapshot["composerOverflow"]["optionsOverflowed"] == true || ring_off_row {
             // CDXC:SessionDetails 2026-11-12 DECISION: where the chat has the Session details panel, its first
             // tab's Context card and its second tab carry this (Q2763, option A); the row stays for a chat
             // without one.
             if self.snapshot["contextMeter"].is_object() && !self.session_details_available() {
                 more_rows.push(json!({"label":"Context window","iconPath":"titlebar/circle-half.svg","detail":self.snapshot["contextMeter"]["percentage"],"openOnHover":false,"children":self.context_menu_rows()}));
             }
-            if self.snapshot["optionLabels"]["showOptions"] == true
+            if self.snapshot["composerOverflow"]["optionsOverflowed"] == true
+                && self.snapshot["optionLabels"]["showOptions"] == true
                 && !self.snapshot["modelMenu"].is_object()
             {
                 let options: Vec<Value> = self.snapshot["optionMenus"]["options"]

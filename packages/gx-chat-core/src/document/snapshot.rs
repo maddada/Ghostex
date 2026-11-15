@@ -160,6 +160,9 @@ pub struct Document {
     pub composer_collapsed: bool,
     pub composer_overflow: ComposerOverflow,
     pub composer_actions: ComposerActions,
+    /// What the chat box row leaves out (Settings > Experience, `composer/row.rs`).
+    #[serde(default)]
+    pub composer_row: crate::composer::row::ComposerRow,
     pub composer_chrome: ComposerChrome,
     /// The slash command the composer would complete to, or `null`. Family d.
     pub composer_command: Option<String>,

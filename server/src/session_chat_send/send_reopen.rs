@@ -40,13 +40,30 @@ pub(crate) async fn handle_send_session_chat_message_from(
                 Some(key) => plan_reopen(&state, &attempt_caller, key, started_ms).await,
                 None => None,
             };
-            let response =
-                send_session_chat_message_attempt(&state, endpoint_path, request_id, &body).await;
+            // A worker its coordinator returns to after its prompt cache expired is compacted
+            // first (CDXC:Coordinators 2026-11-15 in server/src/carry_on_compaction.rs).
+            let compaction = match &target {
+                Some(key) => plan_worker_compaction(&state, key, &message_text(&body)).await,
+                None => None,
+            };
+            let response = match &compaction {
+                Some(compaction) => {
+                    send_after_compaction(&state, endpoint_path, request_id, &body, compaction)
+                        .await
+                }
+                None => {
+                    send_session_chat_message_attempt(&state, endpoint_path, request_id, &body)
+                        .await
+                }
+            };
             if !response.response.status().is_success() {
                 return response;
             }
             let mut fields = Map::new();
             fields.insert(REOPEN_CHECKED.to_string(), json!(true));
+            if let Some(compaction) = &compaction {
+                fields.insert("compactedFirst".to_string(), compaction.to_value());
+            }
             if let Some(plan) = plan {
                 if run_reopen(&state, plan.clone(), sent_message(&body, started_ms)).await {
                     fields.insert("reopenedThread".to_string(), json!(true));
@@ -130,6 +147,74 @@ async fn recover_replayed_reopen(
     stored.extend(fields.clone());
     crate::session_chat_send_requests::mark_sent(&state.paths, &ledger_key, &Value::Object(stored));
     edit_result(response, |result| result.extend(fields)).await
+}
+
+async fn plan_worker_compaction(
+    state: &AppState,
+    key: &SessionKey,
+    text: &str,
+) -> Option<crate::carry_on_compaction::WorkerCompaction> {
+    let (state, key, text) = (state.clone(), key.clone(), text.to_string());
+    tokio::task::spawn_blocking(move || {
+        let db = open_gxserver_database(&state.paths).ok()?;
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        crate::carry_on_compaction::plan_worker_compaction(&repository, &key, &text)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Types the compact command now, then holds the message in the worker's queue, which types it
+/// once the compaction's turn ends and the input box is back.
+async fn send_after_compaction(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+    compaction: &crate::carry_on_compaction::WorkerCompaction,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let mut compact = params.clone();
+    compact.insert("text".to_string(), json!(compaction.command));
+    compact.remove("imagePaths");
+    compact.remove("interrupt");
+    compact.remove("draftVersion");
+    if let Some(id) = params.get(SEND_REQUEST_ID_PARAM).and_then(Value::as_str) {
+        compact.insert(
+            SEND_REQUEST_ID_PARAM.to_string(),
+            json!(format!("{id}-compact")),
+        );
+    } else {
+        compact.remove(SEND_REQUEST_ID_PARAM);
+    }
+    let compacted = send_session_chat_message_attempt(
+        state,
+        endpoint_path.clone(),
+        uuid::Uuid::new_v4().to_string(),
+        &json!({ "params": compact }),
+    )
+    .await;
+    // A worker that would not take the command gets the message the usual way.
+    if !compacted.response.status().is_success() {
+        return send_session_chat_message_attempt(state, endpoint_path, request_id, body).await;
+    }
+    let target = match resolve_session_chat_send_target(state, &params, "sendSessionChatMessage") {
+        Ok(target) => target,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let text = message_text(body);
+    crate::session_chat_send_wake::queue_startup_send(
+        state,
+        endpoint_path,
+        request_id,
+        &params,
+        &target,
+        &text,
+    )
 }
 
 /// A message, not a raw key: `key` carries a keystroke with no text (send_http.rs).

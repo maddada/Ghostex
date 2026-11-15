@@ -357,6 +357,19 @@ fn sidebar_section(
             false,
             cx,
         ));
+        // CDXC:RemoteMachines 2026-11-15 DECISION in gx-core sidebar_view/merged.rs (an advanced
+        // row, off by default); Separate by machine gives each computer its own tab instead.
+        if !g.values.bool("sidebarSeparateByMachine") {
+            rows.extend(page.toggle(
+                g,
+                s,
+                "sidebarHideDisconnectedMachines",
+                "Hide sessions and projects from computers that aren't connected",
+                "Leave a computer that isn't connected out of the Project sidebar: its sessions leave every project, and a project only it has is hidden. They come back when it reconnects. Off: its last sessions stay, faded. The Unified sidebar always leaves it out. The phone follows this.",
+                false,
+                cx,
+            ));
+        }
     }
     // CDXC:Sidebar 2026-11-07 DECISION in gx-core sidebar_view/inputs.rs (an advanced row, Manual by
     // default); both sidebars and the phone follow it.
@@ -602,6 +615,18 @@ fn session_cards_section(
         "showSessionCardHoverButtonsInContextMenu",
         "Hover buttons also in context menu",
         "Also list the enabled hover buttons in the session right-click menu, in their usual place in the menu. Close is never listed while it is on the card. Turn off to leave every button out of the menu once it is on the card.",
+        false,
+        cx,
+    ));
+    // CDXC:Coordinators 2026-11-15 DECISION (issue #618, Q3275): coordinators stand apart without
+    // bold; bold is opt-in. The phone has it under Settings > Advanced > Sessions list; the computer
+    // has no Sessions list section, so it sits with the other session-card looks here.
+    rows.extend(page.toggle(
+        g,
+        s,
+        "sessionsBoldCoordinatorTitle",
+        "Bold coordinator title",
+        "Draw each coordinator's title in bold in the sidebar. Off, a coordinator stands apart from its threads by its crown, its brighter title and its threads' dimmer titles.",
         false,
         cx,
     ));

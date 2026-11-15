@@ -440,6 +440,10 @@ pub struct ChatQuietViewSettings {
     pub chats: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expand_last: Option<bool>,
+    /// Calm Quiet View (`chatQuietViewCalm`, Settings > Experience's Chill); absent from an older
+    /// computer, which is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calm: Option<bool>,
 }
 
 /// One of a chat's view records as the session's computer keeps it: the value the user picked
@@ -631,6 +635,10 @@ pub struct ReadSessionChatResult {
     /// Whether the Show all effort levels setting is on, the same way as `catch_up`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_orchestrator_efforts: Option<bool>,
+    /// Whether the Varied thinking words setting (`chatVariedWorkingWords`) is on, the same way as
+    /// `catch_up`; off, the working strip says Thinking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub varied_working_words: Option<bool>,
     /// The icons of the agents turned on in Settings › Agents (an agent with no icon gives its
     /// id), the same way as `catch_up`; the model menu shows only their providers' tabs.
     #[serde(default, skip_serializing_if = "Option::is_none")]

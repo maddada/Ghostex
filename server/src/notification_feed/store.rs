@@ -617,6 +617,19 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
             {
                 item["body"] = Value::String("Waiting for your approval".to_string());
             }
+            // CDXC:Notifications 2026-11-14 (Q3243 in server/src/worker_alerts.rs): a coordinator's
+            // thread's approval opens its coordinator, where the card is relayed. Clients that
+            // predate these fields open the thread.
+            if let (Some(project), Some(session)) =
+                (item["projectId"].as_str(), item["sessionId"].as_str())
+            {
+                if let Some((open_project, open_session)) =
+                    crate::worker_alerts::worker_coordinator(db, project, session)
+                {
+                    item["openProjectId"] = Value::String(open_project);
+                    item["openSessionId"] = Value::String(open_session);
+                }
+            }
         }
     }
     /*

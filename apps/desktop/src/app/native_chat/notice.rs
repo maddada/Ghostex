@@ -4,9 +4,10 @@ use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px, svg,
 };
-use serde_json::json;
+use gpui_component::tooltip::ManagedTooltipExt as _;
+use serde_json::{Value, json};
 
 impl NativeChatView {
     /// CDXC:SessionChat 2026-10-11 DECISION: User picked the proposed notices design: a notice is a tone card (tone_card.rs) washed in the tone the chat core gives it, with its actions in the footer (the account switch first and filled, Terminal view beside it, Dismiss quiet at the right end); this supersedes the 2026-09-16 rule that notices are the shared status card. The `/resume` picker, pass-through and side-question cards keep their own shells. User (2026-09-16): no "Selected in terminal" badge on any picker row, in any state.
@@ -346,6 +347,12 @@ impl NativeChatView {
             }
             body.push(rows.into_any_element());
         }
+        // CDXC:AgentProviders 2026-11-14 DECISION in server/src/carry_on_compaction.rs (GitHub #608,
+        // Q3238): a card Ghostex makes itself can carry a checkbox (Compact first) with an (i) whose
+        // quick tooltip says why; a click sends its `answer`, and gxserver redraws the card.
+        if !collapsed && notice["checkbox"].is_object() {
+            body.push(self.notice_checkbox(&notice["checkbox"], p, cx));
+        }
         if !collapsed && !rate_limit && !panel && notice["dialog"].is_object() {
             let (dialog_body, dialog_actions) =
                 self.render_terminal_dialog(&notice["dialog"], p, window, cx);
@@ -639,5 +646,90 @@ impl NativeChatView {
             press,
             p,
         ))
+    }
+}
+
+impl NativeChatView {
+    /// A notice's checkbox row: the box, its label, and an (i) with the `hint` tooltip.
+    fn notice_checkbox(
+        &mut self,
+        checkbox: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let checked = checkbox["checked"] == true;
+        let label = text(checkbox, "label");
+        let hint = text(checkbox, "hint");
+        let answer = json!({"type":"answer","answer":checkbox["answer"].clone()});
+        let mut row = div()
+            .id(gpui::SharedString::from(format!(
+                "notice-checkbox:{}",
+                text(checkbox, "id")
+            )))
+            .role(gpui::Role::CheckBox)
+            .aria_label(label.clone())
+            .flex()
+            .items_center()
+            .gap(px(8.0 * s))
+            .cursor_pointer()
+            .child(
+                div()
+                    .size(px(16.0 * s))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(4.0 * s))
+                    .border_1()
+                    .border_color(if checked {
+                        p.foreground
+                    } else {
+                        p.control_border
+                    })
+                    .when(checked, |check| {
+                        check.bg(p.foreground).child(
+                            svg()
+                                .path("titlebar/check.svg")
+                                .size(px(12.0 * s))
+                                .text_color(p.card_row),
+                        )
+                    }),
+            )
+            .child(
+                div()
+                    .text_size(px(14.0 * s))
+                    .line_height(px(19.25 * s))
+                    .text_color(p.foreground)
+                    .child(label),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)));
+        if !hint.is_empty() {
+            row = row.child(
+                div()
+                    .id("notice-checkbox-info")
+                    .role(gpui::Role::Button)
+                    .aria_label(hint.clone())
+                    .size(px(18.0 * s))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        svg()
+                            .path("titlebar/info-circle.svg")
+                            .size(px(15.0 * s))
+                            .text_color(p.muted),
+                    )
+                    .managed_tooltip_with(
+                        Some(gpui_component::Placement::Top),
+                        Some(super::ask_card::QUICK_TOOLTIP_DELAY),
+                        move |window, cx| {
+                            gpui_component::tooltip::Tooltip::new(hint.clone()).build(window, cx)
+                        },
+                    ),
+            );
+        }
+        row.into_any_element()
     }
 }

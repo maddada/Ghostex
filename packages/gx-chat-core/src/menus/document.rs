@@ -27,7 +27,11 @@ pub fn document_with(
     model_menu: &mut Option<crate::menus::picker::document::KeptModelMenu>,
 ) {
     let now_ms = context.now_millis();
-    let options = compute_native_chat_options(state, context);
+    let mut options = compute_native_chat_options(state, context);
+    // A chat box without the mode picker shows no mode anywhere (composer/row.rs).
+    if !state.core.composer_row.mode_picker {
+        options.option_menus.mode.clear();
+    }
 
     into.selected_options = nullable(state.session.selected_options.clone());
     into.available_agents = nullable(state.session.available_agents.clone());

@@ -113,6 +113,7 @@ pub(crate) fn read_endpoint_value() -> Value {
         "idleCompaction": compaction.idle_compaction,
         "idleCompactAbove": compaction.min_tokens.to_string(),
         "oneHourPromptCache": compaction.one_hour_cache,
+        "compactWorkersBeforeReturn": crate::carry_on_compaction::compact_workers_enabled(),
     })
 }
 

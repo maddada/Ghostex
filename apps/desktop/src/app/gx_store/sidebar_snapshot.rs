@@ -542,7 +542,21 @@ fn native_group(
             .iter()
             // The computer's name and id: its chip draws the computer's icon (gx-core
             // computer_icons.rs).
-            .map(|chip| (chip.name.clone(), chip.machine_id.clone()))
+            .map(
+                |chip| crate::app::native_sidebar::model::SidebarMachineChip {
+                    name: chip.name.clone(),
+                    machine_id: chip.machine_id.clone(),
+                    hidden: chip.hidden,
+                    hidden_needs_you: chip.hidden_needs_you.map(|wait| {
+                        match wait {
+                            ghostex_gx_core::NeedsYou::Approval => "approval",
+                            ghostex_gx_core::NeedsYou::Question => "question",
+                            ghostex_gx_core::NeedsYou::Attention => "attention",
+                        }
+                        .to_string()
+                    }),
+                },
+            )
             .collect(),
         holds_active_session_group: group.holds_active_session_group,
         project_context: project_context(group),
@@ -1062,15 +1076,22 @@ pub(crate) fn insert_coordinator_nesting(
                 "containsActive": nesting.contains_active_session,
             }),
         );
-        let folded = nesting.folded_status;
-        if folded.any() {
-            details["coordinatorThreads"]["foldedStatus"] = json!({
-                "working": folded.working,
-                "attention": folded.attention,
-                "backgroundWork": folded.background_work,
-                "question": folded.question,
-                "approval": folded.approval,
-            });
+        let dots = |status: ghostex_gx_core::FoldedStatus| {
+            json!({
+                "working": status.working,
+                "attention": status.attention,
+                "backgroundWork": status.background_work,
+                "question": status.question,
+                "approval": status.approval,
+            })
+        };
+        if nesting.folded_status.any() {
+            details["coordinatorThreads"]["foldedStatus"] = dots(nesting.folded_status);
+        }
+        // Folded or not, the whole team's dots (gx-core `RowNesting::team_status`), which an
+        // unfolded coordinator draws in its status slot (threads.rs `folded_status_indicator`).
+        if nesting.team_status.any() {
+            details["coordinatorThreads"]["teamStatus"] = dots(nesting.team_status);
         }
     }
 }

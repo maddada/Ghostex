@@ -143,6 +143,9 @@ pub(super) fn chat_settings() -> ChatSettings {
         all_orchestrator_efforts: object
             .get("orchestratorAllEfforts")
             .and_then(Value::as_bool),
+        varied_working_words: object
+            .get("chatVariedWorkingWords")
+            .and_then(Value::as_bool),
         marked_heading_strength: object
             .get("markedHandoversHeadingStrength")
             .and_then(Value::as_f64),
@@ -193,11 +196,23 @@ pub(super) fn chat_settings() -> ChatSettings {
                 coordinators: switch("chatQuietViewCoordinators", true),
                 chats: switch("chatQuietViewChats", true),
                 expand_last: switch("chatQuietViewExpandLast", true),
+                calm: switch("chatQuietViewCalm", false),
             }
         }),
         // The desktop draws its own status line, which is what its gxserver sends the phone
         // (gx-chat-core `menus/context/computer_pins.rs`).
         status_line_from_computer: None,
+        // The chat box row switches Settings > Experience sets (gx-chat-core `composer/row.rs`);
+        // a web page whose settings have not arrived keeps the whole row.
+        composer_row: (!object.is_empty()).then(|| {
+            let switch = |key: &str| object.get(key).and_then(Value::as_bool).unwrap_or(true);
+            ghostex_gx_chat_core::composer::row::ComposerRowSettings {
+                mode_picker: switch("chatComposerModePicker"),
+                terminal_button: switch("chatComposerTerminalButton"),
+                context_ring: switch("chatComposerContextRing"),
+                maximize: switch("chatComposerMaximize"),
+            }
+        }),
     }
 }
 

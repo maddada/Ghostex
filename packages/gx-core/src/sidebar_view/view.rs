@@ -477,6 +477,15 @@ pub struct RowNesting {
     /// CDXC:SessionStatus 2026-10-27 DECISION:
     /// User: "Please for permissions let's show a new red dot so user knows stuff is stuck and waiting on him to approve". A thread waiting for approval (`awaitingApproval`) draws the red approval dot on its own row, so the folded stack shows that red dot for it instead of the pink one; any other waiting thread keeps the pink needs-you dot.
     pub folded_status: FoldedStatus,
+    /// On a coordinator row with threads, folded or not: the status dots of its whole team (its
+    /// own, its threads' and theirs at any depth). An unfolded coordinator draws them in its status
+    /// slot, so one with sub-coordinators under it still says its team works or needs you; folded,
+    /// it is the same as `folded_status`.
+    ///
+    /// CDXC:Coordinators 2026-11-15 DECISION (issue #618, Q3275): the user wants coloured status
+    /// dots on each coordinator and no bold; the phone draws the same (apps/mobile/app
+    /// src/contract/coordinatorTree.ts `teamStatus`).
+    pub team_status: FoldedStatus,
 }
 
 /// Which status dots a folded coordinator's stack draws, counted as the computer tabs count them
@@ -657,6 +666,12 @@ pub struct MachineChip {
     /// [`super::inputs::LOCAL_MACHINE_ID`] or the saved remote machine's id: the project menu's
     /// Clone on… offers the machines whose chips a project lacks.
     pub machine_id: String,
+    /// The user hid this computer's sessions in this project (a click on its icon); the icon
+    /// draws dimmed (CDXC:RemoteMachines 2026-11-15 in `merged.rs`).
+    pub hidden: bool,
+    /// While hidden, the most urgent wait among the rows it hides, so the dimmed icon carries
+    /// that dot.
+    pub hidden_needs_you: Option<NeedsYou>,
 }
 
 /// One session (or browser tab) as a sidebar row.

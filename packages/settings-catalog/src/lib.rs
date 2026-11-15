@@ -16,6 +16,7 @@ pub mod availability;
 pub mod built_in_extensions;
 pub mod dark_chrome;
 mod data;
+pub mod experience;
 pub mod file_opening;
 pub mod folder_trust;
 mod general;

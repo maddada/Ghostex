@@ -10,8 +10,9 @@
 //! route (SSH, Easy Connect, Windows). Measured on an Easy Connect link that day: the relay carried
 //! about 12.7 KB/s, so github.com never finished loading through it, and the page load held the
 //! shared link long enough for the health check to drop the computer, which closed the page.
-//! The toolbar's route chip says "From this Mac" while the page is one this computer opens, so a
-//! name only the remote's network knows that fails here is not mistaken for a remote failure.
+//! The toolbar's route icon is this computer's logo (named in its tooltip) while the page is one
+//! this computer opens, so a name only the remote's network knows that fails here is not
+//! mistaken for a remote failure (since 2026-11-15 an icon only, no words).
 //! Supersedes CDXC:Browser 2026-09-05 (every page of a remote tab through the machine's SOCKS).
 //!
 //! The rule decides by the address as written, never by resolving a name here: a name that is not

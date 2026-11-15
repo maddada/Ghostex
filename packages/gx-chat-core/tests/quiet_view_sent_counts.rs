@@ -99,6 +99,7 @@ fn quiet_chat(mut rows: Vec<ChatMessage>) -> ChatState {
             coordinators: true,
             chats: true,
             expand_last: false,
+            calm: false,
         },
     );
     state

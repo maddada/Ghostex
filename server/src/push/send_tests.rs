@@ -179,6 +179,8 @@ fn alert_event(
         project_name: "demo-app".to_string(),
         session_title: String::new(),
         occurred_at_ms,
+        worker: false,
+        open_session_id: None,
     }
 }
 

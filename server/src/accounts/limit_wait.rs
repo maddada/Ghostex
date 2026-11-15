@@ -209,7 +209,14 @@ pub(super) fn enter(
     });
     if first {
         if let Some(id) = notification.as_deref() {
-            crate::push::announce_blocked(state, repo, session, id, crate::push::BlockedWhy::Usage);
+            crate::push::announce_blocked(
+                state,
+                repo,
+                session,
+                id,
+                crate::push::BlockedWhy::Usage,
+                crate::push::PushRoute::default(),
+            );
         }
     }
     wait["notificationId"] = json!(notification);
@@ -235,7 +242,7 @@ pub(super) fn settle(state: &AppState, repo: &DomainRepository<'_>, pid: &str, s
         Ok(session) => session,
         Err(_) => return,
     };
-    if let Some(saved) = session.as_ref().and_then(waiting) {
+    if let Some(saved) = session.as_ref().and_then(shown) {
         waits()
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -247,6 +254,62 @@ pub(super) fn settle(state: &AppState, repo: &DomainRepository<'_>, pid: &str, s
         .unwrap_or_else(|e| e.into_inner())
         .remove(&key(pid, sid));
     if let Some(id) = wait["notificationId"].as_str() {
+        if dismiss_notification(repo.db, id).is_ok_and(|removed| removed > 0) {
+            broadcast_notification_feed_changed(state);
+        }
+    }
+}
+
+/// A usage-limit wait that no every-account-full card covers (Wait for reset, or a login Ghostex
+/// does not track): the limit card says when Ghostex continues the session, `at`, and offers Stop
+/// (CDXC:AgentProviders 2026-11-14 in recovery.rs, Q3229). No bell row or push: nothing is blocked,
+/// the session waits as its settings say. Returns whether `recovery` changed and needs saving.
+pub(super) fn enter_reset(
+    session: &Value,
+    recovery: &mut Value,
+    at: Option<DateTime<Utc>>,
+) -> bool {
+    let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+    else {
+        return false;
+    };
+    let existing = recovery
+        .get("accountWait")
+        .filter(|w| w.is_object())
+        .cloned();
+    if existing.as_ref().is_some_and(|w| w["mode"] != "reset") {
+        return false;
+    }
+    let resets_at = at.map(|t| t.to_rfc3339());
+    let since = existing
+        .as_ref()
+        .and_then(|w| w["since"].as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+    let wait = json!({ "mode": "reset", "resetsAt": resets_at, "since": since });
+    let changed = existing.as_ref() != Some(&wait);
+    recovery["accountWait"] = wait.clone();
+    waits()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key(pid, sid), wait);
+    changed
+}
+
+/// Drops the session's wait and its bell row, before its recovery is replaced at startup.
+pub(super) fn forget(state: &AppState, repo: &DomainRepository<'_>, session: &Value) {
+    let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+    else {
+        return;
+    };
+    waits()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(&key(pid, sid));
+    if let Some(id) = session
+        .pointer("/runtimeSettings/accountRecovery/accountWait/notificationId")
+        .and_then(Value::as_str)
+    {
         if dismiss_notification(repo.db, id).is_ok_and(|removed| removed > 0) {
             broadcast_notification_feed_changed(state);
         }
@@ -316,7 +379,14 @@ pub(super) fn announce_limit_gave_up(
     };
     broadcast_notification_feed_changed(state);
     if let Some(id) = item["id"].as_str() {
-        crate::push::announce_blocked(state, repo, session, id, crate::push::BlockedWhy::Usage);
+        crate::push::announce_blocked(
+            state,
+            repo,
+            session,
+            id,
+            crate::push::BlockedWhy::Usage,
+            crate::push::PushRoute::default(),
+        );
     }
 }
 
@@ -336,6 +406,19 @@ pub(crate) fn blocked_since(session: &Value) -> Option<String> {
                 .and_then(Value::as_str)
         })
         .map(str::to_string)
+}
+
+/// The saved wait while the limit card should still show it: every account full, a wait for the
+/// reset (`enter_reset`), or a wait a restart paused until the user continues it.
+fn shown(session: &Value) -> Option<Value> {
+    let recovery = session.pointer("/runtimeSettings/accountRecovery")?;
+    let wait = recovery["accountWait"].clone();
+    let keep = match recovery["status"].as_str() {
+        Some("waiting") => recovery["reason"] == NO_ROOM || wait["mode"] == "reset",
+        Some("paused") => wait["mode"] == "afterRestart",
+        _ => false,
+    };
+    (keep && wait.is_object()).then_some(wait)
 }
 
 /// The saved wait, while the session's recovery is still waiting for an account with room.

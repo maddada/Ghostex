@@ -1,5 +1,5 @@
-//! A session pill's live extras and its hover card: the state dot and, for a session on another
-//! computer, that computer's icon after the title, and the card hovering the pill shows. The rule
+//! A mentioned session's live extras and its hover card: the state dot (working or needs you) and,
+//! for a session on another computer, that computer's icon after the title, and the card hovering the pill shows. The rule
 //! (which state, which computer counts as another, what the card says) is gx-chat-core's
 //! `mention_card` (transcript/session_mentions.rs, where the user's decision lives); this file reads
 //! it from the host's session list at draw time and gives it the chat's colours.
@@ -100,28 +100,24 @@ pub(super) fn card_for(server_id: &str, project_id: &str, session_id: &str) -> O
     card(&session.global_ref)
 }
 
-/// The pill's marks after its title: the state dot, then the computer icon for a session on
-/// another computer.
+/// The marks after a session's title: its state dot only while it works or needs you (the core
+/// leaves `dot` empty otherwise, CDXC:SessionChat 2026-11-15 on `mention_card`), then the computer
+/// icon for a session on another computer.
 pub(super) fn marks(card: &MentionCard, p: &ChatAppearance) -> Vec<PillMark> {
     let s = p.scale;
-    let dot = match card.dot.as_str() {
-        "working" => PillMark::Dot {
-            size: px(6.0 * s),
-            color: rgb(WORKING_COLOR).into(),
-            ring: Pixels::ZERO,
-        },
-        "attention" => PillMark::Dot {
-            size: px(6.0 * s),
-            color: rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into(),
-            ring: Pixels::ZERO,
-        },
-        _ => PillMark::Dot {
-            size: px(6.0 * s),
-            color: p.muted.opacity(0.8),
-            ring: px(1.3 * s),
-        },
+    let dot: Option<Hsla> = match card.dot.as_str() {
+        "working" => Some(rgb(WORKING_COLOR).into()),
+        "attention" => Some(rgb(crate::app::native_sidebar::status::APPROVAL_COLOR).into()),
+        _ => None,
     };
-    let mut marks = vec![dot];
+    let mut marks: Vec<PillMark> = dot
+        .map(|color| PillMark::Dot {
+            size: px(6.0 * s),
+            color,
+            ring: Pixels::ZERO,
+        })
+        .into_iter()
+        .collect();
     if card.elsewhere {
         marks.push(PillMark::Icon {
             // That computer's own icon (CDXC:SessionChat 2026-11-14 in session_directory.rs).
