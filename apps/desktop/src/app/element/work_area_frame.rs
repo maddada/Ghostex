@@ -242,6 +242,26 @@ pub(crate) fn refresh_native_work_area_frame_clip(
     true
 }
 
+/// Rounds a web page's native window on Windows and Linux to the card's inner corners in `window`
+/// where it meets them; square where it does not, with the frame off and in windows with no card.
+/// SEE-ALSO: cef/linux_x11.rs and cef/windows.rs (`set_native_view_corner_radii`).
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub(crate) fn clip_native_view_to_work_area_frame(
+    browser: &crate::cef::CefBrowser,
+    bounds: Bounds<Pixels>,
+    window: &Window,
+) {
+    let radii = work_area_frame_corner_radii(bounds, window).map_or([0.0; 4], |corners| {
+        [
+            corners.top_left.as_f32(),
+            corners.top_right.as_f32(),
+            corners.bottom_right.as_f32(),
+            corners.bottom_left.as_f32(),
+        ]
+    });
+    browser.set_corner_radii(radii, window.scale_factor());
+}
+
 #[cfg(target_os = "macos")]
 thread_local! {
     /// Whether each workspace window's traffic lights were last placed for the frame, by window id.

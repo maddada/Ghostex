@@ -1,24 +1,12 @@
 use gpui::{Element, Styled};
 
 pub(crate) trait WindowCornerPaneExt: Element + Styled + Sized {
-    #[cfg(target_os = "macos")]
     fn window_corner_pane(self) -> WindowCornerPane<Self> {
         WindowCornerPane(self, false)
     }
 
-    #[cfg(not(target_os = "macos"))]
-    fn window_corner_pane(self) -> Self {
-        self
-    }
-
-    #[cfg(target_os = "macos")]
     fn window_corner_outline(self) -> WindowCornerPane<Self> {
         WindowCornerPane::outline(self)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn window_corner_outline(self) -> Self {
-        self
     }
 }
 
@@ -41,7 +29,6 @@ pub(crate) fn refresh_native_window_corner_clip(native_view: *mut std::ffi::c_vo
     unsafe { GhostexGpuiCEFRefreshNativeViewWindowCorners(native_view) }
 }
 
-#[cfg(target_os = "macos")]
 use gpui::{
     App, Bounds, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels,
     Window, px,
@@ -50,17 +37,14 @@ use gpui::{
 /// CDXC:Workarea 2026-09-06 DECISION:
 /// User: on macOS, round only pane bottom corners that meet the window's bottom corners, accounting for splits, either sidebar side, hidden sidebars, and bottom/right command panels in every state.
 /// Use this frame's layout bounds, including pane Focus mode and panel reservations, so rounding cannot lag a resize or depend on a duplicated layout model.
-#[cfg(target_os = "macos")]
 pub(crate) struct WindowCornerPane<E>(E, bool);
 
-#[cfg(target_os = "macos")]
 impl<E> WindowCornerPane<E> {
     fn outline(element: E) -> Self {
         Self(element, true)
     }
 }
 
-#[cfg(target_os = "macos")]
 impl<E: Element + Styled> IntoElement for WindowCornerPane<E> {
     type Element = Self;
 
@@ -69,7 +53,6 @@ impl<E: Element + Styled> IntoElement for WindowCornerPane<E> {
     }
 }
 
-#[cfg(target_os = "macos")]
 impl<E: Element + Styled> Element for WindowCornerPane<E> {
     type RequestLayoutState = E::RequestLayoutState;
     type PrepaintState = E::PrepaintState;
@@ -134,6 +117,32 @@ impl<E: Element + Styled> Element for WindowCornerPane<E> {
             }
             return self.0.prepaint(id, inspector_id, bounds, state, window, cx);
         }
+        // Windows and Linux have no window corners to follow here (the compositor rounds the window,
+        // if anything): only the frame's card above rounds a pane there.
+        #[cfg(target_os = "macos")]
+        self.round_to_window_corners(bounds, window);
+        self.0.prepaint(id, inspector_id, bounds, state, window, cx)
+    }
+
+    fn paint(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        state: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.0
+            .paint(id, inspector_id, bounds, state, prepaint, window, cx);
+    }
+}
+
+impl<E: Element + Styled> WindowCornerPane<E> {
+    /// Rounds the pane's corners that meet the window's own (macOS), without the work area frame.
+    #[cfg(target_os = "macos")]
+    fn round_to_window_corners(&mut self, bounds: Bounds<Pixels>, window: &Window) {
         // The command group has a 1pt outer edge and a 1pt right reservation;
         // companion bodies may also sit inside their parent's 1pt border.
         let edge_inset = px(2.0);
@@ -161,20 +170,5 @@ impl<E: Element + Styled> Element for WindowCornerPane<E> {
             radii.top_left = Some(radius(at_top && at_left).into());
             radii.top_right = Some(radius(at_top && at_right).into());
         }
-        self.0.prepaint(id, inspector_id, bounds, state, window, cx)
-    }
-
-    fn paint(
-        &mut self,
-        id: Option<&GlobalElementId>,
-        inspector_id: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        state: &mut Self::RequestLayoutState,
-        prepaint: &mut Self::PrepaintState,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        self.0
-            .paint(id, inspector_id, bounds, state, prepaint, window, cx);
     }
 }

@@ -8949,8 +8949,7 @@
       "type": "boolean",
       "default": true,
       "advanced": true,
-      "agentWritable": true,
-      "availability": "Only on macOS."
+      "agentWritable": true
     },
     {
       "key": "showWindowButtonsWhenSidebarCollapsed",
