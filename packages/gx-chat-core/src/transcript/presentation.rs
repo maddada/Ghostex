@@ -46,7 +46,7 @@ use crate::transcript::prose::prose_markdown;
 use crate::transcript::question_exchange::answered_question_exchange;
 use crate::transcript::question_forms::{question_forms, QuestionForm};
 use crate::transcript::sent_message::{project_sent_messages, resolve_recipients};
-use crate::transcript::simple::{edit_label, tool_count_label};
+use crate::transcript::simple::{calls_label, edit_label};
 use crate::transcript::system_cards::classify_system_card;
 use crate::transcript::tool_fold::{pair_tool_blocks, split_blocks, ToolPair};
 use crate::transcript::tool_rows::{
@@ -478,17 +478,17 @@ pub fn project_message(
     );
     /* React counts only the work rows for this label: an answered question is conversation, so its
     card sits outside the group and is not one of the "N tool calls". */
-    let call_rows = rows
+    let call_rows: Vec<&Value> = rows
         .iter()
         .filter(|row| {
             row.get("hasCall") == Some(&Value::Bool(true))
                 && row.get("exchange") != Some(&Value::Bool(true))
                 && row.get("sentMessage") != Some(&Value::Bool(true))
         })
-        .count();
+        .collect();
     projected.insert(
         "simpleToolLabel".to_string(),
-        tool_count_label(call_rows).into(),
+        calls_label(&call_rows).into(),
     );
     // The pictures the message's calls opened from disk, which its turn's fold keeps showing
     // (`read_images.rs`).
