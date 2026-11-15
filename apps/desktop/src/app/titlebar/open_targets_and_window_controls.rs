@@ -215,30 +215,22 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .h_full()
             .items_center()
-            .when(self.window_minimize_available(), |this| {
-                this.child(self.render_titlebar_window_control(
-                    GpuiWindowCaptionControl::Minimize,
-                    full_height,
-                    cx,
-                ))
-            })
+            .when(
+                crate::app::helpers::window_minimize_available(window),
+                |this| {
+                    this.child(self.render_titlebar_window_control(
+                        GpuiWindowCaptionControl::Minimize,
+                        full_height,
+                        cx,
+                    ))
+                },
+            )
             .child(self.render_titlebar_window_control(maximize_control, full_height, cx))
             .child(self.render_titlebar_window_control(
                 GpuiWindowCaptionControl::Close,
                 full_height,
                 cx,
             ))
-    }
-
-    /// Whether the window has somewhere to minimize to. On Hyprland that is Omarchy's dock
-    /// (`linux_hyprland::omarchy_minimize_available`); plain Hyprland has no minimize at all.
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
-    pub(crate) fn window_minimize_available(&self) -> bool {
-        #[cfg(target_os = "linux")]
-        if crate::linux_hyprland::running_on_hyprland() {
-            return crate::linux_hyprland::omarchy_minimize_available();
-        }
-        true
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]

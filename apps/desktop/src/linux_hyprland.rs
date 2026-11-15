@@ -29,6 +29,11 @@ use std::time::Duration;
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 
+mod minimize_places;
+pub(crate) use minimize_places::{
+    learn_active_window, omarchy_minimizes_window, watch_minimize_places,
+};
+
 /// Ghostex's X11 class (`gpui_platform_window_app_id`).
 const WINDOW_CLASS: &str = "ghostex";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
@@ -154,6 +159,9 @@ pub(crate) fn start_hyprland_integration() {
         return;
     };
     read_blur(&directory);
+    if let Some(omarchy_bin) = omarchy_bin_directory() {
+        minimize_places::start(&directory, omarchy_bin.clone());
+    }
     let spawned = std::thread::Builder::new()
         .name("hyprland-integration".to_string())
         .spawn(move || {
@@ -176,20 +184,20 @@ pub(crate) fn running_on_hyprland() -> bool {
 
 /// Omarchy's minimize command, which moves a window to its dock (the titlebar `−` of Omarchy's
 /// floating workspaces and Super+M run it).
-pub(crate) const OMARCHY_MINIMIZE_COMMAND: &str = "omarchy-hyprland-window-minimize";
+const OMARCHY_MINIMIZE_COMMAND: &str = "omarchy-hyprland-window-minimize";
 
-/// Whether this Hyprland has somewhere to minimize a window to: Omarchy's minimize command is on
-/// `PATH`. Hyprland itself has no minimize, so without it the minimize button would do nothing.
+/// The folder holding Omarchy's commands, found through Omarchy's minimize command on `PATH`.
+/// Hyprland itself has no minimize, so without it the minimize button would do nothing.
 ///
-/// CDXC:Titlebar 2026-11-15 SEE-ALSO: .dependencies/zed/crates/gpui_linux/src/linux/x11/window.rs (`minimize` runs this command on Hyprland), app/titlebar/open_targets_and_window_controls.rs (`window_minimize_available` hides the button without it).
-pub(crate) fn omarchy_minimize_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        std::env::var_os("PATH").is_some_and(|path| {
-            std::env::split_paths(&path)
-                .any(|directory| directory.join(OMARCHY_MINIMIZE_COMMAND).is_file())
+/// CDXC:Titlebar 2026-11-15 SEE-ALSO: .dependencies/zed/crates/gpui_linux/src/linux/x11/window.rs (`minimize` runs this command on Hyprland), linux_hyprland/minimize_places.rs (where it acts), app/helpers/titlebar/window_caption.rs (`window_minimize_available` shows the button from it).
+fn omarchy_bin_directory() -> Option<&'static PathBuf> {
+    static DIRECTORY: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIRECTORY
+        .get_or_init(|| {
+            std::env::split_paths(&std::env::var_os("PATH")?)
+                .find(|directory| directory.join(OMARCHY_MINIMIZE_COMMAND).is_file())
         })
-    })
+        .as_ref()
 }
 
 /// `$XDG_RUNTIME_DIR/hypr/<signature>` (Hyprland 0.40 and later), else `/tmp/hypr/<signature>`.
@@ -254,7 +262,8 @@ fn send_request(directory: &PathBuf, request: &str) -> std::io::Result<String> {
     Ok(answer)
 }
 
-/// Re-adds the rule after each config reload, for as long as Hyprland's event socket stays open.
+/// Re-adds the rule after each config reload, and follows where Ghostex's windows are
+/// (`minimize_places`), for as long as Hyprland's event socket stays open.
 fn watch_reloads(directory: &PathBuf) {
     let Ok(stream) = UnixStream::connect(directory.join(".socket2.sock")) else {
         return;
@@ -263,6 +272,7 @@ fn watch_reloads(directory: &PathBuf) {
         let Ok(line) = line else {
             return;
         };
+        minimize_places::note_event(&line);
         if is_config_reloaded_event(&line) {
             apply_rule(directory);
             read_blur(directory);
