@@ -2366,8 +2366,11 @@ written. And
 `ghostex visual check <file.json>` draws a Ghostex visual to an image, or lists a
 Ghostex form's questions (and names anything to write the standard way), so the
 agent can check it before replying;
-`ghostex visual check <file.html>` opens a page in Chrome at a phone's width
-and a computer's, saves a screenshot of each and lists what does not fit.
+`ghostex visual check <file.html>` opens a page in Chrome at 360, 600, 900 and
+1280px wide, and again with large text (130%) on a phone and a foldable, saves
+a screenshot of each and lists anything that overflows its box, is cut off or
+is drawn over other text, by its CSS selector (`--width N` and
+`--text-scale 130` check one size).
 
 **Exported pages.** Any Ghostex page can go to someone who doesn't use Ghostex.
 Press Export on the page's card in the chat, or Export page in the ⋯ menu at the

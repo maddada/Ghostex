@@ -188,8 +188,8 @@ For every question:
   tag was already used means: give that question a new tag.
 - Write a form's block to a file and send it only when `ghostex visual check <file>` shows no error.
   Whoever builds a page looks at it before the user does:
-  `ghostex visual check <page.html> --out <file.png>` (`--width 390` for the phone); put that in the
-  brief of a thread that builds one.
+  `ghostex visual check <page.html> --out <file.png>` (phone, foldable, computer and large text; it
+  fails while anything overflows or overlaps); put that in the brief of a thread that builds one.
 - End your turn after asking: the answers arrive as your next message.
 - An answer or Reply arrives as "W<n> Q<n>: <answer>", already recorded: act on it, never ask it again
   or withdraw it. Dismiss arrives as "I dismissed …": withdrawn for good, never ask it again. A

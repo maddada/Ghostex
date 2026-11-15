@@ -159,8 +159,11 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
 /// User: fix pages for phones "for customers and all future inline htmls like we did previously for light dark etc". The kit fits any page, and the agent is told right where it reads `ghostex show`'s result when its page needed fitting, so its next page is written for a phone; `--no-check` skips the check.
 fn phone_note(findings: &[String], file: &str) -> String {
     let mut note = format!(
-        "Phone check ({}px): the page needs work to read well on a phone. Fix it, look with `ghostex visual check {file}`, then run ghostex show again and reply with the new block.",
-        visual_page_check::PHONE_WIDTH
+        "Narrow-screen check ({}px, {}px, and {}px with text at {:.0}%): the page needs work to read well on a phone or foldable. Fix it, look with `ghostex visual check {file}` (every size, with screenshots), then run ghostex show again and reply with the new block.",
+        visual_page_check::PHONE_WIDTH,
+        visual_page_check::SMALL_TABLET_WIDTH,
+        visual_page_check::FOLDABLE_WIDTH,
+        visual_page_check::LARGE_TEXT_SCALE * 100.0
     );
     for finding in findings {
         note.push_str("\n- ");
