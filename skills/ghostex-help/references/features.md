@@ -5040,7 +5040,12 @@ in Settings > Voice Agent, pick a voice, and paste the provider's key there
 (xAI keys come from console.x.ai, OpenAI keys from platform.openai.com). The
 key is checked with the provider before it is saved, kept encrypted on this
 computer and never shown again. If a saved key can't be read anymore,
-Settings > Voice Agent says so on its row: paste it again. The provider bills your account while a
+Settings > Voice Agent says so on its row: paste it again. For OpenAI, when
+Codex is signed in with ChatGPT on this computer, Use my ChatGPT sign-in
+(beside Save) uses that sign-in instead of a key: Ghostex reads it from Codex
+each time and never refreshes it, so when it has expired, run Codex once and
+call again. Voice calls work on it; the memory summary and OpenAI Dictation use
+your OpenAI API credits. The provider bills your account while a
 conversation is open. When the provider refuses a conversation (for example
 xAI answering "payment required" because an X subscription's included usage
 is used up for the moment), the panel shows the provider's own reason.

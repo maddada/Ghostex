@@ -13688,7 +13688,7 @@
     {
       "key": "voiceAgentOpenaiKey",
       "title": "OpenAI API key",
-      "subtitle": "Shown under the provider when it is OpenAI GPT Realtime. Dictation uses the same key when its engine is OpenAI. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.",
+      "subtitle": "Shown under the provider when it is OpenAI GPT Realtime. Dictation uses the same key when its engine is OpenAI. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead. When Codex is signed in with ChatGPT on this computer, Use my ChatGPT sign-in uses that sign-in instead of a key.",
       "tab": "voiceAgent",
       "tabTitle": "Voice Agent",
       "section": "provider",

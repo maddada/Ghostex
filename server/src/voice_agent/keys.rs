@@ -123,6 +123,46 @@ fn reference_path(paths: &GxserverPaths, provider: Provider) -> PathBuf {
         .join(format!("{}.ref.json", provider.id()))
 }
 
+/// Marks that OpenAI's key is the ChatGPT sign-in Codex keeps (`chatgpt_signin.rs`) rather than a
+/// saved key. A pasted key or a 1Password reference replaces it, and it replaces them.
+fn signin_path(paths: &GxserverPaths) -> PathBuf {
+    paths
+        .auth_dir
+        .join("voice-agent")
+        .join("openai.chatgpt-signin.json")
+}
+
+/// Whether the provider's key is the ChatGPT sign-in (only OpenAI has one).
+pub(super) fn uses_chatgpt_signin(paths: &GxserverPaths, provider: Provider) -> bool {
+    provider == Provider::OpenAi && signin_path(paths).is_file()
+}
+
+fn remove_if_present(path: &std::path::Path, what: &str) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(format!("Couldn't remove {what}: {error}"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Makes OpenAI use the ChatGPT sign-in, dropping its saved key or 1Password reference.
+pub(super) fn use_chatgpt_signin(paths: &GxserverPaths) -> Result<(), String> {
+    let path = signin_path(paths);
+    let write = || -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, br#"{"source":"codexChatgpt"}"#)
+    };
+    write().map_err(|error| format!("Couldn't save the choice: {error}"))?;
+    remove_if_present(&sealed_path(paths, Provider::OpenAi), "the old API key")?;
+    remove_if_present(
+        &reference_path(paths, Provider::OpenAi),
+        "the 1Password reference",
+    )
+}
+
 /// The secret provider reference the provider's key is read from, if it has one.
 pub(super) fn key_reference(
     paths: &GxserverPaths,
@@ -162,12 +202,10 @@ pub(super) fn write_key_reference(
         fs::rename(&temp, &path)
     };
     write().map_err(|error| format!("Couldn't save the 1Password reference: {error}"))?;
-    match fs::remove_file(sealed_path(paths, provider)) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            Err(format!("Couldn't remove the old API key: {error}"))
-        }
-        _ => Ok(()),
+    if provider == Provider::OpenAi {
+        remove_if_present(&signin_path(paths), "the ChatGPT sign-in choice")?;
     }
+    remove_if_present(&sealed_path(paths, provider), "the old API key")
 }
 
 /// [`read_key`] off the async runtime: a key kept in 1Password may wait for an unlock.
@@ -181,12 +219,15 @@ pub(super) async fn read_key_async(
         .map_err(|_| "Couldn't read the API key.".to_string())?
 }
 
-/// The provider's saved key, unsealed or read through its secret provider; `None` when none is
-/// saved. Blocking.
+/// The provider's saved key, unsealed or read through its secret provider (or the ChatGPT sign-in's
+/// current token); `None` when none is saved. Blocking.
 pub(super) fn read_key(
     paths: &GxserverPaths,
     provider: Provider,
 ) -> Result<Option<String>, String> {
+    if uses_chatgpt_signin(paths, provider) {
+        return super::chatgpt_signin::read_token(paths).map(Some);
+    }
     if let Some(reference) = key_reference(paths, provider) {
         return crate::secret_providers::resolve(paths, &reference)
             .map(|key| Some(key.trim().to_string()))
@@ -226,8 +267,9 @@ pub(super) enum KeyState {
 /// Opens the saved key to see that it still can: one small file and the vault key the vault
 /// caches for the process, cheap enough for every read.
 pub(super) fn key_state(paths: &GxserverPaths, provider: Provider) -> KeyState {
-    // Read only when used: 1Password may ask to unlock, which a status read must never cause.
-    if key_reference(paths, provider).is_some() {
+    // Read only when used: 1Password may ask to unlock, which a status read must never cause. The
+    // ChatGPT sign-in too: using it says when Codex is signed out or its sign-in has expired.
+    if uses_chatgpt_signin(paths, provider) || key_reference(paths, provider).is_some() {
         return KeyState::Saved;
     }
     match fs::read_to_string(sealed_path(paths, provider)) {
@@ -250,19 +292,12 @@ pub(super) fn write_key(
     key: Option<&str>,
 ) -> Result<(), String> {
     let path = sealed_path(paths, provider);
-    match fs::remove_file(reference_path(paths, provider)) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            return Err(format!("Couldn't remove the 1Password reference: {error}"))
-        }
-        _ => {}
+    remove_if_present(&reference_path(paths, provider), "the 1Password reference")?;
+    if provider == Provider::OpenAi {
+        remove_if_present(&signin_path(paths), "the ChatGPT sign-in choice")?;
     }
     let Some(key) = key else {
-        return match fs::remove_file(&path) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                Err(format!("Couldn't remove the API key: {error}"))
-            }
-            _ => Ok(()),
-        };
+        return remove_if_present(&path, "the API key");
     };
     let sealed = vault::seal(paths, key)?;
     let write = || -> std::io::Result<()> {

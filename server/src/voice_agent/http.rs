@@ -50,6 +50,8 @@ pub(crate) async fn handle_read_voice_agent_http(
             "configured": state == KeyState::Saved,
             "unreadable": state == KeyState::Unreadable,
             "reference": keys::key_reference(paths, provider).map(|reference| reference.reference),
+            // The key is the ChatGPT sign-in Codex keeps (OpenAI only, `chatgpt_signin.rs`).
+            "chatgptSignIn": keys::uses_chatgpt_signin(paths, provider),
         })
     };
     let result = json!({
@@ -60,6 +62,9 @@ pub(crate) async fn handle_read_voice_agent_http(
         },
         "voiceOptions": {"xai": voices(Provider::Xai), "openai": voices(Provider::OpenAi)},
         "keys": {"xai": key_view(Provider::Xai), "openai": key_view(Provider::OpenAi)},
+        // Codex is signed in with ChatGPT here, so Settings can offer "Use my ChatGPT sign-in" for
+        // OpenAI (`setVoiceAgentKey` with `chatgptSignIn: true`).
+        "chatgptSignInAvailable": super::chatgpt_signin::available(paths),
         "secretsSealedWith": crate::vault::vault_backend(paths),
         // Off on Settings > Extensions: `/api/voice` refuses conversations (`feature.rs`); the
         // keys stay readable because Dictate uses the xAI or OpenAI key.
@@ -119,6 +124,36 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
         .unwrap_or_default()
         .to_string();
     let paths = state.paths.clone();
+    // "Use my ChatGPT sign-in": the token Codex keeps, checked with OpenAI once here and read again
+    // each time it is used.
+    if params.get("chatgptSignIn").and_then(Value::as_bool) == Some(true) {
+        if provider != Provider::OpenAi {
+            return Err(failure(
+                "invalidParams",
+                "Only OpenAI voice can use a ChatGPT sign-in.",
+            ));
+        }
+        return tokio::task::spawn_blocking(move || {
+            let token = super::chatgpt_signin::read_token(&paths)
+                .map_err(|message| failure("badKey", message))?;
+            match keys::check_key(provider, &token) {
+                KeyCheck::Valid => {}
+                KeyCheck::Refused(reason) => {
+                    return Err(failure(
+                        "badKey",
+                        keys::refused_message(provider, "your ChatGPT sign-in", reason.as_deref()),
+                    ))
+                }
+                KeyCheck::Unreachable(message) => {
+                    return Err(failure("providerUnavailable", message))
+                }
+            }
+            keys::use_chatgpt_signin(&paths).map_err(|message| failure("internalError", message))
+        })
+        .await
+        .map_err(|error| failure("internalError", error.to_string()))?
+        .map(|()| json!({"provider": provider.id(), "configured": true, "chatgptSignIn": true}));
+    }
     if key.is_empty() {
         tokio::task::spawn_blocking(move || keys::write_key(&paths, provider, None))
             .await
