@@ -666,6 +666,10 @@ fn open_reference(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     if let Some(item) = crate::extras::coordinator_board::board_item(href) {
         return crate::extras::coordinator_board::show_item(state, item);
     }
+    // What a Reply in chat box answers: a label, never a place to open.
+    if crate::questions::answer_pills::parse_href(href).is_some() {
+        return Vec::new();
+    }
     // A mention of another session switches to it, as its pill does in the transcript.
     if let Some(target) = ghostex_gx_protocol::parse_global_session_ref(href.trim()) {
         return vec![Effect::HostAction {

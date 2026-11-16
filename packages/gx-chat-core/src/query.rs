@@ -52,6 +52,19 @@ pub fn answer_query(
                 field("reply").unwrap_or_default(),
             ))
         }
+        // `answerInChatBox({draft, name, tags, settles, reply})`: the chat box after a Reply in
+        // chat box (`questions/answer_pills.rs`).
+        Query::AnswerInChatBox => {
+            let request = first?;
+            let field = |name: &str| request.get(name).and_then(Value::as_str).unwrap_or_default();
+            to_json(&crate::questions::answer_pills::in_chat_box(
+                field("draft"),
+                field("name"),
+                field("tags"),
+                request.get("settles").and_then(Value::as_bool).unwrap_or(true),
+                field("reply"),
+            )?)
+        }
         Query::SendBlockedToast => {
             // The renderer passes the reason it already has; when it passes none, the helper asks
             // the composer for the current one.
@@ -173,6 +186,7 @@ pub enum Query {
     TranscriptMenu,
     /// `transcriptReply({draft, quote, reply})`: the chat box after the Reply popover adds a reply.
     TranscriptReply,
+    AnswerInChatBox,
     /// The toast text for a send the composer refused.
     SendBlockedToast,
     /// A question answer with the references for the files a paste uploaded.
@@ -208,6 +222,7 @@ impl Query {
             Self::ReferenceMenu => "referenceMenu",
             Self::TranscriptMenu => "transcriptMenu",
             Self::TranscriptReply => "transcriptReply",
+            Self::AnswerInChatBox => "answerInChatBox",
             Self::SendBlockedToast => "sendBlockedToast",
             Self::InsertAnswerAttachments => "insertAnswerAttachments",
             Self::AttachmentReferencePaths => "attachmentReferencePaths",
@@ -229,6 +244,7 @@ impl Query {
             "referenceMenu" => Self::ReferenceMenu,
             "transcriptMenu" => Self::TranscriptMenu,
             "transcriptReply" => Self::TranscriptReply,
+            "answerInChatBox" => Self::AnswerInChatBox,
             "sendBlockedToast" => Self::SendBlockedToast,
             "insertAnswerAttachments" => Self::InsertAnswerAttachments,
             "attachmentReferencePaths" => Self::AttachmentReferencePaths,

@@ -23,7 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 /// The card's size before the chat's zoom.
-const WIDTH: f32 = 360.0;
+const WIDTH: f32 = 400.0;
 const HEIGHT: f32 = 132.0;
 /// The line that says why the last send failed (`reopen_failed_reply`).
 const ERROR_LINE: f32 = 22.0;
@@ -35,7 +35,12 @@ pub(super) const OPENING_PRESS: Duration = Duration::from_millis(350);
 /// The open popover's window, one per chat.
 #[derive(Default)]
 pub(in crate::app::native_chat) struct ReplyPopoverState {
-    handle: Option<gpui::WindowHandle<Root>>,
+    pub(super) handle: Option<gpui::WindowHandle<Root>>,
+    /// The open card's field, for Dictate and the pictures saved into it (reply_attachments.rs).
+    pub(super) input: Option<WeakEntity<TextareaState>>,
+    /// Pictures being saved into it, and why the last one could not be.
+    pub(super) pending: usize,
+    pub(super) attach_error: Option<String>,
     /// The last popover's command and the window it opened from, so a work item Reply whose send
     /// failed opens again where it was (`reopen_failed_reply`).
     last: Option<(gpui::AnyWindowHandle, serde_json::Value)>,
@@ -202,6 +207,11 @@ struct ReplyPopover {
     /// Where its words are kept until sent (`KEPT_REPLIES`), and whether its row was open on the
     /// dock or the board when it opened; `None` for a quoted selection.
     kept: Option<(String, String, bool)>,
+    /// The paperclip's file picker is open: the key it takes is not a click away.
+    picking: bool,
+    /// The field's pills (its pictures), parsed from the text they were drawn for.
+    references: Vec<super::composer_references::ComposerReference>,
+    reference_draft: Option<String>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -674,6 +684,25 @@ impl NativeChatView {
     ) {
         if let Some(question) = question {
             let reply = reply.trim();
+            // Reply in chat box puts what it answers in the chat box as a pill inside the text,
+            // by its title, with the words after it; the tags ride in the pill's link only. It
+            // goes also with no words yet, to say them in the chat box (by voice, with pictures,
+            // or beside other answers). (`questions::answer_pills`, CDXC:Coordinators 2026-11-16.)
+            if action == ReplyAction::AddToPrompt {
+                let (tags, settles) = match (&question.questions, &question.work) {
+                    (Some(_), _) => (question.tag.clone(), false),
+                    (None, Some((item, _))) => (format!("{item} {}", question.tag), true),
+                    (None, None) => (question.tag.clone(), true),
+                };
+                if let Some(pill) = ghostex_gx_chat_core::questions::answer_pills::pill(
+                    &question.name,
+                    &tags,
+                    settles,
+                ) {
+                    self.append_prompt(&format!("{pill}{reply}"), cx);
+                    return;
+                }
+            }
             if reply.is_empty() {
                 return;
             }
@@ -880,6 +909,16 @@ impl ReplyPopover {
             cx,
             |popover: &mut Self, _, cx| popover.close(None, false, cx),
         );
+        // Dictate and the pictures being saved are the chat's: the card draws them as they change.
+        let mut observers = Vec::new();
+        if let Some(view) = chat.upgrade() {
+            view.update(cx, |view, _| {
+                view.reply_popover.input = Some(input.downgrade());
+                view.reply_popover.pending = 0;
+                view.reply_popover.attach_error = None;
+            });
+            observers.push(cx.observe(&view, |_, _, cx| cx.notify()));
+        }
         Self {
             chat,
             quote,
@@ -893,7 +932,13 @@ impl ReplyPopover {
             settling: true,
             rekeys: 0,
             kept,
-            _subscriptions: vec![activation, press, enter, keep],
+            picking: false,
+            references: Vec::new(),
+            reference_draft: None,
+            _subscriptions: [activation, press, enter, keep]
+                .into_iter()
+                .chain(observers)
+                .collect(),
         }
     }
 
@@ -902,7 +947,8 @@ impl ReplyPopover {
     /// chat's menus do (CDXC:SessionChat 2026-09-22 on `ChatOptionMenu::check_active`).
     fn key_lost(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // GPUI reports activation from a queued task, so the report can be out of date already.
-        if self.closed || window.is_window_active() {
+        // The paperclip's file picker takes the key while it is open; the card stays.
+        if self.closed || self.picking || window.is_window_active() {
             return;
         }
         if key_loss_closes(
@@ -981,6 +1027,110 @@ impl ReplyPopover {
         }
     }
 
+    /// The field's picture pills, drawn as the chat box draws them.
+    fn sync_references(&mut self, cx: &mut Context<Self>) {
+        let text = self.input.read(cx).value().to_string();
+        if self.reference_draft.as_deref() == Some(text.as_str()) {
+            return;
+        }
+        let parsed = serde_json::to_value(
+            ghostex_gx_chat_core::composer::queries::composer_references(&text),
+        )
+        .unwrap_or(serde_json::Value::Null);
+        self.references = super::composer_references::parse(&text, &parsed);
+        self.reference_draft = Some(text);
+        let replacements = super::composer_references::replacements(&self.references, &self.appearance);
+        self.input
+            .update(cx, |input, cx| input.set_inline_replacements(replacements, cx));
+    }
+
+    /// The microphone: Dictate records into this field (reply_attachments.rs), through the chat's
+    /// own window, which holds the recording.
+    fn toggle_dictation(&mut self, cx: &mut Context<Self>) {
+        let chat = self.chat.clone();
+        cx.defer(move |cx| {
+            let Some(main) = chat.upgrade().and_then(|chat| chat.read(cx).main_window) else {
+                return;
+            };
+            let _ = main.update(cx, |_, window, cx| {
+                let _ = chat.update(cx, |chat, cx| chat.toggle_reply_dictation(window, cx));
+            });
+        });
+    }
+
+    /// The paperclip: pictures or files picked are saved into the field as pasted ones are.
+    fn pick_files(&mut self, cx: &mut Context<Self>) {
+        self.picking = true;
+        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: None,
+        });
+        let input = self.input.clone();
+        cx.spawn(async move |popover, cx| {
+            let picked = paths.await.ok().and_then(Result::ok).flatten().unwrap_or_default();
+            let _ = popover.update(cx, |popover, cx| {
+                popover.picking = false;
+                let chat = popover.chat.clone();
+                cx.defer(move |cx| {
+                    let Some(main) = chat.upgrade().and_then(|chat| chat.read(cx).main_window)
+                    else {
+                        return;
+                    };
+                    let _ = main.update(cx, |_, window, cx| {
+                        let _ = chat.update(cx, |chat, cx| {
+                            chat.attach_reply_paths(picked, input, window, cx)
+                        });
+                    });
+                });
+            });
+        })
+        .detach();
+    }
+
+    fn icon_button(
+        &self,
+        id: &'static str,
+        icon: &'static str,
+        label: &'static str,
+        live: bool,
+        cx: &mut Context<Self>,
+        press: impl Fn(&mut Self, &mut Context<Self>) + 'static,
+    ) -> AnyElement {
+        let p = &self.appearance;
+        let s = p.scale;
+        let (hover, _) = menu_ink_washes(p.light);
+        div()
+            .id(id)
+            .role(gpui::Role::Button)
+            .aria_label(label)
+            .chat_cursor_pointer()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .justify_center()
+            .size(px(26.0 * s))
+            .rounded(px(6.0 * s))
+            .when(live, |button| button.bg(hover))
+            .hover(move |button| button.bg(hover))
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+            })
+            .child(
+                gpui::svg()
+                    .path(icon)
+                    .size(px(15.0 * s))
+                    .text_color(if live {
+                        p.ring
+                    } else {
+                        p.muted
+                    }),
+            )
+            .on_click(cx.listener(move |popover, _, _, cx| press(popover, cx)))
+            .into_any_element()
+    }
+
     fn action_button(
         &self,
         id: &'static str,
@@ -1017,6 +1167,32 @@ impl Render for ReplyPopover {
         let s = p.scale;
         let (_, edge) = menu_ink_washes(p.light);
         let error_color = p.error();
+        self.sync_references(cx);
+        let paste = NativeChatView::reply_paste_handler(self.chat.clone(), self.input.clone());
+        // Dictate, and the pictures being saved, as the chat holds them (reply_attachments.rs).
+        let (dictation, pending, attach_error) = self
+            .chat
+            .upgrade()
+            .map(|chat| {
+                let chat = chat.read(cx);
+                (
+                    chat.reply_dictation(cx),
+                    chat.reply_popover.pending,
+                    chat.reply_popover.attach_error.clone(),
+                )
+            })
+            .unwrap_or((super::reply_attachments::ReplyDictation::Idle, 0, None));
+        let status = match (dictation, pending, attach_error) {
+            (super::reply_attachments::ReplyDictation::Transcribing, _, _) => {
+                Some(("Transcribing\u{2026}".to_string(), false))
+            }
+            (super::reply_attachments::ReplyDictation::Recording, _, _) => {
+                Some(("Listening\u{2026}".to_string(), false))
+            }
+            (_, pending, _) if pending > 0 => Some(("Saving the picture\u{2026}".to_string(), false)),
+            (_, _, Some(error)) => Some((error, true)),
+            _ => None,
+        };
         div()
             .id("chat-reply-popover")
             .role(gpui::Role::Dialog)
@@ -1038,6 +1214,7 @@ impl Render for ReplyPopover {
             .child(
                 div().px(px(4.0 * s)).pt(px(2.0 * s)).child(
                     Textarea::new(&self.input)
+                        .on_paste(paste)
                         .appearance(false)
                         .bordered(false)
                         .caret_color(p.foreground)
@@ -1070,9 +1247,45 @@ impl Render for ReplyPopover {
                     .justify_end()
                     .gap(px(2.0 * s))
                     .font_weight(FontWeight::MEDIUM)
+                    .child(self.icon_button(
+                        "chat-reply-dictate",
+                        "titlebar/microphone.svg",
+                        match dictation {
+                            super::reply_attachments::ReplyDictation::Idle => "Dictate",
+                            _ => "Stop dictating",
+                        },
+                        dictation != super::reply_attachments::ReplyDictation::Idle,
+                        cx,
+                        |popover, cx| popover.toggle_dictation(cx),
+                    ))
+                    .child(self.icon_button(
+                        "chat-reply-attach",
+                        "titlebar/paperclip.svg",
+                        "Attach pictures or files",
+                        false,
+                        cx,
+                        |popover, cx| popover.pick_files(cx),
+                    ))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .px(px(4.0 * s))
+                            .truncate()
+                            .font_weight(FontWeight::NORMAL)
+                            .text_size(px(12.0 * s))
+                            .when_some(status, |line, (status, error)| {
+                                line.text_color(if error { error_color } else { p.muted })
+                                    .child(status)
+                            }),
+                    )
                     .child(self.action_button(
                         "chat-reply-add",
-                        "Add to prompt",
+                        if self.question.is_some() {
+                            "Reply in chat box"
+                        } else {
+                            "Add to prompt"
+                        },
                         ReplyAction::AddToPrompt,
                         cx,
                     ))

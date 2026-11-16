@@ -6,6 +6,7 @@
 
 pub mod account_wait;
 pub mod actions;
+pub mod answer_pills;
 pub mod async_answers;
 pub mod async_controller;
 pub mod content;
