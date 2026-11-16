@@ -326,6 +326,7 @@ pub(crate) mod tests {
                 restart: None,
             }]),
             removed_question_ids: Some(vec![format!("removed {tag}")]),
+            retired_page_ids: Some(vec![format!("retired page {tag}")]),
             resource_index: Some(vec![json!(tag)].into()),
         };
         ReadSessionChatResult {

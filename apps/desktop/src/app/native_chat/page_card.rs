@@ -276,7 +276,14 @@ impl NativeChatView {
         // Dismiss) reads Seen, as one marked seen on the page does (gx-chat-core
         // questions/later.rs `mark_seen`).
         let seen_only = page.awaits_seen && page.questions.is_none();
-        let withdrawn = if canceled && seen_only {
+        // A page its agent retired is on that removed list too, but reads Replaced
+        // (`withdrawnPages`' `replaced`, gx-chat-core transcript/document.rs).
+        let replaced = page_id
+            .as_deref()
+            .is_some_and(|id| self.snapshot["withdrawnPages"][id]["replaced"] == true);
+        let withdrawn = if replaced {
+            withdrawn
+        } else if canceled && seen_only {
             Some(("Seen".to_string(), "Seen, no answer needed".to_string()))
         } else if canceled {
             Some((

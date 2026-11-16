@@ -212,6 +212,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .removed_question_ids
         .clone()
         .or_else(|| previous_side.and_then(|state| state.removed_question_ids.clone()));
+    folded.result.state.retired_page_ids = side
+        .retired_page_ids
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.retired_page_ids.clone()));
 
     folded.result.state.unavailable_modes = side
         .unavailable_modes

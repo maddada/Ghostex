@@ -41,6 +41,9 @@ pub struct SessionState {
     /// The question forms and pages the user removed without answering, as gxserver keeps them
     /// (`crate::questions::later`). Absent means unchanged.
     pub removed_question_ids: crate::state::Stamped<Vec<String>>,
+    /// The pages their agent retired (`ghostex page retire`), as gxserver keeps them: their cards
+    /// read Replaced (`transcript::document`). Absent means unchanged.
+    pub retired_page_ids: Vec<String>,
     /// The session's resource index as gxserver keeps it (`crate::questions::resource_index`):
     /// every form, page and chart of the whole conversation, which the Resources pill and list add
     /// to what the loaded rows hold. Absent means unchanged.
@@ -181,6 +184,7 @@ impl Default for SessionState {
             later_question_ids: Default::default(),
             unavailable_modes: Vec::new(),
             removed_question_ids: Default::default(),
+            retired_page_ids: Vec::new(),
             resource_index: Default::default(),
             async_questions_since: None,
             forked_at: None,
