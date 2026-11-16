@@ -71,6 +71,8 @@ impl GhostexGpuiApp {
                     .and_then(|machine| self.gpui_remote_gxserver_request_target(machine))
                 {
                     super::note_owner_key_approved(&Transport::Remote(target));
+                    // Its requests that were notices ("Approve on …") can be approved here now.
+                    self.owner_security_show_pending_requests(machine_id.clone(), cx);
                 }
             }
             self.remove_gpui_app_toast(&id, cx);
@@ -227,9 +229,10 @@ impl GhostexGpuiApp {
         let Some(target) = self.gpui_remote_gxserver_request_target(&machine) else {
             return;
         };
-        let checked = cx
-            .background_executor()
-            .spawn(async move { super::answerer(&Transport::Remote(target)) });
+        let checked = cx.background_executor().spawn({
+            let request = request.clone();
+            async move { super::answerer_for(&Transport::Remote(target), &request) }
+        });
         cx.spawn(async move |this, cx| {
             let answerer = checked.await;
             let _ = this.update(cx, |this, cx| match answerer {
@@ -257,7 +260,7 @@ impl GhostexGpuiApp {
             .unwrap_or_else(|| machine_id.to_string());
         let summary = request.summary.trim().trim_end_matches('.');
         let where_to = match devices {
-            [] => format!("in Ghostex on {computer}"),
+            [] => format!("in Ghostex on {computer} or on a phone paired with it"),
             several => format!("on {}", several.join(" or ")),
         };
         let then = if asked {

@@ -183,8 +183,13 @@ fn gpui_remote_gxserver_post_attempt(
     })
     .to_string();
     // The app's owner session on that computer once it is open (GitHub #495), its token file
-    // until then.
-    let owner_token = crate::app::owner_security::cached_remote_owner_token(target);
+    // until then. A pairing code or an Approve goes with the owner session opened for them
+    // (CDXC:Security 2026-11-16 at `owner_security::is_door_call`).
+    let owner_token = match crate::app::owner_security::remote_door_token(target, path, params) {
+        Some(Ok(token)) => Some(token),
+        Some(Err(refusal)) => return Err(refusal.into()),
+        None => crate::app::owner_security::cached_remote_owner_token(target),
+    };
     let request = format!(
         "POST {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\n{GPUI_GXSERVER_PROTOCOL_HEADER}: {GPUI_GXSERVER_PROTOCOL_VERSION}\r\nContent-Length: {}\r\n\r\n{body}",
         owner_token.as_deref().unwrap_or(target.token.as_str()),

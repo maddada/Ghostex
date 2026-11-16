@@ -101,6 +101,19 @@ const DOOR_RETRY_AFTER: Duration = Duration::from_secs(5);
 CDXC:Security 2026-11-16 DECISION:
 User (W524, "Owner only"): only this app or a paired phone makes pairing codes and approves new devices; agents running as the user, who can read the token file, must not. gxserver keeps the door for the owner session once this computer has an owner device (CDXC:Security 2026-11-16 in server/src/security/policy.rs), so this app opens its owner session on this computer's gxserver again (the owner key in the OS key store signs it; the first key, or the one in the minutes after the first start with the rule, goes in without a card, a later one waits for an Approve on a phone) and sends it only with those calls: the code in Connect a phone or computer, Settings > Remote and the 11.0.1 notice, and Approve ([`door_token`], picked where every call to this computer's gxserver picks its token). Every other call still goes with the token file, as since plain approvals.
 */
+/*
+CDXC:Security 2026-11-16 DECISION:
+User (after W524: "build the cross-computer fix first"): this app gets owner power on each connected computer after one Approve per computer, so approving that computer's pairing requests from here keeps working through its connection. Where a connected computer's gxserver says its token file no longer keeps the door there (`mayApproveDevices: false` in `/api/securityStatus`, which this app reaches it with), this app enrolls its owner key there at connect: one "Let <this computer> (Ghostex app) act as you on this computer" card on that computer's own app or a phone paired with it, reused while it waits; denied or lapsed, it isn't asked again until this app restarts (`enroll_owner_key`). Once approved, its owner session there goes only with that computer's door calls ([`remote_door_token`]), as here. Where that computer's token file still keeps the door (it has no owner device yet) nothing is enrolled, so connecting never makes this app the owner of another computer by itself.
+*/
+/// A call that makes a pairing code (`openTunnel`) or approves: it goes with the owner session.
+fn is_door_call(path: &str, params: &Value) -> bool {
+    match path {
+        "/api/remotePairingCode" => params.get("openTunnel").and_then(Value::as_bool) == Some(true),
+        "/api/approveApprovalRequest" => true,
+        _ => false,
+    }
+}
+
 /// The token for a call to this computer's gxserver that makes a pairing code (`openTunnel`) or
 /// approves: the owner session, opened first if needed (blocks: never on the main thread).
 /// `Some(Err)` while this app waits for its own Approve on a phone, instead of sending the call
@@ -108,37 +121,54 @@ User (W524, "Owner only"): only this app or a paired phone makes pairing codes a
 /// every other call, and when the owner session can't be opened for another reason (the token
 /// file still keeps the door on a computer without an owner device).
 pub(crate) fn door_token(path: &str, params: &Value) -> Option<Result<String, String>> {
-    let door = match path {
-        "/api/remotePairingCode" => params.get("openTunnel").and_then(Value::as_bool) == Some(true),
-        "/api/approveApprovalRequest" => true,
-        _ => false,
-    };
-    if !door {
+    door_token_for(&Transport::Local, path, params)
+}
+
+/// [`door_token`] for the connected computer `target` reaches: its owner session there, or
+/// `Some(Err)` while that computer hasn't let this app act as you yet; `None` sends the call with
+/// that computer's token file (it still keeps the door there, or for any other call).
+pub(crate) fn remote_door_token(
+    target: &GpuiRemoteGxserverRequestTarget,
+    path: &str,
+    params: &Value,
+) -> Option<Result<String, String>> {
+    door_token_for(&Transport::Remote(target.clone()), path, params)
+}
+
+fn door_token_for(
+    transport: &Transport,
+    path: &str,
+    params: &Value,
+) -> Option<Result<String, String>> {
+    if !is_door_call(path, params) {
         return None;
     }
-    ensure_local_owner_session();
-    match with_session(LOCAL, |session| session.token.clone()) {
+    ensure_owner_session(transport);
+    match with_session(&transport.key(), |session| session.token.clone()) {
         Some(token) => Some(Ok(token)),
-        None if path == "/api/remotePairingCode" => local_owner_refusal().map(Err),
+        None if path == "/api/remotePairingCode" => owner_refusal(transport).map(Err),
         None => None,
     }
 }
 
-/// Runs `work`, an Approve of a new device, a terminal's pairing code or another owner on this
-/// computer, or answers why not while this app waits for its own Approve on a phone (gxserver
-/// would refuse it from the token file).
-pub(crate) fn door_call<R>(work: impl FnOnce() -> Result<R, String>) -> Result<R, String> {
-    ensure_local_owner_session();
-    if let Some(refusal) = local_owner_refusal() {
+/// Runs `work`, an Approve of a new device, a terminal's pairing code or another owner on
+/// `transport`'s gxserver, or answers why not while this app waits there for its own Approve
+/// (gxserver would refuse it from the token file).
+pub(crate) fn door_call<R>(
+    transport: &Transport,
+    work: impl FnOnce() -> Result<R, String>,
+) -> Result<R, String> {
+    ensure_owner_session(transport);
+    if let Some(refusal) = owner_refusal(transport) {
         return Err(refusal);
     }
     work()
 }
 
-/// Why this app can't make a code or approve here yet: its owner key waits for an Approve on a
-/// phone, or that Approve was denied or lapsed. `None` when neither.
-fn local_owner_refusal() -> Option<String> {
-    let (open, waiting, gave_up) = with_session(LOCAL, |session| {
+/// Why this app can't make a code or approve on `transport`'s gxserver yet: its owner key waits
+/// for an Approve there, or that Approve was denied or lapsed. `None` when neither.
+fn owner_refusal(transport: &Transport) -> Option<String> {
+    let (open, waiting, gave_up) = with_session(&transport.key(), |session| {
         (
             session.token.is_some(),
             session.waiting_approval.is_some(),
@@ -146,13 +176,20 @@ fn local_owner_refusal() -> Option<String> {
         )
     });
     let me = this_computer_name();
+    let local = matches!(transport, Transport::Local);
     match (open, waiting, gave_up) {
         (true, ..) => None,
-        (false, true, _) => Some(format!(
+        (false, true, _) if local => Some(format!(
             "This computer already has an owner. On your phone, approve \"Let {me} (Ghostex app) act as you on this computer\" once; then Ghostex here can show the code and approve devices."
         )),
-        (false, false, true) => Some(format!(
+        (false, true, _) => Some(format!(
+            "That computer has its own owner. Approve \"Let {me} (Ghostex app) act as you on this computer\" once in Ghostex there or on a phone paired with it; then you can approve its devices from here."
+        )),
+        (false, false, true) if local => Some(format!(
             "\"Let {me} (Ghostex app) act as you on this computer\" wasn't approved on your phone, so Ghostex here can't show the code or approve devices. Restart Ghostex to ask again, or do it from your phone."
+        )),
+        (false, false, true) => Some(format!(
+            "That computer didn't let {me} act as you there, so approve its devices in Ghostex there or on a phone paired with it. Restart Ghostex here to ask again."
         )),
         _ => None,
     }
@@ -176,11 +213,13 @@ fn open_local_owner_session_quietly() {
     }
 }
 
-/// Opens the owner session on this computer's gxserver unless it is open or was tried in the last
-/// few seconds.
-fn ensure_local_owner_session() {
-    let start = with_session(LOCAL, |session| {
-        if session.token.is_some() || session.opening {
+/// Opens the owner session on `transport`'s gxserver for door calls unless it is open or was
+/// tried in the last few seconds; on a connected computer only where its token file no longer
+/// keeps the door (asking there once, `enroll_owner_key`).
+fn ensure_owner_session(transport: &Transport) {
+    let key = transport.key();
+    let start = with_session(&key, |session| {
+        if session.token.is_some() || session.opening || session.gave_up {
             return false;
         }
         let due = session
@@ -195,15 +234,22 @@ fn ensure_local_owner_session() {
     if !start {
         return;
     }
-    let opened = in_security_flow(|| open_owner_session(&Transport::Local, true));
-    with_session(LOCAL, |session| {
+    let needed = match transport {
+        Transport::Local => true,
+        // A gxserver from before plain approvals keeps its own owner session (`cached_token`).
+        Transport::Remote(_) => plain::server_approvals(transport)
+            .is_some_and(|answer| answer.plain && !answer.may_approve_devices),
+    };
+    let opened = needed.then(|| in_security_flow(|| open_owner_session(transport, true)));
+    with_session(&key, |session| {
         session.opening = false;
         match opened {
-            Ok(token) => {
+            Some(Ok(token)) => {
                 session.token = Some(token);
                 session.door_only = true;
             }
-            Err(error) => log::info!("owner session for pairing not opened: {error}"),
+            Some(Err(error)) => log::info!("owner session for pairing not opened: {error}"),
+            None => {}
         }
     });
 }
@@ -335,8 +381,11 @@ fn cached_token(transport: &Transport) -> Option<String> {
                     });
                     // The owner-only door: enroll this app's key quietly now, while gxserver may
                     // still take it without a card (CDXC:Security 2026-11-16 at `door_token`).
-                    if matches!(transport, Transport::Local) {
-                        open_local_owner_session_quietly();
+                    match &transport {
+                        Transport::Local => open_local_owner_session_quietly(),
+                        // A connected computer with its own owner: ask there once, at connect
+                        // (CDXC:Security 2026-11-16 at `is_door_call`).
+                        Transport::Remote(_) => ensure_owner_session(&transport),
                     }
                     return;
                 }
@@ -783,6 +832,30 @@ pub(crate) enum Answerer {
 CDXC:Security 2026-11-10 WHY:
 A Ghostex user with four computers: "Clicking approve on that gave me the error that the other machines is where that should happen." This app showed every connected computer's requests as cards with Approve, but it can only sign for a computer where it acts as the owner and its approver key is enrolled, which a computer with its own Ghostex app grants only once its owner approves it. So a connected computer's request is an approvable card only where this app can answer it; elsewhere it is a notice that names where to approve it, and this app asks that computer once (one card there) to let it answer its requests from here too.
 */
+/// [`answerer`] for one request: on a gxserver that approves plainly, a new device, a terminal's
+/// pairing code or another owner needs this app's owner session there once that computer has an
+/// owner device (CDXC:Security 2026-11-16 at `is_door_call`); until that computer lets this app
+/// act as you, it is a notice naming where to approve it.
+pub(crate) fn answerer_for(transport: &Transport, request: &ApprovalRequest) -> Answerer {
+    let plain_door = matches!(transport, Transport::Remote(_))
+        && plain::is_plain(transport)
+        && plain::opens_door(&request.action);
+    if !plain_door {
+        return answerer(transport);
+    }
+    ensure_owner_session(transport);
+    let open = with_session(&transport.key(), |session| session.token.is_some());
+    if open || plain::server_approvals(transport).is_none_or(|answer| answer.may_approve_devices) {
+        return Answerer::ThisApp;
+    }
+    Answerer::Elsewhere {
+        devices: Vec::new(),
+        asked: with_session(&transport.key(), |session| {
+            session.waiting_approval.is_some()
+        }),
+    }
+}
+
 /// Whether this app can answer `transport`'s requests now, and if not, who can. Runs on a
 /// background thread; may ask that computer once to let this app act as the owner there.
 pub(crate) fn answerer(transport: &Transport) -> Answerer {

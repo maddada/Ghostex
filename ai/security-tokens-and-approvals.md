@@ -88,7 +88,17 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
   `OWNER_KEY_WINDOW_MS`), so the app that started it enrolls its key without a card.
 
 `/api/securityStatus` says `mayApproveDevices` for the caller. Everything else the token file does is
-unchanged. A same-user program that rewrites `security.json` or the paired devices database can still
+unchanged.
+
+Connected computers: the desktop reaches another computer through its SSH tunnel with that
+computer's token file, so there it is the token file too. Where that computer says
+`mayApproveDevices: false`, the app enrolls its owner key there at connect: one `addApproverKey`
+card ("Let <computer> (Ghostex app) act as you on this computer") on that computer's app or a phone
+paired with it, reused while it waits; denied or lapsed, it asks again only after the app restarts.
+Once approved, its owner session there (which survives that gxserver's restarts) goes only with that
+computer's codes and Approve (`owner_security::remote_door_token`), and that computer's pairing cards
+are approvable here (`answerer_for`); until then they show as "Approve on <computer>". Where that
+computer's token file still keeps the door, nothing is enrolled. A same-user program that rewrites `security.json` or the paired devices database can still
 undo this.
 
 ## What they may do: `Capability`
