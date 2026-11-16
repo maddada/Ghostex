@@ -18,6 +18,7 @@ futures-util = "0.3"
 hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }
 ghostex-paths = { path = "../packages/paths" }
+ghostex-spaceo-heal = { path = "../packages/spaceo-heal" }
 ghostex-gx-protocol = { path = "../packages/gx-protocol" }
 ghostex-gx-cloud = { path = "../packages/gx-cloud" }
 ghostex-docs = { path = "../packages/project-docs" }

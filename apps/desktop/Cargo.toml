@@ -62,6 +62,7 @@ cef = { path = "../../.dependencies/cef-rs/cef", default-features = false }
 flate2 = "1"
 futures = "0.3"
 ghostex-paths = { path = "../../packages/paths" }
+ghostex-spaceo-heal = { path = "../../packages/spaceo-heal" }
 ghostex-gx-protocol = { path = "../../packages/gx-protocol" }
 # The owner and approver keys in the OS key store, and the presence prompt (GitHub #495, app/owner_security/).
 ghostex-owner-keys = { path = "../../packages/owner-keys" }

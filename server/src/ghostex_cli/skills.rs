@@ -343,6 +343,13 @@ pub fn install_computer_use_skill_command(args: &[String]) -> CliResult<()> {
 }
 
 pub fn spaceo_command(args: &[String]) -> CliResult<()> {
+    let rest = args.get(1..).unwrap_or_default();
+    let help = rest.iter().any(|arg| arg == "-h" || arg == "--help");
+    match args.first().map(String::as_str) {
+        Some("status") if !help => return super::spaceo_heal::status_command(rest),
+        Some("repair") if !help => return super::spaceo_heal::repair_command(rest),
+        _ => {}
+    }
     skill_surface_command(
         args,
         &usage::spaceo_usage(),

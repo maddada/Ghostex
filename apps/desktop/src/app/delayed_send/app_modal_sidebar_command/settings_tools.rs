@@ -169,6 +169,9 @@ impl GhostexGpuiApp {
             "checkSpaceoUpdate" => {
                 self.check_gpui_spaceo_update(cx);
             }
+            "repairSpaceo" => {
+                self.repair_gpui_spaceo(cx);
+            }
             "requestToolPermissionStatus" => {
                 self.refresh_gpui_tool_permission_status(cx);
             }

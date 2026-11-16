@@ -661,6 +661,14 @@ pub fn usage() -> String {
             "Show Ghostex SpaceO skill setup for driving Mac apps on SpaceO's virtual displays (macOS only)",
         ),
         format_help_command(
+            "spaceo status [--json]",
+            "Say whether SpaceO can give agents screens, or why it is stuck (read-only)",
+        ),
+        format_help_command(
+            "spaceo repair",
+            "Unstick SpaceO with its operator recovery; for you at a terminal, never for agents",
+        ),
+        format_help_command(
             "cli --help",
             "Show general Ghostex CLI discovery and agent skill setup",
         ),

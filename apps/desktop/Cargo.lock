@@ -2573,6 +2573,7 @@ dependencies = [
  "ghostex-owner-keys",
  "ghostex-paths",
  "ghostex-settings-catalog",
+ "ghostex-spaceo-heal",
  "gpui",
  "gpui-base",
  "gpui-component",
@@ -2722,6 +2723,14 @@ dependencies = [
 name = "ghostex-settings-catalog"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "ghostex-spaceo-heal"
+version = "0.1.0"
+dependencies = [
+ "libc",
  "serde_json",
 ]
 

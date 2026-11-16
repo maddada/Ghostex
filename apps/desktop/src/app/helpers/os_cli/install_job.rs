@@ -115,6 +115,11 @@ impl GpuiInstallJob {
         Ok(())
     }
 
+    /// Adds one line of progress to the job's output (a job run from Rust, such as SpaceO's Repair).
+    pub(crate) fn append_line(&self, line: &str) {
+        self.append(&format!("{line}\n"));
+    }
+
     fn append(&self, chunk: &str) {
         if let Ok(mut job) = self.state.lock()
             && let Some(job) = job.as_mut()

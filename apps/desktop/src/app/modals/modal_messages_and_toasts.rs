@@ -251,6 +251,9 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::ResetInterfaceScale => {
                 self.reset_interface_scale_to_default(cx);
             }
+            GpuiAppToastAction::RepairSpaceo => {
+                self.repair_gpui_spaceo(cx);
+            }
             GpuiAppToastAction::SecurityApproval {
                 request,
                 deny,
