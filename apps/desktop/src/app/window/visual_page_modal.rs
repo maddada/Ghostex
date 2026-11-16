@@ -25,6 +25,7 @@ mod more_menu;
 mod more_menu_panel;
 pub(crate) mod open_timing;
 mod page;
+mod page_dictation;
 mod source;
 
 pub(crate) use glass::{PAGE_TOP_DARK, PAGE_TOP_LIGHT};
@@ -126,6 +127,8 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// The card's open message, for opening it again behind the web runtime's install prompt.
     open_message: serde_json::Value,
     surface: Option<Entity<CefSurface>>,
+    /// The microphone the page's text boxes dictate with (`page_dictation.rs`).
+    dictation: Option<page_dictation::PageDictation>,
     /// The page has loaded once; until then the header shows a spinner.
     loaded: bool,
     error: Option<String>,
@@ -234,6 +237,7 @@ impl GpuiVisualPageModalWindow {
             page_url,
             open_message,
             surface: None,
+            dictation: None,
             loaded: false,
             error: None,
             focus_handle,
@@ -508,6 +512,7 @@ impl GpuiVisualPageModalWindow {
             Ok(surface) => {
                 *shown_surface.borrow_mut() = Some(surface.downgrade());
                 surface.read(cx).add_page_script(page::PAGE_SCRIPT);
+                self.dictation = page_dictation::PageDictation::attach(&surface, window, cx);
                 surface.update(cx, |surface, _| {
                     surface.show_when_placed();
                     surface.set_visible(true);
@@ -623,6 +628,9 @@ impl GpuiVisualPageModalWindow {
         self.hidden = hidden;
         if hidden {
             self.close_more_menu(cx);
+            if let Some(dictation) = &self.dictation {
+                dictation.cancel(cx);
+            }
             self.flush_draft(cx);
             self.check_questions_left_soon(cx);
         } else {

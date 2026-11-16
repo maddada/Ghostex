@@ -273,6 +273,19 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 #gx-tip .gx-tip-label{min-width:0}
 #gx-tip .gx-tip-keys{display:flex;flex:none;align-items:center;gap:3px}
 #gx-tip kbd{min-width:17px;box-sizing:border-box;padding:0 4px;border-radius:5px;border:1px solid color-mix(in srgb,var(--gx-tip-fg) 16%,transparent);background:color-mix(in srgb,var(--gx-tip-fg) 9%,transparent);color:color-mix(in srgb,var(--gx-tip-fg) 86%,transparent);font:600 11px/16px Inter,var(--font-sans);text-align:center}
+/* Dictate: a microphone in each note and text box where the page's host can dictate (CDXC:Dictate 2026-11-16 in apps/desktop/src/app/window/visual_page_modal/page_dictation.rs). */
+.gx-field{position:relative;margin:8px 0 0}
+.gx-field>.gx-note,.gx-field>.gx-text{margin-top:0}
+.gx-field>.gx-box{padding-right:38px}
+.gx-mic{position:absolute;top:5px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--gx-muted);cursor:pointer}
+.gx-mic svg{width:16px;height:16px}
+.gx-mic:hover:not(:disabled){background:color-mix(in srgb,var(--gx-fg) 10%,transparent);color:var(--gx-fg)}
+.gx-mic:focus-visible{outline:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--ring) 45%,transparent)}
+.gx-mic:disabled{opacity:.4;cursor:default}
+.gx-mic[hidden]{display:none}
+.gx-mic.gx-mic-on,.gx-mic.gx-mic-on:hover:not(:disabled){color:var(--destructive);background:color-mix(in srgb,var(--destructive) 14%,transparent)}
+.gx-mic.gx-mic-busy svg{animation:gx-mic-spin 1s linear infinite}
+@keyframes gx-mic-spin{to{transform:rotate(360deg)}}
 </style>"#;
 
 /// The kit's behaviour: turns the first `<gx-questions>` into a working form once the page has
@@ -356,7 +369,7 @@ function renderBox(area){
   boxState(area);
 }
 function boxState(area){
-  var ed=area.__gxBox;ed.classList.toggle("gx-empty",!area.value);ed.hidden=area.hidden;ed.setAttribute("data-placeholder",area.placeholder||"");ed.setAttribute("aria-readonly",area.readOnly?"true":"false");
+  var ed=area.__gxBox;if(area.__gxMic)area.__gxMic.hidden=area.readOnly||area.hidden;ed.classList.toggle("gx-empty",!area.value);ed.hidden=area.hidden;ed.setAttribute("data-placeholder",area.placeholder||"");ed.setAttribute("aria-readonly",area.readOnly?"true":"false");
   var mode=area.readOnly?"false":"plaintext-only";if(ed.getAttribute("contenteditable")!==mode)try{ed.contentEditable=mode;}catch(x){ed.contentEditable="true";}
 }
 /* Whether the box's nodes are not what its text draws: a reference typed or pasted as text, a line break the browser made an element of, a pill without its caret anchors. */
@@ -685,7 +698,8 @@ function setup(root){
     /* Once sent, the page shows what went: no picks and no notes. */
     send(out,function(){restore({});root.querySelectorAll("textarea").forEach(function(t){t.value="";});});
   });
-  function lock(){questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Seen":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked as seen. The agent was told.":"Sent to the agent.";}
+  var dictStop=null;
+  function lock(){if(dictStop)dictStop();questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent=seen?"Seen":"Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent=seen?"Marked as seen. The agent was told.":"Sent to the agent.";}
   /* CDXC:SessionChat 2026-11-11 DECISION:
      User: "please show number of questions answered so far in bottom right corner always". A page with questions shows "3 of 10 answered" in a small glass pill fixed at the window's bottom right, whatever the scroll, updated as the reader answers. A question counts as answered as the tile's check and Send count it (`gx-has-answer`): a choice picked, or a note or text written; one left blank counts as not answered, also after Skip all. All answered turns it green. (2026-11-12: it stays fully on screen: User, on an Android phone's page sheet where the pill's right end was cut off by the screen's edge: "make questions bottom right not off screen pls". Its margin is the page's own gutter (16px on a phone, 24px otherwise) or the safe area, it shrinks with an ellipsis if the screen is narrower than its text, and the script places it by the visual viewport, so a web view whose layout is wider than the screen cannot push it off.) The page gets room at its end (the gutter plus 34px; measured from the pill since 2026-11-15, below), so scrolled to the bottom the pill sits below the send bar instead of on it. The floating window, a browser tab and the phone's page sheet all get it from here.
      CDXC:SessionChat 2026-11-15 DECISION: User, with a screenshot of a page on their Android foldable where the "1 of 2 answered" pill sat over an option card, among cards that overflowed and overlapped: "Please also make sure inline htmls don't look like this where stuff is over flowing and overlapping." Asked whether the pill should fade whenever content is under it or always show, the user answered "Always show", so the "always" above stands: the pill never hides. It cannot hide a control: clicks and taps go through it (`pointer-events:none`), and the page's room at its end is measured from the pill itself (its margin, its height at the current text size and a 12px gap), so scrolled to the end every card, the send bar and its buttons sit clear above it. Supersedes the fading pill tried the same day. */
@@ -767,6 +781,48 @@ function setup(root){
       if(area.__gxBox&&document.activeElement===area.__gxBox)setCaret(area.__gxBox,s);else if(document.activeElement===area)area.setSelectionRange(s,s);
     });
   },true);
+  /* Dictate: see the CDXC:Dictate 2026-11-16 DECISION in apps/desktop/src/app/window/visual_page_modal/page_dictation.rs. Where the page's host can dictate (`__ghostexHostDictate`: the floating page window) each box gets a microphone; the host records and transcribes, and the words go in at the caret (or over the selection) the box had when the recording started while its text is unchanged, at its end otherwise. */
+  var dictateHost=typeof window.__ghostexHostDictate==="function"?window.__ghostexHostDictate:null;
+  if(dictateHost){
+    var MIC_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>',
+      STOP_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>',
+      SPIN_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
+    var dictPhase="idle",dictTarget=null;
+    dictStop=function(){if(dictPhase!=="idle")dictateHost("cancel");};
+    var micLook=function(){boxes().forEach(function(a){var m=a.__gxMic;if(!m)return;
+      var mine=!!dictTarget&&dictTarget.area===a,rec=mine&&(dictPhase==="recording"||dictPhase==="starting"),busy=mine&&dictPhase==="transcribing",tip=rec?"Stop and transcribe":busy?"Transcribing…":"Dictate";
+      m.classList.toggle("gx-mic-on",rec);m.classList.toggle("gx-mic-busy",busy);m.innerHTML=rec?STOP_ICON:busy?SPIN_ICON:MIC_ICON;
+      m.setAttribute("aria-label",tip);m.setAttribute("data-gx-tip",tip);m.setAttribute("aria-pressed",rec?"true":"false");m.disabled=button.disabled||(dictPhase!=="idle"&&!mine);});};
+    var dictHint=function(a,text,error){hint(a,text,error);a.__gxDictHint=!!text&&!error;};
+    boxes().forEach(function(area){
+      var ed=area.__gxBox;if(!ed||area.__gxMic)return;
+      var field=el("div","gx-field"),m=el("button","gx-mic");area.before(field);field.append(area,ed,m);m.type="button";area.__gxMic=m;
+      /* The press leaves the keyboard and the caret in the box, which shows where the words will land. */
+      m.addEventListener("mousedown",function(e){e.preventDefault();});
+      m.addEventListener("click",function(){
+        if(area.readOnly||button.disabled)return;
+        if(dictPhase==="idle"){if(document.activeElement!==ed)area.focus();var c=caretIn(ed),v=area.value;dictTarget={area:area,value:v,start:c?c.start:v.length,end:c?c.end:v.length};boxes().forEach(function(b){if(b.__gxDictHint)dictHint(b,"");});}
+        else if(!dictTarget||dictTarget.area!==area||dictPhase==="transcribing")return;
+        dictateHost("toggle");
+      });
+      boxState(area);
+    });
+    micLook();
+    /* Escape cancels a recording or a transcription (the recording is kept on the computer). */
+    root.addEventListener("keydown",function(e){if(e.key==="Escape"&&dictPhase!=="idle"){e.preventDefault();e.stopPropagation();dictateHost("cancel");}},true);
+    window.addEventListener("gx-dictation",function(e){
+      var d=e.detail||{},t=dictTarget,a=t&&t.area;
+      if(typeof d.phase==="string"){dictPhase=d.phase;
+        if(a){if(d.phase==="starting")dictHint(a,"Starting the microphone…");else if(d.phase==="recording")dictHint(a,"Listening… press the microphone again to transcribe, or Escape to cancel.");else if(d.phase==="transcribing")dictHint(a,"Transcribing…");else if(a.__gxDictHint)dictHint(a,"");}}
+      if(typeof d.text==="string"&&d.text.trim()&&a){
+        if(a.readOnly||button.disabled)dictHint(a,"Your answers were already sent, so the dictated words were not added.",true);
+        else{var v=a.value,s,en;if(v===t.value){s=t.start;en=t.end;}else{var c=a.__gxBox&&document.activeElement===a.__gxBox?caretIn(a.__gxBox):null;s=c?c.start:v.length;en=c?c.end:v.length;}
+          var lead=s>0&&!/\s/.test(v.charAt(s-1))?" ":"",tail=en<v.length&&!/\s/.test(v.charAt(en))?" ":"",ins=lead+d.text.trim()+tail;
+          a.value=v.slice(0,s)+ins+v.slice(en);edited(a);s+=ins.length;if(a.__gxBox&&document.activeElement===a.__gxBox)setCaret(a.__gxBox,s);t.value=a.value;t.start=t.end=s;}}
+      if(d.error&&a)dictHint(a,d.message||d.error,true);
+      micLook();
+    });
+  }
   allPills();
   /* A newer draft than the one the page was served came after it loaded (PAGE_API's "gx-draft", sent only before the reader changed anything): show it. */
   document.addEventListener("gx-draft",function(){if(button.disabled)return;var s=ghostex.__draft("kit"),t=ghostex.__draft("thumbs");boxes().forEach(function(b){b.value="";});restore(s&&typeof s==="object"?s:{});if(t&&typeof t==="object")Object.keys(t).forEach(function(k){keepSmall(k,t[k]);});syncOptions();allPills();});
