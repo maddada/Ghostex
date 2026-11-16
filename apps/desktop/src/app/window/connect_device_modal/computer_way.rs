@@ -16,6 +16,38 @@ const JOIN_POLL_EVERY: Duration = Duration::from_secs(1);
 /// the new attempt's answer (the new attempt starts within a second or two).
 const STALE_FAILURE_POLLS: u8 = 8;
 
+/// What the headless server's terminal runs to print its code.
+const HEADLESS_COMMAND: &str = "ghostex computer-code";
+
+/// The tabs of the Connect a computer pane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ComputerTab {
+    /// This computer's code, and the box for the other computer's code.
+    Code,
+    /// A computer with no screen: run `ghostex computer-code` in its terminal.
+    Headless,
+    /// The address, username and password form.
+    Ssh,
+}
+
+impl ComputerTab {
+    fn index(self) -> usize {
+        match self {
+            Self::Code => 0,
+            Self::Headless => 1,
+            Self::Ssh => 2,
+        }
+    }
+
+    fn from_index(index: usize) -> Self {
+        match index {
+            1 => Self::Headless,
+            2 => Self::Ssh,
+            _ => Self::Code,
+        }
+    }
+}
+
 /// The other computer, as its code names it: what saving it after the approval needs.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct JoinTarget {
@@ -647,12 +679,97 @@ impl GpuiConnectDeviceWindow {
             .into_any_element()
     }
 
-    /// This computer's code with Copy, then the box for the other computer's code with Connect.
+    /// The three tabs over the computer's pane: Code, Headless server and SSH details.
+    fn computer_tabs(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let items = [
+            ModalSegmentedItem {
+                icon: None,
+                label: "Code",
+            },
+            ModalSegmentedItem {
+                icon: None,
+                label: "Headless server",
+            },
+            ModalSegmentedItem {
+                icon: None,
+                label: "SSH details",
+            },
+        ];
+        modal_segmented_control(
+            &p,
+            "connect-computer-tabs",
+            &items,
+            self.computer_tab.index(),
+            |this: &mut Self, index, _window, cx| {
+                this.computer_tab = ComputerTab::from_index(index);
+                cx.notify();
+            },
+            cx,
+        )
+    }
+
+    /// The Connect a computer pane: its tabs, and the picked tab's content.
     pub(super) fn computer_way(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let tabs = self.computer_tabs(cx);
+        let content = match self.computer_tab {
+            ComputerTab::Code => self.code_tab(window, cx),
+            ComputerTab::Headless => self.headless_tab(window, cx),
+            ComputerTab::Ssh => self.ssh_tab(cx),
+        };
+        v_flex()
+            .w_full()
+            .gap(px(14.0))
+            .child(tabs)
+            .child(content)
+            .into_any_element()
+    }
+
+    /// The box for the other computer's code with Connect (shared by the Code and Headless server
+    /// tabs, so a code pasted on one stays when the tab changes).
+    fn paste_row(&mut self, ready: bool, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let p = self.palette;
+        v_flex()
+            .w_full()
+            .gap(px(6.0))
+            .child(self.label("The other computer's code"))
+            .child(
+                h_flex()
+                    .w_full()
+                    .gap(px(8.0))
+                    .child(div().flex_1().min_w_0().child(modal_text_input(
+                        &p,
+                        &self.computer_inputs.code,
+                        !ready,
+                        window,
+                        cx,
+                    )))
+                    .child(div().flex_shrink_0().child(modal_action_button(
+                        &p,
+                        "connect-computer-connect",
+                        "Connect",
+                        None,
+                        ModalButtonTone::Primary,
+                        !ready,
+                        |this: &mut Self, window, cx| this.join(window, cx),
+                        cx,
+                    ))),
+            )
+            .children(self.code_error.clone().map(|error| {
+                div()
+                    .text_size(px(12.5))
+                    .line_height(px(17.0))
+                    .text_color(hsla(p.destructive))
+                    .child(error)
+            }))
+    }
+
+    /// Code: this computer's code to copy, and the box for the other computer's code.
+    fn code_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let ready = self.stage == Stage::Ready && self.code.is_some();
         let own_code: AnyElement = if ready {
@@ -723,39 +840,7 @@ impl GpuiConnectDeviceWindow {
         } else {
             self.code_placeholder(120.0, cx)
         };
-        let paste = v_flex()
-            .w_full()
-            .gap(px(6.0))
-            .child(self.label("The other computer's code"))
-            .child(
-                h_flex()
-                    .w_full()
-                    .gap(px(8.0))
-                    .child(div().flex_1().min_w_0().child(modal_text_input(
-                        &p,
-                        &self.computer_inputs.code,
-                        !ready,
-                        window,
-                        cx,
-                    )))
-                    .child(div().flex_shrink_0().child(modal_action_button(
-                        &p,
-                        "connect-computer-connect",
-                        "Connect",
-                        None,
-                        ModalButtonTone::Primary,
-                        !ready,
-                        |this: &mut Self, window, cx| this.join(window, cx),
-                        cx,
-                    ))),
-            )
-            .children(self.code_error.clone().map(|error| {
-                div()
-                    .text_size(px(12.5))
-                    .line_height(px(17.0))
-                    .text_color(hsla(p.destructive))
-                    .child(error)
-            }));
+        let paste = self.paste_row(ready, window, cx);
         v_flex()
             .w_full()
             .gap(px(14.0))
@@ -763,24 +848,143 @@ impl GpuiConnectDeviceWindow {
             .child(self.or_divider())
             .child(paste)
             .child(
-                h_flex()
-                    .w_full()
-                    .justify_between()
+                self.muted(
+                    "Copy one code to the other computer, or paste its code here. Either way works.",
+                )
+                .text_size(px(12.0)),
+            )
+            .into_any_element()
+    }
+
+    /// One numbered step whose line wraps inside the window.
+    fn numbered_step(&self, number: usize, text: &'static str) -> AnyElement {
+        let p = self.palette;
+        h_flex()
+            .w_full()
+            .items_start()
+            .gap(px(10.0))
+            .child(
+                div()
+                    .mt(px(0.5))
+                    .flex_shrink_0()
+                    .flex()
                     .items_center()
-                    .child(self.muted(
-                        "Copy one code to the other computer, or paste its code here. Either way works.",
-                    )
-                    .text_size(px(12.0))
+                    .justify_center()
+                    .size(px(18.0))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.raised))
+                    .text_size(px(11.0))
+                    .line_height(px(15.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(hsla(p.foreground))
+                    .child(SharedString::from(number.to_string())),
+            )
+            .child(self.muted(text).flex_1().min_w_0())
+            .into_any_element()
+    }
+
+    /// Headless server: a computer with no screen, reached through a terminal, in four steps.
+    ///
+    /// CDXC:RemotePairing 2026-11-16 DECISION:
+    /// User picked variant A on the Headless server page (Q3594, "A. A Headless server tab beside the code"), and on SSH details: "i like ssh details being a tab there". Connect a computer opens on three tabs: Code (this computer's code and the box for the other's), Headless server (what it means, then four steps: gxserver must be running there, run `ghostex computer-code` in its terminal, paste the code it prints, compare the three words and approve there) and SSH details (the address, username and password form, which lives in Settings > Remote's Add a computer). The paste box is the same one on Code and Headless server.
+    fn headless_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let ready = self.stage == Stage::Ready && self.code.is_some();
+        if !ready {
+            return self.code_placeholder(120.0, cx);
+        }
+        let command = h_flex()
+            .w_full()
+            .gap(px(8.0))
+            .items_center()
+            .child(
+                div()
                     .flex_1()
-                    .min_w_0())
-                    .child(div().flex_shrink_0().pl(px(12.0)).child(self.link(
-                        "connect-computer-ssh",
-                        "Use SSH details",
-                        |this, window, cx| {
-                            this.close_and_send(ConnectDeviceCommand::OpenAddComputerSsh, window, cx)
-                        },
-                        cx,
-                    ))),
+                    .min_w_0()
+                    .h(px(MODAL_CONTROL_HEIGHT))
+                    .px(px(12.0))
+                    .flex()
+                    .items_center()
+                    .rounded(px(MODAL_RADIUS_CONTROL))
+                    .border_1()
+                    .border_color(hsla(p.hairline))
+                    .bg(hsla(p.panel))
+                    .font_family(MODAL_MONO_FONT)
+                    .text_size(px(12.0))
+                    .text_color(hsla(p.foreground))
+                    .child(HEADLESS_COMMAND),
+            )
+            .child(
+                div().flex_shrink_0().child(modal_action_button(
+                    &p,
+                    "connect-computer-copy-command",
+                    if self.copied { "Copied" } else { "Copy" },
+                    Some(
+                        modal_icon(
+                            if self.copied { ICON_CHECK } else { ICON_COPY },
+                            14.0,
+                            p.foreground,
+                        )
+                        .into_any_element(),
+                    ),
+                    ModalButtonTone::Neutral,
+                    false,
+                    |this: &mut Self, _window, cx| this.copy_text(HEADLESS_COMMAND.to_string(), cx),
+                    cx,
+                )),
+            );
+        let paste = self.paste_row(ready, window, cx);
+        v_flex()
+            .w_full()
+            .gap(px(12.0))
+            .child(self.muted(
+                "A computer with no screen that you use through a terminal, such as a VPS or a Raspberry Pi. You run one command on it.",
+            ))
+            .child(self.numbered_step(
+                1,
+                "Ghostex's server, gxserver, must be running there. Not installed? Use the SSH details tab and Ghostex installs it.",
+            ))
+            .child(self.numbered_step(2, "In its terminal, run:"))
+            .child(command)
+            .child(
+                self.muted("Add --copy to put the code on that terminal's clipboard too.")
+                    .text_size(px(12.0))
+                    .line_height(px(17.0)),
+            )
+            .child(self.numbered_step(3, "Paste the code it prints:"))
+            .child(paste)
+            .child(self.numbered_step(
+                4,
+                "Compare the three words on both screens, then approve there: type y in its terminal, or approve on your phone if one is paired with it.",
+            ))
+            .into_any_element()
+    }
+
+    /// SSH details: add a computer by its address, username and password (Settings > Remote's Add a
+    /// computer holds the form, so the button opens it).
+    fn ssh_tab(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        v_flex()
+            .w_full()
+            .gap(px(12.0))
+            .child(self.muted(
+                "Type the computer's address, username and password. If Ghostex's server, gxserver, isn't installed there, Ghostex installs it.",
+            ))
+            .child(
+                h_flex().w_full().justify_end().child(div().w(px(190.0)).child(modal_action_button(
+                    &p,
+                    "connect-computer-ssh",
+                    "Add with SSH details",
+                    None,
+                    ModalButtonTone::Primary,
+                    false,
+                    |this: &mut Self, window, cx| {
+                        this.close_and_send(ConnectDeviceCommand::OpenAddComputerSsh, window, cx)
+                    },
+                    cx,
+                ))),
             )
             .into_any_element()
     }

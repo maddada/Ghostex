@@ -5345,8 +5345,17 @@ sessions, so any client can control agents on any machine.
   one too, with no second code (the other computer must run this release as
   well; an older one says to update it first). A failure says what happened in
   a line or two with one button that fixes it (Try another code, Reconnect,
-  Try again). Use SSH details in the window adds a computer by its address,
-  username and password instead. To re-pair a computer paired before 11.1.0,
+  Try again). The window has three tabs: Code (the flow above, the one it opens
+  on), Headless server and SSH details. Headless server is for a computer with
+  no screen that you use through a terminal (a VPS, a Raspberry Pi): gxserver
+  must be running there, run `ghostex computer-code` in its terminal (the tab
+  has a Copy button for the command; add `--copy` to put the code on that
+  terminal's clipboard too), paste the code it prints into the same box, click
+  Connect, compare the three words on both screens, then approve there (type y
+  in its terminal, or approve on a phone paired with it). SSH details adds a
+  computer by its address, username and password instead (its button opens
+  Settings > Remote's Add a computer form, which installs gxserver on the
+  computer when it isn't there). To re-pair a computer paired before 11.1.0,
   open it in Settings > Remote there and paste a new code.
   A computer's code is the text Connect a Computer shows under "This computer's
   code": it names that computer and carries a one-time secret. It works once and

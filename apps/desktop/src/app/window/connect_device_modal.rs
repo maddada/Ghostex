@@ -30,7 +30,7 @@ mod tailscale_pane;
 mod ways;
 
 pub(crate) use computer_way::{BackStep, JoinTarget, join_target};
-use computer_way::{ComputerInputs, JoinFlow};
+use computer_way::{ComputerInputs, ComputerTab, JoinFlow};
 pub(crate) use tailscale_pane::TailscalePane;
 pub(crate) use ways::ConnectWay;
 
@@ -252,10 +252,12 @@ pub(crate) struct GpuiConnectDeviceWindow {
     /// Which screen the window was last sized for: a new one (the words, connected, another
     /// way, the large code, the helper's screens) is measured again, so the window fits each
     /// screen instead of the first.
-    fitted_screen: Option<(u8, ConnectWay)>,
+    fitted_screen: Option<(u8, ConnectWay, ComputerTab)>,
     focus_handle: FocusHandle,
     /// Opened as Connect a computer: no list of ways, only the computer's pane.
     computer_only: bool,
+    /// Which tab of the computer's pane shows: Code, Headless server or SSH details.
+    computer_tab: ComputerTab,
     computer_inputs: ComputerInputs,
     /// Why the pasted code can't be used.
     code_error: Option<String>,
@@ -303,6 +305,7 @@ impl GpuiConnectDeviceWindow {
             fitted_screen: None,
             focus_handle,
             computer_only: config.kind == ConnectDeviceKind::Computer,
+            computer_tab: ComputerTab::Code,
             computer_inputs,
             code_error: None,
             join: None,
@@ -495,7 +498,13 @@ impl GpuiConnectDeviceWindow {
         let Some(code) = self.code.as_ref() else {
             return;
         };
-        cx.write_to_clipboard(gpui::ClipboardItem::new_string(code.text.clone()));
+        let text = code.text.clone();
+        self.copy_text(text, cx);
+    }
+
+    /// Puts `text` on the clipboard and shows "Copied" for a moment.
+    fn copy_text(&mut self, text: String, cx: &mut Context<Self>) {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         (self.host)(ConnectDeviceCommand::Copied, cx);
         self.copied = true;
         self.copied_generation = self.copied_generation.wrapping_add(1);
@@ -956,11 +965,11 @@ impl Render for GpuiConnectDeviceWindow {
         let screen = self.screen();
         if self
             .fitted_screen
-            .is_some_and(|fitted| fitted != (screen, self.way))
+            .is_some_and(|fitted| fitted != (screen, self.way, self.computer_tab))
         {
             self.fit = ModalScrollFit::new();
         }
-        self.fitted_screen = Some((screen, self.way));
+        self.fitted_screen = Some((screen, self.way, self.computer_tab));
         let body = match (self.stage.clone(), self.waiting.clone()) {
             _ if self.join.is_some() => self.join_body(window, cx),
             (Stage::Connected(_), _) => self.connected_body(cx),
