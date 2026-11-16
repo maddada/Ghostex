@@ -367,8 +367,22 @@ pub(in crate::server) async fn route_http(
     .flatten();
     // A session's own `gxs_` token or the desktop's `gxo_` owner session (crate::security).
     // Chief's own token is the head for this request while its extension is on (chief/head.rs).
+    // A door session (the app's, for pairing codes and approvals) only on the door's routes
+    // (review M2 in security/policy.rs); everywhere else it is no token at all.
     let token_principal = bearer_token(&parts.headers)
-        .and_then(|token| state.security.session_tokens.resolve(token))
+        .and_then(|token| {
+            state.security.session_tokens.resolve(token).or_else(|| {
+                crate::security::DOOR_SESSION_ENDPOINTS
+                    .contains(&endpoint.path.as_str())
+                    .then(|| {
+                        state
+                            .security
+                            .session_tokens
+                            .resolve_door(token, crate::security::now_ms())
+                    })
+                    .flatten()
+            })
+        })
         .map(|principal| crate::chief::settle_principal(principal, &state.paths));
     if share.is_some()
         && !crate::collab_shim::registry::GUEST_READ_ENDPOINTS.contains(&endpoint.path.as_str())

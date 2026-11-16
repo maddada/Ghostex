@@ -81,7 +81,16 @@ struct OwnerSession {
     /// `token` was opened for door calls only ([`door_call`]): every other call keeps the token
     /// file.
     door_only: bool,
+    /// When `token` was opened: a door session lapses (`DOOR_SESSION_REFRESH`).
+    opened_at: Option<Instant>,
+    /// The three words of the key this app signs with there, which the "act as you" card there
+    /// shows too (`approval::key_words`).
+    key_words: Option<String>,
 }
+
+/// A door session is opened again after this, well before gxserver lets it lapse (12 hours,
+/// `DOOR_SESSION_TTL_MS` in server/src/security/policy.rs); its key is enrolled, so no card.
+const DOOR_SESSION_REFRESH: Duration = Duration::from_secs(6 * 60 * 60);
 
 static SESSIONS: Mutex<Option<HashMap<String, OwnerSession>>> = Mutex::new(None);
 
@@ -103,7 +112,7 @@ User (W524, "Owner only"): only this app or a paired phone makes pairing codes a
 */
 /*
 CDXC:Security 2026-11-16 DECISION:
-User (after W524: "build the cross-computer fix first"): this app gets owner power on each connected computer after one Approve per computer, so approving that computer's pairing requests from here keeps working through its connection. Where a connected computer's gxserver says its token file no longer keeps the door there (`mayApproveDevices: false` in `/api/securityStatus`, which this app reaches it with), this app enrolls its owner key there at connect: one "Let <this computer> (Ghostex app) act as you on this computer" card on that computer's own app or a phone paired with it, reused while it waits; denied or lapsed, it isn't asked again until this app restarts (`enroll_owner_key`). Once approved, its owner session there goes only with that computer's door calls ([`remote_door_token`]), as here. Where that computer's token file still keeps the door (it has no owner device yet) nothing is enrolled, so connecting never makes this app the owner of another computer by itself.
+User (after W524: "build the cross-computer fix first"): this app gets owner power on each connected computer after one Approve per computer, so approving that computer's pairing requests from here keeps working through its connection. Where a connected computer's gxserver says its token file no longer keeps the door there (`mayApproveDevices: false` in `/api/securityStatus`, which this app reaches it with), this app enrolls its owner key there at connect: one "Let <this computer> (Ghostex app) show this computer's pairing code and approve new phones and computers here (key words: …)" card on that computer's own app or a phone paired with it, reused while it waits; denied or lapsed, it isn't asked again until this app restarts (`enroll_owner_key`). Once approved, its owner session there goes only with that computer's door calls ([`remote_door_token`]), as here. Where that computer's token file still keeps the door (it has no owner device yet) nothing is enrolled, so connecting never makes this app the owner of another computer by itself.
 */
 /// A call that makes a pairing code (`openTunnel`) or approves: it goes with the owner session.
 fn is_door_call(path: &str, params: &Value) -> bool {
@@ -168,11 +177,12 @@ pub(crate) fn door_call<R>(
 /// Why this app can't make a code or approve on `transport`'s gxserver yet: its owner key waits
 /// for an Approve there, or that Approve was denied or lapsed. `None` when neither.
 fn owner_refusal(transport: &Transport) -> Option<String> {
-    let (open, waiting, gave_up) = with_session(&transport.key(), |session| {
+    let (open, waiting, gave_up, words) = with_session(&transport.key(), |session| {
         (
             session.token.is_some(),
             session.waiting_approval.is_some(),
             session.gave_up,
+            session.key_words.clone().unwrap_or_default(),
         )
     });
     let me = this_computer_name();
@@ -180,13 +190,13 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
     match (open, waiting, gave_up) {
         (true, ..) => None,
         (false, true, _) if local => Some(format!(
-            "This computer already has an owner. On your phone, approve \"Let {me} (Ghostex app) act as you on this computer\" once; then Ghostex here can show the code and approve devices."
+            "This computer already has an owner. On your phone, approve \"Let {me} (Ghostex app) show this computer's pairing code and approve new phones and computers here\" once, if its key words are {words}; then Ghostex here can show the code and approve devices."
         )),
         (false, true, _) => Some(format!(
-            "That computer has its own owner. Approve \"Let {me} (Ghostex app) act as you on this computer\" once in Ghostex there or on a phone paired with it; then you can approve its devices from here."
+            "That computer has its own owner. Approve \"Let {me} (Ghostex app) show this computer's pairing code and approve new phones and computers here\" once in Ghostex there or on a phone paired with it, if its key words are {words}; then you can approve its devices from here."
         )),
         (false, false, true) if local => Some(format!(
-            "\"Let {me} (Ghostex app) act as you on this computer\" wasn't approved on your phone, so Ghostex here can't show the code or approve devices. Restart Ghostex to ask again, or do it from your phone."
+            "\"Let {me} (Ghostex app) show this computer's pairing code\" wasn't approved on your phone, so Ghostex here can't show the code or approve devices. Restart Ghostex to ask again, or do it from your phone."
         )),
         (false, false, true) => Some(format!(
             "That computer didn't let {me} act as you there, so approve its devices in Ghostex there or on a phone paired with it. Restart Ghostex here to ask again."
@@ -207,6 +217,7 @@ fn open_local_owner_session_quietly() {
             if session.token.is_none() {
                 session.token = Some(token);
                 session.door_only = true;
+                session.opened_at = Some(Instant::now());
             }
         }),
         Err(error) => log::info!("owner session for pairing not opened at start: {error}"),
@@ -219,6 +230,13 @@ fn open_local_owner_session_quietly() {
 fn ensure_owner_session(transport: &Transport) {
     let key = transport.key();
     let start = with_session(&key, |session| {
+        if session.door_only
+            && session
+                .opened_at
+                .is_some_and(|opened| opened.elapsed() >= DOOR_SESSION_REFRESH)
+        {
+            session.token = None;
+        }
         if session.token.is_some() || session.opening || session.gave_up {
             return false;
         }
@@ -247,6 +265,7 @@ fn ensure_owner_session(transport: &Transport) {
             Some(Ok(token)) => {
                 session.token = Some(token);
                 session.door_only = true;
+                session.opened_at = Some(Instant::now());
             }
             Some(Err(error)) => log::info!("owner session for pairing not opened: {error}"),
             None => {}
@@ -528,7 +547,14 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         let key = owner_key_for(transport)?;
         let public_key = key.public_key_b64();
         remember_own_owner_key(&public_key);
-        let mut params = json!({ "key": key_json(&public_key, &public_key, "Ghostex app") });
+        let words = key_id_of(&public_key).map(|id| ghostex_gx_protocol::approval::key_words(&id));
+        with_session(&transport.key(), |session| session.key_words = words);
+        // Door sessions only: pairing codes, approvals and paired devices (review M2 in
+        // server/src/security/policy.rs); a gxserver from before it ignores the field.
+        let mut params = json!({
+            "key": key_json(&public_key, &public_key, "Ghostex app"),
+            "scope": ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR,
+        });
         // The approver key goes along, so the one approval that lets this app act as the owner
         // there also lets it answer requests there (server/src/server/security_http.rs,
         // `APPROVER_KEY_PARAM`); a gxserver from before it ignores the field.
@@ -556,7 +582,12 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         let opened = rpc(
             transport,
             "/api/openOwnerSession",
-            json!({ "keyId": key_id, "challenge": challenge, "signature": signature }),
+            json!({
+                "keyId": key_id,
+                "challenge": challenge,
+                "signature": signature,
+                "scope": ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR,
+            }),
         )
         .map_err(|(_, message)| message)?;
         text(&opened, "token").ok_or_else(|| "gxserver opened no owner session".to_string())
@@ -882,7 +913,12 @@ pub(crate) enum Answerer {
     ThisApp,
     /// Only the named devices there (Ghostex on another computer, a paired phone; empty when
     /// gxserver doesn't say). `asked`: a request waits there to let this app answer from here.
-    Elsewhere { devices: Vec<String>, asked: bool },
+    Elsewhere {
+        devices: Vec<String>,
+        asked: bool,
+        /// The key words the card there shows for this app's key, when it asked.
+        words: Option<String>,
+    },
 }
 
 /*
@@ -905,11 +941,16 @@ pub(crate) fn answerer_for(transport: &Transport, request: &ApprovalRequest) -> 
     if open || plain::server_approvals(transport).is_none_or(|answer| answer.may_approve_devices) {
         return Answerer::ThisApp;
     }
+    let (asked, words) = with_session(&transport.key(), |session| {
+        (
+            session.waiting_approval.is_some(),
+            session.key_words.clone(),
+        )
+    });
     Answerer::Elsewhere {
         devices: Vec::new(),
-        asked: with_session(&transport.key(), |session| {
-            session.waiting_approval.is_some()
-        }),
+        asked,
+        words: words.filter(|_| asked),
     }
 }
 
@@ -976,6 +1017,7 @@ pub(crate) fn answerer(transport: &Transport) -> Answerer {
             return Answerer::Elsewhere {
                 devices: elsewhere(),
                 asked,
+                words: None,
             };
         }
         if approver_ids.is_empty()
@@ -1002,6 +1044,7 @@ pub(crate) fn answerer(transport: &Transport) -> Answerer {
                     return Answerer::Elsewhere {
                         devices: elsewhere(),
                         asked: code.as_deref() == Some(APPROVAL_REQUIRED_ERROR),
+                        words: None,
                     };
                 }
             }
@@ -1009,6 +1052,7 @@ pub(crate) fn answerer(transport: &Transport) -> Answerer {
         Answerer::Elsewhere {
             devices: elsewhere(),
             asked: false,
+            words: None,
         }
     })
 }

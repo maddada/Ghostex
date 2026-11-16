@@ -418,6 +418,30 @@ pub struct OpenOwnerSessionParams {
     pub challenge: String,
     /// The signature over [`owner_session_signing_payload`], base64 standard with padding.
     pub signature: String,
+    /// [`OWNER_SCOPE_DOOR`]: a session for pairing codes and approvals only, that lapses
+    /// ([`OpenOwnerSessionResult::expires_at_ms`]). Absent (older apps): a full owner session,
+    /// unless the key may open door sessions only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+}
+
+/// `scope` on `/api/enrollOwnerKey` and `/api/openOwnerSession`: pairing codes, approvals and
+/// paired devices only (the owner-only door, CDXC:Security 2026-11-16 in
+/// server/src/security/policy.rs). A key enrolled with it opens only such sessions.
+pub const OWNER_SCOPE_DOOR: &str = "door";
+
+/// Three words naming an owner key by its `keyId` (hex of the first 16 bytes of SHA-256 over the
+/// public key), from [`crate::pairing::PAIRING_WORDS`]: the "act as you" card and the app that
+/// asks both show them, so the person can tell the app's request from another one. Empty for an
+/// id that isn't hex.
+pub fn key_words(key_id: &str) -> String {
+    let bytes: Vec<u8> = (0..key_id.len() / 2)
+        .map_while(|index| u8::from_str_radix(key_id.get(index * 2..index * 2 + 2)?, 16).ok())
+        .collect();
+    if bytes.len() < 3 {
+        return String::new();
+    }
+    crate::pairing::pairing_match_words(&bytes).join(" ")
 }
 
 /// `/api/openOwnerSession` → the owner session token, held only in the desktop app's memory.
@@ -426,6 +450,9 @@ pub struct OpenOwnerSessionParams {
 pub struct OpenOwnerSessionResult {
     pub token: String,
     pub device_id: String,
+    /// When a door session lapses (ms since the epoch); absent for a full owner session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at_ms: Option<u64>,
 }
 
 /// `/api/enrollOwnerKey` and `/api/enrollApproverKey`: the public key to add. gxserver

@@ -115,6 +115,7 @@ impl SecurityState {
         key_id: &str,
         challenge: &str,
         signature_b64: &str,
+        door: bool,
         now_ms: u64,
     ) -> Result<OpenOwnerSessionResult, OwnerError> {
         if !self.owner_challenges.take(challenge, now_ms) {
@@ -127,7 +128,14 @@ impl SecurityState {
         let payload = owner_session_signing_payload(&self.server_id, challenge, key_id)
             .map_err(|_| OwnerError::BadChallenge)?;
         verify_approval_signature(&key, &payload, signature_b64).map_err(OwnerError::Key)?;
-        let token = self.session_tokens.mint_owner(&key.device_id);
+        // A door session for the app's door calls, or a key let in for those only (review M2 in
+        // security/policy.rs); a full owner session for an older app.
+        let door = door || self.is_door_only_key(key_id);
+        let expires_at_ms = door.then_some(now_ms + super::DOOR_SESSION_TTL_MS);
+        let token = match expires_at_ms {
+            Some(until) => self.session_tokens.mint_door(&key.device_id, until, now_ms),
+            None => self.session_tokens.mint_owner(&key.device_id),
+        };
         self.save()
             .map_err(|error| OwnerError::Save(error.to_string()))?;
         self.publish(SecurityEvent::SessionTokenMinted {
@@ -138,6 +146,7 @@ impl SecurityState {
         Ok(OpenOwnerSessionResult {
             token,
             device_id: key.device_id,
+            expires_at_ms,
         })
     }
 }

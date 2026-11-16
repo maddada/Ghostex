@@ -24,6 +24,26 @@ pub const OWNER_DEVICE: &str = "ownerDevice";
 /// How long one Approve lets the token file get pairing codes (`ghostex computer-code`'s idle limit).
 pub const TOKEN_FILE_CODE_WINDOW_MS: u64 = 10 * 60 * 1000;
 
+/*
+CDXC:Security 2026-11-16 FIX:
+Review M2 of the owner-only door: the session the app opens for the door was a full owner session (every capability, secrets included, no end), while the card that lets it in says it shows codes and approves devices. The app now asks for a door session (`scope: "door"` on `/api/openOwnerSession`): it is never in the owner session table, so no route, socket or relay but the door's own (`DOOR_SESSION_ENDPOINTS`) knows it, and it lapses after `DOOR_SESSION_TTL_MS` (the app opens a new one, no card: the key is enrolled). A key enrolled with `scope: "door"` (this app's keys, and a key let in through its card) opens only door sessions. An app from before this (11.2.2 and earlier keep their owner session for every call) enrolls without a scope and opens a full session as before; its card says that it acts as you for everything here.
+*/
+/// How long a door session works before the app opens another.
+pub const DOOR_SESSION_TTL_MS: u64 = 12 * 60 * 60 * 1000;
+/// The only routes a door session opens (review M2 above): pairing codes, approvals and paired
+/// devices, and the signed ask that has another computer connect back here.
+pub const DOOR_SESSION_ENDPOINTS: &[&str] = &[
+    "/api/remotePairingCode",
+    "/api/pairedDevices",
+    "/api/removePairedDevice",
+    "/api/signComputerConnectBack",
+    super::APPROVALS_LIST_ENDPOINT,
+    super::APPROVALS_READ_ENDPOINT,
+    super::APPROVALS_APPROVE_ENDPOINT,
+    super::APPROVALS_DENY_ENDPOINT,
+    super::SECURITY_STATUS_ENDPOINT,
+];
+
 /// Whether `action` lets someone in or makes an owner: approved only by the door's keepers.
 pub fn opens_door(action: &SensitiveAction) -> bool {
     matches!(
@@ -39,6 +59,26 @@ impl SecurityState {
     /// its own token (now or before).
     pub fn has_owner_device(&self) -> bool {
         !self.owner_keys.list().is_empty() || self.is_remembered(OWNER_DEVICE)
+    }
+
+    /// Whether owner key `key_id` opens door sessions only (review M2 above).
+    pub fn is_door_only_key(&self, key_id: &str) -> bool {
+        self.door_only_keys
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(key_id)
+    }
+
+    /// Owner key `key_id` opens door sessions only from now on.
+    pub fn mark_door_only_key(&self, key_id: &str) {
+        let added = self
+            .door_only_keys
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key_id.to_string());
+        if added {
+            let _ = self.save();
+        }
     }
 
     /// A phone paired with its own token is here: remembered for good.

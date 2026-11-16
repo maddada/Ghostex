@@ -243,6 +243,8 @@ listing requests, `owner_security::quiet_owner_session`) send
 `askOwner: false`, which enrolls a key that needs no approval and otherwise answers
 `ownerApprovalNeeded` without making a request. A call without the field asks, as before.
 */
+/// `/api/enrollOwnerKey`'s and `/api/openOwnerSession`'s scope (`approval::OWNER_SCOPE_DOOR`).
+const OWNER_SCOPE_PARAM: &str = "scope";
 /// `/api/enrollOwnerKey`'s flag: `false` enrolls only when no approval is needed.
 const ASK_OWNER_PARAM: &str = "askOwner";
 /// The answer to `askOwner: false` when the key needs the owner's approval.
@@ -287,6 +289,12 @@ fn enroll_key(
     params.remove(ASK_OWNER_PARAM);
     params.remove(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM);
     let owner = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT;
+    // `scope: "door"`: the key opens door sessions only (review M2 in security/policy.rs).
+    let door_only = params
+        .remove(OWNER_SCOPE_PARAM)
+        .and_then(|scope| scope.as_str().map(str::to_string))
+        .as_deref()
+        == Some(ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR);
     // The same app's approver key, sent with its owner key (see `APPROVER_KEY_PARAM`).
     let approver_key = match params.get(APPROVER_KEY_PARAM).filter(|_| owner) {
         Some(value) => Some(
@@ -342,15 +350,39 @@ fn enroll_key(
                     .to_string(),
             ));
         }
+        /*
+        CDXC:Security 2026-11-16 FIX:
+        Review M1 and M2 of the owner-only door: the card's words came from the key's own label, which any caller writes, so an agent's request looked like the app's, and it said "show codes and approve devices" while the key opened a full owner session. The card now ends with three words from the key's id (`approval::key_words`), which the app that asks shows too, says what the key may really do (door sessions only with `scope: "door"`, which this app sends; an older app's key acts as you for everything here), and the token file keeps one such request at a time (`replaces`): a newer one replaces its older one.
+        */
+        let words = ghostex_gx_protocol::approval::key_words(&key_id);
+        let (summary, detail) = if door_only {
+            (
+                format!(
+                    "Let {} show this computer's pairing code and approve new phones and computers here (key words: {words})",
+                    key.label
+                ),
+                "Approve only if it is your own Ghostex app, on this computer or on one of your computers connected to this one, and it shows the same three words.".to_string(),
+            )
+        } else {
+            (
+                format!(
+                    "Let {} act as you on this computer (key words: {words})",
+                    key.label
+                ),
+                "It can then do everything you can do here: show the pairing code, approve new phones and computers, answer secret requests. Approve only if it is your own Ghostex app and it shows the same three words.".to_string(),
+            )
+        };
         let action = ActionRequest::new(
             ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey,
-            format!("Let {} act as you on this computer", key.label),
+            summary,
         )
         .target(key_id.clone())
-        .detail(
-            "It can then show this computer's pairing code and approve new phones and computers here. Approve only if it is your own Ghostex app, on this computer or on one of your computers connected to this one.",
-        )
-        .params(json!({ "key": serde_json::to_value(&key).unwrap_or(Value::Null) }));
+        .detail(detail)
+        .replaces("ownerKey")
+        .params(json!({
+            "key": serde_json::to_value(&key).unwrap_or(Value::Null),
+            "doorOnly": door_only,
+        }));
         if let Err(response) = presence_outcome_response(
             presence_outcome(state, caller, action, body),
             endpoint_path,
@@ -361,6 +393,9 @@ fn enroll_key(
     }
     if let Some(approver) = approver_key {
         enroll_approved_key(state, caller, false, approver, now);
+    }
+    if owner && door_only {
+        security.mark_door_only_key(&key_id);
     }
     enroll_approved_key(state, caller, owner, key, now);
     registry
@@ -570,9 +605,11 @@ fn handle(
                 key_id,
                 challenge,
                 signature,
+                scope,
             } = parse(params)?;
+            let door = scope.as_deref() == Some(ghostex_gx_protocol::approval::OWNER_SCOPE_DOOR);
             security
-                .open_owner_session(&key_id, &challenge, &signature, now)
+                .open_owner_session(&key_id, &challenge, &signature, door, now)
                 .map(|opened| json!(opened))
                 .map_err(|error| ("forbidden", error.to_string()))
         }

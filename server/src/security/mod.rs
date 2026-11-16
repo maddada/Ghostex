@@ -34,7 +34,10 @@ pub use capability::{route_access, Capability, Principal, RouteAccess, SessionRo
 pub use events::SecurityEvent;
 pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
-pub use policy::{opens_door, EASY_CONNECT_ENABLE, TOKEN_FILE_CODE_WINDOW_MS};
+pub use policy::{
+    opens_door, DOOR_SESSION_ENDPOINTS, DOOR_SESSION_TTL_MS, EASY_CONNECT_ENABLE,
+    TOKEN_FILE_CODE_WINDOW_MS,
+};
 pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
 pub use session_tokens::{
     SessionTokens, OWNER_TOKEN_PREFIX, SESSION_TOKEN_ENV, SESSION_TOKEN_PREFIX,
@@ -105,6 +108,8 @@ pub struct SecurityState {
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
     events: broadcast::Sender<SecurityEvent>,
+    /// Owner keys that open door sessions only (review M2 in `policy.rs`).
+    door_only_keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
     /// Until when (ms) the token file gets pairing codes after an Approve (`policy.rs`).
     token_file_code_until: Arc<std::sync::Mutex<u64>>,
 }
@@ -125,6 +130,7 @@ impl SecurityState {
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
             token_file_code_until: Arc::default(),
+            door_only_keys: Arc::default(),
         }
     }
 
@@ -137,6 +143,12 @@ impl SecurityState {
         state.approver_keys.restore(saved.approver_keys);
         state.session_tokens.restore(saved.session_tokens);
         state.session_tokens.restore_owner(saved.owner_sessions);
+        state.session_tokens.restore_door(saved.door_sessions);
+        *state
+            .door_only_keys
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+            saved.door_only_keys.into_iter().collect();
         *state
             .approved_computers
             .lock()
@@ -204,6 +216,14 @@ impl SecurityState {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone(),
+                door_only_keys: self
+                    .door_only_keys
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .iter()
+                    .cloned()
+                    .collect(),
+                door_sessions: self.session_tokens.door_snapshot(),
             },
         )
     }
