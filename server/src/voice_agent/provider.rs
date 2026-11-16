@@ -20,7 +20,10 @@ pub(super) const SAMPLE_RATE: u32 = 24_000;
 pub(super) const BYTES_PER_MS: usize = (SAMPLE_RATE as usize * 2) / 1000;
 
 const XAI_REALTIME_URL: &str = "wss://api.x.ai/v1/realtime?model=grok-voice-latest";
-const OPENAI_REALTIME_URL: &str = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1";
+/// The Realtime model calls use; `realtime_url` puts it in the socket URL and the key check asks for it.
+const OPENAI_REALTIME_MODEL: &str = "gpt-realtime-2.1";
+const OPENAI_REALTIME_URL: &str = "wss://api.openai.com/v1/realtime";
+const OPENAI_CLIENT_SECRETS_URL: &str = "https://api.openai.com/v1/realtime/client_secrets";
 const XAI_STT_URL: &str = "wss://api.x.ai/v1/stt";
 
 /// OpenAI Realtime: `session.audio.input.transcription.prompt` takes at most 1024 characters (the API
@@ -33,6 +36,12 @@ pub(super) const XAI_KEYTERM_MAX_CHARS: usize = 50;
 
 const OPENAI_TRANSCRIPTION_PROMPT_LEAD: &str = "Names you may hear: ";
 const OPENAI_TRANSCRIPTION_PROMPT_TRAIL: &str = ".";
+
+/// How [`Provider::key_check`] asks the provider about a key.
+pub(super) enum KeyCheckRequest {
+    Get(&'static str),
+    PostJson(&'static str, Value),
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Provider {
@@ -88,17 +97,28 @@ impl Provider {
         }
     }
 
-    pub(super) fn key_check_url(self) -> &'static str {
+    /// The request that tells whether a key works: xAI's key info, and for OpenAI the Realtime
+    /// session a call opens, minted as a client secret that lapses after 10 seconds unused.
+    ///
+    /// CDXC:VoiceMode 2026-11-16 WHY:
+    /// GitHub #629: a ChatGPT (Codex) sign-in token works for Realtime but `GET /v1/models` answers it 403 "Missing scopes: api.model.read", so the save refused a key that would have worked. Measured 2026-11-16 with a ChatGPT sign-in: `/v1/models` 403, `POST /v1/realtime/client_secrets` 200, the Realtime socket `session.created` and a reply. The check now asks for what a call needs.
+    pub(super) fn key_check(self) -> KeyCheckRequest {
         match self {
-            Self::Xai => "https://api.x.ai/v1/api-key",
-            Self::OpenAi => "https://api.openai.com/v1/models",
+            Self::Xai => KeyCheckRequest::Get("https://api.x.ai/v1/api-key"),
+            Self::OpenAi => KeyCheckRequest::PostJson(
+                OPENAI_CLIENT_SECRETS_URL,
+                json!({
+                    "expires_after": {"anchor": "created_at", "seconds": 10},
+                    "session": {"type": "realtime", "model": OPENAI_REALTIME_MODEL},
+                }),
+            ),
         }
     }
 
-    fn realtime_url(self) -> &'static str {
+    fn realtime_url(self) -> String {
         match self {
-            Self::Xai => XAI_REALTIME_URL,
-            Self::OpenAi => OPENAI_REALTIME_URL,
+            Self::Xai => XAI_REALTIME_URL.to_string(),
+            Self::OpenAi => format!("{OPENAI_REALTIME_URL}?model={OPENAI_REALTIME_MODEL}"),
         }
     }
 
@@ -400,7 +420,7 @@ pub(super) async fn connect_realtime(
     provider: Provider,
     key: &str,
 ) -> Result<ProviderSocket, ConnectError> {
-    open(provider.realtime_url(), key, provider.label()).await
+    open(&provider.realtime_url(), key, provider.label()).await
 }
 
 /// xAI's streaming speech-to-text: raw PCM in binary frames, `transcript.partial` events back.

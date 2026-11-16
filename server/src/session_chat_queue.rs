@@ -69,6 +69,8 @@ pub struct SessionChatQueuedPrompt {
     pub wait_reason: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<u64>,
 }
 
 /// The waiting reasons the scheduler shows, by prompt id. In memory only: a reason is a reading
@@ -135,6 +137,7 @@ state frames, never `appended`. Their omission semantics differ:
 #[derive(Clone, Debug, Default)]
 pub struct SessionChatQueueSnapshot {
     pub queue: Vec<SessionChatQueuedPrompt>,
+    pub queue_version: Option<u64>,
     pub draft: Option<SessionChatDraft>,
     pub account_switch: Option<Value>,
     /// The retry after a connection or server error (accounts/api_errors.rs `chat_state`).
@@ -205,6 +208,9 @@ impl SessionChatQueueSnapshot {
             "queue".to_string(),
             serde_json::to_value(&self.queue).unwrap_or_else(|_| Value::Array(Vec::new())),
         );
+        if let Some(queue_version) = self.queue_version {
+            target.insert("queueVersion".to_string(), json!(queue_version));
+        }
         if let Some(draft) = self.draft.as_ref() {
             if let Ok(value) = serde_json::to_value(draft) {
                 target.insert("draft".to_string(), value);
@@ -231,6 +237,10 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&self.resource_epoch.to_string());
+        if let Some(queue_version) = self.queue_version {
+            revision.push(':');
+            revision.push_str(&queue_version.to_string());
+        }
         for prompt in &self.queue {
             revision.push_str(&prompt.id);
             revision.push(':');
@@ -426,6 +436,7 @@ pub fn handle_session_chat_queue_endpoint(
                     wait_reason: None,
                     created_at: now_iso(),
                     updated_at: now_iso(),
+                    version: None,
                 };
                 let snapshot = read_snapshot(&transaction, &project_id, &session_id)?;
                 let mut value = snapshot_value(&snapshot);
@@ -472,16 +483,36 @@ pub fn handle_session_chat_queue_endpoint(
         "/api/updateSessionChatQueuedPrompt" => {
             let prompt_id = required_text(params, "promptId")?;
             let text = optional_text(params, "text");
+            let expected_text = params
+                .get("expectedText")
+                .and_then(Value::as_str)
+                .map(str::to_string);
             let retry = params.get("retry").and_then(Value::as_bool) == Some(true);
-            update_prompt(&db, &project_id, &session_id, &prompt_id, text, retry)?;
-            let snapshot = read_snapshot(&db, &project_id, &session_id)?;
+            let transaction =
+                rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
+                    .map_err(sql_error)?;
+            update_prompt(
+                &transaction,
+                &project_id,
+                &session_id,
+                &prompt_id,
+                text,
+                expected_text.as_deref(),
+                retry,
+            )?;
+            let snapshot = read_snapshot(&transaction, &project_id, &session_id)?;
+            transaction.commit().map_err(sql_error)?;
             (snapshot_value(&snapshot), true)
         }
         "/api/removeSessionChatQueuedPrompt" => {
             let prompt_id = required_text(params, "promptId")?;
-            let prompt = remove_prompt(&db, &project_id, &session_id, &prompt_id)?;
+            let transaction =
+                rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
+                    .map_err(sql_error)?;
+            let prompt = remove_prompt(&transaction, &project_id, &session_id, &prompt_id)?;
+            let snapshot = read_snapshot(&transaction, &project_id, &session_id)?;
+            transaction.commit().map_err(sql_error)?;
             crate::session_chat_queue_attachments::remove(paths, &prompt_id);
-            let snapshot = read_snapshot(&db, &project_id, &session_id)?;
             let mut value = snapshot_value(&snapshot);
             insert_prompt(&mut value, &prompt);
             (value, true)
@@ -499,8 +530,12 @@ pub fn handle_session_chat_queue_endpoint(
                 .filter_map(Value::as_str)
                 .map(str::to_string)
                 .collect::<Vec<_>>();
-            reorder_queue(&db, &project_id, &session_id, &prompt_ids)?;
-            let snapshot = read_snapshot(&db, &project_id, &session_id)?;
+            let transaction =
+                rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
+                    .map_err(sql_error)?;
+            reorder_queue(&transaction, &project_id, &session_id, &prompt_ids)?;
+            let snapshot = read_snapshot(&transaction, &project_id, &session_id)?;
+            transaction.commit().map_err(sql_error)?;
             (snapshot_value(&snapshot), true)
         }
         "/api/setSessionChatDraft" => {
@@ -603,61 +638,77 @@ pub async fn deliver_session_chat_queued_prompt(
     )
     .await;
     let db = open_gxserver_database(paths).map_err(internal_error)?;
-    let mut held = false;
-    // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
-    // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
-    // as it went out) ended Not sent while its words said it would go out once the prompt is
-    // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
-    // once the prompt is answered.
-    let held_for_prompt = outcome
-        .as_ref()
-        .err()
-        .is_some_and(crate::session_chat_send::refused_for_prompt);
-    let error_message = match outcome {
-        // A delivery that restarted the agent made this row a startup send; it waits for the new
-        // input box whichever caller delivered it.
-        Err(error)
-            if (hold_when_composer_missing && error.code == "composerNotReady")
-                || held_for_prompt
-                || error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
-        {
-            db.execute(
-                r#"
-                UPDATE session_chat_queued_prompts
-                SET state = 'queued', errorMessage = NULL
-                WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'sending'
-                "#,
-                params![prompt_id, project_id, session_id],
-            )
-            .map_err(sql_error)?;
-            held = true;
-            None
-        }
-        Ok(()) => {
-            db.execute(
-                r#"
-                DELETE FROM session_chat_queued_prompts
-                WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
-                "#,
-                params![prompt_id, project_id, session_id],
-            )
-            .map_err(sql_error)?;
-            crate::session_chat_queue_attachments::mark_delivered(paths, prompt_id);
-            crate::session_chat_queue_attachments::sweep(paths, &db);
-            None
-        }
-        Err(error) => {
-            let message = bounded_reason(&error.message);
-            fail_prompt(&db, project_id, session_id, prompt_id, &message)?;
-            Some(message)
-        }
-    };
+    let (held, held_for_prompt, error_message, snapshot) = with_write_tx(&db, |db| {
+        let mut held = false;
+        // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
+        // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
+        // as it went out) ended Not sent while its words said it would go out once the prompt is
+        // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
+        // once the prompt is answered.
+        let held_for_prompt = outcome
+            .as_ref()
+            .err()
+            .is_some_and(crate::session_chat_send::refused_for_prompt);
+        let error_message = match &outcome {
+            // A delivery that restarted the agent made this row a startup send; it waits for the new
+            // input box whichever caller delivered it.
+            Err(error)
+                if (hold_when_composer_missing && error.code == "composerNotReady")
+                    || held_for_prompt
+                    || error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+            {
+                let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+                db.execute(
+                    r#"
+                    UPDATE session_chat_queued_prompts
+                    SET state = 'queued', errorMessage = NULL, version = ?4
+                    WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'sending'
+                    "#,
+                    params![prompt_id, project_id, session_id, next_version],
+                )
+                .map_err(sql_error)?;
+                held = true;
+                None
+            }
+            Ok(()) => {
+                bump_queue_version(db, project_id, session_id)?;
+                db.execute(
+                    r#"
+                    DELETE FROM session_chat_queued_prompts
+                    WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
+                    "#,
+                    params![prompt_id, project_id, session_id],
+                )
+                .map_err(sql_error)?;
+                None
+            }
+            Err(error) => {
+                let message = bounded_reason(&error.message);
+                fail_prompt(db, project_id, session_id, prompt_id, &message)?;
+                Some(message)
+            }
+        };
+        let snapshot = read_snapshot(db, project_id, session_id)?;
+        Ok((held, held_for_prompt, error_message, snapshot))
+    })?;
+    if outcome.is_ok() {
+        crate::session_chat_queue_attachments::mark_delivered(paths, prompt_id);
+        crate::session_chat_queue_attachments::sweep(paths, &db);
+    }
+    if let Some(reason) = error_message.as_deref() {
+        crate::session_chat_send_failure::report_failed_row(
+            project_id,
+            session_id,
+            prompt_id,
+            reason,
+        );
+    }
     Ok(SessionChatQueueDelivery {
         sent: error_message.is_none() && !held,
         held,
         held_for_prompt,
         error_message,
-        snapshot: read_snapshot(&db, project_id, session_id)?,
+        snapshot,
     })
 }
 
@@ -717,13 +768,14 @@ pub fn fail_session_chat_queued_prompt(
     reason: &str,
 ) -> Result<SessionChatQueueSnapshot, DomainStateError> {
     let db = open_gxserver_database(paths).map_err(internal_error)?;
-    fail_prompt(
-        &db,
+    let bounded = bounded_reason(reason);
+    fail_prompt(&db, project_id, session_id, prompt_id, &bounded)?;
+    crate::session_chat_send_failure::report_failed_row(
         project_id,
         session_id,
         prompt_id,
-        &bounded_reason(reason),
-    )?;
+        &bounded,
+    );
     read_snapshot(&db, project_id, session_id)
 }
 
@@ -844,17 +896,41 @@ pub fn recover_session_chat_queue_after_restart(
     paths: &GxserverPaths,
 ) -> Result<(), DomainStateError> {
     let db = open_gxserver_database(paths).map_err(internal_error)?;
-    db.execute(
-        r#"
-        UPDATE session_chat_queued_prompts
-        SET state = 'failed', errorMessage = ?1, updatedAt = ?2
-        WHERE state = 'sending'
-        "#,
-        params![SESSION_CHAT_QUEUE_RESTART_REASON, now_iso()],
-    )
-    .map_err(sql_error)?;
-    // Model selection is idempotent: the driver reads the current footer before changing anything.
-    db.execute("UPDATE session_chat_model_selections SET state = 'queued', retryAt = 0 WHERE state = 'applying'", []).map_err(sql_error)?;
+    with_write_tx(&db, |db| {
+        let mut statement = db
+            .prepare("SELECT DISTINCT projectId, sessionId FROM session_chat_queued_prompts WHERE state = 'sending'")
+            .map_err(sql_error)?;
+        let affected = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(sql_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        drop(statement);
+        let now = now_iso();
+        for (project_id, session_id) in affected {
+            let next_version = bump_queue_version(db, &project_id, &session_id)? as i64;
+            db.execute(
+                r#"
+                UPDATE session_chat_queued_prompts
+                SET state = 'failed', errorMessage = ?1, updatedAt = ?2, version = ?5
+                WHERE projectId = ?3 AND sessionId = ?4 AND state = 'sending'
+                "#,
+                params![
+                    SESSION_CHAT_QUEUE_RESTART_REASON,
+                    now,
+                    project_id,
+                    session_id,
+                    next_version,
+                ],
+            )
+            .map_err(sql_error)?;
+        }
+        // Model selection is idempotent: the driver reads the current footer before changing anything.
+        db.execute("UPDATE session_chat_model_selections SET state = 'queued', retryAt = 0 WHERE state = 'applying'", []).map_err(sql_error)?;
+        Ok(())
+    })?;
     crate::session_chat_queue_attachments::sweep(paths, &db);
     Ok(())
 }
@@ -863,67 +939,149 @@ pub fn recover_session_chat_queue_after_restart(
 // Storage
 // ---------------------------------------------------------------------------
 
+fn with_write_tx<T>(
+    db: &Connection,
+    f: impl FnOnce(&Connection) -> Result<T, DomainStateError>,
+) -> Result<T, DomainStateError> {
+    if !db.is_autocommit() {
+        return f(db);
+    }
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+    let result = f(&transaction)?;
+    transaction.commit().map_err(sql_error)?;
+    Ok(result)
+}
+
+fn with_read_tx<T>(
+    db: &Connection,
+    f: impl FnOnce(&Connection) -> Result<T, DomainStateError>,
+) -> Result<T, DomainStateError> {
+    if !db.is_autocommit() {
+        return f(db);
+    }
+    let transaction =
+        rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Deferred)
+            .map_err(sql_error)?;
+    f(&transaction)
+}
+
+pub(crate) fn bump_queue_version(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Result<u64, DomainStateError> {
+    let version: i64 = db
+        .query_row(
+            r#"
+            INSERT INTO session_chat_queue_versions (projectId, sessionId, version)
+            VALUES (
+                ?1,
+                ?2,
+                COALESCE(
+                    (SELECT MAX(version) FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2),
+                    0
+                ) + 1
+            )
+            ON CONFLICT(projectId, sessionId) DO UPDATE SET
+              version = MAX(
+                session_chat_queue_versions.version,
+                COALESCE(
+                  (SELECT MAX(version) FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2),
+                  0
+                )
+              ) + 1
+            RETURNING version
+            "#,
+            params![project_id, session_id],
+            |row| row.get(0),
+        )
+        .map_err(sql_error)?;
+    Ok(u64::try_from(version).unwrap_or(0))
+}
+
 fn read_snapshot(
     db: &Connection,
     project_id: &str,
     session_id: &str,
 ) -> Result<SessionChatQueueSnapshot, DomainStateError> {
-    let mut statement = db
-        .prepare(
-            r#"
-            SELECT promptId, text, state, errorMessage, createdAt, updatedAt, startupSend,
-              imagePaths
-            FROM session_chat_queued_prompts
-            WHERE projectId = ?1 AND sessionId = ?2
-            ORDER BY position, createdAt, promptId
-            "#,
-        )
-        .map_err(sql_error)?;
-    let queue = statement
-        .query_map(params![project_id, session_id], |row| {
-            let id: String = row.get(0)?;
-            Ok(SessionChatQueuedPrompt {
-                wait_reason: queue_wait_reason(&id),
-                id,
-                text: row.get(1)?,
-                state: row.get(2)?,
-                error_message: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-                startup_send: row.get(6)?,
-                image_paths: crate::session_chat_queue_attachments::decode(row.get(7)?),
+    with_read_tx(db, |db| {
+        let queue_version: i64 = db
+            .query_row(
+                r#"
+                SELECT COALESCE(
+                    (SELECT version FROM session_chat_queue_versions WHERE projectId = ?1 AND sessionId = ?2),
+                    (SELECT MAX(version) FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2),
+                    0
+                )
+                "#,
+                params![project_id, session_id],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        let mut statement = db
+            .prepare(
+                r#"
+                SELECT promptId, text, state, errorMessage, createdAt, updatedAt, startupSend,
+                  imagePaths, version
+                FROM session_chat_queued_prompts
+                WHERE projectId = ?1 AND sessionId = ?2
+                ORDER BY position, createdAt, promptId
+                "#,
+            )
+            .map_err(sql_error)?;
+        let queue = statement
+            .query_map(params![project_id, session_id], |row| {
+                let id: String = row.get(0)?;
+                let version: i64 = row.get(8)?;
+                Ok(SessionChatQueuedPrompt {
+                    wait_reason: queue_wait_reason(&id),
+                    id,
+                    text: row.get(1)?,
+                    state: row.get(2)?,
+                    error_message: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    startup_send: row.get(6)?,
+                    image_paths: crate::session_chat_queue_attachments::decode(row.get(7)?),
+                    version: u64::try_from(version).ok(),
+                })
             })
+            .map_err(sql_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        let draft = crate::session_chat_draft_versions::read(db, project_id, session_id)?;
+        Ok(SessionChatQueueSnapshot {
+            retired_async_question_ids:
+                crate::session_chat_async_questions::read_retired_question_ids(
+                    db, project_id, session_id,
+                ),
+            async_questions_since:
+                crate::session_chat_async_questions::read_async_questions_since(
+                    db, project_id, session_id,
+                ),
+            forked_at: crate::session_chat_open_questions::read_forked_at(db, project_id, session_id),
+            later_question_ids: crate::session_chat_open_questions::read_later_ids(
+                db, project_id, session_id,
+            ),
+            unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(
+                db, project_id, session_id,
+            ),
+            removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
+                db, project_id, session_id,
+            ),
+            resource_index: Default::default(),
+            resource_epoch: crate::session_chat_resources::epoch(),
+            account_switch: crate::accounts::switch_progress::read(db, project_id, session_id),
+            api_retry: read_api_retry(db, project_id, session_id),
+            queue,
+            queue_version: u64::try_from(queue_version).ok(),
+            draft,
+            pending_model_selection: crate::session_chat_model_selection::read_pending(
+                db, project_id, session_id,
+            ),
         })
-        .map_err(sql_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(sql_error)?;
-    let draft = crate::session_chat_draft_versions::read(db, project_id, session_id)?;
-    Ok(SessionChatQueueSnapshot {
-        retired_async_question_ids: crate::session_chat_async_questions::read_retired_question_ids(
-            db, project_id, session_id,
-        ),
-        async_questions_since: crate::session_chat_async_questions::read_async_questions_since(
-            db, project_id, session_id,
-        ),
-        forked_at: crate::session_chat_open_questions::read_forked_at(db, project_id, session_id),
-        later_question_ids: crate::session_chat_open_questions::read_later_ids(
-            db, project_id, session_id,
-        ),
-        unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(
-            db, project_id, session_id,
-        ),
-        removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
-            db, project_id, session_id,
-        ),
-        resource_index: Default::default(),
-        resource_epoch: crate::session_chat_resources::epoch(),
-        account_switch: crate::accounts::switch_progress::read(db, project_id, session_id),
-        api_retry: read_api_retry(db, project_id, session_id),
-        queue,
-        draft,
-        pending_model_selection: crate::session_chat_model_selection::read_pending(
-            db, project_id, session_id,
-        ),
     })
 }
 
@@ -955,71 +1113,76 @@ fn append_prompt(
     startup_send: bool,
     images: &[String],
 ) -> Result<SessionChatQueuedPrompt, DomainStateError> {
-    let count: i64 = db
-        .query_row(
-            "SELECT COUNT(*) FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2",
-            params![project_id, session_id],
-            |row| row.get(0),
-        )
-        .map_err(sql_error)?;
-    if count as usize >= SESSION_CHAT_QUEUE_MAX_PROMPTS {
-        return Err(DomainStateError::bad_request(format!(
-            "{SESSION_CHAT_QUEUE_MAX_PROMPTS} messages are already waiting. Wait for some to go out, or remove one."
-        )));
-    }
-    let next_position: i64 = db
-        .query_row(
-            r#"
-            SELECT COALESCE(MAX(position), -1) + 1
-            FROM session_chat_queued_prompts
-            WHERE projectId = ?1 AND sessionId = ?2
-            "#,
-            params![project_id, session_id],
-            |row| row.get(0),
-        )
-        .map_err(sql_error)?;
-    let id = create_prompt_id();
-    let image_paths = match paths {
-        Some(paths) => crate::session_chat_queue_attachments::store(paths, &id, images)?,
-        None => Vec::new(),
-    };
-    let prompt = SessionChatQueuedPrompt {
-        id,
-        text: text.to_string(),
-        startup_send,
-        image_paths,
-        state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
-        error_message: None,
-        wait_reason: None,
-        created_at: now_iso(),
-        updated_at: now_iso(),
-    };
-    db.execute(
-        r#"
-        INSERT INTO session_chat_queued_prompts (
-          promptId, projectId, sessionId, position, text,
-          state, errorMessage, createdAt, updatedAt, startupSend, imagePaths
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, 'queued', NULL, ?6, ?6, ?7, ?8)
-        "#,
-        params![
-            prompt.id,
-            project_id,
-            session_id,
-            next_position,
-            prompt.text,
-            prompt.created_at,
-            prompt.startup_send,
-            crate::session_chat_queue_attachments::encode(&prompt.image_paths),
-        ],
-    )
-    .map_err(|error| {
-        if let Some(paths) = paths {
-            crate::session_chat_queue_attachments::remove(paths, &prompt.id);
+    with_write_tx(db, |db| {
+        let count: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2",
+                params![project_id, session_id],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        if count as usize >= SESSION_CHAT_QUEUE_MAX_PROMPTS {
+            return Err(DomainStateError::bad_request(format!(
+                "{SESSION_CHAT_QUEUE_MAX_PROMPTS} messages are already waiting. Wait for some to go out, or remove one."
+            )));
         }
-        sql_error(error)
-    })?;
-    Ok(prompt)
+        let next_position: i64 = db
+            .query_row(
+                r#"
+                SELECT COALESCE(MAX(position), -1) + 1
+                FROM session_chat_queued_prompts
+                WHERE projectId = ?1 AND sessionId = ?2
+                "#,
+                params![project_id, session_id],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        let id = create_prompt_id();
+        let image_paths = match paths {
+            Some(paths) => crate::session_chat_queue_attachments::store(paths, &id, images)?,
+            None => Vec::new(),
+        };
+        let next_version = bump_queue_version(db, project_id, session_id)?;
+        let prompt = SessionChatQueuedPrompt {
+            id,
+            text: text.to_string(),
+            startup_send,
+            image_paths,
+            state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
+            error_message: None,
+            wait_reason: None,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+            version: Some(next_version),
+        };
+        db.execute(
+            r#"
+            INSERT INTO session_chat_queued_prompts (
+              promptId, projectId, sessionId, position, text,
+              state, errorMessage, createdAt, updatedAt, startupSend, imagePaths, version
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, 'queued', NULL, ?6, ?6, ?7, ?8, ?9)
+            "#,
+            params![
+                prompt.id,
+                project_id,
+                session_id,
+                next_position,
+                prompt.text,
+                prompt.created_at,
+                prompt.startup_send,
+                crate::session_chat_queue_attachments::encode(&prompt.image_paths),
+                next_version as i64,
+            ],
+        )
+        .map_err(|error| {
+            if let Some(paths) = paths {
+                crate::session_chat_queue_attachments::remove(paths, &prompt.id);
+            }
+            sql_error(error)
+        })?;
+        Ok(prompt)
+    })
 }
 
 /// Appends a queued prompt outside the endpoint, for gxserver's own notes: a plain row, or with
@@ -1040,44 +1203,73 @@ fn update_prompt(
     session_id: &str,
     prompt_id: &str,
     text: Option<String>,
+    expected_text: Option<&str>,
     retry: bool,
 ) -> Result<(), DomainStateError> {
-    let state = read_prompt_state(db, project_id, session_id, prompt_id)?;
-    if state == SESSION_CHAT_QUEUE_STATE_SENDING {
-        return Err(DomainStateError::bad_request(
-            "This message is going to the agent now, so it can't be changed.",
-        ));
-    }
-    if text.is_none() && !retry {
-        return Err(DomainStateError::bad_request(
-            "updateSessionChatQueuedPrompt requires text or retry.",
-        ));
-    }
-    if let Some(text) = text.as_deref() {
-        validate_text(text)?;
-    }
-    // `retry` is ignored for rows that are not failed, per the wire contract.
-    let clear_failure = retry && state == SESSION_CHAT_QUEUE_STATE_FAILED;
-    db.execute(
-        r#"
-        UPDATE session_chat_queued_prompts
-        SET text = COALESCE(?4, text),
-            state = CASE WHEN ?5 THEN 'queued' ELSE state END,
-            errorMessage = CASE WHEN ?5 THEN NULL ELSE errorMessage END,
-            updatedAt = ?6
-        WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
-        "#,
-        params![
-            prompt_id,
-            project_id,
-            session_id,
-            text,
-            clear_failure,
-            now_iso(),
-        ],
-    )
-    .map_err(sql_error)?;
-    Ok(())
+    with_write_tx(db, |db| {
+        let state = read_prompt_state(db, project_id, session_id, prompt_id)?;
+        if state == SESSION_CHAT_QUEUE_STATE_SENDING {
+            return Err(DomainStateError::bad_request(
+                "This message is going to the agent now, so it can't be changed.",
+            ));
+        }
+        if text.is_none() && !retry {
+            return Err(DomainStateError::bad_request(
+                "updateSessionChatQueuedPrompt requires text or retry.",
+            ));
+        }
+        if expected_text.is_some() && text.is_none() {
+            return Err(DomainStateError::bad_request(
+                "expectedText requires text on updateSessionChatQueuedPrompt.",
+            ));
+        }
+        if let Some(text) = text.as_deref() {
+            validate_text(text)?;
+        }
+        // `retry` is ignored for rows that are not failed, per the wire contract.
+        let clear_failure = retry && state == SESSION_CHAT_QUEUE_STATE_FAILED;
+        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+        let changed = db
+            .execute(
+                r#"
+                UPDATE session_chat_queued_prompts
+                SET text = COALESCE(?4, text),
+                    state = CASE WHEN ?5 THEN 'queued' ELSE state END,
+                    errorMessage = CASE WHEN ?5 THEN NULL ELSE errorMessage END,
+                    updatedAt = ?6,
+                    version = ?8
+                WHERE promptId = ?1
+                  AND projectId = ?2
+                  AND sessionId = ?3
+                  AND state != 'sending'
+                  AND (?7 IS NULL OR text = ?7)
+                "#,
+                params![
+                    prompt_id,
+                    project_id,
+                    session_id,
+                    text,
+                    clear_failure,
+                    now_iso(),
+                    expected_text,
+                    next_version,
+                ],
+            )
+            .map_err(sql_error)?;
+        if changed == 0 {
+            let latest = read_prompt(db, project_id, session_id, prompt_id)?;
+            if latest.state == SESSION_CHAT_QUEUE_STATE_SENDING {
+                return Err(DomainStateError::bad_request(
+                    "This message is going to the agent now, so it can't be changed.",
+                ));
+            }
+            return Err(DomainStateError {
+                code: "conflict",
+                message: "This queued message changed before your update arrived.".to_string(),
+            });
+        }
+        Ok(())
+    })
 }
 
 /// Deletes the queued prompts of a session deleted for good, or of every session of a removed
@@ -1090,17 +1282,37 @@ pub(crate) fn forget_session_chat_queue(
     project_id: &str,
     session_id: Option<&str>,
 ) -> Result<usize, DomainStateError> {
-    match session_id {
-        Some(session_id) => db.execute(
-            "DELETE FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2",
-            params![project_id, session_id],
-        ),
-        None => db.execute(
-            "DELETE FROM session_chat_queued_prompts WHERE projectId = ?1",
-            params![project_id],
-        ),
-    }
-    .map_err(sql_error)
+    with_write_tx(db, |db| {
+        let sessions: Vec<String> = match session_id {
+            Some(session_id) => vec![session_id.to_string()],
+            None => {
+                let mut statement = db
+                    .prepare("SELECT DISTINCT sessionId FROM session_chat_queued_prompts WHERE projectId = ?1")
+                    .map_err(sql_error)?;
+                let ids = statement
+                    .query_map(params![project_id], |row| row.get::<_, String>(0))
+                    .map_err(sql_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(sql_error)?;
+                ids
+            }
+        };
+        for sid in &sessions {
+            bump_queue_version(db, project_id, sid)?;
+        }
+        let deleted = match session_id {
+            Some(session_id) => db.execute(
+                "DELETE FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2",
+                params![project_id, session_id],
+            ),
+            None => db.execute(
+                "DELETE FROM session_chat_queued_prompts WHERE projectId = ?1",
+                params![project_id],
+            ),
+        }
+        .map_err(sql_error)?;
+        Ok(deleted)
+    })
 }
 
 fn remove_prompt(
@@ -1109,21 +1321,24 @@ fn remove_prompt(
     session_id: &str,
     prompt_id: &str,
 ) -> Result<SessionChatQueuedPrompt, DomainStateError> {
-    let prompt = read_prompt(db, project_id, session_id, prompt_id)?;
-    if prompt.state == SESSION_CHAT_QUEUE_STATE_SENDING {
-        return Err(DomainStateError::bad_request(
-            "This message is going to the agent now, so it can't be changed.",
-        ));
-    }
-    db.execute(
-        r#"
-        DELETE FROM session_chat_queued_prompts
-        WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
-        "#,
-        params![prompt_id, project_id, session_id],
-    )
-    .map_err(sql_error)?;
-    Ok(prompt)
+    with_write_tx(db, |db| {
+        let prompt = read_prompt(db, project_id, session_id, prompt_id)?;
+        if prompt.state == SESSION_CHAT_QUEUE_STATE_SENDING {
+            return Err(DomainStateError::bad_request(
+                "This message is going to the agent now, so it can't be changed.",
+            ));
+        }
+        bump_queue_version(db, project_id, session_id)?;
+        db.execute(
+            r#"
+            DELETE FROM session_chat_queued_prompts
+            WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
+            "#,
+            params![prompt_id, project_id, session_id],
+        )
+        .map_err(sql_error)?;
+        Ok(prompt)
+    })
 }
 
 /*
@@ -1138,40 +1353,44 @@ fn reorder_queue(
     session_id: &str,
     prompt_ids: &[String],
 ) -> Result<(), DomainStateError> {
-    let existing = read_snapshot(db, project_id, session_id)?.queue;
-    let mut ordered: Vec<String> = Vec::with_capacity(existing.len());
-    for prompt_id in prompt_ids {
-        if ordered.iter().any(|id| id == prompt_id) {
-            continue;
+    with_write_tx(db, |db| {
+        let existing = read_snapshot(db, project_id, session_id)?.queue;
+        let mut ordered: Vec<String> = Vec::with_capacity(existing.len());
+        for prompt_id in prompt_ids {
+            if ordered.iter().any(|id| id == prompt_id) {
+                continue;
+            }
+            if existing.iter().any(|prompt| &prompt.id == prompt_id) {
+                ordered.push(prompt_id.clone());
+            }
         }
-        if existing.iter().any(|prompt| &prompt.id == prompt_id) {
-            ordered.push(prompt_id.clone());
+        for prompt in &existing {
+            if !ordered.iter().any(|id| id == &prompt.id) {
+                ordered.push(prompt.id.clone());
+            }
         }
-    }
-    for prompt in &existing {
-        if !ordered.iter().any(|id| id == &prompt.id) {
-            ordered.push(prompt.id.clone());
+        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+        let timestamp = now_iso();
+        for (position, prompt_id) in ordered.iter().enumerate() {
+            db.execute(
+                r#"
+                UPDATE session_chat_queued_prompts
+                SET position = ?4, updatedAt = ?5, version = ?6
+                WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
+                "#,
+                params![
+                    prompt_id,
+                    project_id,
+                    session_id,
+                    position as i64,
+                    timestamp,
+                    next_version,
+                ],
+            )
+            .map_err(sql_error)?;
         }
-    }
-    let timestamp = now_iso();
-    for (position, prompt_id) in ordered.iter().enumerate() {
-        db.execute(
-            r#"
-            UPDATE session_chat_queued_prompts
-            SET position = ?4, updatedAt = ?5
-            WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
-            "#,
-            params![
-                prompt_id,
-                project_id,
-                session_id,
-                position as i64,
-                timestamp,
-            ],
-        )
-        .map_err(sql_error)?;
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 fn set_draft(
@@ -1392,30 +1611,33 @@ fn claim_prompt(
     session_id: &str,
     prompt_id: &str,
 ) -> Result<(String, Vec<String>), DomainStateError> {
-    let prompt = read_prompt(db, project_id, session_id, prompt_id)?;
-    if prompt.state == SESSION_CHAT_QUEUE_STATE_SENDING {
-        return Err(DomainStateError::bad_request(
-            "This message is going to the agent now, so it can't be changed.",
-        ));
-    }
-    let claimed = db
-        .execute(
-            r#"
-            UPDATE session_chat_queued_prompts
-            SET state = 'sending', errorMessage = NULL, updatedAt = ?4
-            WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
-              AND state IN ('queued', 'failed')
-            "#,
-            params![prompt_id, project_id, session_id, now_iso()],
-        )
-        .map_err(sql_error)?
-        > 0;
-    if !claimed {
-        return Err(DomainStateError::bad_request(
-            "This message is going to the agent now, so it can't be changed.",
-        ));
-    }
-    Ok((prompt.text, prompt.image_paths))
+    with_write_tx(db, |db| {
+        let prompt = read_prompt(db, project_id, session_id, prompt_id)?;
+        if prompt.state == SESSION_CHAT_QUEUE_STATE_SENDING {
+            return Err(DomainStateError::bad_request(
+                "This message is going to the agent now, so it can't be changed.",
+            ));
+        }
+        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+        let claimed = db
+            .execute(
+                r#"
+                UPDATE session_chat_queued_prompts
+                SET state = 'sending', errorMessage = NULL, updatedAt = ?4, version = ?5
+                WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
+                  AND state IN ('queued', 'failed')
+                "#,
+                params![prompt_id, project_id, session_id, now_iso(), next_version],
+            )
+            .map_err(sql_error)?
+            > 0;
+        if !claimed {
+            return Err(DomainStateError::bad_request(
+                "This message is going to the agent now, so it can't be changed.",
+            ));
+        }
+        Ok((prompt.text, prompt.image_paths))
+    })
 }
 
 /// Turns the row this session is delivering into a startup send, so it waits for the input box of
@@ -1427,15 +1649,31 @@ pub(crate) fn hold_sending_prompt_for_restart(
     session_id: &str,
 ) -> bool {
     open_gxserver_database(paths).is_ok_and(|db| {
-        db.execute(
-            r#"
-            UPDATE session_chat_queued_prompts
-            SET startupSend = 1
-            WHERE projectId = ?1 AND sessionId = ?2 AND state = 'sending'
-            "#,
-            params![project_id, session_id],
-        )
-        .is_ok_and(|changed| changed > 0)
+        with_write_tx(&db, |db| {
+            let has_sending: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM session_chat_queued_prompts WHERE projectId = ?1 AND sessionId = ?2 AND state = 'sending')",
+                    params![project_id, session_id],
+                    |row| row.get(0),
+                )
+                .map_err(sql_error)?;
+            if !has_sending {
+                return Ok(false);
+            }
+            let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+            let changed = db
+                .execute(
+                    r#"
+                    UPDATE session_chat_queued_prompts
+                    SET startupSend = 1, version = ?3
+                    WHERE projectId = ?1 AND sessionId = ?2 AND state = 'sending'
+                    "#,
+                    params![project_id, session_id, next_version],
+                )
+                .map_err(sql_error)?;
+            Ok(changed > 0)
+        })
+        .unwrap_or(false)
     })
 }
 
@@ -1451,9 +1689,13 @@ pub(crate) fn drop_queued_prompt(
     prompt_id: &str,
 ) -> bool {
     let dropped = open_gxserver_database(paths).is_ok_and(|db| {
-        read_prompt(&db, project_id, session_id, prompt_id)
-            .is_ok_and(|prompt| prompt.state == "queued")
-            && remove_prompt(&db, project_id, session_id, prompt_id).is_ok()
+        with_write_tx(&db, |db| {
+            let ok = read_prompt(db, project_id, session_id, prompt_id)
+                .is_ok_and(|prompt| prompt.state == "queued")
+                && remove_prompt(db, project_id, session_id, prompt_id).is_ok();
+            Ok(ok)
+        })
+        .unwrap_or(false)
     });
     if dropped {
         crate::session_chat_queue_attachments::remove(paths, prompt_id);
@@ -1468,15 +1710,31 @@ pub(crate) fn hold_queued_prompt_for_wake(
     prompt_id: &str,
 ) -> bool {
     open_gxserver_database(paths).is_ok_and(|db| {
-        db.execute(
-            r#"
-            UPDATE session_chat_queued_prompts
-            SET startupSend = 1
-            WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'queued'
-            "#,
-            params![prompt_id, project_id, session_id],
-        )
-        .is_ok_and(|changed| changed > 0)
+        with_write_tx(&db, |db| {
+            let is_queued: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM session_chat_queued_prompts WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'queued')",
+                    params![prompt_id, project_id, session_id],
+                    |row| row.get(0),
+                )
+                .map_err(sql_error)?;
+            if !is_queued {
+                return Ok(false);
+            }
+            let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+            let changed = db
+                .execute(
+                    r#"
+                    UPDATE session_chat_queued_prompts
+                    SET startupSend = 1, version = ?4
+                    WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'queued'
+                    "#,
+                    params![prompt_id, project_id, session_id, next_version],
+                )
+                .map_err(sql_error)?;
+            Ok(changed > 0)
+        })
+        .unwrap_or(false)
     })
 }
 
@@ -1487,16 +1745,26 @@ fn fail_prompt(
     prompt_id: &str,
     reason: &str,
 ) -> Result<(), DomainStateError> {
-    db.execute(
-        r#"
-        UPDATE session_chat_queued_prompts
-        SET state = 'failed', errorMessage = ?4, updatedAt = ?5
-        WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
-        "#,
-        params![prompt_id, project_id, session_id, reason, now_iso()],
-    )
-    .map_err(sql_error)?;
-    crate::session_chat_send_failure::report_failed_row(project_id, session_id, prompt_id, reason);
+    with_write_tx(db, |db| {
+        let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+        db.execute(
+            r#"
+            UPDATE session_chat_queued_prompts
+            SET state = 'failed', errorMessage = ?4, updatedAt = ?5, version = ?6
+            WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
+            "#,
+            params![
+                prompt_id,
+                project_id,
+                session_id,
+                reason,
+                now_iso(),
+                next_version,
+            ],
+        )
+        .map_err(sql_error)?;
+        Ok(())
+    })?;
     Ok(())
 }
 
@@ -1508,13 +1776,15 @@ fn read_prompt(
 ) -> Result<SessionChatQueuedPrompt, DomainStateError> {
     db.query_row(
         r#"
-        SELECT promptId, text, state, errorMessage, createdAt, updatedAt, startupSend, imagePaths
+        SELECT promptId, text, state, errorMessage, createdAt, updatedAt, startupSend, imagePaths,
+          version
         FROM session_chat_queued_prompts
         WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
         "#,
         params![prompt_id, project_id, session_id],
         |row| {
             let id: String = row.get(0)?;
+            let version: i64 = row.get(8)?;
             Ok(SessionChatQueuedPrompt {
                 wait_reason: queue_wait_reason(&id),
                 id,
@@ -1525,6 +1795,7 @@ fn read_prompt(
                 updated_at: row.get(5)?,
                 startup_send: row.get(6)?,
                 image_paths: crate::session_chat_queue_attachments::decode(row.get(7)?),
+                version: u64::try_from(version).ok(),
             })
         },
     )

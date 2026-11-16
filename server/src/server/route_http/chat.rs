@@ -564,6 +564,15 @@ pub(super) async fn route_chat_http(
             }
             response
         }
+        crate::visual_pages::RETIRE_VISUAL_PAGES_ENDPOINT => {
+            crate::visual_pages::handle_retire_visual_pages_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         crate::visual_pages::PUBLISH_VISUAL_PAGE_ENDPOINT => {
             crate::visual_pages::handle_publish_visual_page_http(
                 &state,

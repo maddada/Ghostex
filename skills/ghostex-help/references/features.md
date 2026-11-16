@@ -759,18 +759,18 @@ of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
 several. On the phone, the pencil at the top of the Sessions list (New session,
-next to the bell, in both the Unified and the Project layout) lists every
-project on every computer, recent ones first, with a search field and a chip for
-each computer, starting on the one you used last for that project. Tap a project
-and its remembered agent starts there (the computer's Settings > Agents >
-Remember the agent you pick decides whether that is the agent picked last in the
-project, in its Space or anywhere). It opens in the view the phone's Settings >
-Chat > Default agent view picks, as a project's agent button does: in Chat, a new
-chat where you can still change the agent, model, worktree, project or computer
-before you send the first message; an agent without chat always opens its
-terminal. If that computer isn't connected, it says so. A project's "+" and the
-"+" on a project in the filter open the agent menu instead, which shows its
-project on top (tap it to pick any project) and the same computer chips.
+next to the bell, in both the Unified and the Project layout) opens the agent
+menu on the project you used last (or the one project the filter shows), with
+that project on top: tap it to pick any project on any computer, recent ones
+first, and its computer chips pick where it runs. The menu lists what that
+computer has set up: New Coordinator…, its agents (the remembered one stands
+out), Cloud Box where offered, and Terminal. Nothing starts until you pick a
+row. An agent opens in the view the phone's Settings > Chat > Default agent view
+picks: in Chat, a new chat where you can still change the agent, model,
+worktree, project or computer before you send the first message; an agent
+without chat always opens its terminal. If the project's computer isn't
+connected, the project list opens instead. A project's "+" and the "+" on a
+project in the filter open the same agent menu on that project.
 
 On the computer, both sidebars have a wide New session button in a row of its
 own under the top row: a plus and New session, with its shortcut shown while
@@ -2259,7 +2259,13 @@ ends with a "Reply about this page" box and a Mark as seen button, and until you
 press it the page sits in the list above the chat box of things that need you
 ("Page, not seen yet") and counts in its "need you". Pressing it tells the agent
 you saw the page, with your reply if you wrote one, and the page's card then
-says Seen. Pages an agent showed before this came in don't wait. A page with
+says Seen. Pages an agent showed before this came in don't wait. When two or
+more pages wait only to be seen, Mark all seen at the bottom of that list clears
+them all at once (their cards say Seen, and nothing is sent to the agent). When
+an agent shows a newer version of the same file, the older cards say Replaced
+and stop counting: the newest card is the page. An agent can also retire a page
+it replaced or no longer needs, with its questions, using `ghostex page retire`
+(`ghostex page --help`). A page with
 questions shows "N of M answered" in a small pill at its bottom right (green
 once every question has an answer). In the
 floating window, clicking outside it, its Hide button beside the close button,
@@ -2358,7 +2364,8 @@ card that asks a single choice question right away, without Send answers
 answers still wait for Send). Commands:
 `ghostex show <file.html>`
 publishes a page and prints the block that shows its card, which opens where
-Open Ghostex pages in says. Opening a page's HTML file itself (from the Files
+Open Ghostex pages in says; `ghostex page retire <page>` takes back a page the
+agent replaced. Opening a page's HTML file itself (from the Files
 view, a file link in the chat, Open in browser, or the phone) shows it styled
 the same way: it answers to the chat that published that file, or, when no
 agent sent it, opens read-only with a note saying so. Other HTML files open as
@@ -2747,7 +2754,7 @@ Tool call lines (Settings > Extensions > Experimental, off by default; on the ph
 
 A call that is still running shows a light sweeping across its words in every look: the tool rows and Tool call lines.
 
-Chat look (Settings > Chat > Advanced) has five opt-in settings for a quieter, Slack or Claude Code style chat. With all five at Default the chat looks as it always has. Message layout set to Left aligned starts every message at the same left edge instead of putting yours on the right. Your messages set to Band puts yours on a soft full-width strip and also left-aligns them. Status line in the chat shows what the agent is doing as the last line of the chat instead of above the chat box. Chat box matches transcript width makes the chat box as wide as the transcript when Transcript width is set to a percentage (computer only). Message spacing set to Compact puts messages closer together and keeps a small row under each message for its time and ⋯ menu; on the phone that row shows the time. The phone follows the computer's choices for all but the chat box width, and picks up a changed look the next time a chat opens or catches up after a lost connection (`chatMessageLayout`, `chatUserMessageStyle`, `chatStatusInTranscript`, `chatComposerMatchesTranscriptWidth`, `chatMessageSpacing`).
+Chat look (Settings > Chat > Advanced) has five opt-in settings for a quieter, Slack or Claude Code style chat. With all five at Default the chat looks as it always has. Message layout set to Left aligned starts every message at the same left edge instead of putting yours on the right. Your messages set to Band puts yours on a soft full-width strip and also left-aligns them. Status line in the chat shows what the agent is doing as the last line of the chat instead of above the chat box. Chat box matches transcript width makes the chat box as wide as the transcript when Transcript width is set to a percentage (computer only). Message spacing set to Compact puts messages closer together and keeps a small row under each message for its time and ⋯ menu; on the phone that row shows the time. On a tablet (an iPad, or an Android tablet) the phone's transcript uses the full width by default; with Custom Transcript Width on (Settings > Advanced on the phone), its percentage applies instead, and phones keep the standard column. The phone follows the computer's choices for all but the chat box width, and picks up a changed look the next time a chat opens or catches up after a lost connection (`chatMessageLayout`, `chatUserMessageStyle`, `chatStatusInTranscript`, `chatComposerMatchesTranscriptWidth`, `chatMessageSpacing`).
 
 Quiet View makes a chat read as the conversation: your messages, the agent's replies, Ghostex pages and forms, questions and your answers, approvals waiting on you, errors and messages that were not sent stay in view, and everything between two of them (reports from threads, messages sent to them, tool calls, the line that says which work items changed, turns that ended without a reply) folds into one quiet line that counts it, for example "3 reports · 1 message sent · 3 tool calls · 1 item updated". Click the line to see all of it in order, as the full chat shows it; an open line drops its counts and says only "Working", how long the agent worked, or "Reports", since what it holds is in view. Inside, a single turn's card says what it did ("4 tool calls") instead of repeating the time, and when the line holds several turns their tool calls sit right under it, with a small "Then · 22s" mark where the agent picked up again. Click it again to shut it. While the agent works the line counts up instead of the cards piling up. Every chat opens in Quiet View; More actions > View > Quiet View turns it on or off for any chat, and the chat remembers that choice. When a chat's view differs from its default, a small Quiet view or Full view chip at the left of the chat box's pill row switches it back in one click. Summary view, which folds more, wins while it is on, and Detailed view is Quiet View with every line open. Agent work Reduced and Quiet and the Tool call cards preview are gone: Quiet View replaced them, and a chat that used one of them opens in Quiet View. Settings > Chat > Advanced has the defaults: Coordinators open in Quiet View (on), Other chats open in Quiet View (on; turn it off to have other chats open in the full Normal view), and Expand the last turn in Quiet View (on), which shows the work after the newest reply, or the running turn, open until a newer reply comes. Quiet View is on the computer, in Ghostex in a browser and on the phone, which follows the computer's three settings and has the same Quiet View row in its chat box's More actions > View; with a computer on an older Ghostex the phone shows the full chat (`chatQuietViewCoordinators`, `chatQuietViewChats`, `chatQuietViewExpandLast`).
 
@@ -5033,7 +5040,12 @@ in Settings > Voice Agent, pick a voice, and paste the provider's key there
 (xAI keys come from console.x.ai, OpenAI keys from platform.openai.com). The
 key is checked with the provider before it is saved, kept encrypted on this
 computer and never shown again. If a saved key can't be read anymore,
-Settings > Voice Agent says so on its row: paste it again. The provider bills your account while a
+Settings > Voice Agent says so on its row: paste it again. For OpenAI, when
+Codex is signed in with ChatGPT on this computer, Use my ChatGPT sign-in
+(beside Save) uses that sign-in instead of a key: Ghostex reads it from Codex
+each time and never refreshes it, so when it has expired, run Codex once and
+call again. Voice calls work on it; the memory summary and OpenAI Dictation use
+your OpenAI API credits. The provider bills your account while a
 conversation is open. When the provider refuses a conversation (for example
 xAI answering "payment required" because an X subscription's included usage
 is used up for the moment), the panel shows the provider's own reason.
@@ -5130,7 +5142,12 @@ sessions, so any client can control agents on any machine.
   is right in the step, with a light button). It won't scan gives tips. If the
   phone can't scan it, click Copy the code under the code and tap Paste a code
   instead on the phone (also under Other ways to connect on the first screen,
-  beside Use Tailscale). The code works once, for five minutes. "Need the
+  beside Use Tailscale). The code works once, for five minutes. To add a
+  computer with no code at all, tap Use SSH details (a small link on the
+  first screen and on Add a computer) and type its name, SSH host (an IP or
+  host name the phone can reach, such as its Tailscale IP or its address on
+  your own network), SSH username and password, or generate a key under
+  Advanced; the computer needs SSH access on. "Need the
   app?" at the bottom of the window links to the Android app and to the App
   Store for iPhone. Computer in the window's list shows another computer's two
   steps and the code to copy. Tailscale in the list says what it is for and
@@ -5309,7 +5326,13 @@ sessions, so any client can control agents on any machine.
   a line or two with one button that fixes it (Try another code, Reconnect,
   Try again). Use SSH details in the window adds a computer by its address,
   username and password instead. To re-pair a computer paired before 11.1.0,
-  open it in Settings > Remote there and paste a new code.
+  open it in Settings > Remote there and paste a new code. On a server without
+  the app (or any terminal), `ghostex computer-code` (also `gxserver
+  computer-code`) prints this computer's code to paste into Connect a Computer
+  on the other one, then shows that computer's three words and asks y or n to
+  approve it; `--once` or `--json` only prints the code. Easy Connect must be on
+  (`ghostex tailcat enable`), and it runs only in your own terminal, not from an
+  agent's session.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;
@@ -6799,12 +6822,19 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   sight. What a panel may do is limited to what you allowed when you installed
   it: See your projects, See your sessions, Open projects and sessions, Start
   agents, Hear from your agents (an agent can tell it about its own thread
-  only) and Message a thread when you tap its panel (one short message, right
-  after your tap). A panel's section can fold under its heading, and a long list
-  shows its first items with "N more". The Thread brief extension uses these: a
-  side panel view with each thread's objective, status, next up, done, blocked
-  and parked items, kept by the thread's agent through its skill, with Refresh
-  to ask the thread for an update. Turn its sidebar button or its sections off on its page in Settings >
+  only), Message a thread when you tap its panel (one short message, right
+  after your tap) and Tell new agent sessions about it (one short line added to
+  what agent sessions are told when they start or resume, except coordinators
+  and their threads; it stops once the extension is off or uninstalled). A
+  panel's section can fold under its heading, a long list shows its first items
+  with "N more", and a text can be editable: click it to rewrite it in place.
+  The Thread brief extension uses these: a side panel view with each session's
+  objective (click it to rewrite it; yours stays), status, next up, done,
+  blocked and parked items, kept by the session's agent through its skill, with
+  Refresh to ask for an update, and a Briefs button in the sidebar's top row
+  listing every session with a brief, its objective and its done count. While
+  it is on, new and resumed agent sessions start their brief on their own;
+  coordinators and their threads keep none. Turn its sidebar button or its sections off on its page in Settings >
   Extensions (Sidebar mode, Sections in Projects). On the phone, the extension's
   button sits in the sessions list's header, its sections show in the Project
   list, a tap ticks an item or opens it, and a long press opens its options
@@ -7766,16 +7796,29 @@ itself, so it works even when it cannot reach your computer. While a computer is
 connected, "Collect more data with an agent" is there too: Start Agent starts
 the agent on that computer and opens its chat on the phone.
 
-If the phone app closes unexpectedly, it saves a crash report on the phone
-(what went wrong, the app version, the phone model and the screen you were on);
-nothing is sent on its own. The next time you open the app, a card at the
-bottom says it closed unexpectedly, once per crash: Dismiss deletes the
-report, Send Report opens Send Bug / Feedback with it attached. Names of your
-computers, addresses, usernames, emails and keys are removed first; Show Report
-displays the cleaned text, and Review shows the exact issue before you send it.
-If you started the agent instead, it removes anything personal it still finds.
-A saved report you have not sent can also be attached later with Attach Crash
-Report in Send Bug / Feedback.
+If the phone app closes unexpectedly, it can save a crash report on the phone
+(what went wrong, the app version, the phone model and the screen, when known);
+nothing is sent on its own. The iPhone features described below need an app
+build with the crash-report updates; older builds may not have them. With
+those updates, the iPhone also keeps the native crashes that
+iOS reports to the app later; for those iOS gives only a time range, not the
+exact time. The next time you open the app, a card at the bottom says it closed
+unexpectedly, once per crash: Send Report opens Send Bug / Feedback with it
+attached, and Dismiss keeps the report on the iPhone and deletes it on Android.
+Names of your computers, addresses, usernames, emails and keys are removed
+first; Show Report displays the cleaned text, and Review shows the exact issue
+before you send it. If you started the agent instead, it removes anything
+personal it still finds. A saved report you have not sent can also be attached
+later with Attach Crash Report in Send Bug / Feedback.
+
+On the iPhone, Settings › Connection › Troubleshooting › Crash reports lists the
+saved reports, newest first, and the phone keeps the 5 newest. Open one to Copy
+its cleaned text, Share it as a text file or Delete it; Delete All Reports
+removes every report after asking. Copy and Share replace the computer and user
+names, addresses, emails and keys they recognize, so read the text before you
+share it. Keep crash reports is on by default; turning it off deletes the saved
+reports, after asking when there are any, and the phone saves none until you
+turn it on again.
 
 ## Answering the common questions
 

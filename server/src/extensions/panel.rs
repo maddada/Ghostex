@@ -384,6 +384,50 @@ impl PanelStore {
         )
     }
 
+    /// Applies a user's rewrite of an editable text block (`{op: "text", text}`).
+    pub(crate) fn edit_text(
+        &self,
+        manifest: &ExtensionManifest,
+        payload_dir: &Path,
+        surface: &PanelSurface,
+        block_id: &str,
+        new_text: &str,
+        base_revision: Option<u64>,
+    ) -> ExtensionResult<PanelRecord> {
+        self.commit(
+            manifest,
+            payload_dir,
+            surface,
+            base_revision,
+            PanelWriter::User,
+            |current| {
+                let mut document = current.clone();
+                let block = document
+                    .blocks
+                    .iter_mut()
+                    .find(|block| block.id == block_id)
+                    .ok_or_else(|| {
+                        ExtensionError::not_found(format!("The panel has no block {block_id:?}."))
+                    })?;
+                let PanelBlockBody::Text { text, editable } = &mut block.body else {
+                    return Err(ExtensionError::bad_request(format!(
+                        "Block {block_id:?} is not a text block."
+                    )));
+                };
+                if *editable != Some(true) {
+                    return Err(ExtensionError::bad_request(format!(
+                        "Text {block_id:?} is not editable."
+                    )));
+                }
+                *text = new_text.to_string();
+                let value = serde_json::to_value(&document).map_err(|error| {
+                    ExtensionError::internal(format!("Could not encode panel: {error}"))
+                })?;
+                validate_panel_document(&value, |_| true)
+            },
+        )
+    }
+
     /// Forgets every panel of an uninstalled extension.
     pub(crate) fn remove_extension(&self, extension_id: &str) -> ExtensionResult<()> {
         self.lock()?.retain(|(id, _), _| id != extension_id);
@@ -971,7 +1015,7 @@ impl<F: Fn(ExtensionPermission) -> bool> Checker<'_, F> {
                 }
                 optional_label("label", text.as_deref())?;
             }
-            PanelBlockBody::Text { text } => {
+            PanelBlockBody::Text { text, .. } => {
                 if text.chars().count() > TEXT_MAX_CHARS {
                     return Err(bad(format!(
                         "text is longer than {TEXT_MAX_CHARS} characters."

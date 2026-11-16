@@ -150,6 +150,12 @@ pub struct SessionState {
     /// the "daemon does not support it" state and hides every queue control; an empty list means
     /// supported and empty.
     pub queue_prompts: crate::state::Stamped<Option<Vec<Value>>>,
+    /// Un-patched authoritative queue rows from the latest server snapshot/frame or settled RPC.
+    pub server_queue_prompts: Option<Vec<Value>>,
+    /// Highest server queue version observed so older snapshots cannot resurrect deleted prompts.
+    pub server_queue_version: Option<u64>,
+    /// Monotonic counter bumped whenever authoritative server queue state updates.
+    pub queue_revision: u64,
     /// The latest synced composer draft. Unchanged on omission; a clear is an explicit empty
     /// `content`.
     pub synced_draft: Option<crate::document::SharedValue>,
@@ -218,6 +224,9 @@ impl Default for SessionState {
             api_retry: Tri::Absent,
             pending_model_selection: Tri::Absent,
             queue_prompts: Default::default(),
+            server_queue_prompts: None,
+            server_queue_version: None,
+            queue_revision: 0,
             synced_draft: None,
             synced_draft_revision: 0,
             deliveries_recorded_revision: 0,

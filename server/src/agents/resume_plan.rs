@@ -327,7 +327,7 @@ pub(crate) fn to_agent_resume_input(
         .as_ref()
         .and_then(|agent_id| {
             base_command.as_ref().map(|command| {
-                resolve_agent_launch_command(
+                resolve_session_launch_command(
                     agent_id,
                     command,
                     // A Claude the user restarted in Bypass from the Mode menu keeps starting in
@@ -345,6 +345,7 @@ pub(crate) fn to_agent_resume_input(
                     read_text_from_map(&agent_config, "icon")
                         .or_else(|| read_text_from_map(&launch_settings, "icon"))
                         .as_deref(),
+                    session_is_coordinator(&runtime_settings),
                 )
             })
         })

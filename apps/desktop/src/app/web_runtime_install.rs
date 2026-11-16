@@ -280,6 +280,7 @@ impl GhostexGpuiApp {
         {
             self.ensure_active_browser_surface(cx);
         }
+        self.reload_open_project_browser_tabs_on_startup(cx);
         self.update_active_mode_cef_child_visibility(cx);
     }
 

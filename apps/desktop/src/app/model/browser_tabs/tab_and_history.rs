@@ -219,16 +219,37 @@ impl BrowserTabGroup {
 }
 
 pub(crate) fn sanitize_browser_tab_url_for_state(url: &str) -> Option<String> {
+    sanitize_browser_tab_url_with_policy(url, false)
+}
+
+/// Persisted Browser tabs and history preserve local `file://` URLs alongside HTTP(S) so local
+/// HTML pages and artifacts reopen after restarts, while remote-machine tabs stay HTTP(S)-only.
+pub(crate) fn sanitize_browser_tab_url_for_tab(
+    url: &str,
+    remote_machine_id: Option<&str>,
+) -> Option<String> {
+    sanitize_browser_tab_url_with_policy(url, remote_machine_id.is_none())
+}
+
+fn sanitize_browser_tab_url_with_policy(url: &str, allow_local_file: bool) -> Option<String> {
     /*
     CDXC:Browser 2026-09-09 DECISION:
     User: after an app restart, a Browser tab must reopen the same complete HTTP(S) URL, including its query string and fragment, rather than only the page path. Continue removing URL credentials before persistence.
     */
     let trimmed = url.trim();
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case(BROWSER_ADDRESS_ONLY_CEF_URL) {
+    if trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case(BROWSER_ADDRESS_ONLY_CEF_URL)
+        || trimmed.chars().any(char::is_control)
+    {
         return None;
     }
     let (scheme, rest) = trimmed.split_once("://")?;
     let scheme = scheme.to_ascii_lowercase();
+    if scheme == "file" {
+        return allow_local_file
+            .then(|| sanitize_local_file_url(trimmed, rest))
+            .flatten();
+    }
     if scheme != "http" && scheme != "https" {
         return None;
     }
@@ -240,6 +261,114 @@ pub(crate) fn sanitize_browser_tab_url_for_state(url: &str) -> Option<String> {
         return None;
     }
     Some(format!("{scheme}://{authority}{navigation_suffix}"))
+}
+
+fn sanitize_local_file_url(trimmed: &str, rest: &str) -> Option<String> {
+    if rest.starts_with('\\') || rest.starts_with("/\\") {
+        return None;
+    }
+    let suffix_start = rest.find(['?', '#']).unwrap_or(rest.len());
+    let before_suffix = &rest[..suffix_start];
+    let raw_path = if before_suffix.starts_with('/') {
+        before_suffix
+    } else if let Some((authority, _)) = before_suffix.split_once('/') {
+        if authority.contains('@') || !authority.eq_ignore_ascii_case("localhost") {
+            return None;
+        }
+        &before_suffix[authority.len()..]
+    } else {
+        return None;
+    };
+    if raw_file_path_resolves_to_unc_or_empty(raw_path) {
+        return None;
+    }
+    let parsed = url::Url::parse(trimmed).ok()?;
+    if parsed.scheme() != "file" || !parsed.username().is_empty() || parsed.password().is_some() {
+        return None;
+    }
+    if parsed
+        .host_str()
+        .is_some_and(|host| !host.eq_ignore_ascii_case("localhost"))
+    {
+        return None;
+    }
+    let path = parsed.path();
+    if !path.starts_with('/') || path.len() <= 1 {
+        return None;
+    }
+    if path
+        .as_bytes()
+        .get(1)
+        .is_some_and(|byte| matches!(byte, b'/' | b'\\'))
+    {
+        return None;
+    }
+    if path.get(1..4).is_some_and(|prefix| {
+        prefix.eq_ignore_ascii_case("%2f") || prefix.eq_ignore_ascii_case("%5c")
+    }) {
+        return None;
+    }
+    Some(parsed.into())
+}
+
+// Check raw dot-segment resolution before `url::Url::parse` because WHATWG `file:` parsing
+// collapses `file:////host/...` and `..//` empty segments into local-looking `file:///host/...`.
+fn raw_file_path_resolves_to_unc_or_empty(raw_path: &str) -> bool {
+    let Some(after_root) = raw_path.strip_prefix('/') else {
+        return true;
+    };
+    if after_root.is_empty() {
+        return true;
+    }
+    let mut stack: Vec<&str> = Vec::new();
+    let mut has_drive_root = false;
+    for segment in after_root.split(['/', '\\']) {
+        if is_single_dot_segment(segment) {
+            continue;
+        }
+        if is_double_dot_segment(segment) {
+            if stack.len() > usize::from(has_drive_root) {
+                stack.pop();
+            }
+            continue;
+        }
+        if stack.is_empty() && is_windows_drive_segment(segment) {
+            has_drive_root = true;
+        }
+        stack.push(segment);
+    }
+    let Some(first) = stack.first().copied() else {
+        return true;
+    };
+    first.is_empty()
+        || first.get(0..3).is_some_and(|prefix| {
+            prefix.eq_ignore_ascii_case("%2f") || prefix.eq_ignore_ascii_case("%5c")
+        })
+}
+
+fn is_windows_drive_segment(segment: &str) -> bool {
+    let bytes = segment.as_bytes();
+    bytes.len() == 2 && bytes[0].is_ascii_alphabetic() && matches!(bytes[1], b':' | b'|')
+}
+
+fn is_single_dot_segment(segment: &str) -> bool {
+    segment == "." || segment.eq_ignore_ascii_case("%2e")
+}
+
+fn is_double_dot_segment(segment: &str) -> bool {
+    let Some(rest) = segment
+        .strip_prefix('.')
+        .or_else(|| strip_ascii_prefix_ignore_case(segment, "%2e"))
+    else {
+        return false;
+    };
+    rest == "." || rest.eq_ignore_ascii_case("%2e")
+}
+
+fn strip_ascii_prefix_ignore_case<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = value.get(..prefix.len())?;
+    head.eq_ignore_ascii_case(prefix)
+        .then(|| &value[prefix.len()..])
 }
 
 pub(crate) fn browser_placeholder_safe_origin_url(sanitized_url: &str) -> Option<String> {

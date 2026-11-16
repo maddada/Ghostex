@@ -104,6 +104,7 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
         title,
         &url,
         &file_name,
+        &source_key(&path),
         popup,
         question_tags.as_deref(),
         awaits_seen,
@@ -256,6 +257,7 @@ fn visual_page_block(
     title: &str,
     url: &str,
     file: &str,
+    source: &str,
     popup: bool,
     questions: Option<&[String]>,
     awaits_seen: bool,
@@ -270,11 +272,32 @@ fn visual_page_block(
         ""
     };
     format!(
-        "```visual\n{{\"page\":{{\"title\":{},\"url\":{},\"file\":{}{open}{questions}{seen}}}}}\n```",
+        "```visual\n{{\"page\":{{\"title\":{},\"url\":{},\"file\":{},\"source\":{}{open}{questions}{seen}}}}}\n```",
         json_string(title),
         json_string(url),
-        json_string(file)
+        json_string(file),
+        json_string(source)
     )
+}
+
+/// The block's `"source"`: which file the page was published from, as 16 hex characters of the
+/// file's whole path (FNV-1a), so the chat can tell a newer `ghostex show` of the same file from a
+/// page of another folder's file with the same name, without printing the path into the reply.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// User picked "reply and build" on issue #626 (each `ghostex show` of an updated file made a new
+/// card and the older ones kept counting as "not seen yet"): a newer `ghostex show` of the same
+/// file replaces its older cards in the chat; they stop counting and read Replaced, and the newest
+/// card is the page (gx-chat-core transcript/open_questions.rs `settle_askers`). Blocks printed
+/// before carry no source and replace nothing.
+fn source_key(path: &Path) -> String {
+    let hash = path
+        .to_string_lossy()
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        });
+    format!("{hash:016x}")
 }
 
 fn json_string(text: &str) -> String {

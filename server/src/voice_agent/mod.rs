@@ -6,6 +6,7 @@
 
 mod announcements;
 mod approvals;
+mod chatgpt_signin;
 mod clip;
 mod computers;
 #[cfg(test)]

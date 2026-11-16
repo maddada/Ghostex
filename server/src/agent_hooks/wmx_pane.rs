@@ -149,7 +149,7 @@ fn filetime_to_epoch_ms(filetime: u64) -> i64 {
 }
 
 #[cfg(windows)]
-struct Process(windows_sys::Win32::Foundation::HANDLE);
+pub(crate) struct Process(windows_sys::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl Drop for Process {
@@ -160,7 +160,7 @@ impl Drop for Process {
 
 #[cfg(windows)]
 impl Process {
-    fn open(pid: u32) -> Option<Self> {
+    pub(crate) fn open(pid: u32) -> Option<Self> {
         use windows_sys::Win32::System::Threading::{
             OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
         };
@@ -188,7 +188,7 @@ impl Process {
     }
 
     /// The process's command line, the way .dependencies/wmx/src/process_snapshot.rs reads it.
-    fn command_line(&self) -> Option<String> {
+    pub(crate) fn command_line(&self) -> Option<String> {
         use windows_sys::{
             Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation},
             Win32::Foundation::UNICODE_STRING,

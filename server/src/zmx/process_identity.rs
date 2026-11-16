@@ -15,9 +15,8 @@ pub(crate) struct ProcessRow {
 }
 
 impl ProcessRow {
-    /// A row read from the kernel rather than parsed from `ps` (process_table_macos.rs); the
-    /// terminal name goes through the same normalization a `ps` tty column does.
-    #[cfg(target_os = "macos")]
+    /// A row read from the kernel rather than parsed from `ps` (process_table_macos.rs,
+    /// session_tree.rs); the terminal name goes through the same normalization a `ps` tty column does.
     pub(crate) fn new(pid: i64, ppid: i64, terminal_name: Option<String>, command: String) -> Self {
         Self {
             command,
@@ -141,15 +140,21 @@ pub(crate) fn zmx_daemon_processes(ps_output: &str) -> Vec<(i64, String)> {
     parse_process_rows(ps_output)
         .into_iter()
         .filter_map(|row| {
-            let mut arguments = row.command.split_whitespace();
-            let executable = arguments.next()?;
-            if Path::new(executable).file_stem()?.to_str()? != "zmx" || arguments.next()? != "run" {
-                return None;
-            }
-            let name = arguments.next()?.to_string();
+            let name = zmx_daemon_session_name(&row.command)?.to_string();
             (row.pid > 0).then_some((row.pid, name))
         })
         .collect()
+}
+
+/// The session a `zmx run <name>` daemon's command line names, whichever zmx binary started it.
+#[cfg(not(windows))]
+pub(crate) fn zmx_daemon_session_name(command: &str) -> Option<&str> {
+    let mut arguments = command.split_whitespace();
+    let executable = arguments.next()?;
+    if Path::new(executable).file_stem()?.to_str()? != "zmx" || arguments.next()? != "run" {
+        return None;
+    }
+    arguments.next()
 }
 
 /// CDXC:Zmx 2026-11-03 WHY: macOS `ps` writes `??` for a process without a terminal and Linux procps writes `?`. Only `??` was known, so on Linux every daemon row kept its `?` as the first word of its command, no `zmx run <name>` daemon was ever found, and the chat's repaint step reported "the session's zmx daemon is not running" for live sessions (GitHub #400).

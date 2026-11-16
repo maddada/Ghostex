@@ -47,6 +47,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionLinks 2026-10-24 DECISION: User: "user can pick to open in embedded or external browser in settings (default to embedded)".
     ("sessionLinkOpenTarget", J::Str("embedded")),
     ("browserPagesInViewRow", J::Bool(false)),
+    // CDXC:Browser 2026-11-16 WHY: reloading the open project's Browser tabs on launch came with the file:// tab restore (PR #624); it is an Advanced toggle, off by default, because web panes sleep until clicked so launch never loads a page nobody asked for (model/project_editor_shell.rs).
+    ("reloadBrowserTabsOnStartup", J::Bool(false)),
     // CDXC:Extensions 2026-11-09 DECISION: User: "that url is mine but it should open grok.com usually please". The Grok page opens grok.com unless the user puts their own page (a Grok bot, say) here; no one's own page ships as a default.
     ("grokWebStartPage", J::Str("https://grok.com/")),
     // The Grok logins, each `{ "id", "name" }` with its own browser profile (apps/desktop/src/app/claude_web/grok.rs). Empty is one login named Grok.

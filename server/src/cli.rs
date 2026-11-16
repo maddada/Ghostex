@@ -157,6 +157,12 @@ pub async fn run(args: Vec<String>) -> Result<()> {
             )?;
         }
         Some("endpoint") => print_endpoint(args.iter().skip(1).any(|arg| arg == "--no-token"))?,
+        // The same program as `ghostex`: a server without the app is often reached as gxserver
+        // (CDXC:RemotePairing 2026-11-16 in ghostex_cli/computer_code.rs).
+        Some("computer-code") => {
+            crate::ghostex_cli::run_computer_code(&args[1..])
+                .map_err(|error| anyhow!("{error}"))?;
+        }
         Some("agent-skills") => {
             run_agent_skills_command(args.iter().skip(1).cloned().collect()).await?;
         }
@@ -748,6 +754,9 @@ Usage:
   gxserver stop-all  Stop gxserver and kill tracked zmx sessions
   gxserver status    Print gxserver runtime state
   gxserver endpoint  Print the running daemon's port and auth token as JSON (for SSH clients; --no-token leaves the token out)
+  gxserver computer-code [--once] [--json]
+                     Print this computer's pairing code for Connect a Computer on another
+                     computer, then approve that computer here (same as ghostex computer-code)
   gxserver agent-skills status [skill...] [--json]
   gxserver agent-skills install <skill...> --source <path> [--offline] [--json]
   gxserver agent-skills refresh [--json]

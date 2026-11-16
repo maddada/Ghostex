@@ -764,6 +764,19 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .work_dock_hidden
         .as_ref()
         .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))));
+    // Mark all seen, once two or more pages wait only to be looked at (one has its own ⋯ Dismiss):
+    // every such page in the dock, the rows past the limit too (`questions::later::mark_seen`).
+    let unseen: Vec<&str> = rows
+        .iter()
+        .filter(|row| row["seenOnly"] == true)
+        .map(|row| text(row, "pageId"))
+        .filter(|id| !id.is_empty())
+        .collect();
+    let mark_all_seen = if unseen.len() >= 2 {
+        json!({ "label": "Mark all seen", "command": { "type": "markPagesSeen", "ids": unseen } })
+    } else {
+        Value::Null
+    };
     // At most four rows show (three on the phone); the rest are "N more need you", which opens the
     // Work panel at Needs you. The counts are the Work pill's (`coordinator_board::pill`).
     json!({
@@ -772,6 +785,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         "limit": 4,
         "phoneLimit": 3,
         "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
+        "markAllSeen": mark_all_seen,
     })
 }
 
@@ -1054,6 +1068,8 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                 if !form {
                     row["pageId"] = json!(asker.id);
                     row["count"] = json!(page_count(state, &asker));
+                    // The dock's Mark all seen clears these (`dock_with`).
+                    row["seenOnly"] = json!(asker.seen_only);
                 }
                 row["buttons"] = json!([]);
                 // A page that asks nothing waits to be marked seen (`Asker::seen_only`).

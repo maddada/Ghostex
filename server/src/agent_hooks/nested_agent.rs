@@ -125,13 +125,13 @@ fn is_session_daemon(stem: &str) -> bool {
 }
 
 #[cfg(windows)]
-pub(super) struct ProcessTable {
+pub(crate) struct ProcessTable {
     rows: std::collections::HashMap<u32, (u32, String)>,
 }
 
 #[cfg(windows)]
 impl ProcessTable {
-    pub(super) fn read() -> Self {
+    pub(crate) fn read() -> Self {
         use std::mem::{size_of, zeroed};
         use windows_sys::Win32::{
             Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
@@ -166,7 +166,7 @@ impl ProcessTable {
 
     /// The parent, when it still exists and was created no later than `pid`: Windows keeps a dead
     /// parent's pid and hands it to new processes.
-    pub(super) fn parent(&self, pid: u32) -> Option<u32> {
+    pub(crate) fn parent(&self, pid: u32) -> Option<u32> {
         let (parent, _) = self.rows.get(&pid)?;
         let parent = *parent;
         if parent == 0 || parent == pid || !self.rows.contains_key(&parent) {
@@ -175,9 +175,19 @@ impl ProcessTable {
         (created(parent)? <= created(pid)?).then_some(parent)
     }
 
-    pub(super) fn executable_stem(&self, pid: u32) -> Option<String> {
+    pub(crate) fn executable_stem(&self, pid: u32) -> Option<String> {
         let (_, exe) = self.rows.get(&pid)?;
         Some(exe.strip_suffix(".exe").unwrap_or(exe).to_string())
+    }
+
+    /// The processes whose recorded parent pid is `parent`, before `parent` checks each link
+    /// (the account switch walks one session's tree down from its shell, zmx/session_tree.rs).
+    pub(crate) fn recorded_children(&self, parent: u32) -> Vec<u32> {
+        self.rows
+            .iter()
+            .filter(|(pid, (recorded, _))| *recorded == parent && **pid != parent)
+            .map(|(pid, _)| *pid)
+            .collect()
     }
 
     /// Every process whose executable is `<stem>.exe`, ignoring case.

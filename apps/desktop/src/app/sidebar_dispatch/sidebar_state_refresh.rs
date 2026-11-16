@@ -206,6 +206,8 @@ impl GhostexGpuiApp {
         }
         self.project_editor_auto_sleep_epochs.bump(mode);
         if mode == TitlebarMode::Browser {
+            self.pending_startup_browser_reload = false;
+            self.pending_startup_browser_remote_machines.clear();
             self.update_active_mode_cef_child_visibility(cx);
         }
         if mode == TitlebarMode::Source {

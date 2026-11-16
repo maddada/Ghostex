@@ -968,8 +968,13 @@ pub fn settle_request(
             // step that lost a race self-corrects on the next line instead of rolling back.
             if let Some(queue) = result.get("queue").and_then(Value::as_array) {
                 // `setQueuePrompts(result.queue)`: the answer's own array, equal or not.
-                *state.session.queue_prompts = Some(queue.clone());
-                state.messages.new_composition_identity();
+                let queue_version = result.get("queueVersion").and_then(Value::as_u64);
+                crate::session::apply::apply_server_queue_versioned(
+                    state,
+                    queue,
+                    queue_version,
+                    true,
+                );
             }
             // `setSyncedDraft((current) => mergeSessionChatDraftState(current, result.draft))`:
             // the receipts union, and a newer local revision wins over the answer's body.
@@ -1131,8 +1136,13 @@ pub fn settle_queue_mutation(
         crate::wire::RpcOutcome::Ok { result } => {
             if let Some(queue) = result.get("queue").and_then(Value::as_array) {
                 // `setQueuePrompts(result.queue)`: the answer's own array, equal or not.
-                *state.session.queue_prompts = Some(queue.clone());
-                state.messages.new_composition_identity();
+                let queue_version = result.get("queueVersion").and_then(Value::as_u64);
+                crate::session::apply::apply_server_queue_versioned(
+                    state,
+                    queue,
+                    queue_version,
+                    true,
+                );
             }
             if let Some(removed) = removed.as_deref() {
                 crate::questions::forms::reopen_after_removed_answers(state, removed);
@@ -1148,6 +1158,14 @@ pub fn settle_queue_mutation(
             }
         }
         crate::wire::RpcOutcome::Err { message, code, .. } => {
+            if let Some(server_queue) = state.session.server_queue_prompts.clone() {
+                crate::session::apply::apply_server_queue_versioned(
+                    state,
+                    &server_queue,
+                    state.session.server_queue_version,
+                    true,
+                );
+            }
             state.core.fail(message.clone(), code.clone());
         }
     }

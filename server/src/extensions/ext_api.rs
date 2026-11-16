@@ -8,8 +8,8 @@
 //! | `PATCH /api/ext/v1/panel` `{blocks?, removeBlocks?, title?, tabs?, baseRevision?}` | the extension | Upserts blocks by id, removes blocks |
 //! | `GET /api/ext/v1/projects` | the extension, with `projects.read` | This computer's projects |
 //! | `GET /api/ext/v1/sessions?project=` | the extension, with `sessions.read` | Its sessions and what they are doing |
-//! | `GET /api/ext/v1/events` | the extension, and you and your agents (its panel events only) | Server-sent events: `panelChanged`, `checklistEdited`, `panelAction`, and `projectsChanged` / `sessionsChanged` with the matching read permission |
-//! | `POST /api/ext/v1/panelAction` `{extension, surface?, session?, blockId, itemId?, edit? \| action?, data?, baseRevision?}` | your Ghostex apps and phones | A tap: an editable-checklist edit gxserver applies, or an `extension` action passed to the extension |
+//! | `GET /api/ext/v1/events` | the extension, and you and your agents (its panel events only) | Server-sent events: `panelChanged`, `checklistEdited`, `textEdited`, `panelAction`, and `projectsChanged` / `sessionsChanged` with the matching read permission |
+//! | `POST /api/ext/v1/panelAction` `{extension, surface?, session?, blockId, itemId?, edit? \| action?, data?, baseRevision?}` | your Ghostex apps and phones | A tap: an editable checklist's or text's edit gxserver applies, or an `extension` action passed to the extension |
 //!
 //! The extension is the one whose server holds the bearer token (`GHOSTEX_API_TOKEN`, given to
 //! its command server at start); every other caller names it with `?extension=<id>`. Answered
@@ -461,6 +461,30 @@ fn panel_action(
         .and_then(Value::as_str)
         .ok_or_else(|| ExtensionError::bad_request("A panel action needs blockId."))?;
     let panels = state.extension_registry.panels();
+    if let Some(edit) = body.get("edit").filter(|edit| edit["op"] == "text") {
+        let text = edit
+            .get("text")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .ok_or_else(|| ExtensionError::bad_request("The edit needs text."))?;
+        let record = panels.edit_text(
+            &extension.manifest,
+            &extension.payload_dir,
+            surface,
+            block_id,
+            text,
+            base_revision,
+        )?;
+        let mut event = Map::new();
+        event.insert("type".into(), json!("textEdited"));
+        surface.describe(&mut event);
+        event.insert("blockId".into(), json!(block_id));
+        event.insert("text".into(), json!(text));
+        event.insert("revision".into(), json!(record.revision));
+        panels.emit(id, Value::Object(event));
+        return Ok((with_ok(record.to_json(id, surface)), true));
+    }
     if let Some(edit) = body.get("edit") {
         let edit = ChecklistEdit::parse(edit)?;
         let record = panels.edit_checklist(
@@ -790,6 +814,11 @@ fn forked_from(state: &AppState) -> std::collections::HashMap<String, String> {
         .unwrap_or_default()
 }
 
+/// This computer's sessions as an extension sees them, each with its `role`: `coordinator`, `thread`
+/// (with its `coordinator` ref) or `session` for every other one.
+///
+/// CDXC:Extensions 2026-11-16 DECISION:
+/// User (Q3430 "ordinary sessions only (not coordinators or threads). Make the Ghostex change extensions need to tell them apart"): the Thread brief extension keeps a brief only for ordinary sessions, so the sessions list says which ones are coordinators and threads, read from the presentation snapshot's coordinator fields (coordinators/presentation.rs).
 fn sessions(
     snapshot: &Value,
     project: Option<&str>,
@@ -819,7 +848,21 @@ fn sessions(
                         })
                         .unwrap_or_default();
                     let reference = format!("{project_id}:{session_id}");
+                    let role = match session.get("coordinatorRole").and_then(Value::as_str) {
+                        Some("coordinator") => "coordinator",
+                        Some("thread") => "thread",
+                        _ => "session",
+                    };
+                    let coordinator = (role == "thread")
+                        .then(|| {
+                            let project = session.get("coordinatorProjectId")?.as_str()?;
+                            let id = session.get("coordinatorSessionId")?.as_str()?;
+                            Some(format!("{project}:{id}"))
+                        })
+                        .flatten();
                     json!({
+                        "role": role,
+                        "coordinator": coordinator,
                         "forkedFrom": forks.get(&reference),
                         "session": reference,
                         "projectId": project_id,

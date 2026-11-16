@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::provider::Provider;
+use super::provider::{KeyCheckRequest, Provider};
 use crate::paths::GxserverPaths;
 use crate::vault::{self, UnsealError};
 
@@ -123,6 +123,46 @@ fn reference_path(paths: &GxserverPaths, provider: Provider) -> PathBuf {
         .join(format!("{}.ref.json", provider.id()))
 }
 
+/// Marks that OpenAI's key is the ChatGPT sign-in Codex keeps (`chatgpt_signin.rs`) rather than a
+/// saved key. A pasted key or a 1Password reference replaces it, and it replaces them.
+fn signin_path(paths: &GxserverPaths) -> PathBuf {
+    paths
+        .auth_dir
+        .join("voice-agent")
+        .join("openai.chatgpt-signin.json")
+}
+
+/// Whether the provider's key is the ChatGPT sign-in (only OpenAI has one).
+pub(super) fn uses_chatgpt_signin(paths: &GxserverPaths, provider: Provider) -> bool {
+    provider == Provider::OpenAi && signin_path(paths).is_file()
+}
+
+fn remove_if_present(path: &std::path::Path, what: &str) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(format!("Couldn't remove {what}: {error}"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Makes OpenAI use the ChatGPT sign-in, dropping its saved key or 1Password reference.
+pub(super) fn use_chatgpt_signin(paths: &GxserverPaths) -> Result<(), String> {
+    let path = signin_path(paths);
+    let write = || -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, br#"{"source":"codexChatgpt"}"#)
+    };
+    write().map_err(|error| format!("Couldn't save the choice: {error}"))?;
+    remove_if_present(&sealed_path(paths, Provider::OpenAi), "the old API key")?;
+    remove_if_present(
+        &reference_path(paths, Provider::OpenAi),
+        "the 1Password reference",
+    )
+}
+
 /// The secret provider reference the provider's key is read from, if it has one.
 pub(super) fn key_reference(
     paths: &GxserverPaths,
@@ -162,12 +202,10 @@ pub(super) fn write_key_reference(
         fs::rename(&temp, &path)
     };
     write().map_err(|error| format!("Couldn't save the 1Password reference: {error}"))?;
-    match fs::remove_file(sealed_path(paths, provider)) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            Err(format!("Couldn't remove the old API key: {error}"))
-        }
-        _ => Ok(()),
+    if provider == Provider::OpenAi {
+        remove_if_present(&signin_path(paths), "the ChatGPT sign-in choice")?;
     }
+    remove_if_present(&sealed_path(paths, provider), "the old API key")
 }
 
 /// [`read_key`] off the async runtime: a key kept in 1Password may wait for an unlock.
@@ -181,12 +219,15 @@ pub(super) async fn read_key_async(
         .map_err(|_| "Couldn't read the API key.".to_string())?
 }
 
-/// The provider's saved key, unsealed or read through its secret provider; `None` when none is
-/// saved. Blocking.
+/// The provider's saved key, unsealed or read through its secret provider (or the ChatGPT sign-in's
+/// current token); `None` when none is saved. Blocking.
 pub(super) fn read_key(
     paths: &GxserverPaths,
     provider: Provider,
 ) -> Result<Option<String>, String> {
+    if uses_chatgpt_signin(paths, provider) {
+        return super::chatgpt_signin::read_token(paths).map(Some);
+    }
     if let Some(reference) = key_reference(paths, provider) {
         return crate::secret_providers::resolve(paths, &reference)
             .map(|key| Some(key.trim().to_string()))
@@ -226,8 +267,9 @@ pub(super) enum KeyState {
 /// Opens the saved key to see that it still can: one small file and the vault key the vault
 /// caches for the process, cheap enough for every read.
 pub(super) fn key_state(paths: &GxserverPaths, provider: Provider) -> KeyState {
-    // Read only when used: 1Password may ask to unlock, which a status read must never cause.
-    if key_reference(paths, provider).is_some() {
+    // Read only when used: 1Password may ask to unlock, which a status read must never cause. The
+    // ChatGPT sign-in too: using it says when Codex is signed out or its sign-in has expired.
+    if uses_chatgpt_signin(paths, provider) || key_reference(paths, provider).is_some() {
         return KeyState::Saved;
     }
     match fs::read_to_string(sealed_path(paths, provider)) {
@@ -250,19 +292,12 @@ pub(super) fn write_key(
     key: Option<&str>,
 ) -> Result<(), String> {
     let path = sealed_path(paths, provider);
-    match fs::remove_file(reference_path(paths, provider)) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            return Err(format!("Couldn't remove the 1Password reference: {error}"))
-        }
-        _ => {}
+    remove_if_present(&reference_path(paths, provider), "the 1Password reference")?;
+    if provider == Provider::OpenAi {
+        remove_if_present(&signin_path(paths), "the ChatGPT sign-in choice")?;
     }
     let Some(key) = key else {
-        return match fs::remove_file(&path) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                Err(format!("Couldn't remove the API key: {error}"))
-            }
-            _ => Ok(()),
-        };
+        return remove_if_present(&path, "the API key");
     };
     let sealed = vault::seal(paths, key)?;
     let write = || -> std::io::Result<()> {
@@ -291,27 +326,68 @@ pub(super) fn write_key(
 /// What checking a key with its provider found.
 pub(super) enum KeyCheck {
     Valid,
-    Refused,
+    /// The provider turned the key down; its own reason when it gave one other than a wrong key.
+    Refused(Option<String>),
     Unreachable(String),
 }
 
 /// Asks the provider whether the key works (blocking; run it off the async runtime).
+///
+/// A 401 is a wrong or revoked key. A 400 or 403 also refuses the key, with the provider's reason
+/// (a key without access to Realtime, say), since that key can't run a call either. The 401's own
+/// text is left out: OpenAI's repeats part of the key.
 pub(super) fn check_key(provider: Provider, key: &str) -> KeyCheck {
-    let response = crate::http_agent::agent()
-        .get(provider.key_check_url())
-        .header("authorization", format!("Bearer {key}"))
-        .config()
-        .timeout_global(Some(Duration::from_secs(15)))
-        .build()
-        .call();
-    match response {
-        Ok(_) => KeyCheck::Valid,
-        Err(ureq::Error::StatusCode(400 | 401 | 403)) => KeyCheck::Refused,
-        Err(ureq::Error::StatusCode(status)) => {
-            KeyCheck::Unreachable(format!("{} answered HTTP {status}.", provider.label()))
-        }
+    let agent = crate::http_agent::answering_agent();
+    let bearer = format!("Bearer {key}");
+    let timeout = Some(Duration::from_secs(15));
+    let response = match provider.key_check() {
+        KeyCheckRequest::Get(url) => agent
+            .get(url)
+            .header("authorization", bearer)
+            .config()
+            .timeout_global(timeout)
+            .build()
+            .call(),
+        KeyCheckRequest::PostJson(url, body) => agent
+            .post(url)
+            .header("authorization", bearer)
+            .config()
+            .timeout_global(timeout)
+            .build()
+            .send_json(body),
+    };
+    let mut response = match response {
+        Ok(response) => response,
         Err(error) => {
-            KeyCheck::Unreachable(format!("Couldn't reach {}: {error}", provider.label()))
+            return KeyCheck::Unreachable(format!("Couldn't reach {}: {error}", provider.label()))
         }
+    };
+    let status = response.status().as_u16();
+    if (200..300).contains(&status) {
+        return KeyCheck::Valid;
+    }
+    let body = response
+        .body_mut()
+        .with_config()
+        .limit(64 * 1024)
+        .read_to_vec()
+        .ok();
+    match status {
+        401 => KeyCheck::Refused(None),
+        400 | 403 => KeyCheck::Refused(super::provider::error_body_text(body.as_deref())),
+        status => KeyCheck::Unreachable(super::provider::refused_sentence(
+            provider.label(),
+            status,
+            body.as_deref(),
+        )),
+    }
+}
+
+/// The sentence for a refused key: `what` names the key ("that API key"), then the provider's
+/// reason when it gave one.
+pub(super) fn refused_message(provider: Provider, what: &str, reason: Option<&str>) -> String {
+    match reason {
+        Some(reason) => format!("{} refused {what}: {reason}", provider.label()),
+        None => format!("{} refused {what}.", provider.label()),
     }
 }

@@ -681,18 +681,20 @@ impl NativeChatView {
                     .items_center()
                     .justify_center()
                     .rounded(px(4.0 * s))
-                    .border_1()
+                    .border(px(1.5 * s))
+                    // CDXC:SessionChat 2026-11-16 DECISION: User: the Compact first box "is a plain white filled square, so you can't tell whether it is on or off". The tick was drawn in `card_row`, which under window glass is a 6% white wash, so it vanished on the white fill; and the empty box's 6% white `control_border` barely showed. Off is now an empty box with a soft grey outline (the ask card's), on a light fill with the tick in the opaque chat background, never a see-through tone.
+                    // SEE-ALSO: apps/mobile/app/src/chat/native/cards/NoticeCard.tsx (the phone's box).
                     .border_color(if checked {
                         p.foreground
                     } else {
-                        p.control_border
+                        p.muted.opacity(0.7)
                     })
                     .when(checked, |check| {
                         check.bg(p.foreground).child(
                             svg()
                                 .path("titlebar/check.svg")
                                 .size(px(12.0 * s))
-                                .text_color(p.card_row),
+                                .text_color(p.background),
                         )
                     }),
             )

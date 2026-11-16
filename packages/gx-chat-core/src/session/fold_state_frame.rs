@@ -45,6 +45,7 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
         side_chat_of: _,
         agent_message_deliveries: _,
         queue: _,
+        queue_version: _,
         resource_index: _,
         coordinator_threads: _,
         // Three-state.
@@ -108,8 +109,19 @@ pub fn fold_state_frame(mut folded: FoldedSnapshot, frame: &ChatStateFrame) -> F
         secret_requests,
         side_chat_of,
         agent_message_deliveries,
-        queue,
     );
+    let stale_queue_version = match (state.queue_version, side.queue_version) {
+        (Some(prev), Some(inc)) => inc < prev,
+        _ => false,
+    };
+    if !stale_queue_version {
+        if let Some(value) = side.queue.as_ref() {
+            state.queue = Some(value.clone());
+        }
+        if let Some(version) = side.queue_version {
+            state.queue_version = Some(version);
+        }
+    }
     state.resource_index = carried(side.resource_index.as_ref(), state.resource_index.as_ref());
     state.coordinator_threads = carried(
         side.coordinator_threads.as_ref(),

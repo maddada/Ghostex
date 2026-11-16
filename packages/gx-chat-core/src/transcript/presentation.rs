@@ -40,7 +40,7 @@ use crate::transcript::open_questions::{
     askers, link_question_tags, linkable_tags, linked_words, tag_words, Asker, QuestionTag,
 };
 use crate::transcript::page_answers::{
-    page_answers_in, project_page_answers, split_page_answers, PageAnswers,
+    page_answers_in, project_page_answers, split_all_page_answers, PageAnswers,
 };
 use crate::transcript::prose::prose_markdown;
 use crate::transcript::question_exchange::answered_question_exchange;
@@ -143,12 +143,17 @@ pub fn project_message(
     let images = image_blocks(&prose);
     let body = js_trim(&prose_markdown(&message.blocks)).to_string();
     let is_user = message.role == ChatRole::User;
-    // Answers a page or question form sent: the card stands for the envelope, and the bubble below
-    // it shows only what the user wrote besides (`page_answers.rs`).
-    let page_answers = is_user.then(|| split_page_answers(&body)).flatten();
-    let user_words = match &page_answers {
-        Some((_, rest)) if !rest.is_empty() => rest.as_str(),
-        _ => body.as_str(),
+    // Answers a page or question form sent: the card stands for each envelope, and the bubble
+    // below it shows only what the user wrote besides (`page_answers.rs`).
+    let (page_answers, rest) = if is_user {
+        split_all_page_answers(&body)
+    } else {
+        (Vec::new(), String::new())
+    };
+    let user_words = if !page_answers.is_empty() && !rest.is_empty() {
+        rest.as_str()
+    } else {
+        body.as_str()
     };
     // A side chat's first message: the bubble shows the question, not the note to its agent.
     let user_words = crate::composer::side_chat::without_side_chat_note(user_words);
@@ -295,28 +300,29 @@ pub fn project_message(
             None => Value::Null,
         },
     );
-    projected.insert(
-        "pageAnswers".to_string(),
-        page_answers
-            .as_ref()
-            .map_or(Value::Null, |(answers, rest)| {
-                // An in-chat form's answers show its choices' labels (`project_page_answers`).
-                let forms = forms.get_or_init(|| question_forms(messages));
-                let form = forms.iter().find(|form| form.id == answers.page_id);
-                let mut card = project_page_answers(answers, form);
-                card["withText"] = Value::Bool(!rest.is_empty());
-                // A page's folded card opens the page again (`answered_page_link`).
-                if form.is_none() {
-                    if let Some(link) = crate::transcript::page_answers::answered_page_link(
-                        crate::state::messages_of(messages),
-                        &answers.page_id,
-                    ) {
-                        card["page"] = link;
-                    }
-                }
-                card
-            }),
-    );
+    let with_text = !rest.is_empty();
+    let mut cards = page_answers.iter().map(|answers| {
+        // An in-chat form's answers show its choices' labels (`project_page_answers`).
+        let forms = forms.get_or_init(|| question_forms(messages));
+        let form = forms.iter().find(|form| form.id == answers.page_id);
+        let mut card = project_page_answers(answers, form);
+        card["withText"] = Value::Bool(with_text);
+        // A page's folded card opens the page again (`answered_page_link`).
+        if form.is_none() {
+            if let Some(link) = crate::transcript::page_answers::answered_page_link(
+                crate::state::messages_of(messages),
+                &answers.page_id,
+            ) {
+                card["page"] = link;
+            }
+        }
+        card
+    });
+    projected.insert("pageAnswers".to_string(), cards.next().unwrap_or(Value::Null));
+    let extra_cards: Vec<Value> = cards.collect();
+    if !extra_cards.is_empty() {
+        projected.insert("extraPageAnswers".to_string(), Value::Array(extra_cards));
+    }
     projected.insert("questions".to_string(), Value::Array(questions));
     // A "Message to" card shows when it went, like a "Message from" card: its send's own call
     // time, else the message's.

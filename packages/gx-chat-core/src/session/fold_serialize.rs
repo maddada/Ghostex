@@ -295,6 +295,7 @@ pub(crate) mod tests {
             screen_probed: Some(flag),
             agent_gone: Some(!flag),
             queue: Some(vec![json!(tag)]),
+            queue_version: Some(number as u64),
             draft: some(tag, "draft").map(Into::into),
             app_commands: Some(vec![json!(tag)]),
             returned_prompt: some(tag, "returnedPrompt"),

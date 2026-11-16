@@ -12,6 +12,14 @@ use crate::questions::drafts::AnswerDrafts;
 use crate::questions::notice_state::DismissedNotice;
 use crate::state::PendingSend;
 
+/// Pending coarse `resource_index` fallback claim for an untracked page awaiting its real row.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UntrackedIndexedClaim {
+    pub prompt_id: String,
+    pub answers: serde_json::Value,
+    pub boundary: PendingSend,
+}
+
 /// What the question and notice surfaces remember between frames.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct QuestionsState {
@@ -103,6 +111,15 @@ pub struct QuestionsState {
     pub core_id: String,
     /// The real answer rows and send boundaries in the current loaded transcript.
     pub form_answer_index: crate::state::Stamped<crate::session::answer_echoes::AnswerIndex>,
+    /// Confirmed `(prompt_id, answers, (row_id, occurrence))` claims for queued sends whose
+    /// pages are not in `forms` (for example standalone visual pages), preventing one transcript
+    /// row from confirming more queued prompts than its envelope count across `settle` calls.
+    pub untracked_confirmed_queue_answers:
+        std::collections::BTreeMap<String, Vec<(String, serde_json::Value, (String, usize))>>,
+    /// Coarse page-level `resource_index` fallback claims (`page_id -> claim`), capped at one
+    /// queued prompt per page when no transcript row is present, carrying its answer value and send
+    /// boundary so the claim transfers cleanly once its transcript row lands.
+    pub untracked_indexed_claims: std::collections::BTreeMap<String, UntrackedIndexedClaim>,
     /// One-click answers being changed (`crate::questions::inline_answers`).
     pub inline_answers: crate::state::Stamped<crate::questions::inline_answers::InlineAnswersState>,
 
@@ -152,12 +169,12 @@ pub struct FormState {
     pub confirmation_boundary: Option<PendingSend>,
     /// The current send's answers appeared in the transcript.
     pub confirmed: bool,
-    /// Rows used by earlier confirmations, so a new send needs its own transcript row.
-    pub confirmed_message_ids: Vec<String>,
+    /// Confirmed transcript row and envelope occurrence pairs, so a new send needs its own envelope.
+    pub confirmed_message_ids: Vec<(String, usize)>,
     /// The queue receipt returned for the current send, when it took the queue path.
     pub queued_prompt_id: Option<String>,
-    /// Confirmed queue receipts: queue id, answers, and the real transcript row that recorded them.
-    pub confirmed_queue_answers: Vec<(String, serde_json::Value, String)>,
+    /// Confirmed queue receipts: queue id, answers, and the transcript `(row_id, occurrence)` that recorded them.
+    pub confirmed_queue_answers: Vec<(String, serde_json::Value, (String, usize))>,
     /// Per receipt: latest queue update time, failure state, retry occurrence, and answer text.
     pub queue_receipt_versions:
         std::collections::BTreeMap<String, (i64, bool, Option<u32>, String)>,
@@ -175,6 +192,17 @@ pub struct FormState {
     pub dictated: std::collections::BTreeMap<String, u64>,
 }
 
+/// Recovery data for a merged multi-part resend emitted after taking back an agent-queued message.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CombinedFormSend {
+    /// Echo id in `state.pending.sends` when `begin_send` created an optimistic row for this send.
+    pub pending_id: Option<String>,
+    /// Complete merged text (`env(A) + env(B_new) + prose`) moved into `composer.unsent` on permanent error.
+    pub text: String,
+    /// Seed echo used when no `pending.sends` row existed (e.g. `answers_wait_for_idle = true`).
+    pub echo_seed: PendingSend,
+}
+
 /// A question form's answers on their way to the agent.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FormSend {
@@ -186,6 +214,8 @@ pub struct FormSend {
     pub queue_until_idle: bool,
     /// See [`crate::questions::unreachable_retry`].
     pub retry: crate::questions::unreachable_retry::Retry,
+    /// Present only for combined resends produced by an inline agent-queue take-back.
+    pub combined_recovery: Option<CombinedFormSend>,
 }
 
 /// The answer call in flight and what settling it means.
