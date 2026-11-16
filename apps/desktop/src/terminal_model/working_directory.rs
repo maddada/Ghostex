@@ -43,7 +43,7 @@ pub(crate) fn file_url_local_path(url: &str, local_hostname: Option<&str>) -> Op
 }
 
 /// `%XX` escapes decoded to bytes; `None` when the result is not UTF-8. A `%` without two hex digits stays as it is.
-fn file_url_percent_decode(path: &str) -> Option<String> {
+pub(crate) fn file_url_percent_decode(path: &str) -> Option<String> {
     let bytes = path.as_bytes();
     let hex = |index: usize| {
         bytes

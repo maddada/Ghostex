@@ -19,7 +19,7 @@ use crate::extras::minimap_rail::{
 };
 use crate::state::{ChatContext, ChatState};
 use crate::transcript::jsstr::js_trim;
-use crate::transcript::page_answers::split_page_answers;
+use crate::transcript::page_answers::split_all_page_answers;
 use crate::transcript::prose::prose_markdown;
 use crate::transcript::raw_html::escape_raw_html;
 use crate::transcript::turns::is_agent_conversation;
@@ -67,10 +67,8 @@ pub fn is_own_prompt(message: &ChatMessage) -> bool {
     if is_agent_conversation(message) {
         return false;
     }
-    match split_page_answers(&prose_markdown(&message.blocks)) {
-        Some((_, rest)) => !js_trim(&rest).is_empty(),
-        None => true,
-    }
+    let (envelopes, rest) = split_all_page_answers(&prose_markdown(&message.blocks));
+    envelopes.is_empty() || !js_trim(&rest).is_empty()
 }
 
 /// The rows of [`project_minimap_turns`] for some of the turns, whether or not the rail shows.

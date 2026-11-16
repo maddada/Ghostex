@@ -123,6 +123,13 @@ pub struct GhostexGpuiApp {
     pub(crate) browser_profiles: BrowserProfileModel,
     pub(crate) browser_tabs: BrowserTabModel,
     pub(crate) browser_tabs_project_id: Option<String>,
+    /// One-shot launch reload flag (`reloadBrowserTabsOnStartup`): cleared once the open
+    /// project's restored local `Loaded` tabs get their CEF surfaces, the view sleeps, or the user
+    /// switches projects.
+    pub(crate) pending_startup_browser_reload: bool,
+    /// Remote machines whose restored `Loaded` tabs are still waiting to reload on startup once
+    /// their SSH tunnel and remote CEF context become ready.
+    pub(crate) pending_startup_browser_remote_machines: HashSet<String>,
     /// The page on screen that another page opened, while it has stayed on screen since; see
     /// `forget_browser_tab_opener_once_hidden`.
     pub(crate) browser_tab_opener: Option<BrowserTabOpener>,

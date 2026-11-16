@@ -129,7 +129,13 @@ impl GhostexGpuiApp {
         } else {
             self.leaving_view_successor(saved)
         };
-        self.show_leaving_view_successor(successor, at_launch, cx);
+        let asleep = at_launch
+            && !(saved == TitlebarMode::Browser
+                && self.pending_startup_browser_reload
+                && shared_settings::shared_sidebar_settings_snapshot()
+                    .reload_browser_tabs_on_startup());
+        self.show_leaving_view_successor(successor, asleep, cx);
+        self.reload_open_project_browser_tabs_on_startup(cx);
         if self.active_mode == TitlebarMode::Browser {
             self.defer_in_main_window(cx, |app, window, cx| {
                 app.sync_browser_address_input_if_shown(window, cx);

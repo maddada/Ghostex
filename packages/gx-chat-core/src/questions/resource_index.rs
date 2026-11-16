@@ -655,9 +655,7 @@ mod tests {
                 .or_else(|| value["message"]["content"].as_str().map(str::to_string))
                 .unwrap_or_default();
             if role == "user" {
-                if let Some(id) = crate::transcript::page_answers::answers_page_id(&text) {
-                    answered.push(id);
-                }
+                answered.extend(crate::transcript::page_answers::answers_page_ids(&text));
                 continue;
             }
             if role != "assistant" {

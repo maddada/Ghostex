@@ -117,7 +117,7 @@ fn plain_user_message(message: &ChatMessage) -> bool {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    crate::transcript::page_answers::answers_page_id(&text).is_none()
+    crate::transcript::page_answers::answers_page_ids(&text).is_empty()
         && crate::transcript::agent_message::parse_inter_agent_message(&text).is_none()
 }
 

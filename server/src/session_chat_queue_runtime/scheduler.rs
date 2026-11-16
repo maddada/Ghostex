@@ -1714,6 +1714,7 @@ mod tests {
             wait_reason: None,
             created_at: created.clone(),
             updated_at: created,
+            version: None,
         }
     }
 

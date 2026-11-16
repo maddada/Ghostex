@@ -23,6 +23,8 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
     crate::session::answer_echoes::observe_queue_updates(state);
     crate::session::answer_echoes::apply_queue_receipts(
         &state.questions.forms,
+        &state.questions.inline_answers.queue_updates,
+        state.session.queue_prompts.as_deref(),
         &mut state.pending.sends,
     );
     // A queued answer can be pruned before its form's confirmation is observed.
@@ -60,7 +62,12 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
             context.now_millis(),
             oldest_loaded,
         );
-        crate::session::answer_echoes::apply_queue_receipts(&state.questions.forms, &mut hydrated);
+        crate::session::answer_echoes::apply_queue_receipts(
+            &state.questions.forms,
+            &state.questions.inline_answers.queue_updates,
+            Some(&queue),
+            &mut hydrated,
+        );
         state.pending.sends = if hydrated.is_empty() {
             hydrated
         } else {

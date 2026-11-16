@@ -440,6 +440,15 @@ fn browser_section(
         false,
         cx,
     ));
+    rows.extend(page.toggle(
+        g,
+        "browser",
+        "reloadBrowserTabsOnStartup",
+        "Reload open pages on launch",
+        "Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.",
+        false,
+        cx,
+    ));
     // The Grok extension's rows (claude_web/grok.rs), shown while it is on: the catalog hides a
     // feature's `settingKeys` while the feature is off.
     if g.visible("browser", "grokWebStartPage") {

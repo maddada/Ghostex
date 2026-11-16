@@ -320,24 +320,31 @@ enum Mode {
     Matching,
 }
 
+fn bypasses_text_matching(entry: &PendingSend) -> bool {
+    entry.awaiting_attachments
+        || (entry.queued_prompt_id.is_some()
+            && !crate::transcript::page_answers::answers_page_ids(&entry.text).is_empty())
+}
+
 fn filter_pending_sends(
     pending: &[PendingSend],
     messages: &[ChatRow],
     mode: Mode,
 ) -> Vec<PendingSend> {
-    // A send still waiting for its pictures has not left, so no transcript row can be it: it stays,
-    // and the others are matched as if it were not there (`crate::composer::attaching`).
-    if pending.iter().any(|entry| entry.awaiting_attachments) {
+    // Sends waiting for attachments (`crate::composer::attaching`) and queued page-answer echoes
+    // (owned by `session/answer_echoes.rs` by `queued_prompt_id` + envelope occurrence) skip
+    // heuristic text/repeat matching here so unrelated sibling turns cannot drop them early.
+    if pending.iter().any(bypasses_text_matching) {
         let open: Vec<PendingSend> = pending
             .iter()
-            .filter(|entry| !entry.awaiting_attachments)
+            .filter(|entry| !bypasses_text_matching(entry))
             .cloned()
             .collect();
         let kept = filter_sent_pending_sends(&open, messages, mode);
         return pending
             .iter()
             .filter(|entry| {
-                entry.awaiting_attachments || kept.iter().any(|kept| kept.id == entry.id)
+                bypasses_text_matching(entry) || kept.iter().any(|kept| kept.id == entry.id)
             })
             .cloned()
             .collect();

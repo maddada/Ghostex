@@ -297,16 +297,20 @@ pub fn asker_entries<'a>(
     let mut found: Vec<Found> = Vec::new();
     for message in messages {
         if message.role == ChatRole::User {
+            if crate::transcript::page_answers::is_unsent_or_failed(message) {
+                continue;
+            }
             let text = prose_markdown(&message.blocks);
-            let envelope = crate::transcript::page_answers::split_page_answers(&text);
-            let said = match &envelope {
-                Some((answers, _)) => tags_answered_in_envelope(&answers.answers),
-                None => said_in(message),
+            let (envelopes, _) = crate::transcript::page_answers::split_all_page_answers(&text);
+            let said = if envelopes.is_empty() {
+                said_in(message)
+            } else {
+                tags_answered_in_envelopes(&envelopes)
             };
             if !said.is_empty() {
                 found.push(Found::Said(said));
             }
-            if let Some((answers, _)) = envelope {
+            for answers in envelopes {
                 found.push(Found::Answers(
                     answers.page_id,
                     keys_answered_in_envelope(&answers.answers),
@@ -493,18 +497,33 @@ pub fn asker_entries<'a>(
 /// SessionStatus 2026-10-20 rule (server/src/session_chat_open_questions.rs) that only a form's,
 /// a page's or queued answers, a withdrawal or the same tags asked again clear a question.
 pub fn said_in(message: &ChatMessage) -> Vec<String> {
+    if crate::transcript::page_answers::is_unsent_or_failed(message) {
+        return Vec::new();
+    }
     let text = prose_markdown(&message.blocks);
-    if let Some((answers, _)) = crate::transcript::page_answers::split_page_answers(&text) {
-        return tags_answered_in_envelope(&answers.answers);
+    let (envelopes, _) = crate::transcript::page_answers::split_all_page_answers(&text);
+    if !envelopes.is_empty() {
+        return tags_answered_in_envelopes(&envelopes);
     }
     if !text.bytes().any(|byte| byte.is_ascii_digit())
         || text.trim_start().starts_with('<')
-        || crate::transcript::page_answers::answers_page_id(&text).is_some()
         || crate::transcript::agent_message::parse_inter_agent_message(&text).is_some()
     {
         return Vec::new();
     }
     tags_answered_in_words(&text)
+}
+
+fn tags_answered_in_envelopes(
+    envelopes: &[crate::transcript::page_answers::PageAnswers],
+) -> Vec<String> {
+    let mut tags: Vec<String> = envelopes
+        .iter()
+        .flat_map(|answers| tags_answered_in_envelope(&answers.answers))
+        .collect();
+    tags.sort();
+    tags.dedup();
+    tags
 }
 
 /// The tags a form's or page's answers envelope answers by name: its keys shaped like a tag

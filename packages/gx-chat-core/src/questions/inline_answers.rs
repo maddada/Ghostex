@@ -34,6 +34,35 @@ pub struct InlineTakeBack {
     pub correction: Value,
     /// What it sends once the old answers are out of the agent's queue.
     pub replacement: Value,
+    /// The queued message text taken back, so other envelopes and prose around the target form stay intact.
+    pub queued_text: String,
+}
+
+/// A pending or applied sibling-form update on a queued prompt.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InlineQueueEdit {
+    pub form: String,
+    pub picked: String,
+    pub previous_sent: Option<Value>,
+    pub replacement: Value,
+}
+
+/// An in-flight update to a queued prompt in Ghostex's queue, with any queued sibling edits
+/// serialized behind it and rollback state if the server refuses or detects a stale snapshot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InlineQueueUpdate {
+    pub request_id: u64,
+    pub prompt_id: String,
+    pub initial_text: String,
+    pub initial_updated_at: Option<String>,
+    pub initial_version: Option<u64>,
+    pub server_saw_change: bool,
+    pub authoritative_text: String,
+    /// Exact text sent in this update's RPC, used as base if the response omits `queue`.
+    pub sent_text: String,
+    pub updated_text: String,
+    pub applied: Vec<InlineQueueEdit>,
+    pub queued: Vec<InlineQueueEdit>,
 }
 
 /// What this client is doing with one-click answers.
@@ -42,13 +71,35 @@ pub struct InlineAnswersState {
     /// The forms whose sent answer the reader asked to change: their other answers take a click.
     pub changing: BTreeSet<String>,
     pub take_back: Option<InlineTakeBack>,
+    pub queue_updates: Vec<InlineQueueUpdate>,
+    /// Sibling queued edits displaced while a prompt left Ghostex's queue or lost an envelope.
+    pub deferred_edits: Vec<(String, String)>,
 }
 
-/// The value the form's one question was answered with: the answers in the transcript, then what
-/// this client sent.
+fn queued_pending_answer<'a>(state: &'a ChatState, form_id: &str) -> Option<&'a Value> {
+    state
+        .questions
+        .inline_answers
+        .queue_updates
+        .iter()
+        .rev()
+        .find_map(|update| {
+            update
+                .queued
+                .iter()
+                .rev()
+                .chain(update.applied.iter().rev())
+                .find(|edit| edit.form == form_id)
+                .map(|edit| &edit.replacement)
+        })
+}
+
+/// The value the form's one question was answered with: any pending queued edit, the answers in
+/// the transcript, then what this client sent.
 fn sent_value(state: &ChatState, form: &QuestionForm) -> Option<String> {
     let key = &form.questions.first()?.key;
-    crate::questions::forms::received_answers(state, &form.id)
+    queued_pending_answer(state, &form.id)
+        .or_else(|| crate::questions::forms::received_answers(state, &form.id))
         .or_else(|| {
             let entry = state.questions.forms.get(&form.id)?;
             entry
@@ -79,19 +130,292 @@ fn answers_for(form: &QuestionForm, value: &str, changed_from: Option<&str>) -> 
     Value::Object(out)
 }
 
-/// The id of Ghostex's queued prompt that holds the form's answers, when one does.
-fn ghostex_queued_prompt(state: &ChatState, id: &str) -> Option<String> {
+/// The id and full text of Ghostex's queued prompt that holds the form's answers, when one does.
+fn ghostex_queued_prompt(state: &ChatState, id: &str) -> Option<(String, String)> {
     state
         .session
         .queue_prompts
         .as_ref()?
         .iter()
         .find_map(|prompt| {
+            if prompt.get("state").and_then(Value::as_str) == Some("sending") {
+                return None;
+            }
             let text = prompt.get("text").and_then(Value::as_str)?;
-            (crate::transcript::page_answers::answers_page_id(text).as_deref() == Some(id))
-                .then(|| prompt.get("id").and_then(Value::as_str).map(str::to_string))
+            crate::transcript::page_answers::answers_page_ids(text)
+                .iter()
+                .any(|page_id| page_id == id)
+                .then(|| {
+                    prompt
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(|prompt_id| (prompt_id.to_string(), text.to_string()))
+                })
                 .flatten()
         })
+}
+
+fn patch_queued_prompt_text(
+    state: &mut ChatState,
+    prompt_id: &str,
+    new_text: &str,
+    expected_text: Option<&str>,
+) {
+    let Some(mut queue) = (*state.session.queue_prompts).clone() else {
+        return;
+    };
+    let mut changed = false;
+    for prompt in &mut queue {
+        if prompt.get("id").and_then(Value::as_str) != Some(prompt_id)
+            || prompt.get("state").and_then(Value::as_str) == Some("sending")
+        {
+            continue;
+        }
+        if expected_text
+            .is_some_and(|expected| prompt.get("text").and_then(Value::as_str) != Some(expected))
+        {
+            continue;
+        }
+        if let Some(object) = prompt.as_object_mut() {
+            object.insert("text".to_string(), Value::String(new_text.to_string()));
+            changed = true;
+        }
+    }
+    if changed {
+        *state.session.queue_prompts = Some(queue);
+        state.messages.new_composition_identity();
+    }
+}
+
+fn defer_edit(deferred: &mut Vec<(String, String)>, form: &str, picked: &str) {
+    if let Some(existing) = deferred.iter_mut().find(|(id, _)| id == form) {
+        existing.1 = picked.to_string();
+    } else {
+        deferred.push((form.to_string(), picked.to_string()));
+    }
+}
+
+/// Rebuilds composed rows and transcript answers mid-turn before re-dispatching displaced edits
+/// so `open` and `sent_value` read the rolled-back state instead of stale optimistic caches.
+fn refresh_view(state: &mut ChatState, context: &ChatContext) {
+    crate::session::before_compose(state, context);
+    let working = crate::session::working::is_working(state);
+    crate::session::composition::compose_cached(state, None, working);
+    crate::transcript::rows::refresh(state, context);
+}
+
+pub(crate) fn has_pending_queue_updates(state: &ChatState) -> bool {
+    !state.questions.inline_answers.queue_updates.is_empty()
+}
+
+pub(crate) fn authoritative_prompt_text(state: &ChatState, prompt_id: &str) -> Option<String> {
+    state
+        .questions
+        .inline_answers
+        .queue_updates
+        .iter()
+        .rfind(|update| update.prompt_id == prompt_id)
+        .map(|update| update.authoritative_text.clone())
+}
+
+fn server_queue_slice(state: &ChatState) -> Option<&[Value]> {
+    state
+        .session
+        .server_queue_prompts
+        .as_deref()
+        .or(state.session.queue_prompts.as_deref())
+}
+
+fn prompt_by_id<'a>(queue: &'a [Value], prompt_id: &str) -> Option<&'a Value> {
+    queue
+        .iter()
+        .find(|prompt| prompt.get("id").and_then(Value::as_str) == Some(prompt_id))
+}
+
+fn server_queued_prompt_info(
+    state: &ChatState,
+    prompt_id: &str,
+) -> Option<(String, Option<String>, Option<u64>)> {
+    let prompt = prompt_by_id(server_queue_slice(state)?, prompt_id)?;
+    if prompt.get("state").and_then(Value::as_str) == Some("sending") {
+        return None;
+    }
+    let text = prompt.get("text").and_then(Value::as_str)?.to_string();
+    let updated_at = prompt
+        .get("updatedAt")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let version = prompt.get("version").and_then(Value::as_u64);
+    Some((text, updated_at, version))
+}
+
+fn server_queued_prompt_text_by_id(state: &ChatState, prompt_id: &str) -> Option<String> {
+    server_queued_prompt_info(state, prompt_id).map(|(text, _, _)| text)
+}
+
+fn merge_ack_prompt_into_queue(queue: &mut [Value], prompt_id: &str, ack_prompt: &Value) -> bool {
+    if let Some(existing) = queue
+        .iter_mut()
+        .find(|row| row.get("id").and_then(Value::as_str) == Some(prompt_id))
+    {
+        *existing = ack_prompt.clone();
+        true
+    } else {
+        false
+    }
+}
+
+fn remove_prompt_by_id(queue: &mut Vec<Value>, prompt_id: &str) -> bool {
+    let before = queue.len();
+    queue.retain(|row| row.get("id").and_then(Value::as_str) != Some(prompt_id));
+    queue.len() != before
+}
+
+fn ack_queue_is_fresh(
+    state: &ChatState,
+    update: &InlineQueueUpdate,
+    ack_queue: &[Value],
+    ack_queue_version: Option<u64>,
+) -> bool {
+    if let (Some(current_qv), Some(ack_qv)) = (state.session.server_queue_version, ack_queue_version)
+    {
+        if ack_qv < current_qv {
+            return false;
+        }
+    }
+    let Some(current) = server_queue_slice(state) else {
+        return true;
+    };
+    let ack_prompt = prompt_by_id(ack_queue, &update.prompt_id);
+    let current_prompt = prompt_by_id(current, &update.prompt_id);
+    if ack_prompt
+        .is_some_and(|prompt| prompt.get("state").and_then(Value::as_str) != Some("sending"))
+        && current_prompt
+            .is_none_or(|prompt| prompt.get("state").and_then(Value::as_str) == Some("sending"))
+    {
+        return false;
+    }
+    let ack_version = ack_prompt.and_then(|prompt| prompt.get("version").and_then(Value::as_u64));
+    let current_version =
+        current_prompt.and_then(|prompt| prompt.get("version").and_then(Value::as_u64));
+    if let (Some(current_v), Some(ack_v)) = (current_version, ack_version) {
+        return ack_v >= current_v;
+    }
+    if ack_prompt.is_none() {
+        if let (Some(current_qv), Some(ack_qv)) =
+            (state.session.server_queue_version, ack_queue_version)
+        {
+            if ack_qv >= current_qv {
+                return true;
+            }
+        }
+        return !update.server_saw_change;
+    }
+    let ack_text = ack_prompt.and_then(|prompt| prompt.get("text").and_then(Value::as_str));
+    if (update.server_saw_change || update.authoritative_text != update.initial_text)
+        && ack_text != Some(update.authoritative_text.as_str())
+    {
+        return false;
+    }
+    let ack_prompt_ms = ack_prompt.and_then(|prompt| {
+        crate::session::startup_sends::parse_iso_ms(
+            prompt.get("updatedAt").and_then(Value::as_str),
+        )
+    });
+    let current_prompt_ms = current_prompt.and_then(|prompt| {
+        crate::session::startup_sends::parse_iso_ms(
+            prompt.get("updatedAt").and_then(Value::as_str),
+        )
+    });
+    if let (Some(current_ms), Some(ack_ms)) = (current_prompt_ms, ack_prompt_ms) {
+        if current_ms > ack_ms {
+            return false;
+        }
+    }
+    true
+}
+
+fn run_or_defer_edits(
+    state: &mut ChatState,
+    context: &ChatContext,
+    edits: Vec<(String, String)>,
+) -> Vec<Effect> {
+    if edits.is_empty() {
+        return Vec::new();
+    }
+    if state.questions.inline_answers.take_back.is_none() {
+        refresh_view(state, context);
+    }
+    let mut effects = Vec::new();
+    for (form, picked) in edits {
+        if state.questions.inline_answers.take_back.is_some() {
+            defer_edit(
+                &mut state.questions.inline_answers.deferred_edits,
+                &form,
+                &picked,
+            );
+        } else {
+            effects.extend(answer(state, context, &form, &picked, true));
+        }
+    }
+    effects
+}
+
+/// Syncs in-flight queue updates when an authoritative server queue frame arrives, keeping
+/// server truth separate from optimistic overlays and re-applying pending picks onto display rows.
+pub(crate) fn on_server_queue_prompts(state: &mut ChatState) {
+    if state.questions.inline_answers.queue_updates.is_empty() {
+        return;
+    }
+    let mut updates = std::mem::take(&mut state.questions.inline_answers.queue_updates);
+    let mut patches: Vec<(String, String)> = Vec::new();
+    for update in &mut updates {
+        let Some((server_text, server_updated_at, server_version)) =
+            server_queued_prompt_info(state, &update.prompt_id)
+        else {
+            update.server_saw_change = true;
+            continue;
+        };
+        if server_text != update.initial_text
+            || server_updated_at != update.initial_updated_at
+            || server_version != update.initial_version
+        {
+            update.server_saw_change = true;
+        }
+        update.authoritative_text = server_text.clone();
+        // Re-apply optimistic pending edits onto `queue_prompts` (never `server_queue_prompts`):
+        // include `applied` while the server row has not changed, and always layer `queued` edits.
+        let apply_applied = !update.server_saw_change && server_text == update.initial_text;
+        let pending_edits = if apply_applied {
+            update.applied.iter().chain(update.queued.iter())
+        } else {
+            [].iter().chain(update.queued.iter())
+        };
+        let mut rebuilt = server_text;
+        let mut any_overlay = false;
+        for edit in pending_edits {
+            let Some(form) = crate::questions::forms::form(state, &edit.form) else {
+                continue;
+            };
+            let new_envelope = answers_message(form, &edit.replacement);
+            if let Some(replaced) = crate::transcript::page_answers::replace_page_answers_envelope(
+                &rebuilt,
+                &edit.form,
+                &new_envelope,
+            ) {
+                rebuilt = replaced;
+                any_overlay = true;
+            }
+        }
+        update.updated_text = rebuilt.clone();
+        if any_overlay {
+            patches.push((update.prompt_id.clone(), rebuilt));
+        }
+    }
+    state.questions.inline_answers.queue_updates = updates;
+    for (prompt_id, text) in patches {
+        patch_queued_prompt_text(state, &prompt_id, &text, None);
+    }
 }
 
 /// The text of the message the agent holds in its own queue with the form's answers, when it does.
@@ -102,7 +426,9 @@ fn agent_queued_text(state: &ChatState, id: &str) -> Option<(String, String)> {
             return None;
         }
         let text = crate::transcript::prose::prose_markdown(&message.blocks);
-        (crate::transcript::page_answers::answers_page_id(&text).as_deref() == Some(id))
+        crate::transcript::page_answers::answers_page_ids(&text)
+            .iter()
+            .any(|page_id| page_id == id)
             .then(|| (message.id.clone(), text))
     })
 }
@@ -282,19 +608,87 @@ fn answer(
         return Vec::new();
     }
     let replacement = answers_for(&form, picked, None);
-    if let Some(prompt_id) = ghostex_queued_prompt(state, id) {
-        if let Some(entry) = state.questions.forms.get_mut(id) {
-            entry.sent = Some(replacement.clone());
+    if let Some((prompt_id, existing_text)) = ghostex_queued_prompt(state, id) {
+        let new_envelope = answers_message(&form, &replacement);
+        if let Some(updated_text) = crate::transcript::page_answers::replace_page_answers_envelope(
+            &existing_text,
+            id,
+            &new_envelope,
+        ) {
+            let previous_sent = state
+                .questions
+                .forms
+                .get(id)
+                .and_then(|entry| entry.sent.clone());
+            if let Some(entry) = state.questions.forms.get_mut(id) {
+                entry.sent = Some(replacement.clone());
+            }
+            patch_queued_prompt_text(state, &prompt_id, &updated_text, None);
+            let edit = InlineQueueEdit {
+                form: id.to_string(),
+                picked: picked.to_string(),
+                previous_sent,
+                replacement,
+            };
+            if let Some(in_flight) = state
+                .questions
+                .inline_answers
+                .queue_updates
+                .iter_mut()
+                .find(|update| update.prompt_id == prompt_id)
+            {
+                in_flight.updated_text = updated_text;
+                if let Some(existing) = in_flight
+                    .queued
+                    .iter_mut()
+                    .find(|pending| pending.form == edit.form)
+                {
+                    existing.picked = edit.picked;
+                    existing.replacement = edit.replacement;
+                } else {
+                    let mut queued_edit = edit;
+                    if let Some(first_applied) = in_flight
+                        .applied
+                        .iter()
+                        .find(|pending| pending.form == queued_edit.form)
+                    {
+                        queued_edit.previous_sent = first_applied.previous_sent.clone();
+                    }
+                    in_flight.queued.push(queued_edit);
+                }
+                return Vec::new();
+            }
+            let (_, initial_updated_at, initial_version) =
+                server_queued_prompt_info(state, &prompt_id)
+                    .unwrap_or_else(|| (existing_text.clone(), None, None));
+            let request_id = state.core.allocate_request_id();
+            state
+                .questions
+                .inline_answers
+                .queue_updates
+                .push(InlineQueueUpdate {
+                    request_id,
+                    prompt_id: prompt_id.clone(),
+                    initial_text: existing_text.clone(),
+                    initial_updated_at,
+                    initial_version,
+                    server_saw_change: false,
+                    authoritative_text: existing_text.clone(),
+                    sent_text: updated_text.clone(),
+                    updated_text: updated_text.clone(),
+                    applied: vec![edit],
+                    queued: Vec::new(),
+                });
+            return vec![Effect::SendRpc {
+                request_id,
+                method: ChatRpcMethod::UpdateSessionChatQueuedPrompt,
+                params: Box::new(json!({
+                    "promptId": prompt_id,
+                    "text": updated_text,
+                    "expectedText": existing_text,
+                })),
+            }];
         }
-        let request_id = state.core.allocate_request_id();
-        return vec![Effect::SendRpc {
-            request_id,
-            method: ChatRpcMethod::UpdateSessionChatQueuedPrompt,
-            params: Box::new(json!({
-                "promptId": prompt_id,
-                "text": answers_message(&form, &replacement),
-            })),
-        }];
     }
     let correction = answers_for(&form, picked, previous.as_deref());
     if let Some((_, text)) = agent_queued_text(state, id) {
@@ -304,6 +698,7 @@ fn answer(
             form: id.to_string(),
             correction,
             replacement,
+            queued_text: text.clone(),
         });
         return vec![Effect::SendRpc {
             request_id,
@@ -511,13 +906,28 @@ fn answer_elsewhere(state: &ChatState, tag: &str) -> Option<String> {
         })
 }
 
-/// Ends a change's take-back, or answers `None` when the id is not one.
+/// Ends a change's queued-prompt rewrite or take-back, or answers `None` when the id is not one.
 pub fn rpc_settled(
     state: &mut ChatState,
     context: &ChatContext,
     request_id: u64,
     outcome: &RpcOutcome,
 ) -> Option<Vec<Effect>> {
+    if let Some(position) = state
+        .questions
+        .inline_answers
+        .queue_updates
+        .iter()
+        .position(|update| update.request_id == request_id)
+    {
+        let update = state
+            .questions
+            .inline_answers
+            .queue_updates
+            .remove(position);
+        state.core.request_publish();
+        return Some(settle_queue_update(state, context, update, outcome));
+    }
     if state
         .questions
         .inline_answers
@@ -533,18 +943,62 @@ pub fn rpc_settled(
     let taken = matches!(outcome, RpcOutcome::Ok { result } if result.get("takenBack") == Some(&Value::Bool(true)));
     if !taken {
         // The agent read the old answers meanwhile: the new pick goes as a correction.
-        return Some(crate::questions::forms::dispatch_answers(
+        let mut effects = crate::questions::forms::dispatch_answers(
             state,
             context,
             &form,
             take_back.correction,
-        ));
+        );
+        let deferred = std::mem::take(&mut state.questions.inline_answers.deferred_edits);
+        effects.extend(run_or_defer_edits(state, context, deferred));
+        return Some(effects);
     }
-    // The old answers never reached the agent: forget them and send the new pick in their place.
+    // The old answers never reached the agent: forget them and send the new pick in their place,
+    // preserving any other envelopes or prose carried in the same queued message.
     if let Some((message_id, _)) = agent_queued_text(state, &form.id) {
         if let Some(pending_id) = message_id.strip_prefix(PENDING_ID_PREFIX) {
             crate::session::sends::drop_send(state, pending_id);
         }
+    }
+    let original_text = match outcome {
+        RpcOutcome::Ok { result } => result
+            .get("text")
+            .and_then(Value::as_str)
+            .filter(|text| !text.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| take_back.queued_text.clone()),
+        RpcOutcome::Err { .. } => take_back.queued_text.clone(),
+    };
+    let new_envelope = answers_message(&form, &take_back.replacement);
+    let mut updated_text = crate::transcript::page_answers::replace_page_answers_envelope(
+        &original_text,
+        &form.id,
+        &new_envelope,
+    )
+    .unwrap_or_else(|| new_envelope.clone());
+    let deferred = std::mem::take(&mut state.questions.inline_answers.deferred_edits);
+    let original_pages = crate::transcript::page_answers::answers_page_ids(&original_text);
+    let mut merged_siblings: Vec<(String, Value)> = Vec::new();
+    let mut remaining_deferred: Vec<(String, String)> = Vec::new();
+    for (sibling_id, sibling_picked) in deferred {
+        if sibling_id != form.id && original_pages.iter().any(|page| page == &sibling_id) {
+            if let Some(sibling_form) = crate::questions::forms::form(state, &sibling_id).cloned() {
+                let sibling_answers = answers_for(&sibling_form, &sibling_picked, None);
+                let sibling_envelope = answers_message(&sibling_form, &sibling_answers);
+                if let Some(replaced) =
+                    crate::transcript::page_answers::replace_page_answers_envelope(
+                        &updated_text,
+                        &sibling_id,
+                        &sibling_envelope,
+                    )
+                {
+                    updated_text = replaced;
+                    merged_siblings.push((sibling_id, sibling_answers));
+                    continue;
+                }
+            }
+        }
+        remaining_deferred.push((sibling_id, sibling_picked));
     }
     if let Some(entry) = state.questions.forms.get_mut(&form.id) {
         entry.sent = None;
@@ -553,12 +1007,360 @@ pub fn rpc_settled(
         entry.confirmed = false;
         entry.queued_prompt_id = None;
     }
-    Some(crate::questions::forms::dispatch_answers(
+    let combined = updated_text != new_envelope;
+    let combined_pending_id = (combined && !state.core.answers_wait_for_idle)
+        .then(|| crate::session::sends::begin_send(state, context, &updated_text, &[]));
+    let mut effects = crate::questions::forms::dispatch_answers_text(
         state,
         context,
         &form,
         take_back.replacement,
-    ))
+        updated_text,
+        combined_pending_id,
+        combined,
+    );
+    let boundary = state
+        .questions
+        .forms
+        .get(&form.id)
+        .and_then(|entry| entry.confirmation_boundary.clone());
+    let wait_for_idle = state.core.answers_wait_for_idle;
+    for (sibling_id, sibling_answers) in merged_siblings {
+        if let Some(entry) = state.questions.forms.get_mut(&sibling_id) {
+            entry.error = None;
+            entry.sent = Some(sibling_answers);
+            entry.sent_waiting_for_idle = wait_for_idle;
+            entry.confirmation_boundary = boundary.clone();
+            entry.confirmed = false;
+            entry.queued_prompt_id = None;
+        }
+    }
+    effects.extend(run_or_defer_edits(state, context, remaining_deferred));
+    Some(effects)
+}
+
+fn dispatch_or_fallback_queued_edits(
+    state: &mut ChatState,
+    context: &ChatContext,
+    prompt_id: &str,
+    base_text: Option<&str>,
+    queued: Vec<InlineQueueEdit>,
+    refresh_previous_from_base: bool,
+) -> Vec<Effect> {
+    if queued.is_empty() {
+        return Vec::new();
+    }
+    let Some(base_text) = base_text else {
+        // The prompt left the queue or entered `sending` before the queued sibling edits went out:
+        // restore those forms' pre-edit answers and fall through to take-back / correction.
+        let mut edits = Vec::with_capacity(queued.len());
+        for edit in queued {
+            if let Some(entry) = state.questions.forms.get_mut(&edit.form) {
+                entry.sent = edit.previous_sent;
+            }
+            edits.push((edit.form, edit.picked));
+        }
+        return run_or_defer_edits(state, context, edits);
+    };
+    let base_answers = refresh_previous_from_base
+        .then(|| crate::transcript::page_answers::split_all_page_answers(base_text).0);
+    let mut next_text = base_text.to_string();
+    let mut applied = Vec::new();
+    let mut fallback_edits = Vec::new();
+    for mut edit in queued {
+        if let Some(base_answer) = base_answers
+            .as_ref()
+            .and_then(|answers| answers.iter().rfind(|answer| answer.page_id == edit.form))
+        {
+            edit.previous_sent = Some(base_answer.answers.clone());
+        }
+        let Some(form) = crate::questions::forms::form(state, &edit.form).cloned() else {
+            continue;
+        };
+        let new_envelope = answers_message(&form, &edit.replacement);
+        if let Some(replaced) = crate::transcript::page_answers::replace_page_answers_envelope(
+            &next_text,
+            &edit.form,
+            &new_envelope,
+        ) {
+            next_text = replaced;
+            if let Some(entry) = state.questions.forms.get_mut(&edit.form) {
+                entry.sent = Some(edit.replacement.clone());
+            }
+            applied.push(edit);
+        } else {
+            let keep_open = !crate::questions::forms::queued_in_queue(state, &edit.form);
+            if let Some(entry) = state.questions.forms.get_mut(&edit.form) {
+                if !entry.confirmed && keep_open {
+                    entry.sent = None;
+                    entry.queued_prompt_id = None;
+                } else {
+                    entry.sent = edit.previous_sent;
+                }
+            }
+            fallback_edits.push((edit.form, edit.picked));
+        }
+    }
+    let mut effects = Vec::new();
+    if !applied.is_empty() && next_text != base_text {
+        patch_queued_prompt_text(state, prompt_id, &next_text, None);
+        let (_, initial_updated_at, initial_version) = server_queued_prompt_info(state, prompt_id)
+            .unwrap_or_else(|| (base_text.to_string(), None, None));
+        let request_id = state.core.allocate_request_id();
+        state
+            .questions
+            .inline_answers
+            .queue_updates
+            .push(InlineQueueUpdate {
+                request_id,
+                prompt_id: prompt_id.to_string(),
+                initial_text: base_text.to_string(),
+                initial_updated_at,
+                initial_version,
+                server_saw_change: false,
+                authoritative_text: base_text.to_string(),
+                sent_text: next_text.clone(),
+                updated_text: next_text.clone(),
+                applied,
+                queued: Vec::new(),
+            });
+        effects.push(Effect::SendRpc {
+            request_id,
+            method: ChatRpcMethod::UpdateSessionChatQueuedPrompt,
+            params: Box::new(json!({
+                "promptId": prompt_id,
+                "text": next_text,
+                "expectedText": base_text,
+            })),
+        });
+    } else if !applied.is_empty() {
+        patch_queued_prompt_text(state, prompt_id, base_text, None);
+    }
+    effects.extend(run_or_defer_edits(state, context, fallback_edits));
+    effects
+}
+
+fn sync_applied_forms_from_server(
+    state: &mut ChatState,
+    prompt_id: &str,
+    applied: &[InlineQueueEdit],
+) {
+    let Some(server_text) = server_queued_prompt_text_by_id(state, prompt_id) else {
+        return;
+    };
+    let server_answers = crate::transcript::page_answers::split_all_page_answers(&server_text).0;
+    for edit in applied {
+        if let Some(entry) = state.questions.forms.get_mut(&edit.form) {
+            entry.sent = server_answers
+                .iter()
+                .rfind(|answer| answer.page_id == edit.form)
+                .map(|answer| answer.answers.clone());
+        }
+    }
+}
+
+fn settle_queue_update(
+    state: &mut ChatState,
+    context: &ChatContext,
+    update: InlineQueueUpdate,
+    outcome: &RpcOutcome,
+) -> Vec<Effect> {
+    match outcome {
+        RpcOutcome::Ok { result } => {
+            let mut ack_applied = false;
+            let ack_queue_version = result.get("queueVersion").and_then(Value::as_u64);
+            let ack_has_queue = result.get("queue").and_then(Value::as_array).is_some();
+            if let Some(queue) = result.get("queue").and_then(Value::as_array) {
+                if ack_queue_is_fresh(state, &update, queue, ack_queue_version) {
+                    if ack_queue_version.is_some() {
+                        crate::session::apply::apply_server_queue_versioned(
+                            state,
+                            queue,
+                            ack_queue_version,
+                            false,
+                        );
+                        ack_applied = true;
+                    } else if let Some(ack_prompt) = prompt_by_id(queue, &update.prompt_id) {
+                        if let Some(mut server_q) = state.session.server_queue_prompts.clone() {
+                            if merge_ack_prompt_into_queue(
+                                &mut server_q,
+                                &update.prompt_id,
+                                ack_prompt,
+                            ) {
+                                state.session.server_queue_prompts = Some(server_q);
+                                state.session.queue_revision =
+                                    state.session.queue_revision.saturating_add(1);
+                            }
+                        } else if let Some(existing_q) = (*state.session.queue_prompts).clone() {
+                            let mut server_q = existing_q;
+                            if merge_ack_prompt_into_queue(
+                                &mut server_q,
+                                &update.prompt_id,
+                                ack_prompt,
+                            ) {
+                                state.session.server_queue_prompts = Some(server_q);
+                                state.session.queue_revision =
+                                    state.session.queue_revision.saturating_add(1);
+                            }
+                        } else {
+                            state.session.server_queue_prompts = Some(queue.clone());
+                            state.session.queue_revision =
+                                state.session.queue_revision.saturating_add(1);
+                        }
+                        if let Some(mut display_q) = (*state.session.queue_prompts).clone() {
+                            if merge_ack_prompt_into_queue(
+                                &mut display_q,
+                                &update.prompt_id,
+                                ack_prompt,
+                            ) {
+                                *state.session.queue_prompts = Some(display_q);
+                                state.messages.new_composition_identity();
+                            }
+                        } else {
+                            *state.session.queue_prompts = Some(queue.clone());
+                            state.messages.new_composition_identity();
+                        }
+                        on_server_queue_prompts(state);
+                        ack_applied = true;
+                    } else {
+                        if let Some(mut server_q) = state.session.server_queue_prompts.clone() {
+                            if remove_prompt_by_id(&mut server_q, &update.prompt_id) {
+                                state.session.server_queue_prompts = Some(server_q);
+                                state.session.queue_revision =
+                                    state.session.queue_revision.saturating_add(1);
+                            }
+                        } else {
+                            state.session.server_queue_prompts = Some(queue.clone());
+                            state.session.queue_revision =
+                                state.session.queue_revision.saturating_add(1);
+                        }
+                        if let Some(mut display_q) = (*state.session.queue_prompts).clone() {
+                            if remove_prompt_by_id(&mut display_q, &update.prompt_id) {
+                                *state.session.queue_prompts = Some(display_q);
+                                state.messages.new_composition_identity();
+                            }
+                        } else {
+                            *state.session.queue_prompts = Some(queue.clone());
+                            state.messages.new_composition_identity();
+                        }
+                        on_server_queue_prompts(state);
+                        ack_applied = true;
+                    }
+                }
+            }
+            if ack_has_queue && !ack_applied {
+                sync_applied_forms_from_server(state, &update.prompt_id, &update.applied);
+            } else if !ack_has_queue
+                && !update.server_saw_change
+                && update.authoritative_text == update.initial_text
+            {
+                if let Some(mut server_q) = state.session.server_queue_prompts.clone() {
+                    if let Some(entry) = server_q
+                        .iter_mut()
+                        .find(|entry| {
+                            entry.get("id").and_then(Value::as_str)
+                                == Some(update.prompt_id.as_str())
+                        })
+                        .and_then(Value::as_object_mut)
+                    {
+                        if entry.get("text").and_then(Value::as_str)
+                            == Some(update.initial_text.as_str())
+                        {
+                            entry.insert(
+                                "text".to_string(),
+                                Value::String(update.sent_text.clone()),
+                            );
+                            state.session.server_queue_prompts = Some(server_q);
+                        }
+                    }
+                }
+            }
+            if update.queued.is_empty() {
+                if !ack_applied && ack_has_queue {
+                    if let Some(server_text) =
+                        server_queued_prompt_text_by_id(state, &update.prompt_id)
+                    {
+                        patch_queued_prompt_text(state, &update.prompt_id, &server_text, None);
+                    }
+                }
+                return Vec::new();
+            }
+            let base_text = server_queued_prompt_text_by_id(state, &update.prompt_id).map(
+                |server_text| {
+                    if ack_applied
+                        || ack_has_queue
+                        || update.server_saw_change
+                        || update.authoritative_text != update.initial_text
+                    {
+                        server_text
+                    } else {
+                        update.sent_text.clone()
+                    }
+                },
+            );
+            let effects = dispatch_or_fallback_queued_edits(
+                state,
+                context,
+                &update.prompt_id,
+                base_text.as_deref(),
+                update.queued,
+                true,
+            );
+            if effects.is_empty() && !ack_applied && ack_has_queue {
+                if let Some(base) = base_text.as_deref() {
+                    patch_queued_prompt_text(state, &update.prompt_id, base, None);
+                }
+            }
+            effects
+        }
+        RpcOutcome::Err { message, code, .. } => {
+            let live_server_text = server_queued_prompt_text_by_id(state, &update.prompt_id);
+            let server_updated = update.server_saw_change
+                || update.authoritative_text != update.initial_text
+                || live_server_text
+                    .as_deref()
+                    .is_some_and(|text| text != update.initial_text);
+            let authoritative_text = live_server_text
+                .clone()
+                .unwrap_or_else(|| update.authoritative_text.clone());
+            let authoritative_answers = server_updated.then(|| {
+                crate::transcript::page_answers::split_all_page_answers(&authoritative_text).0
+            });
+            for edit in update.applied.into_iter().rev() {
+                if let Some(entry) = state.questions.forms.get_mut(&edit.form) {
+                    if let Some(found) = authoritative_answers.as_ref() {
+                        entry.sent = found
+                            .iter()
+                            .rfind(|answer| answer.page_id == edit.form)
+                            .map(|answer| answer.answers.clone());
+                    } else {
+                        entry.sent = edit.previous_sent;
+                    }
+                }
+            }
+            let restore_text = live_server_text.clone().unwrap_or(update.authoritative_text);
+            patch_queued_prompt_text(
+                state,
+                &update.prompt_id,
+                &restore_text,
+                Some(&update.updated_text),
+            );
+            state.core.fail(message.clone(), code.clone());
+            let fallback_base = if server_queue_slice(state).is_some() {
+                live_server_text
+            } else {
+                Some(restore_text)
+            };
+            dispatch_or_fallback_queued_edits(
+                state,
+                context,
+                &update.prompt_id,
+                fallback_base.as_deref(),
+                update.queued,
+                server_updated,
+            )
+        }
+    }
 }
 
 #[cfg(test)]
