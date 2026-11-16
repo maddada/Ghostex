@@ -263,9 +263,9 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
         (true, ..) => None,
         // The old owner key may let this app in there: only on the user's Approve of its card.
         (false, true, _) if offered => {
-            let (computer, host) = machine_and_host(transport);
+            let (computer, _) = machine_and_host(transport);
             Some(format!(
-                "First approve \"Let this Mac in on {computer}?\" on this Mac (it names how this Mac reaches it: {host}); then you can show its code and approve its devices from here."
+                "First approve \"Let this Mac manage {computer} again?\" on this Mac. Then you can show {computer}'s pairing code and approve its devices from here."
             ))
         }
         (false, false, _) if flooded.is_some() => flooded,
@@ -820,7 +820,8 @@ fn check_old_key_unlock(
     let RequestState::Pending(request) = request_state(transport, &request_id) else {
         return Ok(None);
     };
-    let new_key_id = key_id_of(new_public_key).ok_or("this app's owner key couldn't be read")?;
+    let new_key_id =
+        key_id_of(new_public_key).ok_or("Ghostex couldn't read this Mac's sign-in keys.")?;
     if request.action != SensitiveAction::AddApproverKey
         || request.target.as_deref() != Some(new_key_id.as_str())
     {
@@ -828,8 +829,8 @@ fn check_old_key_unlock(
     }
     let shared =
         ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
-    let shared_key_id =
-        key_id_of(&shared.public_key_b64()).ok_or("the old owner key couldn't be read")?;
+    let shared_key_id = key_id_of(&shared.public_key_b64())
+        .ok_or("Ghostex couldn't read this Mac's sign-in keys.")?;
     let status =
         rpc(transport, "/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
     let lists_shared_key = status
@@ -931,23 +932,27 @@ fn presence_for_unlock(transport: &Transport) -> Result<(), String> {
     {
         return Err("Another approval prompt is open. Finish it, then approve again.".to_string());
     }
-    let (computer, host) = machine_and_host(transport);
-    let confirmed = ghostex_owner_keys::confirm_presence(&format!(
-        "let this Mac in on {computer} ({host}) with its old owner key"
-    ));
+    // macOS shows it as "Ghostex is trying to <reason>." (CDXC:Security 2026-11-17 at
+    // `machine_and_host`).
+    let (computer, _) = machine_and_host(transport);
+    let confirmed =
+        ghostex_owner_keys::confirm_presence(&format!("let this Mac manage {computer} again"));
     PROMPT_OPEN.store(false, Ordering::Release);
     confirmed.map(|_| ()).map_err(|error| error.to_string())
 }
 
-/// The name this app keeps for `transport`'s machine and how it connects there ("SSH to
-/// user@host" or "Easy Connect at …"), as saved in Settings > Remote (what a forwarder on that
-/// connection can't change).
-fn machine_and_host(transport: &Transport) -> (String, String) {
+/*
+CDXC:Security 2026-11-17 FIX:
+User, on the Touch ID prompt "Ghostex is trying to let this Mac in on m7-arch (Easy Connect at tcpGFwWC…) with its old owner key": it showed the whole Easy Connect address and jargon. "Rewrite the prompt reason (and the card text if it has the same problem) for non-technical users: short, no addresses, ids, keys or codes. E.g. 'let this Mac manage m7-arch again'. For SSH, at most the plain host name, never the long Easy Connect address. Keep the security-relevant bit (which computer) visible in plain words." The prompt and the card name the computer by the name saved in Settings > Remote; the card adds the name that computer reports for itself (what a relay to another computer would change) and, for SSH, the host name only when it is a name rather than a numeric address.
+*/
+/// The name this app keeps for `transport`'s machine (Settings > Remote), and its SSH host name
+/// when that is a plain name (never an address, never an Easy Connect code).
+fn machine_and_host(transport: &Transport) -> (String, Option<String>) {
     let Transport::Remote(target) = transport else {
-        return ("this computer".to_string(), "this computer".to_string());
+        return ("this computer".to_string(), None);
     };
     let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(&target.machine_id)
-        .unwrap_or_else(|| "That computer".to_string());
+        .unwrap_or_else(|| "that computer".to_string());
     let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
     let saved = snapshot
         .object()
@@ -962,19 +967,25 @@ fn machine_and_host(transport: &Transport) -> (String, String) {
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    let field = |key: &str| crate::app::helpers::gpui_remote_machine_string_field(&saved, key);
     let easy_connect = saved.get("transport").and_then(Value::as_str) == Some("easyConnect");
-    let host = match (
-        field("sshUser"),
-        field("sshHost"),
-        field("easyConnectAddress"),
-    ) {
-        (_, _, Some(address)) if easy_connect => format!("Easy Connect at {address}"),
-        (Some(user), Some(host), _) => format!("SSH to {user}@{host}"),
-        (None, Some(host), _) => format!("SSH to {host}"),
-        _ => "a connection with no saved host".to_string(),
-    };
+    let host = crate::app::helpers::gpui_remote_machine_string_field(&saved, "sshHost")
+        .filter(|_| !easy_connect)
+        .filter(|host| {
+            host.len() <= 40
+                && host.parse::<std::net::IpAddr>().is_err()
+                && host.chars().any(|c| c.is_ascii_alphabetic())
+                && !host.eq_ignore_ascii_case(&computer)
+        });
     (computer, host)
+}
+
+/// The name the computer behind `request` gives itself: the "<name> (Ghostex server …)" gxserver
+/// writes into its "act as you" summary (`this_computer_label` in
+/// server/src/server/security_http.rs).
+fn reported_computer_name(request: &ApprovalRequest) -> Option<String> {
+    let after = request.summary.split_once("pairing code of ")?.1;
+    let name = after.split_once(" (Ghostex server")?.0.trim();
+    (!name.is_empty()).then(|| name.to_string())
 }
 
 /*
@@ -1063,19 +1074,27 @@ fn lists_old_shared_key(transport: &Transport) -> bool {
         })
 }
 
-/// The unlock card's title and words for `request` on `target`'s machine: what it does, the SSH
-/// host this app reached, and what the computer there says it is (the request's own summary,
-/// which names it and its server id).
+/// The unlock card's title and words for `request` on `target`'s machine, in plain words: what
+/// Approve does, and which computer answered (the name it reports for itself, and the SSH host
+/// name when it is a plain name), so a card from the wrong computer reads wrong.
 pub(crate) fn old_key_unlock_card(
     target: &GpuiRemoteGxserverRequestTarget,
     request: &ApprovalRequest,
 ) -> (String, String) {
     let (computer, host) = machine_and_host(&Transport::Remote(target.clone()));
+    let reached = host
+        .map(|host| format!(" This Mac connects to it at {host}."))
+        .unwrap_or_default();
+    let check = match reported_computer_name(request) {
+        Some(name) => format!(
+            " The computer that answered calls itself \"{name}\". Approve only if that is {computer}."
+        ),
+        None => format!(" Approve only if you expected this for {computer}."),
+    };
     (
-        format!("Let this Mac in on {computer}?"),
+        format!("Let this Mac manage {computer} again?"),
         format!(
-            "{computer}'s Ghostex has only this Mac's old owner key (from before 16 Nov) as its owner, so nobody can let new phones or computers in there. Approve lets this Mac's new key in there, once, with that old key. This Mac reaches {computer} by {host}, and the computer there says: \"{}\". Approve only if that names {computer}.",
-            request.summary.trim().trim_end_matches('.')
+            "Since the last Ghostex update, {computer} doesn't know this Mac any more, so no one can add a phone or computer to it. Approve to let this Mac manage {computer} again.{reached}{check}"
         ),
     )
 }
@@ -1102,7 +1121,7 @@ pub(crate) fn unlock_with_old_key(
         if error == OWNER_WAITING_ERROR {
             let (computer, _) = machine_and_host(transport);
             format!(
-                "This Mac's old owner key couldn't let it in on {computer} now. Try again in a minute; if this keeps happening, approve this Mac in Ghostex on {computer} or on a phone paired with it."
+                "This Mac couldn't manage {computer} again just now. Try again in a minute. If it keeps failing, approve this Mac in Ghostex on {computer} or on a phone paired with it."
             )
         } else {
             error
@@ -1170,7 +1189,7 @@ User (1A, "match against what the local gxserver recorded for that computer; ref
 /// key for `server_id` unless this app's registration of `transport`'s machine and this
 /// computer's gxserver both record that server id.
 fn recorded_server_id_matches(transport: &Transport, server_id: &str) -> Result<(), String> {
-    const REFUSED: &str = "That computer's server id doesn't match the one recorded for it here, so this app didn't use its old owner key there.";
+    const REFUSED: &str = "Ghostex couldn't confirm this is the same computer it connected to before, so it changed nothing there.";
     let Transport::Remote(target) = transport else {
         return Err(REFUSED.to_string());
     };
@@ -1240,7 +1259,8 @@ static PINS_LOCK: Mutex<()> = Mutex::new(());
 /// another machine signed for. `pin`: keep `server_id` as that machine's from now on; only right
 /// before a signature, so an attempt refused or cancelled before it pins nothing (review finding 4).
 fn check_server_id(transport: &Transport, server_id: &str, pin: bool) -> Result<(), String> {
-    const REFUSED: &str = "That computer's Ghostex answered as another computer, so this app didn't sign in there as you.";
+    const REFUSED: &str =
+        "That computer answered as a different computer, so Ghostex changed nothing there.";
     let Transport::Remote(target) = transport else {
         return Ok(());
     };
@@ -1665,7 +1685,7 @@ pub(crate) fn answerer_for(transport: &Transport, request: &ApprovalRequest) -> 
             devices: Vec::new(),
             asked,
             note: Some(format!(
-                "Or approve \"Let this Mac in on {computer}?\" on this Mac first, then approve this here."
+                "Or first approve \"Let this Mac manage {computer} again?\" on this Mac, then approve this here."
             )),
         };
     }
@@ -1797,8 +1817,9 @@ pub(crate) fn approve_request(
     in_security_flow(|| {
         require_owner_session(transport)?;
         let owner_key = owner_key_for(transport)?;
-        let (key, presence) = ghostex_owner_keys::unlock_approver_key(&request.summary)
-            .map_err(|error| error.to_string())?;
+        let (key, presence) =
+            ghostex_owner_keys::unlock_approver_key(&plain::presence_reason(&request.summary))
+                .map_err(|error| error.to_string())?;
         let mut wire_key = key_json(
             &key.public_key_b64(),
             &owner_key.public_key_b64(),

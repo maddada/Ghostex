@@ -99,6 +99,27 @@ pub(crate) fn this_computer_requires_presence() -> bool {
         .unwrap_or(false)
 }
 
+/// What Touch ID, Windows Hello or the password prompt says for a request (macOS shows "Ghostex
+/// is trying to <reason>."): its summary without the parts meant for matching on a card, the
+/// server id ("(Ghostex server S1u)") and the key words ("(key words: …)"), and starting
+/// lower-case (CDXC:Security 2026-11-17 at `super::machine_and_host`).
+pub(crate) fn presence_reason(summary: &str) -> String {
+    let mut reason = summary.trim().trim_end_matches('.').to_string();
+    for marker in [" (Ghostex server ", " (key words: "] {
+        while let Some(start) = reason.find(marker) {
+            let end = reason[start..]
+                .find(')')
+                .map_or(reason.len(), |close| start + close + 1);
+            reason.replace_range(start..end, "");
+        }
+    }
+    let mut chars = reason.chars();
+    match chars.next() {
+        Some(first) => first.to_lowercase().chain(chars).collect(),
+        None => "approve a request".to_string(),
+    }
+}
+
 /// Approves `request` on `transport` with one click: the system prompt first when that computer
 /// asks for it (`require_presence`), then `{ id }`.
 pub(crate) fn approve_plain(
@@ -107,7 +128,7 @@ pub(crate) fn approve_plain(
     require_presence: bool,
 ) -> Result<(), String> {
     if require_presence {
-        ghostex_owner_keys::confirm_presence(&request.summary)
+        ghostex_owner_keys::confirm_presence(&presence_reason(&request.summary))
             .map_err(|error| error.to_string())?;
     }
     let approve = || {
