@@ -56,12 +56,12 @@ pub(crate) enum Transport {
 }
 
 impl Transport {
-    /// The owner session's key: `local`, or the remote computer's token file token, which names
-    /// that gxserver and never leaves memory.
+    /// The owner session's key: `local`, or this app's own id for that machine (its settings),
+    /// never the machine's token, which the machine hands over (review round 2, R2-1).
     fn key(&self) -> String {
         match self {
             Self::Local => LOCAL.to_string(),
-            Self::Remote(target) => format!("remote:{}", target.token),
+            Self::Remote(target) => format!("remote:{}", target.machine_id),
         }
     }
 }
@@ -600,7 +600,11 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
 
 /*
 CDXC:Security 2026-11-16 FIX:
-Review B1 of the owner-only door: the app signed an owner session for whatever server id and challenge a computer's tunnel answered with, using the one owner key it enrolls everywhere, so whatever answered there could get a signature that opened an owner session on this computer (or another one). Each connected computer now has its own owner key (`ghostex_owner_keys::load_or_create_scoped_owner_key`, named after that computer's token, which this app read over SSH), enrolled only there, so its signature opens nothing elsewhere. On top, a connection never signs this computer's own server id, and the server id a connection first signed for is pinned for the rest of the app's run. A computer still on a gxserver from before plain approvals (11.2.2 and earlier) asks once more to let this app act as the owner there, for its new key.
+Review B1 of the owner-only door: the app signed an owner session for whatever server id and challenge a computer's tunnel answered with, using the one owner key it enrolls everywhere, so whatever answered there could get a signature that opened an owner session on this computer (or another one). Each connected computer now has its own owner key (`ghostex_owner_keys::load_or_create_scoped_owner_key`, named as round 2 below says), enrolled only there, so its signature opens nothing elsewhere. On top, a connection never signs this computer's own server id, and each machine keeps the server id it first signed for (saved, round 2 below). A computer still on a gxserver from before plain approvals (11.2.2 and earlier) asks once more to let this app act as the owner there, for its new key.
+*/
+/*
+CDXC:Security 2026-11-16 FIX:
+Review round 2 (R2-1): the per-computer key, the cached owner session and the server-id pin were named after the connected computer's token, which that computer hands over, so an agent on one computer that set its token file to another computer's token got that computer's cached session, or a signature with its key. They are now named after this app's own id for the machine (its settings, `GpuiRemoteGxserverRequestTarget::machine_id`) mixed with a random salt kept in the key store (`ghostex_owner_keys::local_salt`). The pin is saved (`owner-session-pins.json` in Ghostex's state folder): each machine id keeps the server id it first signed for, and a server id already pinned to another machine is refused. Two computers that happen to share a server id (360 values) therefore can't both act as you from here; removing one and adding it again names it anew.
 */
 /// The owner key this app signs with on `transport`: this computer's, or the one of that
 /// connected computer.
@@ -608,10 +612,18 @@ fn owner_key_for(transport: &Transport) -> Result<ghostex_owner_keys::DeviceKey,
     match transport {
         Transport::Local => ghostex_owner_keys::load_or_create_owner_key(),
         Transport::Remote(target) => {
-            let digest = ring::digest::digest(
-                &ring::digest::SHA256,
-                format!("ghostex-remote-owner-key\n{}", target.token).as_bytes(),
-            );
+            if target.machine_id.is_empty() {
+                return Err(
+                    "This connection names no machine, so this app doesn't sign in there as you."
+                        .to_string(),
+                );
+            }
+            let salt = ghostex_owner_keys::local_salt().map_err(|error| error.to_string())?;
+            let mut input = b"ghostex-remote-owner-key\n".to_vec();
+            input.extend_from_slice(&salt);
+            input.push(b'\n');
+            input.extend_from_slice(target.machine_id.as_bytes());
+            let digest = ring::digest::digest(&ring::digest::SHA256, &input);
             ghostex_owner_keys::load_or_create_scoped_owner_key(&format!(
                 "remote-{}",
                 hex::encode(&digest.as_ref()[..8])
@@ -621,30 +633,53 @@ fn owner_key_for(transport: &Transport) -> Result<ghostex_owner_keys::DeviceKey,
     .map_err(|error| error.to_string())
 }
 
-/// The server id each connection signed its owner session for, kept for the app's run.
-static SIGNED_FOR: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+/// The saved pins: this app's machine id → the server id it signed for there.
+fn pins_path() -> std::path::PathBuf {
+    crate::shared_settings::ghostex_storage_paths()
+        .state_dir
+        .join("owner-session-pins.json")
+}
+
+static PINS_LOCK: Mutex<()> = Mutex::new(());
 
 /// Refuses to sign an owner session for `server_id` on `transport` when it is this computer's own
-/// id over a connection to another computer, or not the id that connection signed for before.
+/// id over a connection to another computer, not the id that machine signed for before, or the id
+/// another machine signed for.
 fn check_server_id(transport: &Transport, server_id: &str) -> Result<(), String> {
     const REFUSED: &str = "That computer's Ghostex answered as another computer, so this app didn't sign in there as you.";
-    if matches!(transport, Transport::Remote(_))
-        && crate::app::helpers::gpui_local_gxserver_server_id().as_deref() == Some(server_id)
-    {
+    let Transport::Remote(target) = transport else {
+        return Ok(());
+    };
+    if crate::app::helpers::gpui_local_gxserver_server_id().as_deref() == Some(server_id) {
         log::warn!("owner session not signed: a connection named this computer's server id");
         return Err(REFUSED.to_string());
     }
-    let mut pinned = SIGNED_FOR
+    let _guard = PINS_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let pinned = pinned
-        .get_or_insert_with(HashMap::new)
-        .entry(transport.key())
-        .or_insert_with(|| server_id.to_string());
-    if pinned != server_id {
-        log::warn!("owner session not signed: a connection changed its server id");
+    let path = pins_path();
+    let mut pins: std::collections::BTreeMap<String, String> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    if let Some(pinned) = pins.get(&target.machine_id) {
+        if pinned != server_id {
+            log::warn!("owner session not signed: a machine answered with another server id");
+            return Err(REFUSED.to_string());
+        }
+        return Ok(());
+    }
+    if pins.values().any(|pinned| pinned == server_id) {
+        log::warn!("owner session not signed: that server id is another machine's");
         return Err(REFUSED.to_string());
     }
+    pins.insert(target.machine_id.clone(), server_id.to_string());
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let text = serde_json::to_string_pretty(&pins).map_err(|error| error.to_string())?;
+    std::fs::write(&path, text)
+        .map_err(|error| format!("Ghostex couldn't save which computer this is: {error}"))?;
     Ok(())
 }
 

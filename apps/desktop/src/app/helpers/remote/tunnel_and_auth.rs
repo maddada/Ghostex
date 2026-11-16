@@ -46,6 +46,7 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
                 presentation_stream_cancel: None,
                 presentation_stream_generation: None,
                 token: token.to_string(),
+                machine_id: config.remote_machine_id.clone(),
                 child: tunnel.child,
                 forward: tunnel.forward,
                 liveness: GpuiRemoteTunnelLiveness::default(),

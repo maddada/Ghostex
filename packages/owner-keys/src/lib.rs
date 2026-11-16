@@ -134,6 +134,24 @@ pub fn load_or_create_owner_key() -> Result<DeviceKey, KeyError> {
 CDXC:Security 2026-11-16 FIX:
 Review B1 of the owner-only door: with one owner key for every computer, whatever answered on a connected computer's tunnel could hand the app this computer's server id and a challenge from here, and the app's signature opened an owner session here. Each connected computer now gets an owner key of its own (`scope` names it), enrolled only there, so a signature the app makes for one computer opens nothing anywhere else. This computer keeps [`load_or_create_owner_key`].
 */
+/// A random value made once and kept in the key store, never sent anywhere: the app mixes it into
+/// the names it gives connected computers' keys and sessions (review round 2, R2-1), so those names
+/// can't be worked out or lined up from outside.
+pub fn local_salt() -> Result<Vec<u8>, KeyError> {
+    const ACCOUNT: &str = "owner-key-salt";
+    if let Some(salt) = platform::read_secret(ACCOUNT)? {
+        return Ok(salt);
+    }
+    let mut salt = vec![0_u8; 32];
+    ring::rand::SecureRandom::fill(&SystemRandom::new(), &mut salt)
+        .map_err(|_| KeyError::KeyStore("no random numbers".to_string()))?;
+    platform::write_secret(ACCOUNT, &salt)?;
+    match platform::read_secret(ACCOUNT)? {
+        Some(saved) => Ok(saved),
+        None => Err(KeyError::KeyStore("the salt wasn't saved".to_string())),
+    }
+}
+
 /// The owner key for one connected computer (`scope`: a short name for it, letters, digits and
 /// `-` only), made and saved the first time.
 pub fn load_or_create_scoped_owner_key(scope: &str) -> Result<DeviceKey, KeyError> {

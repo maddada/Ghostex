@@ -90,13 +90,14 @@ fn links<T>(apply: impl FnOnce(&mut CloudBoxLinks) -> T) -> T {
     apply(&mut guard)
 }
 
-fn request_target(port: u16, token: &str) -> GpuiRemoteGxserverRequestTarget {
+fn request_target(machine_id: &str, port: u16, token: &str) -> GpuiRemoteGxserverRequestTarget {
     GpuiRemoteGxserverRequestTarget {
         capabilities: GpuiRemoteGxserverCapabilities::default(),
         code_server_component_platform: None,
         execution_target: GpuiRemoteExecutionTarget::PosixHost,
         local_port: port,
         token: token.to_string(),
+        machine_id: machine_id.to_string(),
     }
 }
 
@@ -109,7 +110,7 @@ pub(crate) fn cloud_box_request_target(
         return None;
     }
     links(|links| links.targets.get(machine_id).cloned())
-        .map(|(port, token)| request_target(port, &token))
+        .map(|(port, token)| request_target(machine_id, port, &token))
 }
 
 /// The connected box machines and where their gxserver answers, for the remote clients'

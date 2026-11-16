@@ -577,6 +577,7 @@ mod tests {
             execution_target: GpuiRemoteExecutionTarget::PosixHost,
             local_port,
             token: token.clone(),
+            machine_id: "remote-test".to_string(),
         };
         let answer = request(&target(port), &json!({ "action": "list" })).expect("a list");
         let items = remote_items("remote-test", "Test box", &answer);
