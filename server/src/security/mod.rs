@@ -109,6 +109,10 @@ pub struct SecurityState {
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
     events: broadcast::Sender<SecurityEvent>,
+    /// When the token file made its "act as you" requests in the last hour (review round 3, R3-2).
+    owner_key_requests: Arc<std::sync::Mutex<Vec<u64>>>,
+    /// The app's own "act as you" requests (they carried this start's value), never pushed out.
+    app_owner_key_requests: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     /// SHA-256 of the one-time value the app handed over at start (review round 2, R2-3 in `policy.rs`).
     first_key_secret_hash: Arc<std::sync::Mutex<Option<Vec<u8>>>>,
     /// Owner keys that open door sessions only (review M2 in `policy.rs`).
@@ -135,6 +139,8 @@ impl SecurityState {
             token_file_code_until: Arc::default(),
             door_only_keys: Arc::default(),
             first_key_secret_hash: Arc::default(),
+            owner_key_requests: Arc::default(),
+            app_owner_key_requests: Arc::default(),
         }
     }
 

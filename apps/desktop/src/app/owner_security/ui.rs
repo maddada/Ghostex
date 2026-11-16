@@ -242,13 +242,13 @@ impl GhostexGpuiApp {
                 super::Answerer::Elsewhere {
                     devices,
                     asked,
-                    words,
+                    note,
                 } => this.owner_security_show_approve_elsewhere(
                     &machine,
                     &request,
                     &devices,
                     asked,
-                    words.as_deref(),
+                    note.as_deref(),
                     cx,
                 ),
             });
@@ -264,7 +264,7 @@ impl GhostexGpuiApp {
         request: &ApprovalRequest,
         devices: &[String],
         asked: bool,
-        words: Option<&str>,
+        note: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) {
         let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(machine_id)
@@ -275,15 +275,15 @@ impl GhostexGpuiApp {
             several => format!("on {}", several.join(" or ")),
         };
         let then = if asked {
-            let words = words
-                .filter(|words| !words.is_empty())
-                .map(|words| format!(" (its key words: {words})"))
-                .unwrap_or_default();
             format!(
-                " It also asks there, once, to let this computer answer {computer}'s requests from here{words}."
+                " It also asks there, once, to let this computer answer {computer}'s requests from here."
             )
         } else {
             String::new()
+        };
+        let then = match note.filter(|note| !note.is_empty()) {
+            Some(note) => format!("{then} {note}"),
+            None => then,
         };
         self.upsert_gpui_app_toast(
             GpuiAppToast {

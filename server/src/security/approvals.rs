@@ -584,6 +584,23 @@ impl ApprovalStore {
         }
     }
 
+    /// Retires request `id` if it still waits, as replaced by `newer` (its card closes; whoever
+    /// asked reads `replacedBy` and may ask again). Returns it, now `expired`.
+    pub fn push_out(&self, id: &str, newer: &str, now_ms: u64) -> Option<ApprovalRequest> {
+        let mut requests = self.lock();
+        let stored = requests.get_mut(id)?;
+        if stored.request.status != ApprovalStatus::Pending {
+            return None;
+        }
+        stored.request.status = ApprovalStatus::Expired;
+        stored.request.decided_at_ms = Some(now_ms);
+        stored.request.replaced_by = Some(newer.to_string());
+        stored.resume = None;
+        let pushed = stored.request.clone();
+        self.save(&requests);
+        Some(pushed)
+    }
+
     /// Withdraws `requester`'s requests still waiting, because what asked went away (`why`, as
     /// in "the session that asked was closed"); returns them, now `expired`.
     pub fn withdraw_by(

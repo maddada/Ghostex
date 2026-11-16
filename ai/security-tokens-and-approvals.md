@@ -88,7 +88,12 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
   one-time value the app hands gxserver as it starts it (`auth/first-key-handoff`, written by the
   app just before the launch, read and deleted by gxserver first thing, never in an environment;
   `firstKeySecret` on the enroll). Without it no key is added there, so on a computer where the
-  app never starts gxserver the token file keeps the door until a phone pairs. A computer upgraded
+  app never starts gxserver the token file keeps the door until a phone pairs. Known same-user
+  limit: whoever starts gxserver picks that value. Any program running as the user can write the
+  file and start gxserver itself, then add the first key; on a computer without the app and
+  without a phone, that leaves the user locked out until the reset below. It could also read the
+  file in the moment before gxserver deletes it. The app deletes a handoff gxserver didn't take
+  (a failed launch, or a gxserver already running). A computer upgraded
   with a phone but without the app's key asks the phone once.
 
 `/api/securityStatus` says `mayApproveDevices` for the caller. Everything else the token file does is

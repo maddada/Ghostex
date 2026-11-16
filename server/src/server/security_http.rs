@@ -245,9 +245,66 @@ listing requests, `owner_security::quiet_owner_session`) send
 */
 /// `/api/enrollOwnerKey`'s one-time value from the app for the first key (review round 2, R2-3).
 const FIRST_KEY_SECRET_PARAM: &str = "firstKeySecret";
-/// How many "act as you" requests (`addApproverKey`) for other keys may wait at once
-/// (review round 2, R2-2).
+/// How many "act as you" requests (`addApproverKey`) may wait at once before a new one pushes
+/// out the oldest that isn't the app's (review rounds 2 and 3, R2-2 and R3-2).
 const OWNER_KEY_REQUESTS_WAITING: usize = 3;
+/// The answer when the token file made too many "act as you" requests this hour (R3-2).
+pub(crate) const OWNER_KEY_FLOODED: &str = "ownerKeyRequestsFlooded";
+
+/// This computer's name and server id as the "act as you" card names them (review round 3, R3-4).
+fn this_computer_label(state: &AppState) -> String {
+    let name = crate::remote_access::cached_remote_access_identity()
+        .map(|identity| identity.computer_name)
+        .unwrap_or_else(|_| "this computer".to_string());
+    format!("{name} (Ghostex server {})", &*state.security.server_id)
+}
+
+/// A new "act as you" request beyond `OWNER_KEY_REQUESTS_WAITING` pushes out the oldest waiting
+/// one that isn't the app's own (review round 3, R3-2 in security/policy.rs); its card closes.
+fn push_out_oldest_owner_key_request(state: &AppState, newest: &str, now: u64) {
+    let security = &state.security;
+    let mut waiting: Vec<_> = security
+        .approvals
+        .list_pending(now)
+        .into_iter()
+        .filter(|request| {
+            request.action == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
+                && request.id != newest
+        })
+        .collect();
+    if waiting.len() < OWNER_KEY_REQUESTS_WAITING {
+        return;
+    }
+    waiting.sort_by_key(|request| request.created_at_ms);
+    if let Some(oldest) = waiting
+        .iter()
+        .find(|request| !security.is_app_owner_key_request(&request.id))
+    {
+        if let Some(pushed) = security.approvals.push_out(&oldest.id, newest, now) {
+            security.publish(security::SecurityEvent::ApprovalExpired { request: pushed });
+        }
+    }
+}
+
+/// The security log notes, once an hour, that the token file asked to act as you too often.
+fn note_owner_key_flood(state: &AppState, caller: &Principal, now: u64) {
+    static LAST: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
+    let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if *last + 60 * 60 * 1000 > now {
+        return;
+    }
+    *last = now;
+    let _ = state;
+    crate::audit::record(
+        crate::audit::Action::new(
+            "ownerKey.flood",
+            "Too many apps asked to act as you on this computer within an hour",
+        ),
+        crate::audit::Actor::from(caller),
+        crate::audit::Outcome::Refused("More asks wait until the hour is over".to_string()),
+        None,
+    );
+}
 /// `/api/enrollOwnerKey`'s and `/api/openOwnerSession`'s scope (`approval::OWNER_SCOPE_DOOR`).
 const OWNER_SCOPE_PARAM: &str = "scope";
 /// `/api/enrollOwnerKey`'s flag: `false` enrolls only when no approval is needed.
@@ -373,25 +430,30 @@ fn enroll_key(
         }
         /*
         CDXC:Security 2026-11-16 FIX:
-        Review M1 and M2 of the owner-only door: the card's words came from the key's own label, which any caller writes, so an agent's request looked like the app's, and it said "show codes and approve devices" while the key opened a full owner session. The card now ends with three words, which the app that asks shows too (from the request's own nonce since round 2, below), and says what the key may really do (door sessions only with `scope: "door"`, which this app sends; an older app's key acts as you for everything here).
+        Review M1 and M2 of the owner-only door: the card's words came from the key's own label, which any caller writes, so an agent's request looked like the app's, and it said "show codes and approve devices" while the key opened a full owner session. The card now ends with key words (four since round 3), which the app that asks shows too (from the request's own nonce since round 2, below), and says what the key may really do (door sessions only with `scope: "door"`, which this app sends; an older app's key acts as you for everything here).
         */
         /*
         CDXC:Security 2026-11-16 FIX:
         Review round 2 (R2-2): words from the key id alone were 24 bits a caller chooses (grind keys offline until the words match the app's), and `replaces` let the token file's newer request replace the app's waiting card. The words now come from a nonce gxserver makes for each request, hashed with the key id (`approval::owner_key_words_input`); the request carries that nonce back to the app that asked, which works the words out and shows them. Requests no longer replace each other; instead at most `OWNER_KEY_REQUESTS_WAITING` such requests wait at once, and another key gets a plain refusal until those are answered.
         */
-        let pending_others = security
-            .approvals
-            .list_pending(now)
-            .iter()
-            .filter(|request| {
+        // Review round 3 (R3-2 in security/policy.rs): this computer's app (it carries this
+        // start's one-time value) is never capped or pushed out; the same key asking again, or
+        // coming back with its approval, makes no new request.
+        let app_request = security.is_first_key_secret(first_key_secret.as_deref());
+        let pending = security.approvals.list_pending(now);
+        let returning = body
+            .pointer("/params/approvalId")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.trim().is_empty())
+            || pending.iter().any(|request| {
                 request.action == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
-                    && request.target.as_deref() != Some(key_id.as_str())
-            })
-            .count();
-        if pending_others >= OWNER_KEY_REQUESTS_WAITING {
+                    && request.target.as_deref() == Some(key_id.as_str())
+            });
+        if !app_request && !returning && !security.note_owner_key_request(now) {
+            note_owner_key_flood(state, caller, now);
             return Err(EnrollRefusal::Reply(
-                "rateLimited",
-                "Other apps already wait to act as you here. Approve or deny those first, in Ghostex or on your phone.".to_string(),
+                OWNER_KEY_FLOODED,
+                "Too many apps asked to act as you on this computer in the last hour, so this one can't ask yet. Deny the requests you don't know there (in Ghostex or on your phone) and try again in an hour.".to_string(),
             ));
         }
         let nonce = security::random_b64(32);
@@ -401,21 +463,25 @@ fn enroll_key(
                 ghostex_gx_protocol::approval::owner_key_words_input(&nonce, &key_id),
             ))
         };
+        // Review round 3 (R3-4): the card names this computer and its server id, so a request
+        // that reached it through another computer's connection shows a name the app didn't ask
+        // for (the asking app shows the computer it means).
+        let here = this_computer_label(state);
         let (summary, detail) = if door_only {
             (
                 format!(
-                    "Let {} show this computer's pairing code and approve new phones and computers here (key words: {words})",
+                    "Let {} show the pairing code of {here} and approve new phones and computers there (key words: {words})",
                     key.label
                 ),
-                "Approve only if it is your own Ghostex app, on this computer or on one of your computers connected to this one, and it shows the same three words.".to_string(),
+                format!("Approve only if it is your own Ghostex app, on this computer or on one of your computers connected to it, and it shows the same four words and names {here}."),
             )
         } else {
             (
                 format!(
-                    "Let {} act as you on this computer (key words: {words})",
+                    "Let {} act as you on {here} (key words: {words})",
                     key.label
                 ),
-                "It can then do everything you can do here: show the pairing code, approve new phones and computers, answer secret requests. Approve only if it is your own Ghostex app and it shows the same three words.".to_string(),
+                format!("It can then do everything you can do there: show the pairing code, approve new phones and computers, answer secret requests. Approve only if it is your own Ghostex app and it shows the same four words and names {here}."),
             )
         };
         let action = ActionRequest::new(
@@ -429,11 +495,18 @@ fn enroll_key(
             "key": serde_json::to_value(&key).unwrap_or(Value::Null),
             "doorOnly": door_only,
         }));
-        if let Err(response) = presence_outcome_response(
-            presence_outcome(state, caller, action, body),
-            endpoint_path,
-            request_id,
-        ) {
+        let outcome = presence_outcome(state, caller, action, body);
+        if let security::PresenceOutcome::Pending(request) = &outcome {
+            // New, not one that already waited (`pending` was read before asking).
+            if !pending.iter().any(|waiting| waiting.id == request.id) {
+                if app_request {
+                    security.note_app_owner_key_request(&request.id);
+                } else {
+                    push_out_oldest_owner_key_request(state, &request.id, now);
+                }
+            }
+        }
+        if let Err(response) = presence_outcome_response(outcome, endpoint_path, request_id) {
             return Err(EnrollRefusal::Response(response));
         }
     }

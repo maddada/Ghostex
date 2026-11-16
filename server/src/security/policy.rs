@@ -23,8 +23,25 @@ Review B2 of the owner-only door: the two minutes after the first start with thi
 pub const OWNER_DEVICE: &str = "ownerDevice";
 /*
 CDXC:Security 2026-11-16 FIX:
-Review round 2 (R2-3): on a computer without the app, the first owner key went in from the token file with no card, so an agent could make itself the only keeper of the door and `ghostex computer-code` would then wait for an app or phone that doesn't exist. The first key now needs a one-time value the app hands gxserver as it starts it: the app writes it to `auth/first-key-handoff` (0600) just before it launches gxserver, gxserver reads and deletes that file first thing at start (server/foreground.rs), keeps only its hash in memory, never puts it in any environment, and spends it on the first key (`take_first_key`). On a computer where the app never starts gxserver, no key can be added without an Approve, so the token file keeps the door until a phone pairs and `ghostex computer-code` works there as before. Where gxserver was started by something else (the CLI, a restart outside the app), the app stays on the token file, which still keeps the door there, until the app next starts gxserver. Same-user limit: a program running as the user could read that file in the moment between the app writing it and gxserver deleting it.
+Review round 2 (R2-3): on a computer without the app, the first owner key went in from the token file with no card, so an agent could make itself the only keeper of the door and `ghostex computer-code` would then wait for an app or phone that doesn't exist. The first key now needs a one-time value the app hands gxserver as it starts it: the app writes it to `auth/first-key-handoff` (0600) just before it launches gxserver, gxserver reads and deletes that file first thing at start (server/foreground.rs), keeps only its hash in memory, never puts it in any environment, and spends it on the first key (`take_first_key`). On a computer where the app never starts gxserver, no key can be added without an Approve, so the token file keeps the door until a phone pairs and `ghostex computer-code` works there as before. Where gxserver was started by something else (the CLI, a restart outside the app), the app stays on the token file, which still keeps the door there, until the app next starts gxserver. Known same-user limits (review round 3, R3-1): whoever starts gxserver picks the value. gxserver takes whatever file is there when it starts, so any program running as the user can write that file itself and start gxserver (the gxserver binary, `launchctl kickstart`, a detached process), then add the first key with that value; on a computer without the app and without a phone that makes it the only one who can approve, and the user is locked out until the reset in Help. It could also read the file in the moment between the app writing it and gxserver deleting it. The app deletes a file gxserver didn't take (a failed launch, or a gxserver that was already running), so none is left lying around. Where the token file already kept the door, this adds no power beyond that lockout.
 */
+/*
+CDXC:Security 2026-11-16 FIX:
+Review round 3 (R3-2): the cap of three waiting "act as you" requests could be filled by any token-file holder, so the app's own request was refused here or on a connected computer. Now a request that carries this start's one-time value (this computer's app) is never capped or pushed out; any other new request pushes out the oldest waiting one that isn't the app's (as replaced, so its asker may ask again); and the token file makes at most `OWNER_KEY_REQUESTS_PER_HOUR` new ones an hour. Past that it is refused with plain words, which the asking app shows, and the security log notes it once an hour.
+*/
+/// New "act as you" requests the token file may make in an hour (review round 3, R3-2).
+pub const OWNER_KEY_REQUESTS_PER_HOUR: usize = 12;
+
+/// Compares two hashes without stopping at the first difference.
+fn same_bytes(left: &[u8], right: &[u8]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .fold(0_u8, |differ, (a, b)| differ | (a ^ b))
+            == 0
+}
+
 /// The file the app writes its one-time value to just before it starts gxserver (in `auth/`).
 pub const FIRST_KEY_HANDOFF_FILE: &str = "first-key-handoff";
 
@@ -130,17 +147,59 @@ impl SecurityState {
             .first_key_secret_hash
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let matches = stored.as_deref().is_some_and(|hash| {
-            ring::constant_time::verify_slices_are_equal(
-                hash,
-                &Sha256::digest(presented.as_bytes()),
-            )
-            .is_ok()
-        });
+        let matches = stored
+            .as_deref()
+            .is_some_and(|hash| same_bytes(hash, &Sha256::digest(presented.as_bytes())));
         if matches {
             *stored = None;
         }
         matches
+    }
+
+    /// Whether `presented` is the one-time value the app handed over at this start, without
+    /// spending it (review round 3, R3-2: the app's own "act as you" request is never capped or
+    /// pushed out).
+    pub fn is_first_key_secret(&self, presented: Option<&str>) -> bool {
+        use sha2::{Digest, Sha256};
+        let Some(presented) = presented.map(str::trim).filter(|value| !value.is_empty()) else {
+            return false;
+        };
+        self.first_key_secret_hash
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_deref()
+            .is_some_and(|hash| same_bytes(hash, &Sha256::digest(presented.as_bytes())))
+    }
+
+    /// Notes a new "act as you" request from the token file; `false` when the hour's cap
+    /// (`OWNER_KEY_REQUESTS_PER_HOUR`) is reached, so it isn't made.
+    pub fn note_owner_key_request(&self, now_ms: u64) -> bool {
+        let mut recent = self
+            .owner_key_requests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        recent.retain(|at| at + 60 * 60 * 1000 > now_ms);
+        if recent.len() >= OWNER_KEY_REQUESTS_PER_HOUR {
+            return false;
+        }
+        recent.push(now_ms);
+        true
+    }
+
+    /// The app's own "act as you" request here (it carried this start's value): never pushed out.
+    pub fn note_app_owner_key_request(&self, id: &str) {
+        self.app_owner_key_requests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(id.to_string());
+    }
+
+    /// Whether request `id` is the app's own (see [`SecurityState::note_app_owner_key_request`]).
+    pub fn is_app_owner_key_request(&self, id: &str) -> bool {
+        self.app_owner_key_requests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(id)
     }
 
     /// One Approve of a terminal's pairing code: the token file gets codes for a while.

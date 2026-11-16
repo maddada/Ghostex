@@ -5376,7 +5376,9 @@ sessions, so any client can control agents on any machine.
   then open Ghostex: it starts the server again and its key becomes the owner,
   and you pair your phones and computers again. On a computer without the app,
   that computer's own terminal keeps pairing (as `ghostex computer-code` does)
-  until a phone pairs with it.
+  until a phone pairs with it. A program running as you there could still make
+  itself that computer's owner before you pair a phone (by starting Ghostex's
+  server with a first-key value of its own); then use this reset.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;
