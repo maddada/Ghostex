@@ -611,35 +611,71 @@ impl NativeChatView {
             for row in rows.iter().take(if all { rows.len() } else { limit }) {
                 list = list.child(self.dock_row(row, p, cx));
             }
-            if hidden > 0 {
+            // Mark all seen (gx-chat-core `dock_with`), in the more line's quiet words, at its
+            // right.
+            let mark_all_seen = dock["markAllSeen"]["command"].is_object().then(|| {
+                let command = dock["markAllSeen"]["command"].clone();
+                let label = dock["markAllSeen"]["label"]
+                    .as_str()
+                    .unwrap_or("Mark all seen")
+                    .to_string();
+                div()
+                    .id("work-dock-mark-all-seen")
+                    .role(gpui::Role::Button)
+                    .ml_auto()
+                    .flex_shrink_0()
+                    .pl(px(8.0 * s))
+                    .pr(px(8.0 * s))
+                    .pt(px(2.0 * s))
+                    .pb(px(6.0 * s))
+                    .text_color(p.muted)
+                    .chat_cursor_pointer()
+                    .hover(|style| style.text_color(p.foreground))
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.invoke(command.clone(), cx);
+                    }))
+            });
+            if hidden == 0 {
+                if let Some(button) = mark_all_seen {
+                    list = list.child(div().w_full().flex().child(button));
+                }
+            } else {
                 list = list.child(
                     div()
-                        .id("work-dock-more")
-                        .role(gpui::Role::Button)
-                        .pl(px(31.0 * s))
-                        .pr(px(8.0 * s))
-                        .pt(px(2.0 * s))
-                        .pb(px(6.0 * s))
-                        .text_color(p.muted)
-                        .chat_cursor_pointer()
-                        .hover(|style| style.text_color(p.foreground))
-                        .aria_expanded(all)
-                        .child(if all {
-                            "Show fewer".to_string()
-                        } else {
-                            // "1 more needs you", "3 more need you".
-                            if hidden == 1 {
-                                "1 more needs you".to_string()
-                            } else {
-                                format!("{hidden} more need you")
-                            }
-                        })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if !this.expanded.remove(DOCK_ALL_ROWS) {
-                                this.expanded.insert(DOCK_ALL_ROWS.to_string());
-                            }
-                            cx.notify();
-                        })),
+                        .w_full()
+                        .flex()
+                        .items_start()
+                        .child(
+                            div()
+                                .id("work-dock-more")
+                                .role(gpui::Role::Button)
+                                .pl(px(31.0 * s))
+                                .pr(px(8.0 * s))
+                                .pt(px(2.0 * s))
+                                .pb(px(6.0 * s))
+                                .text_color(p.muted)
+                                .chat_cursor_pointer()
+                                .hover(|style| style.text_color(p.foreground))
+                                .aria_expanded(all)
+                                .child(if all {
+                                    "Show fewer".to_string()
+                                } else {
+                                    // "1 more needs you", "3 more need you".
+                                    if hidden == 1 {
+                                        "1 more needs you".to_string()
+                                    } else {
+                                        format!("{hidden} more need you")
+                                    }
+                                })
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if !this.expanded.remove(DOCK_ALL_ROWS) {
+                                        this.expanded.insert(DOCK_ALL_ROWS.to_string());
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                        .children(mark_all_seen),
                 );
             }
             surface = surface.child(self.disclosure_body_motion(

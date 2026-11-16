@@ -6,7 +6,8 @@
 //! `dictation-xai` (xAI picked, no key), `dictation-hex-stopped` (Hex installed but not running),
 //! `dictation-hex-nomodel` (Hex running with no model ready), `dictation-install` (Hex
 //! missing; Install Hex plays a stubbed installer, then Open Hex works), `dictation-install-confirm`,
-//! `-asking`, `-running`, `-failed` and `-nobrew` (each step of it), `voice-agent` (the Voice Agent page on xAI with its saved key).
+//! `-asking`, `-running`, `-failed` and `-nobrew` (each step of it), `voice-agent` (the Voice Agent page on xAI with its saved key),
+//! `voice-agent-openai` (with `{"voiceAgentProvider":"openai"}`: no OpenAI key yet, Codex signed in with ChatGPT, so Use my ChatGPT sign-in is offered).
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -16,11 +17,11 @@ static INSTALLED: AtomicBool = AtomicBool::new(false);
 static OPENED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn owns(state: &str) -> bool {
-    state.starts_with("dictation") || state == "voice-agent"
+    state.starts_with("dictation") || state.starts_with("voice-agent")
 }
 
 pub(super) fn open_message(state: &str) -> Option<Value> {
-    if state == "voice-agent" {
+    if state.starts_with("voice-agent") {
         return Some(json!({ "initialTab": "voiceAgent" }));
     }
     owns(state).then(|| json!({ "initialTab": "dictation" }))
@@ -133,6 +134,7 @@ pub(super) fn rpc(state: &str, path: &str, _params: &Value) -> Option<Result<Val
             dictate_settings(state)
         }
         "/api/readVoiceAgent" => json!({
+            "chatgptSignInAvailable": state == "voice-agent-openai",
             "keys": {
                 "xai": { "configured": true, "unreadable": false },
                 "openai": { "configured": false, "unreadable": false }

@@ -42,7 +42,14 @@ pub struct ExtensionManifest {
     /// An agent skill the extension ships, offered when it is installed (skills.rs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skill: Option<ExtensionSkillManifest>,
+    /// One short line added to the note ordinary agent sessions get when they start or resume,
+    /// while the extension is installed, on and granted `agents.note` (agents/ghostex_note.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_note: Option<String>,
 }
+
+/// The longest `agentNote` an extension may add to an agent's launch note.
+pub(crate) const AGENT_NOTE_MAX_CHARS: usize = 400;
 
 /// An agent skill inside the extension's package: a folder holding `SKILL.md` (whose frontmatter
 /// `name` is `name`) and its files, covered by the package hash like the rest of the payload.
@@ -139,6 +146,12 @@ pub enum ExtensionPermission {
     /// (`/api/ext/v1/sessionMessage`).
     #[serde(rename = "sessions.message")]
     SessionsMessage,
+    /// Its manifest's `agentNote` joins the note ordinary agent sessions get at start and resume.
+    ///
+    /// CDXC:Extensions 2026-11-16 DECISION:
+    /// User (Q3431, Thread brief): sessions start their brief "automatic, but only when the Thread brief extension is installed and enabled. With it off or uninstalled, nothing happens and no session is touched." An extension's line rides the launch note Ghostex already rewrites at every start and resume (agents/marked_handovers.rs `with_launch_notes`), which coordinators and threads never take, so it reaches ordinary sessions only and stops at the next start once the extension is off, uninstalled or this permission removed. The user grants it on the install card like every other permission.
+    #[serde(rename = "agents.note")]
+    AgentsNote,
 }
 
 impl ExtensionPermission {
@@ -156,6 +169,7 @@ impl ExtensionPermission {
             Self::AgentsStart => "agents.start",
             Self::AgentsMessage => "agents.message",
             Self::SessionsMessage => "sessions.message",
+            Self::AgentsNote => "agents.note",
         }
     }
 
@@ -548,6 +562,25 @@ impl ExtensionManifest {
         }
         if let Some(skill) = &self.skill {
             super::skills::validate_skill_manifest(skill)?;
+        }
+        self.validate_agent_note()
+    }
+
+    /// An `agentNote` is one short line and comes with the `agents.note` permission it needs.
+    fn validate_agent_note(&self) -> ExtensionResult<()> {
+        let Some(note) = &self.agent_note else {
+            return Ok(());
+        };
+        let length = note.chars().count();
+        if note.trim().is_empty() || length > AGENT_NOTE_MAX_CHARS || note.contains('\n') {
+            return Err(ExtensionError::bad_request(format!(
+                "agentNote is one line of 1 to {AGENT_NOTE_MAX_CHARS} characters."
+            )));
+        }
+        if !self.permissions.contains(&ExtensionPermission::AgentsNote) {
+            return Err(ExtensionError::bad_request(
+                "agentNote needs the agents.note permission.",
+            ));
         }
         Ok(())
     }

@@ -197,6 +197,16 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 field("text"),
             ));
         }
+        ActionKind::MarkPagesSeen => {
+            let ids: Vec<&str> = action
+                .param("ids")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            effects.extend(crate::questions::later::mark_seen(state, &ids));
+        }
         ActionKind::QuestionRemove => {
             let id = action
                 .param("id")

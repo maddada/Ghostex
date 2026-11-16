@@ -1035,16 +1035,39 @@ pub(crate) fn browser_url_host(url: &str) -> Option<String> {
 }
 
 pub(crate) fn browser_tab_title_for_url(url: &str) -> String {
-    if let Some(host) = browser_url_host(url) {
-        return host;
-    }
-
     let trimmed = url.trim();
     if trimmed.is_empty() || trimmed == BROWSER_ADDRESS_ONLY_CEF_URL {
-        "New Tab".to_string()
-    } else {
-        trimmed.to_string()
+        return "New Tab".to_string();
     }
+    if let Some(file_title) = browser_local_file_tab_title(trimmed) {
+        return file_title;
+    }
+    if let Some(host) = browser_url_host(trimmed) {
+        return host;
+    }
+    trimmed.to_string()
+}
+
+fn browser_local_file_tab_title(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("file") {
+        return None;
+    }
+    let path_only = rest.split(['?', '#']).next().unwrap_or(rest);
+    let path_without_host = if path_only
+        .get(..10)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("localhost/"))
+    {
+        &path_only[9..]
+    } else {
+        path_only
+    };
+    let segment = path_without_host
+        .rsplit('/')
+        .find(|part| !part.is_empty())
+        .and_then(crate::terminal_model::file_url_percent_decode)
+        .filter(|part| !part.is_empty());
+    Some(segment.unwrap_or_else(|| "Local File".to_string()))
 }
 
 /*

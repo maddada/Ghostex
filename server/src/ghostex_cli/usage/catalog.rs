@@ -40,9 +40,22 @@ pub fn command_usage(command_name: &str) -> String {
     if command_name == "read-session-chat" {
         text.push_str(READ_SESSION_CHAT_HELP);
     }
+    if command_name == "page" {
+        text.push_str(PAGE_HELP);
+    }
     text.push_str("\nEvery command: ghostex --help");
     text
 }
+
+const PAGE_HELP: &str = "
+Examples:
+  ghostex page retire 0123456789abcdef0123456789abcdef
+  ghostex page retire http://127.0.0.1:8899/visual/0123456789abcdef0123456789abcdef --json
+
+Use it for a page you replaced with another file, or that is out of date. You do not need it after
+publishing a newer version of the same file with ghostex show: the newest card already replaces
+the older ones. The reader's card then reads Seen or Canceled; nothing is sent to you.
+";
 
 const READ_SESSION_CHAT_HELP: &str = "
 Examples:
@@ -217,6 +230,10 @@ pub fn usage() -> String {
             "Update this or a connected computer's Ghostex app",
         ),
         format_help_command(
+            "computer-code [--once] [--json]",
+            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer, then approve that computer here when its three words match; works on a server without the app, in your own terminal only",
+        ),
+        format_help_command(
             "computers [--json]",
             "List the computers this one is connected to; any agent can then start, message and read sessions there with --computer <name> (sessions, agents create/send/list, coordinator start-thread, read-session-chat, read-text and the other session verbs), or with a session ref from that computer",
         ),
@@ -263,6 +280,10 @@ pub fn usage() -> String {
         format_help_command(
             "show <file.html> [--title text] [--json] [--no-check]",
             "Publish a Ghostex page (gx page): a self-contained HTML page, and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open Ghostex pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at 360 and 600px and at 900px with large text and says what overflows, overlaps or did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow $ghostex-visuals and its examples/plan-review.html",
+        ),
+        format_help_command(
+            "page retire <page>... [--json]",
+            "Retire Ghostex pages you published and then replaced or no longer need: each page (its id or its address, the \"url\" in the block ghostex show printed) and its open questions stop waiting on the reader, so they leave the dock, the ? pill and the sidebar's dot on every computer and phone; the page still opens. A newer ghostex show of the same file already replaces its older cards by itself",
         ),
         format_help_command(
             "visual check <file.json|-|page.html> [--width N] [--text-scale P] [--light] [--out file.png]",

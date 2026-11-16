@@ -102,10 +102,31 @@ pub(crate) fn launch_note_text(
     (!text.is_empty()).then_some(text)
 }
 
-/// [`launch_note_text`] for the current settings.
-pub(crate) fn current_launch_note_text(paths: &GxserverPaths) -> Option<String> {
+/// [`launch_note_text`] for the current settings, followed, `with_extensions`, by the line of each
+/// installed extension that may add one (extensions/agent_notes.rs).
+pub(crate) fn current_launch_note_text(
+    paths: &GxserverPaths,
+    with_extensions: bool,
+) -> Option<String> {
     let note = ghostex_note_enabled(paths).then(|| ghostex_note_text(agent_preview_browser(paths)));
-    launch_note_text(note.as_deref(), super::marked_handovers_enabled(paths))
+    let text = launch_note_text(note.as_deref(), super::marked_handovers_enabled(paths));
+    // Unit tests assert exact commands, which must not depend on the user's extensions.
+    if cfg!(test) || !with_extensions {
+        return text;
+    }
+    with_extension_notes(
+        text,
+        &crate::extensions::agent_notes::installed_agent_notes(paths),
+    )
+}
+
+/// `text` with each extension's line after it, as one text.
+fn with_extension_notes(text: Option<String>, notes: &[String]) -> Option<String> {
+    let parts = text
+        .into_iter()
+        .chain(notes.iter().cloned())
+        .collect::<Vec<_>>();
+    (!parts.is_empty()).then(|| parts.join("\n\n"))
 }
 
 #[cfg(test)]

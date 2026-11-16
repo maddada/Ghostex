@@ -102,6 +102,11 @@ pub struct PageRef {
     /// The file the page was published from, which the card names instead of the page's address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+    /// Which file it was published from, as `ghostex show` keys the file's whole path (16 hex
+    /// characters, server/src/ghostex_cli/show.rs `source_key`): a later page with the same source
+    /// replaces this one in the chat. `None` for blocks printed before 2026-11-16.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     /// The agent marked the page `"open": "popup"`. Ghostex apps before 2026-10-26 float only a
     /// marked card; the desktop now opens every card where Open Ghostex pages in says.
     pub popup: bool,

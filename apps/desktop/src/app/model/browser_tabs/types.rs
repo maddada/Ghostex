@@ -172,7 +172,7 @@ impl BrowserBodyPlaceholder {
 
     pub(crate) fn from_tab(tab: &BrowserTab, has_cef_surface: bool) -> Self {
         let sanitized_url = if tab.state == BrowserTabState::Loaded {
-            sanitize_browser_tab_url_for_state(&tab.url)
+            sanitize_browser_tab_url_for_tab(&tab.url, tab.remote_machine_id.as_deref())
         } else {
             None
         };

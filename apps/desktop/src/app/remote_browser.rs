@@ -257,8 +257,19 @@ impl GhostexGpuiApp {
                         Ok(false) => false,
                         result => {
                             app.remote_browser.context_pending.remove(&profile);
-                            if let Err(error) = result { app.remote_browser.errors.insert(machine_id.clone(), error.to_string()); }
-                            else { app.sync_active_browser_tab_to_surface(window, cx); }
+                            if let Err(error) = result {
+                                app.remote_browser.errors.insert(machine_id.clone(), error.to_string());
+                                app.pending_startup_browser_remote_machines.remove(&machine_id);
+                            } else {
+                                if app.active_mode == TitlebarMode::Browser
+                                    && app
+                                        .project_editor_shell
+                                        .is_mode_awake(TitlebarMode::Browser)
+                                {
+                                    app.sync_active_browser_tab_to_surface(window, cx);
+                                }
+                                app.reload_pending_startup_browser_tabs_for_remote_machine(&machine_id, cx);
+                            }
                             cx.notify(); true
                         }
                     }
@@ -267,6 +278,7 @@ impl GhostexGpuiApp {
             }
             let _ = this.update(cx, |app, cx| {
                 app.remote_browser.context_pending.remove(&profile);
+                app.pending_startup_browser_remote_machines.remove(&machine_id);
                 app.remote_browser.errors.insert(machine_id, "The remote browser network did not initialize. Reconnect the computer to try again.".into());
                 cx.notify();
             });
@@ -391,13 +403,21 @@ impl GhostexGpuiApp {
                 this.remote_browser.pending.remove(&machine_id);
                 match result {
                     Ok(tunnel) => {
-                        this.remote_browser.tunnels.insert(machine_id, tunnel);
+                        this.remote_browser.tunnels.insert(machine_id.clone(), tunnel);
+                        if this.active_mode == TitlebarMode::Browser
+                            && this
+                                .project_editor_shell
+                                .is_mode_awake(TitlebarMode::Browser)
+                        {
+                            this.sync_active_browser_tab_to_surface(window, cx);
+                        }
+                        this.reload_pending_startup_browser_tabs_for_remote_machine(&machine_id, cx);
                     }
                     Err(message) => {
-                        this.remote_browser.errors.insert(machine_id, message);
+                        this.remote_browser.errors.insert(machine_id.clone(), message);
+                        this.pending_startup_browser_remote_machines.remove(&machine_id);
                     }
                 }
-                this.sync_active_browser_tab_to_surface(window, cx);
                 cx.notify();
             });
         })

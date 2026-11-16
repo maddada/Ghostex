@@ -12,10 +12,27 @@ use crate::session_chat_send::{
 pub(crate) const AGENT_DID_NOT_EXIT: &str =
     "The agent did not exit back to the shell, so the resume command was not typed.";
 
-/// Whether `error` is the exit giving up with the agent still holding the terminal, the one failure a
-/// stop-and-restart of the session gets past (accounts/restart.rs).
-pub(crate) fn did_not_exit(error: &SessionChatSendError) -> bool {
-    error.failure == SessionChatSendFailure::ComposerNotReady && error.message == AGENT_DID_NOT_EXIT
+/// Why an account switch's exit gave up: the session's processes could not be read, so whether the
+/// shell had the terminal back was never known.
+pub(crate) const AGENT_NOT_INSPECTED: &str =
+    "Ghostex could not check the session's processes while exiting the agent, so the resume command was not typed.";
+
+/// Consecutive failed reads of the session's processes the exit sits out before it gives up.
+const FAILED_READS_LIMIT: u32 = 10;
+
+/// Whether `error` is the exit giving up without the resume command typed (the agent kept the
+/// terminal, or the session could not be read), the failures a Full Reload of the session on the
+/// selected account gets past (accounts/restart.rs).
+///
+/// CDXC:AgentProviders 2026-11-16 WHY:
+/// User, on GitHub #630: "Full reload is better than sleep wake". A switch that could not read the
+/// session used to stop with "Could not inspect the agent", the agent already stopped and the
+/// session holding an empty shell, so the user had to put it to sleep, switch and wake it. A failed
+/// read now ends in the same recovery as an agent that will not exit: the session is reloaded on
+/// the selected account and resumes its conversation there.
+pub(crate) fn reload_recovers(error: &SessionChatSendError) -> bool {
+    error.failure == SessionChatSendFailure::ComposerNotReady
+        && (error.message == AGENT_DID_NOT_EXIT || error.message == AGENT_NOT_INSPECTED)
 }
 
 /// Account switching deliberately cancels the old agent regardless of its screen.
@@ -24,7 +41,7 @@ pub(crate) fn did_not_exit(error: &SessionChatSendError) -> bool {
 /// CDXC:AgentProviders 2026-09-29 WHY:
 /// With a background shell or agent running, Claude's second Ctrl+C opens an "Exit and stop tasks / Move to background and exit / Stay" dialog that needs two more Ctrl+C presses to exit (stopping the tasks). The old three-Ctrl+C cycle sent its Escape right after the third press, cancelling that dialog every round, so the switch looped until it timed out. Each round therefore sends four Ctrl+C presses before its Escape.
 pub(crate) async fn interrupt_until_exited(
-    home: &Path,
+    _home: &Path,
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
@@ -37,6 +54,7 @@ pub(crate) async fn interrupt_until_exited(
     let mut next_key = 0;
     let mut shell_ready_since = None;
     let mut shell_starting_since = None;
+    let mut failed_reads = 0;
     loop {
         if cancelled() {
             return Err(error(
@@ -44,29 +62,27 @@ pub(crate) async fn interrupt_until_exited(
                 "The switch was cancelled.",
             ));
         }
+        // CDXC:AgentProviders 2026-11-16 WHY: the first read runs before any key is sent, so a
+        // session that cannot be read is never stopped by this loop (GitHub #630). A read that
+        // fails once the agent is stopping is retried; only reads that keep failing give up, and
+        // the switch then reloads the session (`reload_recovers`).
         let name = zmx_name.to_string();
-        let home = home.to_path_buf();
-        let running = tokio::task::spawn_blocking(move || {
-            crate::zmx::read_zmx_session_process_identities(std::slice::from_ref(&name), &home)
-                .map_err(|_| ())
-                .and_then(|identities| {
-                    let running = identities.contains_key(&name);
-                    let owner = if running {
-                        TerminalOwner::Command
-                    } else {
-                        terminal_owner(&name)?
-                    };
-                    Ok((running, owner))
-                })
-        })
-        .await;
-        let (running, owner) = match running {
-            Ok(Ok(observation)) => observation,
+        let observation = tokio::task::spawn_blocking(move || observe(&name)).await;
+        let (running, owner) = match observation {
+            Ok(Ok(observation)) => {
+                failed_reads = 0;
+                observation
+            }
             _ => {
-                return Err(error(
-                    SessionChatSendFailure::ComposerNotReady,
-                    "Could not inspect the agent while exiting it. Retry the switch.",
-                ))
+                failed_reads += 1;
+                if failed_reads >= FAILED_READS_LIMIT || Instant::now() >= deadline {
+                    return Err(error(
+                        SessionChatSendFailure::ComposerNotReady,
+                        AGENT_NOT_INSPECTED,
+                    ));
+                }
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                continue;
             }
         };
         if owner == TerminalOwner::ShellStarting {
@@ -130,16 +146,31 @@ pub(crate) enum TerminalOwner {
 /// without a line editor reads its prompt that way.
 const SHELL_STARTING_LIMIT: Duration = Duration::from_secs(8);
 
+/// Who holds the session's terminal, from one read of the session's own processes
+/// (zmx/session_tree.rs); `Err` when they cannot be read or no daemon runs for the session.
+pub(crate) fn terminal_owner(zmx_name: &str) -> Result<TerminalOwner, ()> {
+    observe(zmx_name).map(|(_, owner)| owner)
+}
+
+/// Whether the session runs an agent, and who holds its terminal.
+///
 /// CDXC:AgentProviders 2026-10-24 WHY:
 /// A shell holding its terminal is not yet a shell at its prompt. Until its startup files finish, zsh holds the terminal in line mode and an agent session's start command is still to run from the first prompt (zmx/zsh_startup.rs), so a resume or switch command typed then sits in the terminal's input until that start command reads it. A draft switched from Claude to Codex in its first seconds could do that, or its command could be left unrun at the prompt (GitHub #290). The shell counts as at its prompt only once its line editor has taken the terminal out of line mode (zsh, bash and fish all do); the mode is read from the terminal itself.
-pub(crate) fn terminal_owner(zmx_name: &str) -> Result<TerminalOwner, ()> {
-    let Some(tty) = shell_owning_terminal(zmx_name)? else {
-        return Ok(TerminalOwner::Command);
+fn observe(zmx_name: &str) -> Result<(bool, TerminalOwner), ()> {
+    let tree = crate::zmx::read_zmx_session_tree(zmx_name)?.ok_or(())?;
+    if tree.agent_identity().is_some() {
+        return Ok((true, TerminalOwner::Command));
+    }
+    let Some(tty) = shell_owning_terminal(&tree) else {
+        return Ok((false, TerminalOwner::Command));
     };
-    Ok(match line_mode(&tty) {
-        Some(true) => TerminalOwner::ShellStarting,
-        Some(false) | None => TerminalOwner::ShellPrompt,
-    })
+    Ok((
+        false,
+        match line_mode(&tty) {
+            Some(true) => TerminalOwner::ShellStarting,
+            Some(false) | None => TerminalOwner::ShellPrompt,
+        },
+    ))
 }
 
 /// Whether the terminal device `tty` (as `ps` prints it) is in line mode, `None` when unreadable.
@@ -177,64 +208,39 @@ fn line_mode(_: &str) -> Option<bool> {
 
 /// CDXC:AgentProviders 2026-09-22 WHY:
 /// A missing agent PID can be a gap inside an older shell restore script, with a resume lookup or account wrapper still running. Only an idle foreground shell may receive the new account's command.
-/// The process capture must drain stdout while ps runs; waiting for exit before reading fills the pipe on machines with many sessions and falsely times out.
-/// Answers the shell's terminal device while the shell holds the terminal.
+/// Answers the shell's terminal device while the daemon's own shell holds the terminal alone.
 #[cfg(not(windows))]
-fn shell_owning_terminal(zmx_name: &str) -> Result<Option<String>, ()> {
-    let output = crate::zmx::run_zmx_probe_script(
-        "ps -axo pid=,ppid=,pgid=,tpgid=,tty=,command=".to_string(),
-        crate::zmx::ZmxCommandOptions {
-            stdout_limit_bytes: Some(crate::zmx::GXSERVER_ZMX_PROCESS_SNAPSHOT_STDOUT_LIMIT_BYTES),
-            timeout_ms: Some(3_000),
-            ..Default::default()
-        },
-    )
-    .map_err(|_| ())?;
-    if output.exit_code != 0 || output.stdout_truncated {
-        return Err(());
-    }
-    let mut rows = Vec::new();
-    let mut identity_rows = String::new();
-    for line in output.stdout.lines() {
-        let mut fields = line.split_whitespace();
-        let mut number = || fields.next().and_then(|value| value.parse::<i64>().ok());
-        let (Some(pid), Some(ppid), Some(pgid), Some(tpgid)) =
-            (number(), number(), number(), number())
-        else {
-            return Err(());
-        };
-        let tty = fields.next().ok_or(())?.to_string();
-        let command = fields.collect::<Vec<_>>().join(" ");
-        identity_rows.push_str(&format!("{pid} {ppid} {command}\n"));
-        rows.push((pid, ppid, pgid, tpgid, tty, command));
-    }
-    let root = crate::zmx::find_zmx_daemon_process_id(&identity_rows, zmx_name).ok_or(())?;
-    let shell = rows.iter().find(|(pid, ppid, pgid, tpgid, _, command)| {
-        *ppid == root
-            && *pgid > 0
-            && pgid == tpgid
-            && command
-                .split_whitespace()
-                .next()
-                .and_then(|name| Path::new(name).file_name())
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| {
-                    matches!(
-                        name.trim_start_matches('-'),
-                        "sh" | "bash" | "zsh" | "fish" | "ksh" | "dash" | "nu"
-                    )
-                })
-            && !rows
-                .iter()
-                .any(|(other_pid, _, other_group, _, _, _)| other_pid != pid && other_group == pgid)
-    });
-    Ok(shell.map(|(_, _, _, _, tty, _)| tty.clone()))
+fn shell_owning_terminal(tree: &crate::zmx::SessionTree) -> Option<String> {
+    let processes = &tree.processes;
+    processes
+        .iter()
+        .find(|process| {
+            process.ppid == tree.root
+                && process.group > 0
+                && process.group == process.foreground_group
+                && process
+                    .command
+                    .split_whitespace()
+                    .next()
+                    .and_then(|name| Path::new(name).file_name())
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| {
+                        matches!(
+                            name.trim_start_matches('-'),
+                            "sh" | "bash" | "zsh" | "fish" | "ksh" | "dash" | "nu"
+                        )
+                    })
+                && !processes
+                    .iter()
+                    .any(|other| other.pid != process.pid && other.group == process.group)
+        })
+        .map(|process| process.terminal.clone().unwrap_or_default())
 }
 
 // Native Windows has no POSIX foreground process groups. It retains the agent-process exit check above.
 #[cfg(windows)]
-fn shell_owning_terminal(_: &str) -> Result<Option<String>, ()> {
-    Ok(Some(String::new()))
+fn shell_owning_terminal(_: &crate::zmx::SessionTree) -> Option<String> {
+    Some(String::new())
 }
 
 fn error(failure: SessionChatSendFailure, message: &str) -> SessionChatSendError {

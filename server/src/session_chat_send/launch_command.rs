@@ -162,7 +162,7 @@ pub(super) async fn run_shell_command(
     zmx_name: &str,
     source: &str,
     command: &str,
-    home_dir: &Path,
+    _home_dir: &Path,
     timeout_ms: u64,
     cancelled: &(dyn Fn() -> bool + Send + Sync),
 ) -> Result<(), SessionChatSendError> {
@@ -187,19 +187,10 @@ pub(super) async fn run_shell_command(
             ));
         }
         let name = zmx_name.to_string();
-        let home = home_dir.to_path_buf();
-        let owner = tokio::task::spawn_blocking(move || {
-            let running =
-                crate::zmx::read_zmx_session_process_identities(std::slice::from_ref(&name), &home)
-                    .map_err(|_| ())?
-                    .contains_key(&name);
-            if running {
-                return Ok(TerminalOwner::Command);
-            }
-            crate::accounts::exit::terminal_owner(&name)
-        })
-        .await
-        .unwrap_or(Err(()));
+        let owner =
+            tokio::task::spawn_blocking(move || crate::accounts::exit::terminal_owner(&name))
+                .await
+                .unwrap_or(Err(()));
         let line = match owner {
             Ok(TerminalOwner::Command) => return Ok(()),
             Ok(TerminalOwner::ShellPrompt) => grid_text(zmx_name)

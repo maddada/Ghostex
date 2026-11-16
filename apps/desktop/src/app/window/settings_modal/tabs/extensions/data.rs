@@ -750,6 +750,7 @@ pub(crate) fn permission_label(permission: &str) -> String {
         "agents.start" => "Start agents",
         "agents.message" => "Hear from your agents",
         "sessions.message" => "Message a thread when you tap its panel",
+        "agents.note" => "Tell new agent sessions about it",
         other => other,
     }
     .to_string()
@@ -770,6 +771,9 @@ pub(crate) fn permission_description(permission: &str) -> &'static str {
         "agents.message" => "An agent can send it updates about its own thread.",
         "sessions.message" => {
             "When you tap a button in a thread's panel, it can send that thread one short message."
+        }
+        "agents.note" => {
+            "Adds one short line to what agent sessions are told when they start, except coordinators and their threads."
         }
         _ => "",
     }

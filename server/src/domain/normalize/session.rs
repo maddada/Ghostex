@@ -369,12 +369,13 @@ pub(crate) fn normalize_create_agent_session_params(
     let base_command = read_optional_text(launch_settings.get("agentCommand"))
         .or_else(|| default_agent_command(&agent_id).map(str::to_string))
         .unwrap_or_default();
-    let command = crate::agents::resolve_agent_launch_command(
+    let command = crate::agents::resolve_session_launch_command(
         &agent_id,
         &base_command,
         read_optional_text(launch_settings.get("acceptAllMode")).as_deref(),
         false,
         read_optional_text(launch_settings.get("icon")).as_deref(),
+        crate::agents::session_is_coordinator(&runtime_settings),
     );
     let startup_text = if command.is_empty() {
         String::new()

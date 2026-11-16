@@ -3192,6 +3192,19 @@
       "agentWritable": true
     },
     {
+      "key": "reloadBrowserTabsOnStartup",
+      "title": "Reload open pages on launch",
+      "subtitle": "Automatically reload the open project's browser tabs when Ghostex starts so pages are ready before you click them.",
+      "tab": "tools",
+      "tabTitle": "Files & Links",
+      "section": "browser",
+      "sectionTitle": "Browser",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "grokWebStartPage",
       "title": "Grok Bot start page",
       "subtitle": "The page the Grok Bot view opens on, for every Grok Bot login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com. Shown while the Grok Bot extension is on.",
@@ -13688,7 +13701,7 @@
     {
       "key": "voiceAgentOpenaiKey",
       "title": "OpenAI API key",
-      "subtitle": "Shown under the provider when it is OpenAI GPT Realtime. Dictation uses the same key when its engine is OpenAI. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.",
+      "subtitle": "Shown under the provider when it is OpenAI GPT Realtime. Dictation uses the same key when its engine is OpenAI. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead. When Codex is signed in with ChatGPT on this computer, Use my ChatGPT sign-in uses that sign-in instead of a key.",
       "tab": "voiceAgent",
       "tabTitle": "Voice Agent",
       "section": "provider",

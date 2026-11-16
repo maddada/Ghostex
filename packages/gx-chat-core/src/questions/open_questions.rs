@@ -673,7 +673,11 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
             })
         })
         .collect();
+    let form_count = found.len();
     for entry in state.session.queue_prompts.iter().flatten() {
+        if entry.get("state").and_then(serde_json::Value::as_str) == Some("failed") {
+            continue;
+        }
         let text = entry["prompt"]["text"]
             .as_str()
             .or_else(|| entry["text"].as_str())
@@ -681,9 +685,15 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
         if !text.contains("<ghostex-page-answers") {
             continue;
         }
-        if let Some((answers, _)) = crate::transcript::page_answers::split_page_answers(text) {
-            if !found.iter().any(|known| known.page_id == answers.page_id) {
-                found.push(answers);
+        for answers in crate::transcript::page_answers::split_all_page_answers(text).0 {
+            // Form answers keep precedence; a later queued answer replaces an earlier queued one.
+            match found
+                .iter()
+                .position(|known| known.page_id == answers.page_id)
+            {
+                Some(index) if index >= form_count => found[index] = answers,
+                Some(_) => {}
+                None => found.push(answers),
             }
         }
     }
@@ -1187,6 +1197,8 @@ mod tests {
             superseded: Vec::new(),
             inherited: false,
             seen_only: false,
+            source: None,
+            replaced: false,
             prints: Vec::new(),
             rounds: Vec::new(),
             said: Vec::new(),
@@ -2130,6 +2142,8 @@ mod paged_labels_tests {
                 superseded: Vec::new(),
                 inherited: false,
                 seen_only: false,
+                source: None,
+                replaced: false,
                 prints: Vec::new(),
                 rounds: Vec::new(),
                 said: Vec::new(),

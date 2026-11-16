@@ -86,6 +86,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::QuestionRemove
         | ActionKind::SnoozeQuestion
         | ActionKind::CancelQuestion
+        | ActionKind::MarkPagesSeen
         | ActionKind::QuestionsReply
         | ActionKind::QuestionListFilter
         | ActionKind::OpenResource

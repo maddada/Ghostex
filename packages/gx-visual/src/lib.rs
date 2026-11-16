@@ -185,6 +185,7 @@ pub fn render_json_at(
             "open": if page.popup { "popup" } else { "browser" },
             "pageId": page.page_id(),
             "questions": page.questions,
+            "awaitsSeen": page.awaits_seen,
         }),
         Err(message) => json!({
             "kind": "error",

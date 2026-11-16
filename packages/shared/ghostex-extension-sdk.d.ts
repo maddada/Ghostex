@@ -61,7 +61,8 @@ export interface GhostexBridgeError extends Error {
     | 'sessions.open'
     | 'agents.start'
     | 'agents.message'
-    | 'sessions.message';
+    | 'sessions.message'
+    | 'agents.note';
 }
 
 export interface GhostexExtensionApi {
@@ -107,7 +108,15 @@ export interface GhostexExtensionApi {
       title: string;
       agent: string;
       activity: string;
+      lifecycleState?: string;
+      awaitingAnswer?: boolean;
       lastActiveAt: string;
+      /** The session it was forked from, when it is a fork. */
+      forkedFrom?: string | null;
+      /** `coordinator`, `thread` (a coordinator's thread) or `session` (every other one). Ghostex 11.8 and newer. */
+      role?: 'coordinator' | 'thread' | 'session';
+      /** A thread's coordinator, `<projectId>:<sessionId>`. */
+      coordinator?: string | null;
     }>
   >;
   /** `sessions` and `projects` changed (with the read permission), the `panel` changed, or an `action` was tapped. */

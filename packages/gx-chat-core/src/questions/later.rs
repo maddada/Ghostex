@@ -174,6 +174,19 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
     effects
 }
 
+/// `markPagesSeen {ids}`: the dock's Mark all seen. Each page that waits only to be looked at
+/// ("not seen yet") is removed as `remove` does, so it leaves the dock, the counts and the
+/// sidebar's dot on every client and gxserver keeps it across restarts. Nothing reaches the agent:
+/// a page's own Mark as seen tells it, but one message per page would bury it.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User picked "reply and build" on issue #626 (a dock with 16 page cards "not seen yet", most of
+/// them already read): the dock gets Mark all seen, on the desktop and the phone. A page cleared
+/// this way reads Seen on its card, as one marked seen on the page does.
+pub fn mark_seen(state: &mut ChatState, ids: &[&str]) -> Vec<Effect> {
+    ids.iter().flat_map(|id| remove(state, id)).collect()
+}
+
 /// `questionsReply {id, text}`: the reader's own words on a whole form or page, from its dock
 /// row's Reply, sent to the agent as a message without touching the chat box. `text` comes already
 /// after its title and the questions it still asks ("Triage (Q12 to Q14): words", `extras::work_cards`), as a work

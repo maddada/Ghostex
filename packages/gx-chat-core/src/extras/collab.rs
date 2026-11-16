@@ -102,18 +102,27 @@ pub fn owner_name(state: &ChatState) -> String {
 /// A held message that carries a form's or page's answers, as the answers card the transcript
 /// draws for them (`pageAnswers`), with what else it says (`answersText`). `by` names who answered
 /// when it is not the reader.
-fn held_answers(state: &ChatState, row: &Value, by: Option<&str>) -> Option<(Value, String)> {
-    let (answers, rest) = crate::transcript::page_answers::split_page_answers(text(row, "text"))?;
-    let form = state
-        .transcript_view
-        .question_forms
-        .iter()
-        .find(|form| form.id == answers.page_id);
-    let mut card = crate::transcript::page_answers::project_page_answers(&answers, form);
-    if let (Some(by), Some(object)) = (by, card.as_object_mut()) {
-        object.insert("by".to_string(), json!(by));
+fn held_answers(state: &ChatState, row: &Value, by: Option<&str>) -> Option<(Vec<Value>, String)> {
+    let (envelopes, rest) = crate::transcript::page_answers::split_all_page_answers(text(row, "text"));
+    if envelopes.is_empty() {
+        return None;
     }
-    Some((card, split_image_references(&rest).0))
+    let cards = envelopes
+        .iter()
+        .map(|answers| {
+            let form = state
+                .transcript_view
+                .question_forms
+                .iter()
+                .find(|form| form.id == answers.page_id);
+            let mut card = crate::transcript::page_answers::project_page_answers(answers, form);
+            if let (Some(by), Some(object)) = (by, card.as_object_mut()) {
+                object.insert("by".to_string(), json!(by));
+            }
+            card
+        })
+        .collect();
+    Some((cards, split_image_references(&rest).0))
 }
 
 /// On a guest's page, a form whose answers the owner held follows what the owner did with them
@@ -177,9 +186,11 @@ pub fn own_held_answers(state: &ChatState, form_id: &str) -> Option<Value> {
         .and_then(Value::as_array)?
         .iter()
         .filter(|row| text(row, "name") == me)
-        .filter_map(|row| crate::transcript::page_answers::split_page_answers(text(row, "text")))
-        .find(|(answers, _)| answers.page_id == form_id)
-        .map(|(answers, _)| answers.answers)
+        .flat_map(|row| {
+            crate::transcript::page_answers::split_all_page_answers(text(row, "text")).0
+        })
+        .rfind(|answers| answers.page_id == form_id)
+        .map(|answers| answers.answers)
 }
 
 /// This page is a guest's (`setCollabGuest`).
@@ -273,20 +284,32 @@ pub fn project(state: &ChatState) -> Value {
         .iter()
         .map(|(_, held_id)| held_id.as_str())
         .collect();
+    let attach_answers = |entry: &mut Value, cards: Option<(Vec<Value>, String)>| {
+        if let (Some((mut cards, _)), Some(object)) = (cards, entry.as_object_mut()) {
+            let mut iter = cards.drain(..);
+            object.insert("answers".to_string(), iter.next().unwrap_or(Value::Null));
+            let extra: Vec<Value> = iter.collect();
+            if !extra.is_empty() {
+                object.insert("extraAnswers".to_string(), Value::Array(extra));
+            }
+        }
+    };
     let cards: Vec<Value> = if guest {
         Vec::new()
     } else {
         held.iter()
             .map(|row| {
                 let answers = held_answers(state, row, Some(text(row, "name")));
-                json!({
+                let mut entry = json!({
                     "id": text(row, "id"),
                     "title": format!("Message from {}", text(row, "name")),
                     "text": answers.as_ref().map_or_else(|| held_text(row), |(_, rest)| rest.clone()),
-                    "answers": answers.map(|(card, _)| card),
+                    "answers": Value::Null,
                     "images": held_images(row),
                     "busy": busy.contains(&text(row, "id")),
-                })
+                });
+                attach_answers(&mut entry, answers);
+                entry
             })
             .collect()
     };
@@ -295,7 +318,7 @@ pub fn project(state: &ChatState) -> Value {
             .map(|row| {
                 let name = text(row, "name");
                 let answers = held_answers(state, row, (name != me).then_some(name));
-                json!({
+                let mut entry = json!({
                     "id": text(row, "id"),
                     "label": if name == me {
                         format!("{name} (you) \u{b7} Waiting for {owner}")
@@ -303,9 +326,11 @@ pub fn project(state: &ChatState) -> Value {
                         format!("{name} \u{b7} Waiting for {owner}")
                     },
                     "text": answers.as_ref().map_or_else(|| held_text(row), |(_, rest)| rest.clone()),
-                    "answers": answers.map(|(card, _)| card),
+                    "answers": Value::Null,
                     "images": held_images(row),
-                })
+                });
+                attach_answers(&mut entry, answers);
+                entry
             })
             .collect()
     } else {

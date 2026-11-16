@@ -27,7 +27,7 @@ use ghostex_gx_chat_core::transcript::open_questions::{
     asker_entries, askers, linkable_tags, mark_inherited, settle_askers, share_answers,
     tags_answered_in_words, AskerKind, Found, TagState,
 };
-use ghostex_gx_chat_core::transcript::page_answers::answers_page_id;
+use ghostex_gx_chat_core::transcript::page_answers::answers_page_ids;
 use ghostex_gx_chat_core::transcript::question_forms::{question_forms, QuestionForm};
 use rusqlite::OptionalExtension;
 use serde_json::{json, Map, Value};
@@ -475,17 +475,17 @@ impl Ledger {
                         continue;
                     }
                     self.turns += 1;
-                    let answers_id = answers_page_id(&text);
-                    if let Some(id) = answers_id.clone() {
+                    let answers_ids = answers_page_ids(&text);
+                    for id in &answers_ids {
                         if let Some(at) = message.byte_offset {
                             self.answers_at.entry(id.clone()).or_insert(at);
                         }
-                        self.answered.push(id);
+                        self.answered.push(id.clone());
                     }
                     // Answers in the user's own words ("Q12: yes"), and the tags an answers
                     // envelope names ("Q1277": …), settle questions asked before them whatever id
                     // they have now (gx-chat-core's `said_in`, which leaves out a thread's report).
-                    if answers_id.is_some() || !tags_answered_in_words(&text).is_empty() {
+                    if !answers_ids.is_empty() || !tags_answered_in_words(&text).is_empty() {
                         let converted = serde_json::to_value(&message)
                             .ok()
                             .and_then(|value| serde_json::from_value::<ChatMessage>(value).ok());
@@ -801,7 +801,8 @@ because what the reading keeps may have changed with it; a change to what
 // `without_work_ref`), so `observe` keeps those messages; a copy without them is read again.
 // 6: `observe` keeps the replies whose page waits to be seen (`awaitsSeen`), so a copy without
 // them is read again (CDXC:Coordinators 2026-11-14 in `Ledger::observe`).
-const SAVED_LEDGER_FORMAT: u32 = 6;
+// 7: `observe` keeps every answers envelope when multiple envelopes share one message (2026-11-14).
+const SAVED_LEDGER_FORMAT: u32 = 7;
 const SAVED_LEDGERS_DIR: &str = "open-questions";
 const SAVED_LEDGER_EVERY: Duration = Duration::from_secs(60);
 const SAVED_LEDGER_UNUSED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);
@@ -955,7 +956,7 @@ fn queued_answers(db: &rusqlite::Connection, project_id: &str, session_id: &str)
         .queue
         .iter()
         .filter(|prompt| prompt.state != "failed")
-        .filter_map(|prompt| answers_page_id(&prompt.text))
+        .flat_map(|prompt| answers_page_ids(&prompt.text))
         .collect()
 }
 

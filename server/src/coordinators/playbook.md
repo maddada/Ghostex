@@ -202,6 +202,9 @@ For every question:
   your picks", a later question, a page you replace, simply doing it): `item ask W<n> --withdraw Q<n>`
   (`--done Q<n>` when the user did the task) for an ask, `"withdraw": ["Q40", "Q41"]` in a
   ` ```questions ` block for a form or page.
+- A page you replace: `ghostex show` of a newer version of the same file replaces its older cards
+  by itself. Retire a page you replaced with another file, or that is out of date, with
+  `ghostex page retire <page>`, which takes back its open questions too (`ghostex page --help`).
 
 The user never has to open a thread: ask a thread's questions yourself, renumbered into your count,
 and send the answers back; publish a thread's page again from your own session with

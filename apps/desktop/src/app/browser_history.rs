@@ -4,7 +4,7 @@ use crate::browser_history::{self, HistoryPage};
 use crate::*;
 
 fn history_page(tab: &BrowserTab, project_id: &str, project_name: &str) -> Option<HistoryPage> {
-    let url = sanitize_browser_tab_url_for_state(&tab.url)?;
+    let url = sanitize_browser_tab_url_for_tab(&tab.url, tab.remote_machine_id.as_deref())?;
     let favicon_url = if let Some(favicon) = &tab.runtime_favicon_image {
         Some(format!(
             "data:{};base64,{}",
@@ -94,7 +94,9 @@ impl GhostexGpuiApp {
         ) {
             for tab in &tabs.tabs {
                 for url in &tab.navigation_history.entries {
-                    let Some(url) = sanitize_browser_tab_url_for_state(url) else {
+                    let Some(url) =
+                        sanitize_browser_tab_url_for_tab(url, tab.remote_machine_id.as_deref())
+                    else {
                         continue;
                     };
                     let Some(mut page) = history_page(

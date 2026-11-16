@@ -29,7 +29,7 @@ pub const FOLDED_INTO_WORK: &str = "foldedIntoWork";
 /// What one folded row counts as.
 enum Folded {
     Message,
-    Answer,
+    Answer(usize),
 }
 
 /// What `row` folds as, if it folds: another agent's message, or answers with nothing else.
@@ -41,7 +41,8 @@ fn folds_as(row: &Value) -> Option<Folded> {
         return Some(Folded::Message);
     }
     let answers = &row["pageAnswers"];
-    (answers.is_object() && answers["withText"] != true).then_some(Folded::Answer)
+    (answers.is_object() && answers["withText"] != true)
+        .then(|| Folded::Answer(crate::transcript::page_answers::row_page_answers(row).count()))
 }
 
 /// The sends a `sentMessages` list draws a card for.
@@ -102,7 +103,7 @@ fn fold_turn(item: &mut TranscriptItem, opener: Option<ProjectedMessage>) {
         };
         match kind {
             Folded::Message => messages += 1,
-            Folded::Answer => answers += 1,
+            Folded::Answer(count) => answers += count,
         }
         if let Value::Object(fields) = std::sync::Arc::make_mut(row) {
             fields.insert(FOLDED_INTO_WORK.into(), Value::Bool(true));

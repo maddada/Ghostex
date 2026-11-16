@@ -63,7 +63,8 @@ use viewer_detach::{ViewerDetachParser, ViewerDetachState};
 #[path = "terminal_model/working_directory.rs"]
 mod working_directory;
 pub(crate) use working_directory::{
-    file_url_local_path, terminal_local_hostname, terminal_working_directory_from_osc7,
+    file_url_local_path, file_url_percent_decode, terminal_local_hostname,
+    terminal_working_directory_from_osc7,
 };
 #[cfg(windows)]
 #[path = "terminal_model/zmx_control.rs"]
