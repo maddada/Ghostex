@@ -99,15 +99,35 @@ pub(crate) fn approve_plain(
         ghostex_owner_keys::confirm_presence(&request.summary)
             .map_err(|error| error.to_string())?;
     }
-    in_security_flow(|| {
-        rpc(
-            transport,
-            "/api/approveApprovalRequest",
-            json!({ "id": request.id }),
-        )
-    })
-    .map(|_| ())
-    .map_err(|(_, message)| message)
+    let approve = || {
+        in_security_flow(|| {
+            rpc(
+                transport,
+                "/api/approveApprovalRequest",
+                json!({ "id": request.id }),
+            )
+        })
+        .map(|_| ())
+        .map_err(|(_, message)| message)
+    };
+    // A new device, a terminal's pairing code or another owner on this computer: gxserver takes
+    // it only from this app's owner session (CDXC:Security 2026-11-16 in `super::door_call`).
+    if matches!(transport, super::Transport::Local) && opens_door(&request.action) {
+        return super::door_call(approve);
+    }
+    approve()
+}
+
+/// The requests gxserver lets only the owner session or a paired phone approve once this computer
+/// has one (`opens_door` in server/src/security/policy.rs).
+fn opens_door(action: &ghostex_gx_protocol::approval::SensitiveAction) -> bool {
+    use ghostex_gx_protocol::approval::SensitiveAction;
+    matches!(
+        action,
+        SensitiveAction::PairingApproveDevice
+            | SensitiveAction::PairingShowCode
+            | SensitiveAction::AddApproverKey
+    )
 }
 
 /*

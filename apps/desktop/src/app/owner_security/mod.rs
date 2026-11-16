@@ -17,7 +17,9 @@
 //! none of the owner session, owner key, approver key and signature below: this app approves there
 //! with one click on its token file and opens no owner session. They stay only for computers still
 //! on a gxserver from before plain approvals (11.2.2 and earlier); delete them once those no longer
-//! matter.
+//! matter. Since 2026-11-16 the owner session is opened on this computer's gxserver again for the
+//! door's calls alone (pairing codes and Approve, [`door_token`]), which gxserver keeps from the
+//! token file once this computer has an owner device.
 
 pub(crate) mod plain;
 pub(crate) mod ui;
@@ -76,6 +78,9 @@ struct OwnerSession {
     gave_up: bool,
     /// That gxserver takes plain approvals: no owner session is opened there (`plain.rs`).
     plain: bool,
+    /// `token` was opened for door calls only ([`door_call`]): every other call keeps the token
+    /// file.
+    door_only: bool,
 }
 
 static SESSIONS: Mutex<Option<HashMap<String, OwnerSession>>> = Mutex::new(None);
@@ -87,6 +92,120 @@ thread_local! {
     /// Set while this thread runs work the user didn't just start (a renewal, a retry loop), so
     /// an `approvalRequired` answer never shows the system prompt ([`without_prompts`]).
     static NO_PROMPTS: Cell<bool> = const { Cell::new(false) };
+}
+
+/// How soon after a failed attempt a door call tries to open the owner session again.
+const DOOR_RETRY_AFTER: Duration = Duration::from_secs(5);
+
+/*
+CDXC:Security 2026-11-16 DECISION:
+User (W524, "Owner only"): only this app or a paired phone makes pairing codes and approves new devices; agents running as the user, who can read the token file, must not. gxserver keeps the door for the owner session once this computer has an owner device (CDXC:Security 2026-11-16 in server/src/security/policy.rs), so this app opens its owner session on this computer's gxserver again (the owner key in the OS key store signs it; the first key, or the one in the minutes after the first start with the rule, goes in without a card, a later one waits for an Approve on a phone) and sends it only with those calls: the code in Connect a phone or computer, Settings > Remote and the 11.0.1 notice, and Approve ([`door_token`], picked where every call to this computer's gxserver picks its token). Every other call still goes with the token file, as since plain approvals.
+*/
+/// The token for a call to this computer's gxserver that makes a pairing code (`openTunnel`) or
+/// approves: the owner session, opened first if needed (blocks: never on the main thread).
+/// `Some(Err)` while this app waits for its own Approve on a phone, instead of sending the call
+/// with the token file, which gxserver would refuse or turn into a card of its own. `None` for
+/// every other call, and when the owner session can't be opened for another reason (the token
+/// file still keeps the door on a computer without an owner device).
+pub(crate) fn door_token(path: &str, params: &Value) -> Option<Result<String, String>> {
+    let door = match path {
+        "/api/remotePairingCode" => params.get("openTunnel").and_then(Value::as_bool) == Some(true),
+        "/api/approveApprovalRequest" => true,
+        _ => false,
+    };
+    if !door {
+        return None;
+    }
+    ensure_local_owner_session();
+    match with_session(LOCAL, |session| session.token.clone()) {
+        Some(token) => Some(Ok(token)),
+        None if path == "/api/remotePairingCode" => local_owner_refusal().map(Err),
+        None => None,
+    }
+}
+
+/// Runs `work`, an Approve of a new device, a terminal's pairing code or another owner on this
+/// computer, or answers why not while this app waits for its own Approve on a phone (gxserver
+/// would refuse it from the token file).
+pub(crate) fn door_call<R>(work: impl FnOnce() -> Result<R, String>) -> Result<R, String> {
+    ensure_local_owner_session();
+    if let Some(refusal) = local_owner_refusal() {
+        return Err(refusal);
+    }
+    work()
+}
+
+/// Why this app can't make a code or approve here yet: its owner key waits for an Approve on a
+/// phone, or that Approve was denied or lapsed. `None` when neither.
+fn local_owner_refusal() -> Option<String> {
+    let (open, waiting, gave_up) = with_session(LOCAL, |session| {
+        (
+            session.token.is_some(),
+            session.waiting_approval.is_some(),
+            session.gave_up,
+        )
+    });
+    let me = this_computer_name();
+    match (open, waiting, gave_up) {
+        (true, ..) => None,
+        (false, true, _) => Some(format!(
+            "This computer already has an owner. On your phone, approve \"Let {me} (Ghostex app) act as you on this computer\" once; then Ghostex here can show the code and approve devices."
+        )),
+        (false, false, true) => Some(format!(
+            "\"Let {me} (Ghostex app) act as you on this computer\" wasn't approved on your phone, so Ghostex here can't show the code or approve devices. Restart Ghostex to ask again, or do it from your phone."
+        )),
+        _ => None,
+    }
+}
+
+/// At start: the owner session on this computer's gxserver when it opens without anyone's
+/// Approve (the first owner key, this app's key already enrolled, or the minutes after gxserver's
+/// first start with the owner-only door). Makes no request; a door call asks later if needed.
+fn open_local_owner_session_quietly() {
+    if with_session(LOCAL, |session| session.token.is_some()) {
+        return;
+    }
+    match in_security_flow(|| open_owner_session(&Transport::Local, false)) {
+        Ok(token) => with_session(LOCAL, |session| {
+            if session.token.is_none() {
+                session.token = Some(token);
+                session.door_only = true;
+            }
+        }),
+        Err(error) => log::info!("owner session for pairing not opened at start: {error}"),
+    }
+}
+
+/// Opens the owner session on this computer's gxserver unless it is open or was tried in the last
+/// few seconds.
+fn ensure_local_owner_session() {
+    let start = with_session(LOCAL, |session| {
+        if session.token.is_some() || session.opening {
+            return false;
+        }
+        let due = session
+            .last_attempt
+            .is_none_or(|last| last.elapsed() >= DOOR_RETRY_AFTER);
+        if due {
+            session.opening = true;
+            session.last_attempt = Some(Instant::now());
+        }
+        due
+    });
+    if !start {
+        return;
+    }
+    let opened = in_security_flow(|| open_owner_session(&Transport::Local, true));
+    with_session(LOCAL, |session| {
+        session.opening = false;
+        match opened {
+            Ok(token) => {
+                session.token = Some(token);
+                session.door_only = true;
+            }
+            Err(error) => log::info!("owner session for pairing not opened: {error}"),
+        }
+    });
 }
 
 /// Whether a system prompt for one of the app's own calls is open now; a second call waits for
@@ -214,19 +333,34 @@ fn cached_token(transport: &Transport) -> Option<String> {
                         session.opening = false;
                         session.plain = true;
                     });
+                    // The owner-only door: enroll this app's key quietly now, while gxserver may
+                    // still take it without a card (CDXC:Security 2026-11-16 at `door_token`).
+                    if matches!(transport, Transport::Local) {
+                        open_local_owner_session_quietly();
+                    }
                     return;
                 }
                 let opened = in_security_flow(|| open_owner_session(&transport, true));
                 with_session(&transport.key(), |session| {
                     session.opening = false;
                     match opened {
-                        Ok(token) => session.token = Some(token),
+                        Ok(token) => {
+                            session.token = Some(token);
+                            session.door_only = false;
+                        }
                         Err(error) => log::warn!("owner session not opened: {error}"),
                     }
                 });
             });
     }
-    with_session(&key, |session| session.token.clone())
+    // On a gxserver that approves plainly the owner session goes only with door calls
+    // ([`door_call`]); everything else keeps the token file.
+    with_session(&key, |session| {
+        session
+            .token
+            .clone()
+            .filter(|_| !session.plain && !session.door_only)
+    })
 }
 
 /// The owner session's token for this computer's gxserver, when it is open.

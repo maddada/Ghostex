@@ -192,7 +192,12 @@ fn gxserver_post_typed_operation_once(
     // first during that wait is who the connect reaches.
     ghostex_paths::loopback_owner::check_host_port(GPUI_GXSERVER_LOCAL_API_HOST, port)
         .map_err(|error| error.to_string())?;
-    let token = read_gpui_gxserver_auth_token()?;
+    // A pairing code or an Approve goes with the app's owner session (CDXC:Security 2026-11-16
+    // in app/owner_security/mod.rs); every other call as before.
+    let token = match crate::app::owner_security::door_token(path, params) {
+        Some(token) => token?,
+        None => read_gpui_gxserver_auth_token()?,
+    };
     let owner_token = token.starts_with("gxo_").then(|| token.clone());
     stream
         .set_read_timeout(Some(timeout))
