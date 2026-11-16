@@ -463,6 +463,10 @@ impl ProjectIconProber for SystemProjectIconProber {
 The discovery itself, with the file loaded into a bounded data URL.
 */
 pub fn discover_project_icon(root: &Path) -> Option<ProjectIcon> {
+    // Judged before the folder is read, so an unmounted drive or a home folder still gets its icon.
+    if let Some(icon) = builtin::builtin_folder_icon(root) {
+        return Some(icon);
+    }
     // The root is canonicalized ONCE, and every candidate is measured against
     // that canonical root. Doing it here rather than per candidate also means a
     // project path that no longer exists costs one failed syscall, not thirty.
@@ -474,6 +478,7 @@ pub fn discover_project_icon(root: &Path) -> Option<ProjectIcon> {
     nested::discover_nested_icon(&canonical_root)
 }
 
+mod builtin;
 mod nested;
 
 fn discover_icon_in_directory(canonical_root: &Path, directory: &str) -> Option<ProjectIcon> {

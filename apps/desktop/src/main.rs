@@ -579,6 +579,11 @@ fn force_gpui_x11_backend_for_windowed_cef() {
     linux_x11_scale::pin_gpui_x11_scale_factor();
 }
 
+/// The X11 class (`WM_CLASS`) of every Ghostex window on Linux. Every window passes it as
+/// `WindowOptions::app_id`, pop-ups and other override-redirect windows included.
+///
+/// CDXC:PlatformSupport 2026-11-17 WHY:
+/// User, on Omarchy: "im not able to click on this on arch … it closes the usage pop up as soon as i try to. works on mac tho". Omarchy ships a Hyprland rule that sets `no_focus` on every floating XWayland window with an empty class and an empty title (default/hypr/windows.lua, "Fix some dragging issues with XWayland"). The work area and sidebar dropdowns (the usage pop-up, Notifications, Jobs, Share, the Start, Git and ⋯ menus), the hub and links hover cards and the modal close button opened without a class or title, so Hyprland's hit test skipped them, took a click on one for a click on the Ghostex window under it and raised that window over the pop-up: the usage pop-up's Rate limit resets list seemed to close the pop-up, which was only hidden behind the window. A window with the class is never matched by that rule.
 fn gpui_platform_window_app_id() -> Option<String> {
     #[cfg(target_os = "linux")]
     {

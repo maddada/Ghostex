@@ -284,6 +284,7 @@ fn open_corner_close_window(
         is_movable: false,
         is_resizable: false,
         is_minimizable: false,
+        app_id: crate::gpui_platform_window_app_id(),
         window_background: WindowBackgroundAppearance::Transparent,
         ..Default::default()
     };
