@@ -174,13 +174,13 @@ pub(crate) use activation_focus::{
     menu_bar_session_focus_id, palette_session_focus_id, system_notification_session,
 };
 pub(crate) use added_project::{NewProjectChoice, NewProjectStart, read_new_project_start};
-pub(crate) use computer_icons::COMPUTER_ICON_SETTINGS_SOURCE;
 pub(crate) use agentbox::{
     AGENTBOX_STATUS_ON_OPEN, cached_agentbox_locations, invalidate_agentbox_status,
 };
 pub(crate) use capture_targets::CaptureTargetProject;
 pub(crate) use client_storage_init::initialize_client_storage_at_start;
 pub(crate) use cloud_boxes::{cloud_box_request_target, cloud_box_send_target};
+pub(crate) use computer_icons::COMPUTER_ICON_SETTINGS_SOURCE;
 pub(crate) use focus_perform::RowFocusOptions;
 pub(crate) use host::GxStoreHost;
 pub(crate) use primary_launcher::{

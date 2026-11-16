@@ -192,7 +192,10 @@ fn coordinator_playbook_note(
     let playbook = crate::coordinators::playbook_update_note(&db, &repository, &key)
         .ok()
         .flatten();
-    let session = repository.get_session(project_id, session_id).ok().flatten();
+    let session = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten();
     let drift = session.as_ref().and_then(|session| {
         crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, session)
     });
@@ -326,7 +329,11 @@ fn read_open_questions_sent(db: &rusqlite::Connection, key: &(String, String)) -
     .ok()
 }
 
-fn write_open_questions_sent(db: &rusqlite::Connection, key: &(String, String), note: Option<&str>) {
+fn write_open_questions_sent(
+    db: &rusqlite::Connection,
+    key: &(String, String),
+    note: Option<&str>,
+) {
     let metadata_key = open_questions_sent_key(key);
     let _ = match note {
         Some(note) => db.execute(
