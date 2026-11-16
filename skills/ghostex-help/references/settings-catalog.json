@@ -3200,7 +3200,7 @@
       "section": "browser",
       "sectionTitle": "Browser",
       "type": "boolean",
-      "default": true,
+      "default": false,
       "advanced": true,
       "agentWritable": true
     },

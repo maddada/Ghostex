@@ -283,10 +283,11 @@ impl GhostexGpuiApp {
         self.ensure_browser_surface_for_tab(tab_id, url, profile_id, cx)
     }
 
-    /// CDXC:Browser 2026-11-14 DECISION:
-    /// User (Q312): when `reloadBrowserTabsOnStartup` is enabled (the default), create CEF surfaces
-    /// once on startup for the open project's restored `Loaded` tabs so both the active tab and
-    /// background tabs are ready before being clicked, while parked inactive projects stay asleep.
+    /// CDXC:Browser 2026-11-14 WHY: added with the file:// tab restore (PR #624). When
+    /// `reloadBrowserTabsOnStartup` is on (off by default, see its default in settings-catalog),
+    /// create CEF surfaces once on startup for the open project's restored `Loaded` tabs so both
+    /// the active tab and background tabs are ready before being clicked, while parked inactive
+    /// projects stay asleep.
     pub(crate) fn reload_open_project_browser_tabs_on_startup(
         &mut self,
         cx: &mut gpui::Context<Self>,
@@ -328,8 +329,7 @@ impl GhostexGpuiApp {
         if !self
             .pending_startup_browser_remote_machines
             .contains(machine_id)
-            || !shared_settings::shared_sidebar_settings_snapshot()
-                .reload_browser_tabs_on_startup()
+            || !shared_settings::shared_sidebar_settings_snapshot().reload_browser_tabs_on_startup()
         {
             self.pending_startup_browser_remote_machines
                 .remove(machine_id);
