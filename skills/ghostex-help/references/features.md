@@ -915,7 +915,7 @@ way and follows this setting of the computer it shows.
 The ⋯ button, or a right-click on the project,
 opens the project menu: Add Worktree (or Create PR), History,
 New Browser Tab, Create Terminal, pinned Actions, Open Folder in the file
-manager and Add to Group.
+manager and Project Group.
 A project's Sleep, Wake, Sleep Inactive and Close Inactive act on that
 project's sessions only; its browser tabs are slept and closed from the tab
 strip above the view, where they live.
@@ -1104,7 +1104,7 @@ the empty sidebar area) joins the Space that is open at the time and appears at
 the top of it; add a project while Other is selected to leave it out of every
 Space. A project made with New project folder goes where its form says (see
 below).
-Grouping never moves a project out of its Space: a group made with Add to Group
+Grouping never moves a project out of its Space: a group made with Project Group
 > New Group joins the Space its project is in, and a project taken out
 of a group (Remove from Group, Ungroup, or dragging it out) stays in that
 group's Space. Adding a project to an existing group in another Space moves it
@@ -1138,7 +1138,7 @@ Project suggests the folder that holds the selected project's folder (else
 is made in as the setting. Local folder and a clone's destination on this
 computer start in that folder too. A sessions group (Move to New Sessions
 Group) only sorts sessions inside a project and never makes a folder; use New
-project folder when the work needs its own folder, and Add to Group > New Group
+project folder when the work needs its own folder, and Project Group > New Group
 to group projects together.
 Right-click a Space icon for its menu: Manage (Edit Space, New Space) and
 Sleep. Sleep Inactive sleeps only the Space's sessions that are awake but

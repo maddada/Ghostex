@@ -111,7 +111,7 @@ pub(crate) fn project_membership_menu(
             MenuCommand::project_membership(group_id, "moveCollection", None),
         ));
     }
-    let mut items = vec![MenuItem::submenu("Add to Group", "plus", children).with_page()];
+    let mut items = vec![MenuItem::submenu("Project Group", "plus", children).with_page()];
     if current_collection_id.is_none() {
         if let Some(menu) = space_membership_menu(spaces, SpaceMember::Project(project_id)) {
             items.push(menu);
