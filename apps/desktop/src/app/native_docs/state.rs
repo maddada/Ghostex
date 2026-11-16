@@ -505,6 +505,9 @@ pub(crate) struct NativeDocsState {
     pub(crate) remote_chat_files: std::collections::HashMap<String, (String, String)>,
     /// A published page asked for before Docs synced to the current project.
     pub(crate) pending_page: Option<super::published_page::DocsPendingPage>,
+    /// The microphone the open page's text boxes dictate with (app/page_dictation.rs), for the
+    /// browser that shows pages.
+    pub(crate) page_dictation: Option<crate::app::page_dictation::PageDictation>,
     /// Open File was asked for before Files drew; its next draw shows the search box.
     pub(crate) open_file_prompt: bool,
     /// The Rename item dialog, while open.

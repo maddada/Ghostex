@@ -454,6 +454,11 @@ impl CefSurface {
         self.browser.set_visible(visible);
     }
 
+    /// Whether the page is meant to be on screen (`set_visible`).
+    pub(crate) fn is_visible(&self) -> bool {
+        self.visible
+    }
+
     /// How long the page has been off screen, `None` while it is shown.
     pub(crate) fn hidden_for(&self) -> Option<std::time::Duration> {
         self.hidden_since.map(|since| since.elapsed())

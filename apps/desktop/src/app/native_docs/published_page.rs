@@ -238,6 +238,23 @@ impl GhostexGpuiApp {
             cx,
         )?;
         surface.update(cx, |surface, _| surface.show_when_placed());
+        // Dictate starts only while this browser shows a page in the Files view, in a Ghostex
+        // window the reader is using (app/page_dictation.rs).
+        let shown: crate::app::page_dictation::PageShown = {
+            let app = cx.weak_entity();
+            let page = surface.downgrade();
+            Rc::new(move |cx| {
+                cx.active_window().is_some()
+                    && page
+                        .upgrade()
+                        .is_some_and(|page| page.read(cx).is_visible())
+                    && app
+                        .read_with(cx, |app, _| app.native_docs_active_page().is_some())
+                        .unwrap_or(false)
+            })
+        };
+        self.native_docs.page_dictation =
+            crate::app::page_dictation::PageDictation::attach(&surface, shown, cx);
         Ok(surface)
     }
 

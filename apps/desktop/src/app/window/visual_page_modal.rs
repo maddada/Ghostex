@@ -25,7 +25,6 @@ mod more_menu;
 mod more_menu_panel;
 pub(crate) mod open_timing;
 mod page;
-mod page_dictation;
 mod source;
 
 pub(crate) use glass::{PAGE_TOP_DARK, PAGE_TOP_LIGHT};
@@ -127,8 +126,8 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// The card's open message, for opening it again behind the web runtime's install prompt.
     open_message: serde_json::Value,
     surface: Option<Entity<CefSurface>>,
-    /// The microphone the page's text boxes dictate with (`page_dictation.rs`).
-    dictation: Option<page_dictation::PageDictation>,
+    /// The microphone the page's text boxes dictate with (app/page_dictation.rs).
+    dictation: Option<crate::app::page_dictation::PageDictation>,
     /// The page has loaded once; until then the header shows a spinner.
     loaded: bool,
     error: Option<String>,
@@ -512,7 +511,19 @@ impl GpuiVisualPageModalWindow {
             Ok(surface) => {
                 *shown_surface.borrow_mut() = Some(surface.downgrade());
                 surface.read(cx).add_page_script(page::PAGE_SCRIPT);
-                self.dictation = page_dictation::PageDictation::attach(&surface, window, cx);
+                // Dictate starts only while this window is shown and the active one.
+                let shown: crate::app::page_dictation::PageShown = {
+                    let modal = cx.weak_entity();
+                    let handle = gpui::Window::window_handle(window);
+                    Rc::new(move |cx| {
+                        cx.active_window().is_some_and(|active| active == handle)
+                            && modal
+                                .read_with(cx, |modal, _| !modal.hidden)
+                                .unwrap_or(false)
+                    })
+                };
+                self.dictation =
+                    crate::app::page_dictation::PageDictation::attach(&surface, shown, cx);
                 surface.update(cx, |surface, _| {
                     surface.show_when_placed();
                     surface.set_visible(true);

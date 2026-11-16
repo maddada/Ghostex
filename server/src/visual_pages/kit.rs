@@ -277,6 +277,7 @@ html[data-gx-theme=light] .gx-ref{color:#5f9878}
 .gx-field{position:relative;margin:8px 0 0}
 .gx-field>.gx-note,.gx-field>.gx-text{margin-top:0}
 .gx-field>.gx-box{padding-right:38px}
+.gx-field>.gx-box.gx-empty::before{right:38px}
 .gx-mic{position:absolute;top:5px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:none;color:var(--gx-muted);cursor:pointer}
 .gx-mic svg{width:16px;height:16px}
 .gx-mic:hover:not(:disabled){background:color-mix(in srgb,var(--gx-fg) 10%,transparent);color:var(--gx-fg)}
@@ -787,7 +788,7 @@ function setup(root){
     var MIC_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>',
       STOP_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>',
       SPIN_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>';
-    var dictPhase="idle",dictTarget=null;
+    var dictPhase="idle",dictTarget=null,keyboard=!window.matchMedia||matchMedia("(pointer:fine)").matches;
     dictStop=function(){if(dictPhase!=="idle")dictateHost("cancel");};
     var micLook=function(){boxes().forEach(function(a){var m=a.__gxMic;if(!m)return;
       var mine=!!dictTarget&&dictTarget.area===a,rec=mine&&(dictPhase==="recording"||dictPhase==="starting"),busy=mine&&dictPhase==="transcribing",tip=rec?"Stop and transcribe":busy?"Transcribing…":"Dictate";
@@ -813,7 +814,7 @@ function setup(root){
     window.addEventListener("gx-dictation",function(e){
       var d=e.detail||{},t=dictTarget,a=t&&t.area;
       if(typeof d.phase==="string"){dictPhase=d.phase;
-        if(a){if(d.phase==="starting")dictHint(a,"Starting the microphone…");else if(d.phase==="recording")dictHint(a,"Listening… press the microphone again to transcribe, or Escape to cancel.");else if(d.phase==="transcribing")dictHint(a,"Transcribing…");else if(a.__gxDictHint)dictHint(a,"");}}
+        if(a){if(d.phase==="starting")dictHint(a,"Starting the microphone…");else if(d.phase==="recording")dictHint(a,keyboard?"Listening… press the microphone again to transcribe, or Escape to cancel.":"Listening… tap the microphone again to transcribe.");else if(d.phase==="transcribing")dictHint(a,"Transcribing…");else if(a.__gxDictHint)dictHint(a,"");}}
       if(typeof d.text==="string"&&d.text.trim()&&a){
         if(a.readOnly||button.disabled)dictHint(a,"Your answers were already sent, so the dictated words were not added.",true);
         else{var v=a.value,s,en;if(v===t.value){s=t.start;en=t.end;}else{var c=a.__gxBox&&document.activeElement===a.__gxBox?caretIn(a.__gxBox):null;s=c?c.start:v.length;en=c?c.end:v.length;}
