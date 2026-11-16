@@ -205,6 +205,16 @@ impl DeviceApiTokens {
             .filter(|entry| entry.expires_at_ms.is_none_or(|expires| now_ms < expires))
             .cloned()
     }
+
+    /// Whether a paired device's token is loaded (lapsed or not: its key can renew it), so this
+    /// computer has a phone of the owner's (`SecurityState::note_owner_device`).
+    pub fn names_any_device(&self) -> bool {
+        self.entries
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .values()
+            .any(|entry| entry.device_id.is_some())
+    }
 }
 
 /// A fresh device token: the prefix and 32 random bytes in base64url.

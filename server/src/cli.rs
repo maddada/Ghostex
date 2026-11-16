@@ -756,7 +756,8 @@ Usage:
   gxserver endpoint  Print the running daemon's port and auth token as JSON (for SSH clients; --no-token leaves the token out)
   gxserver computer-code [--once] [--json]
                      Print this computer's pairing code for Connect a Computer on another
-                     computer, then approve that computer here (same as ghostex computer-code)
+                     computer; approve it in the app or on your phone once this computer has
+                     either, otherwise here (same as ghostex computer-code)
   gxserver agent-skills status [skill...] [--json]
   gxserver agent-skills install <skill...> --source <path> [--offline] [--json]
   gxserver agent-skills refresh [--json]

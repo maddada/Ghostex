@@ -116,7 +116,15 @@ pub(crate) async fn handle_remote_access_http(
                 .get("openTunnel")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            let show_code = open_tunnel && may_show_pairing_code(&caller);
+            let show_code = if open_tunnel {
+                match pairing_code_gate(state, &caller, &params, body, &endpoint_path, &request_id)
+                {
+                    Ok(show) => show,
+                    Err(response) => return response,
+                }
+            } else {
+                false
+            };
             tokio::task::spawn_blocking(move || {
                 // The Show QR dialog is open: a new phone must get past the allow-list to pair. It
                 // comes in through the door, whose address the QR then carries; the helpers paired
@@ -837,10 +845,48 @@ pub(crate) fn easy_connect_pairing_entry(code: EasyConnectCode, qr_address: Stri
     json!({ "payload": payload, "text": text, "code": code })
 }
 
-/// Only you get a pairing code (the desktop app with its owner session or the token file, a paired
-/// phone); an agent's session token can't mint one (CDXC:Security 2026-11-10 in security/policy.rs).
-pub(crate) fn may_show_pairing_code(caller: &Principal) -> bool {
-    caller.is_owner_device()
+/// Who gets a pairing code: the desktop app's owner session and paired phones; the token file
+/// while it keeps the door, or for a while after you approved a terminal's pairing code; never an
+/// agent's session token (CDXC:Security 2026-11-16 in security/policy.rs).
+pub(crate) fn may_show_pairing_code(
+    security: &crate::security::SecurityState,
+    caller: &Principal,
+    now_ms: u64,
+) -> bool {
+    match caller {
+        Principal::LocalAgent => security.token_file_gets_code(now_ms),
+        other => security.keeps_door(other),
+    }
+}
+
+/*
+CDXC:Security 2026-11-16 DECISION:
+User (W524, "Owner only"): pairing codes come from the app or a phone, not from whatever holds the token file. Once this computer has an owner device, the token file asking for the code with the window open (`ghostex computer-code`, or a script) makes one `pairingShowCode` card for the app and your phones; the CLI waits for it and repeats the call with the approval, and from then on it gets the code for ten minutes (`TOKEN_FILE_CODE_WINDOW_MS`, its own idle limit) without asking again. Every phone or computer that then uses the code still waits for an Approve that only the app's owner session or a phone can give. An agent's session token still gets the details without a code and asks nothing.
+*/
+/// Whether `caller` gets the code with the pairing window open, or the answer that waits for the
+/// owner's Approve (the token file once this computer has an owner device).
+fn pairing_code_gate(
+    state: &AppState,
+    caller: &Principal,
+    params: &Value,
+    body: &Value,
+    endpoint_path: &str,
+    request_id: &str,
+) -> Result<bool, RoutedResponse> {
+    use crate::security::{ActionRequest, SensitiveAction};
+    let now = crate::security::now_ms();
+    if !matches!(caller, Principal::LocalAgent) || state.security.token_file_gets_code(now) {
+        return Ok(may_show_pairing_code(&state.security, caller, now));
+    }
+    let action = ActionRequest::new(
+        SensitiveAction::PairingShowCode,
+        "Show this computer's pairing code in a terminal (ghostex computer-code)",
+    )
+    .detail("A phone or computer that uses the code still waits for your Approve. Approve only if you just ran ghostex computer-code yourself.")
+    .params(params.clone());
+    crate::server::require_owner_presence(state, caller, action, body, endpoint_path, request_id)?;
+    state.security.open_token_file_code_window(now);
+    Ok(true)
 }
 
 fn read_device_id(body: &Value) -> Result<String, RemoteAccessHttpError> {

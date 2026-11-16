@@ -221,6 +221,7 @@ pub(crate) fn route_security_http(
                 Err(EnrollRefusal::Reply(code, message)) => {
                     reply(StatusCode::OK, Err((code, message)))
                 }
+                Err(EnrollRefusal::Response(response)) => response,
             },
         );
     }
@@ -256,7 +257,14 @@ const APPROVER_KEY_PARAM: &str = "approverKey";
 
 enum EnrollRefusal {
     Reply(&'static str, String),
+    /// The owner's Approve is needed first (`approvalRequired`, `approvalDenied`).
+    Response(RoutedResponse),
 }
+
+/// What `/api/approveApprovalRequest` answers the token file (or anyone else but the app's owner
+/// session and paired phones) for a new device, a terminal's pairing code or another owner, once
+/// this computer has an owner device (CDXC:Security 2026-11-16 in security/policy.rs).
+const DOOR_REFUSAL: &str = "Approve this in the Ghostex app on this computer or on your phone. A terminal or an agent can't approve a new device here.";
 
 /// `/api/enrollOwnerKey` and `/api/enrollApproverKey`. The first key of each kind is taken on
 /// the owner's word (first owner key: the token file only; first approver key: the desktop's owner
@@ -265,14 +273,16 @@ fn enroll_key(
     state: &AppState,
     caller: &Principal,
     endpoint_path: &str,
-    _request_id: &str,
-    _body: &Value,
+    request_id: &str,
+    body: &Value,
     params: Map<String, Value>,
 ) -> Result<Value, EnrollRefusal> {
     use ghostex_gx_protocol::approval::EnrollKeyParams;
     let security = &state.security;
     let now = security::now_ms();
-    // Older apps send `askOwner` and `approvalId`; nothing asks any more, so both are ignored.
+    // `askOwner: false` (the app's quiet opener): never make a request, answer
+    // `ownerApprovalNeeded` instead. `approvalId` is read from the body by the gate below.
+    let ask_owner = params.get(ASK_OWNER_PARAM).and_then(Value::as_bool) != Some(false);
     let mut params = params;
     params.remove(ASK_OWNER_PARAM);
     params.remove(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM);
@@ -297,7 +307,7 @@ fn enroll_key(
     .map_err(|(code, message)| EnrollRefusal::Reply(code, message))?;
     /*
     CDXC:Security 2026-11-10 WHY:
-    An owner key opens an owner session, which is one of your devices (it approves pairings and answers secret requests). Only the token file or an owner session may add one, as since 8 Nov: an agent's session token must not make itself yours. With approvals plain (security/policy.rs) nothing else is asked: a key from your own app goes in at once, on this computer and on another computer through its SSH tunnel, so the "act as the owner" card (#532) is gone; apps from before 11.2.3 still enroll and open their owner sessions as they always did.
+    An owner key opens an owner session, which is one of your devices (it approves pairings and answers secret requests). Only the token file or an owner session may add one, as since 8 Nov: an agent's session token must not make itself yours. With approvals plain (security/policy.rs) nothing else is asked: a key from your own app goes in at once, on this computer and on another computer through its SSH tunnel, so the "act as the owner" card (#532) is gone; apps from before 11.2.3 still enroll and open their owner sessions as they always did. Narrowed on 2026-11-16 for the token file once this computer has an owner device (below).
     */
     if owner && !matches!(caller, Principal::LocalAgent | Principal::Owner { .. }) {
         return Err(EnrollRefusal::Reply(
@@ -318,6 +328,38 @@ fn enroll_key(
     // older apps' lists whole.
     if let Some(known) = registry.get(&key_id) {
         return Ok(json!({ "key": known }));
+    }
+    /*
+    CDXC:Security 2026-11-16 DECISION:
+    User (W524, "Owner only"): an owner key opens the owner session, which makes pairing codes and approves new devices, so once this computer has an owner device the token file (every program of the user, agents included) adds one only with an Approve on the app's owner session or a paired phone: one `addApproverKey` card, reused while it waits, that the desktop already waits on and repeats its call with (`owner_security::enroll_owner_key`). Before that, and in the minutes after the first start with this rule (so the app that started gxserver enrolls its key without a card), it goes in at once as before. An owner session adding a key is the owner.
+    */
+    if owner
+        && matches!(caller, Principal::LocalAgent)
+        && !security.token_file_may_add_owner_key(now)
+    {
+        if !ask_owner {
+            return Err(EnrollRefusal::Reply(
+                OWNER_APPROVAL_NEEDED,
+                "This computer already has an owner: approve this app in Ghostex there or on your phone first."
+                    .to_string(),
+            ));
+        }
+        let action = ActionRequest::new(
+            ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey,
+            format!("Let {} act as you on this computer", key.label),
+        )
+        .target(key_id.clone())
+        .detail(
+            "It can then show this computer's pairing code and approve new phones and computers. Approve only if you just opened Ghostex on this computer.",
+        )
+        .params(json!({ "key": serde_json::to_value(&key).unwrap_or(Value::Null) }));
+        if let Err(response) = presence_outcome_response(
+            presence_outcome(state, caller, action, body),
+            endpoint_path,
+            request_id,
+        ) {
+            return Err(EnrollRefusal::Response(response));
+        }
     }
     if let Some(approver) = approver_key {
         enroll_approved_key(state, caller, false, approver, now);
@@ -430,6 +472,19 @@ fn handle(
             // older app's `keyId` and signature are accepted and not checked (CDXC:Security
             // 2026-11-10 in security/policy.rs).
             let ApproveApprovalParams { id, key_id, .. } = parse(params)?;
+            // A new device, a terminal's pairing code or another owner: only the door's keepers
+            // (CDXC:Security 2026-11-16 in security/policy.rs).
+            if let Some(asked) = security.approvals.read(&id, caller, now) {
+                if security::opens_door(&asked.action) && !security.keeps_door(caller) {
+                    crate::audit::record(
+                        crate::audit::Action::from_approval(&asked),
+                        crate::audit::Actor::from(caller),
+                        crate::audit::Outcome::Refused(DOOR_REFUSAL.to_string()),
+                        Some(crate::audit::ApprovalRef::from(&asked)),
+                    );
+                    return Err(("forbidden", DOOR_REFUSAL.to_string()));
+                }
+            }
             let request = security
                 .approvals
                 .approve_plain(&id, caller, now)
@@ -531,6 +586,11 @@ fn handle(
             // password or the phone's Face ID first (`approvalsRequirePresence`, off by default).
             "requirePresence": approvals_require_presence(state),
             "caller": caller,
+            // Whether this caller may make pairing codes and approve new devices here (the token
+            // file only until this computer has an owner device): `ghostex computer-code` asks
+            // y/n only when it may (CDXC:Security 2026-11-16 in security/policy.rs). Older
+            // clients don't read it.
+            "mayApproveDevices": security.keeps_door(caller),
             "ownerKeys": security.owner_keys.list(),
             "approverKeys": security.approver_keys.list(),
             "pendingApprovals": if caller.has(security::Capability::DecideApprovals) {

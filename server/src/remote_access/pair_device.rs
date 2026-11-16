@@ -1198,6 +1198,11 @@ fn finish_pairing(
     }
 
     super::paired_devices::reload_device_api_tokens(context.db, context.device_tokens)?;
+    // A phone with its own token keeps the door from now on (CDXC:Security 2026-11-16 in
+    // security/policy.rs); a computer gets no token.
+    if context.device_tokens.names_any_device() {
+        context.security.note_owner_device(now_ms());
+    }
 
     if let Some(approver_key) = approver_key {
         // The same approval that let the phone in enrolls its Face ID / fingerprint key, saved

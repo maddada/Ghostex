@@ -233,10 +233,18 @@ pub async fn run_gxserver_foreground(
 
     let security = load_security_state(&paths, metadata.server_id.as_str(), &logger);
     crate::security::install(&security);
+    let device_api_tokens = load_device_api_tokens(&paths);
+    // Who keeps the door (CDXC:Security 2026-11-16 in security/policy.rs): a phone paired before
+    // this start counts, and the first start with the rule lets the app enroll its key at once.
+    let started_ms = crate::security::now_ms();
+    if device_api_tokens.names_any_device() {
+        security.note_owner_device(started_ms);
+    }
+    security.open_owner_key_window(started_ms);
     let state = Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,
-        device_api_tokens: load_device_api_tokens(&paths),
+        device_api_tokens,
         security,
         cef_devtools: Default::default(),
         automation_runtime,

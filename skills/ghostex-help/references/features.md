@@ -5350,8 +5350,13 @@ sessions, so any client can control agents on any machine.
   open it in Settings > Remote there and paste a new code. On a server without
   the app (or any terminal), `ghostex computer-code` (also `gxserver
   computer-code`) prints this computer's code to paste into Connect a Computer
-  on the other one, then shows that computer's three words and asks y or n to
-  approve it; `--once` or `--json` only prints the code. Easy Connect must be on
+  on the other one, then shows that computer's three words. Once this computer
+  has the Ghostex app or a paired phone, only they make codes and let devices
+  in: the command first waits for you to approve "Show this computer's pairing
+  code" in the app or on your phone (then it gets codes for ten minutes), and
+  the other computer is approved there too, where it shows with the same three
+  words; on a computer with neither yet, it asks y or n to approve it right
+  there. `--once` or `--json` only prints the code. Easy Connect must be on
   (`ghostex tailcat enable`), and it runs only in your own terminal, not from an
   agent's session.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
