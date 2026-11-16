@@ -27,7 +27,7 @@ pub(crate) mod open_timing;
 mod page;
 mod source;
 
-pub(crate) use glass::{PAGE_TOP_DARK, PAGE_TOP_LIGHT, panel_backdrop};
+pub(crate) use glass::{PAGE_TOP_DARK, PAGE_TOP_LIGHT};
 pub(crate) use page::page_id;
 
 use super::native_modal_kit::*;

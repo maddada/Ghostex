@@ -1,9 +1,8 @@
 //! A dock row's ask in a floating panel over the chat (work_cards.rs `dock_row`), opened the way a
 //! Ghostex page opens from the chat: a window of its own over the main window, with the page
-//! window's look (window/visual_page_modal.rs): the page's backdrop (the app's softened wallpaper
-//! under the work area's tint under window glass, the page's top colour without), its 36pt top
-//! band that moves the window with the round glass controls in its corners, and edges that resize
-//! it. The chat stays drawn behind it, whole.
+//! window's look (window/visual_page_modal.rs): its 36pt top band that moves the window with the
+//! round glass controls in its corners, and edges that resize it. Its surface is the frosted glass
+//! of the form dialogs under window glass (the Rename dialog's), the page's top colour without. The chat stays drawn behind it, whole.
 //!
 //! In it: the row's mark and title whole, its age, the work it belongs to, its whole Markdown
 //! description and where it stands, then its item pills and threads at the left of its answers
@@ -28,6 +27,9 @@
 //! inline html panel that appears, and not hide the chat that's already there. fix pls". The ask
 //! is a floating panel like a Ghostex page's, with the chat fully visible behind it. The phone shows
 //! the same ask in a sheet (apps/mobile/app/src/chat/native/cards/WorkCards.tsx `DockRow`).
+//!
+//! CDXC:Coordinators 2026-11-16 DECISION:
+//! User, of the dock's question pop-up drawn as a near-opaque black panel: "make this more transparent like we did for other parts of the app pls it's not good now. the rename one is good example". Under window glass the panel takes the Rename dialog's material: its window blurs what is behind it and it paints only the app's frosted fill (`ChatAppearance::menu_surface`, the same `frosted_menu_fill` the form dialogs use) over that blur, in dark and light. It no longer paints the opaque page-top colour with the wallpaper and tint over it, which hid the blur. Glass off keeps the solid page colour.
 
 use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
 use super::work_cards::{OPENED_ROW_GAP, answers_divider, pill_fit, pill_widths, row_mark};
@@ -37,8 +39,8 @@ use crate::app::window::page_controls::{ControlGlass, control_button};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, ParentElement as _, Pixels, Render, StatefulInteractiveElement as _, Styled as _,
-    StyledImage as _, Subscription, Task, Window, WindowBounds, WindowOptions, div, px, svg,
+    IntoElement, ParentElement as _, Render, StatefulInteractiveElement as _, Styled as _,
+    Subscription, Window, WindowBounds, WindowOptions, div, px, svg,
 };
 use gpui_component::Root;
 use serde_json::{Value, json};
@@ -59,7 +61,7 @@ const PANEL_PAD_X: f32 = 20.0;
 /// The text's indent under the title, past the mark.
 const TEXT_LEAD: f32 = 24.0;
 
-/// The page window's backdrop colours without a picture (window/visual_page_modal/glass.rs).
+/// The panel's colours with window glass off (window/visual_page_modal/glass.rs).
 #[cfg(not(ghostex_web))]
 use crate::app::window::visual_page_modal::{PAGE_TOP_DARK, PAGE_TOP_LIGHT};
 #[cfg(ghostex_web)]
@@ -99,18 +101,10 @@ fn settled_toast(how: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-/// The picture the panel paints behind itself under window glass (`panel_backdrop`).
-struct PanelBackdrop {
-    image: std::sync::Arc<gpui::Image>,
-    rect: gpui::Bounds<Pixels>,
-    tint: gpui::Rgba,
-}
-
 /// The panel window's view: the chat draws what is in it (`dock_ask_panel`).
 struct DockAskPanel {
     chat: Entity<NativeChatView>,
     focus: FocusHandle,
-    backdrop: Option<PanelBackdrop>,
     /// The natural heights measured at the last paint: band and title, the text, the foot.
     measured: Rc<Cell<(f32, f32, f32)>>,
     /// The height the panel last fitted itself to; once the reader resizes it, it stops fitting.
@@ -118,66 +112,9 @@ struct DockAskPanel {
     /// The main window's height when the panel opened, which caps how tall it fits itself.
     main_height: f32,
     _chat: Subscription,
-    _glass: Option<Task<()>>,
-    _bounds: Option<Subscription>,
 }
 
 impl DockAskPanel {
-    /// Follows the main window's glass picture, as the page window does: once a second, and at
-    /// once on a move or resize.
-    fn follow_backdrop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.sync_backdrop(window, cx);
-        self._glass = Some(cx.spawn_in(window, async move |this, cx| {
-            loop {
-                cx.background_executor()
-                    .timer(std::time::Duration::from_secs(1))
-                    .await;
-                if this
-                    .update_in(cx, |this, window, cx| this.sync_backdrop(window, cx))
-                    .is_err()
-                {
-                    return;
-                }
-            }
-        }));
-        self._bounds = Some(cx.observe_window_bounds(window, |this, window, cx| {
-            this.sync_backdrop(window, cx);
-        }));
-    }
-
-    #[cfg(not(ghostex_web))]
-    fn sync_backdrop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let next = crate::app::window::visual_page_modal::panel_backdrop(window, cx).map(
-            |(jpeg, rect, tint)| PanelBackdrop {
-                image: match &self.backdrop {
-                    Some(old) if old.image.bytes() == jpeg.as_slice() => old.image.clone(),
-                    _ => {
-                        std::sync::Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Jpeg, jpeg))
-                    }
-                },
-                rect,
-                tint,
-            },
-        );
-        let changed = match (&self.backdrop, &next) {
-            (Some(old), Some(new)) => {
-                old.rect != new.rect
-                    || old.tint != new.tint
-                    || !std::sync::Arc::ptr_eq(&old.image, &new.image)
-            }
-            (None, None) => false,
-            _ => true,
-        };
-        self.backdrop = next;
-        if changed {
-            cx.notify();
-        }
-    }
-
-    /// The web build has no window glass: the panel keeps the page's own colour.
-    #[cfg(ghostex_web)]
-    fn sync_backdrop(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
-
     /// Fits the window to its ask's height about its centre, until the reader resizes it.
     fn fit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (head, text, foot) = self.measured.get();
@@ -234,9 +171,14 @@ impl Render for DockAskPanel {
             let glass = crate::app::helpers::window_glass_active_for(chat.main_window);
             let p = ChatAppearance::current(&chat.snapshot).on_window_glass(glass);
             chat.dock_ask_panel(&p, measured, window, cx)
-                .map(|content| (content, p.light, p.font.clone()))
+                .map(|content| {
+                    // Under window glass the panel is the same frosted surface as the form dialogs
+                    // (the Rename dialog): the app's frosted fill over the window's own blur.
+                    let fill = glass.then(|| p.menu_surface());
+                    (content, p.light, p.font.clone(), fill)
+                })
         });
-        let Some((content, light, font)) = content else {
+        let Some((content, light, font, glass_fill)) = content else {
             // Its row left the dock, or the panel is closing: nothing is left to show, so the
             // window goes with it. The backdrop is this window's own (its blur and picture), so a
             // panel with no ask removes itself here instead of waiting on the chat to close it;
@@ -254,32 +196,14 @@ impl Render for DockAskPanel {
             .flex_col()
             .overflow_hidden()
             .font_family(font)
-            .bg(gpui::rgb(if light {
-                PAGE_TOP_LIGHT
-            } else {
-                PAGE_TOP_DARK
+            .bg(glass_fill.unwrap_or_else(|| {
+                gpui::rgb(if light { PAGE_TOP_LIGHT } else { PAGE_TOP_DARK }).into()
             }))
             .on_key_down(move |event: &gpui::KeyDownEvent, _, cx| {
                 if event.keystroke.key == "escape" && !event.is_held {
                     chat.update(cx, |chat, cx| chat.close_dock_ask_modal(cx));
                     cx.stop_propagation();
                 }
-            })
-            .when_some(self.backdrop.as_ref(), |this, backdrop| {
-                this.child(
-                    div()
-                        .absolute()
-                        .left(backdrop.rect.origin.x)
-                        .top(backdrop.rect.origin.y)
-                        .w(backdrop.rect.size.width)
-                        .h(backdrop.rect.size.height)
-                        .child(
-                            gpui::img(backdrop.image.clone())
-                                .size_full()
-                                .object_fit(gpui::ObjectFit::Fill),
-                        ),
-                )
-                .child(div().absolute().inset_0().bg(backdrop.tint))
             })
             .child(content)
             .into_any_element()
@@ -429,19 +353,14 @@ impl NativeChatView {
                             let observed = cx.observe(&chat, |_, _, cx| cx.notify());
                             let focus = cx.focus_handle();
                             focus.focus(window, cx);
-                            let mut panel = DockAskPanel {
+                            DockAskPanel {
                                 chat,
                                 focus,
-                                backdrop: None,
                                 measured: Rc::new(Cell::new((0.0, 0.0, 0.0))),
                                 fitted: None,
                                 main_height,
                                 _chat: observed,
-                                _glass: None,
-                                _bounds: None,
-                            };
-                            panel.follow_backdrop(window, cx);
-                            panel
+                            }
                         });
                         cx.new(|cx| {
                             Root::new(view, window, cx)

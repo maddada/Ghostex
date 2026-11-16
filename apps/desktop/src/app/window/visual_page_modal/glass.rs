@@ -161,17 +161,6 @@ impl GpuiVisualPageModalWindow {
     }
 }
 
-/// What another floating panel over the chat paints behind it to wear the page window's look
-/// (native_chat/dock_ask_modal.rs): the same softened picture as JPEG bytes, where it lies in
-/// `window`, and the work area's tint over it; `None` while the glass shows no picture, when the
-/// panel paints `PAGE_TOP_DARK` / `PAGE_TOP_LIGHT` as the page window's band does.
-pub(crate) fn panel_backdrop(
-    window: &Window,
-    cx: &mut App,
-) -> Option<(Vec<u8>, Bounds<Pixels>, Rgba)> {
-    page_glass(window, cx).map(|glass| (glass.jpeg, glass.rect, glass.tint))
-}
-
 /// The picture behind the main window's glass, where it lies in the page window `window`, and the
 /// work area's tint; `None` while the glass shows no picture (glass off, a video or a live style).
 fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
