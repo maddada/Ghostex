@@ -7033,6 +7033,16 @@ struct CodeBg {
     border: Option<Hsla>,
 }
 
+/// Local change (Ghostex Docs): a table cell drawn with its inline Markdown rendered: the text
+/// with markers hidden, its styled runs, and a map from each display byte (plus the end) back to
+/// the byte of the cell's source, so the caret and clicks land where the source is.
+#[derive(Clone)]
+struct CellView {
+    text: SharedString,
+    runs: std::rc::Rc<Vec<TextRun>>,
+    map: std::rc::Rc<Vec<usize>>,
+}
+
 /// A table row rendered as a grid (W4c): its cells, per-column alignment, the
 /// content-fit per-column widths (shared across the table), header/separator/
 /// last-row flags, and the border color. Built only when the caret is outside
@@ -7040,6 +7050,9 @@ struct CodeBg {
 #[derive(Clone)]
 struct TableRow {
     cells: Vec<SharedString>,
+    /// Local change (Ghostex Docs): each cell as shown, with its inline Markdown (links, code,
+    /// emphasis) rendered and its markers hidden. `None` where the cell shows its source as is.
+    views: Vec<Option<CellView>>,
     /// Byte range of each cell's trimmed content within its source line — for
     /// placing the caret inside a cell + hit-testing a click back to a source
     /// offset (in-cell editing).

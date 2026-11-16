@@ -330,7 +330,73 @@ pub(crate) fn hidden_runs(
     reveal_inline: bool,
     md: &SyntaxStyle,
 ) -> (String, Vec<TextRun>, Vec<usize>) {
-    let mut spans = scan(line, md);
+    let spans = scan(line, md);
+    hidden_runs_from(
+        line,
+        spans,
+        base_font,
+        base_color,
+        diagnostics,
+        caret_col,
+        reveal_prefix,
+        hide_prefix,
+        reveal_inline,
+        md,
+    )
+}
+
+/// Local change (Ghostex Docs): a table cell's `content` with its inline markers (`**`, `` ` ``,
+/// `[text](url)`, ...) hidden, like [`hidden_runs`] but scanned as inline text only: a cell is not
+/// a line, so a leading `-`, `1.`, `>` or `#` stays literal. `caret_col` (a byte in `content`)
+/// keeps the construct under the caret in source. Returns the display string, its runs, and the
+/// display-to-source byte map, or `None` when nothing in the cell is hidden or styled.
+pub(crate) fn hidden_cell_runs(
+    content: &str,
+    base_font: &Font,
+    base_color: Hsla,
+    caret_col: Option<usize>,
+    md: &SyntaxStyle,
+) -> Option<(String, Vec<TextRun>, Vec<usize>)> {
+    // Nothing to render in a cell without one of the characters an inline construct starts with.
+    if !content
+        .bytes()
+        .any(|b| matches!(b, b'`' | b'*' | b'_' | b'[' | b'~' | b'$' | b'<' | b'\\' | b'=' | b'^' | b'&' | b':' | b'@' | b'!'))
+    {
+        return None;
+    }
+    let mut spans = Vec::new();
+    let mut next_id = 1u16;
+    scan_inline(
+        content,
+        0,
+        content.len(),
+        md,
+        &mut spans,
+        &Style::default(),
+        0,
+        &mut next_id,
+    );
+    if spans.is_empty() {
+        return None;
+    }
+    Some(hidden_runs_from(
+        content, spans, base_font, base_color, &[], caret_col, 0, 0, false, md,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn hidden_runs_from(
+    line: &str,
+    mut spans: Vec<Span>,
+    base_font: &Font,
+    base_color: Hsla,
+    diagnostics: &[Diagnostic],
+    caret_col: Option<usize>,
+    reveal_prefix: usize,
+    hide_prefix: usize,
+    reveal_inline: bool,
+    md: &SyntaxStyle,
+) -> (String, Vec<TextRun>, Vec<usize>) {
     spans.sort_by_key(|s| s.range.start);
 
     // The construct (a maximal run of adjacent spans: its markers + body) the
