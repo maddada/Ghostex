@@ -488,6 +488,57 @@ pub(crate) fn session_chat_paste_needles(text: &str) -> Vec<String> {
     needles
 }
 
+/// The last characters of the message, normalized: what an input box that scrolled down to its
+/// cursor still shows after its start went above the box's top row.
+pub(crate) fn session_chat_paste_tail_needle(text: &str) -> Option<String> {
+    let normalized: Vec<char> = normalize_session_chat_screen_text(text).chars().collect();
+    let start = normalized
+        .len()
+        .saturating_sub(SESSION_CHAT_VERIFY_NEEDLE_CHARS);
+    let tail: String = normalized[start..].iter().collect();
+    (!tail.is_empty()).then_some(tail)
+}
+
+/// CDXC:SessionChat 2026-11-16 WHY:
+/// GitHub #643: a single-line message that wraps to more rows than Claude Code's input box shows
+/// (758 CJK characters at 24 x 200: eight rows in a box of six) was pasted whole, but the box
+/// showed only its last six rows, so the needles (each line's first 40 characters) were never on
+/// screen and every paste counted as failed: retyped, the idle agent restarted, then "Still not
+/// sent". The box's height follows the terminal's (3 rows at 16, 4 at 20, 6 at 24 in Claude Code
+/// 2.1.325; the 8-row message fit whole from 30), so a fixed size cannot be assumed. A paste counts
+/// as shown when every character the box shows is the end of the message, at least a needle long,
+/// and the rows the box shows cannot hold the whole message. A paste that lost its end or arrived
+/// garbled in what the box shows still fails, and a box short enough to show the whole message
+/// still has to.
+///
+/// `box_text` is an input box's rows, one line each (`session_chat_input_box_text`).
+pub(crate) fn input_box_shows_scrolled_message(box_text: &str, text: &str) -> bool {
+    use unicode_width::UnicodeWidthStr;
+    let shown = normalize_session_chat_screen_text(box_text);
+    let message = normalize_session_chat_screen_text(text);
+    if shown.chars().count() < SESSION_CHAT_VERIFY_NEEDLE_CHARS
+        || shown.len() >= message.len()
+        || !message.ends_with(&shown)
+    {
+        return false;
+    }
+    let rows = box_text.lines().count();
+    let row_width = box_text
+        .lines()
+        .map(|row| row.trim().width())
+        .max()
+        .unwrap_or(0);
+    if rows == 0 || row_width == 0 {
+        return false;
+    }
+    // The fewest rows the message needs at that width; word wrapping only adds rows.
+    let needed: usize = text
+        .lines()
+        .map(|line| line.trim_end().width().div_ceil(row_width).max(1))
+        .sum();
+    needed > rows
+}
+
 /// The verify step for a message body, or `None` when no capture could ever
 /// recognise this payload: an images-only send (the composer renders an
 /// attachment chip, never the pasted path) or a body with no characters that

@@ -156,7 +156,7 @@ pub(crate) fn guarded_write_refusal(
                 Some(agent) => session_chat_input_box_text(agent, screen),
                 None => screen.to_string(),
             };
-            if !paste_shown_in(reads_box.as_deref(), &shown, &needles) {
+            if !paste_shown_in(reads_box.as_deref(), &shown, text, &needles) {
                 return Err(GuardRefusal::InputBox(
                     "The input box no longer shows the message.".to_string(),
                 ));
@@ -177,9 +177,10 @@ fn box_holds_only(reads_box: Option<&str>, screen: &str, text: &str) -> bool {
     let want = normalize_session_chat_screen_text(text);
     match reads_box {
         Some(agent) => {
-            let typed =
-                normalize_session_chat_screen_text(&session_chat_input_box_text(agent, screen));
-            typed == want || {
+            let shown = session_chat_input_box_text(agent, screen);
+            let typed = normalize_session_chat_screen_text(&shown);
+            // A box that scrolled shows only the message's end (GitHub #643).
+            typed == want || input_box_shows_scrolled_message(&shown, text) || {
                 let lower = typed.to_lowercase();
                 lower.starts_with("[paste")
                     && lower.ends_with(']')

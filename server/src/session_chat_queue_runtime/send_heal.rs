@@ -162,6 +162,15 @@ pub(super) async fn heal_refused_send(
         );
         return SendHeal::GaveUp(None);
     }
+    if running && input_box_shows_message(target, terminal_agent, text).await {
+        record(
+            state,
+            target,
+            "sessionChatSendHealGaveUp",
+            RESTART_CANNOT_HELP_MESSAGE_IN_BOX,
+        );
+        return SendHeal::GaveUp(Some(RESTART_CANNOT_HELP_MESSAGE_IN_BOX.to_string()));
+    }
     match restart_agent_for_send(state, target, running).await {
         Ok(()) => SendHeal::Restarting,
         Err(reason) => {
@@ -169,6 +178,47 @@ pub(super) async fn heal_refused_send(
             SendHeal::GaveUp(Some(reason.to_string()))
         }
     }
+}
+
+/// Why a running agent whose input box shows the refused message is not restarted.
+pub(crate) const RESTART_CANNOT_HELP_MESSAGE_IN_BOX: &str =
+    "the agent's input box shows the message, so a restart would not help";
+
+/// Whether the running agent's input box shows `text` (its start, its end, a box that scrolled to
+/// its end, or the agent's collapsed paste placeholder for it).
+///
+/// CDXC:SessionChat 2026-11-16 WHY:
+/// GitHub #643: a paste check that could not find a message it was shown (a box shorter than the
+/// message, scrolled to its end) restarted the idle agent on its own conversation. The terminal
+/// and the agent were taking input, so the restart could only cost the agent its state; and as
+/// soon as the terminal's client was attached again at the same short height, the startup send
+/// failed the same check, the restart window refused a second restart, and the message ended as
+/// "Still not sent". The heal is the same as in 11.7.1: reproduced on 2026-11-16, a restarted
+/// session that came back at its 50-row resting height delivered the held message, and one whose
+/// 24-row client attached again first did not. A restart helps a terminal that does not take the
+/// message; one whose box shows it ends here with a card.
+async fn input_box_shows_message(
+    target: &crate::session_chat_send::SessionChatSendTarget,
+    terminal_agent: Option<&str>,
+    text: &str,
+) -> bool {
+    let Some(agent) = crate::agents::identity::normalize_agent_id(terminal_agent) else {
+        return false;
+    };
+    let Some(screen) =
+        crate::session_chat_send::capture_session_terminal_text_vt(&target.zmx_name).await
+    else {
+        return false;
+    };
+    let shown = crate::session_chat_send::session_chat_input_box_text(&agent, &screen);
+    if crate::session_chat_send::normalize_session_chat_screen_text(&shown).is_empty() {
+        return false;
+    }
+    let mut needles = crate::session_chat_send::session_chat_paste_needles(text);
+    needles.extend(crate::session_chat_send::session_chat_paste_tail_needle(
+        text,
+    ));
+    crate::session_chat_send::paste_shown_in(Some(&agent), &shown, text, &needles)
 }
 
 /// A send that finds the agent gone from its terminal (Codex after "Update now" or /logout, a

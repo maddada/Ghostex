@@ -144,7 +144,7 @@ pub(crate) async fn verify_session_chat_paste_landed(
         };
         if let Some((screen, pasting)) = capture {
             readable = true;
-            if paste_shown_in(agent, &screen, &needles) {
+            if paste_shown_in(agent, &screen, text, &needles) {
                 return SessionChatPasteVerification::Landed;
             }
             if !extended && pasting {
@@ -179,13 +179,21 @@ pub(crate) fn session_chat_input_box_text(agent: &str, screen: &str) -> String {
 }
 
 /// Whether `shown` (the input box's text for an agent whose box the send reads, the whole screen
-/// otherwise) shows the message `needles` were taken from, or its collapsed paste placeholder.
-pub(crate) fn paste_shown_in(agent: Option<&str>, shown: &str, needles: &[String]) -> bool {
+/// otherwise) shows `text` (whose `needles` these are), or its collapsed paste placeholder. An
+/// input box also counts when it scrolled and shows only the end of `text`
+/// (`input_box_shows_scrolled_message`, GitHub #643).
+pub(crate) fn paste_shown_in(
+    agent: Option<&str>,
+    shown: &str,
+    text: &str,
+    needles: &[String],
+) -> bool {
     let normalized = normalize_session_chat_screen_text(shown);
     normalized
         .to_lowercase()
         .contains(SESSION_CHAT_PASTED_PLACEHOLDER_NEEDLE)
         || needles.iter().any(|needle| normalized.contains(needle))
+        || (agent.is_some() && input_box_shows_scrolled_message(shown, text))
         || omp_paste_chip_landed(agent, shown)
 }
 

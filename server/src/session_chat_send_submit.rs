@@ -5,8 +5,9 @@ use std::time::{Duration, Instant};
 use crate::session_chat_send::{
     build_agent_tui_clear_input_for_text, capture_session_terminal_text_vt,
     normalize_session_chat_screen_text, record_busy_agent_wait, session_chat_paste_needles,
-    wait_out_busy_agent, write_session_chat_payload_guarded, AgentMidTurnProbe, BusyAgentWait,
-    InputGuard, SessionChatSendError, SessionChatSendFailure, SESSION_CHAT_EMPRYO_SUBMIT,
+    session_chat_paste_tail_needle, wait_out_busy_agent, write_session_chat_payload_guarded,
+    AgentMidTurnProbe, BusyAgentWait, InputGuard, SessionChatSendError, SessionChatSendFailure,
+    SESSION_CHAT_EMPRYO_SUBMIT,
 };
 
 /// Codex and Claude Code clear their input box within a frame of taking a submission; the window
@@ -55,10 +56,12 @@ pub(crate) async fn confirm_submitted(
     mid_turn: Option<&AgentMidTurnProbe>,
     since: Instant,
 ) -> Result<(), SessionChatSendError> {
-    let needles = session_chat_paste_needles(text);
+    let mut needles = session_chat_paste_needles(text);
     if needles.is_empty() {
         return Ok(());
     }
+    // A box that scrolled still shows the message's end after a Return it kept (GitHub #643).
+    needles.extend(session_chat_paste_tail_needle(text).filter(|tail| !needles.contains(tail)));
     let Some(mut screen) = message_still_held(agent, zmx_name, &needles, cancelled).await else {
         return Ok(());
     };

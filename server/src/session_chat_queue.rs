@@ -641,81 +641,185 @@ pub async fn deliver_session_chat_queued_prompt(
         require_session(&db, server_id, project_id, session_id)?;
         claim_prompt(&db, project_id, session_id, prompt_id)?
     };
-    let outcome = deliver_once(
-        paths, server_id, project_id, session_id, prompt_id, text, images, send,
-    )
-    .await;
-    let db = open_gxserver_database(paths).map_err(internal_error)?;
-    let (held, held_for_prompt, error_message, snapshot) = with_write_tx(&db, |db| {
-        let mut held = false;
-        // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
-        // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
-        // as it went out) ended Not sent while its words said it would go out once the prompt is
-        // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
-        // once the prompt is answered.
-        let held_for_prompt = outcome
-            .as_ref()
-            .err()
-            .is_some_and(crate::session_chat_send::refused_for_prompt);
-        let error_message = match &outcome {
-            // A delivery that restarted the agent made this row a startup send; it waits for the new
-            // input box whichever caller delivered it.
-            Err(error)
-                if (hold_when_composer_missing && error.code == "composerNotReady")
-                    || held_for_prompt
-                    || error.code
-                        == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
-            {
-                let next_version = bump_queue_version(db, project_id, session_id)? as i64;
-                db.execute(
-                    r#"
+    let claimed = ClaimedDelivery {
+        paths: paths.clone(),
+        server_id: server_id.to_string(),
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+        prompt_id: prompt_id.to_string(),
+    };
+    let task = {
+        let claimed = claimed.clone();
+        let send = send.clone();
+        tokio::spawn(async move {
+            let delivered = claimed
+                .deliver(text, images, &send, hold_when_composer_missing)
+                .await;
+            if delivered.is_err() {
+                claimed.release_if_still_sending();
+            }
+            delivered
+        })
+    };
+    match task.await {
+        Ok(delivered) => delivered,
+        Err(error) => {
+            claimed.release_if_still_sending();
+            Err(internal_error(anyhow::anyhow!(
+                "The queued message's delivery stopped: {error}"
+            )))
+        }
+    }
+}
+
+/// The row one delivery claimed (`sending`), owned so the delivery can run in its own task.
+/// CDXC:SessionChat 2026-11-16 WHY:
+/// GitHub #643: a row stayed `sending` for hours with no delivery behind it, so Send now and
+/// Remove answered "This message is going to the agent now" and every message queued behind it
+/// waited. Send now ran its delivery inside its HTTP request, and a client that stopped waiting
+/// (a paste that the heal retried and restarted for runs over a minute) dropped the delivery
+/// between its claim and its settle. The delivery now runs in its own task, as the other send
+/// requests do (session_chat_send_requests.rs `send_once`), and a delivery that panics or cannot
+/// settle puts its row back as `failed` with Retry. A gxserver that stops mid-delivery fails
+/// the row at its next start (`recover_session_chat_queue_after_restart`).
+#[derive(Clone)]
+struct ClaimedDelivery {
+    paths: GxserverPaths,
+    server_id: String,
+    project_id: String,
+    session_id: String,
+    prompt_id: String,
+}
+
+/// Why a row whose delivery stopped before it settled is `failed`. The delivery may have typed it,
+/// so it is never sent again on its own; Retry reads the transcript first (`retire_instead_of_retry`).
+const SESSION_CHAT_QUEUE_DELIVERY_LOST_REASON: &str =
+    "Ghostex stopped delivering this message before it could tell whether it went through.";
+
+impl ClaimedDelivery {
+    /// Fails the row when it is still `sending`: its delivery stopped before it settled.
+    fn release_if_still_sending(&self) {
+        let Ok(db) = open_gxserver_database(&self.paths) else {
+            return;
+        };
+        let released = with_write_tx(&db, |db| {
+            let sending: bool = db
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM session_chat_queued_prompts WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'sending')",
+                    params![self.prompt_id, self.project_id, self.session_id],
+                    |row| row.get(0),
+                )
+                .map_err(sql_error)?;
+            if sending {
+                fail_prompt(
+                    db,
+                    &self.project_id,
+                    &self.session_id,
+                    &self.prompt_id,
+                    SESSION_CHAT_QUEUE_DELIVERY_LOST_REASON,
+                )?;
+            }
+            Ok(sending)
+        });
+        if released.unwrap_or(false) {
+            crate::session_chat_send_failure::report_failed_row(
+                &self.project_id,
+                &self.session_id,
+                &self.prompt_id,
+                SESSION_CHAT_QUEUE_DELIVERY_LOST_REASON,
+            );
+        }
+    }
+
+    async fn deliver(
+        &self,
+        text: String,
+        images: Vec<String>,
+        send: &SessionChatQueueSender,
+        hold_when_composer_missing: bool,
+    ) -> Result<SessionChatQueueDelivery, DomainStateError> {
+        let (paths, server_id) = (&self.paths, self.server_id.as_str());
+        let (project_id, session_id, prompt_id) = (
+            self.project_id.as_str(),
+            self.session_id.as_str(),
+            self.prompt_id.as_str(),
+        );
+        let outcome = deliver_once(
+            paths, server_id, project_id, session_id, prompt_id, text, images, send,
+        )
+        .await;
+        let db = open_gxserver_database(paths).map_err(internal_error)?;
+        let (held, held_for_prompt, error_message, snapshot) = with_write_tx(&db, |db| {
+            let mut held = false;
+            // CDXC:SessionChat 2026-11-12 WHY: GitHub #555 review: "Send now" and automatic account
+            // recovery deliver without the scheduler's hold, so a row the guard refused (a prompt appeared
+            // as it went out) ended Not sent while its words said it would go out once the prompt is
+            // answered. Whoever delivers it, such a row goes back to the queue and the scheduler sends it
+            // once the prompt is answered.
+            let held_for_prompt = outcome
+                .as_ref()
+                .err()
+                .is_some_and(crate::session_chat_send::refused_for_prompt);
+            let error_message = match &outcome {
+                // A delivery that restarted the agent made this row a startup send; it waits for the new
+                // input box whichever caller delivered it.
+                Err(error)
+                    if (hold_when_composer_missing && error.code == "composerNotReady")
+                        || held_for_prompt
+                        || error.code
+                            == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+                {
+                    let next_version = bump_queue_version(db, project_id, session_id)? as i64;
+                    db.execute(
+                        r#"
                     UPDATE session_chat_queued_prompts
                     SET state = 'queued', errorMessage = NULL, version = ?4
                     WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3 AND state = 'sending'
                     "#,
-                    params![prompt_id, project_id, session_id, next_version],
-                )
-                .map_err(sql_error)?;
-                held = true;
-                None
-            }
-            Ok(()) => {
-                bump_queue_version(db, project_id, session_id)?;
-                db.execute(
-                    r#"
+                        params![prompt_id, project_id, session_id, next_version],
+                    )
+                    .map_err(sql_error)?;
+                    held = true;
+                    None
+                }
+                Ok(()) => {
+                    bump_queue_version(db, project_id, session_id)?;
+                    db.execute(
+                        r#"
                     DELETE FROM session_chat_queued_prompts
                     WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
                     "#,
-                    params![prompt_id, project_id, session_id],
-                )
-                .map_err(sql_error)?;
-                None
-            }
-            Err(error) => {
-                let message = bounded_reason(&error.message);
-                fail_prompt(db, project_id, session_id, prompt_id, &message)?;
-                Some(message)
-            }
-        };
-        let snapshot = read_snapshot(db, project_id, session_id)?;
-        Ok((held, held_for_prompt, error_message, snapshot))
-    })?;
-    if outcome.is_ok() {
-        crate::session_chat_queue_attachments::mark_delivered(paths, prompt_id);
-        crate::session_chat_queue_attachments::sweep(paths, &db);
+                        params![prompt_id, project_id, session_id],
+                    )
+                    .map_err(sql_error)?;
+                    None
+                }
+                Err(error) => {
+                    let message = bounded_reason(&error.message);
+                    fail_prompt(db, project_id, session_id, prompt_id, &message)?;
+                    Some(message)
+                }
+            };
+            let snapshot = read_snapshot(db, project_id, session_id)?;
+            Ok((held, held_for_prompt, error_message, snapshot))
+        })?;
+        if outcome.is_ok() {
+            crate::session_chat_queue_attachments::mark_delivered(paths, prompt_id);
+            crate::session_chat_queue_attachments::sweep(paths, &db);
+        }
+        if let Some(reason) = error_message.as_deref() {
+            crate::session_chat_send_failure::report_failed_row(
+                project_id, session_id, prompt_id, reason,
+            );
+        }
+        Ok(SessionChatQueueDelivery {
+            sent: error_message.is_none() && !held,
+            held,
+            held_for_prompt,
+            error_message,
+            snapshot,
+        })
     }
-    if let Some(reason) = error_message.as_deref() {
-        crate::session_chat_send_failure::report_failed_row(
-            project_id, session_id, prompt_id, reason,
-        );
-    }
-    Ok(SessionChatQueueDelivery {
-        sent: error_message.is_none() && !held,
-        held,
-        held_for_prompt,
-        error_message,
-        snapshot,
-    })
 }
 
 /// CDXC:SessionChat 2026-10-05 WHY:

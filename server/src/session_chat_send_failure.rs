@@ -154,6 +154,9 @@ fn heal_reason_sentence(reason: &str) -> Option<String> {
         "The agent took the message into its input box but kept it there; it was not restarted." => {
             return None
         }
+        crate::session_chat_queue_runtime::RESTART_CANNOT_HELP_MESSAGE_IN_BOX => {
+            "The message is in the agent's input box, so Ghostex did not restart the agent."
+        }
         other => return Some(other.to_string()),
     };
     Some(sentence.to_string())
