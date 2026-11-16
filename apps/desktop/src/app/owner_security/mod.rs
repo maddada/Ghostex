@@ -99,7 +99,7 @@ const DOOR_RETRY_AFTER: Duration = Duration::from_secs(5);
 
 /*
 CDXC:Security 2026-11-16 DECISION:
-User (W524, "Owner only"): only this app or a paired phone makes pairing codes and approves new devices; agents running as the user, who can read the token file, must not. gxserver keeps the door for the owner session once this computer has an owner device (CDXC:Security 2026-11-16 in server/src/security/policy.rs), so this app opens its owner session on this computer's gxserver again (the owner key in the OS key store signs it; the first key, or the one in the minutes after the first start with the rule, goes in without a card, a later one waits for an Approve on a phone) and sends it only with those calls: the code in Connect a phone or computer, Settings > Remote and the 11.0.1 notice, and Approve ([`door_token`], picked where every call to this computer's gxserver picks its token). Every other call still goes with the token file, as since plain approvals.
+User (W524, "Owner only"): only this app or a paired phone makes pairing codes and approves new devices; agents running as the user, who can read the token file, must not. gxserver keeps the door for the owner session once this computer has an owner device (CDXC:Security 2026-11-16 in server/src/security/policy.rs), so this app opens its owner session on this computer's gxserver again (the owner key in the OS key store signs it; the first key on a computer with no owner key and no paired phone goes in without a card, any other waits for an Approve on a phone or the owner's app) and sends it only with those calls: the code in Connect a phone or computer, Settings > Remote and the 11.0.1 notice, and Approve ([`door_token`], picked where every call to this computer's gxserver picks its token). Every other call still goes with the token file, as since plain approvals.
 */
 /*
 CDXC:Security 2026-11-16 DECISION:
@@ -196,8 +196,8 @@ fn owner_refusal(transport: &Transport) -> Option<String> {
 }
 
 /// At start: the owner session on this computer's gxserver when it opens without anyone's
-/// Approve (the first owner key, this app's key already enrolled, or the minutes after gxserver's
-/// first start with the owner-only door). Makes no request; a door call asks later if needed.
+/// Approve (the first owner key, or this app's key already enrolled). Makes no request; a door call
+/// asks later if needed.
 fn open_local_owner_session_quietly() {
     if with_session(LOCAL, |session| session.token.is_some()) {
         return;

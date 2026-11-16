@@ -11,17 +11,16 @@ CDXC:Security 2026-11-16 DECISION:
 User (W524, "Owner only"): only the Ghostex app on this computer or a paired phone makes pairing codes and approves new devices; agents running as the user must not. The token file is readable by every program of the user (its path is in every session's environment), so once this computer has an owner device (the app's owner key, kept in the OS key store, is enrolled, or a phone paired with its own token), the token file alone no longer:
 - gets a pairing code without an Approve on the app or a phone (`ghostex computer-code` asks once, then gets codes for ten minutes, `TOKEN_FILE_CODE_WINDOW_MS`);
 - approves a device asking to pair, a terminal's pairing code or another owner key (`/api/approveApprovalRequest` refuses it; it may still deny, which only closes a door);
-- adds an owner key without such an Approve (`addApproverKey`), except in the two minutes after the first start of a gxserver with this rule (`OWNER_KEY_WINDOW_MS`), when the app that started it enrolls its own key without a card on the phone.
+- adds an owner key without such an Approve (`addApproverKey`).
 The app proves itself with its owner session (`/api/openOwnerSession`, signed by the owner key), which it opens for these calls only; every other call it makes, and everything else the token file does, is unchanged. Until this computer has any owner device (a new install, or a server without the app and no phone yet), the token file still keeps the door, or nobody could pair the first phone. A program running as the user that rewrites gxserver's own files can still change all this (the same-user limit). This narrows the 2026-11-10 decision below for the door only.
+*/
+/*
+CDXC:Security 2026-11-16 FIX:
+Review B2 of the owner-only door: the two minutes after the first start with this rule let the token file add an owner key even where the app's key was already enrolled or a phone paired, took any key, stayed open after the first one, and opened again when an unreadable `security.json` was moved aside. An upgrade is exactly when gxserver restarts with agent sessions still running. The user kept the window for its intent (the app that started gxserver enrolls without a card), so it now takes a key only while this computer has no owner key and no paired phone, and closes with the first key: the same rule as the first key on a new computer, so it needs no timer of its own. A computer upgraded with a phone but without the app's key asks the phone once. A paired phone in the database marks the computer as owned at every start (`note_owner_device`, server/foreground.rs), so a `security.json` moved aside never reopens it where a phone is paired.
 */
 /// Remembered once this computer has an owner device (a paired phone; an owner key counts by
 /// itself): from then on the token file alone no longer keeps the door.
 pub const OWNER_DEVICE: &str = "ownerDevice";
-/// Remembered at the first start with the owner-only door: the one start whose first minutes let
-/// the token file add the app's owner key without a card.
-const OWNER_KEY_WINDOW: &str = "ownerKeyWindow";
-/// How long, after that first start, the token file may add an owner key without a card.
-pub const OWNER_KEY_WINDOW_MS: u64 = 2 * 60 * 1000;
 /// How long one Approve lets the token file get pairing codes (`ghostex computer-code`'s idle limit).
 pub const TOKEN_FILE_CODE_WINDOW_MS: u64 = 10 * 60 * 1000;
 
@@ -59,19 +58,10 @@ impl SecurityState {
         }
     }
 
-    /// Opens the owner-key window if this is the first start with the owner-only door (gxserver
-    /// start, before any request).
-    pub fn open_owner_key_window(&self, now_ms: u64) {
-        if self.is_remembered(OWNER_KEY_WINDOW) {
-            return;
-        }
-        self.set_window(&self.owner_key_window_until, now_ms + OWNER_KEY_WINDOW_MS);
-        self.remember(OWNER_KEY_WINDOW, now_ms);
-    }
-
-    /// Whether the token file may add an owner key without a card now.
-    pub fn token_file_may_add_owner_key(&self, now_ms: u64) -> bool {
-        !self.has_owner_device() || now_ms < self.window(&self.owner_key_window_until)
+    /// Whether the token file may add an owner key without a card now: only while this computer
+    /// has no owner key and no paired phone (the first key; review B2 above).
+    pub fn token_file_may_add_owner_key(&self) -> bool {
+        !self.has_owner_device()
     }
 
     /// One Approve of a terminal's pairing code: the token file gets codes for a while.

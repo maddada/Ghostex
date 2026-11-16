@@ -331,11 +331,9 @@ fn enroll_key(
     }
     /*
     CDXC:Security 2026-11-16 DECISION:
-    User (W524, "Owner only"): an owner key opens the owner session, which makes pairing codes and approves new devices, so once this computer has an owner device the token file (every program of the user, agents included) adds one only with an Approve on the app's owner session or a paired phone: one `addApproverKey` card, reused while it waits, that the desktop already waits on and repeats its call with (`owner_security::enroll_owner_key`). Before that, and in the minutes after the first start with this rule (so the app that started gxserver enrolls its key without a card), it goes in at once as before. An owner session adding a key is the owner. Another computer's app reaching this one through its SSH tunnel (the same token file) asks the same way, once per computer, so it can approve this computer's devices from there (CDXC:Security 2026-11-16 at `is_door_call` in apps/desktop/src/app/owner_security/mod.rs).
+    User (W524, "Owner only"): an owner key opens the owner session, which makes pairing codes and approves new devices, so once this computer has an owner device the token file (every program of the user, agents included) adds one only with an Approve on the app's owner session or a paired phone: one `addApproverKey` card, reused while it waits, that the desktop already waits on and repeats its call with (`owner_security::enroll_owner_key`). Before that (no owner key and no paired phone: the first key) it goes in at once as before (review B2 in security/policy.rs). An owner session adding a key is the owner. Another computer's app reaching this one through its SSH tunnel (the same token file) asks the same way, once per computer, so it can approve this computer's devices from there (CDXC:Security 2026-11-16 at `is_door_call` in apps/desktop/src/app/owner_security/mod.rs).
     */
-    if owner
-        && matches!(caller, Principal::LocalAgent)
-        && !security.token_file_may_add_owner_key(now)
+    if owner && matches!(caller, Principal::LocalAgent) && !security.token_file_may_add_owner_key()
     {
         if !ask_owner {
             return Err(EnrollRefusal::Reply(

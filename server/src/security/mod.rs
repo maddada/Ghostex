@@ -34,7 +34,7 @@ pub use capability::{route_access, Capability, Principal, RouteAccess, SessionRo
 pub use events::SecurityEvent;
 pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
-pub use policy::{opens_door, EASY_CONNECT_ENABLE, OWNER_KEY_WINDOW_MS, TOKEN_FILE_CODE_WINDOW_MS};
+pub use policy::{opens_door, EASY_CONNECT_ENABLE, TOKEN_FILE_CODE_WINDOW_MS};
 pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
 pub use session_tokens::{
     SessionTokens, OWNER_TOKEN_PREFIX, SESSION_TOKEN_ENV, SESSION_TOKEN_PREFIX,
@@ -105,8 +105,6 @@ pub struct SecurityState {
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
     events: broadcast::Sender<SecurityEvent>,
-    /// Until when (ms) the token file may add an owner key without a card (`policy.rs`).
-    owner_key_window_until: Arc<std::sync::Mutex<u64>>,
     /// Until when (ms) the token file gets pairing codes after an Approve (`policy.rs`).
     token_file_code_until: Arc<std::sync::Mutex<u64>>,
 }
@@ -126,7 +124,6 @@ impl SecurityState {
             persist_path: None,
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
-            owner_key_window_until: Arc::default(),
             token_file_code_until: Arc::default(),
         }
     }

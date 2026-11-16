@@ -83,9 +83,9 @@ owner key is enrolled, or a phone paired with its own token, remembered for good
 - can't approve `pairingApproveDevice`, `pairingShowCode` or `addApproverKey` requests
   (`opens_door`; `/api/approveApprovalRequest` answers `forbidden`); it still lists and denies;
 - adds a new owner key (`/api/enrollOwnerKey`) only with an approved `addApproverKey` (the desktop
-  waits on it and repeats with `approvalId`; `askOwner: false` answers `ownerApprovalNeeded`), except
-  in the two minutes after the first start of a gxserver with this rule (`ownerKeyWindow`,
-  `OWNER_KEY_WINDOW_MS`), so the app that started it enrolls its key without a card.
+  waits on it and repeats with `approvalId`; `askOwner: false` answers `ownerApprovalNeeded`). The
+  first key on a computer with no owner key and no paired phone goes in at once; a computer
+  upgraded with a phone but without the app's key asks the phone once.
 
 `/api/securityStatus` says `mayApproveDevices` for the caller. Everything else the token file does is
 unchanged.
