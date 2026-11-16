@@ -796,23 +796,23 @@ async fn tool_items(state: &AppState, usage: &Usage, fresh: bool) -> Vec<Value> 
         .collect()
 }
 
-/// `hex_wanted`: Dictate transcribes with Hex here, so Hex is listed (and lights the top bar)
-/// even before it is installed, with Install as its update.
+/// An installed tool's update. `hex_wanted`: Dictate transcribes with Hex here, so an installed
+/// Hex's update lights the top bar. A missing Hex is never an update: it is in the Not installed
+/// part (`missing.rs`), installed only by its own Install.
+///
+/// CDXC:Dictate 2026-11-17 DECISION: GitHub #644: "I updated Ghostex to 11.8.2 ... I didn't open Settings → Dictation or click \"Install Hex\". Right after the update, a new app I didn't recognise was running: Hex", expected "Install only when I confirm ... Users who don't dictate should be left alone." A computer whose engine was our retired local model is set to Hex (`speech/settings.rs`), and a missing Hex was listed here as an available update with `canUpdate`, so the top bar's Update all (which updates the Ghostex app last) installed Hex and opened it (`managed_tools/hex.rs` opens a newly installed Hex). A missing Hex is now a Not installed item like every other missing tool: never `canUpdate` (Update all skips it), never `topBar`. Supersedes the 2026-11-07 listing of a missing Hex "with Install as its update" that lit the top bar.
 pub(super) fn tool_item(tool: &Value, usage: &Usage, hex_wanted: bool) -> Option<Value> {
     let id = tool["id"].as_str()?;
     let hex = id == "hex";
     if hex && tool["supported"] != true {
         return None;
     }
-    if tool["installed"] != true && !(hex && hex_wanted) {
+    if tool["installed"] != true {
         return None;
     }
     let can_update = tool["actions"]
         .as_array()
         .is_some_and(|actions| actions.iter().any(|action| action == "update"));
-    let can_install = tool["actions"]
-        .as_array()
-        .is_some_and(|actions| actions.iter().any(|action| action == "install"));
     let desktop_control = matches!(id, "trycua" | "spaceo");
     // Only what Ghostex installed is Ghostex's to update; cua-driver, SpaceO and Hex always are.
     if !desktop_control && !hex && !(can_update && tool["source"] == "ghostex") {
@@ -834,10 +834,8 @@ pub(super) fn tool_item(tool: &Value, usage: &Usage, hex_wanted: bool) -> Option
         tool["latestVersion"].as_str().map(str::to_string),
     );
     let job = &tool["job"];
-    let failed = job["status"] == "failed"
-        && (job["operation"] == "update" || (hex && job["operation"] == "install"));
-    let missing = tool["installed"] != true;
-    let settled = if tool["updateAvailable"] == true || (missing && can_install) {
+    let failed = job["status"] == "failed" && job["operation"] == "update";
+    let settled = if tool["updateAvailable"] == true {
         "available"
     } else if tool["checkError"].is_string() || tool["notAnswering"].is_string() {
         "unknown"
@@ -858,9 +856,7 @@ pub(super) fn tool_item(tool: &Value, usage: &Usage, hex_wanted: bool) -> Option
         );
         item.insert("settledState".into(), json!(settled));
     }
-    let note = if missing && state == "available" {
-        Some("Not installed. Dictate is set to use Hex.")
-    } else if hex && state == "available" {
+    let note = if hex && state == "available" {
         tool["detail"].as_str()
     } else if tool["needsPassword"] == true && state == "available" {
         Some("Asks for your password.")
@@ -871,10 +867,7 @@ pub(super) fn tool_item(tool: &Value, usage: &Usage, hex_wanted: bool) -> Option
     };
     item.insert("note".into(), json!(note));
     item.insert("state".into(), json!(state));
-    item.insert(
-        "canUpdate".into(),
-        json!((can_update || (missing && can_install)) && state != "updating"),
-    );
+    item.insert("canUpdate".into(), json!(can_update && state != "updating"));
     // Hex installs and updates only when the user clicks (CDXC:Dictate 2026-11-07 in managed_tools/hex.rs).
     item.insert(
         "canAuto".into(),
@@ -1042,16 +1035,13 @@ mod hex_tests {
     }
 
     #[test]
-    fn a_missing_hex_is_listed_with_install_only_when_dictate_uses_it() {
+    fn a_missing_hex_is_never_an_update_even_when_dictate_uses_it() {
         let usage = Usage::default();
         assert!(tool_item(&hex(false, &["install"], json!({})), &usage, false).is_none());
-        let item = tool_item(&hex(false, &["install"], json!({})), &usage, true).expect("listed");
-        assert_eq!(item["state"], "available");
-        assert_eq!(item["canUpdate"], true);
-        assert_eq!(item["canAuto"], false, "Hex installs only on a click");
-        assert_eq!(item["topBar"], true);
-        assert_eq!(item["latest"], "3.3.0");
-        assert_eq!(item["note"], "Not installed. Dictate is set to use Hex.");
+        assert!(
+            tool_item(&hex(false, &["install"], json!({})), &usage, true).is_none(),
+            "GitHub #644: Update all must never install Hex"
+        );
     }
 
     #[test]

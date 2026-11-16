@@ -1848,6 +1848,8 @@ them in Superwhisper's settings (or ask an agent to, with the `superwhisper`
 command). Ghostex starts Superwhisper's service when needed.
 A computer that used Ghostex's old built-in model moves to Hex (never to a paid
 engine), and Ghostex deletes the speech models that model downloaded by itself.
+Moving to Hex never installs or opens Hex: it stays off the computer until you
+install it here or from Settings > Updates.
 A new install
 picks the xAI or OpenAI key when one is saved, Superwhisper when there is no key
 and it is installed (Linux), and Hex otherwise, then keeps that choice until you
@@ -7406,9 +7408,10 @@ list, with a count beside it) shows everything this computer uses that Ghostex
 can update, as a grid of cards: Ghostex itself, your remote machines' Ghostex,
 the agent CLIs you have turned on or used in the last week, Claude Swap and
 Codex Swap, Fast Computer & Browser Use (cua-driver) and SpaceO, the tools
-Ghostex installed (Node, uv and the like), Hex when it is installed or Dictate
-is set to use it (with Install when it is missing; Hex installs or updates only
-when you click, never by itself), your extensions, the VS Code view's
+Ghostex installed (Node, uv and the like), Hex when it is installed (when it is
+missing it sits in the Not installed part, saying so when Dictate is set to use
+it; Update all never installs it, and Hex installs or updates only when you
+click its own button, never by itself), your extensions, the VS Code view's
 code-server while that view is on, the Chromium runtime (CEF), and the Easy
 Connect helper (Tailcat) that lets phones reach this computer. The helper's
 card offers Update when a Ghostex update brings a newer helper than the one

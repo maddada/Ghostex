@@ -248,7 +248,12 @@ impl EditorState {
         let content = t.cells.get(cell)?;
         let cw = cell_span_width(&t.col_widths, t.cells.len(), cell);
         let cf = cell_font(&font, t.is_header);
-        let full_w = measure_width(window, content, &cf, font_size);
+        let view = t.views.get(cell).and_then(Option::as_ref);
+        let full_w = match view {
+            Some(_) => shape_shown(window, content, view, &cf, font_size, None, Hsla::default())
+                .map_or(px(0.), |wl| wl.width()),
+            None => measure_width(window, content, &cf, font_size),
+        };
         let avail = (cw - pad * 2.).max(px(8.));
         // Alignment shifts only unwrapped content (a wrapped cell fills its width).
         let align_off = if full_w > avail {
@@ -270,7 +275,8 @@ impl EditorState {
             (rel.x - cx - pad - align_off).max(px(0.)),
             rel.y - self.line_tops[row] - pad_y,
         );
-        let in_cell = cell_offset_for_point(content, target, avail, &cf, font_size, window);
+        let view = t.views.get(cell).and_then(Option::as_ref);
+        let in_cell = cell_offset_for_point(content, view, target, avail, &cf, font_size, window);
         Some(self.line_starts()[row] + t.cell_ranges.get(cell)?.start + in_cell)
     }
 
@@ -997,6 +1003,7 @@ impl EditorState {
             Hsla::default(),
             None,
             None,
+            self.markdown_style.as_ref(),
         );
         let Some(&w) = natural.get(col) else {
             return;
@@ -1181,6 +1188,7 @@ pub(crate) fn table_column_widths(
     color: Hsla,
     col_resize: Option<TableColResize>,
     avail: Option<Pixels>,
+    md: Option<&markdown_syntax::SyntaxStyle>,
 ) -> Vec<Pixels> {
     // Reader parity: a row with MORE cells than the header widens the grid —
     // extra columns render (the short rows' last cells span the remainder)
@@ -1213,23 +1221,35 @@ pub(crate) fn table_column_widths(
             if header {
                 font.weight = gpui::FontWeight::BOLD;
             }
-            let run = TextRun {
-                len: cell.len(),
-                font,
-                color,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
+            // The cell as drawn: its inline Markdown rendered, markers hidden (the caret's
+            // construct, which shows its source, does not move the columns).
+            let w = match md.and_then(|md| {
+                markdown_syntax::hidden_cell_runs(cell, &font, color, None, md)
+            }) {
+                Some((text, runs, _)) => window
+                    .text_system()
+                    .shape_line(SharedString::from(text), font_size, &runs, None)
+                    .width(),
+                None => {
+                    let run = TextRun {
+                        len: cell.len(),
+                        font,
+                        color,
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    };
+                    window
+                        .text_system()
+                        .shape_line(
+                            SharedString::from(cell.to_string()),
+                            font_size,
+                            &[run],
+                            None,
+                        )
+                        .width()
+                }
             };
-            let w = window
-                .text_system()
-                .shape_line(
-                    SharedString::from(cell.to_string()),
-                    font_size,
-                    &[run],
-                    None,
-                )
-                .width();
             // Local change (Ghostex Docs): the header keeps room for its sort button, like the
             // Docs page's 2.5ch (`meo/helpers/tables.ts` 150-153).
             let sort = if header { font_size * 1.5 } else { px(0.) };
@@ -1244,7 +1264,7 @@ pub(crate) fn table_column_widths(
         && let Some(avail) = avail
         && widths.iter().copied().sum::<Pixels>() > avail
     {
-        let words = table_column_words(lines, region, window, base_font, font_size, color, cols);
+        let words = table_column_words(lines, region, window, base_font, font_size, color, cols, md);
         widths = fit_table_columns(&widths, &words, font_size, avail);
     }
     // Explicit widths — the marker's `cols=` list (drag-to-resize persisted),
@@ -1278,6 +1298,7 @@ fn table_column_words(
     font_size: Pixels,
     color: Hsla,
     cols: usize,
+    md: Option<&markdown_syntax::SyntaxStyle>,
 ) -> Vec<Pixels> {
     let mut words = vec![px(0.); cols];
     for li in region.lines.clone() {
@@ -1295,7 +1316,11 @@ fn table_column_words(
             .enumerate()
             .take(cols)
         {
-            for word in cell.split_whitespace() {
+            // Words of the cell as drawn (a link shows its text, not its address).
+            let shown = md
+                .and_then(|md| markdown_syntax::hidden_cell_runs(cell, &font, color, None, md))
+                .map(|(text, _, _)| text);
+            for word in shown.as_deref().unwrap_or(cell).split_whitespace() {
                 let run = TextRun {
                     len: word.len(),
                     font: font.clone(),
@@ -1475,6 +1500,62 @@ fn cell_font(font: &Font, is_header: bool) -> Font {
     f
 }
 
+/// Local change (Ghostex Docs): each cell of a row as shown, its inline Markdown (links, inline
+/// code, emphasis) rendered with the markers hidden, like a paragraph's. A cell with nothing to
+/// render stays `None` and shows its source. The cell the caret is in keeps the construct under
+/// the caret in source, so a link can be edited. `caret` is the caret's byte in the row's line.
+pub(crate) fn table_cell_views(
+    cells: &[SharedString],
+    ranges: &[Range<usize>],
+    is_header: bool,
+    md: Option<&markdown_syntax::SyntaxStyle>,
+    font: &Font,
+    color: Hsla,
+    caret: Option<usize>,
+) -> Vec<Option<CellView>> {
+    let Some(md) = md else {
+        return vec![None; cells.len()];
+    };
+    let cf = cell_font(font, is_header);
+    cells
+        .iter()
+        .enumerate()
+        .map(|(c, content)| {
+            let local = caret.and_then(|col| {
+                let range = ranges.get(c)?;
+                (range.start..=range.end)
+                    .contains(&col)
+                    .then(|| col - range.start)
+            });
+            let (text, runs, map) =
+                markdown_syntax::hidden_cell_runs(content, &cf, color, local, md)?;
+            Some(CellView {
+                text: SharedString::from(text),
+                runs: std::rc::Rc::new(runs),
+                map: std::rc::Rc::new(map),
+            })
+        })
+        .collect()
+}
+
+/// A cell's display byte for the source byte `at` of its content: the first display byte that
+/// maps to `at` or past it.
+fn display_index(view: &CellView, at: usize) -> usize {
+    view.map
+        .iter()
+        .position(|&source| source >= at)
+        .unwrap_or(view.text.len())
+        .min(view.text.len())
+}
+
+/// The cell's source byte for display byte `at`.
+fn source_index(view: &CellView, at: usize) -> usize {
+    view.map
+        .get(at.min(view.text.len()))
+        .copied()
+        .unwrap_or(0)
+}
+
 /// Shape a table cell's `content` into a single (unwrapped) line, for exact
 /// caret / hit-test geometry that matches the kerned glyphs `paint_table_row`
 /// renders (measuring prefixes in isolation drifts by their kerning).
@@ -1508,6 +1589,27 @@ fn shape_cell(
             wrap,
             None,
         )
+        .ok()?
+        .into_iter()
+        .next()
+}
+
+/// Shape a cell as shown: its rendered `view` when it has one, else its source `content`.
+fn shape_shown(
+    window: &mut Window,
+    content: &str,
+    view: Option<&CellView>,
+    font: &Font,
+    font_size: Pixels,
+    wrap: Option<Pixels>,
+    color: Hsla,
+) -> Option<WrappedLine> {
+    let Some(view) = view else {
+        return shape_cell(window, content, font, font_size, wrap, color);
+    };
+    window
+        .text_system()
+        .shape_text(view.text.clone(), font_size, &view.runs, wrap, None)
         .ok()?
         .into_iter()
         .next()
@@ -1608,6 +1710,7 @@ pub(crate) fn cell_span_width(col_widths: &[Pixels], cells_len: usize, c: usize)
 pub(crate) fn table_row_wrap_rows(
     window: &mut Window,
     cells: &[SharedString],
+    views: &[Option<CellView>],
     col_widths: &[Pixels],
     is_header: bool,
     font: &Font,
@@ -1625,7 +1728,8 @@ pub(crate) fn table_row_wrap_rows(
             continue;
         }
         let avail = (cw - pad * 2.).max(px(8.));
-        if let Some(wl) = shape_cell(window, cell, &cf, font_size, Some(avail), Hsla::default()) {
+        let view = views.get(c).and_then(Option::as_ref);
+        if let Some(wl) = shape_shown(window, cell, view, &cf, font_size, Some(avail), Hsla::default()) {
             rows = rows.max(wl.wrap_boundaries().len() + 1);
         }
     }
@@ -1660,6 +1764,11 @@ pub(crate) fn table_caret_pos(
     let range = t.cell_ranges.get(cell)?;
     let content = t.cells.get(cell)?;
     let in_cell = col.saturating_sub(range.start).min(content.len());
+    let view = t.views.get(cell).and_then(Option::as_ref);
+    // The shaped text is the rendered cell when it has one: the caret sits at the display byte
+    // its source byte shows at.
+    let shown: &str = view.map_or(content.as_ref(), |v| v.text.as_ref());
+    let shown_at = view.map_or(in_cell, |v| display_index(v, in_cell));
     let cell_x = left + col_offset(&t.col_widths, t.cell_ranges.len(), cell, t.rtl);
     let cw = cell_span_width(&t.col_widths, t.cell_ranges.len(), cell);
     // The header is bold, so shape with the bold font or the caret lands left of
@@ -1668,24 +1777,25 @@ pub(crate) fn table_caret_pos(
     let cf = cell_font(font, t.is_header);
     let line_h = font_size * LINE_HEIGHT_RATIO;
     let avail = (cw - pad * 2.).max(px(8.));
-    let wl = shape_cell(
+    let wl = shape_shown(
         window,
         content,
+        view,
         &cf,
         font_size,
         Some(avail),
         Hsla::default(),
     )?;
-    let mut pos = wl.position_for_index(in_cell, line_h).unwrap_or_default();
+    let mut pos = wl.position_for_index(shown_at, line_h).unwrap_or_default();
     let wrapped = !wl.wrap_boundaries().is_empty();
     // A cell holding right-to-left text needs the same index↔x map the rest of
     // the editor uses: gpui's `position_for_index` collapses every offset in an
     // RTL run onto one x, which is a caret that won't move through the word.
     // Only an unwrapped cell can use it — a map's x's run along the single
     // pre-wrap line (same limit as elsewhere).
-    if !wrapped && zorite_markdown::syntax::contains_rtl(content) {
-        let map = gpui_bidi::shaped::map_of_wrapped(&wl, content.len());
-        pos.x = px(map.x_for_index(in_cell));
+    if !wrapped && zorite_markdown::syntax::contains_rtl(shown) {
+        let map = gpui_bidi::shaped::map_of_wrapped(&wl, shown.len());
+        pos.x = px(map.x_for_index(shown_at));
     }
     let full_w = wl.width();
     // Alignment shifts only unwrapped content (a wrapped cell fills its width).
@@ -1706,6 +1816,7 @@ pub(crate) fn table_caret_pos(
 /// shaped line so it matches the kerned glyphs.
 fn cell_offset_for_point(
     content: &str,
+    view: Option<&CellView>,
     target: Point<Pixels>,
     wrap: Pixels,
     font: &Font,
@@ -1713,9 +1824,10 @@ fn cell_offset_for_point(
     window: &mut Window,
 ) -> usize {
     let line_h = font_size * LINE_HEIGHT_RATIO;
-    let Some(wl) = shape_cell(
+    let Some(wl) = shape_shown(
         window,
         content,
+        view,
         font,
         font_size,
         Some(wrap),
@@ -1723,12 +1835,15 @@ fn cell_offset_for_point(
     ) else {
         return 0;
     };
-    if wl.wrap_boundaries().is_empty() && zorite_markdown::syntax::contains_rtl(content) {
+    let shown: &str = view.map_or(content, |v| v.text.as_ref());
+    // A display byte is a source byte through the cell's map.
+    let to_source = |at: usize| view.map_or(at, |v| source_index(v, at));
+    if wl.wrap_boundaries().is_empty() && zorite_markdown::syntax::contains_rtl(shown) {
         // Same reason as the caret above, in reverse.
-        let map = gpui_bidi::shaped::map_of_wrapped(&wl, content.len());
-        return map.index_for_x(f32::from(target.x));
+        let map = gpui_bidi::shaped::map_of_wrapped(&wl, shown.len());
+        return to_source(map.index_for_x(f32::from(target.x)));
     }
-    match wl.closest_index_for_position(
+    to_source(match wl.closest_index_for_position(
         point(
             target.x,
             target.y.max(px(0.)).min(wl.size(line_h).height - px(1.)),
@@ -1736,7 +1851,7 @@ fn cell_offset_for_point(
         line_h,
     ) {
         Ok(i) | Err(i) => i,
-    }
+    })
 }
 
 /// Paint a table row as a grid (W4c): a top border (+ bottom on the last row),
@@ -1814,8 +1929,9 @@ pub(crate) fn paint_table_row(
             // row's last cell spans the remaining columns.
             let cw = cell_span_width(&t.col_widths, t.cells.len(), c);
             let avail = (cw - pad * 2.).max(px(8.));
+            let view = t.views.get(c).and_then(Option::as_ref);
             if let Some(shaped) =
-                shape_cell(window, cell, &cell_font, font_size, Some(avail), color)
+                shape_shown(window, cell, view, &cell_font, font_size, Some(avail), color)
             {
                 let align = match t.aligns.get(c) {
                     Some(markdown_syntax::Align::Center) => gpui::TextAlign::Center,

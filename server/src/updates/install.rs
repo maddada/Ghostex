@@ -225,7 +225,7 @@ async fn update_helper(state: &AppState, provider: &str) -> Result<(), Outcome> 
 /// Settings > Integrations' Update of a tool (cua-driver, SpaceO, Node, uv...), followed until its
 /// job ends. SpaceO's own update restarts its daemon with the operator restart that waits for agents.
 async fn update_tool(state: &AppState, tool: &str) -> Result<(), Outcome> {
-    // A tool the list shows before it is installed (Hex, when Dictate uses it) is installed.
+    // A tool from the Not installed part (missing.rs) is installed, only on its own Install click.
     let mut read = Map::new();
     read.insert("action".into(), json!("read"));
     read.insert("tool".into(), json!(tool));

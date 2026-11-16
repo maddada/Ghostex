@@ -3427,6 +3427,7 @@ fn shape_document(
                                 base_color,
                                 col_resize,
                                 table_avail,
+                                md,
                             )
                         })
                         .collect(),
@@ -3863,12 +3864,25 @@ fn shape_document(
             .filter(|&ri| !is_code && caret_row != Some(regions[ri].lines.start + 1))
             .map(|ri| {
                 let r = &regions[ri];
+                let cells: Vec<SharedString> = markdown_syntax::table_cells(line)
+                    .into_iter()
+                    .map(|c| SharedString::from(c.to_string()))
+                    .collect();
+                let cell_ranges = markdown_syntax::table_cell_ranges(line);
+                let views = table_cell_views(
+                    &cells,
+                    &cell_ranges,
+                    idx == r.lines.start,
+                    md,
+                    base_font,
+                    base_color,
+                    (caret_row == Some(idx) && selection.0 == selection.1)
+                        .then(|| selection.0.saturating_sub(line_start)),
+                );
                 TableRow {
-                    cells: markdown_syntax::table_cells(line)
-                        .into_iter()
-                        .map(|c| SharedString::from(c.to_string()))
-                        .collect(),
-                    cell_ranges: markdown_syntax::table_cell_ranges(line),
+                    cells,
+                    views,
+                    cell_ranges,
                     aligns: r.aligns.clone(),
                     col_widths: region_cols[ri].clone(),
                     is_header: idx == r.lines.start,
@@ -4451,6 +4465,11 @@ fn shape_document(
                                 f32::from(*w).to_bits().hash(&mut h);
                             }
                             t.is_header.hash(&mut h);
+                            // A rendered cell wraps by what it shows (the caret's construct
+                            // shows its source).
+                            for view in &t.views {
+                                view.as_ref().map(|v| v.text.as_ref()).hash(&mut h);
+                            }
                             run_epoch.hash(&mut h);
                             h.finish()
                         };
@@ -4461,6 +4480,7 @@ fn shape_document(
                                 let r = table_row_wrap_rows(
                                     window,
                                     &t.cells,
+                                    &t.views,
                                     &t.col_widths,
                                     t.is_header,
                                     base_font,

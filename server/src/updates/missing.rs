@@ -121,12 +121,11 @@ pub(super) fn missing_helper_item(tool: &Value) -> Option<Value> {
 }
 
 /// A tool from Integrations > Tools that isn't installed and that Ghostex installs itself (not one
-/// it can only hand a terminal command for). `listed_elsewhere`: Hex while Dictate uses it, which
-/// the updates list already offers.
-pub(super) fn missing_tool_item(tool: &Value, listed_elsewhere: bool) -> Option<Value> {
+/// it can only hand a terminal command for). `dictate_hex`: Hex while Dictate is set to use it,
+/// which says so on its row and still installs only on its own click (GitHub #644, items.rs).
+pub(super) fn missing_tool_item(tool: &Value, dictate_hex: bool) -> Option<Value> {
     let id = tool["id"].as_str()?;
-    if listed_elsewhere
-        || tool["installed"] == true
+    if tool["installed"] == true
         || tool["supported"] != true
         || !offers(tool, "install")
         || tool["terminalCommand"].is_string()
@@ -150,7 +149,9 @@ pub(super) fn missing_tool_item(tool: &Value, listed_elsewhere: bool) -> Option<
     if let Some(latest) = tool["latestVersion"].as_str() {
         item["latest"] = json!(latest);
     }
-    if tool["needsPassword"] == true {
+    if dictate_hex {
+        item["note"] = json!("Dictate is set to use Hex.");
+    } else if tool["needsPassword"] == true {
         item["note"] = json!("Asks for your password.");
     }
     let job = &tool["job"];
@@ -234,10 +235,14 @@ mod tests {
             json!({ "id": "hex", "supported": false, "installed": false, "actions": ["install"] });
         assert!(missing_tool_item(&unsupported, false).is_none());
         let hex = json!({ "id": "hex", "label": "Hex", "supported": true, "installed": false, "actions": ["install"] });
-        assert!(
-            missing_tool_item(&hex, true).is_none(),
-            "Hex for Dictate is already listed as an update"
+        let dictate_hex = missing_tool_item(&hex, true).expect("listed");
+        assert_eq!(dictate_hex["state"], "notInstalled");
+        assert_eq!(
+            dictate_hex["canUpdate"], false,
+            "GitHub #644: Update all never installs Hex"
         );
+        assert_eq!(dictate_hex["topBar"], false);
+        assert_eq!(dictate_hex["note"], "Dictate is set to use Hex.");
         assert!(missing_tool_item(&hex, false).is_some());
         let installed =
             json!({ "id": "uv", "supported": true, "installed": true, "actions": ["update"] });
