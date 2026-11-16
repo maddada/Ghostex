@@ -732,7 +732,7 @@ fn gated_post(
                 return Gated::Waiting;
             }
             RequestState::Unknown => return Gated::Waiting,
-            RequestState::Declined => {
+            RequestState::Declined | RequestState::Lapsed => {
                 forget(true);
                 return Gated::Declined;
             }
