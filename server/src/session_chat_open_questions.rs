@@ -112,6 +112,8 @@ pub(crate) struct OpenAsker {
     latest_turn: bool,
     /// The question tags it asks, uppercased.
     tags: Vec<String>,
+    /// When the reply that asks it arrived (epoch ms), if the transcript says.
+    at: Option<i64>,
 }
 
 impl OpenAsker {
@@ -122,6 +124,11 @@ impl OpenAsker {
     /// The question tags it still asks (the coordinator's open questions note, send.rs).
     pub(crate) fn waiting_tags(&self) -> Vec<String> {
         self.tags.clone()
+    }
+
+    /// When it was asked (epoch ms), if the transcript says.
+    pub(crate) fn asked_at(&self) -> Option<i64> {
+        self.at
     }
 }
 
@@ -670,6 +677,7 @@ impl Ledger {
                         .iter()
                         .map(|tag| tag.to_ascii_uppercase())
                         .collect(),
+                    at: asker.at,
                     id: asker.id,
                     kind: asker.kind,
                 }
@@ -1573,6 +1581,7 @@ mod tests {
             waiting,
             latest_turn: true,
             tags: Vec::new(),
+            at: None,
         }
     }
 

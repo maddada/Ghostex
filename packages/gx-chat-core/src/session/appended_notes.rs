@@ -170,9 +170,68 @@ fn strip_last_note(rest: &str) -> Option<&str> {
         .then_some(body)
 }
 
-/// `text` with `note` under it, a blank line apart: the shape gxserver types.
+/// `text` with `note` under it, a blank line apart: the shape gxserver typed before 11.8
+/// (`with_system_notes` now). Kept so such rows in transcripts are still read without it.
 pub fn with_note(text: &str, note: &str) -> String {
     format!("{}\n\n{note}", text.trim_end())
+}
+
+/// The block that carries Ghostex's own notes to the agent, after what the user wrote and apart
+/// from it: the playbook note, the drift reminder, the compaction note and the open questions.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, of "Still open for the user: …" drawn in his own bubble: "This is a system message. mark
+/// it as such and don't show these ghostex system messages in the chat view at all like this!
+/// also shouldn't be attached to a user's message should be sent on its own". Every note goes in
+/// one `<ghostex-system>` block, marked as Ghostex's and never part of the user's words, in the
+/// same submit (a second submit would land mid-turn as another user message on Claude Code and
+/// Codex alike, and could be lost or reordered by their queues). Every chat drops the block from
+/// the row it draws, wherever in the text it sits (`without_notes`).
+pub const SYSTEM_OPEN: &str = "<ghostex-system>";
+pub const SYSTEM_CLOSE: &str = "</ghostex-system>";
+
+/// `text` with Ghostex's `notes` after it in one `<ghostex-system>` block; `text` alone for none.
+pub fn with_system_notes(text: &str, notes: &[&str]) -> String {
+    let notes: Vec<&str> = notes
+        .iter()
+        .map(|note| note.trim())
+        .filter(|note| !note.is_empty())
+        .collect();
+    if notes.is_empty() {
+        return text.to_string();
+    }
+    format!(
+        "{}\n\n{SYSTEM_OPEN}\nGhostex system note, not written by the user:\n{}\n{SYSTEM_CLOSE}",
+        text.trim_end(),
+        notes.join("\n\n")
+    )
+}
+
+/// `text` without its `<ghostex-system>` blocks, or `None` when it has none.
+fn without_system_blocks(text: &str) -> Option<String> {
+    if !text.contains(SYSTEM_OPEN) {
+        return None;
+    }
+    let mut kept = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find(SYSTEM_OPEN) {
+        let Some(close) = rest[open..].find(SYSTEM_CLOSE) else {
+            break;
+        };
+        kept.push_str(rest[..open].trim_end());
+        rest = &rest[open + close + SYSTEM_CLOSE.len()..];
+    }
+    kept.push_str(rest);
+    Some(kept.trim_end().to_string())
+}
+
+/// `text` without anything gxserver added for the agent: its `<ghostex-system>` blocks, and the
+/// bare notes of older versions under it (`without_appended_notes`). What the user sent.
+pub fn without_notes(text: &str) -> String {
+    match without_system_blocks(text) {
+        Some(plain) => without_appended_notes(&plain).to_string(),
+        None => without_appended_notes(text).to_string(),
+    }
 }
 
 /// `text` without the notes gxserver added under it: what the user sent.
@@ -237,9 +296,9 @@ pub fn shown_message(message: &ChatMessage) -> Option<ChatMessage> {
         .iter()
         .map(|block| match block {
             ChatBlock::Text { text } => {
-                let plain = without_appended_notes(text);
-                let plain = if plain.len() != text.trim_end().len() {
-                    plain.to_string()
+                let stripped = without_notes(text);
+                let plain = if stripped.len() != text.trim_end().len() {
+                    stripped
                 } else {
                     text.clone()
                 };
