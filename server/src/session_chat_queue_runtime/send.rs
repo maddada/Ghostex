@@ -371,7 +371,6 @@ fn record_coordinator_playbook_note(
     }
 }
 
-
 /// One lock per session, held by a chat message send from its screen read to its last retype.
 fn session_send_lock(project_id: &str, session_id: &str) -> Arc<tokio::sync::Mutex<()>> {
     static LOCKS: std::sync::OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
