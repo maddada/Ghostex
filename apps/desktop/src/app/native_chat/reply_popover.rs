@@ -70,7 +70,7 @@ const SAVE_AFTER: Duration = Duration::from_millis(400);
 /// User: "for these kinds of boxes where i reply PLEASE keep in memory what i wrote there so we
 /// restore it when i click away by mistake. i lost what i entered there many times". Reply on the
 /// same row opens with the words and the caret after them; Send answer or Add to prompt clears
-/// them, and a row that holds some says "Draft" on its Reply. Then, of drafts kept only in memory:
+/// them. Then, of drafts kept only in memory:
 /// "not good enough fam. pls fix." gxserver keeps them, as it keeps the chat box's draft.
 static KEPT_REPLIES: std::sync::LazyLock<std::sync::Mutex<HashMap<String, KeptReply>>> =
     std::sync::LazyLock::new(Default::default);
@@ -457,13 +457,6 @@ impl NativeChatView {
             "{}/{}/{}\n{row}",
             self.config.machine_id, self.config.project_id, self.config.session_id
         )
-    }
-
-    /// Whether the Reply of `reply` (a row's `reply` object) holds words not yet sent, for its
-    /// "Draft" sign.
-    pub(super) fn has_kept_reply(&self, reply: &serde_json::Value) -> bool {
-        kept_reply_row(reply)
-            .is_some_and(|row| kept_replies().contains_key(&self.kept_reply_key(&row)))
     }
 
     /// A new snapshot: a draft whose row was open on the dock or the board and is on neither now
