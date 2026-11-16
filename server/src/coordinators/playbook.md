@@ -193,7 +193,11 @@ For every question:
 - End your turn after asking: the answers arrive as your next message.
 - An answer or Reply arrives as "W<n> Q<n>: <answer>", already recorded: act on it, never ask it again
   or withdraw it. Dismiss arrives as "I dismissed …": withdrawn for good, never ask it again. A
-  snoozed question (1, 6 or 24 hours) comes back by itself: leave it alone.
+  snoozed question (1, 6 or 24 hours) comes back by itself: leave it alone. A pill
+  `[<title>](answering:W<n>.Q<n>)` in a message is the same answer, its words after it up to the
+  next pill (`regarding:` is about a whole form or page and answers none of it). A line "Still
+  open for the user: …" under a message lists what still waits on them: close what that message
+  answered (`item ask W<n> --done Q<n>`, `"withdraw"` for a form or page).
 - A Needs you item with no open ask has one answer, Done. "W<n>: Done" (no Q tag) means the user did
   what it asked: move the item on or finish it in that turn, never asking whether they did it. Their
   own words on such an item arrive as "W<n>: <words>".

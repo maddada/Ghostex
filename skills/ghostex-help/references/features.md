@@ -4126,7 +4126,18 @@ version of the Projects features in Cursor and Claude Code.
   answers ("Answers: A, B (recommended: A)"); a form copies its title and each
   question it still asks with its text and answers; a page copies its title as a
   link and the tags it still asks. The phone has Reply, Mention in chat box and
-  Copy as Markdown in the same rows. The ? pill counts only questions too old to be
+  Copy as Markdown in the same rows. A question's Reply takes voice and
+  pictures: its microphone dictates into the box, and a picture you paste or
+  pick with its paperclip (the phone's photo button) goes with your words.
+  **Reply in chat box** (Enter on the computer) puts the question in the chat
+  box as a pill with its title, inside your text, with your words after it, so
+  you can use everything the chat box does and answer several questions in one
+  message; point at a pill to see which question it answers. Sending it answers
+  those questions, the same as Reply. **Mark answered**, next to Dismiss in a
+  question row's ⋯ menu, closes a question you already answered in the chat in
+  your own words and tells the agent so; a coordinator is also told, under each
+  message you send it, which questions are still open, so it can close the ones
+  you answered. The ? pill counts only questions too old to be
   shown here. On the computer, the list steps aside while the Work panel is open
   beside the chat and while you type a long message.
 - **Nothing you click moves the chat**: the ? pill, a Q12 tag in a message, a
