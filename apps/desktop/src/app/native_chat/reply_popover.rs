@@ -542,8 +542,11 @@ impl NativeChatView {
             {
                 let mut kept = kept_replies();
                 let shared = format!("{scope}{SESSION_REPLY_ROW}");
-                if let Some(text) = drafts[SESSION_REPLY_ROW]
-                    .as_str()
+                // `drafts` is a map, whose `[]` panics on a missing key, and a session without a
+                // draft has none.
+                if let Some(text) = drafts
+                    .get(SESSION_REPLY_ROW)
+                    .and_then(|text| text.as_str())
                     .filter(|text| !text.trim().is_empty())
                 {
                     kept.entry(shared.clone()).or_insert_with(|| KeptReply {
