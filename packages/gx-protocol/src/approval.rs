@@ -433,7 +433,7 @@ pub const OWNER_SCOPE_DOOR: &str = "door";
 /// First line of what [`owner_key_words`] hashes.
 pub const OWNER_KEY_WORDS_DOMAIN: &str = "ghostex-owner-key-words-v1";
 
-/// What the "act as you" card's three words come from: the request's own `nonce` (random, made
+/// What the "act as you" card's words come from: the request's own `nonce` (random, made
 /// by gxserver for that request) and the key's `keyId`. Hash it with SHA-256 and pass the digest
 /// to [`owner_key_words`]. The card and the app that asked (which gets the request back) both
 /// show the words; nobody can choose a key whose words match another request's (review round 2,
@@ -442,10 +442,19 @@ pub fn owner_key_words_input(request_nonce: &str, key_id: &str) -> Vec<u8> {
     format!("{OWNER_KEY_WORDS_DOMAIN}\n{request_nonce}\n{key_id}").into_bytes()
 }
 
-/// The three words of an "act as you" request, from the SHA-256 digest of
+/// How many words an "act as you" request shows (review round 3, R3-3: four, so guessing a
+/// match by making and denying requests takes about 2^32 tries, past the hourly cap).
+pub const OWNER_KEY_WORD_COUNT: usize = 4;
+
+/// The four words of an "act as you" request, from the SHA-256 digest of
 /// [`owner_key_words_input`].
 pub fn owner_key_words(digest: &[u8]) -> String {
-    crate::pairing::pairing_match_words(digest).join(" ")
+    digest
+        .iter()
+        .take(OWNER_KEY_WORD_COUNT)
+        .map(|byte| crate::pairing::PAIRING_WORDS[usize::from(*byte)])
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// `/api/openOwnerSession` → the owner session token, held only in the desktop app's memory.
