@@ -5298,7 +5298,7 @@ sessions, so any client can control agents on any machine.
   Connect) needs no pairing: its SSH login is enough, so it reads, replies,
   stops, types and approves from its first sign-in (with the phone app from
   this release; an older phone app still asks once, and Ghostex on the computer
-  shows "Approve this phone?" with three words to compare). Computers you reach
+  shows "Is this your phone?" with three words to compare). Computers you reach
   over SSH don't pair either, and a computer you add under Settings > Remote
   lets the agents on both computers reach each other at once. With the
   computer's Agent access off they don't. Such a phone never gets Easy Connect
@@ -5347,13 +5347,29 @@ sessions, so any client can control agents on any machine.
   a line or two with one button that fixes it (Try another code, Reconnect,
   Try again). Use SSH details in the window adds a computer by its address,
   username and password instead. To re-pair a computer paired before 11.1.0,
-  open it in Settings > Remote there and paste a new code. On a server without
-  the app (or any terminal), `ghostex computer-code` (also `gxserver
-  computer-code`) prints this computer's code to paste into Connect a Computer
-  on the other one, then shows that computer's three words and asks y or n to
-  approve it; `--once` or `--json` only prints the code. Easy Connect must be on
-  (`ghostex tailcat enable`), and it runs only in your own terminal, not from an
-  agent's session.
+  open it in Settings > Remote there and paste a new code.
+  A computer's code is the text Connect a Computer shows under "This computer's
+  code": it names that computer and carries a one-time secret. It works once and
+  lapses after five minutes, and a new one appears when it does. In the app it
+  is in the Connect a Computer window (sidebar More Options, or Settings >
+  Remote, where Add a computer opens the same window); Connect a Phone is for
+  phones. A server with no Ghostex app (a Linux
+  box in the cloud, a headless machine over SSH) has no window to show it in:
+  run `ghostex computer-code` there (`gxserver computer-code` does the same) in
+  your own terminal, not in a Ghostex session. gxserver must be running on it
+  with Easy Connect on (`ghostex tailcat enable`). To connect your computer A
+  (the server) to your computer B (which has the app): run `ghostex
+  computer-code` on A and leave it running; on B open Connect a Computer, paste
+  A's code into "The other computer's code" and click Connect; B shows "Check the
+  words" with three words; A's terminal then prints "<B> wants to connect. Its
+  words: a b c" and asks "Approve it? [y/N]"; if the words are the same on both,
+  type y (n turns it down). The command stops after the first computer you
+  approve (run it again to connect another), after 10 minutes with nobody
+  waiting, or when you press Ctrl+C, and B then finishes signing in as usual.
+  `--once` or `--json` only print the code and exit, so approve the new computer
+  in the Ghostex app (or on a paired phone) within a minute instead. In a
+  terminal that can't answer (no keyboard input), it says to approve in the app
+  or on a phone.
   Easy Connect meets the phone on a relay. Relay (Settings > Remote > Advanced) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;
