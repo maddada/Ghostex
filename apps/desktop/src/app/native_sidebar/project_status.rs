@@ -18,6 +18,50 @@ pub(crate) fn project_diff_deletions_color() -> gpui::Rgba {
 /// The opacity the project header draws its diff numbers at (the 2026-09-22 decision below).
 pub(crate) const PROJECT_DIFF_OPACITY: f32 = 0.7;
 
+/// A collapsed project header draws its sessions' status counts in place of its diff numbers.
+fn collapsed_header_shows_counts(group: &NativeSidebarGroup) -> bool {
+    let count = |key: &str| group.summary[key].as_u64().unwrap_or_default();
+    group.collapsed
+        && [
+            "workingCount",
+            "attentionCount",
+            "questionCount",
+            "approvalCount",
+            "awakeCount",
+        ]
+        .iter()
+        .any(|key| count(key) > 0)
+}
+
+/// The "+N -N" a project header draws, `None` when it draws none (hidden by setting, nothing
+/// changed, or a project with no diff numbers at all).
+fn header_diff_stats<'a>(
+    group: &'a NativeSidebarGroup,
+    hud: &Value,
+) -> Option<(&'a Value, u64, u64)> {
+    if hud["settings"]["hideProjectHeaderDiffStats"] == true {
+        return None;
+    }
+    let stats = group
+        .project_context
+        .as_ref()?
+        .get("editor")?
+        .get("diffStats")?;
+    let additions = stats["additions"].as_u64().unwrap_or_default().min(9999);
+    let deletions = stats["deletions"].as_u64().unwrap_or_default().min(9999);
+    if additions == 0 && deletions == 0 {
+        return None;
+    }
+    Some((stats, additions, deletions))
+}
+
+/// The project header draws its "+N -N" right now (the same test `project_status` makes). The
+/// header's Commit button keeps its plain label while this holds (CDXC:Titlebar 2026-11-16 in
+/// render/workarea_header/action_buttons.rs).
+pub(crate) fn project_header_shows_diff_stats(group: &NativeSidebarGroup, hud: &Value) -> bool {
+    !collapsed_header_shows_counts(group) && header_diff_stats(group, hud).is_some()
+}
+
 pub(crate) fn project_status(
     group: &NativeSidebarGroup,
     hud: &Value,
@@ -31,9 +75,7 @@ pub(crate) fn project_status(
     let question = count("questionCount");
     let approval = count("approvalCount");
     let awake = count("awakeCount");
-    if group.collapsed
-        && (working > 0 || attention > 0 || question > 0 || approval > 0 || awake > 0)
-    {
+    if collapsed_header_shows_counts(group) {
         let count_badge = |count: u64, color, dot: bool| {
             h_flex()
                 .gap(px(3.0 * scale))
@@ -85,19 +127,7 @@ pub(crate) fn project_status(
                 .into_any_element(),
         );
     }
-    if hud["settings"]["hideProjectHeaderDiffStats"] == true {
-        return None;
-    }
-    let stats = group
-        .project_context
-        .as_ref()?
-        .get("editor")?
-        .get("diffStats")?;
-    let additions = stats["additions"].as_u64().unwrap_or_default().min(9999);
-    let deletions = stats["deletions"].as_u64().unwrap_or_default().min(9999);
-    if additions == 0 && deletions == 0 {
-        return None;
-    }
+    let (stats, additions, deletions) = header_diff_stats(group, hud)?;
     // CDXC:Theming 2026-09-22 DECISION: User: make the text have 70% opacity.
     // This supersedes the earlier same-day instruction not to use opacity on these numbers. The theme colors stay solid underneath.
     // SEE-ALSO: packages/core-ui/styles/groups.css (deleted 2026-11-06) `.group-project-diff-stats`, packages/core-ui/styles/sidebar-light.css (deleted 2026-11-06).

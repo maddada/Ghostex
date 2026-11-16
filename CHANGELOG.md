@@ -2,6 +2,115 @@
 
 ## Unreleased
 
+## 11.8.2 - 2026-11-16
+
+**Ghostex 11.8.2 is out.** It fixes the Mac app quitting when a chat shows a one-click answer, including on every launch for some people.
+
+### 🩹 Fixes and polish
+
+- **macOS: Ghostex no longer quits when you open a chat that ends with one-click answer buttons,** which for some people happened on every launch, thanks to @nadzifal, @NexiaMoe and @WangAxerold.
+- **Ghostex's notes reach a coordinator as their own message,** and the chat hides them however they arrive, so a coordinator's reply is no longer lost behind one, thanks to @sebastianarena.
+- **A coordinator's right-click menu groups its settings under one Coordinator row,** as the phone's long-press menu does.
+- **A new chat in an existing worktree on another computer opens in Chat,** not as a terminal or an empty pane.
+
+## 11.8.1 - 2026-11-16
+
+**Ghostex 11.8.1 is out.** It fixes a freeze that could follow an update or restart.
+
+### 🩹 Fixes and polish
+
+- **Fixes Ghostex sometimes freezing right after an update or restart when a coordinator chat was open.**
+
+## 11.8.0 - 2026-11-16
+
+**Ghostex 11.8.0 is out.** Chill, Regular or Advanced in the new Experience settings, to-dos your agents leave you under Needs you, starred pages, a newer page that replaces its older cards, Reply with voice and pictures, switching a folder's branch from the new chat, OpenAI voice with your ChatGPT sign-in, `ghostex computer-code` for a server without the app, the Thread brief extension, the framed work area on Linux and Windows, and Ghostex for iPhone moving from TestFlight to the App Store.
+
+### 🎛️ Experience
+
+- **Chill, Regular or Advanced:** Settings > Experience sets how many buttons and details Ghostex shows, for the whole app or per area (Chat box, Chat, Sessions list), and a row says Custom once you change its settings by hand. Chill keeps the chat box simple and the chat calm: the running turn stays one line that counts its time ("Working · 1m 12s"). On the computer and the phone, each on its own.
+- **The welcome asks how much to show:** its Workspace step offers Chill, Regular (picked) or Advanced and says what each shows, and a new phone asks once after pairing.
+- **A simpler chat box when you want one:** with the terminal button off the row, ••• turns red and says why when the terminal has a problem, and with the mode picker off new Claude sessions start in Auto (or Bypass permissions while Skip permissions is on).
+
+### ✅ Needs you and Reply
+
+- **Agents leave you to-dos:** any session can leave you a step only you can do (`ghostex needs-you add`). It shows as a row above its chat box with Done, Reply and a chip that copies its command, and counts in the pink dot; a thread's to-do goes to its coordinator's Needs you.
+- **Reply takes voice and pictures,** Reply in chat box puts the question in the chat box as a pill by its title, and Mark answered closes a question you answered in the chat ([#627](https://github.com/maddada/Ghostex/issues/627)), thanks to @sebastianarena for raising it.
+- **The Reply card keeps one draft per session,** with its words, pictures and dictation, through a click away, another session, a quit or a crash, and dictation that lands after the card closed joins that draft.
+- **A Reply names what it answers by its title** ("Reply about ..."), never a list of Q tags. On the computer and the phone.
+
+### 📄 Pages
+
+- **Star a page:** click the star in a page card's window bar or on its Chat Resources row, or pick Star page in its window's ⋯ menu (Star in the ⋯ menus on the phone). Resources' Starred filter lists them, stars belong to the chat, and a star moves to the newest version of the same file.
+- **A newer page replaces its older cards:** showing the same file again marks its earlier cards Replaced so they stop waiting, and an agent can take back a page with `ghostex page retire` ([#626](https://github.com/maddada/Ghostex/issues/626)), thanks to @DaveW001 for raising it.
+- **Mark all seen in the dock:** once two or more pages wait only to be looked at, one click clears them from the dock, the counts and the sidebar's dot, and their cards read Seen. On the computer and the phone.
+- **Pages fit narrow windows and large text:** columns, frames and stat values no longer spill or overlap, and the "N of M answered" pill always shows and never covers the send bar or a control.
+
+### 💬 Chat
+
+- **Bigger, bold headings and a soft blue bubble for your messages,** bold words in the bright ink, "Image is being uploaded" under a message waiting for its picture, and a picture that fails to upload stays in the chat box for Send to retry. On the computer and the phone.
+- **"Thinking…" while an agent works:** the playful words are now Settings > Chat > Advanced > Varied thinking words.
+- **Calmer cards:** tool call cards, settled approvals and side questions are one-line cards, background tasks that end in a row share one tool call card, and a card holding one call says what it did.
+- **One-click answers that don't fit stack one per row,** with long answers wrapping inside their button, on the computer, the web build and the phone, thanks to @sebastianarena.
+- **Several page answers in one message** are each read, confirmed and settled, thanks to @suatkocar.
+- **Yes on a Claude Code permission prompt** in a named session lands again instead of "Claude's dialog changed".
+- **Message cards cut a long name instead of collapsing it,** and a Message to card shows when it went.
+- **Approval cards keep Yes and No in reach:** in the Approvals menu a card's header and buttons stay put while a long command scrolls, and several cards scroll as a list. On the computer and the phone.
+- **The Commit button shows the folder's changes:** +N -N and the push and pull counts, when the sidebar isn't already showing them for that project.
+
+### 🗂️ Projects and sessions
+
+- **Switch a folder's branch from the new chat:** click This folder's branch in the new chat's bar (or press Option+B) to search Recent, Local and Remote branches or create one. It checks out at once, offers New worktree when another session works on that branch, and asks first when the folder has uncommitted changes. On the computer and the phone.
+- **Hide a computer's sessions in a project:** click a computer's icon on a project header to hide or show its sessions there, and Hide sessions and projects from computers that aren't connected keeps the list to what you can reach.
+- **A shorter session right-click menu:** a row of Rename, Pin and Copy ID buttons, then Snooze, Park, Note and Tag As, with Sleep under Advanced, as on the phone.
+- **Coordinators stand apart without bold,** with their team's status dots shown open or folded; Bold coordinator title brings the bold back.
+
+### 🧭 Coordinators
+
+- **Waits clear themselves:** a work item waiting on a release, a phone update or a rebuild comes back as Delivered once it happens, page and form questions can be waited on, and stale Waiting and Later items are named for a recheck.
+- **The stopped-threads card** lists only threads that were working, has a clear Compact first tick per thread, and no longer shows 0K.
+- **A coordinator's threads stay under it:** a thread linked from another project, or running on another computer, is listed under its coordinator in the Project list, on the computer and the phone.
+- **Ghostex's own notes to a coordinator stay out of the chat,** and the list of open questions is sent only when it changes.
+- **New Coordinator's Next opens the agent picker again,** its First message hint no longer runs under the footer, and a keyboard handoff held back by the New Thread picker lands as soon as it closes, thanks to @sebastianarena.
+
+### 🌐 Computers and connections
+
+- **`ghostex computer-code`** prints this computer's pairing code, the one Connect a Computer shows, and approves the computer that pastes it, so a server without the app can be connected to. It stops after 10 idle minutes or the first approved computer.
+- **Linux computers wear their distribution's logo:** Manjaro, EndeavourOS, CachyOS, Linux Mint, Pop!_OS, openSUSE and NixOS join Arch, Ubuntu, Debian, Fedora and Red Hat, and an icon you picked no longer goes back to the penguin.
+- **`ghostex project status`** shows a project's uncommitted and unpushed work on this computer and on every connected one, and says which computers are offline.
+- **Add a computer from the phone with its SSH details** (host, username and password) instead of the code; it shows as "SSH · <address>", and Can't reach skips the Tailscale steps for it.
+- **Steadier phone connections:** moving back to Tailscale waits for running commands, a sessions read cut off by the phone's own reconnect is read again quietly, and Send to developer names each computer ([#631](https://github.com/maddada/Ghostex/issues/631), [#632](https://github.com/maddada/Ghostex/issues/632)).
+
+### 🎙️ Voice
+
+- **Use my ChatGPT sign-in for OpenAI voice:** when Codex is signed in with ChatGPT on this computer, the Voice Agent can use that sign-in instead of a pasted OpenAI key, Settings says when it is in use, and a long key now saves and is checked against Realtime ([#629](https://github.com/maddada/Ghostex/issues/629)).
+
+### 🧩 Extensions
+
+- **Thread brief:** turn it on in Settings > Extensions to keep each session's objective, status, next up, done, blocked and parked items in a side panel, kept current by its agent, with a Briefs list in the sidebar's top row. Click the objective to rewrite it, on the computer or the phone ([#593](https://github.com/maddada/Ghostex/issues/593)), thanks to @DaveW001 for the idea.
+- **Extensions can tell new agent sessions about themselves** in one short line you allow on the install card (coordinators and their threads never get it), and a panel's text can be editable.
+
+### 🐧 Linux and Windows
+
+- **The framed work area on Linux and Windows:** Frame the work area shows the work area as a card inside the window, with web pages, terminals and panes rounded to the card.
+- **Window buttons on Omarchy and Hyprland:** minimize, maximize and close sit in the header's top right, and Minimize shows only on floating workspaces, where Omarchy can minimize. The buttons wear the header's colour, so the chat no longer shows through them.
+- **Linux: Settings, Connect a computer and every other dialog get a thin edge.**
+
+### 📱 On the phone
+
+- **iPhone: Ghostex is on the App Store.** This is the last TestFlight build: it asks you once to switch to the App Store version, which gets every update from now on, and its Update button opens the App Store.
+- **New session picks the project and type,** the session wall marks coordinators with a crown, and chats run full width on tablets, thanks to @sebastianarena.
+- **The chat box no longer flashes or jumps while you type,** matches the desktop's pills, and shows a picture's chip at the caret while it uploads.
+- **An open session tab follows its session's new title** after a rename, and a computer that can't be reached keeps its red icon on the home row.
+
+### 🩹 Fixes and polish
+
+- **Claude account switches work with many sessions open:** a switch no longer fails with "Could not inspect the agent" and leaves an empty shell ([#630](https://github.com/maddada/Ghostex/issues/630)).
+- **Browser tabs keep their place:** local file:// tabs survive a relaunch, committing an address keeps the tab where it was, and an Advanced Browser switch reloads open pages on launch, thanks to @suatkocar.
+- **Antigravity: a message sends again** when the agent's last line ends in a link ([#637](https://github.com/maddada/Ghostex/issues/637)), thanks to @DanOverflow for raising it.
+- **Right-clicking a web page in the browser** opens Ghostex's own small menu.
+- **Cloud Boxes: a phone reading its kit while Start boxes from your phone is off** is refused cleanly instead of logging a server error, thanks to @cagatay-io.
+- **Help describes the updated iPhone crash reports,** thanks to @cagatay-io.
+
 ## 11.7.1 - 2026-11-15
 
 **Ghostex 11.7.1 is out.** Sessions no longer wake up and spend your usage on their own after a usage limit or a restart, long chats are compacted before they carry on, workers under a coordinator stop sending you notifications, the project picker and the browser bar show each computer's own logo, sidebar extensions arrive, and Settings search finds only real matches.

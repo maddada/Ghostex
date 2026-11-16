@@ -175,7 +175,7 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    fn dispatch_gpui_install_job_progress(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn dispatch_gpui_install_job_progress(&mut self, cx: &mut gpui::Context<Self>) {
         let payload = gpui_install_job_progress_status_payload();
         self.dispatch_open_gpui_app_modal_sidebar_state_payload(payload.clone(), cx);
     }

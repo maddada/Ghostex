@@ -44,6 +44,7 @@ pub enum GpuiSupportLog {
     CrashReports,
     Performance,
     HelpChatTiming,
+    StartupTiming,
 }
 
 impl GpuiSupportLog {
@@ -59,6 +60,7 @@ impl GpuiSupportLog {
             Self::CrashReports => "gpui-crash-reports.log",
             Self::Performance => "gpui-performance.jsonl",
             Self::HelpChatTiming => "gpui-help-chat-timing.log",
+            Self::StartupTiming => "gpui-startup-timing.log",
         }
     }
 
@@ -73,8 +75,11 @@ impl GpuiSupportLog {
             Self::AppModal => Some(GpuiDiagnosticScenario::AppModal),
             // Crash reports are always-on failure diagnostics, and `--profile` is the performance
             // log's own opt-in (`append_profile_sample`).
-            // The Help chat's step timings are always on (`append_help_chat_timing`).
-            Self::CrashReports | Self::Performance | Self::HelpChatTiming => None,
+            // The Help chat's step timings are always on (`append_help_chat_timing`), and so are
+            // the launch's (`append_startup_timing`).
+            Self::CrashReports | Self::Performance | Self::HelpChatTiming | Self::StartupTiming => {
+                None
+            }
         }
     }
 }
@@ -185,6 +190,17 @@ pub fn append_profile_sample(details: serde_json::Value) {
         "gpui.performance.sample",
         details,
     );
+}
+
+/// Appends one milestone of a launch (the first frame, the sidebar drawn from stored state, the
+/// live presentation arriving). A handful of lines per launch, so it needs no Settings switch; each
+/// line carries `sinceLaunchMs` so two launches can be compared from the file alone.
+pub fn append_startup_timing(event: &str, mut details: serde_json::Value) {
+    if let Some(object) = details.as_object_mut() {
+        object.insert("pid".into(), std::process::id().into());
+        object.insert("sinceLaunchMs".into(), ms_since_launch().into());
+    }
+    append_unconditionally(GpuiSupportLog::StartupTiming, event, details);
 }
 
 /// Appends one step of an Ask Ghostex open (gx_store/create/help_chat_timing.rs). A handful of
@@ -602,6 +618,7 @@ pub fn prune_gpui_support_logs() {
         GpuiSupportLog::AppModal,
         GpuiSupportLog::CrashReports,
         GpuiSupportLog::HelpChatTiming,
+        GpuiSupportLog::StartupTiming,
     ] {
         let retained = logs_directory.join(log.file_name());
         for index in 1..=MAX_ROTATED_LOG_FILES {

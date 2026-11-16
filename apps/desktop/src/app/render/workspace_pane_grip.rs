@@ -15,7 +15,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui_component::ElementExt as _;
 
-use crate::app::actions::{CloseAgentsPane, MergeAllTabsForPane};
+use crate::app::actions::{CloseAgentsPane, MergeAllTabsForPane, OpenAgentsPaneInNewWindow};
 use crate::app::context_menu::GpuiContextMenu;
 use crate::app::helpers::*;
 use crate::app::model::*;
@@ -160,6 +160,11 @@ impl GhostexGpuiApp {
             .menu(
                 "Merge All Panes",
                 Box::new(MergeAllTabsForPane { pane_id: pane_id.0 }),
+            )
+            // The pane's session in a window of its own (app/session_popup/).
+            .menu(
+                "Open in New Window",
+                Box::new(OpenAgentsPaneInNewWindow { pane_id: pane_id.0 }),
             );
         match grip {
             Some(grip) => menu.toggle_below(grip, window, cx),

@@ -308,7 +308,14 @@ impl NativeChatView {
             .sum();
         let own = if clickable { 30.0 * s + 1.0 } else { 0.0 };
         // The row's 16px sides in the transcript column, the list depth, and the pill's border.
-        let room = self.transcript_text_width(p) - 32.0 * s - gutter;
+        // CDXC:SessionChat 2026-11-16 WHY: GitHub #638, #640 and #642: this ran
+        // `transcript_text_width`, whose minimap gutter asks the transcript list how many rows it
+        // holds, from inside that list's own layout (which holds the list's state mutably), so any
+        // chat showing one-click answers with no ask card over them panicked ("RefCell already
+        // mutably borrowed", gpui list.rs) and took the app down, on opening the chat or on every
+        // launch that restored it. The width comes from this frame's render instead, measured
+        // before the list lays out.
+        let room = self.frame_text_width - 32.0 * s - gutter;
         segments + own + 2.0 > room
     }
 }

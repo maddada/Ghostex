@@ -147,6 +147,15 @@ impl GhostexGpuiApp {
             self.gx_store_drop_sidebar_command_before_ready(&command);
             return;
         }
+        // The session menu's Open in New Window, a desktop-only row (app/session_popup/).
+        if command["type"] == "sessionAction"
+            && command["action"] == crate::app::session_popup::OPEN_IN_NEW_WINDOW_ACTION
+        {
+            if let Some(row_id) = command["sessionId"].as_str() {
+                self.open_session_popup_for_row(row_id, cx);
+            }
+            return;
+        }
         // A pin call that carries a place in Pinned (a pinned drop in either sidebar, gx-core
         // sidebar_drag/pinned_order.rs) moves the local row first, on whichever machine the
         // session is, so the row lands under the pointer before gxserver answers.

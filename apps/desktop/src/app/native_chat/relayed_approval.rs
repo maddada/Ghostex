@@ -26,6 +26,9 @@ const APPROVALS_MENU_MAX: f32 = 560.0;
 /// The rows the command box shows before it scrolls inside itself (`tone_card::command_box`'s
 /// 160px at 20px a row).
 const COMMAND_BOX_ROWS: usize = 8;
+/// The least height (unscaled) a card in the menu shrinks to: its header, its buttons and a few
+/// rows of its command, so several cards scroll as a list instead of each shrinking to nothing.
+const APPROVALS_CARD_FLOOR: f32 = 230.0;
 
 /// A settled card's mark and colour.
 fn settled_mark(tone: &str, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
@@ -418,45 +421,59 @@ impl NativeChatView {
         }
         let cards: f32 = open
             .iter()
-            .map(|card| {
-                let key = text(card, "key");
-                let preview = text(card, "codePreview");
-                let expanded = self.expanded.contains(&format!("relay-code:{key}"));
-                let code = if expanded || preview.is_empty() {
-                    text(card, "code")
-                } else {
-                    preview
-                };
-                let rows = code
-                    .lines()
-                    .map(ghostex_gx_chat_core::questions::permission_card::wrapped_rows)
-                    .sum::<usize>()
-                    .min(COMMAND_BOX_ROWS) as f32;
-                let title_lines = (text(card, "title").chars().count() as f32 / 52.0)
-                    .ceil()
-                    .max(1.0);
-                // Header (title rows and the detail line), footer, the card's padding.
-                let mut height = 30.0 + title_lines * 20.0 + 18.0 + 48.0;
-                if rows > 0.0 {
-                    height += 12.0
-                        + 22.0
-                        + rows * 20.0
-                        + if text(card, "codeMore").is_empty() {
-                            0.0
-                        } else {
-                            22.0
-                        };
-                }
-                if !text(&card["reason"], "text").is_empty() {
-                    height += 34.0;
-                }
-                if !text(card, "error").is_empty() {
-                    height += 34.0;
-                }
-                height + 12.0
-            })
+            .map(|card| self.approvals_card_height(card) + 8.0)
             .sum();
         Some((super::chat_pills::MENU_HEADER_HEIGHT + 8.0 + cards).min(APPROVALS_MENU_MAX))
+    }
+
+    /// One open card's height (unscaled) as the menu estimates it.
+    fn approvals_card_height(&self, card: &Value) -> f32 {
+        let key = text(card, "key");
+        let preview = text(card, "codePreview");
+        let expanded = self.expanded.contains(&format!("relay-code:{key}"));
+        let code = if expanded || preview.is_empty() {
+            text(card, "code")
+        } else {
+            preview
+        };
+        let rows = code
+            .lines()
+            .map(ghostex_gx_chat_core::questions::permission_card::wrapped_rows)
+            .sum::<usize>()
+            .min(COMMAND_BOX_ROWS) as f32;
+        let title_lines = (text(card, "title").chars().count() as f32 / 52.0)
+            .ceil()
+            .max(1.0);
+        // Header (title rows and the detail line), footer, the card's padding.
+        let mut height = 30.0 + title_lines * 20.0 + 18.0 + 48.0;
+        if rows > 0.0 {
+            height += 12.0
+                + 22.0
+                + rows * 20.0
+                + if text(card, "codeMore").is_empty() {
+                    0.0
+                } else {
+                    22.0
+                };
+        }
+        // The warning and error lines wrap (about 62 characters a row in the menu's width)
+        // and the "blocks this at" line is one more row; each sits 12px below the last.
+        let wrapped = |line: String| {
+            if line.is_empty() {
+                0.0
+            } else {
+                12.0 + (line.chars().count() as f32 / 62.0).ceil().max(1.0) * 21.0
+            }
+        };
+        height += wrapped(text(&card["reason"], "text"));
+        height += wrapped(text(card, "error"));
+        if card["autoBlockAt"]
+            .as_str()
+            .is_some_and(|at| !at.is_empty())
+        {
+            height += 12.0 + 21.0;
+        }
+        height + 4.0
     }
 
     /// The Approvals menu: every open card, oldest asked first.
@@ -494,10 +511,27 @@ impl NativeChatView {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .children(
-                open.iter()
-                    .map(|card| self.relayed_approval_card(card, "menu", p, cx)),
-            )
+            // CDXC:SessionChat 2026-11-16 DECISION: User: a card's Yes / No stay pinned at its
+            // bottom and only its command area scrolls. A card taller than the menu shrinks to it
+            // and its body scrolls (`tone_card`); with several cards each keeps at least
+            // `APPROVALS_CARD_FLOOR`, so the list scrolls rather than squeezing them to their
+            // buttons. Before, the card shrank with no floor and its body clipped instead of
+            // scrolling, cutting off the buttons (the user's screenshot of a long expanded
+            // command, 2026-11-16).
+            .children(open.iter().map(|card| {
+                let floor = self.approvals_card_height(card).min(APPROVALS_CARD_FLOOR);
+                div()
+                    .id(gpui::SharedString::from(format!(
+                        "relay-menu-card:{}",
+                        text(card, "key")
+                    )))
+                    .w_full()
+                    .min_w_0()
+                    .min_h(px(floor * s))
+                    .flex()
+                    .flex_col()
+                    .child(self.relayed_approval_card(card, "menu", p, cx))
+            }))
             .into_any_element();
         Some(super::chat_pills::pill_menu_column(
             "chat-approvals-menu",

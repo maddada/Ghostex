@@ -194,6 +194,9 @@ pub(crate) enum GpuiAppToastAction {
     /// scale: Interface scale back to 100% (app/display_scale_offer.rs).
     #[cfg_attr(not(all(target_os = "linux", not(ghostex_web))), allow(dead_code))]
     ResetInterfaceScale,
+    /// Repair on "SpaceO is stuck": SpaceO's operator recovery, run because the user clicked it
+    /// (app/os_integration/spaceo_heal.rs).
+    RepairSpaceo,
     /// An approval notice's Approve (`deny: false`) or Deny: GitHub #495,
     /// app/owner_security/ui.rs.
     SecurityApproval {
@@ -217,6 +220,7 @@ impl GpuiAppToastAction {
             Self::OpenUpdateDownloadPage => "Open download page",
             Self::UndoSyncedChange { .. } | Self::UndoChiefDisable => "Undo",
             Self::ResetInterfaceScale => "Set to 100%",
+            Self::RepairSpaceo => "Repair",
             Self::SecurityApproval { deny: false, .. } => "Approve",
             Self::SecurityApproval { deny: true, .. } => "Deny",
             Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {

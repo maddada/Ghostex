@@ -179,6 +179,15 @@ pub(crate) struct GxStoreHost {
     pub(super) added_project: super::added_project::AddedProjectHost,
     /// The last-seen copy of every remote machine: which ones owe a write, and what is unwritten.
     pub(crate) last_seen: super::remote_last_seen::RemoteLastSeenWriter,
+    /// This computer's own stored copy, which the next launch's first frame is drawn from
+    /// (local_last_seen.rs).
+    pub(crate) local_last_seen: super::local_last_seen::LocalLastSeenWriter,
+    /// The warm start before the first frame has run (local_last_seen.rs).
+    pub(super) warm_started: bool,
+    /// Set only during the warm start: a remote machine's last-seen copy is read on this thread
+    /// so it is on the first frame too (remote_clients.rs).
+    pub(super) seed_remote_synchronously: bool,
+    pub(super) remote_seeded_once: bool,
     /// What the fall-through of the sidebar dispatch did with each command.
     pub(super) runtime_route: super::sidebar_runtime_route::SidebarRuntimeRouteCounters,
     /// The facts the list reads from outside the store (the old runtime's one-way facts channel
@@ -257,7 +266,9 @@ impl GxStoreHost {
         let output = self.core.handle_batch(events, now_ms());
         // The sidebar list derives from these; it applies them when it next updates.
         self.sidebar_list.note_changes(&output.changes);
-        if let Some(loaded) = self.core.presentation().loaded(&MachineId::Local) {
+        // Never the revision of rows seeded from the last run's copy (local_last_seen.rs): the
+        // daemon never told this client that revision, so it must not be quoted on a subscribe.
+        if let Some(loaded) = self.core.presentation().loaded_live(&MachineId::Local) {
             self.held_revision.store(loaded.revision, Ordering::Release);
         }
         if !output.changes.machines_reloaded.is_empty() {
@@ -377,11 +388,18 @@ impl GhostexGpuiApp {
         // re-read ride (sidebar_clock.rs). Started once, and not tied to having a transport.
         self.gx_store_start_sidebar_clock(cx);
         self.gx_store_start_app_effects(cx);
-        // The sidebar's own state is read once, and again later if that read failed.
+        // The sidebar's own state and this computer's stored rows, read before the first frame so
+        // it is drawn settled (local_last_seen.rs); then the asynchronous read, which only acts
+        // when that one failed and books the retries.
+        self.gx_store_warm_start(cx);
         self.gx_store_restore_sidebar_ui(cx);
         // A machine may already have connected before the store came up, and the machine tabs are
-        // built here whether or not one has.
+        // built here whether or not one has. The first time, the remote computers' last-seen
+        // copies are read on this thread too, so they are on the first frame with the rest.
+        self.gx_store.seed_remote_synchronously = !self.gx_store.remote_seeded_once;
+        self.gx_store.remote_seeded_once = true;
         self.gx_store_sync_remote_clients(true, cx);
+        self.gx_store.seed_remote_synchronously = false;
         self.remote_reconnect_on_launch(cx);
         if self.gx_store.transport == next {
             return;
@@ -500,6 +518,9 @@ impl GhostexGpuiApp {
         if outcome.local_reloaded || outcome.local_snapshot {
             self.gx_store_presentation_ready(cx);
         }
+        // This computer's rows are also the copy the next launch draws its first frame from
+        // (local_last_seen.rs, which debounces the rebuild).
+        self.gx_store_note_local_last_seen_change(cx);
         let renderer_commands = std::mem::take(&mut self.gx_store.pending_renderer_commands);
         if !renderer_commands.is_empty() {
             self.gx_store_take_renderer_commands(renderer_commands, cx);

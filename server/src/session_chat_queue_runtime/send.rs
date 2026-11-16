@@ -7,6 +7,9 @@ pub(crate) enum SessionChatMessageSource {
     AutomaticRecovery,
     AccountSwitch(uuid::Uuid),
     ManualQueue,
+    /// Ghostex's own notes to a coordinator, sent as a message of their own right after the user's
+    /// (`send_ghostex_notes`).
+    GhostexNote,
 }
 
 /*
@@ -192,14 +195,16 @@ fn coordinator_playbook_note(
     let playbook = crate::coordinators::playbook_update_note(&db, &repository, &key)
         .ok()
         .flatten();
-    let drift = repository
+    let session = repository
         .get_session(project_id, session_id)
         .ok()
-        .flatten()
-        .and_then(|session| {
-            crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, &session)
-        });
-    let open_questions = open_questions_note(state, &db, &key, text);
+        .flatten();
+    let drift = session.as_ref().and_then(|session| {
+        crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, session)
+    });
+    let open_questions = session
+        .as_ref()
+        .and_then(|session| open_questions_note(state, &db, &key, session, text));
     (playbook.is_some() || drift.is_some() || open_questions.is_some()).then_some(
         CoordinatorNotes {
             playbook,
@@ -220,10 +225,19 @@ fn coordinator_playbook_note(
 /// normal chat box left its ask under Needs you because the coordinator did not connect the message
 /// to it. The words of the note and how the chat hides it are gx-chat-core's
 /// (`session::appended_notes::open_questions_note`).
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, of two messages in a row carrying the same list: "we already told the agent about this
+/// no need to spam him like this". The note goes only when the list differs from the last one the
+/// agent was sent (`OPEN_QUESTIONS_SENT`, recorded on delivery): a question added or one closed.
+/// And of "Which of these is what you meant?" (Q985), a form from weeks before that the dock no
+/// longer showed: a form or page put off For later, removed, or asked more than
+/// `OPEN_QUESTIONS_MAX_AGE` ago is not listed; a work item's ask always is, as the dock shows it.
 fn open_questions_note(
     state: &AppState,
     db: &rusqlite::Connection,
     key: &(String, String),
+    session: &Value,
     text: &str,
 ) -> Option<String> {
     if text
@@ -260,9 +274,17 @@ fn open_questions_note(
         }
     }
     use ghostex_gx_chat_core::transcript::open_questions::AskerKind;
+    let put_off: Vec<String> = crate::session_chat_open_questions::later_ids(session)
+        .into_iter()
+        .chain(crate::session_chat_open_questions::removed_ids(session))
+        .collect();
+    let oldest = chrono::Utc::now().timestamp_millis() - OPEN_QUESTIONS_MAX_AGE_MS;
     for asker in crate::session_chat_open_questions::open_askers(state, &key.0, &key.1) {
         let tags = asker.waiting_tags();
-        if tags.is_empty() {
+        if tags.is_empty()
+            || put_off.contains(&asker.id)
+            || asker.asked_at().is_some_and(|at| at < oldest)
+        {
             continue;
         }
         let title = match (&asker.kind, &asker.form) {
@@ -282,7 +304,48 @@ fn open_questions_note(
             ghostex_gx_chat_core::transcript::open_questions::tag_range(&tags),
         ));
     }
-    ghostex_gx_chat_core::session::appended_notes::open_questions_note(&open)
+    let note = ghostex_gx_chat_core::session::appended_notes::open_questions_note(&open);
+    let sent = read_open_questions_sent(db, key);
+    if note.is_none() && sent.is_some() {
+        // Nothing open now: the next list, whatever it is, is news again.
+        write_open_questions_sent(db, key, None);
+    }
+    note.filter(|note| sent.as_deref() != Some(note.as_str()))
+}
+
+/// A form or page asked longer ago than this is not listed in the open questions note.
+const OPEN_QUESTIONS_MAX_AGE_MS: i64 = 3 * 24 * 60 * 60 * 1000;
+
+/// The last open questions note a coordinator was sent, by session, in gxserver's `metadata`.
+const OPEN_QUESTIONS_SENT: &str = "coordinatorOpenQuestionsSent";
+
+fn open_questions_sent_key(key: &(String, String)) -> String {
+    format!("{OPEN_QUESTIONS_SENT}:{}:{}", key.0, key.1)
+}
+
+fn read_open_questions_sent(db: &rusqlite::Connection, key: &(String, String)) -> Option<String> {
+    db.query_row(
+        "SELECT value FROM metadata WHERE key = ?1",
+        [open_questions_sent_key(key)],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+}
+
+fn write_open_questions_sent(
+    db: &rusqlite::Connection,
+    key: &(String, String),
+    note: Option<&str>,
+) {
+    let metadata_key = open_questions_sent_key(key);
+    let _ = match note {
+        Some(note) => db.execute(
+            "INSERT INTO metadata (key, value, updatedAt) VALUES (?1, ?2, ?3) \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+            rusqlite::params![metadata_key, note, chrono::Utc::now().to_rfc3339()],
+        ),
+        None => db.execute("DELETE FROM metadata WHERE key = ?1", [metadata_key]),
+    };
 }
 
 fn record_coordinator_playbook_note(
@@ -302,30 +365,10 @@ fn record_coordinator_playbook_note(
         if let Some(drift) = &notes.drift {
             crate::coordinators::record_coordinator_drift(&db, &key, drift);
         }
+        if let Some(note) = &notes.open_questions {
+            write_open_questions_sent(&db, &key, Some(note));
+        }
     }
-}
-
-fn with_playbook_note(text: &str, notes: Option<&CoordinatorNotes>) -> String {
-    let Some(notes) = notes else {
-        return text.to_string();
-    };
-    // The chat core reads the recorded turn without them again, so the user's echo still matches.
-    let mut noted = text.to_string();
-    for note in notes
-        .playbook
-        .iter()
-        .map(|(note, _)| note.as_str())
-        .chain(
-            notes
-                .drift
-                .iter()
-                .flat_map(|drift| drift.notes.iter().map(String::as_str)),
-        )
-        .chain(notes.open_questions.as_deref())
-    {
-        noted = ghostex_gx_chat_core::session::appended_notes::with_note(&noted, note);
-    }
-    noted
 }
 
 /// One lock per session, held by a chat message send from its screen read to its last retype.
@@ -373,6 +416,8 @@ pub(crate) async fn send_session_chat_message_with_draft(
 ) -> std::result::Result<usize, DomainStateError> {
     let lock = session_send_lock(project_id, session_id);
     let _owned = lock.lock().await;
+    // Read before the message goes, so the open questions it answers by tag are left out.
+    let notes = coordinator_playbook_note(state, project_id, session_id, text, source);
     let sent = send_session_chat_message_locked(
         state,
         project_id,
@@ -386,8 +431,72 @@ pub(crate) async fn send_session_chat_message_with_draft(
     .await;
     if sent.is_ok() {
         settle_work_replies(state, project_id, session_id, text, image_paths, source);
+        if let Some(notes) = notes {
+            send_ghostex_notes(state, project_id, session_id, &notes).await;
+        }
     }
     sent
+}
+
+/// Ghostex's notes for a coordinator (the playbook note, the drift reminder, the compaction note,
+/// the open questions) as a message of their own, one `<ghostex-system>` block, typed right after
+/// the user's message under the same send lock, so nothing else gets between them. The user's
+/// message starts the turn at once and the note reaches the agent while it works: Claude Code and
+/// Codex take a message submitted mid-turn into the running turn. Recorded as sent only once
+/// delivered, so a note that did not go is offered again with the next message.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User (Q3557): the notes may show in the terminal but never in the chat view, and go "as their
+/// own separate message, not inside the user's message". Before, they rode inside the user's
+/// message (2026-11-05 to 2026-11-16); the chat drops a row that holds only the block
+/// (gx-chat-core `session::appended_notes::is_system_only`).
+async fn send_ghostex_notes(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    notes: &CoordinatorNotes,
+) {
+    let all: Vec<&str> = notes
+        .playbook
+        .iter()
+        .map(|(note, _)| note.as_str())
+        .chain(
+            notes
+                .drift
+                .iter()
+                .flat_map(|drift| drift.notes.iter().map(String::as_str)),
+        )
+        .chain(notes.open_questions.as_deref())
+        .collect();
+    let Some(message) = ghostex_gx_chat_core::session::appended_notes::system_message(&all) else {
+        return;
+    };
+    let sent = Box::pin(send_session_chat_message_locked(
+        state,
+        project_id,
+        session_id,
+        &message,
+        &[],
+        SessionChatMessageSource::GhostexNote,
+        None,
+        false,
+    ))
+    .await;
+    match sent {
+        Ok(_) => record_coordinator_playbook_note(state, project_id, session_id, Some(notes)),
+        Err(error) => {
+            let _ = state.logger.log(crate::logging::GxserverLogInput {
+                level: crate::logging::LogLevel::Warn,
+                event: "coordinatorNotesNotSent".to_string(),
+                server_id: Some(state.metadata.server_id.clone()),
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: Some(error.message),
+                details: Some(json!({ "projectId": project_id, "sessionId": session_id })),
+            });
+        }
+    }
 }
 
 /// A user's message that reached a coordinator answers its open work asks named "W7 Q12: …"
@@ -523,8 +632,7 @@ async fn send_session_chat_message_locked(
         let id = conversation.id.clone();
         let send_id = id.clone();
         let directory = conversation.directory;
-        let playbook_note = coordinator_playbook_note(state, project_id, session_id, text, source);
-        let message = with_playbook_note(text, playbook_note.as_ref());
+        let message = text.to_string();
         let images = image_paths.to_vec();
         let session = target.session.clone();
         let message_id = draft_version.map(|version| {
@@ -560,7 +668,6 @@ async fn send_session_chat_message_locked(
             );
         }
         crate::session_chat_opencode::invalidate(&id);
-        record_coordinator_playbook_note(state, project_id, session_id, playbook_note.as_ref());
         promote_draft_session_after_send(state, project_id, session_id);
         unpark_session_after_send(state, project_id, session_id);
         crate::session_chat_returned_prompt::record_session_chat_send_submitted(
@@ -599,17 +706,7 @@ async fn send_session_chat_message_locked(
             std::borrow::Cow::Owned(pictured) => std::borrow::Cow::Owned(pictured),
             std::borrow::Cow::Borrowed(_) => agent_text,
         };
-    let playbook_note = coordinator_playbook_note(
-        state,
-        &target.project_id,
-        &target.session_id,
-        &agent_text,
-        source,
-    );
-    let noted_text = playbook_note
-        .as_ref()
-        .map(|note| with_playbook_note(&agent_text, Some(note)));
-    let text = noted_text.as_deref().unwrap_or(agent_text.as_ref());
+    let text = agent_text.as_ref();
     // A Pi or OMP whose Ghostex extension has its chat channel open takes the message through Pi's
     // own API, without the screen checks and typing below (CDXC:PiChatChannel 2026-11-05).
     if matches!(terminal_agent.as_deref(), Some("pi" | "omp")) {
@@ -626,14 +723,6 @@ async fn send_session_chat_message_locked(
         )
         .await
         {
-            if sent.is_ok() {
-                record_coordinator_playbook_note(
-                    state,
-                    &target.project_id,
-                    &target.session_id,
-                    playbook_note.as_ref(),
-                );
-            }
             return sent;
         }
     }
@@ -653,14 +742,6 @@ async fn send_session_chat_message_locked(
         )
         .await
         {
-            if sent.is_ok() {
-                record_coordinator_playbook_note(
-                    state,
-                    &target.project_id,
-                    &target.session_id,
-                    playbook_note.as_ref(),
-                );
-            }
             return sent;
         }
     }
@@ -879,16 +960,23 @@ async fn send_session_chat_message_locked(
             &detection.composer.screen_tail,
         );
     }
-    let send_probe = crate::session_chat_watchdog::SessionChatSendProbe::sample(
-        &target.project_id,
-        &target.session_id,
-        &target.zmx_name,
-        agent.as_deref(),
-        read_runtime_text(&target.session, "agentSessionId").as_deref(),
-        read_runtime_text(&target.session, "agentSessionPath").as_deref(),
-        text,
-    )
-    .await;
+    // Ghostex's own note (`send_ghostex_notes`) is never watched: a note that did not land must not
+    // come back as the user's message or raise a delivery card; it goes again with the next one.
+    let ghostex_note = source == SessionChatMessageSource::GhostexNote;
+    let send_probe = if ghostex_note {
+        None
+    } else {
+        crate::session_chat_watchdog::SessionChatSendProbe::sample(
+            &target.project_id,
+            &target.session_id,
+            &target.zmx_name,
+            agent.as_deref(),
+            read_runtime_text(&target.session, "agentSessionId").as_deref(),
+            read_runtime_text(&target.session, "agentSessionPath").as_deref(),
+            text,
+        )
+        .await
+    };
     /*
     Chat owns the terminal composer when it sends. Discard anything already
     sitting on that hidden input line instead of turning it into a user-facing
@@ -1007,12 +1095,15 @@ async fn send_session_chat_message_locked(
         0,
         crate::session_chat_send::SessionChatSendStep::WaitOutBusyAgent(mid_turn_probe.clone()),
     );
-    crate::session_chat_returned_prompt::record_session_chat_send_started(
-        &target.project_id,
-        &target.session_id,
-        text,
-        image_paths,
-    );
+    // The user's message stays the one an Escape hands back, not the note after it.
+    if !ghostex_note {
+        crate::session_chat_returned_prompt::record_session_chat_send_started(
+            &target.project_id,
+            &target.session_id,
+            text,
+            image_paths,
+        );
+    }
     let retry_steps = (image_paths.is_empty() && !capture_local_output).then(|| steps.clone());
     let heal_steps = retry_steps.clone();
     let send_started_ms = chrono::Utc::now().timestamp_millis();
@@ -1233,10 +1324,12 @@ async fn send_session_chat_message_locked(
         })
         .await;
     }
-    crate::session_chat_returned_prompt::record_session_chat_send_submitted(
-        &target.project_id,
-        &target.session_id,
-    );
+    if !ghostex_note {
+        crate::session_chat_returned_prompt::record_session_chat_send_submitted(
+            &target.project_id,
+            &target.session_id,
+        );
+    }
     crate::session_chat_watchdog::note_ghostex_typed(&target.project_id, &target.session_id, text);
     // The user sent something new and the agent took it, so an older failure's card and dot are
     // dealt with; its row keeps its own reason, Retry and Remove. A row the queue sent on its own
@@ -1293,13 +1386,8 @@ async fn send_session_chat_message_locked(
             | SessionChatMessageSource::AutomaticRecovery
             | SessionChatMessageSource::AccountSwitch(_)
             | SessionChatMessageSource::ManualQueue => "queue",
+            SessionChatMessageSource::GhostexNote => "ghostexNote",
         },
-    );
-    record_coordinator_playbook_note(
-        state,
-        &target.project_id,
-        &target.session_id,
-        playbook_note.as_ref(),
     );
     /*
     An option command changes what the statusline reports: read it back. It is

@@ -337,6 +337,25 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// The same read, on this thread, for the warm start before the first frame
+    /// (gx_store/local_last_seen.rs): the list is then drawn from the stored state at once instead
+    /// of as the loading skeleton. A failure is left to `gx_store_restore_sidebar_ui`, which runs
+    /// right after and books its own retries.
+    pub(super) fn gx_store_restore_sidebar_ui_now(&mut self) -> &'static str {
+        let ui = &mut self.gx_store.sidebar_ui;
+        if ui.restored || ui.restoring || ui.retry_scheduled {
+            return "skipped";
+        }
+        match read_sidebar_ui_state() {
+            Ok(stored) => {
+                ui.last_error = None;
+                ui.adopt(stored);
+                "restored"
+            }
+            Err(code) => code,
+        }
+    }
+
     /// Books another read after a failure: `MAX_READ_RETRIES` fast attempts, then a standing slow
     /// one for the life of the run (see `READ_RETRY` for why it never gives up). The moment it
     /// stopped trying would be the moment nothing said so, which is why the last fast attempt

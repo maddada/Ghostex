@@ -223,6 +223,8 @@ pub(crate) fn open_workspace_window(
     let lead = start.lead();
     let slot = start.slot();
     let activate = options.focus;
+    // A window the app reopens at launch reopens its sessions' own windows (app/session_popup/).
+    let reopen_popups = matches!(start, WorkspaceWindowStart::Restore { .. });
     /*
     CDXC:CefRuntime 2026-06-14-13:10:
     CEF surfaces need an actual GPUI platform window before they attach native AppKit children. Create the GPUI window first, then let the CEF bridge wait for non-zero layout bounds before creating browser hosts. (CEF is optional since 2026-09-28: see app/helpers/web_runtime.rs.)
@@ -263,8 +265,14 @@ pub(crate) fn open_workspace_window(
                         "sinceLaunchMs": support_logs::ms_since_launch(),
                     }),
                 );
+                // What the sidebar showed on that frame (gx_store/local_last_seen.rs).
+                let facts = view_for_cef.read(cx).gx_store_startup_sidebar_facts();
+                support_logs::append_startup_timing("firstFrame", facts);
             }
             view_for_cef.update(cx, |app, cx| {
+                if reopen_popups {
+                    app.reopen_saved_session_popups(cx);
+                }
                 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                 app.begin_deferred_cef_startup(cx);
                 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -301,6 +309,7 @@ pub(crate) fn open_workspace_window(
             app.start_gpui_workspace_open_target_availability_scan(cx);
             if lead {
                 app.start_gpui_updater(cx);
+                app.start_gpui_spaceo_health_watch(cx);
                 #[cfg(target_os = "linux")]
                 app.offer_interface_scale_reset_for_display_scale(cx);
             }

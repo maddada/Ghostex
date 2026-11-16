@@ -89,6 +89,7 @@ impl GhostexGpuiApp {
             | "reinstallSpaceo"
             | "uninstallSpaceo"
             | "checkSpaceoUpdate"
+            | "repairSpaceo"
             | "requestToolPermissionStatus"
             | "grantToolPermission"
             | "restartSpaceo"

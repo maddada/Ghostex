@@ -232,7 +232,8 @@ impl GpuiConnectDeviceWindow {
                 flow.step = JoinStep::Failed(JoinFailure {
                     title: format!("{name} said no"),
                     message: format!(
-                        "Someone clicked Not my computer there. Copy a new code on {name} to try again."
+                        "Someone turned this computer down there (Not my computer, Deny on a phone, or n in its terminal). {}",
+                        new_code_hint(&name)
                     ),
                     fix: JoinFix::NewCode,
                 });
@@ -240,14 +241,14 @@ impl GpuiConnectDeviceWindow {
             (_, Err(message)) => {
                 flow.step = JoinStep::Failed(JoinFailure {
                     title: format!("Lost touch with {name}"),
-                    message: format!("{message} Copy a new code on {name} and try again."),
+                    message: format!("{message} {}", new_code_hint(&name)),
                     fix: JoinFix::NewCode,
                 });
             }
             _ => {
                 flow.step = JoinStep::Failed(JoinFailure {
                     title: "Nobody approved in time".to_string(),
-                    message: format!("Copy a new code on {name} and try again."),
+                    message: new_code_hint(&name),
                     fix: JoinFix::NewCode,
                 });
             }
@@ -411,7 +412,7 @@ impl GpuiConnectDeviceWindow {
         }
         let Some(target) = join_target(&code) else {
             self.code_error = Some(
-                "That isn't a computer's code. On the other computer, click Connect a Computer and copy its code."
+                "That isn't a computer's code. On the other computer, click Connect a Computer and copy its code. If it has no screen, run ghostex computer-code on it."
                     .to_string(),
             );
             cx.notify();
@@ -863,7 +864,7 @@ impl GpuiConnectDeviceWindow {
                 )
                 .child(pairing_words(&p, &words, false))
                 .child(self.muted(format!(
-                    "{name} shows three words now. Click Approve there only if they are the same as these."
+                    "{name} shows three words now. Click Approve there only if they are the same as these. A computer with no screen asks you to type y in its terminal instead, or to approve on your phone once one is paired with it."
                 )))
                 .child(self.progress_list(vec![
                     (format!("Waiting for Approve on {name}"), Some(false)),
@@ -1070,13 +1071,27 @@ pub(crate) fn join_target(code: &str) -> Option<JoinTarget> {
     })
 }
 
+// CDXC:RemotePairing 2026-11-16 DECISION:
+// User, on the Connect a Computer gaps page ("Fix all"): this window's words assumed the other
+// computer shows a Connect a Computer window, but a server with no screen has only a terminal
+// (`ghostex computer-code`, server/src/ghostex_cli/computer_code.rs). The words under the three
+// words and every failure that sends the person back to the other computer now name that terminal
+// too, in one plain clause, so nothing says "click Approve there" to someone who has no button.
+/// How to get a fresh code on the other computer: its window, or its terminal when it has no screen.
+fn new_code_hint(name: &str) -> String {
+    format!(
+        "Copy a new code on {name} and try again. If it has no screen, run ghostex computer-code there again."
+    )
+}
+
 /// Why `/api/pairComputer` didn't start, in the window's words.
 fn start_failure(name: &str, message: &str) -> JoinFailure {
     if message.contains("different words") {
         return JoinFailure {
             title: "The words didn't match".to_string(),
             message: format!(
-                "Pairing stopped to keep this computer safe. Copy a new code on {name} and try again."
+                "Pairing stopped to keep this computer safe. {}",
+                new_code_hint(name)
             ),
             fix: JoinFix::NewCode,
         };
@@ -1087,7 +1102,10 @@ fn start_failure(name: &str, message: &str) -> JoinFailure {
     {
         return JoinFailure {
             title: "That code ran out".to_string(),
-            message: format!("A code works once, for five minutes. Copy a new one on {name}."),
+            message: format!(
+                "A code works once, for five minutes. {}",
+                new_code_hint(name)
+            ),
             fix: JoinFix::NewCode,
         };
     }
@@ -1095,7 +1113,7 @@ fn start_failure(name: &str, message: &str) -> JoinFailure {
         return JoinFailure {
             title: format!("Can't reach {name}"),
             message: format!(
-                "Keep Connect a Computer open on {name}, check both computers are online, then try again."
+                "Keep Connect a Computer open on {name} (or ghostex computer-code running, if it has no screen), check both computers are online, then try again."
             ),
             fix: JoinFix::NewCode,
         };

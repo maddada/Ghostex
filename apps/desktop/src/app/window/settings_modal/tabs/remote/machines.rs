@@ -591,7 +591,7 @@ impl RemoteTab {
         let Some(dialog) = self.machine_dialog.as_ref() else {
             return;
         };
-        let Some(machine) = normalize_remote_machine_draft(&dialog.draft) else {
+        let Some(mut machine) = normalize_remote_machine_draft(&dialog.draft) else {
             return;
         };
         let password = dialog.draft.ssh_password.clone();
@@ -605,7 +605,29 @@ impl RemoteTab {
             .iter()
             .position(|candidate| candidate.get("id").and_then(Value::as_str) == Some(id.as_str()))
         {
-            Some(index) => machines[index] = machine,
+            Some(index) => {
+                /*
+                CDXC:RemoteMachines 2026-11-16 FIX:
+                The dialog doesn't edit the computer's icon fields: its picker saves through the
+                app (gx_store/computer_icons.rs), which writes them on the saved machine. Its Save
+                wrote back the icon the draft held when the dialog opened, so an icon picked in the
+                dialog went back to the old one (for m7-arch, the penguin) on Save. The saved
+                machine's own icon fields are kept instead.
+                */
+                if let Some(fields) = machine.as_object_mut() {
+                    for key in ["icon", "iconKeptHere", "logo"] {
+                        match machines[index].get(key) {
+                            Some(value) => {
+                                fields.insert(key.to_string(), value.clone());
+                            }
+                            None => {
+                                fields.remove(key);
+                            }
+                        }
+                    }
+                }
+                machines[index] = machine;
+            }
             None => machines.push(machine),
         }
         self.save_remote_machines(normalize_remote_machines(&Value::Array(machines)), cx);

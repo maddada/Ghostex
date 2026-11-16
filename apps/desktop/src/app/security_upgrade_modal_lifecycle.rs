@@ -427,7 +427,9 @@ impl GhostexGpuiApp {
             })
             .collect();
         self.handle_gpui_app_modal_update_settings_patch_message(
-            &json!({ "patch": { "remoteMachines": machines } }),
+            // The settings save keeps the stored machine list for any other source, which dropped
+            // this new code (settings_and_install_probe.rs).
+            &json!({ "patch": { "remoteMachines": machines }, "source": "settings:remoteMachines" }),
             cx,
         );
     }

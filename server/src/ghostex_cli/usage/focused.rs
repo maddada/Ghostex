@@ -810,6 +810,16 @@ pub fn spaceo_usage() -> String {
 Usage:
   gx spaceo --help
   gx spaceo install-skill [--json]
+  gx spaceo status [--json]
+  gx spaceo repair
+
+Health:
+  status says whether SpaceO can give agents screens, read-only. When SpaceO is
+  stuck (its display safety stop is on, so every agent gets 'an earlier
+  display mutation failed or never completed'), repair stops SpaceO, runs its
+  operator recovery and starts it again. repair is for the person at the
+  keyboard only: it asks you to type 'repair' and refuses to run for an agent.
+  Agents that find SpaceO stuck tell the user to click Repair in Ghostex.
 
 Agent skill:
   Use $ghostex-spaceo when a task needs a native Mac app or a Chromium page

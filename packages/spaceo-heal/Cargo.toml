@@ -1,0 +1,11 @@
+[package]
+name = "ghostex-spaceo-heal"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

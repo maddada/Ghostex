@@ -84,6 +84,7 @@ mod hud;
 mod indicators;
 mod layout_persist;
 mod live_snapshot;
+mod local_last_seen;
 mod local_delayed_sends;
 mod local_focus;
 pub(crate) mod machine_short_names;
@@ -180,6 +181,7 @@ pub(crate) use agentbox::{
 pub(crate) use capture_targets::CaptureTargetProject;
 pub(crate) use client_storage_init::initialize_client_storage_at_start;
 pub(crate) use cloud_boxes::{cloud_box_request_target, cloud_box_send_target};
+pub(crate) use computer_icons::COMPUTER_ICON_SETTINGS_SOURCE;
 pub(crate) use focus_perform::RowFocusOptions;
 pub(crate) use host::GxStoreHost;
 pub(crate) use primary_launcher::{

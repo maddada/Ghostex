@@ -143,6 +143,14 @@ pub(crate) struct CloseAgentsPane {
     pub(crate) pane_id: u64,
 }
 
+/// The split-pane grip's Open in New Window: the pane's session in a window of its own
+/// (app/session_popup/).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct OpenAgentsPaneInNewWindow {
+    pub(crate) pane_id: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct SelectAgentsWorkspaceTab {
@@ -541,8 +549,9 @@ pub(crate) struct RunGpuiTitlebarUpdateItem {
     pub(crate) id: String,
 }
 
-/// The dismiss button of a failed item in the top bar's Updates list: hides that failure (and
-/// the button's red) until the item's next update.
+/// The dismiss button of an item in the top bar's Updates list: hides that item at its current
+/// version from the notification and its count until a newer one appears (`error` is a failed
+/// item's message, so its failure and the button's red clear too).
 #[derive(Clone, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct DismissGpuiTitlebarUpdateFailure {

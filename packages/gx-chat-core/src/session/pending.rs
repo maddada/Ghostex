@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource, StartupDelivery};
 
-use crate::session::appended_notes::without_appended_notes;
+use crate::session::appended_notes::without_notes;
 use crate::session::constants::{DELIVERY_UNCONFIRMED, PENDING_ID_PREFIX};
 use crate::session::text::{
     is_js_space, is_staged_path_input, normalize_pending_text, parse_command_envelope,
@@ -127,7 +127,7 @@ fn shell_command_key(normalized: String) -> String {
 /// (`session/appended_notes.rs`).
 fn user_message_text(message: &ChatMessage) -> String {
     shell_command_prompt_text(message)
-        .unwrap_or_else(|| without_appended_notes(&block_text(message, "\n")).to_string())
+        .unwrap_or_else(|| without_notes(&block_text(message, "\n")))
 }
 
 fn user_message_content_key(message: &ChatMessage) -> String {

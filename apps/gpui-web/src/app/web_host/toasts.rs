@@ -168,6 +168,9 @@ impl GhostexGpuiApp {
             // Raised only by the Linux app at launch (display_scale_offer.rs); a page's size
             // follows the browser.
             GpuiAppToastAction::ResetInterfaceScale => {}
+            // Raised only by the Mac app's SpaceO watch (os_integration/spaceo_heal.rs); Repair
+            // runs SpaceO's operator recovery on that Mac, which a page must not start.
+            GpuiAppToastAction::RepairSpaceo => {}
             // Raised only by the app's approval cards (app/owner_security/ui.rs); approving needs
             // the computer's own key store and presence prompt, which a page has not.
             GpuiAppToastAction::SecurityApproval { .. } => {}

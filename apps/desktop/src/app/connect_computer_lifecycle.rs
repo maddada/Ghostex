@@ -217,7 +217,7 @@ impl GhostexGpuiApp {
         else {
             self.update_connect_window_in(cx, |modal, _window, cx| {
                 modal.join_started(
-                    Err("That isn't a computer's code. On the other computer, click Connect a Computer and copy its code.".to_string()),
+                    Err("That isn't a computer's code. On the other computer, click Connect a Computer and copy its code. If it has no screen, run ghostex computer-code on it.".to_string()),
                     cx,
                 )
             });

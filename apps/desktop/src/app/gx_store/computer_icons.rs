@@ -8,6 +8,9 @@
 //!
 //! CDXC:RemoteMachines 2026-11-14 WHY:
 //! A gxserver older than the system logos (its answer has no `logo`) refuses a logo pick. The pick is then kept on this app's saved machine instead, and for such a computer that local pick wins over what it answers, so the user still sees the logo they chose; once that computer runs a newer Ghostex its own answer is the truth again.
+//!
+//! CDXC:RemoteMachines 2026-11-16 FIX:
+//! User: the icon picked for "m7-arch" (Arch Linux, Omarchy) "keeps going back to the penguin icon". Three faults made a pick last only while the app kept that computer's answer in memory: (1) the copy kept on the saved machine was never written, because the settings save lets only `settings:remoteMachines` and `sidebar:remoteMachineOrder` change the machine list and this file saved as `settings:computerIcon` (remote_conn/settings_and_install_probe.rs), so a computer that was away, not read yet, or too old to keep its pick fell back to its system's logo, the penguin for a Linux computer whose distribution wasn't known yet; (2) a read that failed (a tunnel still coming up, a server restarting) was never tried again in that run, so the fallback stayed; (3) a pick kept here for a computer too old to keep it was dropped by that computer's first answer once it updated. The saved machine now keeps the pick (`icon`), whether it was kept here (`iconKeptHere`) and the logo last read there (`logo`); a failed read is tried again a few times; a pick kept here is handed to that computer once it can keep it.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -16,6 +19,10 @@ use serde_json::{Value, json};
 
 use crate::GhostexGpuiApp;
 use ghostex_gx_core::LOCAL_MACHINE_ID;
+
+/// The settings save source of a computer's icon kept on its saved machine, one of the few that may
+/// change `remoteMachines` (remote_conn/settings_and_install_probe.rs).
+pub(crate) const COMPUTER_ICON_SETTINGS_SOURCE: &str = "settings:computerIcon";
 
 /// What one computer's gxserver answered.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -78,16 +85,87 @@ fn store_facts(machine_id: &str, next: ComputerIconFacts) {
     }
 }
 
-/// The icon this app last read on a saved computer, kept to draw while it is away.
-fn saved_icon(settings: &serde_json::Map<String, Value>, machine_id: &str) -> Option<String> {
+/// What this app keeps of a computer's icon on its saved machine (`remoteMachines[]`), to draw
+/// while it is away or not read yet.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct SavedComputerIcon {
+    /// The icon last read there, or picked here.
+    icon: Option<String>,
+    /// `icon` was picked here while that computer's Ghostex couldn't keep it.
+    kept_here: bool,
+    /// The logo that computer last said it wears unpicked.
+    logo: Option<String>,
+}
+
+fn saved_machine<'a>(
+    settings: &'a serde_json::Map<String, Value>,
+    machine_id: &str,
+) -> Option<&'a Value> {
     settings
         .get("remoteMachines")
         .and_then(Value::as_array)?
         .iter()
-        .find(|machine| machine.get("id").and_then(Value::as_str) == Some(machine_id))?
-        .get("icon")
-        .and_then(Value::as_str)
-        .map(str::to_string)
+        .find(|machine| machine.get("id").and_then(Value::as_str) == Some(machine_id))
+}
+
+fn saved_computer_icon(
+    settings: &serde_json::Map<String, Value>,
+    machine_id: &str,
+) -> SavedComputerIcon {
+    let Some(machine) = saved_machine(settings, machine_id) else {
+        return SavedComputerIcon::default();
+    };
+    let text = |key: &str| machine.get(key).and_then(Value::as_str).map(str::to_string);
+    SavedComputerIcon {
+        icon: text("icon"),
+        kept_here: machine.get("iconKeptHere") == Some(&Value::Bool(true)),
+        logo: text("logo"),
+    }
+}
+
+/// How long to wait before reading a computer's icon again after a read failed, by attempt; after
+/// the last it is read again when its client next starts.
+const READ_RETRY_DELAYS: [std::time::Duration; 5] = [
+    std::time::Duration::from_secs(3),
+    std::time::Duration::from_secs(10),
+    std::time::Duration::from_secs(30),
+    std::time::Duration::from_secs(60),
+    std::time::Duration::from_secs(120),
+];
+
+fn read_failures() -> &'static Mutex<HashMap<String, usize>> {
+    static FAILURES: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
+    FAILURES.get_or_init(Default::default)
+}
+
+/// Counts a failed read of that computer's icon and says how long to wait before the next, `None`
+/// once the retries are spent.
+fn note_read_failure(machine_id: &str) -> Option<std::time::Duration> {
+    let mut failures = read_failures().lock().ok()?;
+    let count = failures.entry(machine_id.to_string()).or_default();
+    *count += 1;
+    READ_RETRY_DELAYS.get(*count - 1).copied()
+}
+
+/// Its client started again (remote_clients.rs): its reads get their retries back.
+pub(super) fn forget_computer_icon_read_failures(machine_id: &str) {
+    if let Ok(mut failures) = read_failures().lock() {
+        failures.remove(machine_id);
+    }
+}
+
+/// This computer's own Linux distribution's logo, for when its gxserver hasn't answered yet.
+fn this_linux_logo() -> Option<&'static str> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    static LOGO: OnceLock<&'static str> = OnceLock::new();
+    Some(LOGO.get_or_init(|| {
+        let release = std::fs::read_to_string("/etc/os-release")
+            .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
+            .unwrap_or_default();
+        ghostex_gx_core::computer_icons::linux_distribution_logo_from_os_release(&release)
+    }))
 }
 
 /// This computer's system as its own build knows it.
@@ -110,13 +188,25 @@ impl GhostexGpuiApp {
     ) -> (Option<String>, &'static str) {
         let local = machine_id == LOCAL_MACHINE_ID;
         let facts = computer_icon_facts(machine_id);
-        let saved = (!local).then(|| saved_icon(settings, machine_id)).flatten();
-        let picked = match &facts {
-            Some(facts) if facts.knows_logos() => facts.icon.clone(),
-            Some(facts) => saved.or_else(|| facts.icon.clone()),
-            None => saved,
+        let saved = if local {
+            SavedComputerIcon::default()
+        } else {
+            saved_computer_icon(settings, machine_id)
         };
-        let logo = facts.as_ref().and_then(|facts| facts.logo.clone());
+        let picked = match &facts {
+            // A pick kept here wins until that computer has taken it (`note_computer_icon`).
+            Some(facts) if facts.knows_logos() && facts.icon.is_none() && saved.kept_here => {
+                saved.icon.clone()
+            }
+            Some(facts) if facts.knows_logos() => facts.icon.clone(),
+            Some(facts) => saved.icon.clone().or_else(|| facts.icon.clone()),
+            None => saved.icon.clone(),
+        };
+        let logo = facts
+            .as_ref()
+            .and_then(|facts| facts.logo.clone())
+            .or(saved.logo)
+            .or_else(|| local.then(this_linux_logo).flatten().map(str::to_string));
         let kind = facts.as_ref().and_then(|facts| facts.kind.clone());
         let system = facts
             .as_ref()
@@ -240,20 +330,32 @@ impl GhostexGpuiApp {
                     .as_ref()
                     .map(ComputerIconFacts::from_answer)
                     .unwrap_or_default();
-                let _ = this.update(cx, |this, cx| {
-                    if answer.is_ok() {
+                if answer.is_ok() {
+                    forget_computer_icon_read_failures(&machine_id);
+                    let _ = this.update(cx, |this, cx| {
                         let picked_here = next.knows_logos();
                         this.note_computer_icon(&machine_id, next, picked_here, cx);
-                    }
+                    });
+                    return;
+                }
+                // A read that failed (a tunnel still coming up, a server restarting) is tried
+                // again a few times; until then the computer wears what its saved machine keeps.
+                let Some(delay) = note_read_failure(&machine_id) else {
+                    return;
+                };
+                cx.background_executor().timer(delay).await;
+                let _ = this.update(cx, |this, cx| {
+                    this.gx_store.remote.icons_asked.remove(&machine_id);
+                    this.gx_store_ask_computer_icons(cx);
                 });
             })
             .detach();
         }
     }
 
-    /// Takes a computer's answer: keeps it, saves a remote one's pick on its saved machine so it is
-    /// drawn while that computer is away, and redraws. `authoritative` is false for an older
-    /// gxserver's answer to a read, whose pick only fills a saved machine that keeps none.
+    /// Takes a computer's answer: keeps it, saves a remote one's pick and logo on its saved machine
+    /// so they are drawn while that computer is away, and redraws. `authoritative` is false for an
+    /// older gxserver's answer to a read, whose pick only fills a saved machine that keeps none.
     fn note_computer_icon(
         &mut self,
         machine_id: &str,
@@ -261,27 +363,95 @@ impl GhostexGpuiApp {
         authoritative: bool,
         cx: &mut gpui::Context<Self>,
     ) {
-        let picked = next.icon.clone();
+        let knows_logos = next.knows_logos();
+        let answered_icon = next.icon.clone();
+        let answered_logo = next.logo.clone();
         store_facts(machine_id, next);
         if machine_id != LOCAL_MACHINE_ID {
             let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
-            if authoritative || saved_icon(settings.object(), machine_id).is_none() {
-                self.save_remote_computer_icon(machine_id, picked.as_deref(), cx);
+            let saved = saved_computer_icon(settings.object(), machine_id);
+            let logo = answered_logo.or(saved.logo.clone());
+            if knows_logos && answered_icon.is_none() && saved.kept_here && saved.icon.is_some() {
+                // That computer can keep the pick made here while it couldn't: hand it over.
+                self.save_remote_computer_icon(
+                    machine_id,
+                    saved.icon.as_deref(),
+                    true,
+                    logo.as_deref(),
+                    cx,
+                );
+                self.hand_kept_computer_icon(machine_id.to_string(), saved.icon.unwrap(), cx);
+            } else if authoritative || saved.icon.is_none() {
+                self.save_remote_computer_icon(
+                    machine_id,
+                    answered_icon.as_deref(),
+                    false,
+                    logo.as_deref(),
+                    cx,
+                );
+            } else {
+                self.save_remote_computer_icon(
+                    machine_id,
+                    saved.icon.as_deref(),
+                    saved.kept_here,
+                    logo.as_deref(),
+                    cx,
+                );
             }
         }
         self.gx_store_sync_remote_clients(true, cx);
         cx.notify();
     }
 
-    /// Writes `icon` on that saved machine when it differs from what is there.
+    /// Saves the pick kept here on that computer, quietly: if it still can't keep it, the pick
+    /// stays kept here.
+    fn hand_kept_computer_icon(
+        &mut self,
+        machine_id: String,
+        icon: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(remote) = self.gpui_remote_gxserver_request_target(&machine_id) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let answer = super::rpc::gx_rpc(
+                Some(remote),
+                "/api/setComputerIcon",
+                json!({ "icon": &icon }),
+            )
+            .await;
+            if let Ok(answer) = answer {
+                let facts = ComputerIconFacts::from_answer(&answer);
+                let _ = this.update(cx, |this, cx| {
+                    this.note_computer_icon(&machine_id, facts, true, cx);
+                    this.publish_computer_icons(cx);
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Writes `icon` (picked here when `kept_here`) and `logo` on that saved machine when they
+    /// differ from what is there.
     fn save_remote_computer_icon(
         &mut self,
         machine_id: &str,
         icon: Option<&str>,
+        kept_here: bool,
+        logo: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) {
         let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
-        if saved_icon(settings.object(), machine_id).as_deref() == icon {
+        let kept_here = kept_here && icon.is_some();
+        let next = SavedComputerIcon {
+            icon: icon.map(str::to_string),
+            kept_here,
+            logo: logo.map(str::to_string),
+        };
+        if saved_machine(settings.object(), machine_id).is_none()
+            || saved_computer_icon(settings.object(), machine_id) == next
+        {
             return;
         }
         let Some(machines) = settings
@@ -298,14 +468,17 @@ impl GhostexGpuiApp {
                 if machine.get("id").and_then(Value::as_str) == Some(machine_id)
                     && let Some(fields) = machine.as_object_mut()
                 {
-                    match icon {
-                        Some(icon) => {
-                            fields.insert("icon".to_string(), json!(icon));
+                    let mut set = |key: &str, value: Option<Value>| match value {
+                        Some(value) => {
+                            fields.insert(key.to_string(), value);
                         }
                         None => {
-                            fields.remove("icon");
+                            fields.remove(key);
                         }
-                    }
+                    };
+                    set("icon", icon.map(|icon| json!(icon)));
+                    set("iconKeptHere", kept_here.then_some(Value::Bool(true)));
+                    set("logo", logo.map(|logo| json!(logo)));
                 }
                 machine
             })
@@ -314,7 +487,7 @@ impl GhostexGpuiApp {
             &json!({
                 "type": "updateSettingsPatch",
                 "patch": { "remoteMachines": machines },
-                "source": "settings:computerIcon",
+                "source": COMPUTER_ICON_SETTINGS_SOURCE,
             }),
             cx,
         );
@@ -350,15 +523,37 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| match answer {
                 Ok(answer) => {
                     let facts = ComputerIconFacts::from_answer(&answer);
+                    if machine_id != LOCAL_MACHINE_ID {
+                        // That computer kept this pick (or the default), so no pick kept here
+                        // is handed back over it.
+                        let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+                        let logo = facts
+                            .logo
+                            .clone()
+                            .or(saved_computer_icon(settings.object(), &machine_id).logo);
+                        this.save_remote_computer_icon(
+                            &machine_id,
+                            facts.icon.as_deref(),
+                            false,
+                            logo.as_deref(),
+                            cx,
+                        );
+                    }
                     this.note_computer_icon(&machine_id, facts, true, cx);
                     this.publish_computer_icons(cx);
                 }
                 // An older Ghostex there refuses the logos (or keeps no icon at all): the pick is
                 // kept on this app's saved computer, which wins for such a computer.
                 Err(_) if machine_id != LOCAL_MACHINE_ID => {
+                    let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+                    let logo = computer_icon_facts(&machine_id)
+                        .and_then(|facts| facts.logo)
+                        .or(saved_computer_icon(settings.object(), &machine_id).logo);
                     this.save_remote_computer_icon(
                         &machine_id,
                         Some(icon.as_str()).filter(|icon| !icon.is_empty()),
+                        true,
+                        logo.as_deref(),
                         cx,
                     );
                     this.gx_store_sync_remote_clients(true, cx);

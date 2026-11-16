@@ -136,7 +136,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         ]
     };
     // The coordinator step leaves out Claude (cloud) and leads with the agent that warns.
-    let agents = if state == "coordinator" {
+    let agents = if state.starts_with("coordinator") {
         let mut agents: Vec<NewThreadPickerAgent> = agents
             .into_iter()
             .filter(|agent| agent.agent_id != "claude-cloud")
@@ -185,12 +185,16 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             step,
             agent_id,
             account_id,
+            target,
         } => {
             eprintln!(
-                "coordinator {:?} on {agent_id} with account {account_id:?}",
+                "coordinator {:?} on {agent_id} with account {account_id:?} at {target:?}",
                 step.name
             );
             cx.quit();
+        }
+        NewThreadPickerCommand::CoordinatorPlace { target } => {
+            eprintln!("coordinator moved to {target:?}");
         }
         NewThreadPickerCommand::OpenBrowser { .. } => {
             eprintln!("open browser");
@@ -248,29 +252,34 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     // The Cloud Box chip shows with the boxes states (Cloud Boxes on).
     let cloud_box = state.starts_with("boxes") || state == "projects-cloud";
     // `places` and `projects` draw the project row and machine chips (`projects` opens the list).
-    let place = state.starts_with("places") || state.starts_with("projects");
+    // The coordinator step draws the project row too (`coordinator-projects` opens its list).
+    let place = state.starts_with("places")
+        || state.starts_with("projects")
+        || state.starts_with("coordinator");
     let run_on_shown = !place && (boxes.shows_run_on() || cloud_box);
-    let coordinator = (state == "coordinator").then(|| NewThreadPickerCoordinatorStep {
-        group_id: "local:demo".to_string(),
-        name: "Checkout redesign".to_string(),
-        warnings: [
-            ("grok", "Grok 4.3"),
-            ("hermes", "an unknown model"),
-            ("pi", "an unknown model"),
-            ("zcode", "GLM-5"),
-        ]
-        .into_iter()
-        .map(|(agent, model)| {
-            (
-                agent.to_string(),
-                format!("Coordinator quality may be degraded on {model}"),
-            )
-        })
-        .collect(),
-    });
+    let coordinator = state
+        .starts_with("coordinator")
+        .then(|| NewThreadPickerCoordinatorStep {
+            group_id: "local:demo".to_string(),
+            name: "Checkout redesign".to_string(),
+            warnings: [
+                ("grok", "Grok 4.3"),
+                ("hermes", "an unknown model"),
+                ("pi", "an unknown model"),
+                ("zcode", "GLM-5"),
+            ]
+            .into_iter()
+            .map(|(agent, model)| {
+                (
+                    agent.to_string(),
+                    format!("Coordinator quality may be degraded on {model}"),
+                )
+            })
+            .collect(),
+        });
     let coordinator_height = coordinator
         .as_ref()
-        .map(|_| new_thread_picker_coordinator_height(agents.len()));
+        .map(|_| new_thread_picker_coordinator_height(agents.len(), place));
     let config = NewThreadPickerConfig {
         coordinator,
         place: place.then(|| demo_place(&state)),
@@ -307,7 +316,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         cx,
     );
     *slot.borrow_mut() = Some((window, view.clone()));
-    if state.starts_with("projects") {
+    if state.starts_with("projects") || state == "coordinator-projects" {
         let _ = window.update(cx, |_root, window, cx| {
             view.update(cx, |picker, cx| {
                 picker.toggle_project_list(window, cx);

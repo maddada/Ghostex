@@ -156,10 +156,16 @@ fn matching_rows(rows: &[Value], query: &str) -> Vec<Value> {
         .iter()
         .any(|row| row["label"].as_str() == Some(typed));
     if let Some(create) = rows.iter().find(|row| row.get("createFrom").is_some()) {
-        if !typed.is_empty() && !exact && !typed.contains(char::is_whitespace) {
+        // Only a create row whose `command` is an object: `value["key"] = ..` panics on a
+        // string or a list.
+        if let Some(mut command) = create
+            .get("command")
+            .and_then(serde_json::Value::as_object)
+            .cloned()
+            .filter(|_| !typed.is_empty() && !exact && !typed.contains(char::is_whitespace))
+        {
             let from = create["createFrom"].as_str().unwrap_or_default();
-            let mut command = create["command"].clone();
-            command["folderBranch"] = serde_json::json!(typed);
+            command.insert("folderBranch".to_owned(), serde_json::json!(typed));
             matching.push(serde_json::json!({
                 "label": format!("Create {typed} from {from}"),
                 "iconPath": "titlebar/plus.svg",

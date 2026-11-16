@@ -69,6 +69,20 @@ pub fn normalize_remote_machine_settings(candidate: Option<&Value>) -> Vec<Value
             .and_then(crate::computer_icons::computer_icon)
         {
             machine.insert("icon".to_string(), Value::String(icon.id.to_string()));
+            // The pick was made here while that computer's Ghostex couldn't keep it, so this copy
+            // is the truth until that computer takes it (only `true` is kept).
+            if item.get("iconKeptHere") == Some(&Value::Bool(true)) {
+                machine.insert("iconKeptHere".to_string(), Value::Bool(true));
+            }
+        }
+        // The logo that computer last said it wears unpicked (its Linux distribution's), so it
+        // wears it while away instead of the plain penguin.
+        if let Some(logo) = item
+            .get("logo")
+            .and_then(Value::as_str)
+            .and_then(crate::computer_icons::computer_icon)
+        {
+            machine.insert("logo".to_string(), Value::String(logo.id.to_string()));
         }
         machine.insert("sshHost".to_string(), Value::String(ssh_host));
         if item.get("sshPasswordSaved") == Some(&Value::Bool(true)) {

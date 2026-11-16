@@ -41,7 +41,7 @@ mod new_session_row;
 mod pointer;
 mod project_header;
 pub(crate) mod project_hover;
-mod project_status;
+pub(crate) mod project_status;
 mod rename;
 pub(crate) mod render;
 pub(crate) mod row_drag;

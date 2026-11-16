@@ -230,8 +230,8 @@ pub fn usage() -> String {
             "Update this or a connected computer's Ghostex app",
         ),
         format_help_command(
-            "computer-code [--once] [--json]",
-            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer; once this computer has the Ghostex app or a paired phone, approve the code and then that computer there, otherwise approve it here when its three words match; works on a server without the app; run it in your own terminal, not in a Ghostex session",
+            "computer-code [--once] [--json] [--copy]",
+            "Print this computer's pairing code (the one Connect a Computer shows) to paste into Connect a Computer on another computer; once this computer has the Ghostex app or a paired phone, approve the code and then that computer there, otherwise approve it here when its three words match; --copy also puts the code on the clipboard; works on a server without the app; run it in your own terminal, not in a Ghostex session",
         ),
         format_help_command(
             "computers [--json]",
@@ -659,6 +659,14 @@ pub fn usage() -> String {
         format_help_command(
             "spaceo --help",
             "Show Ghostex SpaceO skill setup for driving Mac apps on SpaceO's virtual displays (macOS only)",
+        ),
+        format_help_command(
+            "spaceo status [--json]",
+            "Say whether SpaceO can give agents screens, or why it is stuck (read-only)",
+        ),
+        format_help_command(
+            "spaceo repair",
+            "Unstick SpaceO with its operator recovery; for you at a terminal, never for agents",
         ),
         format_help_command(
             "cli --help",

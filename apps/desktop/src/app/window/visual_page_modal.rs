@@ -83,6 +83,13 @@ pub(crate) enum VisualPageModalCommand {
     OpenLink { url: String },
     /// Publishing the page's changed file again failed (`source.rs`); the app says why.
     RefreshFailed { message: String },
+    /// A right-click on the page: the app opens its rows in the shared context menu over this
+    /// window, at `position` in its coordinates (CDXC:ContextMenus 2026-11-16).
+    ContextMenu {
+        menu: cef::BrowserPageContextMenu,
+        window: gpui::AnyWindowHandle,
+        position: gpui::Point<gpui::Pixels>,
+    },
     /// A notice for the app to show: how Import answers went (`more_menu.rs`).
     Notice {
         level: &'static str,
@@ -337,6 +344,36 @@ impl GpuiVisualPageModalWindow {
                 let page_title = match event {
                     cef::BrowserPageMetadataEvent::CloseRequested => None,
                     cef::BrowserPageMetadataEvent::TitleChanged(title) => Some(title),
+                    cef::BrowserPageMetadataEvent::ContextMenuRequested(menu) => {
+                        let modal = modal.clone();
+                        let mut async_cx = async_cx.clone();
+                        foreground
+                            .spawn(async move {
+                                let _ = modal.update(&mut async_cx, |this, cx| {
+                                    let Some(origin) = this
+                                        .surface
+                                        .as_ref()
+                                        .and_then(|surface| surface.read(cx).view_origin())
+                                    else {
+                                        return;
+                                    };
+                                    let position = gpui::point(
+                                        origin.x + gpui::px(menu.x),
+                                        origin.y + gpui::px(menu.y),
+                                    );
+                                    (this.host)(
+                                        VisualPageModalCommand::ContextMenu {
+                                            menu,
+                                            window: own_window,
+                                            position,
+                                        },
+                                        cx,
+                                    );
+                                });
+                            })
+                            .detach();
+                        return;
+                    }
                     _ => return,
                 };
                 let modal = modal.clone();

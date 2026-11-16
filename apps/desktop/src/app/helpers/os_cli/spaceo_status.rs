@@ -108,6 +108,8 @@ pub(crate) struct GpuiSpaceoStatus {
     pub(crate) latest_version: Option<String>,
     pub(crate) update_available: Option<bool>,
     pub(crate) permissions: GpuiSpaceoPermissionReport,
+    /// Whether SpaceO can give agents screens (`spaceoHealth`, os_integration/spaceo_heal.rs).
+    pub(crate) health: Option<serde_json::Value>,
 }
 
 /// `fresh` skips the cached latest-release answer; Settings' "check again" button asks for it.
@@ -130,6 +132,7 @@ pub(crate) fn gpui_spaceo_status(fresh: bool) -> GpuiSpaceoStatus {
         latest_version,
         update_available,
         permissions,
+        health: crate::app::os_integration::spaceo_heal::gpui_spaceo_health_json(),
     }
 }
 
@@ -237,6 +240,7 @@ pub(crate) fn gpui_spaceo_status_fields(
         "spaceoAccessibilityPermission": status.permissions.accessibility.as_str(),
         "spaceoScreenRecordingPermission": status.permissions.screen_recording.as_str(),
         "spaceoRestarting": gpui_spaceo_restarting(),
+        "spaceoHealth": status.health,
         "spaceoSkillInstalled": skill_path.is_some(),
         "spaceoSkillPath": skill_path,
     })

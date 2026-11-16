@@ -79,6 +79,7 @@ mod settings_transfer;
 mod show;
 mod side_chats;
 pub mod skills;
+mod spaceo_heal;
 pub mod tailcat;
 pub mod tailcat_tunnel;
 mod team;

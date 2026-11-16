@@ -666,9 +666,12 @@ impl GpuiNewThreadPickerWindow {
     }
 
     /// The coordinator step's warning line for the highlighted agent; the line keeps its room
-    /// while there is none.
+    /// while there is none, and goes while the project list is open.
     fn render_coordinator_warning(&self) -> Option<AnyElement> {
         self.coordinator.as_ref()?;
+        if self.choosing_project {
+            return None;
+        }
         let warning = self.coordinator_warning().map(str::to_string);
         let color = if self.colors.light {
             rgb(0xb45309)

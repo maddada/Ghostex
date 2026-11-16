@@ -62,26 +62,22 @@ impl GhostexGpuiApp {
     }
 
     /// The New Coordinator form's agent step (new_coordinator_modal_lifecycle.rs): the copy's
-    /// computer's launchers without Claude (cloud), and no account lists for another computer's.
+    /// computer's launchers without Claude (cloud), under the project row (`place`, without the
+    /// browser's key cap) that can move it elsewhere. The accounts are read by the caller.
     pub(crate) fn open_coordinator_agent_picker(
         &mut self,
         step: NewThreadPickerCoordinatorStep,
         rows: Vec<serde_json::Value>,
         remote: bool,
+        place: Option<NewThreadPickerPlace>,
         cx: &mut Context<Self>,
     ) {
         self.close_web_new_thread_picker(cx);
-        let primary = (!remote)
-            .then(crate::app::gx_store::read_primary_agent_launcher_id)
-            .flatten();
-        let agents = rows::order_new_thread_picker_agents(&rows, primary.as_deref())
-            .into_iter()
-            .filter(|agent| !ghostex_gx_core::is_claude_cloud_agent(&agent.agent_id))
-            .map(|mut agent| {
-                agent.uses_own_login |= remote;
-                agent
-            })
-            .collect();
+        let agents = self.coordinator_picker_agents(&rows, remote);
+        let place = place.map(|mut place| {
+            place.hotkey = None;
+            place
+        });
         let config = NewThreadPickerConfig {
             palette: self.gpui_native_panel_palette(),
             agents_loaded: true,
@@ -92,11 +88,59 @@ impl GhostexGpuiApp {
             cloud_box: false,
             close_when_inactive: true,
             cloud_default_account: None,
-            place: None,
+            place,
             room: None,
             coordinator: Some(step),
         };
         self.show_web_new_thread_picker(config, cx);
+    }
+
+    /// The coordinator step's agents from a computer's launcher rows: without Claude (cloud), the
+    /// last agent picked first on this computer.
+    pub(crate) fn coordinator_picker_agents(
+        &self,
+        rows: &[serde_json::Value],
+        remote: bool,
+    ) -> Vec<NewThreadPickerAgent> {
+        let primary = (!remote)
+            .then(crate::app::gx_store::read_primary_agent_launcher_id)
+            .flatten();
+        rows::order_new_thread_picker_agents(rows, primary.as_deref())
+            .into_iter()
+            .filter(|agent| !ghostex_gx_core::is_claude_cloud_agent(&agent.agent_id))
+            .collect()
+    }
+
+    /// An `/api/agentAccounts` list as the picker's rows.
+    pub(crate) fn coordinator_picker_accounts(
+        state: &serde_json::Value,
+    ) -> Vec<NewThreadPickerAccount> {
+        rows::new_thread_picker_accounts(state)
+    }
+
+    /// Runs `update` on the picker while it is the coordinator step.
+    pub(crate) fn update_coordinator_picker<R>(
+        &self,
+        cx: &mut Context<Self>,
+        update: impl FnOnce(
+            &mut GpuiNewThreadPickerWindow,
+            &mut gpui::Window,
+            &mut Context<GpuiNewThreadPickerWindow>,
+        ) -> R,
+    ) -> Option<R> {
+        let picker = self.web_host.new_thread_picker.as_ref()?;
+        let view = picker.view.clone();
+        picker
+            .window
+            .update(cx, |_root, window, cx| {
+                view.update(cx, |picker, cx| {
+                    picker
+                        .is_coordinator_step()
+                        .then(|| update(picker, window, cx))
+                })
+            })
+            .ok()
+            .flatten()
     }
 
     /// Opens the picker over the page with `config`, capped to the page.
@@ -123,11 +167,12 @@ impl GhostexGpuiApp {
             ..config
         };
         let height = if config.coordinator.is_some() {
-            new_thread_picker_coordinator_height(config.agents.len())
+            new_thread_picker_coordinator_height(config.agents.len(), config.place.is_some())
         } else {
             new_thread_picker_window_height(config.agents.len(), config.place.is_some(), false)
         };
         let height = new_thread_picker_capped_height(height, config.room, None);
+        let config_is_coordinator = config.coordinator.is_some();
         let bounds = Bounds::centered_at(
             gpui::point(px(page.0 / 2.0), px(page.1 / 2.0)),
             size(px(NEW_THREAD_PICKER_WIDTH), px(height)),
@@ -157,10 +202,14 @@ impl GhostexGpuiApp {
             })
             .ok();
         let view = view_slot.borrow_mut().take();
+        let coordinator = config_is_coordinator;
         self.web_host.new_thread_picker = window
             .zip(view)
             .map(|(window, view)| WebNewThreadPicker { window, view });
-        self.refresh_web_new_thread_picker_accounts(cx);
+        // The coordinator step's accounts are its computer's, read by its caller.
+        if !coordinator {
+            self.refresh_web_new_thread_picker_accounts(cx);
+        }
     }
 
     /// The sidebar's New session button (native_sidebar/new_session_row.rs): the picker's first
@@ -260,9 +309,13 @@ impl GhostexGpuiApp {
                 step,
                 agent_id,
                 account_id,
+                target,
             } => {
                 self.web_host.new_thread_picker = None;
-                self.create_coordinator_from_pick(step, agent_id, account_id, cx);
+                self.create_coordinator_from_pick(step, agent_id, account_id, target, cx);
+            }
+            NewThreadPickerCommand::CoordinatorPlace { target } => {
+                self.follow_coordinator_picker_place(target, cx);
             }
             NewThreadPickerCommand::NewCoordinator { target } => {
                 self.web_host.new_thread_picker = None;
@@ -296,7 +349,9 @@ impl GhostexGpuiApp {
                 unavailable(self, "Settings is not available in the browser", cx);
             }
             NewThreadPickerCommand::RetryAccounts => {
-                self.refresh_web_new_thread_picker_accounts(cx)
+                if !self.retry_coordinator_picker_accounts(cx) {
+                    self.refresh_web_new_thread_picker_accounts(cx);
+                }
             }
             NewThreadPickerCommand::Closed => self.web_host.new_thread_picker = None,
         }

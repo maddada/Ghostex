@@ -126,23 +126,32 @@ pub(crate) fn new_thread_picker_window_height(
 }
 
 /// The coordinator step's frame: the title row and the warning line instead of the divider and the
-/// Coordinator, Browser and Terminal rows, and no project or Run on row.
-pub(crate) fn new_thread_picker_coordinator_height(agent_count: usize) -> f32 {
+/// Coordinator, Browser and Terminal rows, and no Run on row; `place` adds the project row.
+pub(crate) fn new_thread_picker_coordinator_height(agent_count: usize, place: bool) -> f32 {
     NEW_THREAD_PICKER_CHROME_HEIGHT - 3.0 * NEW_THREAD_PICKER_ROW_HEIGHT - 9.0
         + COORDINATOR_TITLE_HEIGHT
         + COORDINATOR_WARNING_HEIGHT
+        + if place {
+            NEW_THREAD_PICKER_PLACE_HEIGHT
+        } else {
+            0.0
+        }
         + agent_count.min(NEW_THREAD_PICKER_MAX_AGENT_ROWS) as f32 * NEW_THREAD_PICKER_ROW_HEIGHT
 }
 
 /// The picker as the New Coordinator form's second step: the agent (and account) the coordinator
-/// runs on, in the copy the form picked.
+/// runs on, and the project and computer it runs in.
 ///
 /// CDXC:Coordinators 2026-11-13 DECISION:
-/// User (Q2980 "Build it: auto-send + remind on drift"): the New Coordinator form drops its agent and model fields; when it is done, the normal New Thread picker opens titled "Pick the coordinator's agent", with every agent and its accounts on Tab, and the pick starts the coordinator and sends its first message. It shows only agents (no Coordinator, Browser or Terminal row, no project list, no Run on row: the form picked where it runs), and a warning line under the list when the highlighted agent would start on a model a coordinator works worse on (gx-protocol `coordinator_quality_concern`).
-/// SEE-ALSO: apps/desktop/src/app/new_coordinator_modal_lifecycle.rs (opens it, creates the pick), apps/gpui-web/src/app/web_host/new_thread_picker.rs (the page's picker).
+/// User (Q2980 "Build it: auto-send + remind on drift"): the New Coordinator form drops its agent and model fields; when it is done, the normal New Thread picker opens titled "Pick the coordinator's agent", with every agent and its accounts on Tab, and the pick starts the coordinator and sends its first message. It shows only agents (no Coordinator, Browser or Terminal row, no Run on row), and a warning line under the list when the highlighted agent would start on a model a coordinator works worse on (gx-protocol `coordinator_quality_concern`).
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User: "i'm not able to pick which machine or account the coordinator starts on. please we need to show this list on the 2nd step when creating a coordinator, so i can pick the machine up top (the project pre selected there has to be the one i'm in ofc)". The step has the New Thread picker's own project row (`In <project> <computer>`, new_thread_picker_place.rs) under its title, starting on the project and computer the form was opened for (the one the first step had); picking another project or computer there lists that computer's agents, their warnings and that computer's accounts on Tab (`CoordinatorPlace`), and the pick creates the coordinator there with the account picked (none: the account a session started there would use). Supersedes the 2026-11-13 "no project list" above.
+/// SEE-ALSO: apps/desktop/src/app/new_coordinator_modal_lifecycle.rs (opens it, follows the project row, creates the pick), apps/gpui-web/src/app/web_host/new_thread_picker.rs (the page's picker).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct NewThreadPickerCoordinatorStep {
-    /// The sidebar group of the copy the coordinator runs in.
+    /// The sidebar group of the copy the coordinator runs in, as the form picked it; the project
+    /// row's pick (`PickCoordinatorAgent::target`) wins over it.
     pub(crate) group_id: String,
     /// The name the form was given (empty: the placeholder "Coordinator").
     pub(crate) name: String,
@@ -398,12 +407,18 @@ pub(crate) enum NewThreadPickerCommand {
         /// The picked project and machine; `None` is the active project.
         target: Option<NewThreadPickerTarget>,
     },
-    /// The coordinator step's pick: create the coordinator on this agent and account.
+    /// The coordinator step's pick: create the coordinator on this agent and account, in the
+    /// project and computer the project row names (`None`: the step's own `group_id`).
     PickCoordinatorAgent {
         step: NewThreadPickerCoordinatorStep,
         agent_id: String,
         account_id: Option<String>,
+        target: Option<NewThreadPickerTarget>,
     },
+    /// The coordinator step's project row moved to another project or computer: the host sends
+    /// that computer's agents (`set_coordinator_agents`) and accounts (`set_accounts`). The picker
+    /// stays open.
+    CoordinatorPlace { target: NewThreadPickerTarget },
     /// The New Coordinator dialog (`projectAction` `coordinator`).
     NewCoordinator {
         target: Option<NewThreadPickerTarget>,
@@ -677,13 +692,72 @@ impl GpuiNewThreadPickerWindow {
         cx.notify();
     }
 
+    /// The coordinator step's project row moved to another computer: its agents (`agents`, in
+    /// launcher order) and their warnings, its accounts read again (`set_accounts`). The list
+    /// starts at its top, out of any account list.
+    pub(crate) fn set_coordinator_agents(
+        &mut self,
+        agents: Vec<NewThreadPickerAgent>,
+        warnings: std::collections::BTreeMap<String, String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(step) = self.coordinator.as_mut() else {
+            return;
+        };
+        step.warnings = warnings;
+        self.agents = agents;
+        self.agents_loaded = true;
+        self.accounts = None;
+        self.accounts_error = None;
+        if self.scope.take().is_some() {
+            self.clear_query(window, cx);
+            self.set_placeholder(self.agents_placeholder(), window, cx);
+        }
+        self.selected = 0;
+        self.scroll.scroll_to_item(0);
+        self.fit_window_height(window);
+        cx.notify();
+    }
+
+    /// The picker is the New Coordinator form's agent step.
+    pub(crate) fn is_coordinator_step(&self) -> bool {
+        self.coordinator.is_some()
+    }
+
+    /// The coordinator step's project and computer as its project row has them now; `None`
+    /// without a project row (or outside the step).
+    pub(crate) fn coordinator_target(&self) -> Option<NewThreadPickerTarget> {
+        self.coordinator.as_ref()?;
+        self.launch_target()
+    }
+
+    /// The copy the coordinator step opened with (`NewThreadPickerCoordinatorStep::group_id`).
+    pub(crate) fn coordinator_group_id(&self) -> &str {
+        self.coordinator
+            .as_ref()
+            .map_or("", |step| step.group_id.as_str())
+    }
+
+    /// The coordinator step's warnings, once the computer's models are read.
+    pub(crate) fn set_coordinator_warnings(
+        &mut self,
+        warnings: std::collections::BTreeMap<String, String>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(step) = self.coordinator.as_mut() {
+            step.warnings = warnings;
+            cx.notify();
+        }
+    }
+
     /// The frame follows the agent count and whether the project and Run on rows are drawn, or
     /// the project list while it is open.
     pub(super) fn fit_window_height(&self, window: &mut Window) {
         let height = if self.choosing_project {
             self.project_list_height()
         } else if self.coordinator.is_some() {
-            new_thread_picker_coordinator_height(self.agents.len())
+            new_thread_picker_coordinator_height(self.agents.len(), self.place.is_some())
         } else {
             new_thread_picker_window_height(
                 self.agents.len(),

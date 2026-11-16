@@ -230,6 +230,7 @@ fn install_job(
         "update" => "Updating",
         "reinstall" => "Reinstalling",
         "uninstall" => "Uninstalling",
+        "repair" => "Repairing",
         _ => "Installing",
     };
     let output = field("output").unwrap_or_default().to_string();

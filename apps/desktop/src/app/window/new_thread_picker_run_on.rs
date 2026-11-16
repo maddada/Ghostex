@@ -453,11 +453,20 @@ impl GpuiNewThreadPickerWindow {
     fn pick_run_location(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         let index = index.min(self.run_on.chip_count() - 1);
         let was = self.run_on.selected_index();
+        let was_target = self.launch_target();
         self.run_on.select_index(index);
         if was != self.run_on.selected_index() {
             self.run_location_changed(window, cx);
         }
         self.reveal_selected_run_location();
+        // ⌘←→ moves the coordinator step to another computer too (`pick_project`).
+        if self.coordinator.is_some()
+            && let Some(target) = self
+                .launch_target()
+                .filter(|target| Some(target) != was_target.as_ref())
+        {
+            (self.host)(NewThreadPickerCommand::CoordinatorPlace { target }, cx);
+        }
         cx.notify();
     }
 

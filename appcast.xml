@@ -8,6 +8,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>11.8.2</title>
+            <pubDate>Mon, 16 Nov 2026 11:57:52 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.8.2</sparkle:fullReleaseNotesLink>
+            <sparkle:version>110802</sparkle:version>
+            <sparkle:shortVersionString>11.8.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.8.2
+
+## 11.8.2 - 2026-11-16
+
+**Ghostex 11.8.2 is out.** It fixes the Mac app quitting when a chat shows a one-click answer, including on every launch for some people.
+
+### 🩹 Fixes and polish
+
+- **macOS: Ghostex no longer quits when you open a chat that ends with one-click answer buttons,** which for some people happened on every launch, thanks to @nadzifal, @NexiaMoe and @WangAxerold.
+- **Ghostex's notes reach a coordinator as their own message,** and the chat hides them however they arrive, so a coordinator's reply is no longer lost behind one, thanks to @sebastianarena.
+- **A coordinator's right-click menu groups its settings under one Coordinator row,** as the phone's long-press menu does.
+- **A new chat in an existing worktree on another computer opens in Chat,** not as a terminal or an empty pane.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.8.2/ghostex-11.8.2-arm64.dmg" length="65308828" type="application/octet-stream" sparkle:edSignature="1IKQOwNQj6Magc/4yux0+GZ65Ort906nCIRG6zCCQMPITATmZvVQm7quUArizFbGfOjaj87Oa39sYl1wug3AAA=="/>
+        </item>
+        <item>
             <title>11.7.1</title>
             <pubDate>Sat, 14 Nov 2026 23:09:51 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.7.1</sparkle:fullReleaseNotesLink>
@@ -219,351 +242,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.6.1/ghostex-11.6.1-arm64.dmg" length="64119663" type="application/octet-stream" sparkle:edSignature="8XsobO28jgniWcnUXdq4uiLTXOCMlbQ/Q+zYuTtcB6QkHymu70kFJ7ypqO/7Nrz4lW6CpgfRNDFOLUywyN1PDA=="/>
         </item>
         <item>
-            <title>11.6.0</title>
-            <pubDate>Fri, 13 Nov 2026 04:01:12 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.6.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>110600</sparkle:version>
-            <sparkle:shortVersionString>11.6.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.6.0
-
-## 11.6.0 - 2026-11-13
-
-**Ghostex 11.6.0 is out.** Quiet View for every chat and a new Summary view, Session details in Overview and Limits tabs, Ghostex pages you can export and answer anywhere, Snooze for pages and forms, a voice agent that waits for "reply", calmer dictation that opens Hex by itself, accounts of your other computers managed from here, agents that run without Ghostex's hooks, read-only threads for coordinators, long messages that always arrive, Claude on Windows PowerShell 5.1, and a lighter phone app.
-
-### 👁️ Chat views
-
-- **Quiet View is on for every chat:** every chat now reads as the conversation, with the work between two replies folded into one line, and the newest turn opens by itself. An opened line's header says what it holds ("Working", "Worked for 2m 5s", "Previous turn") instead of its counts. Settings > Chat > Advanced still turns it off. On the computer and the phone.
-- **Summary view shows your messages and the newest reply:** earlier replies and reports sit behind one "N earlier replies · N reports" line, only pages, charts and questions still waiting on you stay in full, and work that comes after a reply in the same turn (a thread's report, a background task) shows under Active work instead of hiding until the turn ends. On the computer and the phone.
-- **Detailed view is Quiet View with every line open,** so switching views only opens or shuts lines and nothing jumps.
-- **Agent work Reduced and Quiet, and the Tool call cards preview, are retired:** Quiet View replaces them, and anyone who used one of them starts in Quiet View.
-
-### 📄 Pages and forms
-
-- **Export a Ghostex page and get its answers back:** any page downloads as one HTML file that works in any browser, where its Send becomes Export answers (JSON to copy or download). Drop or paste that JSON into a chat, or use Import answers, and it reaches the agent as the page's own answers. On the computer and the phone.
-- **Snooze for pages and forms:** a form card and the page window get Snooze, with 1 hour, 6 hours and 24 hours, which puts the form off For later until then. On the computer and the phone.
-- **The page window has a ⋯ menu:** Snooze, Export page, Import answers and Open in browser sit under one ⋯ beside Hide and Close, in a light glass that reads over the page.
-- **Popups stay open when you switch apps:** Settings, the page window and the chat's form popup no longer close when you go to another app, so you can paste from a clipboard app.
-- **A form popup fades out once its answers are sent,** and stays open on them when the send fails; the page window fades out the same way.
-- **Reply and Mention for forms and pages in the work list:** a form's or page's row has Reply beside Open, whose words go to the agent tagged with the questions it still asks, and Mention in chat box in its ⋯ menu. A question form's row is marked with a pink checklist. On the computer and the phone.
-- **Copy as Markdown from the work list:** a row's ⋯ menu (now also on a right-click of its title) copies a question with its details and answers, or a form with each question, as Markdown.
-- **A Ghostex page no longer shrinks for a moment after it opens:** about a second after an answered or new page opened, it was drawn at about two thirds of its size in the window's corner and then grew back.
-
-### 🧾 Session details
-
-- **Session details has Overview and Limits tabs:** Overview holds Environment (with the agent's version), Changes, Context with Compact context under it, Tasks, Connectors, Skills, Memory files, Background tasks and the agent's other settings; Limits holds your plan limits with their reset times, Cost and time, and Cache. On the computer, in the browser and on the phone.
-- **The Context card shows its usage when folded:** it opens folded with its usage line and bar under its title, and unfolds for the breakdown; a card with nothing more to show has no fold.
-- **The status line under the phone's chat box follows the computer:** it shows the pins you saved for each agent in the Ghostex app on the chat's computer, and Context details says so.
-
-### 🎙️ Voice and dictation
-
-- **The voice agent waits until you say "reply":** with Settings > Voice Agent > Answer when I say "reply" (on by default for Regular calls), the agent answers a spoken turn only once it ends with "reply", "over" or "go ahead", so a pause to think no longer gets an answer. On the computer and the phone.
-- **Dictation opens Hex by itself:** on a Mac, dictating while Hex is closed opens it in the background and transcribes once it is ready, instead of failing.
-- **A live waveform while you dictate:** the recording pill shows your voice as it records, with ✕ to cancel on the left (the microphone's Stop finishes), and says "Can't hear you" after 3 seconds of near-silence. While dictation can't transcribe yet, the microphone is greyed and says why. On the computer and the phone.
-- **Calm dictation cards:** a problem shows in a small Dictate card that says what to do, and your recording is always safe in Past recordings. A refused microphone, no words heard and nothing waiting are cards too, not toasts. On the computer and the phone.
-- **Dictated words go where you were typing:** they replace the selection, or go in at the caret, that the chat box or question form box had when you started recording, even if you clicked elsewhere meanwhile. On the computer and the phone.
-
-### 🔐 Accounts and privacy
-
-- **Manage another computer's accounts from here:** Settings > Accounts has a computer picker that shows a connected computer's saved Claude and Codex accounts and usage. Adding or reconnecting one signs in on that computer while the sign-in page opens on yours, and a remote session's Reconnect opens Accounts on its computer. On the computer and the phone.
-- **A Claude login waiting to renew stays ready:** it no longer says "The saved login expired. Reconnect this account." while its access token is only due for renewal.
-- **Turn usage analytics off with a launch option:** start Ghostex or its server with `--no-analytics`, or set `GHOSTEX_TELEMETRY_DISABLED=1` or `DO_NOT_TRACK=1`, and no usage analytics are sent; setup no longer points to a Settings switch that did not exist, thanks to @lardissone for raising it.
-- **Reset all settings asks first:** one click on Reset all settings to defaults in Settings > About no longer puts every setting and the app icon back with no way back, and a key typed while a Settings confirmation is open stays in it (#589), thanks to @lardissone.
-
-### 🤖 Agents
-
-- **Claude, Codex and OpenCode run without Ghostex's hooks:** Ghostex follows them from their own files on every computer and removes only the hooks it had installed. If an agent goes unseen for 90 seconds, Ghostex installs its hook for that session and says so in the chat; Settings > Agents > Use agent hooks brings the hooks back for good. Without hooks, a Claude question with several questions shows them all in the chat card.
-- **Agents install the way their makers say:** first-run setup, Settings > Agents and Install buttons use each agent's official installer (its own install script, PowerShell on Windows, or npm, Homebrew or WinGet where that is how it ships) instead of mise, unless mise already manages it. DeepSeek Harness installs with npm, Pi with its own installer, Claude Code on Windows without Git for Windows, and OpenCode's Homebrew choice installs OpenCode 2.
-- **Antigravity's Update says it updates itself,** in Settings > Agents and the Updates list, instead of running an installer that does nothing.
-
-### 🧭 Coordinators
-
-- **Read-only threads:** `ghostex coordinator start-thread --read-only` starts a thread that can look but not change anything (Claude in Plan mode, Codex in its read-only sandbox), and it stays read-only across restarts and wakes. ([#554](https://github.com/maddada/Ghostex/issues/554))
-- **Coordinators read their playbook once:** the playbook ships in Ghostex, and `ghostex coordinator guide --changes` shows a coordinator only what changed since it last read it (#580), thanks to @lardissone.
-- **Playbook overrides have room to grow:** an override can be up to 100,000 characters (was 20,000), and past 20,000 every save says how long it is. ([#584](https://github.com/maddada/Ghostex/issues/584))
-- **The work list reads evenly and moves smoothly:** every text in it is one size, an opened row eases open and shut, scrolls just enough to show its answers when the list is full, and shows its threads as their agents' logos beside the answers.
-- **Coordinators mark their replies again by default:** Marked handovers is now one setting with three choices, Off, Coordinators only (the default) and Every session, so coordinators answer in marked sections without you changing anything; threads always mark their reports. Anyone who had it on for every session keeps Every session.
-
-### 💬 Chat
-
-- **Long messages always arrive:** a message over 256 KB (a pasted crash report, for example) now reaches the agent in pieces instead of failing with "The agent's terminal didn't take your message".
-- **A held message no longer holds up the queue:** a message Ghostex held for a moment goes out as soon as a working agent's input box is ready, instead of waiting for its whole turn. ([#591](https://github.com/maddada/Ghostex/issues/591))
-- **Leaving a session keeps its draft:** a draft another client wrote (for example with `ghostex set-session-chat-draft`) is no longer wiped when you leave the session. ([#587](https://github.com/maddada/Ghostex/issues/587))
-- **Drop a session on the chat box to link it:** dragging a session row from the sidebar onto a chat box types its link at the caret, as Copy ID copies it, instead of splitting the pane.
-- **A tidier More actions menu:** the chat box's More actions lists the everyday actions first, then Agent (Rename, Sleep, Fork Session, Switch Account and more) and More. On the computer and the phone.
-- **A pasted picture whose path has spaces shows as a picture,** on the computer and the phone.
-- **Legacy models open under their row:** in the model picker, opening Legacy models lists them below it with no gap. On the computer and the phone.
-- **A message that could not be sent says so calmly:** a failed or waiting message gets a small card right under it with its icon, "Not sent" (or "Waiting to send", "Still not sent"), the reason in one sentence, and Retry and Terminal view as buttons, with Fix it, Start fresh, Edit and Remove in its ⋯ menu. Every notice card in the chat is calmer too, with only its icon in colour. On the computer and the phone.
-
-### 📱 On the phone
-
-- **The phone uses far less data:** long tool outputs come cut to what a card shows (the full text loads when you open it), the link to your computer is compressed, the sessions list is pushed as it changes instead of polled every 5 seconds, a chat picks up where it left off after a reconnect, and a hidden terminal tab sends nothing.
-- **Tabs switch instantly and can be dragged:** your last 4 chats stay ready, a held tab drags to a new place (the strip scrolls near its end), and on a tablet or an unfolded phone you can drop a tab on the right half to show two sessions side by side.
-- **See how each computer connects:** Settings > Connection lists every computer with its status and route (Tailscale, or Easy Connect through Private Relay, Global Relay, Direct or Same network), the Sessions screen stays quiet while everything works, and a computer added over Tailscale also pairs for Easy Connect and switches between the two by itself.
-- **Search Settings:** a search box at the top of Settings finds a setting on any page.
-- **Send logs to the developer:** Logs has Send to developer, with a review step that says what the report holds.
-- **The terminal view has a bottom bar** with the mode button and the chat box's other controls, on iPhone and Android.
-- **Spaces are icon tiles like the desktop's,** led by the Active projects star, and the work list shares one bar with the working status above the chat box.
-- **Show session names is on by default,** so alerts, the Live Activity and the widgets lead with the session's name.
-- **Android: the keyboard comes back** when you tap the chat box after closing it with the back gesture, and the chat box sits right above the keyboard instead of over an empty band.
-- **The questions sheet scrolls,** so every question and its buttons are reachable.
-
-### 🪟 Windows
-
-- **Claude starts on PCs that only have Windows PowerShell 5.1.** ([#582](https://github.com/maddada/Ghostex/issues/582))
-- **Web pages and the feedback form keep working after an update** when Windows will not let go of an old runtime folder. ([#581](https://github.com/maddada/Ghostex/issues/581))
-- **Emoji and characters like Hangul reach Windows apps whole,** long input is no longer cut, and repeated characters stay, thanks to @yossifyahya17-bit.
-- **A queued message stuck on an unreadable input box gets a repaint** and goes out, instead of waiting for the agent to reload.
-- **Autopilot recognises PowerShell and cmd deletes** (Remove-Item, del, erase, rd) and Windows paths when it checks for deletes outside the project, and an agent's refusal while its approval card is open logs as Waiting for you, not failed. ([#590](https://github.com/maddada/Ghostex/issues/590))
-
-### ⚡ Faster and lighter
-
-- **Less GPU and memory use:** hidden menus, tooltips and popups no longer hold up to 64 MB of GPU memory each, the app gives back graphics memory after a heavy frame, and a chat hidden for five minutes keeps 1 MB of pictures instead of 8 MB.
-- **Big coordinators stay light:** a coordinator with over a thousand threads no longer rebuilds its work list and panel every 2 seconds, and Ghostex's server reads running sessions once instead of in every check.
-
-### 🩹 Fixes and polish
-
-- **Closing a page no longer crashes the Mac app** after the window it was last shown in went away.
-- **A file link in the chat of a session on another computer always opens:** it opens in Files in the window you clicked it in, or a toast says why it can't, instead of showing "Opening file in Files view" and then nothing.
-- **A session's computer icon sits in one column** down the sidebar, with its status and time lined up at the right.
-- **Copy ID is its own row** in a session's context menu, above Tag As, and a session from another computer names that computer in Copy ID, Copy Link and a drop on a chat box. On the computer and the phone.
-- **A session reference that names the wrong computer says where the session is** instead of saying the chat was closed.
-- **Notifications are simpler:** the panel has one ⋯ menu with Mark all read and Clear all (for every row), each notification shows its computer's icon, Next unread is gone (its hotkey stays), and a phone added for Easy Connect without a click can be removed from its row. On the computer and the phone.
-- **Ask Ghostex AI, Join Discord and Send Bug / Feedback are in the main menu,** below Keep Awake, instead of a Help submenu.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.6.0/ghostex-11.6.0-arm64.dmg" length="63257422" type="application/octet-stream" sparkle:edSignature="Slr1HcyIBoTApjk94lyqZHT0tUFo5tCJH0ykVo/iw8nkidHfKkDlDo8L4Ndl3rqFM8Xm4tmUnNaysFwuDjpQAg=="/>
-        </item>
-        <item>
-            <title>11.5.0</title>
-            <pubDate>Thu, 12 Nov 2026 04:43:14 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.5.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>110500</sparkle:version>
-            <sparkle:shortVersionString>11.5.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.5.0
-
-## 11.5.0 - 2026-11-12
-
-**Ghostex 11.5.0 is out.** Active projects from every Space and computer in one list, an icon for each computer, the whole sidebar arranged the same on all your computers, the Beads view, Fork from here, a crown for coordinators, queued messages that can no longer answer an approval, a phone app that matches the desktop's chat, and a lighter, faster app.
-
-### 🧭 Sidebar
-
-- **Active projects:** a star now leads the Spaces row. Click it to see, in one list, the projects you are working on from every Space and every connected computer (any project with a session working or waiting on you, or used in the last 8 hours), each with all its sessions, in your Spaces' order. Click a session to open it without switching Spaces; in the Unified sidebar the star shows only those projects' sessions. It is on by default: right-click the star to remove it, and turn it back on in Settings > Sidebar & Sessions > Spaces.
-- **An icon for each computer:** pick one for each of your computers (a laptop, a desktop, a server, a cloud, a house, a rocket and more) in Settings > Remote, under This computer for this one and in a saved computer's settings for the others. The icon is kept on that computer, so your phone and your other computers show the same one. While more than one computer is in the sidebar, every session shows its computer's icon in place of a short name like "WN", and the computers row beside the Spaces uses the same icons. Until you pick one, a laptop shows a laptop and other computers a desktop.
-- **Coordinators wear a crown:** a coordinator's row in both sidebars, its chat pills, its message cards, the `+` list, work chips, the coordinator tips, the Welcome page and the phone show a new outline crown instead of the captain's hat. A project's main coordinator wears it in gold instead of the "Main" tag. Chief of Staff and department leads keep their filled crown.
-- **The Unified sidebar shows a coordinator's threads as the Project sidebar does:** its threads hang under it in the same rows and tree lines, and its crown turns into the fold arrow when you point at it, on the computer and the phone, thanks to @sebastianarena.
-
-### 🔄 Sync
-
-- **Sync sidebar organization:** Settings > Sync's Spaces switch is now Sidebar organization, and it keeps the whole sidebar arranged the same on your computers and your phone: the order of your Spaces and the projects in each, project groups, Project or Unified sidebar, Separate by machine, the other settings that arrange the sidebar, and your Session Tags with their order. A change on one computer shows on the others within a minute without a restart, the newest change wins, and a project one computer doesn't have keeps its place until you add it there. Width, animations and card details stay per computer. Computers that had Spaces sync on keep it on.
-- **The view you pick for a chat follows you:** Quiet View or Full view, and the level of detail, picked for a chat on one device show on your other computers and your phone within seconds, and a chat opens in the view you picked last anywhere.
-
-### 🧩 Beads
-
-- **The Kanban view is now the Beads view:** it opens in the same place with the same hotkey, and a Tree | Board switch sits in its header. Tree shows every bead under its epic with the epic's progress, beads waiting on you pinned on top, filters for Ready, In progress, Blocked and Deferred, and a details pane to close, defer, reprioritize, comment and go to the agent on it. Board is the board you know, and its Columns dialog can now hide Backlog, Test and Review for every computer and agent on the project. The header shows when the beads last synced, with Pull and Push one click away; Push works with Beads 1.2 too, and in a narrow side panel the header's buttons move to a second line instead of past the edge (#573, #577), thanks to @sebastianarena.
-
-### 💬 Chat
-
-- **Fork from a message:** the ⋯ menu under one of your messages, or under the agent's last reply of a turn, now has Fork from here. It starts a new Claude Code session beside the old one whose conversation ends at that message, named "Fork: <old name>", so you can try another direction from an earlier point while the original keeps going. On the phone it is in the message's long-press menu. Other agents keep Fork Session, which copies the whole conversation. ([#362](https://github.com/maddada/Ghostex/issues/362))
-- **A queued message can no longer answer an approval:** when an agent asked for approval (or showed another prompt) at the very moment a message from the chat, its queue, an automation or Generate Name was going out, the message's Return could land in that prompt and approve it without anyone seeing it. Ghostex now reads the agent's screen right before typing the message and right before pressing Return, and does neither while a prompt shows; the message waits, is cleared from the agent's input box, and goes out once the prompt is answered. This covers Claude, OpenClaude, Codex, Grok, Empryo, Pi, Cursor, Copilot, Antigravity, Hermes, OMP and ZCode, the agents whose prompts Ghostex can see on screen. ([#555](https://github.com/maddada/Ghostex/issues/555))
-- **Every fold in the chat opens and shuts smoothly:** an opened Quiet View line, the answers it holds, a thought and Agent work Quiet's steps now ease open and shut over 200ms like the tool call cards, and each fold's arrow turns as it opens instead of jumping. The rest of the chat stays still while one moves, and nothing moves when your system asks for reduced motion. On the computer and the phone.
-- **Quiet View reads cleaner:** a line that is still working shows only its spinner, a finished line ("1 item updated", "Worked for 19s …") only its own icon, and a message to another agent counts once, as a message sent, not also as a tool call. In an opened line, tool calls sit in a card like the "Message to" card, whose whole header lights up under the pointer, and a click or tap anywhere on the thin line down an opened line folds it. On the computer and the phone.
-- **Opened work rows are easier to read and use:** in the work list docked above the chat box and in the Work panel, an opened row uses the whole card's width, leaves the same space between title, description and answers as a question card, and shows one small pill per work item (a dot for its state and its short id, such as #579 or W12; hover or long press for its name, click to open it) in place of the line naming it. Only a click on its title line shuts it, so you can select and copy its text, and a command in a description gets Copy and Paste in terminal buttons. On the computer and the phone.
-- **The work list leaves room for the conversation:** on the computer it never takes more than 40% of the window's height; on the phone it never takes more than 45% of the space above the chat box, folds to its one-line bar while you type so the chat box stays in view, and sits between the conversation and the "Working" line.
-- **A hidden Ghostex page waits above the chat box:** a page you put aside now shows as a pill in the row above the chat box, with its title and how many of its questions you answered ("3/16"), instead of a tab squeezed into the chat's header; click it to bring the page back. The phone's page sheet has Hide beside Close and shows the same pill.
-- **A question that reuses an old tag reaches you and the agent again:** when a coordinator asked a new question under a tag you had already answered, the question showed as answered and your click sent nothing. A tag reused for a different question now shows as a new, open question on the computer and the phone, and your answer reaches the agent; `ghostex coordinator next-tag` prints the next free tag, and `ghostex visual check` warns about a reused one. ([#579](https://github.com/maddada/Ghostex/issues/579))
-- **Claude's models are listed Fable, Opus, Sonnet, Haiku:** the model picker on the computer and the phone and the New Coordinator form list Claude's models by family, newest version first. A starred older model (Fable 5.1, for example) stays in Legacy models with its star lit instead of jumping to the top, a model moves into Legacy models on its own when a newer version comes out, and the Legacy models row always sits at the bottom of the list. The default model is still Opus 5.5.
-- **Rewind reaches messages above a compaction:** Rewind to here now works on messages from before a compaction Claude Code made while it ran, and says so when a message was compacted before Claude last started, instead of closing silently.
-- **Submenus in the chat's menus open on a click:** Snooze in a work row's ⋯ menu and every other submenu in the chat no longer opens on hover; a click opens it and keeps the menu open, and picking an item closes both.
-- **The /mcp menu's buttons stay where they are:** stepping through the servers with Previous and Next no longer moves them, on the computer and the phone. ([#576](https://github.com/maddada/Ghostex/issues/576))
-
-### 📱 On the phone
-
-- **The phone's sessions list is organized like your computer's sidebar:** it follows Sidebar organization sync, so Project or Unified, Separate by machine, Merge copies, Spaces, Active projects, Group working sessions, parking, Pinned order, the Moving section, Group by project and its project order, and your Session Tags list change on the phone when you change them on a computer, and its Settings > Sidebar & Sessions (or Sort & Filter in its ⋯ menu) changes them on your computers within seconds. With Separate by machine off, the phone's Project list is one list of every connected computer, a project on several computers is one entry with all their sessions, and the computer tabs show only while Separate by machine is on. Each project has the Working and Snoozed sections, the Tag As menu offers the tags you left on, Sort & Filter can show only sessions with a tag, and a long press on a Unified project group moves it up or down. A computer without Sidebar organization sync keeps what the phone had before.
-- **The phone's chat matches the desktop's:** a coordinator's chat opens in Quiet View, the work list above the chat box has the desktop's header, rows and Work sheet, #123 links to the project's GitHub issue or pull request, a hex colour gets its small swatch, and right-to-left text (Arabic, Hebrew) is right-aligned.
-- **Session details on the phone:** a ring at the end of the pills above the chat box opens the Session details sheet, with the desktop's Environment, Context, Tasks, Connectors, Skills, Memory files, Changes and Background tasks cards.
-- **Swipe between chats:** a quick sideways swipe on the conversation goes to the previous or next tab, and the chat's top bar now shows only the tabs, its ⋯ menu merged into the chat box's More actions.
-- **More from the chat box:** it says "Hold ↑ for options", and holding Send opens a menu that starts with Skills and commands, Mention a file and Add an agent.
-- **Notifications like the desktop's:** the Notifications screen lists the computer's notifications in Unread and Read, with Open Session, Mark as Read and Clear on each card, and Mark all read and Clear all at the top.
-- **The phone's sessions list follows your computers:** Active projects is a star chip first in the Space row (long press it to remove it, and the Unified list's filter offers it too), the computer tabs and sessions show each computer's icon, Sidebar organization sync arranges the list as on your computers, and each project has the desktop's Working and Snoozed sections. A computer running an older Ghostex keeps the cloud icon.
-- **Settings > Updates says what runs and what waits:** the app's version and where it came from, the update it runs now, and a newer one downloading or ready to restart into.
-- **A connection problem is one line above the search row** ("Can't reach MacBook · list from 2 min ago") instead of floating over the top rows.
-- **Android on Chromebooks and x86 emulators:** the Google Play app now carries x86_64 as well, so it runs natively there instead of crashing in the ARM translator.
-
-### ⚡ Faster and lighter
-
-- **The Mac app uses far less memory:** a long chat session no longer grows the app to 1 to 2 GB; the app now holds close to what its chats really need.
-- **Busy chats cost less:** an update draws the chat once instead of twice, a chat you are not looking at rebuilds at most once a second, the working spinners no longer redraw the whole chat, and a burst of updates can no longer pile up in the app or drop the connection for a full reload.
-- **Ghostex's server does less work with many sessions:** looking a session up, listing projects and sessions, the coordinator checks and the account usage meters read far less each time, and a phone with a chat open re-reads its computer's summary once a minute instead of several times a second.
-
-### 🤖 Agents without hooks
-
-- **Claude without Ghostex's hooks is followed more closely:** a session with background shells still running stays working after a Stop, a queued prompt is caught, and `claude attach` panes are followed on Windows too.
-- **OpenCode without Ghostex's plugin gets its cards:** its question and approval cards show, Ghostex follows it to another conversation, and its prompt clears after a draft hand-off.
-- **Codex without its hook follows the right conversation,** including the new one after `/new`, and shows when it waits on an approval (Codex 0.163 and later).
-
-### 🩹 Fixes and polish
-
-- **Settings no longer repeats a page's name as its first heading,** and some groups have clearer names: UI Scale (was Interface scale), Session Tags (was Sidebar Tags), Behavior and Scrolling on Terminal, Past recordings on Dictation, Log on Security, Configuration on Accounts and Your agentbox boxes on Cloud Boxes. Searching for an old name still finds its settings.
-- **New bot in the Bots list:** a New bot row at the end of the Bots list makes a Hermes bot, on this computer or the connected one the list shows, from a copy of the bot you have open (not its Discord or Telegram tokens) or from blank.
-- **Windows: Connect a Device and every other dialog open fully on the screen,** on a small or scaled screen or near a screen edge, and the close button stays its normal size.
-- **A Ghostex page opens at its full size,** without flashing shrunk into the top-left corner first.
-- **A local chat's Ghostex page opens in its own window again** when a remote project is on screen, instead of in the remote project's Browser.
-- **The "N of M answered" counter on a page stays on the screen** on a phone, with room for it below the Send bar.
-- **The questions list no longer shows a question as waiting** beside a pill that says 0 unanswered.
-- **Tab works from a fresh page in the browser version:** pressing Tab when nothing has the keyboard now moves into the page, as in the desktop app.
-- **An idle thread is reported once a round, also across a restart:** a restart of Ghostex's server no longer sends a coordinator the current round's idle report, and the thread's nudge, a second time. ([#554](https://github.com/maddada/Ghostex/issues/554))
-- **Phone: the chat loads after an update's restart** instead of staying blank until the app is restarted again, and on Android a tap on a row of the More pills sheet does what the pill does.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.5.0/ghostex-11.5.0-arm64.dmg" length="63458562" type="application/octet-stream" sparkle:edSignature="OEyQZmoF+puUOgtoggnKl0xEC+4q5vuHpzfseqEAdD5awtQzwrM4Hlif0dclPAby0DM8VqGrbisgkGvtNtVyAQ=="/>
-        </item>
-        <item>
-            <title>11.4.0</title>
-            <pubDate>Wed, 11 Nov 2026 06:27:55 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.4.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>110400</sparkle:version>
-            <sparkle:shortVersionString>11.4.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.4.0
-
-## 11.4.0 - 2026-11-11
-
-**Ghostex 11.4.0 is out.** A shorter first-run setup, one main menu and a tidier sidebar, Settings grouped by what its pages do, a coordinator's work items in one collapsible list with Quiet View, a time and a ⋯ menu under every message, messages that always go out once, Connect a Device in one window, sturdier connections, and new phone apps.
-
-### ✨ First run
-
-- **A shorter first-run setup that ends in the app:** setup no longer asks for a project folder and has no "You're set" summary; Open Ghostex goes straight to the app, and Add Project opens when there is no project yet. Welcome shows **Coordinators** with a new picture, the Workspace panel offers Fast Computer & Browser use (off until you turn it on), a Unified sidebar switch, and Spaces on for a new install (Kanban and Automate stay in the view picker and Settings > Extensions), and the Mobile panel explains how your phone and other computers connect through Connect a Device.
-- **Setup checks that your agent is signed in, and connects it:** the Agents panel says whether the agent you chose is installed and signed in (a Claude or Codex account saved in Settings > Accounts counts), Sign in opens the agent's own sign-in, and going on always connects Ghostex to your installed agents, so your first message no longer stops on a sign-in card.
-- **No more "Do you trust this folder?" in your own projects:** with Trust project folders automatically on (the default), Ghostex answers that question for every session in a project you added, a folder inside it or its worktrees. Your home folder and the folders above it are never trusted this way, and the agent still asks before commands and edits as you set it.
-- **The first launch says Ghostex is starting:** the empty sidebar reads "Starting Ghostex…", on a Mac Ghostex checks for its own updates automatically from the first launch (no "Check for updates automatically?" question), and when you ask setup to pair your phone, Connect a Device opens after your first agent reply.
-- **Add Project starts with Local folder,** and on a Mac, browsing into Documents, Desktop or Downloads first explains that macOS will ask to let "Ghostex Server" (Ghostex's own service) read the folder.
-- **The Mac download shows where to drag Ghostex:** the disk image window has a background with an arrow from Ghostex to the Applications folder and "Drag Ghostex to Applications".
-
-### 🧭 One main menu and a tidier sidebar
-
-- **One main menu, shorter and in order:** the menu behind the three lines at the top of the sidebar now also holds what the three dots above the chat held, and those dots are gone. It lists Sort & Filter and Collapse All; Commands, Agents Hub, All Automations, Connect a Device and Keep Awake; then the Tools (Search by Prompt, Import Sessions, Extensions, Dev servers, Resources), Help (Ask Ghostex, Join Discord, Send Bug / Feedback) and Ghostex (New Window, Check for Updates, Restart and the Quits) submenus; and Settings last. Sessions left the menu, since the Search button opens the same window.
-- **The usage meters are the last thing in the sidebar:** the row of buttons under them is gone (Commands and Settings are rows of the main menu and keep their hotkeys). To hide them, point at them and click the small button that shows above them (or right-click one and choose Hide account usage); while they are hidden, move the pointer to the bottom of the sidebar and the usage icon shows at the bottom right: point at it to peek, click it to pin them.
-- **A wide New session button under the sidebar's top row:** it leads with a plus, a click starts your last agent, the chevron at its right end opens the list of agents to start, and its shortcut shows while you point at it. Add project moved into the top row, right of Search, and folds into the menu only when the sidebar is very narrow.
-- **Computers are icon tiles beside the Spaces:** with Separate by machine on, the row under New session starts with one tile per computer (this computer's monitor, then each remote computer's Windows, Apple or Ubuntu mark), with its status dots and a tooltip that says its name and state; when the row is too narrow they fold into one button.
-- **Dim inactive projects (Settings > Sidebar & Sessions):** fades the header of a project with nothing running, working or waiting on you.
-- **A Focus Sidebar hotkey** (Cmd+Shift+J, Ctrl+Shift+J on Windows and Linux) moves the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrows move, Enter opens.
-- **Tab and Shift+Tab walk every control of the sidebar,** in both sidebars, and arrows move between session rows (#564), thanks to @sebastianarena.
-- **The chat icon at the top of the sidebar is gone:** it folded the Agents Panel and looked like a chat button; Expand side panel (Cmd+Ctrl+E) does the same and is still there.
-- **Sessions drag into and out of a sidebar folder from any of its rows or headings,** a pinned session keeps its pin when it moves, and dropping a folder session on its project's Sessions heading takes it out of the folder.
-
-### ⚙️ Settings
-
-- **Settings' sidebar is grouped by what its pages do:** Updates and Interface on top, then Working (Chat, Sidebar & Sessions, Terminal, Files & Links, Projects), Keyboard & voice (Hotkeys, Dictation, Voice Agent), Agents & accounts (Agents, Accounts, Autopilot, Secrets, Integrations), Connections (Remote, Sync, Collab) and System (Notifications, Power & Sleep, Security, About), with Extensions at the bottom. Five settings moved to the page they belong on, keeping their values, and Settings search finds each in its new place.
-- **Spaces is a normal setting** in its own section of Settings > Sidebar & Sessions, no longer an extension.
-- **Settings > Extensions has an On tab** that lists everything you turned on, from every tab, under the tab it belongs to; something you turn off there stays listed until you leave the tab, so one click puts it back. Every extension is a card of its own row, all the same height, and a card that is off is greyed out.
-- **On and off switches read at a glance:** an on switch is a solid light track with its knob at the right in dark themes (grey with a white knob in light ones), the same in every Settings page, dialog, Automate and the chat's account menu.
-- **Settings > Projects reads in two parts:** the values every project shares sit in a Global settings fold at the top, and a Project dropdown picks the project the rest of the page is about, with its settings, Issues Workflow (its Linear API key) and Cloud box in their own sections. Every setting keeps its value (#567), thanks to @lardissone.
-- **On macOS, the X that closes a dialog, a popup or a toast sits at its top left,** like the window's own buttons; Close buttons on the right (Settings > Interface > Advanced) puts them back.
-- **Dialogs inside Settings are drawn on one solid surface,** so the page no longer reads through them, and the Share and Jobs popovers use the header menus' own surface.
-
-### 🧭 Coordinators and work items
-
-- **What needs you is one list above the chat box, with a header that folds it:** the header shows what needs you, what is blocked and what is in progress as marks and counts, with a button that opens the Work panel; a click folds the list to one bar, and it opens by itself when something new needs you. What the agent is doing sits on that bar too, and "Worked for" stays a minute after the turn, then goes back to the turn's own fold. On the computer.
-- **A row of that list opens as its own card:** the whole description (as Markdown, with its links), the answers on one line (folding into a Choose an answer dropdown when they don't fit) and Reply last, and a ⋯ menu for Mention, Show in chat, Dismiss and Snooze that takes the row's time on hover. "N more need you" opens the rest in place. A task with no question has a Done answer, and an ask has a short title with its details under it.
-- **A Reply you start is kept:** words typed in a Reply and not sent stay with that row (its Reply says Draft) when you click away, press Escape or quit Ghostex, and a Reply sends however long it is.
-- **Snooze opens a small menu** (1 hour, 6 hours, 24 hours), and a card's repeated actions are icon buttons with the same filled answer buttons everywhere.
-- **A card under a coordinator's reply for each work item it changed:** "Work item updated" (or added, finished, needs you, asked you), its title, the line that changed and its state; a click opens the item in the Work panel. On the computer.
-- **"In progress" means someone is on it:** finished or idle work leaves In progress for a folded **Not being worked on** group until the coordinator settles it, so the counts match what is moving, and the Work panel's header no longer repeats them.
-- **Coordinators follow Marked handovers again:** with Marked handovers in every session on, a coordinator answers in marked sections with bullets; off, with a few sentences of news.
-- **A shorter coordinator playbook:** half as long, each rule said once; threads check their own work and say what they could not check, and coordinators pass those caveats on to you.
-- **The coordinator skill is now `/ghostex-coordinator`:** Ghostex moves installs of `ghostex-orchestrator` to it on its first start, and coordinators you have keep working.
-- **A coordinator keeps its role after `/clear`** (#570): after a `/clear`, a compaction or a fresh start, Ghostex hands a Claude or Codex coordinator its role again before its next message, so it goes on starting threads instead of doing the work itself.
-- **A message you send to a finished thread in its chat reopens it,** and reports that keep failing stop after 10 minutes with one notice instead of retrying forever (#562), thanks to @sebastianarena.
-- **Reports reach their coordinator more reliably** (#554): one report that fails no longer holds back the ones after it, a restart no longer resets a thread's stall clock, a turn is not reported twice, and a session made coordinator manages its threads on another computer like one started as a coordinator.
-- **New Coordinator's notices read right when another computer answers late or has an older model list,** thanks to @sebastianarena.
-
-### 💬 Chat
-
-- **A message you send goes out once, shows at once, and is never handed back:** it is the chat's last message the moment you press Enter, drawn as it will stay. If Ghostex's service is restarting it waits there, says so, and goes by itself; a message that cannot be sent at all (the session is gone, the text was refused, it is too long) stays in the chat with the reason and Retry, Edit and Remove, and its words go back to the chat box only if you choose Edit. Answers in a coordinator's list and Work panel wait out a restart the same way. On the computer and the web, and on the phone with this release's update.
-- **Every message of yours and every final reply shows its time, with a ⋯ for its actions:** point at the message and the ⋯ appears beside the time, with Copy message, Reply by Annotating, Save to Markdown and Read aloud under a reply, and Copy message, Save prompt and Rewind to here (plus Edit and Back to composer while it waits) under yours. On the computer and the web; the phone's long-press menu says Save to Markdown too.
-- **Quiet View makes a chat read as the conversation:** your messages, replies, pages, forms, questions and approvals stay in view, and everything between them (reports, messages to threads, tool calls, item updates) folds into one counted line you can open. Coordinator chats open in it; More actions > View turns it on or off for any chat, and Settings > Chat > Advanced sets the defaults. On the computer and the web.
-- **Tips on new chats, in place of Tips & Tricks:** a new chat shows a small card of tips under "What should we build with …?", one at a time with Previous, Next and Got it; Settings > Chat > Tips on new chats turns it off, and Show tips again brings back the ones you marked. The Tips & Tricks panel is gone.
-- **Compact context compacts again** (#572): Compact context in the context window panel sends `/compact` to the agent, the same as typing it, and says why in the chat box when it can't run, thanks to @KhalidSaifullahFuad for the report.
-- **Find starts at the newest match,** nearest the bottom of the chat, and goes up to older ones (loading older messages when needed).
-- **A message queued behind an agent that was killed goes out:** once the agent is confirmed gone, its turn, approval or question card no longer holds the queue, and sending starts it again (#555); an agent killed without a Stop hook no longer shows as working, thanks to @sebastianarena.
-- **A message that reaches the agent mid-turn no longer cuts the turn,** so its "Worked for" row holds all of the turn's work.
-- **A prompt hook that blocks a message says so** in the chat instead of nothing happening (#543).
-- **A running tool call shows its time so far,** and its card's total counts up with it.
-- **Every waiting question is drawn in the questions pink** (its badge, card, Q-tag chips and highlight), on the computer and the phone.
-- **The new chat's base branch list has a search,** with the picked branch first and the default branch next.
-- **Panels above the chat box keep their bottom edge:** the Links list, Switch Account and the context ring panel stay against their pill when their content grows or shrinks, instead of drifting up.
-- **Copy image works on Windows:** a copied picture pastes into Paint and other Windows apps, every picture is copied as PNG on every computer, and a copy that did not reach the clipboard says so.
-- **Long coordinator chats answer quickly again:** an event no longer rebuilds the whole Work panel, sessions that share a title no longer make every open chat rebuild its transcript when the sidebar reorders, and what you do in a chat goes ahead of the updates waiting for it.
-- **Codex no longer says "Message not sent" for a message it took while starting,** and Retry on a failed message first checks whether the agent already has it, so nothing is typed twice.
-- **A false "Usage limit reached" card no longer shows** when a session's tool output or a message only quotes Claude Code's limit dialog, and it no longer holds that session's queued messages.
-
-### 📄 Ghostex pages
-
-- **A page hides instead of closing:** a click outside it, its Hide button, a link that opens in the app's browser or another page puts it aside, still running, behind a tab you click to bring it back.
-- **A page with nothing to answer waits until you mark it seen:** it ends with a "Reply about this page" box and Mark as seen, sits in the list above the chat box as "Page, not seen yet" until you press it, and tells the agent you saw it, with your reply.
-- **A page with questions counts your answers** in a small pill at its bottom right ("3 of 10 answered"), green once all are answered. On the computer and the phone.
-- **A picture pasted into a page's note shows as an Image #1 pill** where you pasted it, as in the chat box, instead of Markdown text.
-- **A link clicked in a page opens where chat links open,** so Open links in embedded browser sends it to the app's Browser.
-- **Page answers send from an iPhone** (#566), thanks to @suatkocar.
-
-### 🔗 Connect a Device and your computers
-
-- **Connect a Device is one window:** the sidebar menu's Connect a phone is now Connect a Device, and its window lists three ways at its left (Phone, Computer and Tailscale). The code is small until you click it to scan, Copy the code sits under it, Tailscale shows its checklist with a button to Settings, and Remote at the bottom left opens Settings > Remote.
-- **Easy Connect installs its helper when it is missing** (#559): Connect a Device and Settings > Remote say the helper isn't installed yet, with Install, each step of the install and Try again, the code appears in the same window when it is done, and Settings > Updates lists the helper with Update.
-- **Pairing a phone again no longer leaves a second, dead entry for the same computer:** the phone recognises the computer and merges the older entry, and an Easy Connect key belongs to one device only, so a pairing can never take over another device's key (a refusal names the device that holds it).
-- **An Easy Connect computer that went silent is reachable again in about 20 seconds** (#526): when the path to its relay stops carrying without closing, the computer notices and starts the helper again.
-- **Connections come back faster and drop less:** a computer that was away is looked for every 15 seconds for its first ten minutes, a wake gets a second check before a connection is dropped, a phone registering its own key no longer stalls for six seconds, and a keychain prompt can no longer hold a computer on "Connecting".
-- **A dropping connection no longer shows "gxserver returned invalid JSON.":** an answer the link cut off is asked again on a fresh connection, and when it still can't arrive it says so in plain words, without sending a change twice.
-- **On Windows, Easy Connect's helpers stop when Ghostex does,** as they already did on macOS and Linux.
-- **File links in a chat of a session on another computer open in Files,** text and pictures, inside or outside the project, on Mac, Linux and Windows computers; a link to a network share doesn't open, and a link that can't open says why.
-
-### 📱 On the phone
-
-- **New phone apps:** the iPhone app (on the [App Store](https://apps.apple.com/app/id6771707394) once Apple's review passes) and this release's Android app bring everything below that needs a new app; phones on the older apps keep working with this release.
-- **The Live Activity says when it was last updated:** past its time it shows "Updated 8:14 PM" in grey instead of a warning. New and optional: Settings > Live Activity > **Keep it updated while locked** (off by default) lets one of your computers keep it up to date through Ghostex's push service while the phone is locked; iOS can still delay those updates. With the new iPhone app and Ghostex 11.4.0 on the computer.
-- **Show session names (Settings > Live Activity):** the Live Activity, the widgets and pushes can lead each row with the session's name instead of the agent's, off by default (#544, #545), thanks to @suatkocar.
-- **iPhone push notifications arrive:** the iPhone gets its push token again, a registration a computer missed is tried again by itself, and a push never shows a custom agent's internal id.
-- **Quiet notifications, your choice for each kind (iPhone):** Settings > Notifications has Sound, Silent or Off for Needs you, Finished and Errors (Sound by default) and Thread reports (Off by default), and your computer sends only what you chose.
-- **The phone asks about notifications after you pair your first computer,** with one line saying why, instead of at its first launch.
-- **Type to the voice agent on the phone** from a text box under the call's controls, and hold a caption to select or copy it.
-- **A restored Android phone pairs again without being refused:** its Easy Connect keys stay out of Android backup. With the new Android app.
-
-### 🎙️ Voice and Dictate
-
-- **Dictate types into the question form box you are writing in,** from the hotkey or the microphone button, on the computer and the phone, thanks to @suatkocar.
-- **Type to the voice agent on the computer:** a text box under the voice panel's captions sends your words as your turn (Enter sends, Shift+Enter starts a new line), and the captions can be selected and copied.
-- **Mute the agent's voice for a call:** the voice panel's speaker button keeps the captions coming without the voice, next to the microphone's own mute.
-- **Changing the call mode switches a running call at once,** both ways, on the computer and the phone.
-- **The voice agent finds what you name loosely,** as a project or as a session or coordinator title, and speech that starts while a reply is still being made cancels it.
-- **Dictation says what really went wrong:** a refused xAI key says the key was refused, and a recording cut off on the way says it didn't arrive whole (and the phone sends it again).
-
-### 🧰 Command line
-
-- **`ghostex projects` lists your projects with their ids** (`--json`, `--all` for parked ones, `--computer` for a connected computer).
-- **`ghostex create-agent --account` starts a Claude or Codex session on a saved account,** thanks to @sebastianarena.
-
-### 🩹 Fixes and polish
-
-- **Terminal pictures stay after Ghostex reconnects to a session** and when the pane is resized (Kitty graphics, #536), for sessions started after the update.
-- **Ghostex ends a leftover session terminal only when it can prove it started it,** thanks to @sebastianarena.
-- **Beads keeps your repository's own Git hooks:** a worktree no longer takes over the hooks setting, the board shows every issue, `~/.beads` no longer counts as a Beads workspace, and a worktree that needs attention for its Beads hooks says so (#569), thanks to @sebastianarena.
-- **One session's title sync failure no longer holds back every other session's** (#556).
-- **Arch: the AUR ghostex-bin package now updates within minutes of each release,** pushed by the release itself.
-- **The Grok icon is the Grok mark,** not the xAI logo, everywhere it shows.
-- **The new session picker fits the window it opens over,** and its project list scrolls inside it.
-- **The Context card counts again** when the session's Claude came from a version mise has since removed.
-- **Usage popups name their provider:** a Gemini, Cursor or Copilot meter opens that provider's own popup (its logo, limits, plan and a cell for the account in Settings), and account cards read 5 hours and 7 days.
-- **Opening a usage popup no longer fades the main window,** and a Ghostex page window's round buttons sit evenly in its corner.
-- **The floating sidebar sits 5px in from the window's left border,** and the header's extension, Claude, Grok Bot and Prompt Editor buttons fill rounded on hover like their neighbours.
-- **The model picker's Legacy models row works with the arrow keys,** and keeps its full count when a legacy model is starred.
-- **A delayed send that is already set can be switched to Specific time on the phone.**
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.4.0/ghostex-11.4.0-arm64.dmg" length="61874783" type="application/octet-stream" sparkle:edSignature="80jNAvcZLOgKUybvdHuyXRVbhilYGZmU/8+cAptWn4xFJlVHE3er5fRqnQCYlhbdTZKFX5ywSjiQOLUU80KMCw=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -575,6 +253,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: DB/xu0HaJCxo0A8Rd2OxoUHic/RaHKT0XzSllslHI4aSwgxgwfYX5F9IGMilIarFzvMiun5CNWk0deJZtfQ+DQ==
-length: 82052
+edSignature: 8m0zOYeppghgbU9/e4qvOLX4uMQYeSyJVFAzFg8mJQXnRDYr42YwC0w7TnBM+vcxhpQDgCPwGjkgqvjRUUXwDA==
+length: 41283
 -->

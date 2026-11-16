@@ -536,13 +536,16 @@ pub fn apply_authoritative(
                 .get(&message.id)
                 .and_then(|at| state.messages.list.get(*at))
                 .and_then(|old| old.deferred_work.clone());
+            // Without the notes added for the agent, as every row from the wire
+            // (`merge::shown_row`).
+            let shown = crate::session::merge::shown_row(message);
             match carried {
                 Some(deferred) => {
-                    let mut next = message.clone();
+                    let mut next = (*shown).clone();
                     next.deferred_work = Some(deferred);
                     std::sync::Arc::new(next)
                 }
-                None => std::sync::Arc::new(message.clone()),
+                None => shown,
             }
         }));
         rows

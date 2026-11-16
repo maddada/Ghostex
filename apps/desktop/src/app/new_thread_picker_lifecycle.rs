@@ -366,7 +366,7 @@ impl GhostexGpuiApp {
     ) {
         let agent_count = config.agents.len();
         let height = if config.coordinator.is_some() {
-            new_thread_picker_coordinator_height(agent_count)
+            new_thread_picker_coordinator_height(agent_count, config.place.is_some())
         } else {
             new_thread_picker_window_height(
                 agent_count,
@@ -462,33 +462,25 @@ impl GhostexGpuiApp {
     }
 
     /// The picker as the New Coordinator form's agent step: the copy's computer's launchers
-    /// (`rows`), without Claude (cloud), and no account lists for another computer's agents (its
-    /// accounts are not this computer's). Nothing else is offered or read.
+    /// (`rows`) without Claude (cloud), under the project row (`place`) that can move it to
+    /// another project or computer. The accounts are read by the caller, from that computer.
     pub(crate) fn open_coordinator_agent_picker(
         &mut self,
         step: NewThreadPickerCoordinatorStep,
         rows: Vec<Value>,
         remote: bool,
+        place: Option<NewThreadPickerPlace>,
         cx: &mut gpui::Context<Self>,
     ) {
         if self.new_thread_picker_visible {
             self.close_gpui_new_thread_picker(cx);
         }
-        let primary = (!remote)
-            .then(|| self.active_project_agent_id(&rows))
-            .flatten();
-        let agents = order_new_thread_picker_agents(&rows, primary.as_deref())
-            .into_iter()
-            .filter(|agent| !ghostex_gx_core::is_claude_cloud_agent(&agent.agent_id))
-            .map(|mut agent| {
-                agent.uses_own_login |= remote;
-                agent
-            })
-            .collect();
+        let agents = self.coordinator_picker_agents(&rows, remote);
         let config = NewThreadPickerConfig {
-            place: None,
+            place,
             agents,
             agents_loaded: true,
+            accounts: None,
             boxes: NewThreadPickerBoxes::Unknown,
             cloud_box: false,
             cloud_default_account: None,
@@ -496,9 +488,54 @@ impl GhostexGpuiApp {
             ..self.new_thread_picker_config()
         };
         self.show_gpui_new_thread_picker(config, cx);
-        if !remote {
-            self.refresh_gpui_new_thread_picker_accounts(cx);
-        }
+    }
+
+    /// The coordinator step's agents from a computer's launcher rows: without Claude (cloud), this
+    /// computer's last-used agent first. Another computer's agents keep its own logins, which
+    /// their accounts list is read from.
+    pub(crate) fn coordinator_picker_agents(
+        &self,
+        rows: &[Value],
+        remote: bool,
+    ) -> Vec<NewThreadPickerAgent> {
+        let primary = (!remote)
+            .then(|| self.active_project_agent_id(rows))
+            .flatten();
+        order_new_thread_picker_agents(rows, primary.as_deref())
+            .into_iter()
+            .filter(|agent| !ghostex_gx_core::is_claude_cloud_agent(&agent.agent_id))
+            .collect()
+    }
+
+    /// An `/api/agentAccounts` list as the picker's rows.
+    pub(crate) fn coordinator_picker_accounts(state: &Value) -> Vec<NewThreadPickerAccount> {
+        new_thread_picker_accounts(state)
+    }
+
+    /// Runs `update` on the picker while it is the coordinator step.
+    pub(crate) fn update_coordinator_picker<R>(
+        &self,
+        cx: &mut gpui::Context<Self>,
+        update: impl FnOnce(
+            &mut GpuiNewThreadPickerWindow,
+            &mut Window,
+            &mut gpui::Context<GpuiNewThreadPickerWindow>,
+        ) -> R,
+    ) -> Option<R> {
+        let (handle, picker) = (
+            self.new_thread_picker_window?,
+            self.new_thread_picker.clone()?,
+        );
+        handle
+            .update(cx, |_root, window, cx| {
+                picker.update(cx, |picker, cx| {
+                    picker
+                        .is_coordinator_step()
+                        .then(|| update(picker, window, cx))
+                })
+            })
+            .ok()
+            .flatten()
     }
 
     /// Shows the picker with `config`: the preloaded window reset to it, or a new one when the
@@ -617,10 +654,14 @@ impl GhostexGpuiApp {
                 step,
                 agent_id,
                 account_id,
+                target,
             } => {
                 self.gx_store.unified_sidebar.picker_target = None;
                 self.release_gpui_new_thread_picker_window(cx);
-                self.create_coordinator_from_pick(step, agent_id, account_id, cx);
+                self.create_coordinator_from_pick(step, agent_id, account_id, target, cx);
+            }
+            NewThreadPickerCommand::CoordinatorPlace { target } => {
+                self.follow_coordinator_picker_place(target, cx);
             }
             // The launcher's "New Coordinator…" action, so the dialog opens the way it does there.
             NewThreadPickerCommand::NewCoordinator { target } => {
@@ -669,7 +710,9 @@ impl GhostexGpuiApp {
                 self.release_gpui_new_thread_picker_window(cx);
             }
             NewThreadPickerCommand::RetryAccounts => {
-                self.refresh_gpui_new_thread_picker_accounts(cx);
+                if !self.retry_coordinator_picker_accounts(cx) {
+                    self.refresh_gpui_new_thread_picker_accounts(cx);
+                }
             }
             NewThreadPickerCommand::Closed => {
                 self.gx_store.unified_sidebar.picker_target = None;

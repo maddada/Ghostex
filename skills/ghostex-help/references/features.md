@@ -915,7 +915,7 @@ way and follows this setting of the computer it shows.
 The ⋯ button, or a right-click on the project,
 opens the project menu: Add Worktree (or Create PR), History,
 New Browser Tab, Create Terminal, pinned Actions, Open Folder in the file
-manager and Add to Group.
+manager and Project Group.
 A project's Sleep, Wake, Sleep Inactive and Close Inactive act on that
 project's sessions only; its browser tabs are slept and closed from the tab
 strip above the view, where they live.
@@ -1104,7 +1104,7 @@ the empty sidebar area) joins the Space that is open at the time and appears at
 the top of it; add a project while Other is selected to leave it out of every
 Space. A project made with New project folder goes where its form says (see
 below).
-Grouping never moves a project out of its Space: a group made with Add to Group
+Grouping never moves a project out of its Space: a group made with Project Group
 > New Group joins the Space its project is in, and a project taken out
 of a group (Remove from Group, Ungroup, or dragging it out) stays in that
 group's Space. Adding a project to an existing group in another Space moves it
@@ -1138,7 +1138,7 @@ Project suggests the folder that holds the selected project's folder (else
 is made in as the setting. Local folder and a clone's destination on this
 computer start in that folder too. A sessions group (Move to New Sessions
 Group) only sorts sessions inside a project and never makes a folder; use New
-project folder when the work needs its own folder, and Add to Group > New Group
+project folder when the work needs its own folder, and Project Group > New Group
 to group projects together.
 Right-click a Space icon for its menu: Manage (Edit Space, New Space) and
 Sleep. Sleep Inactive sleeps only the Space's sessions that are awake but
@@ -5298,7 +5298,7 @@ sessions, so any client can control agents on any machine.
   Connect) needs no pairing: its SSH login is enough, so it reads, replies,
   stops, types and approves from its first sign-in (with the phone app from
   this release; an older phone app still asks once, and Ghostex on the computer
-  shows "Approve this phone?" with three words to compare). Computers you reach
+  shows "Is this your phone?" with three words to compare). Computers you reach
   over SSH don't pair either, and a computer you add under Settings > Remote
   lets the agents on both computers reach each other at once. With the
   computer's Agent access off they don't. Such a phone never gets Easy Connect
@@ -5347,18 +5347,40 @@ sessions, so any client can control agents on any machine.
   a line or two with one button that fixes it (Try another code, Reconnect,
   Try again). Use SSH details in the window adds a computer by its address,
   username and password instead. To re-pair a computer paired before 11.1.0,
-  open it in Settings > Remote there and paste a new code. On a server without
-  the app (or any terminal), `ghostex computer-code` (also `gxserver
-  computer-code`) prints this computer's code to paste into Connect a Computer
-  on the other one, then shows that computer's three words. Once this computer
-  has the Ghostex app or a paired phone, only they make codes and let devices
-  in: the command first waits for you to approve "Show this computer's pairing
-  code" in the app or on your phone (then it gets codes for ten minutes), and
-  the other computer is approved there too, where it shows with the same three
-  words; on a computer with neither yet, it asks y or n to approve it right
-  there. `--once` or `--json` only prints the code. Easy Connect must be on
-  (`ghostex tailcat enable`), and it runs only in your own terminal, not from an
-  agent's session.
+  open it in Settings > Remote there and paste a new code.
+  A computer's code is the text Connect a Computer shows under "This computer's
+  code": it names that computer and carries a one-time secret. It works once and
+  lapses after five minutes, and a new one appears when it does. In the app it
+  is in the Connect a Computer window (sidebar More Options, or Settings >
+  Remote, where Add a computer opens the same window); Connect a Phone is for
+  phones. A server with no Ghostex app (a Linux
+  box in the cloud, a headless machine over SSH) has no window to show it in:
+  run `ghostex computer-code` there (`gxserver computer-code` does the same) in
+  your own terminal, not in a Ghostex session. gxserver must be running on it
+  with Easy Connect on (`ghostex tailcat enable`). To connect your computer A
+  (the server) to your computer B (which has the app): run `ghostex
+  computer-code` on A and leave it running; on B open Connect a Computer, paste
+  A's code into "The other computer's code" and click Connect; B shows "Check the
+  words" with three words; A's terminal then prints "<B> wants to connect. Its
+  words: a b c". While A has neither the Ghostex app nor a paired phone, it asks
+  "Do they match the words on that computer? Approve it? [y/N]"; if the words
+  are the same on both, type y (n turns it down). Once A has the Ghostex app or
+  a paired phone, only they make codes and let devices in: the command first
+  waits for you to approve "Show this computer's pairing code" in the app or on
+  your phone (then it gets codes for ten minutes), and B waits there to be
+  approved, with the same three words; A's terminal says so and follows that
+  answer. The command stops after the first computer you
+  approve (run it again to connect another), after 10 minutes with nobody
+  waiting, or when you press Ctrl+C, and B then finishes signing in as usual.
+  `--copy` also puts each code on the clipboard (on a server reached over SSH,
+  your terminal's clipboard, when your terminal allows that), so the long text
+  needn't be selected by hand. On B, the words screen tells you to click
+  Approve on A, or to type y in A's terminal when A has no screen (or to
+  approve on your phone, once one is paired with A).
+  `--once` or `--json` only print the code and exit, so approve the new computer
+  in the Ghostex app (or on a paired phone) within a minute instead. In a
+  terminal that can't answer (no keyboard input), it says to approve in the app
+  or on a phone.
   Only the Ghostex app on a computer, or a phone paired with it, makes its
   pairing codes, approves new phones and computers and removes a paired phone.
   Another of your computers' apps can do it too once you approved "Let <that

@@ -460,6 +460,16 @@ impl GhostexGpuiApp {
         // Read here rather than on the background thread: the clock is the host's, the way it is
         // for every other value the store is fed.
         let now_ms = super::host::now_ms() as i64;
+        // CDXC:Startup 2026-11-16 WHY:
+        // The launch's first reconcile runs inside the window's construction, before the first
+        // frame (gx_store/local_last_seen.rs). Read there on this thread, once per machine, the
+        // copy is on the first frame instead of popping in a few frames later; every later ask
+        // stays on the background executor as above.
+        if self.gx_store.seed_remote_synchronously {
+            let stored = super::remote_last_seen::read_last_seen_raw(&machine_id, now_ms);
+            self.gx_store_apply_last_seen_machine(&machine_id, stored, cx);
+            return;
+        }
         cx.spawn(async move |this, cx| {
             let stored = cx
                 .background_executor()
@@ -685,6 +695,7 @@ impl GhostexGpuiApp {
     ) {
         // Its icon may have been picked from another device while it was away.
         self.gx_store.remote.icons_asked.remove(machine_id);
+        super::computer_icons::forget_computer_icon_read_failures(machine_id);
         self.gx_store
             .remote
             .clients

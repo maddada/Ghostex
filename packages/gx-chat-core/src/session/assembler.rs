@@ -344,6 +344,8 @@ pub struct AssembledTail {
     ids: std::collections::HashSet<String>,
     /// The greatest `(tier, timestamp)` among the rows, the two keys the order compares first.
     newest: (u8, i64),
+    /// Where dropping Ghostex's notes stood after the last row (`appended_notes::NoteTurns`).
+    pub(crate) notes: crate::session::appended_notes::NoteTurns,
 }
 
 /// The two keys [`compare_stored`] compares first: rows that differ in them are ordered the same
@@ -400,6 +402,7 @@ pub fn assembled_with_tail(
             source,
             ids,
             newest,
+            notes: Default::default(),
         })
     })();
     (assembled, tail)

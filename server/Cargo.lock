@@ -1045,6 +1045,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghostex-spaceo-heal"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "gif"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1092,6 +1100,7 @@ dependencies = [
  "ghostex-gx-visual",
  "ghostex-paths",
  "ghostex-settings-catalog",
+ "ghostex-spaceo-heal",
  "hex",
  "image",
  "jiff",

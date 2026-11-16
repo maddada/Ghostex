@@ -13,6 +13,7 @@
 //! the list is grouped by computer, this one first.
 //! SEE-ALSO: app/window/settings_modal/tabs/updates/ (the page), app/titlebar/updates_menu.rs.
 mod items;
+mod notification;
 mod remote;
 
 pub(crate) use remote::THIS_COMPUTER;
@@ -51,11 +52,18 @@ struct UpdatesSnapshot {
     /// gxserver keeps its own (so every client hides them); this covers the moment before its
     /// answer and the items only this app lists.
     dismissed: HashMap<String, String>,
+    /// Items dismissed from the top bar's notification: item id to the version it was dismissed at
+    /// (notification.rs; kept on this computer).
+    notification_dismissed: HashMap<String, String>,
 }
 
 /// Every workspace window and the Settings window read the same list.
-static UPDATES: LazyLock<Mutex<UpdatesSnapshot>> =
-    LazyLock::new(|| Mutex::new(UpdatesSnapshot::default()));
+static UPDATES: LazyLock<Mutex<UpdatesSnapshot>> = LazyLock::new(|| {
+    Mutex::new(UpdatesSnapshot {
+        notification_dismissed: notification::load(),
+        ..UpdatesSnapshot::default()
+    })
+});
 
 fn with_snapshot<T>(f: impl FnOnce(&mut UpdatesSnapshot) -> T) -> T {
     let mut snapshot = UPDATES.lock().unwrap_or_else(|e| e.into_inner());
@@ -286,16 +294,22 @@ impl GhostexGpuiApp {
                 .filter_map(|item| item["id"].as_str().map(str::to_string))
                 .collect()
         });
+        let notification_dismissed =
+            with_snapshot(|snapshot| snapshot.notification_dismissed.clone());
+        let counted = |item: &&Value| {
+            item["counts"] == true
+                || (item["state"] == "updating"
+                    && item["id"].as_str().is_some_and(|id| listed.contains(id)))
+        };
+        // Settings > Updates counts everything; the top bar's notification leaves out what
+        // notification.rs says (Fast Computer Use's patch updates, dismissed items).
+        let count = items.iter().filter(counted).count();
         let badge: Vec<Value> = items
             .iter()
-            .filter(|item| {
-                item["counts"] == true
-                    || (item["state"] == "updating"
-                        && item["id"].as_str().is_some_and(|id| listed.contains(id)))
-            })
+            .filter(counted)
+            .filter(|item| !notification::hidden_from_notification(item, &notification_dismissed))
             .cloned()
             .collect();
-        let count = badge.len();
         with_snapshot(|snapshot| snapshot.badge = badge);
         let (running, error, checked_at) = with_snapshot(|snapshot| {
             (
@@ -348,6 +362,31 @@ impl GhostexGpuiApp {
             self.post_updates_request(json!({ "action": "dismiss", "id": id, "error": error }), cx);
         }
         self.publish_updates(cx);
+    }
+
+    /// The top bar list's dismiss button: `id` leaves the notification and its count at the
+    /// version it shows now, until a newer one appears. A failed item's failure is dismissed too
+    /// (see `dismiss_update_failure`), so the red button clears with it.
+    pub(crate) fn dismiss_titlebar_update(
+        &mut self,
+        id: &str,
+        error: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let item = self
+            .updates_badge_items()
+            .into_iter()
+            .find(|item| item["id"] == id);
+        if let Some(item) = item {
+            with_snapshot(|snapshot| {
+                notification::dismiss(&item, &mut snapshot.notification_dismissed)
+            });
+        }
+        if error.is_empty() {
+            self.publish_updates(cx);
+        } else {
+            self.dismiss_update_failure(id, error, cx);
+        }
     }
 
     /// `updates` from Settings > Updates or the top bar: `op` is `refresh`, `check`, `install`
@@ -459,7 +498,9 @@ impl GhostexGpuiApp {
         with_snapshot(|snapshot| {
             for id in &ids {
                 snapshot.dismissed.remove(id);
+                snapshot.notification_dismissed.remove(id);
             }
+            notification::save(&snapshot.notification_dismissed);
         });
         for (machine_id, remote_ids) in remote::remote_ids_by_computer(&ids) {
             self.install_remote_updates(&machine_id, remote_ids, cx);

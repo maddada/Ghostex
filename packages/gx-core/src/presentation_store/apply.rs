@@ -42,7 +42,9 @@ impl PresentationStore {
     ) -> ChangeSummary {
         let entry = self.machine_mut(machine);
         if let (SnapshotOrigin::Read, PresentationState::Loaded(held)) = (origin, &entry.state) {
-            if snapshot.revision < held.revision {
+            // A copy held from a previous run (`seed_last_seen`) is not a revision this client was
+            // told, so the daemon's first read replaces it whatever its revision says.
+            if !held.last_seen && snapshot.revision < held.revision {
                 return ChangeSummary::ignored(IgnoredReason::StaleRevision {
                     held: held.revision,
                     received: snapshot.revision,
@@ -107,6 +109,16 @@ impl PresentationStore {
         match &entry.state {
             PresentationState::NotLoaded => summary.machines_reloaded.push(machine.clone()),
             PresentationState::Loaded(previous) => {
+                // CDXC:Startup 2026-11-16 WHY:
+                // This computer's own rows are seeded from the copy the last run stored, so the
+                // sidebar's first frame is the settled one (apps/desktop/src/app/gx_store/
+                // local_last_seen.rs). The daemon's first answer replacing such a copy is this
+                // run's load of the machine all the same: everything that waits for a reload
+                // (the client documents' reconcile, the presentation-ready work) must still see
+                // one. The rows are diffed as well, so the list moves only where they differ.
+                if previous.last_seen {
+                    summary.machines_reloaded.push(machine.clone());
+                }
                 // A read does not know the daemon identity; keep the one the stream gave.
                 if next.server_id.is_empty() {
                     next.server_id = previous.server_id.clone();

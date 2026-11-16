@@ -112,6 +112,8 @@ pub(crate) struct OpenAsker {
     latest_turn: bool,
     /// The question tags it asks, uppercased.
     tags: Vec<String>,
+    /// When the reply that asks it arrived (epoch ms), if the transcript says.
+    at: Option<i64>,
 }
 
 impl OpenAsker {
@@ -122,6 +124,11 @@ impl OpenAsker {
     /// The question tags it still asks (the coordinator's open questions note, send.rs).
     pub(crate) fn waiting_tags(&self) -> Vec<String> {
         self.tags.clone()
+    }
+
+    /// When it was asked (epoch ms), if the transcript says.
+    pub(crate) fn asked_at(&self) -> Option<i64> {
+        self.at
     }
 }
 
@@ -670,6 +677,7 @@ impl Ledger {
                         .iter()
                         .map(|tag| tag.to_ascii_uppercase())
                         .collect(),
+                    at: asker.at,
                     id: asker.id,
                     kind: asker.kind,
                 }
@@ -793,14 +801,6 @@ fn read_open(
     let read = ledger.index(&queued, forked_at, |id| {
         crate::visual_pages::page_answered(&state.paths.root_dir, id)
     });
-    crate::session_chat_resources::store(
-        state,
-        db,
-        project_id,
-        session_id,
-        &mut ledger.stored,
-        read,
-    );
     let newly: Vec<OpenAsker> = if notify_turn {
         open.iter()
             .filter(|asker| asker.latest_turn && ledger.notified.insert(asker.id.clone()))
@@ -809,6 +809,22 @@ fn read_open(
     } else {
         Vec::new()
     };
+    // Stored with the ledger let go: storing announces the resources on the chat's stream, which
+    // takes its emit order, and a chat frame being emitted can wait on the coordinator panels,
+    // whose refresh reads this ledger (`asked_question_tags`).
+    //
+    // CDXC:Coordinators 2026-11-16 WHY:
+    // gxserver hung right after a start, every request unanswered: this sweep held the ledger
+    // while waiting for the emit order; the followers held the emit order while waiting for the
+    // coordinator panels (`insert_coordinator_threads`); the coordinator runtime held the panels
+    // while waiting for this ledger (`work_value` → `asked_question_tags`). No lock is held here
+    // while another is taken now.
+    let mut stored = std::mem::take(&mut ledger.stored);
+    drop(ledger);
+    crate::session_chat_resources::store(state, db, project_id, session_id, &mut stored, read);
+    if let Ok(mut ledger) = entry.lock() {
+        ledger.stored = stored;
+    }
     Some((open, newly))
 }
 
@@ -1573,6 +1589,7 @@ mod tests {
             waiting,
             latest_turn: true,
             tags: Vec::new(),
+            at: None,
         }
     }
 

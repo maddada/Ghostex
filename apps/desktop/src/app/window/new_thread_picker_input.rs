@@ -111,6 +111,7 @@ impl GpuiNewThreadPickerWindow {
                 NewThreadPickerCommand::LaunchAgent {
                     agent_id,
                     account_id,
+                    target,
                     ..
                 },
                 Some(step),
@@ -118,6 +119,7 @@ impl GpuiNewThreadPickerWindow {
                 step,
                 agent_id,
                 account_id,
+                target,
             },
             (command, _) => command,
         };

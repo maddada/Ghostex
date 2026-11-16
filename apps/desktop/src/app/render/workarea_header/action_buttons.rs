@@ -48,6 +48,148 @@ pub(crate) struct WorkareaHeaderSplitButton {
     pub(crate) dimmed: bool,
     /// Replaces the icon with the shared busy spinner, as the Git button did.
     pub(crate) busy: bool,
+    /// Drawn in place of `label` when set (Commit's diff numbers and push / pull counts).
+    pub(crate) rich_label: Option<AnyElement>,
+    /// Hover text for the button's main half.
+    pub(crate) tooltip: Option<SharedString>,
+}
+
+/// CDXC:Titlebar 2026-11-16 DECISION:
+/// User: "instead of showing Commit we should instead show the +123 -213 there for that session's
+/// worktree basically and also show up or down arrow to the left of them when there's something
+/// that we didn't push or something we should pull". The numbers come from the active project's
+/// git read the Commit menu already draws from (`titlebar_git_menu_state`: `git diff --numstat
+/// HEAD`, untracked files listed, ahead/behind from the local upstream refs), so no new poll and no
+/// fetch. With nothing to show the button keeps the word "Commit", so it is never empty.
+/// Then: the same colours and look as the sidebar's numbers, and only while the sidebar is not
+/// already drawing them for that project (with Separate by machine off it draws none); when it
+/// is, the button stays the plain "Commit".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WorkareaHeaderGitSummary {
+    pub(crate) additions: u64,
+    pub(crate) deletions: u64,
+    pub(crate) ahead: u64,
+    pub(crate) behind: u64,
+}
+
+impl WorkareaHeaderGitSummary {
+    pub(crate) fn from_state(state: &crate::app::model::GpuiTitlebarGitMenuState) -> Self {
+        if !state.is_repo {
+            return Self::default();
+        }
+        Self {
+            additions: state.additions,
+            deletions: state.deletions,
+            ahead: state.ahead_count,
+            behind: state.behind_count,
+        }
+    }
+
+    pub(crate) fn has_diff(self) -> bool {
+        self.additions > 0 || self.deletions > 0
+    }
+
+    pub(crate) fn is_empty(self) -> bool {
+        !self.has_diff() && self.ahead == 0 && self.behind == 0
+    }
+
+    /// "123 lines added, 213 removed · 2 commits to push · 1 to pull"
+    pub(crate) fn tooltip(self) -> Option<String> {
+        if self.is_empty() {
+            return None;
+        }
+        let mut parts = Vec::new();
+        if self.has_diff() {
+            parts.push(format!(
+                "{} {} added, {} removed",
+                self.additions,
+                if self.additions == 1 { "line" } else { "lines" },
+                self.deletions
+            ));
+        }
+        if self.ahead > 0 {
+            parts.push(format!(
+                "{} {} to push",
+                self.ahead,
+                if self.ahead == 1 { "commit" } else { "commits" }
+            ));
+        }
+        if self.behind > 0 {
+            parts.push(format!("{} to pull", self.behind));
+        }
+        Some(parts.join(" \u{00b7} "))
+    }
+
+    /// Up and down counts first, then "+N -N" in the sidebar project header's own colours and
+    /// opacity (`project_status.rs`), capped as it caps them.
+    pub(crate) fn render(self) -> Option<AnyElement> {
+        use crate::app::native_sidebar::project_status::{
+            PROJECT_DIFF_OPACITY, project_diff_additions_color, project_diff_deletions_color,
+        };
+        if self.is_empty() {
+            return None;
+        }
+        Some(
+            h_flex()
+                .items_center()
+                .gap(px(8.0))
+                .when(self.ahead > 0, |this| {
+                    this.child(div().child(format!("\u{2191}{}", self.ahead)))
+                })
+                .when(self.behind > 0, |this| {
+                    this.child(div().child(format!("\u{2193}{}", self.behind)))
+                })
+                .when(self.has_diff(), |this| {
+                    this.child(
+                        h_flex()
+                            .items_center()
+                            .gap(px(8.0))
+                            .opacity(PROJECT_DIFF_OPACITY)
+                            .child(
+                                div()
+                                    .text_color(project_diff_additions_color())
+                                    .child(format!("+{}", self.additions.min(9999))),
+                            )
+                            .child(
+                                div()
+                                    .text_color(project_diff_deletions_color())
+                                    .child(format!("-{}", self.deletions.min(9999))),
+                            ),
+                    )
+                })
+                .into_any_element(),
+        )
+    }
+}
+
+impl GhostexGpuiApp {
+    /// The Project sidebar is drawing the active project's "+N -N" on its header now, so the
+    /// Commit button would only repeat it. Mirrors where the sidebar draws a project header (the
+    /// classic list, not Unified or the Bots list) and `project_header_shows_diff_stats`.
+    fn sidebar_shows_active_project_diff_stats(&self) -> bool {
+        if self.native_sidebar.unified.is_some() {
+            return false;
+        }
+        let Some(snapshot) = self.native_sidebar.snapshot.as_deref() else {
+            return false;
+        };
+        if snapshot.bots_mode {
+            return false;
+        }
+        let Some(active) = self.git_active_scoped_project_id() else {
+            return false;
+        };
+        snapshot.groups.iter().any(|group| {
+            group.owner_group_id.is_none()
+                && self
+                    .git_scope_for_group(&group.group_id)
+                    .is_ok_and(|scope| scope.scoped_id() == active)
+                && crate::app::native_sidebar::project_status::project_header_shows_diff_stats(
+                    group,
+                    &snapshot.hud,
+                )
+        })
+    }
 }
 
 /// A name longer than this is cut and given an ellipsis, so one verbose Action cannot push Open
@@ -225,7 +367,13 @@ impl GhostexGpuiApp {
                     this.child(titlebar_svg_icon(spec.icon, spec.icon_size, icon_color))
                 }
             })
-            .when(!compact, |this| this.child(spec.label));
+            .when(!compact, |this| match spec.rich_label {
+                Some(rich) => this.child(rich),
+                None => this.child(spec.label),
+            })
+            .when_some(spec.tooltip, |this, tooltip| {
+                this.tooltip(move |window, cx| titlebar_tooltip(tooltip.clone(), window, cx))
+            });
 
         let caret = div()
             .id(SharedString::from(format!("{}-caret", spec.id)))
@@ -324,6 +472,12 @@ impl GhostexGpuiApp {
             .as_ref()
             .map(|state| titlebar_git_action_icon_path(state.primary_action))
             .unwrap_or(TITLEBAR_ICON_GIT_COMMIT);
+        let git_summary = self
+            .titlebar_git_menu_state
+            .as_ref()
+            .filter(|_| !self.sidebar_shows_active_project_diff_stats())
+            .map(WorkareaHeaderGitSummary::from_state)
+            .unwrap_or_default();
         let (open_target_icon_path, _open_target_icon_size) = self.titlebar_open_target_icon();
         // While Claude is on only the app's own controls stay (app/claude_web/header.rs).
         let shown = |control| self.header_control_shown(control);
@@ -378,6 +532,8 @@ impl GhostexGpuiApp {
                             label: actions_label,
                             dimmed: self.titlebar_quick_action_button_on_cooldown(),
                             busy: false,
+                            rich_label: None,
+                            tooltip: None,
                         },
                         compact,
                         run_quick_action,
@@ -402,6 +558,8 @@ impl GhostexGpuiApp {
                             label: "Open".into(),
                             dimmed: false,
                             busy: false,
+                            rich_label: None,
+                            tooltip: None,
                         },
                         compact,
                         open_active_open_target,
@@ -431,6 +589,8 @@ impl GhostexGpuiApp {
                                     .titlebar_git_menu_state
                                     .as_ref()
                                     .is_some_and(|state| state.is_busy),
+                                rich_label: git_summary.render(),
+                                tooltip: git_summary.tooltip().map(SharedString::from),
                             },
                             compact,
                             toggle_git_menu,
@@ -459,6 +619,8 @@ impl GhostexGpuiApp {
                 this.children(self.render_workarea_header_session_details_button(cx))
             })
             .children(self.render_workarea_header_share_button(cx))
+            // The focused session in a window of its own (app/session_popup/).
+            .children(self.render_workarea_header_session_popup_button(cx))
             // No trailing ⋯ button: what it held opens from the sidebar's menu
             // (CDXC:Titlebar 2026-11-11 DECISION in titlebar/menu_panels.rs).
             // With a view open the toggles end the view tab strip instead (render_workarea_panel_toggles).
