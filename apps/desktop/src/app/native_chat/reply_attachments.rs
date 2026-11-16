@@ -100,8 +100,28 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         self.reply_popover.pending = self.reply_popover.pending.saturating_sub(1);
+        // The card closed while the picture was saved: it goes into the session's Reply draft,
+        // at its end, and the card opens with it next time.
+        let open = self.reply_popover.handle.is_some()
+            && self
+                .reply_popover
+                .input
+                .as_ref()
+                .and_then(|kept| kept.upgrade())
+                .is_some_and(|kept| kept == input);
+        let (original, start, end) = if open {
+            (original, start, end)
+        } else {
+            let kept = self.kept_session_reply();
+            let len = kept.encode_utf16().count();
+            (kept, len, len)
+        };
         if !paths.is_empty() {
-            let current = input.read(cx).value().to_string();
+            let current = if open {
+                input.read(cx).value().to_string()
+            } else {
+                original.clone()
+            };
             let result = self.runtime.as_ref().and_then(|runtime| {
                 runtime.query(
                     "insertAnswerAttachments",
@@ -121,7 +141,8 @@ impl NativeChatView {
                     result["caret"].as_u64().unwrap_or(0) as usize,
                 ))
             }) {
-                Some((text, caret)) => self.set_reply_text(&input, text, caret, cx),
+                Some((text, caret)) if open => self.set_reply_text(&input, text, caret, cx),
+                Some((text, _)) => self.keep_session_reply(&text, cx),
                 None => {
                     error =
                         Some("The picture could not be added. Please paste it again.".to_string())
@@ -135,12 +156,14 @@ impl NativeChatView {
     /// Writes `text` into the Reply card's field with the caret at `caret` (UTF-16), through the
     /// card's own window; nothing when the card is gone.
     fn set_reply_text(
-        &self,
+        &mut self,
         input: &Entity<TextareaState>,
         text: String,
         caret: usize,
         cx: &mut Context<Self>,
     ) {
+        // Kept at once, whatever happens to the card next.
+        self.keep_session_reply(&text, cx);
         let Some(handle) = self.reply_popover.handle else {
             return;
         };
@@ -192,7 +215,8 @@ impl NativeChatView {
 
     /// Dictate's words for the Reply card's field: at the place it was aimed at while the field
     /// still shows that text, else at its caret, spaced from their neighbours while Insert with
-    /// spacing is on. Answers false when the card is gone, so the words go to the chat box.
+    /// spacing is on. When the card is gone they go at the end of the session's Reply draft, which
+    /// the next Reply card opens with. Answers whether they were taken.
     pub(super) fn insert_reply_dictation(
         &mut self,
         text: &str,
@@ -207,7 +231,14 @@ impl NativeChatView {
             .and_then(|input| input.upgrade())
             .filter(|_| self.reply_popover.handle.is_some())
         else {
-            return false;
+            let kept = self.kept_session_reply();
+            let next = if kept.trim().is_empty() {
+                text.trim().to_string()
+            } else {
+                format!("{} {}", kept.trim_end(), text.trim())
+            };
+            self.keep_session_reply(&next, cx);
+            return true;
         };
         let (shown, selected) = {
             let input = input.read(cx);

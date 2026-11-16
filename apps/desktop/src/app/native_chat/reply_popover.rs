@@ -89,10 +89,30 @@ fn kept_replies() -> std::sync::MutexGuard<'static, HashMap<String, KeptReply>> 
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The row a Reply belongs to, from its `question` object: a work item ask's card key
-/// (`work-ask:W7:Q12`, or the item's own key when it asks no question), else the one-click
-/// question's form and tag. `None` for a reply to a quoted selection.
+/// The one Reply draft a session keeps: every Reply card in the session, whatever question or
+/// selection it opens on, opens with it and writes to it, until a send clears it.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User: "if i write something in a floating reply bubble and i click away or w/e then we MUST
+/// keep that content in that reply bubble". One draft per session, not per question: the last
+/// words, pictures and dictation typed into Reply, there again on whichever Reply opens next, kept
+/// through a click away, a closed card, another session, a quit or a crash (gxserver's Reply
+/// drafts, server/src/session_reply_drafts.rs, the chat box draft's counterpart); sending clears
+/// it. Supersedes the 2026-11-11 one draft per row. The phone keeps the same row
+/// (apps/mobile/app/src/chat/native/cards/replyDrafts.ts).
+pub(super) const SESSION_REPLY_ROW: &str = "reply";
+
+/// The row a Reply belongs to, from its `question` object: the session's one Reply draft
+/// (`SESSION_REPLY_ROW`) for any question, form, page or work item. `None` for an object that
+/// names none.
 fn kept_reply_row(reply: &serde_json::Value) -> Option<String> {
+    legacy_reply_row(reply).map(|_| SESSION_REPLY_ROW.to_owned())
+}
+
+/// The row a draft was kept under before one draft per session (2026-11-11 to 2026-11-16): a
+/// work item ask's `work-ask:W7:Q12`, an item's `work-item:W7`, else its key or the one-click
+/// question's form and tag. Such drafts read back from gxserver are taken into the session's one.
+fn legacy_reply_row(reply: &serde_json::Value) -> Option<String> {
     let tag = reply["tag"].as_str().unwrap_or_default();
     // A work item's: by its reference and ask, which outlive its card key (an item's own Reply's
     // key carries the time it last changed).
@@ -270,14 +290,11 @@ impl NativeChatView {
         self.reply_popover.last = Some((window.window_handle(), command.clone()));
         // Opened again after a failed send: the words typed, and why it did not go. Else what was
         // typed on this row before and not sent (`KEPT_REPLIES`).
-        let kept = kept_reply_row(&command["question"]).map(|row| {
-            let mut open = HashSet::new();
-            for field in ["workDock", "coordinatorBoard"] {
-                open_reply_rows(&self.snapshot[field], &mut open);
-            }
-            let seen = open.contains(&row);
-            (self.kept_reply_key(&row), row, seen)
-        });
+        // Every Reply card, a quoted selection's too, keeps the session's one draft.
+        let kept = {
+            let row = SESSION_REPLY_ROW.to_owned();
+            Some((self.kept_reply_key(&row), row, false))
+        };
         let mut typed = command["text"].as_str().unwrap_or_default().to_owned();
         if let Some((key, row, seen)) = &kept {
             if typed.is_empty() {
@@ -485,6 +502,10 @@ impl NativeChatView {
                 let Some(row) = key.strip_prefix(&scope) else {
                     return true;
                 };
+                // The session's one draft goes only when it is sent.
+                if row == SESSION_REPLY_ROW {
+                    return true;
+                }
                 let open = rows.contains(row);
                 draft.seen |= open;
                 let gone = !open && (draft.seen || check_loaded && row.starts_with("work-"));
@@ -514,22 +535,68 @@ impl NativeChatView {
                 return;
             };
             let scope = chat.kept_reply_key("");
+            // A draft kept per row before one draft per session becomes the session's one when it
+            // has none yet, and the old rows go.
+            let mut legacy = Vec::new();
+            let mut adopted = false;
             {
                 let mut kept = kept_replies();
+                let shared = format!("{scope}{SESSION_REPLY_ROW}");
+                if let Some(text) = drafts[SESSION_REPLY_ROW]
+                    .as_str()
+                    .filter(|text| !text.trim().is_empty())
+                {
+                    kept.entry(shared.clone()).or_insert_with(|| KeptReply {
+                        text: text.to_owned(),
+                        seen: false,
+                    });
+                }
                 for (row, text) in drafts {
-                    if let Some(text) = text.as_str().filter(|text| !text.trim().is_empty()) {
-                        kept.entry(format!("{scope}{row}"))
-                            .or_insert_with(|| KeptReply {
+                    if row == SESSION_REPLY_ROW {
+                        continue;
+                    }
+                    legacy.push(row.clone());
+                    if let Some(text) = text.as_str().filter(|text| !text.trim().is_empty())
+                        && !kept.contains_key(&shared)
+                    {
+                        kept.insert(
+                            shared.clone(),
+                            KeptReply {
                                 text: text.to_owned(),
                                 seen: false,
-                            });
+                            },
+                        );
+                        adopted = true;
                     }
                 }
+            }
+            if adopted {
+                chat.reply_popover.unsaved.insert(SESSION_REPLY_ROW.to_owned());
+                chat.save_kept_replies(cx);
+            }
+            if !legacy.is_empty() {
+                chat.forget_kept_replies(legacy, cx);
             }
             chat.reply_popover.check_loaded = true;
             chat.prune_kept_replies(&serde_json::Value::Null, cx);
             cx.notify();
         });
+    }
+
+    /// The session's Reply draft as kept now (`SESSION_REPLY_ROW`).
+    pub(super) fn kept_session_reply(&self) -> String {
+        kept_replies()
+            .get(&self.kept_reply_key(SESSION_REPLY_ROW))
+            .map(|draft| draft.text.clone())
+            .unwrap_or_default()
+    }
+
+    /// Keeps `text` as the session's Reply draft and saves it soon: words or pictures that
+    /// arrived for a Reply card (Dictate, a picture being saved) are kept whether or not the card
+    /// is still open.
+    pub(super) fn keep_session_reply(&mut self, text: &str, cx: &mut Context<Self>) {
+        keep_reply(&self.kept_reply_key(SESSION_REPLY_ROW), text, false);
+        self.note_reply_edit(SESSION_REPLY_ROW.to_owned(), cx);
     }
 
     /// A Reply box's words changed on `row`: saved `SAVE_AFTER` after the last edit.
