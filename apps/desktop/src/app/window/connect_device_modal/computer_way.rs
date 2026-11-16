@@ -26,7 +26,7 @@ pub(crate) enum ComputerTab {
     Code,
     /// A computer with no screen: run `ghostex computer-code` in its terminal.
     Headless,
-    /// The address, username and password form.
+    /// The Add a computer form (ssh_tab.rs).
     Ssh,
 }
 
@@ -652,7 +652,7 @@ impl GpuiConnectDeviceWindow {
         })
     }
 
-    fn label(&self, text: &'static str) -> Div {
+    pub(super) fn label(&self, text: &'static str) -> Div {
         div()
             .text_size(px(13.0))
             .line_height(px(18.0))
@@ -701,9 +701,8 @@ impl GpuiConnectDeviceWindow {
             "connect-computer-tabs",
             &items,
             self.computer_tab.index(),
-            |this: &mut Self, index, _window, cx| {
-                this.computer_tab = ComputerTab::from_index(index);
-                cx.notify();
+            |this: &mut Self, index, window, cx| {
+                this.set_computer_tab(ComputerTab::from_index(index), window, cx);
             },
             cx,
         )
@@ -719,7 +718,7 @@ impl GpuiConnectDeviceWindow {
         let content = match self.computer_tab {
             ComputerTab::Code => self.code_tab(window, cx),
             ComputerTab::Headless => self.headless_tab(window, cx),
-            ComputerTab::Ssh => self.ssh_tab(cx),
+            ComputerTab::Ssh => self.ssh_tab(window, cx),
         };
         v_flex()
             .w_full()
@@ -959,33 +958,6 @@ impl GpuiConnectDeviceWindow {
                 4,
                 "Compare the three words on both screens, then approve there: type y in its terminal, or approve on your phone if one is paired with it.",
             ))
-            .into_any_element()
-    }
-
-    /// SSH details: add a computer by its address, username and password (Settings > Remote's Add a
-    /// computer holds the form, so the button opens it).
-    fn ssh_tab(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let p = self.palette;
-        v_flex()
-            .w_full()
-            .gap(px(12.0))
-            .child(self.muted(
-                "Type the computer's address, username and password. If Ghostex's server, gxserver, isn't installed there, Ghostex installs it.",
-            ))
-            .child(
-                h_flex().w_full().justify_end().child(div().w(px(190.0)).child(modal_action_button(
-                    &p,
-                    "connect-computer-ssh",
-                    "Add with SSH details",
-                    None,
-                    ModalButtonTone::Primary,
-                    false,
-                    |this: &mut Self, window, cx| {
-                        this.close_and_send(ConnectDeviceCommand::OpenAddComputerSsh, window, cx)
-                    },
-                    cx,
-                ))),
-            )
             .into_any_element()
     }
 

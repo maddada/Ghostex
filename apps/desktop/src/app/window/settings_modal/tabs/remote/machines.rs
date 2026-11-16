@@ -17,60 +17,19 @@ use super::super::super::model::SettingsTabId;
 use super::RemoteTab;
 use super::easy_connect::path_card;
 use super::model::*;
+use super::ssh_form::{
+    DraftField, SshFormInputs, apply_field, put_back_clipped, save_check, words,
+};
 use super::style::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, ClickEvent, Context, Entity, FocusHandle, FontWeight,
-    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px,
+    AnyElement, ClickEvent, Context, Entity, FocusHandle, FontWeight, InteractiveElement as _,
+    IntoElement, KeyDownEvent, ParentElement as _, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, px,
 };
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::InputState;
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
-
-/// The dialog's inputs, one per field.
-struct DialogInputs {
-    code: Entity<InputState>,
-    name: Entity<InputState>,
-    short_name: Entity<InputState>,
-    host: Entity<InputState>,
-    user: Entity<InputState>,
-    password: Entity<InputState>,
-    port: Entity<InputState>,
-    identity: Entity<InputState>,
-    wsl: Entity<InputState>,
-}
-
-/// Which draft field an input edits.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum DraftField {
-    Code,
-    Name,
-    ShortName,
-    Host,
-    User,
-    Password,
-    Port,
-    Identity,
-    Wsl,
-}
-
-impl DraftField {
-    /// The input's `maxLength`.
-    fn max_length(self) -> usize {
-        match self {
-            Self::Code => 4000,
-            Self::Name => 80,
-            Self::ShortName => ghostex_gx_core::machine_short_names::MACHINE_SHORT_NAME_MAX,
-            Self::Host => 200,
-            Self::User => 120,
-            Self::Password => 500,
-            Self::Port => 5,
-            Self::Identity => 500,
-            Self::Wsl => 120,
-        }
-    }
-}
 
 /// The open Add a machine / edit dialog (`RemoteMachineDialogContent`).
 pub(crate) struct MachineDialog {
@@ -80,7 +39,7 @@ pub(crate) struct MachineDialog {
     draft: MachineDraft,
     advanced_open: bool,
     focus: FocusHandle,
-    inputs: DialogInputs,
+    inputs: SshFormInputs,
     /// Pairing this computer with the one behind the code (pairing v2, GitHub #495).
     pairing: Option<ComputerPairing>,
     /// Asks where that pairing stands every `COMPUTER_PAIRING_POLL`; dropped with the dialog.
@@ -182,88 +141,14 @@ impl RemoteTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let make = |field: DraftField,
-                    value: &str,
-                    placeholder: &str,
-                    window: &mut Window,
-                    cx: &mut Context<Self>| {
-            let value = value.to_string();
-            let placeholder = placeholder.to_string();
-            cx.new(|cx| {
-                InputState::new(window, cx)
-                    .placeholder(placeholder)
-                    .masked(field == DraftField::Password)
-                    .default_value(value)
-            })
-        };
-        let inputs = DialogInputs {
-            code: make(
-                DraftField::Code,
-                &draft.easy_connect_code,
-                "Paste the code copied from the other computer",
-                window,
-                cx,
-            ),
-            name: make(DraftField::Name, &draft.name, "Machine one", window, cx),
-            short_name: make(DraftField::ShortName, &draft.short_name, "WN", window, cx),
-            host: make(DraftField::Host, &draft.ssh_host, "100.77.81.4", window, cx),
-            user: make(
-                DraftField::User,
-                &draft.ssh_user,
-                "machine username",
-                window,
-                cx,
-            ),
-            password: make(
-                DraftField::Password,
-                "",
-                if draft.ssh_password_saved {
-                    "Saved in Keychain"
-                } else {
-                    "SSH password"
-                },
-                window,
-                cx,
-            ),
-            port: make(DraftField::Port, &draft.ssh_port, "22", window, cx),
-            identity: make(
-                DraftField::Identity,
-                &draft.ssh_identity_file,
-                "~/.ssh/id_ed25519",
-                window,
-                cx,
-            ),
-            wsl: make(
-                DraftField::Wsl,
-                &draft.wsl_distribution,
-                "Ubuntu-24.04",
-                window,
-                cx,
-            ),
-        };
-        let mut subscriptions = Vec::new();
-        for (field, input) in [
-            (DraftField::Code, &inputs.code),
-            (DraftField::Name, &inputs.name),
-            (DraftField::ShortName, &inputs.short_name),
-            (DraftField::Host, &inputs.host),
-            (DraftField::User, &inputs.user),
-            (DraftField::Password, &inputs.password),
-            (DraftField::Port, &inputs.port),
-            (DraftField::Identity, &inputs.identity),
-            (DraftField::Wsl, &inputs.wsl),
-        ] {
-            subscriptions.push(cx.subscribe_in(
-                input,
-                window,
-                move |tab: &mut Self, input, event: &InputEvent, window, cx| {
-                    if matches!(event, InputEvent::Change) {
-                        let text = input.read(cx).value().to_string();
-                        tab.dialog_field_changed(field, text, input.clone(), window, cx);
-                    }
-                },
-            ));
-        }
+        let (inputs, subscriptions) = SshFormInputs::new(
+            &draft,
+            window,
+            cx,
+            |tab: &mut Self, field, text, input, window, cx| {
+                tab.dialog_field_changed(field, text, input, window, cx);
+            },
+        );
         let focus = cx.focus_handle();
         focus.focus(window, cx);
         self.machine_dialog = Some(MachineDialog {
@@ -450,18 +335,7 @@ impl RemoteTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut next: String = if field == DraftField::Port {
-            text.chars().filter(char::is_ascii_digit).collect()
-        } else {
-            text.clone()
-        };
-        if next.chars().count() > field.max_length() {
-            next = next.chars().take(field.max_length()).collect();
-        }
-        if next != text {
-            let value = next.clone();
-            input.update(cx, |input, cx| input.set_value(value, window, cx));
-        }
+        let next = put_back_clipped(field, &text, &input, window, cx);
         let Some(dialog) = self.machine_dialog.as_mut() else {
             return;
         };
@@ -481,14 +355,7 @@ impl RemoteTab {
                     }
                 }
             }
-            DraftField::Name => dialog.draft.name = next,
-            DraftField::ShortName => dialog.draft.short_name = next,
-            DraftField::Host => dialog.draft.ssh_host = next,
-            DraftField::User => dialog.draft.ssh_user = next,
-            DraftField::Password => dialog.draft.ssh_password = next,
-            DraftField::Port => dialog.draft.ssh_port = next,
-            DraftField::Identity => dialog.draft.ssh_identity_file = next,
-            DraftField::Wsl => dialog.draft.wsl_distribution = next,
+            _ => apply_field(&mut dialog.draft, field, next),
         }
         cx.notify();
     }
@@ -548,15 +415,7 @@ impl RemoteTab {
         let input = dialog.inputs.password.clone();
         input.update(cx, |input, cx| {
             input.set_value("", window, cx);
-            input.set_placeholder(
-                if saved {
-                    "Saved in Keychain"
-                } else {
-                    "SSH password"
-                },
-                window,
-                cx,
-            );
+            input.set_placeholder(words::password_placeholder(saved), window, cx);
         });
         self.post(
             json!({ "password": password, "remoteMachineId": machine_id, "type": "saveRemoteMachinePassword" }),
@@ -1133,23 +992,7 @@ pub(super) fn machine_dialog(
     } else {
         None
     };
-    let normalized = normalize_remote_machine_draft(&draft);
-    let can_save = normalized.is_some();
-    let save_reason = if easy_connect {
-        if matches!(
-            read_easy_connect_code_input(&draft.easy_connect_code),
-            CodeReading::Accepted { .. }
-        ) || !draft.easy_connect_address.is_empty()
-        {
-            "Enter a machine name first."
-        } else {
-            "Paste a valid Easy Connect code first."
-        }
-    } else if !draft.name.trim().is_empty() && !draft.ssh_host.trim().is_empty() {
-        "Check the WSL distribution name."
-    } else {
-        "Enter a machine name and SSH host first."
-    };
+    let (can_save, save_reason) = save_check(&draft);
     let has_endpoint = if easy_connect {
         !draft.easy_connect_address.is_empty()
     } else {
@@ -1236,7 +1079,7 @@ pub(super) fn machine_dialog(
         &colors,
         "SSH username",
         input(&user_input, window, cx),
-        Some("The account you sign in with on the other computer."),
+        Some(words::USER_INFO),
         None,
     ));
     let password_row = if is_new {
@@ -1284,11 +1127,7 @@ pub(super) fn machine_dialog(
         &colors,
         "SSH password",
         password_row,
-        Some(if is_new {
-            "Use the password for this username on the other computer. If you already use SSH keys, leave this blank and set the key under Advanced."
-        } else {
-            "Passwords are stored in secure system storage. Leave blank and press Save to remove a saved password."
-        }),
+        Some(words::password_info(is_new)),
         None,
     ));
     // CDXC:RemotePairing 2026-09-05 DECISION: User: simplify adding a machine and hide the WSL version details under Advanced.
@@ -1324,8 +1163,8 @@ pub(super) fn machine_dialog(
         advanced_fields = advanced_fields.child(dialog_switch_row(
             t,
             "remote-machine-dialog-agent-access",
-            "Agent access",
-            "Agents on this computer can start, message and read sessions on this machine, and its agents can do the same here.",
+            words::AGENT_ACCESS_TITLE,
+            words::AGENT_ACCESS_INFO,
             agent_access,
             move |tab| {
                 if let Some(dialog) = tab.machine_dialog.as_mut() {
@@ -1350,7 +1189,7 @@ pub(super) fn machine_dialog(
                 &colors,
                 "Identity file",
                 input(&identity_input, window, cx),
-                Some("Optional. Use an SSH private key instead of a password."),
+                Some(words::IDENTITY_INFO),
                 None,
             ))
             .child(field(
@@ -1358,9 +1197,7 @@ pub(super) fn machine_dialog(
                 &colors,
                 "Windows WSL distribution",
                 input(&wsl_input, window, cx),
-                Some(
-                    "Optional. Enter a distribution to use WSL2. Leave blank to follow Windows Environment on the remote computer, which defaults to native PowerShell.",
-                ),
+                Some(words::WSL_INFO),
                 None,
             ));
         // A Windows WSL machine's gxserver listens inside that distribution, where a forward in
@@ -1379,8 +1216,8 @@ pub(super) fn machine_dialog(
             advanced_fields = advanced_fields.child(dialog_switch_row(
                 t,
                 "remote-machine-dialog-reuse-ssh",
-                "Reuse an existing SSH connection",
-                "For computers that ask for a verification code each time you sign in. Sign in once in a terminal with ControlMaster on in your SSH config, and Ghostex uses that connection instead of signing in again.",
+                words::REUSE_SSH_TITLE,
+                words::REUSE_SSH_INFO,
                 reuse,
                 move |tab| {
                     if let Some(dialog) = tab.machine_dialog.as_mut() {
@@ -1603,7 +1440,7 @@ pub(super) fn machine_dialog(
                         .line_height(px(20.0))
                         .text_color(hsla(colors.muted))
                         .child(if is_new {
-                            "Enter the other computer’s address and the username and password you sign in with there."
+                            words::NEW_INTRO
                         } else {
                             "Connection details for this machine. Changes apply when you save."
                         }),

@@ -10,6 +10,7 @@
 //! SEE-ALSO: apps/desktop/src/app/connect_device_modal_lifecycle.rs (the gxserver calls, the approval, the approval card kept away while this window shows the request), apps/desktop/src/app/owner_security/ui.rs (the "Is this your phone?" notice for a request that arrives while this window is closed), apps/desktop/src/app/window/settings_modal/tabs/remote/paired_devices.rs (the same request's row in Settings > Remote), apps/desktop/src/bin/native_modal_demo/connect_device.rs (preview).
 use super::native_modal_kit::*;
 use super::settings_modal::fields::{QrGrid, qr_code};
+use super::settings_modal::tabs::remote::SshComputerForm;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, Entity, FocusHandle, FontWeight,
@@ -24,6 +25,8 @@ use std::time::Duration;
 
 #[path = "connect_device_modal/computer_way.rs"]
 mod computer_way;
+#[path = "connect_device_modal/ssh_tab.rs"]
+mod ssh_tab;
 #[path = "connect_device_modal/tailscale_pane.rs"]
 mod tailscale_pane;
 #[path = "connect_device_modal/ways.rs"]
@@ -146,8 +149,12 @@ pub(crate) enum ConnectDeviceCommand {
     OpenRemote,
     /// Settings > Remote with its Tailscale row open.
     OpenTailscale,
-    /// Settings > Remote's Add a computer with SSH details (Connect a computer's quiet link).
-    OpenAddComputerSsh,
+    /// Save the computer the SSH details tab describes (`machine`, a saved-computer entry) and its
+    /// `password` for the keychain, then connect it; the window has removed itself.
+    AddSshComputer {
+        machine: Value,
+        password: String,
+    },
     /// Pair this computer with the one behind `code` (Connect); the host answers `join_started`.
     JoinComputer {
         code: String,
@@ -252,12 +259,14 @@ pub(crate) struct GpuiConnectDeviceWindow {
     /// Which screen the window was last sized for: a new one (the words, connected, another
     /// way, the large code, the helper's screens) is measured again, so the window fits each
     /// screen instead of the first.
-    fitted_screen: Option<(u8, ConnectWay, ComputerTab)>,
+    fitted_screen: Option<(u8, ConnectWay, ComputerTab, u8)>,
     focus_handle: FocusHandle,
     /// Opened as Connect a computer: no list of ways, only the computer's pane.
     computer_only: bool,
     /// Which tab of the computer's pane shows: Code, Headless server or SSH details.
     computer_tab: ComputerTab,
+    /// The SSH details tab's form, built the first time that tab shows.
+    ssh_form: Option<SshComputerForm>,
     computer_inputs: ComputerInputs,
     /// Why the pasted code can't be used.
     code_error: Option<String>,
@@ -306,6 +315,7 @@ impl GpuiConnectDeviceWindow {
             focus_handle,
             computer_only: config.kind == ConnectDeviceKind::Computer,
             computer_tab: ComputerTab::Code,
+            ssh_form: None,
             computer_inputs,
             code_error: None,
             join: None,
@@ -963,13 +973,12 @@ impl Render for GpuiConnectDeviceWindow {
             self.large_code = false;
         }
         let screen = self.screen();
-        if self
-            .fitted_screen
-            .is_some_and(|fitted| fitted != (screen, self.way, self.computer_tab))
-        {
+        if self.fitted_screen.is_some_and(|fitted| {
+            fitted != (screen, self.way, self.computer_tab, self.ssh_fit_key())
+        }) {
             self.fit = ModalScrollFit::new();
         }
-        self.fitted_screen = Some((screen, self.way, self.computer_tab));
+        self.fitted_screen = Some((screen, self.way, self.computer_tab, self.ssh_fit_key()));
         let body = match (self.stage.clone(), self.waiting.clone()) {
             _ if self.join.is_some() => self.join_body(window, cx),
             (Stage::Connected(_), _) => self.connected_body(cx),

@@ -5352,10 +5352,13 @@ sessions, so any client can control agents on any machine.
   has a Copy button for the command; add `--copy` to put the code on that
   terminal's clipboard too), paste the code it prints into the same box, click
   Connect, compare the three words on both screens, then approve there (type y
-  in its terminal, or approve on a phone paired with it). SSH details adds a
-  computer by its address, username and password instead (its button opens
-  Settings > Remote's Add a computer form, which installs gxserver on the
-  computer when it isn't there). To re-pair a computer paired before 11.1.0,
+  in its terminal, or approve on a phone paired with it). SSH details holds the
+  Add a computer form itself (the same one Settings > Remote's Add a computer
+  dialog shows): name, SSH host, SSH username and SSH password, and under
+  Advanced the agent access switch, SSH port, identity file, Windows WSL
+  distribution and reuse of an existing SSH connection. Add computer saves it
+  and closes the window; Ghostex then connects it and asks before it installs
+  gxserver on a computer that has none. To re-pair a computer paired before 11.1.0,
   open it in Settings > Remote there and paste a new code.
   A computer's code is the text Connect a Computer shows under "This computer's
   code": it names that computer and carries a one-time secret. It works once and

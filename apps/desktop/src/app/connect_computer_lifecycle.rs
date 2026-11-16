@@ -162,11 +162,47 @@ impl GhostexGpuiApp {
                 remote_machine_id,
                 code,
             } => self.connect_back(remote_machine_id, code, cx),
-            ConnectDeviceCommand::OpenAddComputerSsh => {
+            ConnectDeviceCommand::AddSshComputer { machine, password } => {
                 self.connect_device_window_closed(cx);
-                self.open_gpui_settings_remote_section(Some("addComputerSsh"), cx);
+                self.add_ssh_computer(machine, password, cx);
             }
             _ => {}
+        }
+    }
+
+    /// The SSH details tab's computer: saved with the others (the reconnect ladder notices it and
+    /// connects it, asking before it installs gxserver), its password to the keychain.
+    fn add_ssh_computer(&mut self, machine: Value, password: String, cx: &mut gpui::Context<Self>) {
+        let Some(id) = machine
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        else {
+            return;
+        };
+        let mut machines: Vec<Value> = shared_settings::shared_sidebar_settings_snapshot()
+            .object()
+            .get("remoteMachines")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        machines.retain(|saved| saved.get("id").and_then(Value::as_str) != Some(id.as_str()));
+        machines.push(machine);
+        let machines =
+            ghostex_gx_core::normalize_remote_machine_settings(Some(&Value::Array(machines)));
+        self.handle_gpui_app_modal_update_settings_patch_message(
+            &json!({
+                "patch": { "remoteMachines": machines },
+                "source": "settings:remoteMachines",
+                "type": "updateSettingsPatch",
+            }),
+            cx,
+        );
+        if !password.trim().is_empty() {
+            let mut command = serde_json::Map::new();
+            command.insert("remoteMachineId".into(), json!(id));
+            command.insert("password".into(), json!(password));
+            self.handle_gpui_save_remote_machine_password_message(&command, cx);
         }
     }
 

@@ -300,7 +300,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             other => eprintln!(
                 "{}",
                 match other {
-                    ConnectDeviceCommand::OpenAddComputerSsh => "open Add a computer (SSH)",
+                    ConnectDeviceCommand::AddSshComputer { .. } => "add SSH computer",
                     ConnectDeviceCommand::CancelJoin { .. } => "cancel join",
                     ConnectDeviceCommand::SubmitPassword { .. } => "submit password",
                     ConnectDeviceCommand::Reconnect { .. } => "reconnect",
