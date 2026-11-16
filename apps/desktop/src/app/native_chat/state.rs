@@ -260,6 +260,11 @@ pub(crate) struct NativeChatView {
     /// keep this frame while one slides (`render.rs` `hold_text_width_while_sliding`).
     pub(super) settled_text_width: Option<f32>,
     pub(super) held_text_width: Option<f32>,
+    /// The transcript rows' natural text width (`transcript_text_width`) measured by this frame's
+    /// render, before the transcript list lays out. A row reads this instead of measuring: a row is
+    /// drawn from inside the list's own layout, which holds the list's state, so a row that asks the
+    /// list anything panics (`render.rs` `hold_text_width_while_sliding`, GitHub #638/#640/#642).
+    pub(super) frame_text_width: f32,
     /// The window's width on this frame, which a Transcript width percentage is taken of
     /// (transcript.rs `transcript_column_cap`).
     pub(super) window_width: f32,
@@ -658,6 +663,7 @@ impl NativeChatView {
             bounds: Default::default(),
             settled_text_width: None,
             held_text_width: None,
+            frame_text_width: 0.0,
             window_width: 0.0,
             scrollbar_track: Default::default(),
             transcript_scrolled_at: None,

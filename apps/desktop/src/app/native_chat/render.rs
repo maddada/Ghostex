@@ -39,6 +39,7 @@ impl NativeChatView {
     fn hold_text_width_while_sliding(&mut self, p: &ChatAppearance) {
         let pane = self.bounds.get().size.width.as_f32();
         let natural = self.transcript_text_width(p);
+        self.frame_text_width = natural;
         if crate::terminal_element::grid_resize_held()
             || self.session_details.motion.frame().animating
             || self.board.motion.frame().animating
