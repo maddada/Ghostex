@@ -221,6 +221,29 @@ pub(crate) fn read_later_ids(
         .collect()
 }
 
+/// The snoozes still running, by id: when each comes back (epoch ms), for the chat's frames
+/// (`laterQuestionUntil`, the dock's Snoozed row). An id no longer put off is left out.
+pub(crate) fn read_later_until(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Value {
+    let later: HashSet<String> = read_later_ids(db, project_id, session_id)
+        .into_iter()
+        .collect();
+    let now = now_ms();
+    let until = read_until(db, project_id, session_id);
+    Value::Object(
+        until
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(id, at)| later.contains(*id) && at.as_i64().is_some_and(|at| at > now))
+            .map(|(id, at)| (id.clone(), at.clone()))
+            .collect(),
+    )
+}
+
 /// The snoozes' ends (`LATER_UNTIL_KEY`), an object.
 fn read_until(db: &rusqlite::Connection, project_id: &str, session_id: &str) -> Value {
     let value: Option<String> = db

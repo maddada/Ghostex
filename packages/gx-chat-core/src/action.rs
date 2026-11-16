@@ -89,6 +89,7 @@ action_kinds! {
     LoadPageQuestionCounts => "loadPageQuestionCounts",
     DismissWorkDockCard => "dismissWorkDockCard",
     SnoozeWorkAsk => "snoozeWorkAsk",
+    UnsnoozeWorkAsk => "unsnoozeWorkAsk",
     ShowInChat => "showInChat",
     HideWorkDock => "hideWorkDock",
     ShowWorkDock => "showWorkDock",

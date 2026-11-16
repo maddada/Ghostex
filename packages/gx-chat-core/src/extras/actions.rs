@@ -126,6 +126,28 @@ pub fn handle_with_ids(
                 })),
             }]
         }
+        // A snoozed work ask back under Needs you now, from the dock's Snoozed row
+        // (server/src/coordinators/work.rs `unsnooze`). It shows there at once: the local mark
+        // wins over gxserver's `snoozedUntil` until the wire agrees (`work_cards::snoozed`).
+        ActionKind::UnsnoozeWorkAsk => {
+            let request_id = next_request_id();
+            state.extras.panels.board_change_requests.insert(request_id);
+            let key = text(action, "key").to_string();
+            let held = context.now_millis() + crate::extras::work_cards::UNSNOOZED_HELD_MS;
+            state.extras.panels.work_snoozed.insert(key, -held);
+            state.core.request_publish();
+            vec![crate::effect::Effect::SendRpc {
+                request_id,
+                method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+                params: Box::new(serde_json::json!({
+                    "projectId": state.identity.project_id,
+                    "sessionId": state.identity.session_id,
+                    "op": "unsnooze",
+                    "item": text(action, "item"),
+                    "ask": text(action, "ask"),
+                })),
+            }]
+        }
         // A dock row's "Show in chat": scrolls to the reply of the turn that asked or changed it,
         // only because the reader pressed it (work_cards.rs `show_in_chat`).
         ActionKind::ShowInChat => {

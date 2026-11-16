@@ -454,15 +454,48 @@ fn short_item_id(item: &Value) -> String {
     }
 }
 
-/// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here.
+/// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here. An
+/// Unsnooze sent from here (`UNSNOOZED_HELD_MS`) wins over gxserver's end until the wire agrees.
 fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
-    at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
-        || state
-            .extras
-            .panels
-            .work_snoozed
-            .get(key)
-            .is_some_and(|until| *until > now_ms)
+    match state.extras.panels.work_snoozed.get(key) {
+        Some(until) if *until < 0 && now_ms < -*until => false,
+        local => {
+            at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
+                || local.is_some_and(|until| *until > now_ms)
+        }
+    }
+}
+
+/// How long an Unsnooze sent from here holds over gxserver's `snoozedUntil` (`snoozed`): the
+/// round trip, with room to spare.
+pub const UNSNOOZED_HELD_MS: i64 = 60_000;
+
+/// When a snoozed ask, form or page comes back, as its dock row says it: "back in 40m", "back in
+/// 5h", "back in 2d".
+fn back_in(until: i64, now_ms: i64) -> String {
+    let minutes = ((until - now_ms).max(0) + 59_999) / 60_000;
+    if minutes < 60 {
+        format!("back in {}m", minutes.max(1))
+    } else if minutes < 48 * 60 {
+        format!("back in {}h", (minutes + 30) / 60)
+    } else {
+        format!("back in {}d", (minutes + 720) / 1440)
+    }
+}
+
+/// When a snoozed work ask comes back: a snooze sent from here, else gxserver's `snoozedUntil`.
+fn snooze_end(ask: &Value, key: &str, state: &ChatState) -> i64 {
+    state
+        .extras
+        .panels
+        .work_snoozed
+        .get(key)
+        .copied()
+        .filter(|until| *until > 0)
+        .into_iter()
+        .chain(at_ms(text(ask, "snoozedUntil")))
+        .max()
+        .unwrap_or(0)
 }
 
 /// Snooze for 1, 6 or 24 hours, as the dock's cards offer it (`command` per hours).
@@ -622,16 +655,17 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .collect();
     let answers = &state.extras.panels.board_answers;
     let mut later: Vec<(i64, Value)> = Vec::new();
+    // (when it comes back, row): the snoozed asks, forms and pages, folded under the dock's
+    // Snoozed row (`snoozed`).
+    let mut snoozed_rows: Vec<(i64, Value)> = snoozed_question_rows(state, now_ms);
     for item in &items {
         for ask in item["asks"].as_array().into_iter().flatten() {
             if ask["open"] != true {
                 continue;
             }
             let key = format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag"));
-            // A snoozed ask waits out of the dock until its end.
-            if snoozed(ask, &key, state, now_ms) {
-                continue;
-            }
+            // A snoozed ask waits out of the live rows until its end, under Snoozed.
+            let is_snoozed = snoozed(ask, &key, state, now_ms);
             let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
             let card = ask_card(
                 item,
@@ -689,6 +723,20 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "needs": true,
             });
             row["showInChat"] = show_in_chat(&turns, asked_in, &key);
+            if is_snoozed {
+                let back = snooze_end(ask, &key, state);
+                row["snooze"] = Value::Null;
+                // When it is back, in the age's place.
+                row["age"] = json!(back_in(back, now_ms));
+                row["unsnooze"] = json!({
+                    "type": "unsnoozeWorkAsk",
+                    "key": key,
+                    "item": text(item, "ref"),
+                    "ask": text(ask, "tag"),
+                });
+                snoozed_rows.push((back, row));
+                continue;
+            }
             needs.push((now_ms - at > DAY_MS, at, row));
         }
     }
@@ -779,7 +827,10 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         .map(|(_, _, row)| row)
         .chain(later.into_iter().map(|(_, row)| row))
         .collect();
-    if rows.is_empty() {
+    // Soonest back first.
+    snoozed_rows.sort_by_key(|(back, _)| *back);
+    let snoozed_rows: Vec<Value> = snoozed_rows.into_iter().map(|(_, row)| row).collect();
+    if rows.is_empty() && snoozed_rows.is_empty() {
         return Value::Null;
     }
     // Hidden by the reader: it stays hidden until shown again or a row that was not there when it
@@ -820,6 +871,17 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
         "phoneLimit": 3,
         "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
         "markAllSeen": mark_all_seen,
+        // The snoozed asks, forms and pages: one quiet "Snoozed (N)" row under the others that
+        // opens to them, each with when it is back, Unsnooze, and its answers or Open as a live
+        // row has them. They stay out of the counts and the `hidden` check.
+        //
+        // CDXC:Coordinators 2026-11-16 DECISION:
+        // User: "please let's show snoozed stuff in the dock under a hidden area", then picked "A.
+        // A Snoozed row at the bottom" (Q3602): folded like "N more need you", each row saying
+        // when it is back with Unsnooze and its answer, the same on the phone.
+        // SEE-ALSO: server/src/coordinators/work.rs (`unsnooze`), apps/desktop/src/app/native_chat/work_cards.rs
+        // (`work_dock_snoozed`), apps/mobile/app/src/chat/native/cards/WorkCards.tsx (`dockSnoozed`).
+        "snoozed": snoozed_rows,
     })
 }
 
@@ -1054,7 +1116,51 @@ fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>)
 /// open" and Open (the answer popup, or the page). Any agent chat, not only a coordinator's.
 fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(i64, Value)> {
     let _ = context;
-    crate::questions::open_questions::unanswered(state)
+    question_rows_of(
+        state,
+        crate::questions::open_questions::unanswered(state),
+        now_ms,
+    )
+}
+
+/// The forms and pages snoozed until a set time (not those put off For later with no end), as
+/// the dock's Snoozed rows: each with when it comes back and its Unsnooze ("Back to unanswered").
+fn snoozed_question_rows(state: &ChatState, now_ms: i64) -> Vec<(i64, Value)> {
+    let until = &state.session.later_question_until;
+    if until.is_empty() {
+        return Vec::new();
+    }
+    let later = crate::questions::later::later_ids(state);
+    let askers: Vec<&crate::transcript::open_questions::Asker> =
+        crate::questions::open_questions::waiting(state)
+            .into_iter()
+            .filter(|asker| later.contains(&asker.id))
+            .filter(|asker| until.get(&asker.id).is_some_and(|at| *at > now_ms))
+            .collect();
+    question_rows_of(state, askers, now_ms)
+        .into_iter()
+        .map(|(_, mut row)| {
+            let id = text(&row, "key")
+                .strip_prefix("dock-questions:")
+                .unwrap_or_default()
+                .to_string();
+            let back = until.get(&id).copied().unwrap_or(now_ms);
+            row["snooze"] = Value::Null;
+            // When it is back, in the age's place.
+            row["age"] = json!(back_in(back, now_ms));
+            row["unsnooze"] = json!({ "type": "questionForLater", "id": id, "later": false });
+            (back, row)
+        })
+        .collect()
+}
+
+/// [`question_rows`] for these askers.
+fn question_rows_of(
+    state: &ChatState,
+    askers: Vec<&crate::transcript::open_questions::Asker>,
+    now_ms: i64,
+) -> Vec<(i64, Value)> {
+    askers
         .into_iter()
         .map(|asker| {
             let at = asker.at.unwrap_or(now_ms);

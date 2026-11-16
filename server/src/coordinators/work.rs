@@ -1932,7 +1932,7 @@ pub fn handle_work_request(
             item.record("answer", words, &now);
             finish_if_only_asking(&mut item, &now);
         }
-        "snooze" | "cancel" => {
+        "snooze" | "cancel" | "unsnooze" => {
             let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
             let ask = item
                 .asks
@@ -1946,6 +1946,9 @@ pub fn handle_work_request(
                 let words = format!("{} dismissed by the user", ask.tag);
                 item.record("settle", words.trim().to_string(), &now);
                 finish_if_only_asking(&mut item, &now);
+            } else if op == "unsnooze" {
+                // Unsnooze from the dock's Snoozed row: back under Needs you now.
+                ask.snoozed_until = None;
             } else {
                 let hours = params
                     .get("hours")

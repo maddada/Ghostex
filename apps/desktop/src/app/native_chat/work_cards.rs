@@ -103,6 +103,10 @@ pub(super) fn answers_divider(p: &ChatAppearance) -> AnyElement {
 /// app's dropdown rows (`{label, command}`, a submenu's under `children`).
 fn page_row_menu(row: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
+    // A snoozed row's Unsnooze (gx-chat-core `dock_with`'s `snoozed`): back under Needs you now.
+    if row["unsnooze"].is_object() {
+        rows.push(json!({ "label": "Unsnooze", "command": row["unsnooze"] }));
+    }
     if row["showInChat"].is_object() {
         rows.push(json!({ "label": "Show in chat", "command": row["showInChat"] }));
     }
@@ -406,6 +410,8 @@ const DOCK_MOTION_KEY: &str = "work-dock:rows";
 
 /// The fold key that shows every dock row in place instead of the first `limit`.
 const DOCK_ALL_ROWS: &str = "dock-rows:all";
+/// `NativeChatView::expanded`'s key for the dock's Snoozed row opened (`work_dock_snoozed`).
+const DOCK_SNOOZED_ROWS: &str = "dock-rows:snoozed";
 /// The dock's cards fold by themselves while the draft is longer than this.
 const DOCK_FOLDS_PAST_CHARS: usize = 280;
 
@@ -554,7 +560,9 @@ impl NativeChatView {
         let dock = &self.snapshot["workDock"];
         let board = &self.snapshot["coordinatorBoard"];
         let rows: Vec<Value> = dock["rows"].as_array().cloned().unwrap_or_default();
-        if rows.is_empty() && !board.is_object() {
+        // The snoozed asks, forms and pages, folded under one Snoozed row (`work_dock_snoozed`).
+        let snoozed: Vec<Value> = dock["snoozed"].as_array().cloned().unwrap_or_default();
+        if rows.is_empty() && snoozed.is_empty() && !board.is_object() {
             return None;
         }
         let long_draft = self
@@ -567,7 +575,7 @@ impl NativeChatView {
         let s = p.scale;
         // The core's `hidden` (hideWorkDock) is the collapsed bar here; it opens by itself when a
         // row that was not there when it collapsed arrives.
-        let collapsible = !rows.is_empty();
+        let collapsible = !rows.is_empty() || !snoozed.is_empty();
         let open = collapsible && dock["hidden"] != true;
         // Collapsing or opening, the rows ease their height and fade as the chat's other folds do
         // (disclosure_motion.rs, its timing and the reduced motion setting), the chevron turning
@@ -683,6 +691,9 @@ impl NativeChatView {
                         .children(mark_all_seen),
                 );
             }
+            if !snoozed.is_empty() {
+                list = list.children(self.work_dock_snoozed(&snoozed, p, cx));
+            }
             surface = surface.child(self.disclosure_body_motion(
                 DOCK_MOTION_KEY,
                 motion,
@@ -720,6 +731,82 @@ impl NativeChatView {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// The dock's Snoozed row under the others (gx-chat-core `dock_with`'s `snoozed`, which holds the
+    /// user's decision): "Snoozed (N)" with a clock and a chevron, folded until clicked; open, the
+    /// snoozed rows follow it, dimmed, each a dock row with when it is back in its age's place and
+    /// Unsnooze first in its ⋯ and right-click menu (`page_row_menu`).
+    fn work_dock_snoozed(
+        &self,
+        snoozed: &[Value],
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        let open = self.expanded.contains(DOCK_SNOOZED_ROWS);
+        let line = div()
+            .id("work-dock-snoozed")
+            .role(gpui::Role::Button)
+            .aria_expanded(open)
+            .w_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(DOCK_GAP * s))
+            .px(px(DOCK_ROW_PAD_X * s))
+            .py(px(5.0 * s))
+            .rounded(px(8.0 * s))
+            .text_color(p.muted)
+            .chat_cursor_pointer()
+            .hover(|style| {
+                style
+                    .bg(p.foreground.opacity(0.04))
+                    .text_color(p.foreground)
+            })
+            .child(
+                svg()
+                    .path("titlebar/clock.svg")
+                    .flex_shrink_0()
+                    .size(px(13.0 * s))
+                    .text_color(p.card_muted),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .child(format!("Snoozed ({})", snoozed.len())),
+            )
+            .child(
+                svg()
+                    .path("titlebar/chevron-down.svg")
+                    .flex_shrink_0()
+                    .size(px(12.0 * s))
+                    .text_color(p.card_muted)
+                    .when(open, |icon| {
+                        icon.with_transformation(gpui::Transformation::rotate(gpui::radians(
+                            std::f32::consts::PI,
+                        )))
+                    }),
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                if !this.expanded.remove(DOCK_SNOOZED_ROWS) {
+                    this.expanded.insert(DOCK_SNOOZED_ROWS.to_string());
+                }
+                cx.notify();
+            }));
+        let mut out = vec![line.into_any_element()];
+        if open {
+            out.extend(snoozed.iter().map(|row| {
+                div()
+                    .w_full()
+                    .opacity(0.72)
+                    .child(self.dock_row(row, p, cx))
+                    .into_any_element()
+            }));
+        }
+        out
     }
 
     /// The dock's header: the counts as marks and numbers, then the work items button and, while

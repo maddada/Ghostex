@@ -148,6 +148,8 @@ pub struct SessionChatQueueSnapshot {
     pub retired_async_question_ids: Vec<String>,
     /// The question forms and pages put off "For later" (`session_chat_open_questions::read_later_ids`).
     pub later_question_ids: Vec<String>,
+    /// When each snoozed one of them comes back (`session_chat_open_questions::read_later_until`).
+    pub later_question_until: Value,
     /// The modes this session's agent cannot use (session_chat_mode_availability.rs).
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
@@ -184,6 +186,10 @@ impl SessionChatQueueSnapshot {
         target.insert(
             "laterQuestionIds".to_string(),
             json!(self.later_question_ids),
+        );
+        target.insert(
+            "laterQuestionUntil".to_string(),
+            self.later_question_until.clone(),
         );
         target.insert(
             "unavailableModes".to_string(),
@@ -240,6 +246,7 @@ impl SessionChatQueueSnapshot {
         revision
             .push_str(&serde_json::to_string(&self.retired_async_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.later_question_until).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
@@ -1171,6 +1178,9 @@ fn read_snapshot(
                 db, project_id, session_id,
             ),
             later_question_ids: crate::session_chat_open_questions::read_later_ids(
+                db, project_id, session_id,
+            ),
+            later_question_until: crate::session_chat_open_questions::read_later_until(
                 db, project_id, session_id,
             ),
             unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(

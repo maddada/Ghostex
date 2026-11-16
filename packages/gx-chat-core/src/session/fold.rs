@@ -220,6 +220,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .starred_page_ids
         .clone()
         .or_else(|| previous_side.and_then(|state| state.starred_page_ids.clone()));
+    folded.result.state.later_question_until = side
+        .later_question_until
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.later_question_until.clone()));
 
     folded.result.state.unavailable_modes = side
         .unavailable_modes
