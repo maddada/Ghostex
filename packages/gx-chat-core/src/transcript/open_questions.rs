@@ -1018,6 +1018,8 @@ pub fn tags_answered_in_words(text: &str) -> Vec<String> {
             }
         }
     }
+    // A Reply in chat box's pill answers the questions it names (`questions/answer_pills.rs`).
+    tags.extend(crate::questions::answer_pills::answered_tags(text));
     tags.sort();
     tags.dedup();
     tags

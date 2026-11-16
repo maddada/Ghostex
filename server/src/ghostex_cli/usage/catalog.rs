@@ -54,7 +54,7 @@ Examples:
 
 Use it for a page you replaced with another file, or that is out of date. You do not need it after
 publishing a newer version of the same file with ghostex show: the newest card already replaces
-the older ones. The reader's card then reads Seen or Canceled; nothing is sent to you.
+the older ones. The page's card then reads Replaced; nothing is sent to you.
 ";
 
 const READ_SESSION_CHAT_HELP: &str = "

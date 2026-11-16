@@ -6,7 +6,7 @@ use serde_json::json;
 
 /// The field a paste lands in.
 #[derive(Clone)]
-enum PasteInto {
+pub(super) enum PasteInto {
     Composer,
     /// The async question's answer field: its key and state.
     Answer(String, Entity<TextareaState>),
@@ -17,13 +17,15 @@ enum PasteInto {
         input: Entity<TextareaState>,
         modal: bool,
     },
+    /// The Reply card's field (`reply_attachments.rs`).
+    Reply(Entity<TextareaState>),
 }
 
 impl PasteInto {
     fn field(&self) -> Option<&Entity<TextareaState>> {
         match self {
             Self::Composer => None,
-            Self::Answer(_, input) | Self::Form { input, .. } => Some(input),
+            Self::Answer(_, input) | Self::Form { input, .. } | Self::Reply(input) => Some(input),
         }
     }
 }
@@ -82,7 +84,7 @@ impl NativeChatView {
     /// Returns whether the paste was taken; `false` lets the field insert the text.
     ///
     /// CDXC:Clipboard 2026-11-06 WHY: User: "pasting an image here in chat on macos takes like 3 seconds for image to paste now". The image work is not what took the time: measured in release on a 3456x2234 Retina screenshot, the pasteboard read, the TIFF-to-PNG conversion, base64, gxserver's save and read back, the digest and the thumbnail come to about 120 ms, and CleanShot's copy (a file URL beside the picture) skips the upload entirely (`importNativeAttachments`). The chip appears after four trips through the one chat host thread (`attachmentsStarted`, the import's answer, `insertAttachments`, `loadImage`), and that thread was settling a long coordinator chat's whole transcript again, 20 to 30 seconds each time, whenever the sidebar's session order moved; the paste queued behind it. The fix is in the chat core (`same_names` in packages/gx-chat-core/src/event.rs, `ProjectionScope::seen_pictures` and `RecipientDirectory`); the user's own log showed the import-to-picture chain at about 50 ms with that thread free.
-    fn paste_attachments(
+    pub(super) fn paste_attachments(
         &mut self,
         clipboard: &ClipboardItem,
         target: PasteInto,
@@ -149,6 +151,7 @@ impl NativeChatView {
                 cx.notify();
             }
             PasteInto::Form { key, modal, .. } => self.form_paste_started(key, *modal, cx),
+            PasteInto::Reply(_) => self.reply_paste_started(cx),
             PasteInto::Composer => {
                 self.attach_to_composer(images, external_paths, cx);
                 return true;
@@ -204,6 +207,9 @@ impl NativeChatView {
                     window,
                     cx,
                 ),
+                PasteInto::Reply(input) => {
+                    chat.finish_reply_attachments(input, selection.unwrap(), paths, error, cx)
+                }
                 // Taken by `attach_to_composer` above (composer_attach.rs).
                 PasteInto::Composer => {}
             });

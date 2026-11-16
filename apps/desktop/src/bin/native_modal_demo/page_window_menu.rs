@@ -103,7 +103,7 @@ impl Render for PageWindowMenuDemo {
                     .child(panel(
                         "visual-page-more-menu",
                         ink,
-                        menu_rows(true),
+                        menu_rows(true, Some(false)),
                         Some(0),
                         std::rc::Rc::new(|_, _| {}),
                     )),

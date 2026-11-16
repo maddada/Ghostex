@@ -99,6 +99,11 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
             crate::transcript::page_answers::answers_below(view.items.iter(), &view.askers),
         )
     };
+    // A page its agent retired (`ghostex page retire`, server/src/visual_pages/retire.rs) reads
+    // Replaced, as one a newer `ghostex show` of the same file replaced does.
+    for id in &state.session.retired_page_ids {
+        into.withdrawn_pages.entry(id.clone()).or_default().replaced = true;
+    }
     into.deferred_work = crate::document::Shared(std::sync::Arc::clone(&view.deferred_work));
     into.workflow_cards = crate::transcript::workflow_card::workflow_cards(state, context).0;
     into.gbot_card_states = crate::transcript::gbot_cards::card_states(state);

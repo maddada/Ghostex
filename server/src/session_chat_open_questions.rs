@@ -85,6 +85,12 @@ fn expired(until: Option<&Value>) -> HashSet<String> {
 const REMOVED_KEY: &str = "sessionChatQuestionsRemoved";
 /// How many removals a session keeps at most; the oldest are dropped first.
 const REMOVED_LIMIT: usize = 500;
+/// Where the pages the user starred in this session's chat are kept (page ids). The chat lists
+/// them under Resources' Starred filter and marks their cards; the star of a page follows a newer
+/// `ghostex show` of the same file (gx-chat-core questions/later.rs `starred_page_ids`).
+const STARRED_KEY: &str = "sessionChatPagesStarred";
+/// How many starred pages a session keeps at most; the oldest stars are dropped first.
+const STARRED_LIMIT: usize = 500;
 /// How many For later marks a session keeps at most; answered ones are dropped as they settle.
 const LATER_LIMIT: usize = 500;
 /// The agent's last words reach its transcript a moment after the turn-end hook.
@@ -111,6 +117,11 @@ pub(crate) struct OpenAsker {
 impl OpenAsker {
     fn count(&self) -> usize {
         self.waiting
+    }
+
+    /// The question tags it still asks (the coordinator's open questions note, send.rs).
+    pub(crate) fn waiting_tags(&self) -> Vec<String> {
+        self.tags.clone()
     }
 }
 
@@ -416,6 +427,81 @@ pub(crate) fn set_removed(
     write_id_list(state, &db, project_id, session_id, REMOVED_KEY, &removed)?;
     refresh(state, project_id, session_id, None);
     Ok(())
+}
+
+/// The pages starred in this session's chat (`STARRED_KEY`), for the chat's frames
+/// (`starredPageIds`).
+pub(crate) fn read_starred_page_ids(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Vec<String> {
+    read_id_list(db, project_id, session_id, STARRED_KEY)
+}
+
+/// Whether `page_id` is a starred page or a version of a starred page's file (`sourcePath` on the
+/// page records), for the page window's ⋯ menu (`readVisualPageSource`'s `starred`).
+pub(crate) fn page_starred(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    page_id: &str,
+) -> bool {
+    let starred = read_starred_page_ids(db, project_id, session_id);
+    if starred.iter().any(|known| known == page_id) {
+        return true;
+    }
+    let root = &state.paths.root_dir;
+    let Some(file) = crate::visual_pages::page_source_path(root, page_id) else {
+        return false;
+    };
+    starred
+        .iter()
+        .any(|known| crate::visual_pages::page_source_path(root, known).as_deref() == Some(&file))
+}
+
+/// `answerSessionChatPrompt` with `kind: "pageStar"`: stars a page in this session's chat, or
+/// takes its star off. Taking it off also takes off the star of every other version of the same
+/// file (the same `sourcePath`), since the chat shows that star on the newest version. Nothing
+/// reaches the agent. Blocking.
+///
+/// CDXC:SessionChat 2026-11-16 DECISION:
+/// BANOZZ asked on Discord ("star resources", 2026-11-13) to star pages in a chat and find them in
+/// Resources; the user promised it and picked on the star-resources page: pages only (Q3540), a
+/// Starred entry in the Resources filter and no group of its own, starred rows staying in their
+/// groups (Q3541, Q3542), newest first (Q3543), stars per session (Q3548) that agents cannot read
+/// (Q3549), and a star that follows a newer version of the same file (Q3547).
+pub(crate) fn set_starred(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    page_id: &str,
+    starred: bool,
+) -> anyhow::Result<()> {
+    let db = open_gxserver_database(&state.paths)?;
+    let mut ids = read_starred_page_ids(&db, project_id, session_id);
+    let before = ids.len();
+    if starred {
+        if ids.iter().any(|known| known == page_id) {
+            return Ok(());
+        }
+        ids.push(page_id.to_string());
+        if ids.len() > STARRED_LIMIT {
+            ids.drain(..ids.len() - STARRED_LIMIT);
+        }
+    } else {
+        let root = &state.paths.root_dir;
+        let file = crate::visual_pages::page_source_path(root, page_id);
+        ids.retain(|known| {
+            known != page_id
+                && (file.is_none() || crate::visual_pages::page_source_path(root, known) != file)
+        });
+        if ids.len() == before {
+            return Ok(());
+        }
+    }
+    write_id_list(state, &db, project_id, session_id, STARRED_KEY, &ids)
 }
 
 /// When this session was forked from another, in epoch ms: the time Ghostex created it. The chat

@@ -523,9 +523,22 @@ fn ask_card(
         // Cancel").
         "text": format!("{reference} {tag}: I dismissed this; no need to ask it again."),
     });
+    // Mark answered in its ⋯ menu: answered in the chat box already, so it closes as a Reply
+    // does, with words that say where (the CDXC:Coordinators 2026-11-16 DECISION on
+    // `questions::later::mark_answered`).
+    let mark_answered = json!({
+        "type": "coordinatorBoardAnswer",
+        "op": "reply",
+        "key": key,
+        "item": reference,
+        "ask": tag,
+        "label": "Answered in chat",
+        "text": format!("{reference} {tag}: I answered this in the chat."),
+    });
     json!({
         "snooze": if open { snooze } else { Value::Null },
         "cancel": if open { cancel } else { Value::Null },
+        "markAnswered": if open { mark_answered } else { Value::Null },
         "key": key,
         "kind": "ask",
         "folded": ask["open"] != true,
@@ -670,6 +683,7 @@ pub fn dock_with(state: &ChatState, context: &ChatContext, turns: &[Turn]) -> Va
                 "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag"), "name": reply_name(text(ask, "text")) },
                 "mention": mention_of(item),
                 "dismiss": card["cancel"],
+                "markAnswered": card["markAnswered"],
                 "snooze": card["snooze"],
                 "chips": card["chips"],
                 "needs": true,
@@ -920,6 +934,7 @@ pub fn panel_actions_with(
         return json!({
             "reply": { "item": reference, "key": key, "tag": tag, "name": reply_name(text(ask, "text")) },
             "dismiss": card["cancel"],
+            "markAnswered": card["markAnswered"],
             "snooze": card["snooze"],
             "showInChat": show_in_chat(&turns, asked_in, &key),
         });
@@ -958,6 +973,7 @@ pub fn question_actions(state: &ChatState, context: &ChatContext, id: &str) -> V
                 "reply": row["reply"],
                 "open": row["open"],
                 "dismiss": row["dismiss"],
+                "markAnswered": row["markAnswered"],
                 "snooze": row["snooze"],
                 "showInChat": row["showInChat"],
             })
@@ -1054,6 +1070,8 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                 "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
                 "age": crate::transcript::message_time::age_label(now_ms, at),
                 "dismiss": { "type": "cancelQuestion", "id": asker.id },
+                // A page that only waits to be seen asks nothing to answer.
+                "markAnswered": if asker.seen_only { Value::Null } else { json!({ "type": "markQuestionAnswered", "id": asker.id }) },
                 "snooze": snooze,
                 "showInChat": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
                 "mention": "",

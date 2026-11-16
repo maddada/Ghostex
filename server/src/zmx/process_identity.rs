@@ -33,9 +33,9 @@ impl ProcessRow {
         self.pid
     }
 
-    /// The parent's process id, for the foreground read (foreground_job.rs; macOS walks the
-    /// kernel's own links instead).
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    /// The parent's process id, for the account switch's tree on macOS (session_tree.rs; Linux
+    /// keeps the parent from `/proc` itself).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn ppid(&self) -> i64 {
         self.ppid
     }

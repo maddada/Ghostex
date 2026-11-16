@@ -4136,7 +4136,18 @@ version of the Projects features in Cursor and Claude Code.
   answers ("Answers: A, B (recommended: A)"); a form copies its title and each
   question it still asks with its text and answers; a page copies its title as a
   link and the tags it still asks. The phone has Reply, Mention in chat box and
-  Copy as Markdown in the same rows. The ? pill counts only questions too old to be
+  Copy as Markdown in the same rows. A question's Reply takes voice and
+  pictures: its microphone dictates into the box, and a picture you paste or
+  pick with its paperclip (the phone's photo button) goes with your words.
+  **Reply in chat box** (Enter on the computer) puts the question in the chat
+  box as a pill with its title, inside your text, with your words after it, so
+  you can use everything the chat box does and answer several questions in one
+  message; point at a pill to see which question it answers. Sending it answers
+  those questions, the same as Reply. **Mark answered**, next to Dismiss in a
+  question row's ⋯ menu, closes a question you already answered in the chat in
+  your own words and tells the agent so; a coordinator is also told, under each
+  message you send it, which questions are still open, so it can close the ones
+  you answered. The ? pill counts only questions too old to be
   shown here. On the computer, the list steps aside while the Work panel is open
   beside the chat and while you type a long message.
 - **Nothing you click moves the chat**: the ? pill, a Q12 tag in a message, a
@@ -6079,6 +6090,14 @@ closed Workers included, each with the Worker's name. They open read-only there.
 Each group (Unanswered, Earlier, Worker pages) shows its newest 30 rows at first
 (Unanswered always in full) with its own "Show all N" under them, which loads the
 rest; a folded group shows none.
+Star a page to find it again: on the computer, click the star at the right end of
+its card's window bar, the star on its row in Chat Resources (shown while the
+pointer is on the row), or Star page in its window's ⋯ menu; on the phone, Star in
+the ⋯ menu of its card or of the open page. A starred page's row shows a yellow
+star and the dropdown gets Starred, which lists only starred pages. Stars belong to
+the chat they were set in, are kept by Ghostex across restarts and devices, and are
+never shown to the agent. When the agent shows a newer version of the same file,
+the star moves to the newest one; unstarring takes it off every version.
 Every copy shows a small "Copied!" bubble at the pointer for a moment, whether
 it came from a terminal, a chat message, a copy button, or a menu. Copy sound is
 off by default. Enable it under Settings > Notifications > Sounds to also hear a
@@ -6428,8 +6447,17 @@ base branch you pick in the last part, the project's current branch to start
 with; that list has a search field and shows the branch picked first, then the
 project's default branch),
 **Existing** (a worktree the project already has, picked in the last part) or
-**Cloud Box** (once Cloud Boxes is set up). With This folder the last part just
-shows the folder's branch. With a worktree picked, sending the first message
+**Cloud Box** (once Cloud Boxes is set up). With This folder the last part is
+the folder's branch, and clicking it switches the folder to another branch
+right away: Recent (the branches the folder was on lately), Local and Remote (a
+remote branch with no local copy yet, which becomes a local branch tracking
+it), with a search; typing a name no branch has offers "Create <name> from
+<current branch>". If another session of the project is working right then, the
+folder stays put and the line under the bar offers New worktree from that
+branch instead. If the folder has uncommitted changes it asks first: Switch and
+take them (git carries them along, or says why it can't), New worktree from that
+branch, or Cancel. Idle sessions of the project simply find the new branch on
+their next turn. With a worktree picked, sending the first message
 creates it (Add Worktree's folder and setup command) and starts the chat there;
 the sidebar shows the chat under its project, with the worktree's branch on its row. The
 branch is named for you from the message: `spx-123-fix-copy-link` when it names

@@ -71,6 +71,9 @@ pub struct DraftWorktreeState {
     /// The running move starts a cloud box, and the box row it last reported (its boot card).
     pub cloud_start: bool,
     pub cloud_box: Option<Value>,
+    /// This folder's branch switch in flight, and how the last one went (`menus/folder_branch.rs`).
+    pub folder_request: Option<u64>,
+    pub folder_switch: Option<Value>,
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -271,9 +274,12 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
         outcome,
     } = event
     {
+        let folder_switch =
+            crate::menus::folder_branch::settle(state, *request_id, outcome.as_ref());
         let tray = &state.menus.draft_worktree;
         let id = Some(*request_id);
-        if tray.read_request == id {
+        if folder_switch {
+        } else if tray.read_request == id {
             let tray = &mut state.menus.draft_worktree;
             tray.read_request = None;
             tray.read_done = true;
@@ -471,6 +477,18 @@ pub fn tray(state: &ChatState) -> Option<Value> {
         json!(selected_base(state, answer)),
     );
     value.insert("branches".to_string(), Value::Array(branches(answer)));
+    value.insert(
+        "recentBranches".to_string(),
+        answer.get("recentBranches").cloned().unwrap_or(Value::Null),
+    );
+    value.insert(
+        "folderPrompt".to_string(),
+        if mode == MODE_FOLDER && available {
+            crate::menus::folder_branch::prompt(state)
+        } else {
+            Value::Null
+        },
+    );
     value.insert("worktrees".to_string(), Value::Array(worktree_list));
     value.insert("worktreeKey".to_string(), json!(worktree_key));
     value.insert("worktreeLabel".to_string(), json!(worktree_label));
@@ -582,7 +600,7 @@ pub fn where_part(tray: &Value) -> Value {
 
 /// The breadcrumb's last part, what the choice on needs next, or `null`:
 /// `{kind, label, glyph, prefix?, tooltip?, star?, placeholder?, menuTitle?, menuWidth?, menu}`.
-/// `kind` is `branch` (This folder's branch, only shown: `menu` is `null`), `baseBranch`,
+/// `kind` is `folderBranch` (This folder's branch, with `create` for the search), `baseBranch`,
 /// `worktree` or `cloudBox`. While a move runs or failed there is none: the status line says it.
 /// The base branch list's order: the picked base first, then the default branch (its local
 /// name, else its `origin/` one), then the rest in gxserver's order.
@@ -725,16 +743,30 @@ pub fn detail_part(tray: &Value) -> Value {
                 "menu": cloud.get("menu").cloned().unwrap_or(Value::Null),
             })
         }
-        _ => match text(tray, "currentBranch") {
-            Some(branch) => json!({
-                "kind": "branch",
-                "label": branch,
+        // This folder's branch: a menu that switches the folder (`menus/folder_branch.rs`).
+        _ => {
+            let menu = crate::menus::folder_branch::menu(tray);
+            let current = text(tray, "currentBranch");
+            if current.is_none() && menu.is_empty() {
+                return Value::Null;
+            }
+            let label = current
+                .clone()
+                .unwrap_or_else(|| "Pick a branch".to_string());
+            json!({
+                "kind": "folderBranch",
+                "label": label,
                 "glyph": "git-branch",
-                "tooltip": format!("This folder is on {branch}"),
-                "menu": Value::Null,
-            }),
-            None => Value::Null,
-        },
+                "tooltip": match &current {
+                    Some(branch) => format!("This folder is on {branch}. Pick a branch to switch it"),
+                    None => "Pick a branch for this folder".to_string(),
+                },
+                "placeholder": current.is_none(),
+                "menuTitle": "Switch this folder to",
+                "menu": menu,
+                "create": crate::menus::folder_branch::create(tray),
+            })
+        }
     }
 }
 
@@ -747,6 +779,11 @@ pub fn pick(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     if current.get("busy").and_then(Value::as_bool) == Some(true) {
         return Vec::new();
     }
+    if let Some(effects) = crate::menus::folder_branch::pick(state, action) {
+        return effects;
+    }
+    // Any other pick on the bar settles a switch prompt (New worktree from that branch among them).
+    state.menus.draft_worktree.folder_switch = None;
     let param = |key: &str| {
         action
             .param(key)
@@ -1075,10 +1112,10 @@ mod tests {
         );
         assert_eq!(menu[2]["label"], "Existing worktree");
         assert_eq!(menu[2]["description"], "1 worktree in this project");
-        // This folder's branch is only shown.
-        assert_eq!(shown["detail"]["kind"], "branch");
+        // This folder's branch opens the menu that switches the folder (Q3520).
+        assert_eq!(shown["detail"]["kind"], "folderBranch");
         assert_eq!(shown["detail"]["label"], "main");
-        assert!(shown["detail"]["menu"].is_null());
+        assert!(shown["detail"]["menu"].is_array());
 
         let _ = pick(&mut state, &action(json!({ "mode": "newWorktree" })));
         let shown = tray(&state).expect("tray");

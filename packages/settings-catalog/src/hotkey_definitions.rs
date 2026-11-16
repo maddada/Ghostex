@@ -123,7 +123,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "newChatPickBranch",
         title: "New Chat: Branch",
-        description: "While a new chat's message box has focus, open the last part of the bar above it: a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key.",
+        description: "While a new chat's message box has focus, open the last part of the bar above it: This folder's branch, a new worktree's base branch, the existing worktree, or the Cloud Box pick. It takes Option+B from the message box on a Mac (no ∫ there): if your keyboard types a letter with Option+B, pick another key.",
         default_key: "alt+b",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

@@ -310,6 +310,64 @@ async fn answer_session_chat_prompt(
             ),
         };
     }
+    // Starring a page is the chat's own bookkeeping too: nothing reaches the agent
+    // (session_chat_open_questions.rs `set_starred`).
+    if kind == "pageStar" {
+        let Some(page_id) = params
+            .get("questionId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty() && id.len() <= 4096)
+            .map(str::to_string)
+        else {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message: "A page ID is required.".to_string(),
+                },
+            );
+        };
+        let starred = params
+            .get("starred")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let worker_state = state.clone();
+        let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
+        let result = tokio::task::spawn_blocking(move || {
+            crate::session_chat_open_questions::set_starred(
+                &worker_state,
+                &project_id,
+                &session_id,
+                &page_id,
+                starred,
+            )
+        })
+        .await;
+        return match result {
+            Ok(Ok(())) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "starred": starred })),
+            ),
+            Ok(Err(error)) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: error.to_string(),
+                },
+            ),
+            Err(_) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "Could not save the page's star.".to_string(),
+                },
+            ),
+        };
+    }
     // "For later" and removing a question form or page without answering it are the chat's own
     // bookkeeping: nothing reaches the agent (session_chat_open_questions.rs, `set_later` and
     // `set_removed`).

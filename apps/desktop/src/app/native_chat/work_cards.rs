@@ -99,12 +99,17 @@ pub(super) fn answers_divider(p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
-/// A page row's ⋯ menu (`dock_row`): Show in chat, Dismiss and Snooze with its lengths, as the
+/// A page row's ⋯ menu (`dock_row`): Show in chat, Mark answered, Dismiss and Snooze with its lengths, as the
 /// app's dropdown rows (`{label, command}`, a submenu's under `children`).
 fn page_row_menu(row: &Value) -> Vec<Value> {
     let mut rows = Vec::new();
     if row["showInChat"].is_object() {
         rows.push(json!({ "label": "Show in chat", "command": row["showInChat"] }));
+    }
+    // Mark answered, beside Dismiss: one answered in the chat box closes by hand
+    // (gx-chat-core `questions::later::mark_answered`).
+    if row["markAnswered"].is_object() {
+        rows.push(json!({ "label": "Mark answered", "command": row["markAnswered"] }));
     }
     if row["dismiss"].is_object() {
         rows.push(json!({ "label": "Dismiss", "command": row["dismiss"] }));

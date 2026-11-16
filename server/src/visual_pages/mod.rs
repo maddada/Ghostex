@@ -47,7 +47,8 @@ pub(crate) use publish::{
 };
 pub(crate) use questions::{page_answered, page_questions};
 pub(crate) use retire::{
-    handle_retire_visual_pages_http, page_id_of, RETIRE_VISUAL_PAGES_ENDPOINT,
+    handle_retire_visual_pages_http, page_id_of, read_retired_page_ids,
+    RETIRE_VISUAL_PAGES_ENDPOINT,
 };
 pub(crate) use scroll::{handle as page_scroll, is_scroll_route};
 pub(crate) use serve::{serve, PAGE_SCRIPT_QUERY, VISUAL_PAGE_ROUTE_PREFIX};
@@ -56,7 +57,7 @@ pub(crate) use source::{
     handle_refresh_http as handle_refresh_visual_page_http, READ_VISUAL_PAGE_SOURCE_ENDPOINT,
     REFRESH_VISUAL_PAGE_ENDPOINT,
 };
-pub(crate) use store::{prune_old_pages, VISUAL_PAGE_MAX_BYTES};
+pub(crate) use store::{page_source_path, prune_old_pages, VISUAL_PAGE_MAX_BYTES};
 pub(crate) use thumbnail::{
     handle_read_http as handle_read_visual_page_thumbnail_http,
     handle_store_http as handle_store_visual_page_thumbnail_http,

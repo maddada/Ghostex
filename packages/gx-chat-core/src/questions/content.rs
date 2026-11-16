@@ -24,6 +24,9 @@ pub struct ContentItem {
     pub title: String,
     /// When that reply arrived (epoch ms), if the transcript says.
     pub at: Option<i64>,
+    /// A page's `"source"`, the file it was published from (server/src/ghostex_cli/show.rs
+    /// `source_key`), so a star follows a newer version of it (`questions::later::starred_page_ids`).
+    pub source: Option<String>,
 }
 
 /// The scan of every message, and what each one held when it was read.
@@ -66,7 +69,7 @@ fn read(message: &ChatMessage) -> Vec<ContentItem> {
     content_fences(&markdown)
         .into_iter()
         .filter_map(|fence| {
-            let (id, title) = match fence.kind {
+            let (id, title, source) = match fence.kind {
                 ContentKind::Form => return None,
                 ContentKind::Page => {
                     let page = ghostex_gx_visual::page_reference(&fence.body)?;
@@ -75,13 +78,14 @@ fn read(message: &ChatMessage) -> Vec<ContentItem> {
                         return None;
                     }
                     let id = page.page_id().map_or(page.url.clone(), str::to_string);
-                    (id, page.title.trim().to_string())
+                    (id, page.title.trim().to_string(), page.source.clone())
                 }
                 ContentKind::Chart => (
                     chart_id(&fence.body),
                     ghostex_gx_visual::drawing_title(&fence.body)
                         .flatten()
                         .unwrap_or_default(),
+                    None,
                 ),
             };
             Some(ContentItem {
@@ -90,6 +94,7 @@ fn read(message: &ChatMessage) -> Vec<ContentItem> {
                 message_id: message.id.clone(),
                 title,
                 at: message.timestamp,
+                source,
             })
         })
         .collect()

@@ -81,6 +81,12 @@ pub fn apply_state_frame(
     if let Some(ids) = frame.state.removed_question_ids.clone() {
         *state.session.removed_question_ids = ids;
     }
+    if let Some(ids) = frame.state.retired_page_ids.clone() {
+        state.session.retired_page_ids = ids;
+    }
+    if let Some(ids) = frame.state.starred_page_ids.clone() {
+        state.session.starred_page_ids = ids;
+    }
     // An index equal to the one held keeps its lookups (`ResourceIndex`). The fold already took
     // the frame's index, or kept its own equal one (`fold::carried`), so the session takes that
     // same allocation and compares by address.
@@ -193,6 +199,8 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         *session.later_question_ids = Vec::new();
         session.unavailable_modes = Vec::new();
         *session.removed_question_ids = Vec::new();
+        session.retired_page_ids = Vec::new();
+        session.starred_page_ids = Vec::new();
         *session.resource_index = Default::default();
     }
     if patch.agent.is_some() {
@@ -634,6 +642,12 @@ pub fn apply_authoritative(
     }
     if let Some(ids) = result.state.removed_question_ids.clone() {
         *state.session.removed_question_ids = ids;
+    }
+    if let Some(ids) = result.state.retired_page_ids.clone() {
+        state.session.retired_page_ids = ids;
+    }
+    if let Some(ids) = result.state.starred_page_ids.clone() {
+        state.session.starred_page_ids = ids;
     }
     if let Some(index) = result
         .state

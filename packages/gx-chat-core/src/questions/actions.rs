@@ -184,6 +184,13 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .unwrap_or_default();
             effects.extend(crate::questions::later::cancel(state, id));
         }
+        ActionKind::MarkQuestionAnswered => {
+            let id = action
+                .param("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            effects.extend(crate::questions::later::mark_answered(state, id));
+        }
         ActionKind::QuestionsReply => {
             let field = |name: &str| {
                 action
@@ -206,6 +213,17 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .filter_map(Value::as_str)
                 .collect();
             effects.extend(crate::questions::later::mark_seen(state, &ids));
+        }
+        ActionKind::PageStar => {
+            let id = action
+                .param("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let starred = action
+                .param("starred")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            effects.extend(crate::questions::later::star(state, id, starred));
         }
         ActionKind::QuestionRemove => {
             let id = action

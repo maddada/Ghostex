@@ -297,7 +297,7 @@ pub(crate) fn dictation_toast(title: &str, message: &str) -> serde_json::Value {
 
 /// The composer's Dictate state, made the first time the reader uses it.
 pub(crate) struct DictationControl {
-    dictate: Entity<Dictate>,
+    pub(super) dictate: Entity<Dictate>,
     _subscription: Subscription,
     /// The pointer is on the microphone; the hover menu opens after [`HOVER_DELAY`].
     hover: Option<Task<()>>,
@@ -306,7 +306,7 @@ pub(crate) struct DictationControl {
     placed: Rc<Cell<(Pixels, Pixels)>>,
     /// The question form box (its `form_inputs` key) the running dictation types into; `None` is
     /// the chat box (`aim_dictation`).
-    target: Option<String>,
+    pub(super) target: Option<String>,
     /// The target's text and selection when the run was aimed (`aim_dictation`): its words go
     /// there while the text is the same when they arrive.
     anchor: Option<(String, Option<std::ops::Range<usize>>)>,
@@ -315,7 +315,7 @@ pub(crate) struct DictationControl {
 pub(crate) type Dictation = Option<DictationControl>;
 
 impl NativeChatView {
-    fn dictate(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<Dictate> {
+    pub(super) fn dictate(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<Dictate> {
         if let Some(control) = &self.dictation {
             return control.dictate.clone();
         }
@@ -362,12 +362,21 @@ impl NativeChatView {
     /// CDXC:Dictate 2026-11-10 SEE-ALSO: the chat core writes the words and decides whether the box still takes them (`insert` in packages/gx-chat-core/src/questions/dictation.rs); the phone's rule is `apps/mobile/app/src/chat/native/composer/dictationTarget.ts`; the box shows it is the target in `question_form.rs` `note_box`.
     ///
     /// CDXC:Dictate 2026-11-13 DECISION: User: "when we dictate with the caret in the middle or some text selected, we should enter the text to replace what's selected or insert it at the caret." The target's selection (or caret) is kept here with its text when the recording starts, and the words go over it while the text is the same when they arrive: moving the caret while it records or transcribes does not move them, typing in the box does (they then go where the caret is, as the text they were aimed into is gone). Same rule on the phone (`dictationAnchor` in apps/mobile/app/src/chat/rust/host.ts, `placeIn` in dictationTarget.ts).
-    fn aim_dictation(&mut self, dictate: &Entity<Dictate>, target: Option<String>, cx: &App) {
+    pub(super) fn aim_dictation(
+        &mut self,
+        dictate: &Entity<Dictate>,
+        target: Option<String>,
+        cx: &App,
+    ) {
         let dictate = dictate.read(cx);
         if dictate.recording() || dictate.transcribing() {
             return;
         }
         let anchor = match target.as_deref() {
+            // The Reply card's field (reply_attachments.rs).
+            Some(super::reply_attachments::REPLY_DICTATION) => self
+                .reply_field(cx)
+                .map(|(text, range)| (text, Some(range))),
             Some(key) => self.form_inputs.get(key).map(|entry| {
                 let input = entry.input.read(cx);
                 (input.value().to_string(), Some(input.selected_range()))
@@ -1091,6 +1100,16 @@ impl NativeChatView {
         if text.is_empty() {
             return;
         }
+        // Aimed at the Reply card's field: typed there while the card is open, else into the chat
+        // box, so a dictation is never lost.
+        let (target, anchor) = if target.as_deref() == Some(super::reply_attachments::REPLY_DICTATION) {
+            if self.insert_reply_dictation(text, &anchor, dictate_insert_spacing(), cx) {
+                return;
+            }
+            (None, None)
+        } else {
+            (target, anchor)
+        };
         let chat_anchor = if target.is_none() {
             anchor.clone()
         } else {

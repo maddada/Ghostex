@@ -159,6 +159,8 @@ pub(super) async fn paste_already_recorded(session: &Value, text: &str, since_ms
 struct CoordinatorNotes {
     playbook: Option<(String, String)>,
     drift: Option<crate::coordinators::DriftDelivery>,
+    /// The questions still waiting on the user, by title (`open_questions_note`).
+    open_questions: Option<String>,
 }
 
 /// The notes that go under this message to an orchestrator (CDXC:Coordinators 2026-11-05 in
@@ -197,7 +199,90 @@ fn coordinator_playbook_note(
         .and_then(|session| {
             crate::coordinators::coordinator_drift_delivery(&db, &state.paths, &key, &session)
         });
-    (playbook.is_some() || drift.is_some()).then_some(CoordinatorNotes { playbook, drift })
+    let open_questions = open_questions_note(state, &db, &key, text);
+    (playbook.is_some() || drift.is_some() || open_questions.is_some()).then_some(
+        CoordinatorNotes {
+            playbook,
+            drift,
+            open_questions,
+        },
+    )
+}
+
+/// The note under a user's message to a coordinator that names the questions still waiting on the
+/// user, by title with the tags the agent knows them by: its work items' open asks ("W7 Q12") and
+/// the forms and pages its replies asked ("Q12 to Q14"), leaving out the asks this message answers
+/// by tag ("W7 Q12: …", settled on delivery by `settle_work_replies`). `None` for a session that
+/// is not a coordinator, a message from another agent, or nothing open. Blocking.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, on issue #627, picked "Tell the coordinator what's still open": an answer typed in the
+/// normal chat box left its ask under Needs you because the coordinator did not connect the message
+/// to it. The words of the note and how the chat hides it are gx-chat-core's
+/// (`session::appended_notes::open_questions_note`).
+fn open_questions_note(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    key: &(String, String),
+    text: &str,
+) -> Option<String> {
+    if text
+        .lines()
+        .any(|line| line.trim() == crate::coordinators::AGENT_MESSAGE_OPENER)
+    {
+        return None;
+    }
+    crate::coordinators::read_coordinator(db, &key.0, &key.1)
+        .ok()
+        .flatten()?;
+    let answered: Vec<(i64, String)> = crate::coordinators::chat_replies(text)
+        .into_iter()
+        .map(|(number, tag, _)| (number, tag))
+        .collect();
+    let mut open: Vec<(String, String)> = Vec::new();
+    for item in crate::coordinators::list_work_items(db, key).unwrap_or_default() {
+        if item.finished_at.is_some() || item.dropped_at.is_some() {
+            continue;
+        }
+        for ask in item.asks.iter().filter(|ask| ask.is_open()) {
+            if answered
+                .iter()
+                .any(|(number, tag)| *number == item.number && *tag == ask.tag)
+            {
+                continue;
+            }
+            let tags = if ask.tag.is_empty() {
+                item.reference()
+            } else {
+                format!("{} {}", item.reference(), ask.tag)
+            };
+            open.push((ask.text.clone(), tags));
+        }
+    }
+    use ghostex_gx_chat_core::transcript::open_questions::AskerKind;
+    for asker in crate::session_chat_open_questions::open_askers(state, &key.0, &key.1) {
+        let tags = asker.waiting_tags();
+        if tags.is_empty() {
+            continue;
+        }
+        let title = match (&asker.kind, &asker.form) {
+            (AskerKind::Form, Some(form)) if form.questions.len() == 1 => {
+                form.questions[0].title.clone()
+            }
+            (AskerKind::Form, Some(form)) => form.title.clone(),
+            (AskerKind::Page, _) => {
+                crate::visual_pages::page_questions(&state.paths.root_dir, &asker.id)
+                    .map(|(title, _)| title)
+                    .unwrap_or_default()
+            }
+            _ => String::new(),
+        };
+        open.push((
+            title,
+            ghostex_gx_chat_core::transcript::open_questions::tag_range(&tags),
+        ));
+    }
+    ghostex_gx_chat_core::session::appended_notes::open_questions_note(&open)
 }
 
 fn record_coordinator_playbook_note(
@@ -226,12 +311,18 @@ fn with_playbook_note(text: &str, notes: Option<&CoordinatorNotes>) -> String {
     };
     // The chat core reads the recorded turn without them again, so the user's echo still matches.
     let mut noted = text.to_string();
-    for note in notes.playbook.iter().map(|(note, _)| note.as_str()).chain(
-        notes
-            .drift
-            .iter()
-            .flat_map(|drift| drift.notes.iter().map(String::as_str)),
-    ) {
+    for note in notes
+        .playbook
+        .iter()
+        .map(|(note, _)| note.as_str())
+        .chain(
+            notes
+                .drift
+                .iter()
+                .flat_map(|drift| drift.notes.iter().map(String::as_str)),
+        )
+        .chain(notes.open_questions.as_deref())
+    {
         noted = ghostex_gx_chat_core::session::appended_notes::with_note(&noted, note);
     }
     noted

@@ -147,6 +147,7 @@ mod page_answers;
 mod page_card;
 mod permission_card;
 mod reply_arrival;
+mod reply_attachments;
 mod reply_popover;
 mod rich_markdown;
 mod row_details;

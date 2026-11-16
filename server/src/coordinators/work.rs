@@ -2127,7 +2127,8 @@ pub fn settle_answered_items(
 }
 
 /// The "W7 Q12: words" answers in a message the user sent: each line that starts so begins an
-/// answer, which runs to the next such line or the end. Words may be empty (a picture alone).
+/// answer, which runs to the next such line or the end, and each answer pill naming a work item
+/// ask (`[<title>](answering:W7.Q12) words`). Words may be empty (a picture alone).
 pub fn chat_replies(text: &str) -> Vec<(i64, String, String)> {
     let mut replies: Vec<(i64, String, String)> = Vec::new();
     for line in text.lines() {
@@ -2147,6 +2148,19 @@ pub fn chat_replies(text: &str) -> Vec<(i64, String, String)> {
     }
     for (_, _, words) in &mut replies {
         *words = words.trim().to_string();
+    }
+    // A Reply in chat box's pill, `[<title>](answering:W7.Q12) words`, answers the same way
+    // (gx-chat-core `questions::answer_pills`, CDXC:Coordinators 2026-11-16 DECISION there).
+    for (pill, words) in ghostex_gx_chat_core::questions::answer_pills::answers_in(text) {
+        if !pill.settles {
+            continue;
+        }
+        let Some(number) = pill.item() else {
+            continue;
+        };
+        for tag in pill.questions() {
+            replies.push((number, tag, words.clone()));
+        }
     }
     replies
 }

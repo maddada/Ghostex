@@ -96,11 +96,69 @@ fn is_drift_reminder(paragraph: &str) -> bool {
     parts.peek().is_some() && parts.all(|part| order.by_ref().any(|words| words == part))
 }
 
-/// `rest` without the note gxserver added last: the fixed notes, or a drift reminder.
+/// The opening and closing words of the note under a user's message to a coordinator that lists
+/// the questions still waiting on the user (server/src/session_chat_queue_runtime/send.rs
+/// `open_questions_note`); its middle names each by its title with the tags the agent knows it by.
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, on issue #627 (an answer typed in the normal chat box left the ask open, so he clicked a
+/// wrong answer to clear it), picked "Tell the coordinator what's still open": when he sends a
+/// message while questions wait on him, the coordinator is told which, by title, and closes any
+/// the message answered. The note is for the agent only; the chat hides it like the other notes.
+const OPEN_QUESTIONS_OPENING: &str = "Still open for the user: ";
+const OPEN_QUESTIONS_CLOSING: &str = " If this message answers any of them, close it: `ghostex coordinator item ask <W7> --done <Q12>` for a work item's question, \"withdraw\" in a ```questions block for a form's or page's.";
+/// The most questions the note names; the rest are counted ("and 3 more").
+const OPEN_QUESTIONS_NAMED: usize = 10;
+
+/// The note listing `open` (each a title and the tags the agent knows it by, "W7 Q12" or "Q12 to
+/// Q14"), `None` for none. Titles are kept to one line of at most 80 characters.
+pub fn open_questions_note(open: &[(String, String)]) -> Option<String> {
+    if open.is_empty() {
+        return None;
+    }
+    let mut named: Vec<String> = open
+        .iter()
+        .take(OPEN_QUESTIONS_NAMED)
+        .map(|(title, tags)| {
+            let title: String = title
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .replace(['\u{201c}', '\u{201d}'], "\"");
+            let title = if title.chars().count() > 80 {
+                format!("{}\u{2026}", title.chars().take(79).collect::<String>())
+            } else {
+                title
+            };
+            match (title.is_empty(), tags.trim().is_empty()) {
+                (true, _) => tags.trim().to_string(),
+                (false, true) => format!("\u{201c}{title}\u{201d}"),
+                (false, false) => format!("\u{201c}{title}\u{201d} ({})", tags.trim()),
+            }
+        })
+        .collect();
+    if open.len() > OPEN_QUESTIONS_NAMED {
+        named.push(format!("and {} more", open.len() - OPEN_QUESTIONS_NAMED));
+    }
+    Some(format!(
+        "{OPEN_QUESTIONS_OPENING}{}.{OPEN_QUESTIONS_CLOSING}",
+        named.join("; ")
+    ))
+}
+
+/// Whether `paragraph` is an open questions note gxserver wrote ([`open_questions_note`]).
+fn is_open_questions_note(paragraph: &str) -> bool {
+    !paragraph.contains('\n')
+        && paragraph.starts_with(OPEN_QUESTIONS_OPENING)
+        && paragraph.ends_with(OPEN_QUESTIONS_CLOSING)
+}
+
+/// `rest` without the note gxserver added last: the fixed notes, a drift reminder, or the open
+/// questions note.
 fn strip_last_note(rest: &str) -> Option<&str> {
     let drift = rest
         .rsplit_once('\n')
-        .filter(|(_, last)| is_drift_reminder(last))
+        .filter(|(_, last)| is_drift_reminder(last) || is_open_questions_note(last))
         .map(|(head, _)| &rest[..head.len() + 1]);
     let head = APPENDED_NOTES
         .iter()

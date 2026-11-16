@@ -59,6 +59,9 @@ pub enum ReferenceKind {
     Session,
     /// A coordinator board item, `[<title>](board:B4)` (`extras/coordinator_board.rs`).
     Board,
+    /// What a Reply in chat box answers, `[<title>](answering:W7.Q12)`
+    /// (`questions/answer_pills.rs`).
+    Answer,
 }
 
 impl ReferenceKind {
@@ -74,6 +77,7 @@ impl ReferenceKind {
             Self::Comment => "comment",
             Self::Session => "session",
             Self::Board => "board",
+            Self::Answer => "answer",
         }
     }
 }
@@ -357,7 +361,10 @@ pub fn reference_display_label(label: &str, path: &str, kind: ReferenceKind) -> 
         return label.to_string();
     }
     // CDXC:SessionChat 2026-11-02 DECISION: User: a session mentioned in the chat box shows its full name, as the sent message's pill does ("Restoring lost Main Coordinator thread", not "Restoring lost Ma…"). Only the chat box's own width may wrap it, never the 18-character cap other pills keep.
-    if kind == ReferenceKind::Session || kind == ReferenceKind::Board {
+    if kind == ReferenceKind::Session
+        || kind == ReferenceKind::Board
+        || kind == ReferenceKind::Answer
+    {
         return crate::transcript::session_mentions::pill_label(label);
     }
     let path_label = reference_path_label(label, path, kind);
@@ -749,6 +756,18 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
                 end: indexed.offset(destination.end),
                 identity: format!("board:{}", destination.path.trim()),
                 kind: ReferenceKind::Board,
+                label,
+                path: destination.path.trim().to_string(),
+                start: indexed.offset(start),
+            });
+            continue;
+        }
+        // What a Reply in chat box answers: its title in a pill, its tags only in the link.
+        if crate::questions::answer_pills::parse_href(&destination.path).is_some() {
+            references.push(ComposerReference {
+                end: indexed.offset(destination.end),
+                identity: format!("answer:{}", destination.path.trim()),
+                kind: ReferenceKind::Answer,
                 label,
                 path: destination.path.trim().to_string(),
                 start: indexed.offset(start),

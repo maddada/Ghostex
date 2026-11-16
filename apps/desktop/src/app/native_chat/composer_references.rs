@@ -137,6 +137,9 @@ pub(super) fn replacements(
                         )
                         .map(|comment| comment.tooltip())
                         .unwrap_or_default()
+                    } else if reference.kind == "answer" {
+                        // The question it answers, by its title (never its tags).
+                        ghostex_gx_chat_core::questions::answer_pills::tooltip(&reference.label)
                     } else if reference.kind == "board" {
                         format!(
                             "{} on the board",

@@ -152,6 +152,10 @@ pub struct SessionChatQueueSnapshot {
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
     pub removed_question_ids: Vec<String>,
+    /// The pages their agent retired (`visual_pages::read_retired_page_ids`).
+    pub retired_page_ids: Vec<String>,
+    /// The pages starred in this chat (`session_chat_open_questions::read_starred_page_ids`).
+    pub starred_page_ids: Vec<String>,
     /// The session's resource index (`session_chat_resources::frame_index`), set only where a
     /// frame or read result is built (`with_resource_index`): the list is large and the snapshot
     /// is read in many places that never send it.
@@ -189,6 +193,8 @@ impl SessionChatQueueSnapshot {
             "removedQuestionIds".to_string(),
             json!(self.removed_question_ids),
         );
+        target.insert("retiredPageIds".to_string(), json!(self.retired_page_ids));
+        target.insert("starredPageIds".to_string(), json!(self.starred_page_ids));
         if !self.resource_index.is_empty() {
             target.insert("resourceIndex".to_string(), json!(*self.resource_index));
         }
@@ -236,6 +242,8 @@ impl SessionChatQueueSnapshot {
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.retired_page_ids).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.starred_page_ids).unwrap_or_default());
         revision.push_str(&self.resource_epoch.to_string());
         if let Some(queue_version) = self.queue_version {
             revision.push(':');
@@ -655,7 +663,8 @@ pub async fn deliver_session_chat_queued_prompt(
             Err(error)
                 if (hold_when_composer_missing && error.code == "composerNotReady")
                     || held_for_prompt
-                    || error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+                    || error.code
+                        == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
             {
                 let next_version = bump_queue_version(db, project_id, session_id)? as i64;
                 db.execute(
@@ -697,10 +706,7 @@ pub async fn deliver_session_chat_queued_prompt(
     }
     if let Some(reason) = error_message.as_deref() {
         crate::session_chat_send_failure::report_failed_row(
-            project_id,
-            session_id,
-            prompt_id,
-            reason,
+            project_id, session_id, prompt_id, reason,
         );
     }
     Ok(SessionChatQueueDelivery {
@@ -771,10 +777,7 @@ pub fn fail_session_chat_queued_prompt(
     let bounded = bounded_reason(reason);
     fail_prompt(&db, project_id, session_id, prompt_id, &bounded)?;
     crate::session_chat_send_failure::report_failed_row(
-        project_id,
-        session_id,
-        prompt_id,
-        &bounded,
+        project_id, session_id, prompt_id, &bounded,
     );
     read_snapshot(&db, project_id, session_id)
 }
@@ -1057,11 +1060,12 @@ fn read_snapshot(
                 crate::session_chat_async_questions::read_retired_question_ids(
                     db, project_id, session_id,
                 ),
-            async_questions_since:
-                crate::session_chat_async_questions::read_async_questions_since(
-                    db, project_id, session_id,
-                ),
-            forked_at: crate::session_chat_open_questions::read_forked_at(db, project_id, session_id),
+            async_questions_since: crate::session_chat_async_questions::read_async_questions_since(
+                db, project_id, session_id,
+            ),
+            forked_at: crate::session_chat_open_questions::read_forked_at(
+                db, project_id, session_id,
+            ),
             later_question_ids: crate::session_chat_open_questions::read_later_ids(
                 db, project_id, session_id,
             ),
@@ -1069,6 +1073,12 @@ fn read_snapshot(
                 db, project_id, session_id,
             ),
             removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
+                db, project_id, session_id,
+            ),
+            retired_page_ids: crate::visual_pages::read_retired_page_ids(
+                db, project_id, session_id,
+            ),
+            starred_page_ids: crate::session_chat_open_questions::read_starred_page_ids(
                 db, project_id, session_id,
             ),
             resource_index: Default::default(),
