@@ -174,6 +174,50 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
     effects
 }
 
+/// `markQuestionAnswered {id}`: a dock row's ⋯ Mark answered on a form, page or one-click question
+/// the reader already answered in their own words in the chat box. It leaves the dock as `remove`
+/// takes it off, and the agent is told it was answered there, by its title with the tags it still
+/// asks after it, as a Reply names it ("Settings layout (Q12): …").
+///
+/// CDXC:Coordinators 2026-11-16 DECISION:
+/// User, on issue #627 (an ask answered in the normal chat box stays under Needs you until he
+/// clicks a wrong answer to clear it): add "Mark answered" next to Dismiss in each question row's
+/// ⋯ menu, on the desktop dock and the phone, which closes the ask by hand.
+pub fn mark_answered(state: &mut ChatState, id: &str) -> Vec<Effect> {
+    let (tags, title) = state
+        .transcript_view
+        .askers
+        .iter()
+        .find(|asker| asker.id == id)
+        .map(|asker| (asker.waiting_tags(), asker.title.clone()))
+        .unwrap_or_default();
+    let mut effects = remove(state, id);
+    if effects.is_empty() {
+        return effects;
+    }
+    let title = title.replace(['[', ']'], "");
+    let name = match (title.trim().is_empty(), tags.is_empty()) {
+        (false, false) => format!(
+            "{} ({})",
+            title.trim(),
+            crate::transcript::open_questions::tag_range(&tags)
+        ),
+        (false, true) => title.trim().to_string(),
+        (true, false) => crate::transcript::open_questions::tag_range(&tags),
+        (true, true) => "Your questions there".to_string(),
+    };
+    let request_id = state.core.allocate_request_id();
+    effects.push(Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::SendSessionChatMessage,
+        params: Box::new(json!({
+            "text": format!("{name}: I answered this in the chat."),
+            "sendRequestId": format!("question-answered-{}-{id}", state.identity.session_id),
+        })),
+    });
+    effects
+}
+
 /// `markPagesSeen {ids}`: the dock's Mark all seen. Each page that waits only to be looked at
 /// ("not seen yet") is removed as `remove` does, so it leaves the dock, the counts and the
 /// sidebar's dot on every client and gxserver keeps it across restarts. Nothing reaches the agent:

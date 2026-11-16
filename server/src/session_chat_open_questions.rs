@@ -112,6 +112,11 @@ impl OpenAsker {
     fn count(&self) -> usize {
         self.waiting
     }
+
+    /// The question tags it still asks (the coordinator's open questions note, send.rs).
+    pub(crate) fn waiting_tags(&self) -> Vec<String> {
+        self.tags.clone()
+    }
 }
 
 /// What the transcript has said about questions so far.
