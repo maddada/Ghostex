@@ -623,6 +623,11 @@ works.
    Read the reply like any message from the reader. Do not add a button of
    your own for this.
 
+Publishing a newer version of the same file with `ghostex show` replaces its
+older cards by itself. To take back a page you replaced with another file or
+that is out of date, with its open questions, run `ghostex page retire <page>`
+(newer Ghostex; `ghostex page --help` says how).
+
 If `ghostex show` is an unknown command, say this Ghostex is too old to show
 pages and give the HTML file's path instead.
 
