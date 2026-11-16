@@ -145,6 +145,7 @@ pub fn connect_back(
     paths: &GxserverPaths,
     params: &Value,
     caller: &Principal,
+    security: &crate::security::SecurityState,
 ) -> Result<Value> {
     let public_key = params
         .pointer("/deviceKey/publicKey")
@@ -209,6 +210,21 @@ pub fn connect_back(
         // `signatureV2` covers where to connect back too; an older computer sends only
         // `signature` (CDXC:Security 2026-11-16 at `connect_back_payload_v2`).
         let signature_v2 = text(params, "signatureV2");
+        /*
+        CDXC:Security 2026-11-16 FIX:
+        Review round 2 (R2-4): every ask still carries the older `signature`, so an ask caught on its way could be sent again within its five minutes without `signatureV2` and with another address. Once this computer has taken a `signatureV2` from a computer's key, it is remembered (`rememberedApprovals`, `connectBackV2:<key hash>`) and asks from that key without one are refused; a computer that never sent one keeps working as before.
+        */
+        let v2_key = format!(
+            "connectBackV2:{}",
+            hex::encode(&Sha256::digest(public_key.as_bytes())[..16])
+        );
+        if signature_v2.is_empty() && security.is_remembered(&v2_key) {
+            bail!(
+                "{} signs its asks to connect back with where to connect too, and this one doesn't. Try again from {}.",
+                asker.name,
+                asker.name
+            );
+        }
         let signed = if signature_v2.is_empty() {
             verify_device_signature(
                 &public_key,
@@ -222,6 +238,9 @@ pub fn connect_back(
                 &signature_v2,
             )
         };
+        if signed && !signature_v2.is_empty() {
+            security.remember(&v2_key, now);
+        }
         if !fresh || timestamp_ms <= seen || !signed {
             bail!(
                 "This ask isn't signed by {}, or its clock is more than five minutes off.",

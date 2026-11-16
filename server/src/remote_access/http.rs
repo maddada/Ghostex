@@ -731,7 +731,8 @@ pub(crate) async fn handle_remote_access_http(
             let caller = caller.clone();
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                let started = super::connect_back::connect_back(&db, &paths, &params, &caller);
+                let started =
+                    super::connect_back::connect_back(&db, &paths, &params, &caller, &security);
                 crate::audit::record(
                     crate::audit::Action::new(
                         "pairing.computerRequest",
